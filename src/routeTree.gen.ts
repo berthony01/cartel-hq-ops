@@ -19,6 +19,7 @@ import { Route as OperativesRouteImport } from './routes/operatives'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as StickerLabRouteImport } from './routes/sticker-lab'
 import { Route as StickerLabIndexRouteImport } from './routes/sticker-lab.index'
+import { Route as StickerLabNewRouteImport } from './routes/sticker-lab.new'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -70,6 +71,11 @@ const StickerLabIndexRoute = StickerLabIndexRouteImport.update({
   path: '/',
   getParentRoute: () => StickerLabRoute,
 } as any)
+const StickerLabNewRoute = StickerLabNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => StickerLabRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -81,6 +87,7 @@ export interface FileRoutesByFullPath {
   '/operatives': typeof OperativesRoute
   '/settings': typeof SettingsRoute
   '/sticker-lab': typeof StickerLabRouteWithChildren
+  '/sticker-lab/new': typeof StickerLabNewRoute
   '/sticker-lab/': typeof StickerLabIndexRoute
 }
 export interface FileRoutesByTo {
@@ -92,6 +99,7 @@ export interface FileRoutesByTo {
   '/operations': typeof OperationsRoute
   '/operatives': typeof OperativesRoute
   '/settings': typeof SettingsRoute
+  '/sticker-lab/new': typeof StickerLabNewRoute
   '/sticker-lab': typeof StickerLabIndexRoute
 }
 export interface FileRoutesById {
@@ -105,6 +113,7 @@ export interface FileRoutesById {
   '/operatives': typeof OperativesRoute
   '/settings': typeof SettingsRoute
   '/sticker-lab': typeof StickerLabRouteWithChildren
+  '/sticker-lab/new': typeof StickerLabNewRoute
   '/sticker-lab/': typeof StickerLabIndexRoute
 }
 export interface FileRouteTypes {
@@ -119,6 +128,7 @@ export interface FileRouteTypes {
     | '/operatives'
     | '/settings'
     | '/sticker-lab'
+    | '/sticker-lab/new'
     | '/sticker-lab/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -130,6 +140,7 @@ export interface FileRouteTypes {
     | '/operations'
     | '/operatives'
     | '/settings'
+    | '/sticker-lab/new'
     | '/sticker-lab'
   id:
     | '__root__'
@@ -142,6 +153,7 @@ export interface FileRouteTypes {
     | '/operatives'
     | '/settings'
     | '/sticker-lab'
+    | '/sticker-lab/new'
     | '/sticker-lab/'
   fileRoutesById: FileRoutesById
 }
@@ -229,14 +241,23 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StickerLabIndexRouteImport
       parentRoute: typeof StickerLabRoute
     }
+    '/sticker-lab/new': {
+      id: '/sticker-lab/new'
+      path: '/new'
+      fullPath: '/sticker-lab/new'
+      preLoaderRoute: typeof StickerLabNewRouteImport
+      parentRoute: typeof StickerLabRoute
+    }
   }
 }
 
 interface StickerLabRouteChildren {
+  StickerLabNewRoute: typeof StickerLabNewRoute
   StickerLabIndexRoute: typeof StickerLabIndexRoute
 }
 
 const StickerLabRouteChildren: StickerLabRouteChildren = {
+  StickerLabNewRoute: StickerLabNewRoute,
   StickerLabIndexRoute: StickerLabIndexRoute,
 }
 
