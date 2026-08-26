@@ -10,11 +10,17 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as BrandKitRouteImport } from './routes/brand-kit'
 import { Route as StickerLabRouteImport } from './routes/sticker-lab'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BrandKitRoute = BrandKitRouteImport.update({
+  id: '/brand-kit',
+  path: '/brand-kit',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StickerLabRoute = StickerLabRouteImport.update({
@@ -25,27 +31,31 @@ const StickerLabRoute = StickerLabRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/brand-kit': typeof BrandKitRoute
   '/sticker-lab': typeof StickerLabRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/brand-kit': typeof BrandKitRoute
   '/sticker-lab': typeof StickerLabRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/brand-kit': typeof BrandKitRoute
   '/sticker-lab': typeof StickerLabRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/sticker-lab'
+  fullPaths: '/' | '/brand-kit' | '/sticker-lab'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/sticker-lab'
-  id: '__root__' | '/' | '/sticker-lab'
+  to: '/' | '/brand-kit' | '/sticker-lab'
+  id: '__root__' | '/' | '/brand-kit' | '/sticker-lab'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BrandKitRoute: typeof BrandKitRoute
   StickerLabRoute: typeof StickerLabRoute
 }
 
@@ -56,6 +66,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/brand-kit': {
+      id: '/brand-kit'
+      path: '/brand-kit'
+      fullPath: '/brand-kit'
+      preLoaderRoute: typeof BrandKitRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sticker-lab': {
@@ -70,6 +87,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BrandKitRoute: BrandKitRoute,
   StickerLabRoute: StickerLabRoute,
 }
 export const routeTree = rootRouteImport
