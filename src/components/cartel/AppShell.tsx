@@ -1,0 +1,101 @@
+import { useState, type ReactNode } from "react";
+import { Menu, Search, Bell, ChevronDown, Building2 } from "lucide-react";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { CartelMark, SidebarNav } from "@/components/cartel/SidebarNav";
+
+function TopBar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
+  return (
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-border bg-background/85 px-4 backdrop-blur md:px-6">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="lg:hidden"
+        aria-label="Open navigation"
+        onClick={onOpenMobileNav}
+      >
+        <Menu className="size-5" />
+      </Button>
+
+      <div className="lg:hidden">
+        <CartelMark />
+      </div>
+
+      {/* Workspace selector — visual placeholder only in this phase */}
+      <button
+        type="button"
+        disabled
+        aria-label="Workspace selector (not available yet)"
+        className="hidden min-h-10 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm text-muted-foreground lg:flex"
+      >
+        <Building2 className="size-4 text-gold" aria-hidden="true" />
+        <span className="font-medium text-foreground">PEPECARTEL</span>
+        <ChevronDown className="size-4" aria-hidden="true" />
+      </button>
+
+      <div className="ml-auto flex items-center gap-2">
+        <div className="hidden items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm text-muted-foreground sm:flex">
+          <Search className="size-4" aria-hidden="true" />
+          <input
+            disabled
+            aria-label="Search (not available yet)"
+            placeholder="Search HQ…"
+            className="w-32 bg-transparent text-sm outline-none placeholder:text-muted-foreground/70 xl:w-56"
+          />
+        </div>
+        <Button variant="ghost" size="icon" disabled aria-label="Notifications (not available yet)">
+          <Bell className="size-5" />
+        </Button>
+        <button
+          type="button"
+          disabled
+          aria-label="Account menu (not available yet)"
+          className="flex min-h-10 items-center gap-2 rounded-md border border-border bg-surface px-2 py-1.5"
+        >
+          <span className="flex size-7 items-center justify-center rounded-full border border-gold/40 bg-surface-raised text-[11px] font-semibold text-gold">
+            PC
+          </span>
+          <span className="hidden text-xs text-muted-foreground sm:inline">Guest</span>
+        </button>
+      </div>
+    </header>
+  );
+}
+
+export function AppShell({ children }: { children: ReactNode }) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  return (
+    <div className="min-h-screen bg-background">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-border bg-sidebar px-3 py-4 lg:flex">
+        <div className="px-1">
+          <CartelMark />
+        </div>
+        <div className="mt-6 flex-1 overflow-y-auto">
+          <SidebarNav />
+        </div>
+        <p className="px-2 pt-4 text-[10px] leading-relaxed text-muted-foreground/70">
+          Phase 0 foundation. Modules are placeholders until wired up.
+        </p>
+      </aside>
+
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetTrigger className="sr-only">Open navigation</SheetTrigger>
+        <SheetContent side="left" className="w-72 border-border bg-sidebar px-3 py-4">
+          <SheetTitle className="sr-only">CARTEL HQ navigation</SheetTitle>
+          <div className="px-1">
+            <CartelMark />
+          </div>
+          <div className="mt-6">
+            <SidebarNav onNavigate={() => setMobileOpen(false)} />
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <div className="lg:pl-64">
+        <TopBar onOpenMobileNav={() => setMobileOpen(true)} />
+        <main className="mx-auto w-full max-w-6xl px-4 py-8 md:px-6 lg:py-10">{children}</main>
+      </div>
+    </div>
+  );
+}
