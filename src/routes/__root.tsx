@@ -135,6 +135,7 @@ function RootComponent() {
       <AppShell>
         <Outlet />
       </AppShell>
-
+    </QueryClientProvider>
   );
+
 }
