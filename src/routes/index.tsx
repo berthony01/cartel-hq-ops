@@ -121,7 +121,7 @@ function HqDashboard() {
       </section>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="cartel-panel rise-in lg:col-span-2">
+        <Card className="cartel-panel rise-in self-start lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-sm uppercase tracking-widest">Recent packs</CardTitle>
           </CardHeader>
@@ -178,7 +178,7 @@ function HqDashboard() {
         >
           Upcoming modules
         </h2>
-        <ol className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
           {ROADMAP.map((item, index) => (
             <li
               key={item.label}
@@ -193,7 +193,7 @@ function HqDashboard() {
                 className={`size-4 ${item.tone === "gold" ? "text-gold" : "text-muted-foreground"}`}
                 aria-hidden="true"
               />
-              <span className="min-w-0 flex-1 truncate text-sm text-foreground">{item.label}</span>
+              <span className="min-w-0 flex-1 text-sm text-foreground">{item.label}</span>
               <span
                 className={`text-[10px] uppercase tracking-wider ${
                   item.tone === "gold" ? "text-gold" : "text-muted-foreground/70"
