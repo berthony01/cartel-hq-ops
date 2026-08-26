@@ -14,6 +14,7 @@ import { Route as AssetsRouteImport } from './routes/assets'
 import { Route as BrandKitRouteImport } from './routes/brand-kit'
 import { Route as MissionsRouteImport } from './routes/missions'
 import { Route as OperationsRouteImport } from './routes/operations'
+import { Route as OperativesRouteImport } from './routes/operatives'
 import { Route as StickerLabRouteImport } from './routes/sticker-lab'
 
 const IndexRoute = IndexRouteImport.update({
@@ -41,6 +42,11 @@ const OperationsRoute = OperationsRouteImport.update({
   path: '/operations',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OperativesRoute = OperativesRouteImport.update({
+  id: '/operatives',
+  path: '/operatives',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StickerLabRoute = StickerLabRouteImport.update({
   id: '/sticker-lab',
   path: '/sticker-lab',
@@ -53,6 +59,7 @@ export interface FileRoutesByFullPath {
   '/brand-kit': typeof BrandKitRoute
   '/missions': typeof MissionsRoute
   '/operations': typeof OperationsRoute
+  '/operatives': typeof OperativesRoute
   '/sticker-lab': typeof StickerLabRoute
 }
 export interface FileRoutesByTo {
@@ -61,6 +68,7 @@ export interface FileRoutesByTo {
   '/brand-kit': typeof BrandKitRoute
   '/missions': typeof MissionsRoute
   '/operations': typeof OperationsRoute
+  '/operatives': typeof OperativesRoute
   '/sticker-lab': typeof StickerLabRoute
 }
 export interface FileRoutesById {
@@ -70,6 +78,7 @@ export interface FileRoutesById {
   '/brand-kit': typeof BrandKitRoute
   '/missions': typeof MissionsRoute
   '/operations': typeof OperationsRoute
+  '/operatives': typeof OperativesRoute
   '/sticker-lab': typeof StickerLabRoute
 }
 export interface FileRouteTypes {
@@ -80,6 +89,7 @@ export interface FileRouteTypes {
     | '/brand-kit'
     | '/missions'
     | '/operations'
+    | '/operatives'
     | '/sticker-lab'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -88,6 +98,7 @@ export interface FileRouteTypes {
     | '/brand-kit'
     | '/missions'
     | '/operations'
+    | '/operatives'
     | '/sticker-lab'
   id:
     | '__root__'
@@ -96,6 +107,7 @@ export interface FileRouteTypes {
     | '/brand-kit'
     | '/missions'
     | '/operations'
+    | '/operatives'
     | '/sticker-lab'
   fileRoutesById: FileRoutesById
 }
@@ -105,6 +117,7 @@ export interface RootRouteChildren {
   BrandKitRoute: typeof BrandKitRoute
   MissionsRoute: typeof MissionsRoute
   OperationsRoute: typeof OperationsRoute
+  OperativesRoute: typeof OperativesRoute
   StickerLabRoute: typeof StickerLabRoute
 }
 
@@ -145,6 +158,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperationsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/operatives': {
+      id: '/operatives'
+      path: '/operatives'
+      fullPath: '/operatives'
+      preLoaderRoute: typeof OperativesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sticker-lab': {
       id: '/sticker-lab'
       path: '/sticker-lab'
@@ -161,6 +181,7 @@ const rootRouteChildren: RootRouteChildren = {
   BrandKitRoute: BrandKitRoute,
   MissionsRoute: MissionsRoute,
   OperationsRoute: OperationsRoute,
+  OperativesRoute: OperativesRoute,
   StickerLabRoute: StickerLabRoute,
 }
 export const routeTree = rootRouteImport
