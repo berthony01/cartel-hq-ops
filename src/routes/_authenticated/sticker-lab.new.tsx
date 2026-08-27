@@ -2307,15 +2307,19 @@ function StickerLabBuilder() {
                 <Button
                   type="button"
                   className="min-h-11"
-                  disabled={!canPublish}
-                  onClick={() => (packPublished ? void doPublish() : setConfirmPublish(true))}
+                  disabled={allPublished || !canPublish}
+                  onClick={() => (canRetryPublish ? void doPublish() : setConfirmPublish(true))}
                 >
                   {publishing ? (
                     <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                   ) : (
                     <Send className="size-4" aria-hidden="true" />
                   )}
-                  {packPublished ? "Retry failed stickers" : "Publish sticker pack"}
+                  {allPublished
+                    ? "Published"
+                    : canRetryPublish
+                      ? "Retry failed stickers"
+                      : "Publish sticker pack"}
                 </Button>
                 <Button
                   type="button"
