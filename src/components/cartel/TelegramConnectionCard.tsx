@@ -60,6 +60,15 @@ function secondsLeft(expiresAt?: string | null): number {
   return ms > 0 ? Math.ceil(ms / 1000) : 0;
 }
 
+/** Android / iPhone / iPod / iPad incl. modern iPadOS (Macintosh + touch). */
+function isMobileDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  if (/Android|iPhone|iPod|iPad/i.test(ua)) return true;
+  return /Macintosh/i.test(ua) && (navigator.maxTouchPoints ?? 0) > 1;
+}
+
+
 export function TelegramConnectionCard({
   setup,
   compact = false,
@@ -75,7 +84,10 @@ export function TelegramConnectionCard({
   const [linkState, setLinkState] = useState<TelegramLinkStatus | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [remaining, setRemaining] = useState(0);
+  const [launchUrls, setLaunchUrls] = useState<{ app?: string | undefined; web?: string | undefined }>({});
+  const [launchBlocked, setLaunchBlocked] = useState(false);
   const pollRef = useRef<number | null>(null);
+  const fallbackRef = useRef<number | null>(null);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current !== null) {
@@ -132,24 +144,63 @@ export function TelegramConnectionCard({
     [queryClient, stopPolling, userId],
   );
 
+  const clearFallback = useCallback(() => {
+    if (fallbackRef.current !== null) {
+      window.clearTimeout(fallbackRef.current);
+      fallbackRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => clearFallback, [clearFallback]);
+
+  /** Launches Telegram: app deep link first on mobile, https t.me otherwise. */
+  const launchTelegram = useCallback(
+    (appUrl?: string, webUrl?: string): boolean => {
+      const mobile = isMobileDevice();
+      if (mobile && appUrl) {
+        window.location.href = appUrl;
+        clearFallback();
+        fallbackRef.current = window.setTimeout(() => {
+          fallbackRef.current = null;
+          if (document.visibilityState === "visible" && webUrl) {
+            window.location.href = webUrl;
+          }
+        }, 1300);
+        return true;
+      }
+      const url = webUrl ?? appUrl;
+      if (!url) return false;
+      if (mobile) {
+        window.location.href = url;
+        return true;
+      }
+      const opened = window.open(url, "_blank", "noopener,noreferrer");
+      if (!opened) {
+        window.location.href = url;
+      }
+      return true;
+    },
+    [clearFallback],
+  );
+
   const connect = async () => {
     if (!userId || starting) return;
     setStarting(true);
-    // Open the tab synchronously so the popup blocker does not swallow it.
-    const tab = typeof window !== "undefined" ? window.open("", "_blank", "noopener") : null;
+    setLaunchBlocked(false);
     try {
       const result = await createTelegramLink();
-      const url = result.botStartUrl ?? botStartUrl;
-      if (!url) throw new Error("The Telegram bot link is unavailable right now.");
-      if (tab) tab.location.href = url;
-      else window.location.href = url;
+      const web = result.botStartUrl ?? botStartUrl;
+      const app = result.botAppUrl;
+      if (!web && !app) throw new Error("The Telegram bot link is unavailable right now.");
       setRequestId(result.requestId);
       setExpiresAt(result.expiresAt ?? null);
+      setLaunchUrls({ app, web });
       setLinkState("pending");
       setRemaining(secondsLeft(result.expiresAt));
       startPolling(result.requestId);
+      const launched = launchTelegram(app, web);
+      setLaunchBlocked(!launched);
     } catch (err) {
-      tab?.close();
       setLinkState(null);
       toast.error(telegramErrorMessage(err));
     } finally {
@@ -164,6 +215,10 @@ export function TelegramConnectionCard({
     : null;
 
   const pending = linkState === "pending";
+  const manualUrl = isMobileDevice()
+    ? (launchUrls.app ?? launchUrls.web)
+    : (launchUrls.web ?? launchUrls.app);
+
 
   return (
     <Card className="cartel-panel">
@@ -229,11 +284,25 @@ export function TelegramConnectionCard({
               Waiting for Telegram…
             </p>
             <p className="mt-1">
-              Tap <strong>Start</strong> in the bot chat.{" "}
+              Telegram opened. Tap <strong>Start</strong> in @{botUsername ?? "PepeCartelHQBot"},
+              then return here. CARTEL HQ will connect automatically.{" "}
+              {launchBlocked ? "If Telegram did not open, use Open Telegram below." : null}{" "}
               {remaining > 0
                 ? `This one-time link expires in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}.`
                 : "This one-time link is about to expire."}
             </p>
+            {manualUrl ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3 min-h-9"
+                onClick={() => launchTelegram(launchUrls.app, launchUrls.web)}
+              >
+                <ExternalLink className="size-4" aria-hidden="true" />
+                Open Telegram
+              </Button>
+            ) : null}
           </div>
         ) : null}
 
