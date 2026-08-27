@@ -969,10 +969,21 @@ function StickerLabBuilder() {
         groupConnectionId: telegramGroup.groupId,
       });
       await loadTelegramState(packId);
+      const title = result.group?.title ?? telegramGroup.groupTitle ?? "the group";
       if (result.assigned) {
-        const title = result.group?.title ?? telegramGroup.groupTitle ?? "the group";
         setAssignedGroupTitle(title);
-        toast.success(`Group sticker set active in ${title}.`);
+        setAssignNotice(null);
+        toast.success(`Official group sticker set active in ${title}.`);
+      } else if (result.announced) {
+        // Successful delivery: the pack link was posted in the group instead.
+        setAssignedGroupTitle(null);
+        setAssignNotice(
+          result.message ||
+            (result.reason === "GROUP_STICKER_MIN_MEMBERS"
+              ? `Pack published and announced in ${title}. Official group sticker set unlocks at ${result.minMembers ?? 100} members (${result.memberCount ?? "?"}/${result.minMembers ?? 100}). Members can open the pack link now, and CARTEL HQ can send native stickers in the group.`
+              : `Pack published and announced in ${title}. Telegram's official group sticker set is not available for this group yet.`),
+        );
+        toast.success(`Pack published and announced in ${title}.`);
       } else {
         const msg = result.message || "Telegram did not accept the group sticker set assignment.";
         setAssignError(result.technical ? `${msg} (${result.technical})` : msg);
