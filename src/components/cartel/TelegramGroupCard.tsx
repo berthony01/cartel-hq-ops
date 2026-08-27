@@ -283,8 +283,23 @@ export function TelegramGroupCard({
               Waiting for Telegram…
             </p>
             <p className="mt-1">
-              Telegram opened. Choose the supergroup, approve the requested admin right, then return
-              here. CARTEL HQ will verify the group automatically.{" "}
+              Telegram opened. Choose the target supergroup and approve the requested admin right,
+              then return here. If @PepeCartelHQBot is already installed in the group, open that
+              group and send{" "}
+              <span className="inline-flex items-center gap-1 align-middle">
+                <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>
+                <button
+                  type="button"
+                  onClick={() => void copyCommandToClipboard()}
+                  className="inline-flex items-center rounded p-0.5 text-muted-foreground hover:bg-surface-raised hover:text-foreground"
+                  aria-label="Copy /cartelhq"
+                  title="Copy /cartelhq"
+                >
+                  <Copy className="size-3" aria-hidden="true" />
+                </button>
+              </span>{" "}
+              once while this link is active, then return here. CARTEL HQ will verify the group
+              automatically.{" "}
               {launchBlocked ? "If Telegram did not open, use Open Telegram below." : null}{" "}
               {remaining > 0
                 ? `This one-time link expires in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}.`
