@@ -260,12 +260,13 @@ export function TelegramGroupCard({
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Connect the supergroup where this sticker pack should become the group sticker set.
-          If @PepeCartelHQBot is already installed there, open the group and send{" "}
+          Connect the supergroup CARTEL HQ should work with. If @PepeCartelHQBot is already
+          installed there, open the group and send{" "}
           <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
           once while a one-time link is active. Otherwise, choose the group and approve admin rights
-          when Telegram opens. Members can then use the set inside that group — installing it globally
-          to a personal Telegram account stays a separate, individual action.
+          when Telegram opens. A verified group can receive the published pack link and native
+          stickers from the bot. Telegram’s <em>official</em> group sticker set is a separate,
+          optional feature that only unlocks once the group meets Telegram’s member minimum.
         </p>
 
         {group ? (
