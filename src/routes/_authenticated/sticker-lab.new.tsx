@@ -145,10 +145,14 @@ function StickerLabBuilder() {
   const [saving, setSaving] = useState(false);
   const [stages, setStages] = useState<Record<string, Stage>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [debugErrors, setDebugErrors] = useState<Record<string, string>>({});
   const [previews, setPreviews] = useState<Record<string, Preview>>({});
   const [confirmRemaining, setConfirmRemaining] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const aliveRef = useRef(true);
+  /** Sticker ids currently polled in this tab — their live stage wins. */
+  const pollingRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     aliveRef.current = true;
