@@ -23,7 +23,10 @@ export type TelegramCreateLinkResult = {
   status: TelegramLinkStatus;
   expiresAt?: string;
   bot?: TelegramBot;
+  startParam?: string;
   botStartUrl?: string;
+  botAppUrl?: string;
+  webhookUrl?: string;
 };
 
 export type TelegramLinkStatusResult = {
