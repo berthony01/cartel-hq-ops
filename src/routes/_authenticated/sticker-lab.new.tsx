@@ -940,7 +940,8 @@ function StickerLabBuilder() {
     !!workspaceId &&
     telegram.botConfigured &&
     telegram.ownerConnected &&
-    exportableCount > 0 &&
+    reviewedStickerIds.length > 0 &&
+    !allPublished &&
     !checksRunning &&
     !publishing;
   const shortNamePreview = packId
@@ -952,7 +953,7 @@ function StickerLabBuilder() {
     setPublishing(true);
     setTgError(null);
     try {
-      const result = await publishPack({ workspaceId, packId });
+      const result = await publishPack({ workspaceId, packId, stickerIds: reviewedStickerIds });
       setPublishResult(result);
       await loadTelegramState(packId);
       if (result.status === "published") {
