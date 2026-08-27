@@ -63,7 +63,6 @@ import {
   previewShortName,
   publishPack,
   refreshPackStatus,
-  sendTestSticker,
   telegramErrorMessage,
   type PackTelegramState,
   type StickerTelegramState,
@@ -2237,6 +2236,14 @@ function StickerLabBuilder() {
             <TelegramConnectionCard setup={telegram} compact />
           </div>
 
+          <div className="mt-6">
+            <TelegramGroupCard
+              setup={telegramGroup}
+              personalConnected={telegram.ownerConnected}
+              botConfigured={telegram.botConfigured}
+            />
+          </div>
+
           <Card className="cartel-panel mt-6">
             <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
               <CardTitle className="text-base">Telegram publishing</CardTitle>
@@ -2258,9 +2265,18 @@ function StickerLabBuilder() {
                   <StatusBadge tone="red">Bot not configured</StatusBadge>
                 )}
                 {telegram.ownerConnected ? (
-                  <StatusBadge tone="green">Owner ID connected</StatusBadge>
+                  <StatusBadge tone="green">Telegram account connected</StatusBadge>
                 ) : (
-                  <StatusBadge tone="red">Owner Telegram ID missing</StatusBadge>
+                  <StatusBadge tone="red">Telegram account not connected</StatusBadge>
+                )}
+                {telegramGroup.groupReady ? (
+                  <StatusBadge tone="green">
+                    Target group verified — {telegramGroup.groupTitle}
+                  </StatusBadge>
+                ) : telegramGroup.groupConnected ? (
+                  <StatusBadge tone="red">Target group not verified</StatusBadge>
+                ) : (
+                  <StatusBadge tone="red">No target group connected</StatusBadge>
                 )}
                 <StatusBadge tone={exportableCount > 0 ? "gold" : "muted"}>
                   {exportableCount} export-ready
@@ -2296,6 +2312,18 @@ function StickerLabBuilder() {
                 <p className="text-xs text-muted-foreground">
                   {publishResult.published} of {publishResult.total} published
                   {publishResult.failed > 0 ? `, ${publishResult.failed} need retry` : ""}.
+                </p>
+              ) : null}
+
+              {assignedGroupTitle && !assignError ? (
+                <p className="rounded-md border border-pepe/40 bg-pepe/5 p-3 text-xs text-pepe">
+                  Group sticker set active in {assignedGroupTitle}.
+                </p>
+              ) : null}
+
+              {assignError ? (
+                <p className="rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
+                  Sticker set published, group assignment needs attention. {assignError}
                 </p>
               ) : null}
 
@@ -2384,17 +2412,31 @@ function StickerLabBuilder() {
                     </a>
                   </Button>
                 ) : null}
+                {allPublished && (!tgPack?.telegram_group_connection_id || assignError) ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11"
+                    disabled={assigning || !telegramGroup.groupReady}
+                    onClick={() => void doAssignGroup()}
+                  >
+                    {assigning ? (
+                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                    ) : null}
+                    {assignError ? "Retry assign to group" : "Assign to group"}
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant="outline"
                   className="min-h-11"
-                  disabled={tgPublishedCount === 0 || sendingTest}
+                  disabled={tgPublishedCount === 0 || sendingTest || !telegramGroup.groupId}
                   onClick={() => void doSendTest()}
                 >
                   {sendingTest ? (
                     <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                   ) : null}
-                  Send test sticker
+                  Send test sticker to group
                 </Button>
               </div>
 
@@ -2406,12 +2448,15 @@ function StickerLabBuilder() {
               ) : null}
               {testResult ? <p className="text-xs text-muted-foreground">{testResult}</p> : null}
               <p className="text-xs text-muted-foreground">
-                The test sends a <strong>native Telegram sticker</strong>, not an image file. If
-                Telegram cannot reach you, open the bot, tap Start, then retry.
+                The test sends a <strong>native Telegram sticker</strong> into the connected
+                supergroup, not an image file. Publishing sets the pack as that supergroup's group
+                sticker set — members can use it inside the group, while installing it to a personal
+                Telegram account stays a separate individual action.
               </p>
               {!canPublish && !publishing && !allPublished ? (
                 <p className="text-xs text-muted-foreground">
-                  Publishing needs: a configured bot, your numeric Telegram owner ID, at least one
+                  Publishing needs: a configured bot, your connected Telegram account, a verified
+                  target supergroup (bot admin + group sticker permission), at least one
                   export-ready sticker, and all browser/cutout checks finished.
                 </p>
               ) : null}
@@ -2425,8 +2470,10 @@ function StickerLabBuilder() {
                 <AlertDialogDescription>
                   This creates a real, shareable Telegram sticker set owned by your Telegram account
                   ({telegram.connection?.telegram_user_id}). {reviewedStickerIds.length} reviewed
-                  sticker{reviewedStickerIds.length === 1 ? "" : "s"} will be uploaded. Sets cannot
-                  be transferred to another owner later.
+                  sticker{reviewedStickerIds.length === 1 ? "" : "s"} will be uploaded. After the set
+                  is created, CARTEL HQ assigns it as the group sticker set of{" "}
+                  <strong>{telegramGroup.groupTitle ?? "the connected supergroup"}</strong>. Sets
+                  cannot be transferred to another owner later.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
