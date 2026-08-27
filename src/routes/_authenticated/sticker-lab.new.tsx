@@ -1085,6 +1085,8 @@ function StickerLabBuilder() {
               const stickerId = stickerIdFor(c.id);
               const preview = stickerId ? previews[stickerId] : undefined;
               const error = stickerId ? errors[stickerId] : undefined;
+              const note = stickerId ? notes[stickerId] : undefined;
+              const debug = stickerId ? debugErrors[stickerId] : undefined;
               return (
                 <li key={c.id} className="cartel-panel rounded-lg p-4">
                   <div className="mb-3 flex items-center justify-between gap-2">
@@ -1095,7 +1097,7 @@ function StickerLabBuilder() {
                       tone={
                         stage === "ready"
                           ? "green"
-                          : stage === "failed" || stage === "timeout"
+                          : isFailure(stage)
                             ? "red"
                             : busy(stage)
                               ? "gold"
@@ -1132,8 +1134,11 @@ function StickerLabBuilder() {
                         : "Transparency not verified"}
                     </p>
                   ) : null}
+                  {note ? (
+                    <p className="mt-2 text-[11px] text-muted-foreground">{note}</p>
+                  ) : null}
                   {error ? (
-                    <p role="alert" className="mt-2 text-[11px] text-signal">
+                    <p role="alert" title={debug || undefined} className="mt-2 text-[11px] text-signal">
                       {error}
                     </p>
                   ) : null}
