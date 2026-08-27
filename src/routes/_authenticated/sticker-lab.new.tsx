@@ -1769,6 +1769,7 @@ function StickerLabBuilder() {
               const stage = stageFor(c.id);
               const failure = stickerId ? failures[stickerId] : undefined;
               const attempts = summarizeAttempts(stickerId ? jobHistory[stickerId] : undefined);
+              const check = clientCheckFor(c.id);
               return (
                 <li key={c.id} className="cartel-panel rounded-lg p-4">
                   <div className="flex items-center gap-3">
@@ -1803,10 +1804,30 @@ function StickerLabBuilder() {
                           ? isFailure(stage)
                             ? STAGE_LABEL[stage]
                             : preview.transparencyValid
-                              ? "Transparency verified"
-                              : "Transparency not verified"
+                              ? "Server verified"
+                              : "Server: transparency not verified"
                           : STAGE_LABEL[stage]}
                       </p>
+                      {backendExportable(c.id) ? (
+                        <p
+                          className={`truncate text-[11px] ${
+                            check?.status === "verified"
+                              ? "text-pepe"
+                              : check?.status === "failed"
+                                ? "text-signal"
+                                : "text-muted-foreground"
+                          }`}
+                          title={check?.reason}
+                        >
+                          {check?.status === "verified"
+                            ? "Browser verified"
+                            : check?.status === "failed"
+                              ? `Browser check failed — ${check.reason}`
+                              : check?.status === "checking"
+                                ? "Checking in browser…"
+                                : "Browser check pending"}
+                        </p>
+                      ) : null}
                       {isFailure(stage) && failure ? (
                         <p className="truncate text-[11px] text-signal" title={failure.body}>
                           {failure.title}
@@ -1828,6 +1849,7 @@ function StickerLabBuilder() {
                         size="sm"
                         variant="ghost"
                         className="ml-auto min-h-10"
+                        disabled={checksRunning}
                         aria-label={`Download ${c.label} as PNG`}
                         onClick={() => void downloadOne(c.id, index)}
                       >
