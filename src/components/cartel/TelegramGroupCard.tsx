@@ -290,8 +290,12 @@ export function TelegramGroupCard({
               ) : null}
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
-              <StatusBadge tone={isSupergroup ? "green" : "red"}>
-                {isSupergroup ? "Supergroup" : `Unsupported chat type (${group.chat_type})`}
+              <StatusBadge tone={supportedChatType ? "green" : "red"}>
+                {isSupergroup
+                  ? "Supergroup"
+                  : isBasicGroup
+                    ? "Basic group"
+                    : `Unsupported chat type (${group.chat_type})`}
               </StatusBadge>
               <StatusBadge tone={botAdmin ? "green" : "red"}>
                 {botAdmin ? "Bot admin verified" : "Bot is not an admin"}
@@ -304,9 +308,11 @@ export function TelegramGroupCard({
               <StatusBadge tone={officialStickerEligible || canSet ? "green" : "gold"}>
                 {officialStickerEligible || canSet
                   ? "Official group sticker set available"
-                  : belowMinMembers
-                    ? `Official group sticker set at ${minMembers}+ members (${memberCount})`
-                    : "Official group sticker set not available yet"}
+                  : isBasicGroup
+                    ? "Official group sticker set requires supergroup"
+                    : belowMinMembers
+                      ? `Official group sticker set at ${minMembers}+ members (${memberCount})`
+                      : "Official group sticker set not available yet"}
               </StatusBadge>
               {typeof memberCount === "number" ? (
                 <StatusBadge tone="muted">{memberCount} members</StatusBadge>
@@ -322,9 +328,11 @@ export function TelegramGroupCard({
               </p>
             ) : !officialStickerEligible ? (
               <p className="mt-3 rounded-md border border-gold/40 bg-gold/5 p-3 text-xs text-muted-foreground">
-                {belowMinMembers
-                  ? `Official group sticker set unlocks at ${minMembers} members. This group currently has ${memberCount}. You can still publish the pack, share it in the group, and send native stickers through the bot.`
-                  : "Telegram has not reported official group sticker-set eligibility for this group yet. Publishing the pack, sharing it in the group and sending native stickers all work normally."}
+                {isBasicGroup
+                  ? "This basic group is fully set up for CARTEL HQ: you can publish the pack, share it here and send native stickers through the bot. Telegram’s official group sticker set is an optional extra that only exists for supergroups — converting is not required to use CARTEL HQ."
+                  : belowMinMembers
+                    ? `Official group sticker set unlocks at ${minMembers} members. This group currently has ${memberCount}. You can still publish the pack, share it in the group, and send native stickers through the bot.`
+                    : "Telegram has not reported official group sticker-set eligibility for this group yet. Publishing the pack, sharing it in the group and sending native stickers all work normally."}
               </p>
             ) : null}
             <details className="mt-3 rounded-md border border-border bg-surface-raised p-3 text-xs">
