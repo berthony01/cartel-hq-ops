@@ -1337,13 +1337,12 @@ function StickerLabBuilder() {
 
 
           <ul className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {draft.concepts.map((c) => {
+            {draft.concepts.map((c, index) => {
               const stage = stageFor(c.id);
               const stickerId = stickerIdFor(c.id);
               const preview = stickerId ? previews[stickerId] : undefined;
-              const error = stickerId ? errors[stickerId] : undefined;
+              const failure = stickerId ? failures[stickerId] : undefined;
               const note = stickerId ? notes[stickerId] : undefined;
-              const debug = stickerId ? debugErrors[stickerId] : undefined;
               return (
                 <li key={c.id} className="cartel-panel rounded-lg p-4">
                   <div className="mb-3 flex items-center justify-between gap-2">
@@ -1391,31 +1390,52 @@ function StickerLabBuilder() {
                         : "Transparency not verified"}
                     </p>
                   ) : null}
-                  {note ? (
+                  {note && isFailure(stage) ? (
                     <p className="mt-2 text-[11px] text-muted-foreground">{note}</p>
                   ) : null}
-                  {error ? (
-                    <p role="alert" title={debug || undefined} className="mt-2 text-[11px] text-signal">
-                      {error}
-                    </p>
+                  {failure && isFailure(stage) ? (
+                    <FailureBlock
+                      failure={failure}
+                      replacement={stage === "replacement_failed"}
+                      onEditConcept={() => editConceptFromFailure(c.id)}
+                    />
                   ) : null}
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={preview ? "outline" : "default"}
-                    className="mt-3 min-h-10 w-full"
-                    disabled={!configured || busy(stage) || saving}
-                    onClick={() => void generateOne(c.id)}
-                  >
-                    {busy(stage) ? (
-                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={preview ? "outline" : "default"}
+                      className="min-h-10 flex-1"
+                      disabled={!configured || busy(stage) || saving}
+                      onClick={() => void generateOne(c.id)}
+                    >
+                      {busy(stage) ? (
+                        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                      ) : null}
+                      {isFailure(stage)
+                        ? "Retry this sticker"
+                        : preview
+                          ? "Regenerate"
+                          : "Generate"}
+                    </Button>
+                    {preview ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="min-h-10"
+                        aria-label={`Download ${c.label} as PNG`}
+                        onClick={() => void downloadOne(c.id, index)}
+                      >
+                        <Download className="size-4" aria-hidden="true" />
+                      </Button>
                     ) : null}
-                    {isFailure(stage) ? "Retry" : preview ? "Regenerate" : "Generate"}
-                  </Button>
+                  </div>
                 </li>
               );
             })}
           </ul>
+
 
           <AlertDialog open={confirmRemaining} onOpenChange={setConfirmRemaining}>
             <AlertDialogContent>
