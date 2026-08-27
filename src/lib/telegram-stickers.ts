@@ -88,11 +88,14 @@ export function fetchTelegramConfig(): Promise<TelegramConfig> {
 export function publishPack(params: {
   workspaceId: string;
   packId: string;
+  /** Review/export-approved sticker row IDs. The server attempts only these. */
+  stickerIds: string[];
 }): Promise<TelegramPublishResult> {
   return invoke<TelegramPublishResult>({
     action: "publish",
     workspaceId: params.workspaceId,
     packId: params.packId,
+    stickerIds: params.stickerIds,
   });
 }
 
