@@ -2178,40 +2178,204 @@ function StickerLabBuilder() {
             </Button>
           </div>
 
+          <div className="mt-6">
+            <TelegramConnectionCard setup={telegram} compact />
+          </div>
+
           <Card className="cartel-panel mt-6">
             <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
-              <CardTitle className="text-base">Telegram publish summary</CardTitle>
-              <StatusBadge tone="muted">Not connected</StatusBadge>
+              <CardTitle className="text-base">Telegram publishing</CardTitle>
+              {packPublished ? (
+                <StatusBadge tone="green">Published</StatusBadge>
+              ) : publishResult?.status === "partial" ? (
+                <StatusBadge tone="gold">Partly published</StatusBadge>
+              ) : (
+                <StatusBadge tone="muted">Not published</StatusBadge>
+              )}
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
+              <div className="flex flex-wrap gap-2">
+                {telegram.botConfigured ? (
+                  <StatusBadge tone="green">Bot @{telegram.botUsername}</StatusBadge>
+                ) : (
+                  <StatusBadge tone="red">Bot not configured</StatusBadge>
+                )}
+                {telegram.ownerConnected ? (
+                  <StatusBadge tone="green">Owner ID connected</StatusBadge>
+                ) : (
+                  <StatusBadge tone="red">Owner Telegram ID missing</StatusBadge>
+                )}
+                <StatusBadge tone={exportableCount > 0 ? "gold" : "muted"}>
+                  {exportableCount} export-ready
+                </StatusBadge>
+              </div>
+
               <dl className="grid gap-3 sm:grid-cols-2">
-                <SummaryRow label="Pack name" value={draft.packName || "Not set"} />
-                <SummaryRow label="Stickers" value={`${draft.concepts.length}`} />
+                <SummaryRow label="Sticker set title" value={draft.packName || "Not set"} />
                 <SummaryRow
-                  label="Generated"
-                  value={`${generatedCount} of ${draft.concepts.length}`}
+                  label="Pack status"
+                  value={tgPack?.status ?? "draft"}
+                />
+                <SummaryRow
+                  label="Published stickers"
+                  value={`${tgPublishedCount} of ${draft.concepts.length}`}
                 />
                 <SummaryRow
                   label="Emoji assigned"
                   value={`${draft.concepts.filter((c) => c.emoji.trim()).length} of ${draft.concepts.length}`}
                 />
               </dl>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                  Requirements for a future publish
+
+              <p className="text-xs text-muted-foreground">
+                Short name preview:{" "}
+                <span className="font-mono text-foreground">
+                  {tgPack?.telegram_set_name ?? shortNamePreview ?? "available once the bot is configured"}
+                </span>
+                . The authoritative set name is decided by the server at publish time. Stickers
+                without an emoji fall back to 🐸.
+              </p>
+
+              {publishResult ? (
+                <p className="text-xs text-muted-foreground">
+                  {publishResult.published} of {publishResult.total} published
+                  {publishResult.failed > 0 ? `, ${publishResult.failed} need retry` : ""}.
                 </p>
-                <ul className="mt-2 space-y-1.5 text-xs text-muted-foreground">
-                  <li>Transparent PNG per sticker at Telegram's required dimensions</li>
-                  <li>One emoji minimum per sticker</li>
-                  <li>An authorised CARTEL HQ Telegram connection</li>
+              ) : null}
+
+              {tgError ? (
+                <p className="rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
+                  {tgError}
+                </p>
+              ) : null}
+
+              {publishResult?.failures?.length ? (
+                <details className="rounded-md border border-border bg-surface-raised p-3 text-xs">
+                  <summary className="cursor-pointer font-semibold">Technical detail</summary>
+                  <ul className="mt-2 space-y-1 text-muted-foreground">
+                    {publishResult.failures.map((f, i) => (
+                      <li key={`${f.stickerId ?? i}`}>
+                        <span className="text-foreground">{f.label ?? f.stickerId ?? "Sticker"}</span>
+                        {f.reason ? ` — ${f.reason}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ) : null}
+
+              {tgPublishedCount > 0 || Object.keys(tgStickers).length > 0 ? (
+                <ul className="space-y-1 text-xs">
+                  {draft.concepts.map((c) => {
+                    const id = stickerIdFor(c.id);
+                    const row = id ? tgStickers[id] : undefined;
+                    return (
+                      <li key={c.id} className="flex flex-wrap items-center gap-2">
+                        <span className="text-foreground">{c.label}</span>
+                        <span className="text-muted-foreground">
+                          {row?.status === "published"
+                            ? "Published to Telegram"
+                            : row?.telegram_publish_error
+                              ? `Failed — ${row.telegram_publish_error}`
+                              : "Not published"}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
+              ) : null}
+
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  type="button"
+                  className="min-h-11"
+                  disabled={!canPublish}
+                  onClick={() => (packPublished ? void doPublish() : setConfirmPublish(true))}
+                >
+                  {publishing ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Send className="size-4" aria-hidden="true" />
+                  )}
+                  {packPublished ? "Retry failed stickers" : "Publish sticker pack"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11"
+                  disabled={!packId || tgRefreshing}
+                  onClick={() => void doRefresh()}
+                >
+                  {tgRefreshing ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <RefreshCw className="size-4" aria-hidden="true" />
+                  )}
+                  Refresh Telegram status
+                </Button>
+                {tgPack?.telegram_set_url ? (
+                  <Button asChild variant="outline" className="min-h-11">
+                    <a href={tgPack.telegram_set_url} target="_blank" rel="noreferrer noopener">
+                      Open sticker pack
+                    </a>
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11"
+                  disabled={tgPublishedCount === 0 || sendingTest}
+                  onClick={() => void doSendTest()}
+                >
+                  {sendingTest ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  ) : null}
+                  Send test sticker
+                </Button>
               </div>
-              <Button type="button" disabled className="min-h-11 w-full sm:w-auto">
-                <Send className="size-4" aria-hidden="true" />
-                Telegram publishing arrives in a later phase
-              </Button>
+
+              {packPublished ? (
+                <p className="text-xs text-muted-foreground">
+                  Retrying only re-attempts stickers that are not published yet — the existing set is
+                  not recreated.
+                </p>
+              ) : null}
+              {testResult ? <p className="text-xs text-muted-foreground">{testResult}</p> : null}
+              <p className="text-xs text-muted-foreground">
+                The test sends a <strong>native Telegram sticker</strong>, not an image file. If
+                Telegram cannot reach you, open the bot, tap Start, then retry.
+              </p>
+              {!canPublish && !publishing ? (
+                <p className="text-xs text-muted-foreground">
+                  Publishing needs: a configured bot, your numeric Telegram owner ID, at least one
+                  export-ready sticker, and all browser/cutout checks finished.
+                </p>
+              ) : null}
             </CardContent>
           </Card>
+
+          <AlertDialog open={confirmPublish} onOpenChange={setConfirmPublish}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Publish this pack to Telegram?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This creates a real, shareable Telegram sticker set owned by your Telegram account
+                  ({telegram.connection?.telegram_user_id}). {exportableCount} verified sticker
+                  {exportableCount === 1 ? "" : "s"} will be uploaded. Sets cannot be transferred to
+                  another owner later.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    setConfirmPublish(false);
+                    void doPublish();
+                  }}
+                >
+                  Publish now
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </StepCard>
       ) : null}
 
