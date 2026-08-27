@@ -925,7 +925,16 @@ function StickerLabBuilder() {
     const id = stickerIdFor(c.id);
     return id ? tgStickers[id]?.status === "published" : false;
   }).length;
-  const packPublished = !!tgPack?.telegram_set_url && tgPublishedCount > 0;
+  const totalConcepts = draft.concepts.length;
+  const allPublished = totalConcepts > 0 && tgPublishedCount === totalConcepts;
+  const partiallyPublished = tgPublishedCount > 0 && !allPublished;
+  const telegramSetExists = !!tgPack?.telegram_set_url || !!tgPack?.telegram_set_name;
+  const canRetryPublish = !allPublished && (partiallyPublished || telegramSetExists);
+  // Only Review/export-approved sticker rows are ever sent to the server.
+  const reviewedStickerIds = draft.concepts
+    .filter((c) => isExportable(c.id))
+    .map((c) => stickerIdFor(c.id))
+    .filter((id): id is string => !!id);
   const canPublish =
     !!packId &&
     !!workspaceId &&
