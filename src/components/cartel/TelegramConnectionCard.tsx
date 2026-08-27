@@ -60,13 +60,6 @@ function secondsLeft(expiresAt?: string | null): number {
   return ms > 0 ? Math.ceil(ms / 1000) : 0;
 }
 
-/** Android / iPhone / iPod / iPad incl. modern iPadOS (Macintosh + touch). */
-function isMobileDevice(): boolean {
-  if (typeof navigator === "undefined") return false;
-  const ua = navigator.userAgent || "";
-  if (/Android|iPhone|iPod|iPad/i.test(ua)) return true;
-  return /Macintosh/i.test(ua) && (navigator.maxTouchPoints ?? 0) > 1;
-}
 
 
 export function TelegramConnectionCard({
