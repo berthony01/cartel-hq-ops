@@ -58,6 +58,21 @@ import {
   X,
 } from "lucide-react";
 
+import {
+  loadPackTelegramState,
+  previewShortName,
+  publishPack,
+  refreshPackStatus,
+  sendTestSticker,
+  telegramErrorMessage,
+  type PackTelegramState,
+  type StickerTelegramState,
+  type TelegramPublishResult,
+} from "@/lib/telegram-stickers";
+import {
+  TelegramConnectionCard,
+  useTelegramSetup,
+} from "@/components/cartel/TelegramConnectionCard";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { Button } from "@/components/ui/button";
