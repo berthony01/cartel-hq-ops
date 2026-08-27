@@ -2356,7 +2356,7 @@ function StickerLabBuilder() {
                 </Button>
               </div>
 
-              {packPublished ? (
+              {canRetryPublish ? (
                 <p className="text-xs text-muted-foreground">
                   Retrying only re-attempts stickers that are not published yet — the existing set is
                   not recreated.
@@ -2367,7 +2367,7 @@ function StickerLabBuilder() {
                 The test sends a <strong>native Telegram sticker</strong>, not an image file. If
                 Telegram cannot reach you, open the bot, tap Start, then retry.
               </p>
-              {!canPublish && !publishing ? (
+              {!canPublish && !publishing && !allPublished ? (
                 <p className="text-xs text-muted-foreground">
                   Publishing needs: a configured bot, your numeric Telegram owner ID, at least one
                   export-ready sticker, and all browser/cutout checks finished.
