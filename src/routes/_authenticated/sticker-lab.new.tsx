@@ -592,9 +592,14 @@ function StickerLabBuilder() {
               [stickerId]: ok ? "ready" : hadPreview ? "replacement_failed" : "failed",
             }));
             if (!ok) {
-              setErrors((e) => ({
+              setFailures((e) => ({
                 ...e,
-                [stickerId]: "The finished image could not be loaded from private storage.",
+                [stickerId]: {
+                  kind: "service",
+                  title: "Image could not be loaded",
+                  body: "The sticker finished but its image could not be read from private storage. Use “Refresh status”, then retry if it still does not appear.",
+                  raw: null,
+                },
               }));
             }
             return;
@@ -609,17 +614,23 @@ function StickerLabBuilder() {
         }
       }
       setStages((s) => ({ ...s, [stickerId]: "timeout" }));
-      setErrors((e) => ({
+      setFailures((e) => ({
         ...e,
-        [stickerId]: "Still running after 15 minutes. Use Refresh status later.",
+        [stickerId]: {
+          kind: "service",
+          title: "Still running after 15 minutes",
+          body: "This sticker is taking unusually long. It may still finish on the provider — use “Refresh status” later before retrying so you do not pay twice.",
+          raw: null,
+        },
       }));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Generation could not start.";
       toast.error(message);
-      setErrors((e) => ({ ...e, [stickerId]: message }));
+      setFailures((e) => ({ ...e, [stickerId]: classifyProviderError(message) }));
       // Fall back to durable, backend-derived state.
       pollingRef.current.delete(stickerId);
       await loadExisting(packId);
+
     } finally {
       pollingRef.current.delete(stickerId);
     }
