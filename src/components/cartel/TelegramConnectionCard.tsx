@@ -284,11 +284,25 @@ export function TelegramConnectionCard({
               Waiting for Telegram…
             </p>
             <p className="mt-1">
-              Tap <strong>Start</strong> in the bot chat.{" "}
+              Telegram opened. Tap <strong>Start</strong> in @{botUsername ?? "PepeCartelHQBot"},
+              then return here. CARTEL HQ will connect automatically.{" "}
+              {launchBlocked ? "If Telegram did not open, use Open Telegram below." : null}{" "}
               {remaining > 0
                 ? `This one-time link expires in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}.`
                 : "This one-time link is about to expire."}
             </p>
+            {manualUrl ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3 min-h-9"
+                onClick={() => launchTelegram(launchUrls.app, launchUrls.web)}
+              >
+                <ExternalLink className="size-4" aria-hidden="true" />
+                Open Telegram
+              </Button>
+            ) : null}
           </div>
         ) : null}
 
