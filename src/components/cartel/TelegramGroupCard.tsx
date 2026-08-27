@@ -247,7 +247,9 @@ export function TelegramGroupCard({
     ? (launchUrls.app ?? launchUrls.web)
     : (launchUrls.web ?? launchUrls.app);
   const lastCheck = groupQuery.data?.request?.metadata?.last_group_check;
+  // The 100-member rule only applies once the chat is already a supergroup.
   const belowMinMembers =
+    isSupergroup &&
     typeof memberCount === "number" &&
     typeof minMembers === "number" &&
     memberCount < minMembers;
