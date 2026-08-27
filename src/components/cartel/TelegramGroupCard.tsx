@@ -29,27 +29,77 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
  */
 export function useTelegramGroupSetup(enabled = true) {
   const { workspaceId } = useWorkspace();
+  const queryClient = useQueryClient();
   const groupQuery = useQuery({
     queryKey: ["telegram-group-link", workspaceId],
     enabled: enabled && !!workspaceId,
     queryFn: () => fetchTelegramGroupLinkStatus(workspaceId!),
   });
 
+  const [live, setLive] = useState<TelegramGroupStatusResult | null>(null);
+  const [checking, setChecking] = useState(false);
+
   const group: TelegramGroupConnection | null = groupQuery.data?.group ?? null;
+  const groupId = group?.id ?? null;
+
+  const recheck = useCallback(
+    async (silent = false) => {
+      if (!workspaceId || !groupId) return;
+      setChecking(true);
+      try {
+        const result = await fetchTelegramGroupStatus({
+          workspaceId,
+          groupConnectionId: groupId,
+        });
+        setLive(result);
+        void queryClient.invalidateQueries({ queryKey: ["telegram-group-link", workspaceId] });
+        if (!silent) toast.success("Group status re-checked.");
+      } catch (err) {
+        if (!silent) toast.error(telegramErrorMessage(err));
+      } finally {
+        setChecking(false);
+      }
+    },
+    [groupId, queryClient, workspaceId],
+  );
+
+  // Live verification when a connected group appears and on window refocus.
+  useEffect(() => {
+    if (!enabled || !groupId) return;
+    void recheck(true);
+    const onFocus = () => void recheck(true);
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [enabled, groupId, recheck]);
+
+  const isSupergroup = (live?.chatType ?? group?.chat_type) === "supergroup";
+  const botAdmin = live?.botIsAdmin ?? group?.bot_is_admin ?? false;
+  const botCanChangeInfo = live?.botCanChangeInfo;
+  const canSetStickerSet = live?.canSetStickerSet ?? group?.can_set_sticker_set ?? false;
+
+  // Operational readiness never depends on official group-sticker eligibility.
   const ready =
-    !!group &&
-    group.chat_type === "supergroup" &&
-    group.bot_is_admin === true &&
-    group.can_set_sticker_set === true;
+    live?.ready ?? (!!group && isSupergroup && botAdmin && botCanChangeInfo !== false);
 
   return {
     workspaceId,
     groupQuery,
     group,
-    groupId: group?.id ?? null,
+    groupId,
     groupTitle: group?.title ?? null,
     groupConnected: !!group,
-    groupReady: ready,
+    groupReady: !!group && ready,
+    live,
+    checking,
+    recheck,
+    isSupergroup,
+    botAdmin,
+    botCanChangeInfo,
+    canSetStickerSet,
+    memberCount: live?.memberCount ?? null,
+    minMembers: live?.minMembers ?? null,
+    officialStickerEligible: live?.officialStickerEligible ?? false,
+    officialStickerReason: live?.officialStickerReason ?? null,
   };
 }
 
