@@ -72,14 +72,18 @@ export function useTelegramGroupSetup(enabled = true) {
     return () => window.removeEventListener("focus", onFocus);
   }, [enabled, groupId, recheck]);
 
-  const isSupergroup = (live?.chatType ?? group?.chat_type) === "supergroup";
+  const chatType = live?.chatType ?? group?.chat_type ?? null;
+  const isSupergroup = chatType === "supergroup";
+  const isBasicGroup = chatType === "group";
+  // Both basic groups and supergroups are valid CARTEL HQ targets.
+  const supportedChatType = isSupergroup || isBasicGroup;
   const botAdmin = live?.botIsAdmin ?? group?.bot_is_admin ?? false;
   const botCanChangeInfo = live?.botCanChangeInfo;
   const canSetStickerSet = live?.canSetStickerSet ?? group?.can_set_sticker_set ?? false;
 
-  // Operational readiness never depends on official group-sticker eligibility.
+  // Operational readiness never depends on chat upgrade or official sticker eligibility.
   const ready =
-    live?.ready ?? (!!group && isSupergroup && botAdmin && botCanChangeInfo !== false);
+    live?.ready ?? (!!group && supportedChatType && botAdmin && botCanChangeInfo !== false);
 
   return {
     workspaceId,
@@ -92,7 +96,10 @@ export function useTelegramGroupSetup(enabled = true) {
     live,
     checking,
     recheck,
+    chatType,
     isSupergroup,
+    isBasicGroup,
+    supportedChatType,
     botAdmin,
     botCanChangeInfo,
     canSetStickerSet,
