@@ -224,8 +224,11 @@ export function TelegramGroupCard({
       <CardContent className="space-y-4 text-sm">
         <p className="text-xs leading-relaxed text-muted-foreground">
           Connect the supergroup where this sticker pack should become the group sticker set.
-          Members can then use the set inside that group — installing it globally to a personal
-          Telegram account stays a separate, individual action.
+          If @PepeCartelHQBot is already installed there, open the group and send{" "}
+          <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
+          once while a one-time link is active. Otherwise, choose the group and approve admin rights
+          when Telegram opens. Members can then use the set inside that group — installing it globally
+          to a personal Telegram account stays a separate, individual action.
         </p>
 
         {group ? (
