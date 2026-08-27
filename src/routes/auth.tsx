@@ -86,7 +86,8 @@ function AuthPage() {
         email: email.trim(),
         password,
         options: {
-          emailRedirectTo: window.location.origin,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+
           ...(displayName.trim() ? { data: { display_name: displayName.trim() } } : {}),
         },
       });
