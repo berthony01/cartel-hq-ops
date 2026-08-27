@@ -107,26 +107,114 @@ export async function loadLatestJobs(
   return out;
 }
 
+export type FailureKind =
+  | "safety"
+  | "busy"
+  | "rate_limit"
+  | "network"
+  | "service"
+  | "unknown";
+
+export type ProviderFailure = {
+  kind: FailureKind;
+  title: string;
+  body: string;
+  /** Raw provider text — technical-detail disclosure only, never the primary message. */
+  raw: string | null;
+};
+
 /**
- * Maps a raw provider error to a user-safe English message. The raw text is
- * kept by callers for developer/debug surfaces only.
+ * Maps a raw provider/job error to a structured, plain-English failure the UI
+ * can render with a clear title, explanation and next action. The raw text is
+ * preserved separately for a technical-detail surface only.
  */
-export function friendlyProviderError(raw: string | null | undefined, jobType?: string): string {
-  const fallback =
-    jobType && jobType.includes("background")
-      ? "Background removal failed. Retry this sticker."
-      : "The last attempt failed. Retry this sticker.";
-  if (!raw) return fallback;
-  if (raw.includes("服务繁忙") || /busy/i.test(raw)) {
-    const queued = raw.match(/(\d+)/)?.[1];
-    return queued
-      ? `Kie is temporarily busy (${queued} tasks were queued). Please retry this sticker in a few minutes.`
-      : "Kie is temporarily busy. Please retry this sticker in a few minutes.";
+export function classifyProviderError(
+  raw: string | null | undefined,
+  jobType?: string | null,
+): ProviderFailure {
+  const text = (raw ?? "").trim();
+  const lower = text.toLowerCase();
+  const background = (jobType ?? "").toLowerCase().includes("background");
+  const detail = text || null;
+
+  const has = (...needles: string[]) => needles.some((n) => lower.includes(n));
+
+  if (has("sensitive", "flagged", "content policy", "moderation", "safety", "nsfw", "prohibited")) {
+    return {
+      kind: "safety",
+      title: "Blocked by the image filter",
+      body: "The provider's safety filter rejected this sticker's wording or reference image. Try a milder action description — for example remove weapons, blood, gore or brand names — or pick a different reference image, then retry.",
+      raw: detail,
+    };
   }
-  // Avoid surfacing non-Latin provider text directly in the UI.
-  if (/[^\u0000-\u024F]/.test(raw)) return fallback;
-  return raw;
+
+  if (text.includes("服务繁忙") || has("busy", "queue", "queued", "capacity", "overloaded")) {
+    const queued = text.match(/(\d+)/)?.[1];
+    return {
+      kind: "busy",
+      title: "Provider is busy",
+      body: queued
+        ? `Kie is handling too many tasks right now (${queued} were queued). Nothing was lost — wait a minute and retry this sticker.`
+        : "Kie is handling too many tasks right now. Nothing was lost — wait a minute and retry this sticker.",
+      raw: detail,
+    };
+  }
+
+  if (has("rate limit", "rate-limit", "ratelimit", "429", "too many requests")) {
+    return {
+      kind: "rate_limit",
+      title: "Rate limit reached",
+      body: "Too many generations were sent in a short window. Wait about a minute, then retry. Stickers that already finished are unaffected.",
+      raw: detail,
+    };
+  }
+
+  if (has("fetch failed", "network", "econnreset", "enotfound", "socket", "abort", "connection")) {
+    return {
+      kind: "network",
+      title: "Connection interrupted",
+      body: "The request to the generation service did not complete. This is usually temporary — check your connection and retry this sticker.",
+      raw: detail,
+    };
+  }
+
+  if (has("503", "502", "504", "unavailable", "timeout", "timed out", "gateway", "internal server")) {
+    return {
+      kind: "service",
+      title: "Generation service unavailable",
+      body: "The generation service did not respond in time. Your pack and every finished sticker are safe. Try again shortly.",
+      raw: detail,
+    };
+  }
+
+  return {
+    kind: "unknown",
+    title: background ? "Background removal didn't finish" : "This sticker didn't finish",
+    body: background
+      ? "The image was generated but the background could not be removed, so no transparent PNG was stored. Nothing else in the pack was affected. Retry this sticker."
+      : "The last attempt failed before an image was stored. Nothing else in the pack was affected. Retry this sticker.",
+    raw: detail,
+  };
 }
+
+/** Attempt count and last failure reason per sticker, derived from ai_jobs rows. */
+export function summarizeAttempts(jobs: AiJobRow[] | undefined): {
+  attempts: number;
+  failed: number;
+  lastFailure: string | null;
+} {
+  const rows = jobs ?? [];
+  // One user attempt spawns a generation job (and possibly a background child).
+  const attempts = rows.filter((j) => !j.job_type.toLowerCase().includes("background")).length;
+  const failedRows = rows.filter((j) => j.status === "failed");
+  const last = failedRows[0];
+  return {
+    attempts: attempts || rows.length,
+    failed: failedRows.length,
+    lastFailure: last ? classifyProviderError(last.error_message, last.job_type).title : null,
+  };
+}
+
 
 
 export async function loadPackStickers(packId: string): Promise<StickerRow[]> {
