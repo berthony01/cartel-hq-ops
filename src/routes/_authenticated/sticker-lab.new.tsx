@@ -771,6 +771,7 @@ function StickerLabBuilder() {
         preview.url,
         stickerFileName(draft.packName || "cartel-pack", index, concept.label),
       );
+      toast.success("Transparent PNG verified and saved unchanged.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Download failed.");
     }
@@ -785,23 +786,38 @@ function StickerLabBuilder() {
         return {
           filename: stickerFileName(draft.packName || "cartel-pack", i, c.label),
           url: preview.url,
+          label: c.label,
         };
       })
-      .filter(Boolean) as { filename: string; url: string }[];
+      .filter(Boolean) as { filename: string; url: string; label: string }[];
     if (entries.length === 0) {
       toast.error("There are no ready, transparency-verified stickers to export yet.");
       return;
     }
     setExporting(true);
     try {
-      const count = await downloadStickersZip(entries, packZipName(draft.packName || "cartel-pack"));
-      toast.success(`${count} sticker${count === 1 ? "" : "s"} exported.`);
+      const result = await downloadStickersZip(
+        entries,
+        packZipName(draft.packName || "cartel-pack"),
+      );
+      if (result.omitted.length > 0) {
+        toast.warning(
+          `${result.exported} verified transparent PNG${result.exported === 1 ? "" : "s"} exported. Omitted: ${result.omitted
+            .map((o) => `${o.label} (${o.reason})`)
+            .join(", ")}.`,
+        );
+      } else {
+        toast.success(
+          `${result.exported} verified transparent PNG${result.exported === 1 ? "" : "s"} exported.`,
+        );
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Export failed.");
     } finally {
       setExporting(false);
     }
   };
+
 
 
   const goNext = () => {
@@ -1549,6 +1565,21 @@ function StickerLabBuilder() {
               or published.
             </p>
           </div>
+
+          <div className="mb-6 rounded-md border border-border bg-background/40 p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-pepe">
+              Transparent PNG verified
+            </p>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              The checkerboard behind each preview marks the pixels that are actually transparent.
+              Some image viewers display transparent areas as white or black — that is the viewer
+              compositing the image, not a background baked into the file. Telegram places the
+              transparent sticker directly over the chat background, so no rectangular background
+              appears. Every download is re-checked in your browser for a real alpha channel before
+              it is saved, and the original PNG bytes are saved unchanged.
+            </p>
+          </div>
+
 
           {omittedLabels.length > 0 ? (
             <p className="mb-6 text-xs text-muted-foreground">
