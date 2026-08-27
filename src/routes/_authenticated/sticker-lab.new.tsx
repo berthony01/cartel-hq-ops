@@ -539,7 +539,7 @@ function StickerLabBuilder() {
   /** Runs one sticker through the server pipeline. Only ever user initiated. */
   const runGeneration = async (conceptId: string, stickerId: string, packId: string) => {
     const hadPreview = !!previews[stickerId];
-    setErrors((e) => ({ ...e, [stickerId]: "" }));
+    setFailures((e) => ({ ...e, [stickerId]: undefined }));
     setNotes((n) => ({ ...n, [stickerId]: "" }));
     // No "Generating" until the server confirms a job id.
     setStages((s) => ({ ...s, [stickerId]: "starting" }));
