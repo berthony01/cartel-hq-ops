@@ -147,7 +147,10 @@ const STAGE_LABEL: Record<Stage, string> = {
   timeout: "Timed out",
 };
 
-type Preview = { url: string; transparencyValid: boolean };
+type Preview = { url: string; transparencyValid: boolean; storagePath?: string };
+
+/** Action-scoped signed URL lifetime (seconds) for verify/download only. */
+const ACTION_URL_TTL = 300;
 
 const CHECKERBOARD: React.CSSProperties = {
   backgroundImage:
@@ -186,7 +189,7 @@ function StickerLabBuilder() {
    * already-signed PNG bytes. Never written back to Supabase.
    */
   const [clientChecks, setClientChecks] = useState<
-    Record<string, { url: string; status: "checking" | "verified" | "failed"; reason?: string }>
+    Record<string, { source: string; status: "checking" | "verified" | "failed"; reason?: string }>
   >({});
   const [checkProgress, setCheckProgress] = useState<{ done: number; total: number } | null>(null);
 
@@ -340,7 +343,11 @@ function StickerLabBuilder() {
       const url = asset ? urls[asset.storage_path] : undefined;
       const hasAsset = !!(asset && url);
       if (asset && url) {
-        nextPreviews[row.id] = { url, transparencyValid: asset.transparency_valid === true };
+        nextPreviews[row.id] = {
+          url,
+          transparencyValid: asset.transparency_valid === true,
+          storagePath: asset.storage_path,
+        };
       }
       // A locally polling sticker owns its own transient stage.
       if (pollingRef.current.has(row.id)) continue;
@@ -381,20 +388,27 @@ function StickerLabBuilder() {
   }, []);
 
   /**
-   * Second, browser-side transparency verification. Read-only: it fetches the
-   * already-signed preview URL and inspects the original PNG bytes with the same
-   * verifyAlpha() helper used at export time. Nothing is uploaded, re-encoded or
-   * written back to Supabase, and no provider call is made.
+   * Second, browser-side transparency verification. Read-only: it mints a fresh,
+   * short-lived signed URL from the immutable storage path immediately before
+   * fetching the original PNG bytes, then inspects them with the same verifyAlpha()
+   * helper used at export time. Nothing is uploaded, re-encoded or written back to
+   * Supabase, and no provider call is made.
    */
   const runClientVerification = useCallback(
     async (force = false) => {
       if (verifyRunRef.current) return;
       const candidates = Object.entries(previews)
-        .filter(([, p]) => p.transparencyValid === true && !!p.url)
-        .map(([stickerId, p]) => ({ stickerId, url: p.url }));
-      const pending = candidates.filter(({ stickerId, url }) => {
+        .filter(([, p]) => p.transparencyValid === true && !!(p.storagePath ?? p.url))
+        .map(([stickerId, p]) => ({
+          stickerId,
+          // Staleness keys off the immutable asset source, never the temporary URL.
+          source: p.storagePath ?? p.url,
+          storagePath: p.storagePath,
+          fallbackUrl: p.url,
+        }));
+      const pending = candidates.filter(({ stickerId, source }) => {
         const existing = clientChecks[stickerId];
-        return force || !existing || existing.url !== url;
+        return force || !existing || existing.source !== source;
       });
       if (pending.length === 0) return;
 
@@ -402,7 +416,7 @@ function StickerLabBuilder() {
       setCheckProgress({ done: 0, total: pending.length });
       setClientChecks((prev) => {
         const next = { ...prev };
-        for (const { stickerId, url } of pending) next[stickerId] = { url, status: "checking" };
+        for (const { stickerId, source } of pending) next[stickerId] = { source, status: "checking" };
         return next;
       });
 
@@ -412,14 +426,37 @@ function StickerLabBuilder() {
         for (;;) {
           const item = queue.shift();
           if (!item) return;
+          // Fresh action-scoped URL so a stale 60s preview link can never fail the check.
           // eslint-disable-next-line no-await-in-loop
-          const check = await verifyAlphaAtUrl(item.url);
+          const freshUrl = item.storagePath
+            ? await signedUrl(item.storagePath, ACTION_URL_TTL)
+            : item.fallbackUrl;
+          if (!aliveRef.current) return;
+          if (!freshUrl) {
+            setClientChecks((prev) => ({
+              ...prev,
+              [item.stickerId]: {
+                source: item.source,
+                status: "failed",
+                reason: "a secure download link could not be created for this private file",
+              },
+            }));
+            done += 1;
+            setCheckProgress({ done, total: pending.length });
+            continue;
+          }
+          // eslint-disable-next-line no-await-in-loop
+          const check = await verifyAlphaAtUrl(freshUrl);
           if (!aliveRef.current) return;
           setClientChecks((prev) => ({
             ...prev,
             [item.stickerId]: check.ok
-              ? { url: item.url, status: "verified" }
-              : { url: item.url, status: "failed", reason: check.reason ?? "transparency check failed" },
+              ? { source: item.source, status: "verified" }
+              : {
+                  source: item.source,
+                  status: "failed",
+                  reason: check.reason ?? "transparency check failed",
+                },
           }));
           done += 1;
           setCheckProgress({ done, total: pending.length });
@@ -611,7 +648,11 @@ function StickerLabBuilder() {
     if (!url || !aliveRef.current) return false;
     setPreviews((p) => ({
       ...p,
-      [stickerId]: { url, transparencyValid: asset.transparency_valid === true },
+      [stickerId]: {
+        url,
+        transparencyValid: asset.transparency_valid === true,
+        storagePath: asset.storage_path,
+      },
     }));
     return true;
   };
@@ -857,8 +898,18 @@ function StickerLabBuilder() {
       return;
     }
     try {
+      // Preview links are deliberately short-lived; mint a fresh one at click time.
+      const freshUrl = preview.storagePath
+        ? await signedUrl(preview.storagePath, ACTION_URL_TTL)
+        : preview.url;
+      if (!freshUrl) {
+        toast.error(
+          "Could not create a secure download link for this private file. Refresh status and try again.",
+        );
+        return;
+      }
       await downloadStickerPng(
-        preview.url,
+        freshUrl,
         stickerFileName(draft.packName || "cartel-pack", index, concept.label),
       );
       toast.success("Transparent PNG verified and saved unchanged.");
@@ -868,31 +919,61 @@ function StickerLabBuilder() {
   };
 
   const downloadZip = async () => {
-    const entries = draft.concepts
+    const candidates = draft.concepts
       .map((c, i) => {
         const id = stickerIdFor(c.id);
         const preview = id ? previews[id] : undefined;
         if (!preview || !isExportable(c.id)) return null;
         return {
           filename: stickerFileName(draft.packName || "cartel-pack", i, c.label),
-          url: preview.url,
+          storagePath: preview.storagePath,
+          fallbackUrl: preview.url,
           label: c.label,
         };
       })
-      .filter(Boolean) as { filename: string; url: string; label: string }[];
-    if (entries.length === 0) {
+      .filter(Boolean) as {
+      filename: string;
+      storagePath?: string;
+      fallbackUrl: string;
+      label: string;
+    }[];
+    if (candidates.length === 0) {
       toast.error("There are no ready, transparency-verified stickers to export yet.");
       return;
     }
     setExporting(true);
     try {
+      // One batched, action-scoped signing call so a multi-sticker export cannot
+      // expire mid-download. Read-only: no storage or table write.
+      const paths = candidates.map((c) => c.storagePath).filter(Boolean) as string[];
+      const fresh = await signedUrlMap(paths, ACTION_URL_TTL);
+
+      const entries: { filename: string; url: string; label: string }[] = [];
+      const linkFailures: { label: string; reason: string }[] = [];
+      for (const c of candidates) {
+        const url = c.storagePath ? fresh[c.storagePath] : c.fallbackUrl;
+        if (!url) {
+          linkFailures.push({ label: c.label, reason: "no secure download link could be created" });
+          continue;
+        }
+        entries.push({ filename: c.filename, url, label: c.label });
+      }
+
+      if (entries.length === 0) {
+        toast.error(
+          "Secure download links could not be created for these private files. Refresh status and try again.",
+        );
+        return;
+      }
+
       const result = await downloadStickersZip(
         entries,
         packZipName(draft.packName || "cartel-pack"),
       );
-      if (result.omitted.length > 0) {
+      const omitted = [...linkFailures, ...result.omitted];
+      if (omitted.length > 0) {
         toast.warning(
-          `${result.exported} verified transparent PNG${result.exported === 1 ? "" : "s"} exported. Omitted: ${result.omitted
+          `${result.exported} verified transparent PNG${result.exported === 1 ? "" : "s"} exported. Omitted: ${omitted
             .map((o) => `${o.label} (${o.reason})`)
             .join(", ")}.`,
         );

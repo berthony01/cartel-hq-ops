@@ -135,12 +135,15 @@ export async function signedUrl(path: string, expiresIn = 60): Promise<string | 
   return data?.signedUrl ?? null;
 }
 
-export async function signedUrlMap(paths: string[]): Promise<Record<string, string>> {
+export async function signedUrlMap(
+  paths: string[],
+  expiresIn = 60,
+): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   if (paths.length === 0) return out;
   const { data } = await supabase.storage
     .from(ASSETS_BUCKET)
-    .createSignedUrls(paths, 60);
+    .createSignedUrls(paths, expiresIn);
   for (const entry of data ?? []) {
     if (entry.path && entry.signedUrl) out[entry.path] = entry.signedUrl;
   }
