@@ -1,8 +1,28 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import { useSession } from "@/hooks/useSession";
 import { useWorkspace } from "@/lib/workspace-context";
-import { signedUrl, uploadWorkspaceAsset, validateImageFile } from "@/lib/media";
+import {
+  listWorkspaceAssets,
+  signedUrl,
+  signedUrlMap,
+  uploadWorkspaceAsset,
+  validateImageFile,
+  type MediaAsset,
+} from "@/lib/media";
+import {
+  fetchStickerAiConfig,
+  startStickerGeneration,
+  syncStickerJob,
+} from "@/lib/sticker-ai";
+import {
+  loadAssets,
+  loadPackStickers,
+  persistDraft,
+  type PersistResult,
+  type StickerRow,
+} from "@/lib/sticker-packs";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -10,9 +30,12 @@ import {
   Check,
   ImagePlus,
   Info,
+  Loader2,
   Plus,
+  RefreshCw,
   RotateCcw,
   Send,
+  Sparkles,
   Trash2,
   TriangleAlert,
   X,
@@ -25,7 +48,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   BUILDER_STEPS,
+  MAX_REFERENCES,
   PACK_SIZES,
   PACK_THEMES,
   loadDraft,
@@ -44,12 +78,12 @@ export const Route = createFileRoute("/_authenticated/sticker-lab/new")({
       {
         name: "description",
         content:
-          "Prototype builder for planning a PEPECARTEL sticker pack: reference, setup, concepts, generation preview and Telegram review.",
+          "Build a PEPECARTEL sticker pack: private references, pack setup, concepts, AI generation with verified transparency, and review.",
       },
       { property: "og:title", content: "New Sticker Pack — CARTEL HQ" },
       {
         property: "og:description",
-        content: "Walk through the planned PEPECARTEL sticker pack creation flow.",
+        content: "Create a PEPECARTEL sticker pack inside the CARTEL HQ operating layer.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -59,6 +93,40 @@ export const Route = createFileRoute("/_authenticated/sticker-lab/new")({
 });
 
 const ACCEPTED = "image/png,image/jpeg,image/webp,image/gif";
+const REFERENCE_TYPES = ["mascot", "reference_image", "logo"] as const;
+const POLL_TIMEOUT_MS = 15 * 60 * 1000;
+
+type Stage =
+  | "idle"
+  | "saving"
+  | "generating"
+  | "background"
+  | "verifying"
+  | "ready"
+  | "failed"
+  | "timeout";
+
+const STAGE_LABEL: Record<Stage, string> = {
+  idle: "Not generated",
+  saving: "Saving pack…",
+  generating: "Generating",
+  background: "Background removal",
+  verifying: "Transparency check",
+  ready: "Ready",
+  failed: "Failed",
+  timeout: "Timed out",
+};
+
+type Preview = { url: string; transparencyValid: boolean };
+
+const CHECKERBOARD: React.CSSProperties = {
+  backgroundImage:
+    "linear-gradient(45deg, rgba(255,255,255,0.08) 25%, transparent 25%), linear-gradient(-45deg, rgba(255,255,255,0.08) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.08) 75%), linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.08) 75%)",
+  backgroundSize: "16px 16px",
+  backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
+};
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function StickerLabBuilder() {
   const { workspaceId } = useWorkspace();
@@ -70,7 +138,20 @@ function StickerLabBuilder() {
   const [dragging, setDragging] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [packNameError, setPackNameError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [stages, setStages] = useState<Record<string, Stage>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [previews, setPreviews] = useState<Record<string, Preview>>({});
+  const [confirmRemaining, setConfirmRemaining] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const aliveRef = useRef(true);
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     setDraft(loadDraft());
@@ -92,6 +173,62 @@ function StickerLabBuilder() {
       active = false;
     };
   }, [storedPath]);
+
+  // Existing private workspace references the user can reuse without uploading.
+  const referencesQuery = useQuery({
+    queryKey: ["workspace-references", workspaceId],
+    enabled: !!workspaceId,
+    queryFn: async () => {
+      const assets = await listWorkspaceAssets(workspaceId!);
+      const usable = assets.filter((a) =>
+        (REFERENCE_TYPES as readonly string[]).includes(a.asset_type),
+      );
+      const urls = await signedUrlMap(usable.map((a) => a.storage_path));
+      return { assets: usable, urls };
+    },
+  });
+
+  // Provider status. Free probe, never a generation call.
+  const configQuery = useQuery({
+    queryKey: ["sticker-ai-config"],
+    enabled: step === 4,
+    staleTime: 60_000,
+    retry: false,
+    queryFn: fetchStickerAiConfig,
+  });
+
+  const packId = draft?.packId ?? null;
+
+  // Load already-persisted sticker rows and their verified assets (no provider call).
+  const loadExisting = useCallback(async (id: string) => {
+    let rows: StickerRow[] = [];
+    try {
+      rows = await loadPackStickers(id);
+    } catch {
+      return;
+    }
+    const assetIds = rows.map((r) => r.image_asset_id).filter(Boolean) as string[];
+    const assets = await loadAssets(assetIds);
+    const paths = Object.values(assets).map((a) => a.storage_path);
+    const urls = await signedUrlMap(paths);
+    if (!aliveRef.current) return;
+    const nextPreviews: Record<string, Preview> = {};
+    const nextStages: Record<string, Stage> = {};
+    for (const row of rows) {
+      const asset = row.image_asset_id ? assets[row.image_asset_id] : undefined;
+      const url = asset ? urls[asset.storage_path] : undefined;
+      if (asset && url) {
+        nextPreviews[row.id] = { url, transparencyValid: asset.transparency_valid === true };
+        nextStages[row.id] = "ready";
+      }
+    }
+    setPreviews((p) => ({ ...nextPreviews, ...p }));
+    setStages((s) => ({ ...nextStages, ...s }));
+  }, []);
+
+  useEffect(() => {
+    if (packId) void loadExisting(packId);
+  }, [packId, loadExisting]);
 
   if (!draft) {
     return (
@@ -128,8 +265,12 @@ function StickerLabBuilder() {
         imageName: file.name,
         referenceAssetId: asset.id,
         referenceStoragePath: asset.storage_path,
+        referenceAssetIds: Array.from(
+          new Set([asset.id, ...draft.referenceAssetIds]),
+        ).slice(0, MAX_REFERENCES),
       });
-      toast.success("Reference image stored");
+      void referencesQuery.refetch();
+      toast.success("Reference stored privately in this workspace");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Upload failed.";
       setFileError(message);
@@ -142,10 +283,28 @@ function StickerLabBuilder() {
 
   const clearFile = () => {
     setPreviewUrl(null);
-    update({ imageName: null, referenceAssetId: null, referenceStoragePath: null });
+    const removed = draft.referenceAssetId;
+    update({
+      imageName: null,
+      referenceAssetId: null,
+      referenceStoragePath: null,
+      referenceAssetIds: draft.referenceAssetIds.filter((id) => id !== removed),
+    });
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const toggleReference = (asset: MediaAsset) => {
+    const selected = draft.referenceAssetIds.includes(asset.id);
+    if (selected) {
+      update({ referenceAssetIds: draft.referenceAssetIds.filter((id) => id !== asset.id) });
+      return;
+    }
+    if (draft.referenceAssetIds.length >= MAX_REFERENCES) {
+      toast.error(`Select at most ${MAX_REFERENCES} references.`);
+      return;
+    }
+    update({ referenceAssetIds: [...draft.referenceAssetIds, asset.id] });
+  };
 
   const setTheme = (theme: PackTheme) =>
     update({ theme, concepts: starterConcepts(theme, draft.size) });
@@ -184,6 +343,161 @@ function StickerLabBuilder() {
     });
   };
 
+  /** Persists pack + concepts. Never triggers a provider call. */
+  const persist = async (): Promise<PersistResult | null> => {
+    if (!workspaceId || !user) {
+      toast.error("Select a workspace first.");
+      return null;
+    }
+    if (!draft.packName.trim()) {
+      toast.error("Give the pack a name in Step 2 before saving.");
+      return null;
+    }
+    setSaving(true);
+    try {
+      const result = await persistDraft({ workspaceId, userId: user.id, draft });
+      setDraft((d) =>
+        d ? { ...d, packId: result.packId, stickerIds: result.stickerIds } : d,
+      );
+      return result;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not save the pack.";
+      toast.error(message);
+      return null;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const attachAsset = async (stickerId: string, assetId: string) => {
+    const assets = await loadAssets([assetId]);
+    const asset = assets[assetId];
+    if (!asset) return false;
+    const url = await signedUrl(asset.storage_path, 3600);
+    if (!url || !aliveRef.current) return false;
+    setPreviews((p) => ({
+      ...p,
+      [stickerId]: { url, transparencyValid: asset.transparency_valid === true },
+    }));
+    return true;
+  };
+
+  /** Runs one sticker through the server pipeline. Only ever user initiated. */
+  const runGeneration = async (conceptId: string, stickerId: string) => {
+    setErrors((e) => ({ ...e, [stickerId]: "" }));
+    setStages((s) => ({ ...s, [stickerId]: "generating" }));
+    try {
+      const started = await startStickerGeneration({
+        workspaceId: workspaceId!,
+        packId: draft.packId ?? "",
+        stickerId,
+        referenceAssetIds: draft.referenceAssetIds,
+      });
+      let jobId = started.aiJobId;
+      let delay = 3000;
+      const deadline = Date.now() + POLL_TIMEOUT_MS;
+
+      while (Date.now() < deadline) {
+        await sleep(delay);
+        if (!aliveRef.current) return;
+        delay = Math.min(Math.round(delay * 1.3), 15_000);
+        const res = await syncStickerJob(jobId);
+        if (!aliveRef.current) return;
+
+        if (res.status === "failed") {
+          setStages((s) => ({ ...s, [stickerId]: "failed" }));
+          setErrors((e) => ({
+            ...e,
+            [stickerId]: res.error || "Generation failed. The previous image was kept.",
+          }));
+          return;
+        }
+        if (res.status === "succeeded") {
+          if (res.childJobId) {
+            jobId = res.childJobId;
+            delay = 3000;
+            setStages((s) => ({ ...s, [stickerId]: "background" }));
+            continue;
+          }
+          if (res.assetId) {
+            setStages((s) => ({ ...s, [stickerId]: "verifying" }));
+            const ok = await attachAsset(stickerId, res.assetId);
+            setStages((s) => ({ ...s, [stickerId]: ok ? "ready" : "failed" }));
+            if (!ok) {
+              setErrors((e) => ({
+                ...e,
+                [stickerId]: "The finished image could not be loaded from private storage.",
+              }));
+            }
+            return;
+          }
+          // Succeeded without an asset yet — refresh from the database.
+          if (draft.packId) await loadExisting(draft.packId);
+          setStages((s) => ({ ...s, [stickerId]: "ready" }));
+          return;
+        }
+        if (res.stage === "background_removal") {
+          setStages((s) => ({ ...s, [stickerId]: "background" }));
+        }
+      }
+      setStages((s) => ({ ...s, [stickerId]: "timeout" }));
+      setErrors((e) => ({
+        ...e,
+        [stickerId]: "Still running after 15 minutes. Use Refresh status later.",
+      }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Generation could not start.";
+      setStages((s) => ({ ...s, [stickerId]: "failed" }));
+      setErrors((e) => ({ ...e, [stickerId]: message }));
+    }
+    void conceptId;
+  };
+
+  const generateOne = async (conceptId: string) => {
+    setStages((s) => ({ ...s, [`concept:${conceptId}`]: "saving" }));
+    const result = await persist();
+    if (!result) {
+      setStages((s) => ({ ...s, [`concept:${conceptId}`]: "idle" }));
+      return;
+    }
+    const stickerId = result.stickerIds[conceptId];
+    if (!stickerId) {
+      toast.error("That concept could not be matched to a saved sticker.");
+      return;
+    }
+    await runGeneration(conceptId, stickerId);
+  };
+
+  const generateRemaining = async () => {
+    setConfirmRemaining(false);
+    const result = await persist();
+    if (!result) return;
+    for (const concept of draft.concepts) {
+      const stickerId = result.stickerIds[concept.id];
+      if (!stickerId) continue;
+      if (stages[stickerId] === "ready" || previews[stickerId]) continue;
+      // eslint-disable-next-line no-await-in-loop
+      await runGeneration(concept.id, stickerId);
+      if (!aliveRef.current) return;
+    }
+  };
+
+  const stickerIdFor = (conceptId: string) => draft.stickerIds[conceptId] ?? null;
+  const stageFor = (conceptId: string): Stage => {
+    const id = stickerIdFor(conceptId);
+    const local = stages[`concept:${conceptId}`];
+    if (local === "saving") return "saving";
+    if (!id) return "idle";
+    return stages[id] ?? (previews[id] ? "ready" : "idle");
+  };
+  const busy = (stage: Stage) =>
+    stage === "saving" || stage === "generating" || stage === "background" || stage === "verifying";
+
+  const anyBusy = draft.concepts.some((c) => busy(stageFor(c.id)));
+  const generatedCount = draft.concepts.filter((c) => stageFor(c.id) === "ready").length;
+  const remainingCount = draft.concepts.length - generatedCount;
+  const configured = configQuery.data?.configured === true;
+
   const goNext = () => {
     if (step === 2 && !draft.packName.trim()) {
       setPackNameError("Give the pack a name before continuing.");
@@ -204,8 +518,8 @@ function StickerLabBuilder() {
       <PageHeader
         eyebrow="Sticker Lab"
         title="New Sticker Pack"
-        description="A frontend prototype of the pack creation flow. Nothing here uploads, generates or publishes — your inputs stay in this browser session only."
-        status="Prototype · Not connected"
+        description="References, packs and stickers are stored in your private CARTEL HQ workspace. AI generation runs server-side and only when you start it."
+        status={draft.packId ? "Saved to workspace" : "Draft"}
         actions={
           <Button asChild variant="outline" className="min-h-11">
             <Link to="/sticker-lab">
@@ -221,12 +535,12 @@ function StickerLabBuilder() {
       {step === 1 ? (
         <StepCard
           title="Character Reference"
-          hint="Stored privately in this workspace's Asset Vault and reused for generation later."
+          hint="Stored privately in this workspace's Asset Vault and reused for generation."
         >
           <div className="grid gap-6 md:grid-cols-2">
             <div>
               <span className="mb-2 block text-sm font-medium text-foreground">
-                Reference image
+                Upload a new reference
               </span>
               {previewUrl ? (
                 <div className="cartel-panel flex flex-col items-center gap-3 rounded-lg p-4">
@@ -322,20 +636,82 @@ function StickerLabBuilder() {
                   onChange={(e) => update({ characterName: e.target.value })}
                 />
                 <p id="character-name-help" className="mt-2 text-xs text-muted-foreground">
-                  Used later to keep the character consistent across every sticker.
+                  Used to keep the character consistent across every sticker.
                 </p>
               </div>
               <Notice tone="muted">
-                Images stay in your browser via a local object URL. There is no upload endpoint,
-                bucket or database in this phase.
+                Uploads go straight into the private <strong>workspace-assets</strong> bucket in
+                Supabase and are recorded in your Asset Vault. Previews use short-lived signed
+                URLs; nothing is public.
               </Notice>
             </div>
+          </div>
+
+          <div className="mt-8">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-medium text-foreground">
+                Reuse existing workspace references
+              </h3>
+              <span className="text-xs text-muted-foreground">
+                {draft.referenceAssetIds.length} of {MAX_REFERENCES} selected
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Mascots, reference images and logos already in your Asset Vault. If none are
+              selected, the server picks the best available reference automatically.
+            </p>
+            {referencesQuery.isLoading ? (
+              <p className="mt-4 text-xs text-muted-foreground">Loading references…</p>
+            ) : (referencesQuery.data?.assets.length ?? 0) === 0 ? (
+              <p className="mt-4 text-xs text-muted-foreground">
+                No mascot, reference or logo assets yet. Upload one above or from the Asset Vault.
+              </p>
+            ) : (
+              <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+                {referencesQuery.data!.assets.map((asset) => {
+                  const selected = draft.referenceAssetIds.includes(asset.id);
+                  const url = referencesQuery.data!.urls[asset.storage_path];
+                  return (
+                    <li key={asset.id}>
+                      <button
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => toggleReference(asset)}
+                        className={`w-full overflow-hidden rounded-lg border p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                          selected
+                            ? "border-gold bg-gold/10"
+                            : "border-border bg-surface-raised hover:border-gold/40"
+                        }`}
+                      >
+                        <span
+                          className="flex aspect-square items-center justify-center overflow-hidden rounded-md border border-border"
+                          style={CHECKERBOARD}
+                        >
+                          {url ? (
+                            <img
+                              src={url}
+                              alt={asset.asset_type}
+                              className="max-h-full max-w-full object-contain"
+                            />
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">No preview</span>
+                          )}
+                        </span>
+                        <span className="mt-2 block truncate text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                          {asset.asset_type.replace("_", " ")}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
         </StepCard>
       ) : null}
 
       {step === 2 ? (
-        <StepCard title="Pack Setup" hint="Defines the brief the generator will eventually use.">
+        <StepCard title="Pack Setup" hint="Saved to this workspace's sticker packs.">
           <div className="grid gap-6 md:grid-cols-2">
             <div>
               <Label htmlFor="pack-name">Pack name</Label>
@@ -431,7 +807,7 @@ function StickerLabBuilder() {
       {step === 3 ? (
         <StepCard
           title="Sticker Concepts"
-          hint="Suggested examples generated locally from a fixed list — not AI output."
+          hint="Starter suggestions come from a fixed local list — not AI output."
           action={
             <div className="flex flex-wrap gap-2">
               <Button
@@ -519,91 +895,289 @@ function StickerLabBuilder() {
               </li>
             ))}
           </ul>
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              disabled={saving}
+              onClick={() => void persist()}
+            >
+              {saving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+              Save pack to workspace
+            </Button>
+            {draft.packId ? (
+              <span className="text-xs text-pepe">Pack saved. Retries reuse the same rows.</span>
+            ) : null}
+          </div>
         </StepCard>
       ) : null}
 
       {step === 4 ? (
-        <StepCard title="Generation Preview" hint="Preflight only. No generation runs.">
-          <Preflight draft={draft} hasImage={Boolean(draft.imageName)} />
-          <Pipeline />
-          <ul className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-            {draft.concepts.map((c) => (
-              <li
-                key={c.id}
-                className="cartel-panel flex aspect-square flex-col items-center justify-center gap-2 rounded-lg p-3 text-center"
-              >
-                <span className="text-2xl" aria-hidden="true">
-                  {c.emoji}
-                </span>
-                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
-                  {c.label}
-                </span>
-                <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                  AI generation not connected yet
-                </span>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-6">
-            <Button type="button" disabled className="min-h-11 w-full sm:w-auto">
-              Generation API coming next
+        <StepCard
+          title="Generation"
+          hint="Each sticker runs generation, background removal and a server-side transparency check."
+          action={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-10"
+              onClick={() => void configQuery.refetch()}
+            >
+              <RefreshCw className="size-4" aria-hidden="true" />
+              Refresh status
             </Button>
+          }
+        >
+          <div className="cartel-panel flex flex-wrap items-center justify-between gap-3 rounded-lg p-4">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Provider
+              </p>
+              <p className="mt-1 truncate text-sm text-foreground">
+                {configQuery.isLoading
+                  ? "Checking…"
+                  : configQuery.data
+                    ? `${configQuery.data.model} · ${configQuery.data.backgroundModel}`
+                    : "Status unavailable"}
+              </p>
+            </div>
+            <StatusBadge tone={configured ? "green" : "muted"}>
+              {configured ? "Configured" : "Not configured"}
+            </StatusBadge>
           </div>
+
+          {configQuery.isError ? (
+            <div className="mt-4">
+              <Notice tone="warn">
+                Could not reach the generation service. Try “Refresh status”.
+              </Notice>
+            </div>
+          ) : null}
+
+          {!configQuery.isLoading && !configQuery.isError && !configured ? (
+            <div className="mt-4">
+              <Notice tone="warn">
+                Generation is unavailable until <strong>KIE_API_KEY</strong> is added to the
+                Supabase Edge Function secrets for the <strong>sticker-ai</strong> function.
+                Everything else in the builder keeps working and nothing has been lost.
+              </Notice>
+            </div>
+          ) : null}
+
+          <Pipeline />
+
+          {configured ? (
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button
+                type="button"
+                className="min-h-11"
+                disabled={anyBusy || saving || generatedCount > 0 || draft.concepts.length === 0}
+                onClick={() => {
+                  const first = draft.concepts[0];
+                  if (first) void generateOne(first.id);
+                }}
+              >
+                <Sparkles className="size-4" aria-hidden="true" />
+                Generate first test sticker
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                disabled={anyBusy || saving || remainingCount === 0}
+                onClick={() => setConfirmRemaining(true)}
+              >
+                Generate remaining ({remainingCount})
+              </Button>
+            </div>
+          ) : null}
+
+          <ul className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {draft.concepts.map((c) => {
+              const stage = stageFor(c.id);
+              const stickerId = stickerIdFor(c.id);
+              const preview = stickerId ? previews[stickerId] : undefined;
+              const error = stickerId ? errors[stickerId] : undefined;
+              return (
+                <li key={c.id} className="cartel-panel rounded-lg p-4">
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <span className="truncate text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
+                      {c.emoji} {c.label}
+                    </span>
+                    <StatusBadge
+                      tone={
+                        stage === "ready"
+                          ? "green"
+                          : stage === "failed" || stage === "timeout"
+                            ? "red"
+                            : busy(stage)
+                              ? "gold"
+                              : "muted"
+                      }
+                    >
+                      {STAGE_LABEL[stage]}
+                    </StatusBadge>
+                  </div>
+                  <div
+                    className="flex aspect-square items-center justify-center overflow-hidden rounded-md border border-border"
+                    style={CHECKERBOARD}
+                  >
+                    {preview ? (
+                      <img
+                        src={preview.url}
+                        alt={`Generated sticker ${c.label}`}
+                        className="max-h-full max-w-full object-contain"
+                      />
+                    ) : busy(stage) ? (
+                      <Loader2 className="size-6 animate-spin text-gold" aria-hidden="true" />
+                    ) : (
+                      <span className="px-3 text-center text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                        No image yet
+                      </span>
+                    )}
+                  </div>
+                  {preview ? (
+                    <p
+                      className={`mt-2 text-[11px] ${preview.transparencyValid ? "text-pepe" : "text-signal"}`}
+                    >
+                      {preview.transparencyValid
+                        ? "Transparency verified"
+                        : "Transparency not verified"}
+                    </p>
+                  ) : null}
+                  {error ? (
+                    <p role="alert" className="mt-2 text-[11px] text-signal">
+                      {error}
+                    </p>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={preview ? "outline" : "default"}
+                    className="mt-3 min-h-10 w-full"
+                    disabled={!configured || busy(stage) || saving}
+                    onClick={() => void generateOne(c.id)}
+                  >
+                    {busy(stage) ? (
+                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                    ) : null}
+                    {preview ? "Regenerate" : "Generate"}
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+
+          <AlertDialog open={confirmRemaining} onOpenChange={setConfirmRemaining}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Generate {remainingCount} stickers?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Each sticker uses TWO Kie tasks — image generation plus background removal — and
+                  consumes Kie credits on your account. That is {remainingCount * 2} provider tasks
+                  in total. Existing ready stickers are skipped.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => void generateRemaining()}>
+                  Generate {remainingCount}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </StepCard>
       ) : null}
 
       {step === 5 ? (
         <StepCard
-          title="Review & Telegram Preview"
-          hint="Layout preview of the future review and publish step."
+          title="Review"
+          hint="Verified static stickers from private storage. Telegram publishing is not connected."
         >
           <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {draft.concepts.map((c) => (
-              <li key={c.id} className="cartel-panel rounded-lg p-4">
-                <div className="flex items-center gap-3">
-                  <span
-                    className="flex size-12 shrink-0 items-center justify-center rounded-md border border-dashed border-border bg-background/40 text-xl"
-                    aria-hidden="true"
-                  >
-                    {c.emoji}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-foreground">{c.label}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      Sticker image pending generation
-                    </p>
+            {draft.concepts.map((c) => {
+              const stickerId = stickerIdFor(c.id);
+              const preview = stickerId ? previews[stickerId] : undefined;
+              return (
+                <li key={c.id} className="cartel-panel rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border"
+                      style={CHECKERBOARD}
+                    >
+                      {preview ? (
+                        <img
+                          src={preview.url}
+                          alt={`Generated sticker ${c.label}`}
+                          className="max-h-full max-w-full object-contain"
+                        />
+                      ) : (
+                        <span aria-hidden="true" className="text-xl">
+                          {c.emoji}
+                        </span>
+                      )}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">{c.label}</p>
+                      <p
+                        className={`truncate text-xs ${
+                          preview?.transparencyValid ? "text-pepe" : "text-muted-foreground"
+                        }`}
+                      >
+                        {preview
+                          ? preview.transparencyValid
+                            ? "Transparency verified"
+                            : "Transparency not verified"
+                          : "Not generated yet"}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div className="mt-3 grid grid-cols-[5rem_1fr] gap-2">
-                  <div>
-                    <Label htmlFor={`${c.id}-review-emoji`} className="text-xs">
-                      Emoji
-                    </Label>
-                    <Input
-                      id={`${c.id}-review-emoji`}
-                      className="mt-1.5 min-h-10"
-                      value={c.emoji}
-                      onChange={(e) => editConcept(c.id, { emoji: e.target.value })}
-                    />
+                  <div className="mt-3 grid grid-cols-[5rem_1fr] gap-2">
+                    <div>
+                      <Label htmlFor={`${c.id}-review-emoji`} className="text-xs">
+                        Emoji
+                      </Label>
+                      <Input
+                        id={`${c.id}-review-emoji`}
+                        className="mt-1.5 min-h-10"
+                        value={c.emoji}
+                        onChange={(e) => editConcept(c.id, { emoji: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor={`${c.id}-keywords`} className="text-xs">
+                        Keywords
+                      </Label>
+                      <Input
+                        id={`${c.id}-keywords`}
+                        className="mt-1.5 min-h-10"
+                        placeholder="comma, separated"
+                        value={draft.keywords[c.id] ?? ""}
+                        onChange={(e) =>
+                          update({ keywords: { ...draft.keywords, [c.id]: e.target.value } })
+                        }
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor={`${c.id}-keywords`} className="text-xs">
-                      Keywords
-                    </Label>
-                    <Input
-                      id={`${c.id}-keywords`}
-                      className="mt-1.5 min-h-10"
-                      placeholder="comma, separated"
-                      value={draft.keywords[c.id] ?? ""}
-                      onChange={(e) =>
-                        update({ keywords: { ...draft.keywords, [c.id]: e.target.value } })
-                      }
-                    />
-                  </div>
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
+
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              disabled={saving}
+              onClick={() => void persist()}
+            >
+              {saving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+              Save emoji &amp; keywords
+            </Button>
+          </div>
 
           <Card className="cartel-panel mt-6">
             <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
@@ -615,10 +1189,13 @@ function StickerLabBuilder() {
                 <SummaryRow label="Pack name" value={draft.packName || "Not set"} />
                 <SummaryRow label="Stickers" value={`${draft.concepts.length}`} />
                 <SummaryRow
+                  label="Generated"
+                  value={`${generatedCount} of ${draft.concepts.length}`}
+                />
+                <SummaryRow
                   label="Emoji assigned"
                   value={`${draft.concepts.filter((c) => c.emoji.trim()).length} of ${draft.concepts.length}`}
                 />
-                <SummaryRow label="Short name" value="Reserved at publish time" />
               </dl>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
@@ -632,7 +1209,7 @@ function StickerLabBuilder() {
               </div>
               <Button type="button" disabled className="min-h-11 w-full sm:w-auto">
                 <Send className="size-4" aria-hidden="true" />
-                Connect Telegram in a later phase
+                Telegram publishing arrives in a later phase
               </Button>
             </CardContent>
           </Card>
@@ -752,51 +1329,13 @@ function Notice({ tone, children }: { tone: "muted" | "warn"; children: React.Re
   );
 }
 
-function Preflight({ draft, hasImage }: { draft: BuilderDraft; hasImage: boolean }) {
-  const rows = useMemo(
-    () => [
-      {
-        label: "Reference image",
-        value: hasImage ? (draft.imageName ?? "Present") : "Not provided",
-        ok: hasImage,
-      },
-      { label: "Pack name", value: draft.packName || "Not set", ok: Boolean(draft.packName) },
-      { label: "Theme", value: draft.theme, ok: true },
-      { label: "Concepts", value: `${draft.concepts.length} of ${draft.size}`, ok: true },
-      {
-        label: "Style notes",
-        value: draft.styleNotes ? "Provided" : "None",
-        ok: Boolean(draft.styleNotes),
-      },
-    ],
-    [draft, hasImage],
-  );
-
-  return (
-    <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {rows.map((r) => (
-        <div key={r.label} className="cartel-panel rounded-lg p-3">
-          <dt className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            {r.label}
-          </dt>
-          <dd
-            className={`mt-1 truncate text-sm font-medium ${r.ok ? "text-pepe" : "text-muted-foreground"}`}
-          >
-            {r.value}
-          </dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
 function Pipeline() {
-  const stages = ["Generate", "Background Removal", "Transparency Check", "Review"];
+  const stages = ["Generate", "Background Removal", "Transparency Check", "Ready"];
   return (
-    <ol className="mt-6 flex flex-wrap items-center gap-2" aria-label="Planned pipeline">
+    <ol className="mt-6 flex flex-wrap items-center gap-2" aria-label="Generation pipeline">
       {stages.map((s, i) => (
         <li key={s} className="flex items-center gap-2">
-          <span className="rounded-md border border-dashed border-border bg-background/40 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          <span className="rounded-md border border-border bg-background/40 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             {s}
           </span>
           {i < stages.length - 1 ? (
