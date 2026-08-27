@@ -1566,6 +1566,21 @@ function StickerLabBuilder() {
             </p>
           </div>
 
+          <div className="mb-6 rounded-md border border-border bg-background/40 p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-pepe">
+              Transparent PNG verified
+            </p>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              The checkerboard behind each preview marks the pixels that are actually transparent.
+              Some image viewers display transparent areas as white or black — that is the viewer
+              compositing the image, not a background baked into the file. Telegram places the
+              transparent sticker directly over the chat background, so no rectangular background
+              appears. Every download is re-checked in your browser for a real alpha channel before
+              it is saved, and the original PNG bytes are saved unchanged.
+            </p>
+          </div>
+
+
           {omittedLabels.length > 0 ? (
             <p className="mb-6 text-xs text-muted-foreground">
               The ZIP will contain {exportableCount} sticker
