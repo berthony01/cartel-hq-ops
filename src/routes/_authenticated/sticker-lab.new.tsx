@@ -18,6 +18,7 @@ import {
 } from "@/lib/sticker-ai";
 import {
   friendlyProviderError,
+  hydrateDraftFromPack,
   loadAssets,
   loadLatestJobs,
   loadPackStickers,
@@ -26,7 +27,7 @@ import {
   type PersistResult,
   type StickerRow,
 } from "@/lib/sticker-packs";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
   ArrowRight,
@@ -342,6 +343,17 @@ function StickerLabBuilder() {
     void loadExisting(packId);
   }, [packId, step, loadExisting]);
 
+  if (hydrateError) {
+    return (
+      <div className="mx-auto max-w-xl py-20 text-center">
+        <p className="text-sm text-destructive">{hydrateError}</p>
+        <Button asChild variant="outline" className="mt-5 min-h-10">
+          <Link to="/sticker-lab">Back to Sticker Lab</Link>
+        </Button>
+      </div>
+    );
+  }
+
   if (!draft) {
     return (
       <div className="py-24 text-center text-sm text-muted-foreground">Loading builder…</div>
@@ -471,6 +483,13 @@ function StickerLabBuilder() {
       setDraft((d) =>
         d ? { ...d, packId: result.packId, stickerIds: result.stickerIds } : d,
       );
+      // The URL becomes the durable pack identity (no reload, no history spam).
+      if (urlPackId !== result.packId) {
+        void navigate({
+          search: { pack: result.packId },
+          replace: true,
+        });
+      }
       return result;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not save the pack.";
