@@ -12,7 +12,11 @@ import type { TelegramGroupConnection } from "@/lib/telegram-group";
 
 export type TelegramLinkStatus = "pending" | "connected" | "expired" | "cancelled";
 
-export type OfficialStickerReason = "minimum_members" | "not_reported" | null;
+export type OfficialStickerReason =
+  | "minimum_members"
+  | "requires_supergroup"
+  | "not_reported"
+  | null;
 
 export type TelegramLinkLastGroupCheck = {
   checked_at?: string;

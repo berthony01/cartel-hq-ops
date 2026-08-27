@@ -29,7 +29,8 @@ export type TelegramGroupStatusResult = {
   botIsAdmin?: boolean;
   botCanChangeInfo?: boolean;
   canSetStickerSet?: boolean;
-  chatType?: string;
+  /** `group` (basic group) and `supergroup` are both valid CARTEL HQ targets. */
+  chatType?: "group" | "supergroup" | (string & {});
   memberCount?: number | null;
   minMembers?: number;
   officialStickerEligible?: boolean;
@@ -43,7 +44,11 @@ export type TelegramAssignPackResult = {
   assigned: boolean;
   /** Server posted the pack link into the group instead of assigning it. */
   announced?: boolean;
-  reason?: "GROUP_STICKER_MIN_MEMBERS" | "GROUP_STICKER_NOT_AVAILABLE" | string;
+  reason?:
+    | "GROUP_STICKER_MIN_MEMBERS"
+    | "GROUP_STICKER_REQUIRES_SUPERGROUP"
+    | "GROUP_STICKER_NOT_AVAILABLE"
+    | string;
   memberCount?: number | null;
   minMembers?: number;
   group?: TelegramGroupConnection | null;

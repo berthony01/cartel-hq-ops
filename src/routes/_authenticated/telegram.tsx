@@ -43,7 +43,7 @@ function TelegramPage() {
       <PageHeader
         eyebrow="System"
         title="Telegram"
-        description="The official CARTEL HQ bot publishes static sticker packs from Sticker Lab into a verified supergroup. Telegram's official group sticker set is assigned only when Telegram reports the group as eligible; otherwise the pack link is posted in the group. The bot token lives server-side only."
+        description="The official CARTEL HQ bot publishes static sticker packs from Sticker Lab into a verified Telegram group or supergroup. Telegram's official group sticker set applies only to eligible supergroups; otherwise the pack link is posted in the group. The bot token lives server-side only."
         status={setup.botConfigured ? "Bot configured" : "Bot not configured"}
       />
 
@@ -65,13 +65,15 @@ function TelegramPage() {
           <p>
             Static sticker pack publishing is active: publish, retry failed stickers, refresh set
             status and send a native test sticker from Sticker Lab Step 5. These work for any
-            verified connected supergroup.
+            verified connected target — both <strong>basic Telegram groups</strong> and{" "}
+            <strong>supergroups</strong> can receive pack announcements and native stickers.
           </p>
           <p>
-            Assigning a pack as a group's <strong>official</strong> Telegram sticker set follows
-            Telegram's own eligibility rules (including its group member minimum). When a group is
-            not eligible yet, CARTEL HQ posts the pack link in the group instead — publishing and
-            native sticker sending are unaffected.
+            Assigning a pack as a group's <strong>official</strong> Telegram sticker set is a
+            Telegram feature that exists only for <strong>supergroups</strong> that also meet
+            Telegram's member minimum. In a basic group, or a supergroup that is not eligible yet,
+            CARTEL HQ posts the pack link in the group instead — publishing and native sticker
+            sending are unaffected, and converting the group is optional.
           </p>
           <p>
             Inline mode, the Telegram Mini App, channel posting and distribution automation remain

@@ -981,9 +981,11 @@ function StickerLabBuilder() {
         setAssignedGroupTitle(null);
         setAssignNotice(
           result.message ||
-            (result.reason === "GROUP_STICKER_MIN_MEMBERS"
-              ? `Pack published and announced in ${title}. Official group sticker set unlocks at ${result.minMembers ?? 100} members (${result.memberCount ?? "?"}/${result.minMembers ?? 100}). Members can open the pack link now, and CARTEL HQ can send native stickers in the group.`
-              : `Pack published and announced in ${title}. Telegram's official group sticker set is not available for this group yet.`),
+            (result.reason === "GROUP_STICKER_REQUIRES_SUPERGROUP"
+              ? `Pack published and announced in ${title}. Members can open the pack link now, and CARTEL HQ can send native stickers in the group. Telegram's official group sticker set only exists for supergroups — upgrading ${title} is optional and only needed if you want that feature.`
+              : result.reason === "GROUP_STICKER_MIN_MEMBERS"
+                ? `Pack published and announced in ${title}. Official group sticker set unlocks at ${result.minMembers ?? 100} members (${result.memberCount ?? "?"}/${result.minMembers ?? 100}). Members can open the pack link now, and CARTEL HQ can send native stickers in the group.`
+                : `Pack published and announced in ${title}. Telegram's official group sticker set is not available for this group yet.`),
         );
         toast.success(`Pack published and announced in ${title}.`);
       } else {
@@ -2469,18 +2471,19 @@ function StickerLabBuilder() {
               ) : null}
               {testResult ? <p className="text-xs text-muted-foreground">{testResult}</p> : null}
               <p className="text-xs text-muted-foreground">
-                The test sends a <strong>native Telegram sticker</strong> into the connected
-                supergroup, not an image file. Native sticker sending works for any verified
-                connected supergroup. Telegram’s <strong>official group sticker set</strong> is
-                separate and optional — it is assigned only when Telegram reports the group as
-                eligible; otherwise CARTEL HQ posts the pack link in the group instead. Installing
-                the pack to a personal Telegram account stays a separate individual action.
+                The test sends a <strong>native Telegram sticker</strong> into the connected group,
+                not an image file. Native sticker sending works for any verified connected group —
+                basic group or supergroup. Telegram’s <strong>official group sticker set</strong> is
+                separate and optional — it only exists for supergroups and is assigned only when
+                Telegram reports the group as eligible; otherwise CARTEL HQ posts the pack link in
+                the group instead. Installing the pack to a personal Telegram account stays a
+                separate individual action.
               </p>
               {!canPublish && !publishing && !allPublished ? (
                 <p className="text-xs text-muted-foreground">
                   Publishing needs: a configured bot, your connected Telegram account, a verified
-                  target supergroup (bot admin + Change Group Info), at least one export-ready
-                  sticker, and all browser/cutout checks finished.
+                  target group or supergroup (bot admin + Change Group Info), at least one
+                  export-ready sticker, and all browser/cutout checks finished.
                 </p>
               ) : null}
             </CardContent>
@@ -2495,9 +2498,9 @@ function StickerLabBuilder() {
                   ({telegram.connection?.telegram_user_id}). {reviewedStickerIds.length} reviewed
                   sticker{reviewedStickerIds.length === 1 ? "" : "s"} will be uploaded. After the set
                   is created, CARTEL HQ either assigns it as the official group sticker set of{" "}
-                  <strong>{telegramGroup.groupTitle ?? "the connected supergroup"}</strong> if
-                  Telegram reports that group as eligible, or posts the pack link into the group if
-                  it is not eligible yet. Sets cannot be transferred to another owner later.
+                  <strong>{telegramGroup.groupTitle ?? "the connected group"}</strong> if Telegram
+                  reports that group as eligible (supergroups only), or posts the pack link into the
+                  group if it is not eligible. Sets cannot be transferred to another owner later.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
