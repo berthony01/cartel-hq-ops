@@ -342,6 +342,7 @@ function StickerLabBuilder() {
   const [assigning, setAssigning] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
   const [assignedGroupTitle, setAssignedGroupTitle] = useState<string | null>(null);
+  const [assignNotice, setAssignNotice] = useState<string | null>(null);
   const [tgPack, setTgPack] = useState<PackTelegramState | null>(null);
   const [tgStickers, setTgStickers] = useState<Record<string, StickerTelegramState>>({});
   const [publishing, setPublishing] = useState(false);
@@ -2328,7 +2329,13 @@ function StickerLabBuilder() {
 
               {assignedGroupTitle && !assignError ? (
                 <p className="rounded-md border border-pepe/40 bg-pepe/5 p-3 text-xs text-pepe">
-                  Group sticker set active in {assignedGroupTitle}.
+                  Official group sticker set active in {assignedGroupTitle}.
+                </p>
+              ) : null}
+
+              {assignNotice && !assignError ? (
+                <p className="rounded-md border border-gold/40 bg-gold/5 p-3 text-xs text-muted-foreground">
+                  {assignNotice}
                 </p>
               ) : null}
 
