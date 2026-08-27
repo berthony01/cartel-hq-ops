@@ -169,31 +169,65 @@ export function TelegramConnectionCard({
   const launchTelegram = useCallback(
     (appUrl?: string, webUrl?: string): boolean => {
       const mobile = isMobileDevice();
+      clearListeners();
+      clearFallback();
+
       if (mobile && appUrl) {
+        handoffRef.current = false;
+
+        const onVisibility = () => {
+          if (document.hidden) {
+            handoffRef.current = true;
+            clearFallback();
+            clearListeners();
+          }
+        };
+        const onPageHide = () => {
+          handoffRef.current = true;
+          clearFallback();
+          clearListeners();
+        };
+
+        document.addEventListener("visibilitychange", onVisibility);
+        window.addEventListener("pagehide", onPageHide);
+        listenerCleanupRef.current = () => {
+          document.removeEventListener("visibilitychange", onVisibility);
+          window.removeEventListener("pagehide", onPageHide);
+        };
+
         window.location.href = appUrl;
-        clearFallback();
         fallbackRef.current = window.setTimeout(() => {
           fallbackRef.current = null;
-          if (document.visibilityState === "visible" && webUrl) {
+          clearListeners();
+          if (!handoffRef.current && document.visibilityState === "visible" && webUrl) {
             window.location.href = webUrl;
           }
         }, 1300);
         return true;
       }
+
       const url = webUrl ?? appUrl;
       if (!url) return false;
       if (mobile) {
         window.location.href = url;
         return true;
       }
-      const opened = window.open(url, "_blank", "noopener,noreferrer");
-      if (!opened) {
-        window.location.href = url;
+
+      const opened = window.open(url, "_blank");
+      if (opened) {
+        try {
+          opened.opener = null;
+        } catch {
+          /* noop — some browsers restrict cross-origin opener mutation */
+        }
+        return true;
       }
+      window.location.href = url;
       return true;
     },
-    [clearFallback],
+    [clearFallback, clearListeners],
   );
+
 
   const connect = async () => {
     if (!userId || starting) return;
