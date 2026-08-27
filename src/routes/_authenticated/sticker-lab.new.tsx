@@ -34,6 +34,7 @@ import {
   downloadStickersZip,
   packZipName,
   stickerFileName,
+  verifyAlphaAtUrl,
 } from "@/lib/sticker-export";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
@@ -180,9 +181,18 @@ function StickerLabBuilder() {
   const [jobHistory, setJobHistory] = useState<Record<string, AiJobRow[]>>({});
   const [confirmRemaining, setConfirmRemaining] = useState(false);
   const [exporting, setExporting] = useState(false);
+  /**
+   * Local-only, second transparency verification performed in the browser on the
+   * already-signed PNG bytes. Never written back to Supabase.
+   */
+  const [clientChecks, setClientChecks] = useState<
+    Record<string, { url: string; status: "checking" | "verified" | "failed"; reason?: string }>
+  >({});
+  const [checkProgress, setCheckProgress] = useState<{ done: number; total: number } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const aliveRef = useRef(true);
+  const verifyRunRef = useRef(false);
   /** Sticker ids currently polled in this tab — their live stage wins. */
   const pollingRef = useRef<Set<string>>(new Set());
 
@@ -370,6 +380,65 @@ function StickerLabBuilder() {
     setJobHistory((h) => ({ ...h, ...jobs }));
   }, []);
 
+  /**
+   * Second, browser-side transparency verification. Read-only: it fetches the
+   * already-signed preview URL and inspects the original PNG bytes with the same
+   * verifyAlpha() helper used at export time. Nothing is uploaded, re-encoded or
+   * written back to Supabase, and no provider call is made.
+   */
+  const runClientVerification = useCallback(
+    async (force = false) => {
+      if (verifyRunRef.current) return;
+      const candidates = Object.entries(previews)
+        .filter(([, p]) => p.transparencyValid === true && !!p.url)
+        .map(([stickerId, p]) => ({ stickerId, url: p.url }));
+      const pending = candidates.filter(({ stickerId, url }) => {
+        const existing = clientChecks[stickerId];
+        return force || !existing || existing.url !== url;
+      });
+      if (pending.length === 0) return;
+
+      verifyRunRef.current = true;
+      setCheckProgress({ done: 0, total: pending.length });
+      setClientChecks((prev) => {
+        const next = { ...prev };
+        for (const { stickerId, url } of pending) next[stickerId] = { url, status: "checking" };
+        return next;
+      });
+
+      let done = 0;
+      const queue = [...pending];
+      const worker = async () => {
+        for (;;) {
+          const item = queue.shift();
+          if (!item) return;
+          // eslint-disable-next-line no-await-in-loop
+          const check = await verifyAlphaAtUrl(item.url);
+          if (!aliveRef.current) return;
+          setClientChecks((prev) => ({
+            ...prev,
+            [item.stickerId]: check.ok
+              ? { url: item.url, status: "verified" }
+              : { url: item.url, status: "failed", reason: check.reason ?? "transparency check failed" },
+          }));
+          done += 1;
+          setCheckProgress({ done, total: pending.length });
+        }
+      };
+      try {
+        await Promise.all([worker(), worker(), worker()]);
+      } finally {
+        verifyRunRef.current = false;
+        if (aliveRef.current) setCheckProgress(null);
+      }
+    },
+    [previews, clientChecks],
+  );
+
+  useEffect(() => {
+    if (step !== 5) return;
+    void runClientVerification(false);
+  }, [step, runClientVerification]);
 
   useEffect(() => {
     if (!packId) return;
@@ -709,14 +778,29 @@ function StickerLabBuilder() {
   const failedConcepts = draft.concepts.filter((c) => isFailure(stageFor(c.id)));
   const failedCount = failedConcepts.length;
   const activeCount = draft.concepts.filter((c) => busy(stageFor(c.id))).length;
-  // Single export invariant: ready AND has a preview AND transparency verified.
-  const isExportable = (conceptId: string) => {
+  // Backend invariant: ready AND has a preview AND backend transparency verified.
+  const backendExportable = (conceptId: string) => {
     if (stageFor(conceptId) !== "ready") return false;
     const id = stickerIdFor(conceptId);
     const preview = id ? previews[id] : undefined;
     return !!preview && preview.transparencyValid === true;
   };
-  const transparentCount = readyConcepts.filter((c) => isExportable(c.id)).length;
+  const clientCheckFor = (conceptId: string) => {
+    const id = stickerIdFor(conceptId);
+    return id ? clientChecks[id] : undefined;
+  };
+  // Export invariant: backend conditions AND a successful browser alpha verification.
+  const isExportable = (conceptId: string) =>
+    backendExportable(conceptId) && clientCheckFor(conceptId)?.status === "verified";
+  const checksRunning = checkProgress !== null;
+  const transparentCount = readyConcepts.filter((c) => backendExportable(c.id)).length;
+  const browserVerifiedCount = draft.concepts.filter(
+    (c) => clientCheckFor(c.id)?.status === "verified",
+  ).length;
+  const browserFailedCount = draft.concepts.filter(
+    (c) => clientCheckFor(c.id)?.status === "failed",
+  ).length;
+  const attentionCount = failedCount + browserFailedCount;
   const exportableConcepts = draft.concepts.filter((c) => isExportable(c.id));
   const exportableCount = exportableConcepts.length;
   const allReady = draft.concepts.length > 0 && generatedCount === draft.concepts.length && !anyBusy;
@@ -762,8 +846,14 @@ function StickerLabBuilder() {
     const stickerId = stickerIdFor(conceptId);
     const preview = stickerId ? previews[stickerId] : undefined;
     const concept = draft.concepts.find((c) => c.id === conceptId);
-    if (!preview || !concept || !isExportable(conceptId)) {
+    if (!preview || !concept || !backendExportable(conceptId)) {
       toast.error("Only ready, transparency-verified stickers can be downloaded.");
+      return;
+    }
+    if (clientCheckFor(conceptId)?.status === "failed") {
+      toast.error(
+        `Browser transparency check failed — ${clientCheckFor(conceptId)?.reason}. This sticker was not saved.`,
+      );
       return;
     }
     try {
@@ -1463,7 +1553,7 @@ function StickerLabBuilder() {
                           ? "Regenerate"
                           : "Generate"}
                     </Button>
-                    {isExportable(c.id) ? (
+                    {backendExportable(c.id) ? (
                       <Button
                         type="button"
                         size="sm"
@@ -1508,14 +1598,14 @@ function StickerLabBuilder() {
           title="Review"
           hint="Verified static stickers from private storage. Telegram publishing is not connected."
         >
-          <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <SummaryStat
-              label="Ready"
+              label="Backend ready"
               value={`${generatedCount}/${draft.concepts.length}`}
               tone={allReady ? "green" : "muted"}
             />
             <SummaryStat
-              label="Transparency verified"
+              label="Backend transparency verified"
               value={`${transparentCount}/${draft.concepts.length}`}
               tone={
                 transparentCount === draft.concepts.length && draft.concepts.length > 0
@@ -1523,21 +1613,74 @@ function StickerLabBuilder() {
                   : "muted"
               }
             />
+            <SummaryStat
+              label="Browser alpha verified"
+              value={`${browserVerifiedCount}/${draft.concepts.length}`}
+              tone={
+                browserVerifiedCount === draft.concepts.length && draft.concepts.length > 0
+                  ? "green"
+                  : "muted"
+              }
+            />
             <SummaryStat label="In progress" value={String(activeCount)} tone="muted" />
             <SummaryStat
-              label="Failed"
-              value={String(failedCount)}
-              tone={failedCount > 0 ? "red" : "muted"}
+              label="Failed / needs attention"
+              value={String(attentionCount)}
+              tone={attentionCount > 0 ? "red" : "muted"}
             />
+          </div>
+
+          <div
+            className="mb-6 flex flex-wrap items-center gap-3 rounded-md border border-border bg-background/40 p-3"
+            aria-live="polite"
+          >
+            {checksRunning ? (
+              <>
+                <Loader2 className="size-4 animate-spin text-gold" aria-hidden="true" />
+                <p className="text-xs text-foreground">
+                  Checking transparency {checkProgress?.done ?? 0}/{checkProgress?.total ?? 0}…
+                </p>
+                <span
+                  className="h-1.5 w-40 overflow-hidden rounded-full bg-border"
+                  aria-hidden="true"
+                >
+                  <span
+                    className="block h-full bg-gold transition-all duration-300"
+                    style={{
+                      width: `${Math.round(
+                        ((checkProgress?.done ?? 0) / Math.max(1, checkProgress?.total ?? 1)) * 100,
+                      )}%`,
+                    }}
+                  />
+                </span>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Review re-checks every finished sticker in your browser for a real alpha channel
+                before it can be exported. {browserVerifiedCount} verified
+                {browserFailedCount > 0 ? `, ${browserFailedCount} failed` : ""}.
+              </p>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="ml-auto min-h-10"
+              disabled={checksRunning}
+              onClick={() => void runClientVerification(true)}
+            >
+              <RefreshCw className="size-4" aria-hidden="true" />
+              Re-check transparency
+            </Button>
           </div>
 
           {!exportReady ? (
             <div className="mb-6">
               <Notice tone="warn">
-                Only stickers that are <strong>ready</strong> and{" "}
-                <strong>transparency verified</strong> can be exported or published later. The rest
-                of this pack is untouched and nothing has been lost — retry or regenerate them in
-                the previous step whenever you want.
+                Only stickers that are <strong>ready</strong>, <strong>transparency verified</strong>{" "}
+                by the backend and <strong>alpha verified in your browser</strong> can be exported or
+                published later. The rest of this pack is untouched and nothing has been lost — retry
+                or regenerate them in the previous step whenever you want.
               </Notice>
             </div>
           ) : null}
@@ -1546,7 +1689,7 @@ function StickerLabBuilder() {
             <Button
               type="button"
               className="min-h-11"
-              disabled={exporting || exportableCount === 0}
+              disabled={exporting || checksRunning || exportableCount === 0}
               onClick={() => void downloadZip()}
             >
               {exporting ? (
@@ -1561,8 +1704,9 @@ function StickerLabBuilder() {
               Refresh status
             </Button>
             <p className="text-xs text-muted-foreground">
-              Exports are transparent PNGs downloaded straight to this device. Nothing is uploaded
-              or published.
+              {checksRunning
+                ? "Export is paused until the browser transparency check finishes."
+                : "Exports are transparent PNGs downloaded straight to this device. Nothing is uploaded or published."}
             </p>
           </div>
 
@@ -1625,6 +1769,7 @@ function StickerLabBuilder() {
               const stage = stageFor(c.id);
               const failure = stickerId ? failures[stickerId] : undefined;
               const attempts = summarizeAttempts(stickerId ? jobHistory[stickerId] : undefined);
+              const check = clientCheckFor(c.id);
               return (
                 <li key={c.id} className="cartel-panel rounded-lg p-4">
                   <div className="flex items-center gap-3">
@@ -1659,10 +1804,30 @@ function StickerLabBuilder() {
                           ? isFailure(stage)
                             ? STAGE_LABEL[stage]
                             : preview.transparencyValid
-                              ? "Transparency verified"
-                              : "Transparency not verified"
+                              ? "Server verified"
+                              : "Server: transparency not verified"
                           : STAGE_LABEL[stage]}
                       </p>
+                      {backendExportable(c.id) ? (
+                        <p
+                          className={`truncate text-[11px] ${
+                            check?.status === "verified"
+                              ? "text-pepe"
+                              : check?.status === "failed"
+                                ? "text-signal"
+                                : "text-muted-foreground"
+                          }`}
+                          title={check?.reason}
+                        >
+                          {check?.status === "verified"
+                            ? "Browser verified"
+                            : check?.status === "failed"
+                              ? `Browser check failed — ${check.reason}`
+                              : check?.status === "checking"
+                                ? "Checking in browser…"
+                                : "Browser check pending"}
+                        </p>
+                      ) : null}
                       {isFailure(stage) && failure ? (
                         <p className="truncate text-[11px] text-signal" title={failure.body}>
                           {failure.title}
@@ -1684,6 +1849,7 @@ function StickerLabBuilder() {
                         size="sm"
                         variant="ghost"
                         className="ml-auto min-h-10"
+                        disabled={checksRunning}
                         aria-label={`Download ${c.label} as PNG`}
                         onClick={() => void downloadOne(c.id, index)}
                       >

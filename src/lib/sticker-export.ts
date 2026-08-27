@@ -102,6 +102,19 @@ export async function verifyAlpha(bytes: Uint8Array): Promise<AlphaCheck> {
 }
 
 /**
+ * Read-only convenience wrapper: fetches an existing signed PNG URL and runs the
+ * same client-side alpha verification used before export. Never writes anything.
+ */
+export async function verifyAlphaAtUrl(url: string): Promise<AlphaCheck> {
+  try {
+    const bytes = await fetchBytes(url);
+    return await verifyAlpha(bytes);
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : "the image could not be fetched" };
+  }
+}
+
+/**
  * Downloads one already-generated sticker PNG after verifying real alpha.
  * The original bytes are saved unchanged.
  */
