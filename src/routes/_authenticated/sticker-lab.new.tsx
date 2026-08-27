@@ -189,8 +189,19 @@ function StickerLabBuilder() {
    * already-signed PNG bytes. Never written back to Supabase.
    */
   const [clientChecks, setClientChecks] = useState<
-    Record<string, { source: string; status: "checking" | "verified" | "failed"; reason?: string }>
+    Record<
+      string,
+      {
+        source: string;
+        status: "checking" | "verified" | "failed";
+        reason?: string;
+        /** Telegram-cutout analysis of the same fresh bytes. */
+        cutout?: "verified" | "will_clean" | "failed";
+        removedPixels?: number;
+      }
+    >
   >({});
+
   const [checkProgress, setCheckProgress] = useState<{ done: number; total: number } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
