@@ -57,6 +57,17 @@ function secondsLeft(expiresAt?: string | null): number {
   return ms > 0 ? Math.ceil(ms / 1000) : 0;
 }
 
+const CARTELHQ_COMMAND = "/cartelhq";
+
+async function copyCommandToClipboard() {
+  try {
+    await navigator.clipboard.writeText(CARTELHQ_COMMAND);
+    toast.success("Copied /cartelhq");
+  } catch {
+    toast.error("Could not copy command");
+  }
+}
+
 export function TelegramGroupCard({
   setup,
   personalConnected,
