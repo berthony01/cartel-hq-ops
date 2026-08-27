@@ -189,7 +189,7 @@ function StickerLabBuilder() {
    * already-signed PNG bytes. Never written back to Supabase.
    */
   const [clientChecks, setClientChecks] = useState<
-    Record<string, { url: string; status: "checking" | "verified" | "failed"; reason?: string }>
+    Record<string, { source: string; status: "checking" | "verified" | "failed"; reason?: string }>
   >({});
   const [checkProgress, setCheckProgress] = useState<{ done: number; total: number } | null>(null);
 
