@@ -233,48 +233,15 @@ export function TelegramGroupCard({
     }
   };
 
-  const recheck = useCallback(
-    async (silent = false) => {
-      if (!workspaceId || !group) return;
-      setChecking(true);
-      try {
-        const result = await fetchTelegramGroupStatus({
-          workspaceId,
-          groupConnectionId: group.id,
-        });
-        setLive(result);
-        void queryClient.invalidateQueries({ queryKey: ["telegram-group-link", workspaceId] });
-        if (!silent) toast.success("Group status re-checked.");
-      } catch (err) {
-        if (!silent) toast.error(telegramErrorMessage(err));
-      } finally {
-        setChecking(false);
-      }
-    },
-    [group, queryClient, workspaceId],
-  );
-
-  // Live verification when the card mounts with a connected group and on refocus.
-  const groupId = group?.id ?? null;
-  useEffect(() => {
-    if (!groupId) return;
-    void recheck(true);
-    const onFocus = () => void recheck(true);
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [groupId, recheck]);
-
   const pending = linkState === "pending";
   const manualUrl = isMobileDevice()
     ? (launchUrls.app ?? launchUrls.web)
     : (launchUrls.web ?? launchUrls.app);
-  const liveBotAdmin = live?.botIsAdmin;
-  const liveCanSet = live?.canSetStickerSet;
-  const botAdmin = liveBotAdmin ?? group?.bot_is_admin ?? false;
-  const canSet = liveCanSet ?? group?.can_set_sticker_set ?? false;
-  const isSupergroup = (live?.chatType ?? group?.chat_type) === "supergroup";
-  const ready = !!group && isSupergroup && botAdmin && canSet;
   const lastCheck = groupQuery.data?.request?.metadata?.last_group_check;
+  const belowMinMembers =
+    typeof memberCount === "number" &&
+    typeof minMembers === "number" &&
+    memberCount < minMembers;
 
 
   return (
