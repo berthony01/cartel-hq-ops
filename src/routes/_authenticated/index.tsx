@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import {
   Sticker,
   Palette,
@@ -17,6 +18,9 @@ import {
   MessageSquare,
   type LucideIcon,
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useSession } from "@/hooks/useSession";
+import { useWorkspace } from "@/lib/workspace-context";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,11 +47,22 @@ export const Route = createFileRoute("/_authenticated/")({
   component: HqDashboard,
 });
 
-const QUICK_ACTIONS = [
-  { label: "Create Sticker Pack", icon: Sticker, note: "Sticker Lab — next module" },
-  { label: "Manage Brand Kit", icon: Palette, note: "Brand Kit — not built yet" },
-  { label: "Connect Telegram", icon: Send, note: "Distribution — not built yet" },
+const QUICK_ACTIONS: {
+  label: string;
+  icon: LucideIcon;
+  note: string;
+  to: string;
+}[] = [
+  {
+    label: "Create Sticker Pack",
+    icon: Sticker,
+    note: "Sticker Lab — first production module",
+    to: "/sticker-lab",
+  },
+  { label: "Manage Brand Kit", icon: Palette, note: "Colours, type, marks, AI rules", to: "/brand-kit" },
+  { label: "Open Asset Vault", icon: FolderLock, note: "Private workspace storage", to: "/assets" },
 ];
+
 
 const ROADMAP_GROUPS: {
   label: string;
