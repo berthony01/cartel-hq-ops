@@ -2266,11 +2266,16 @@ function StickerLabBuilder() {
               {publishResult?.failures?.length ? (
                 <details className="rounded-md border border-border bg-surface-raised p-3 text-xs">
                   <summary className="cursor-pointer font-semibold">Technical detail</summary>
-                  <ul className="mt-2 space-y-1 text-muted-foreground">
+                  <ul className="mt-2 space-y-2 text-muted-foreground">
                     {publishResult.failures.map((f, i) => (
                       <li key={`${f.stickerId ?? i}`}>
                         <span className="text-foreground">{f.label ?? f.stickerId ?? "Sticker"}</span>
-                        {f.reason ? ` — ${f.reason}` : ""}
+                        {f.message ? ` — ${f.message}` : ""}
+                        {f.technical ? (
+                          <span className="mt-1 block font-mono text-[11px] text-muted-foreground/80">
+                            {f.technical}
+                          </span>
+                        ) : null}
                       </li>
                     ))}
                   </ul>
