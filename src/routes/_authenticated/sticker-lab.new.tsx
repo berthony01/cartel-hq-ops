@@ -1647,7 +1647,7 @@ function StickerLabBuilder() {
                         </p>
                       ) : null}
                     </div>
-                    {preview ? (
+                    {isExportable(c.id) ? (
                       <Button
                         type="button"
                         size="sm"
