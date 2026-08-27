@@ -1225,10 +1225,22 @@ function StickerLabBuilder() {
             </StatusBadge>
           </div>
 
-          {configQuery.isError ? (
+          {/* A provider probe failure is only alarming when it actually blocks the
+              user. With finished stickers present it degrades to a neutral note. */}
+          {configQuery.isError && generatedCount === 0 && !anyBusy ? (
             <div className="mt-4">
               <Notice tone="warn">
-                Could not reach the generation service. Try “Refresh status”.
+                Could not reach the generation service, so generation cannot start right now.
+                Nothing was lost — use “Refresh status” to try again.
+              </Notice>
+            </div>
+          ) : null}
+
+          {configQuery.isError && (generatedCount > 0 || anyBusy) ? (
+            <div className="mt-4">
+              <Notice tone="muted">
+                Provider status unknown right now — finished stickers are unaffected. Use “Refresh
+                status” to re-check.
               </Notice>
             </div>
           ) : null}
@@ -1245,31 +1257,84 @@ function StickerLabBuilder() {
 
           <Pipeline />
 
-          {configured ? (
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Button
-                type="button"
-                className="min-h-11"
-                disabled={anyBusy || saving || generatedCount > 0 || draft.concepts.length === 0}
-                onClick={() => {
-                  const first = draft.concepts[0];
-                  if (first) void generateOne(first.id);
-                }}
-              >
-                <Sparkles className="size-4" aria-hidden="true" />
-                Generate first test sticker
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-11"
-                disabled={anyBusy || saving || remainingCount === 0}
-                onClick={() => setConfirmRemaining(true)}
-              >
-                Generate remaining ({remainingCount})
-              </Button>
+          {allReady ? (
+            <div className="mt-6 rounded-lg border border-pepe/40 bg-pepe/5 p-4">
+              <div className="flex items-start gap-3">
+                <CircleCheck className="mt-0.5 size-5 shrink-0 text-pepe" aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-pepe">
+                    All {draft.concepts.length} stickers ready
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {transparentCount} of {draft.concepts.length} transparency verified. Regenerate
+                    any single sticker from its card below if you want a different take.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Button type="button" className="min-h-11" onClick={goNext}>
+                  Continue to Review
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11"
+                  onClick={refreshStatus}
+                >
+                  <RefreshCw className="size-4" aria-hidden="true" />
+                  Refresh status
+                </Button>
+              </div>
+            </div>
+          ) : configured ? (
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              {failedCount > 0 && generatedCount > 0 ? (
+                <>
+                  <Button
+                    type="button"
+                    className="min-h-11"
+                    disabled={anyBusy || saving}
+                    onClick={() => void retryFailed()}
+                  >
+                    <RotateCcw className="size-4" aria-hidden="true" />
+                    Retry failed ({failedCount})
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    {failedCount} of {draft.concepts.length} need another attempt — retries only
+                    re-run the failed stickers and never touch finished ones.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Button
+                    type="button"
+                    className="min-h-11"
+                    disabled={
+                      anyBusy || saving || generatedCount > 0 || draft.concepts.length === 0
+                    }
+                    onClick={() => {
+                      const first = draft.concepts[0];
+                      if (first) void generateOne(first.id);
+                    }}
+                  >
+                    <Sparkles className="size-4" aria-hidden="true" />
+                    Generate first test sticker
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11"
+                    disabled={anyBusy || saving || remainingCount === 0}
+                    onClick={() => setConfirmRemaining(true)}
+                  >
+                    Generate remaining ({remainingCount})
+                  </Button>
+                </>
+              )}
             </div>
           ) : null}
+
 
           <ul className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {draft.concepts.map((c) => {
