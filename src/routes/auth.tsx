@@ -110,6 +110,38 @@ function AuthPage() {
     }
   };
 
+  const handleResend = async () => {
+    const address = email.trim();
+    if (!address) {
+      setError("Enter your email address first.");
+      return;
+    }
+
+    setResendBusy(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const { error: resendError } = await supabase.auth.resend({
+        type: "signup",
+        email: address,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (resendError) throw resendError;
+      setNotice("Confirmation email resent. Check your inbox and click the link to finish signing in.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not resend confirmation email.");
+    } finally {
+      setResendBusy(false);
+    }
+  };
+
+  const showResend =
+    (notice && notice.toLowerCase().includes("confirmation")) ||
+    (error && error.toLowerCase().includes("email not confirmed"));
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
       <div className="w-full max-w-md">
