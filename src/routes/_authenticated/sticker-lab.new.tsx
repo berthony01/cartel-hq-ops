@@ -472,7 +472,7 @@ function StickerLabBuilder() {
               : {
                   source: item.source,
                   status: "verified",
-                  reason: check.ok ? undefined : check.reason,
+                  ...(check.ok || !check.reason ? {} : { reason: check.reason }),
                   cutout: check.ok ? (check.cleaned ? "will_clean" : "verified") : "failed",
                   removedPixels: check.removedPixels,
                 },

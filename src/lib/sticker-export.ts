@@ -188,7 +188,7 @@ export async function prepareTelegramCutout(bytes: Uint8Array): Promise<CutoutRe
       cleaned: false,
       removedPixels: 0,
       removedRatio: 0,
-      reason: base.reason,
+      ...(base.reason ? { reason: base.reason } : {}),
     };
   }
 
