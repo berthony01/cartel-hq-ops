@@ -172,11 +172,15 @@ function StickerLabBuilder() {
   const [packNameError, setPackNameError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [stages, setStages] = useState<Record<string, Stage>>({});
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  /** Structured, user-facing failure per sticker id. */
+  const [failures, setFailures] = useState<Record<string, ProviderFailure | undefined>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
-  const [debugErrors, setDebugErrors] = useState<Record<string, string>>({});
   const [previews, setPreviews] = useState<Record<string, Preview>>({});
+  /** Latest ai_jobs rows per sticker id — attempt history only, read-only. */
+  const [jobHistory, setJobHistory] = useState<Record<string, AiJobRow[]>>({});
   const [confirmRemaining, setConfirmRemaining] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const aliveRef = useRef(true);
   /** Sticker ids currently polled in this tab — their live stage wins. */
