@@ -12,13 +12,28 @@ import type { TelegramGroupConnection } from "@/lib/telegram-group";
 
 export type TelegramLinkStatus = "pending" | "connected" | "expired" | "cancelled";
 
+export type TelegramLinkLastGroupCheck = {
+  checked_at?: string;
+  telegram_chat_id?: number;
+  group_title?: string;
+  chat_type?: string;
+  actor_status?: string;
+  user_is_admin?: boolean;
+  bot_status?: string;
+  bot_is_admin?: boolean;
+  bot_can_change_info?: boolean;
+  can_set_sticker_set?: boolean | null;
+};
+
 export type TelegramLinkRequest = {
   id?: string;
   requestId?: string;
   status: TelegramLinkStatus;
   expiresAt?: string;
   expires_at?: string;
+  metadata?: { last_group_check?: TelegramLinkLastGroupCheck };
 };
+
 
 export type TelegramCreateLinkResult = {
   requestId: string;
