@@ -1474,19 +1474,39 @@ function StickerLabBuilder() {
           title="Review"
           hint="Verified static stickers from private storage. Telegram publishing is not connected."
         >
-          <div className="mb-6 grid gap-3 sm:grid-cols-3">
-            <SummaryStat label="Ready" value={`${generatedCount}/${draft.concepts.length}`} tone={allReady ? "green" : "muted"} />
+          <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <SummaryStat
+              label="Ready"
+              value={`${generatedCount}/${draft.concepts.length}`}
+              tone={allReady ? "green" : "muted"}
+            />
             <SummaryStat
               label="Transparency verified"
               value={`${transparentCount}/${draft.concepts.length}`}
-              tone={transparentCount === draft.concepts.length && draft.concepts.length > 0 ? "green" : "muted"}
+              tone={
+                transparentCount === draft.concepts.length && draft.concepts.length > 0
+                  ? "green"
+                  : "muted"
+              }
             />
+            <SummaryStat label="In progress" value={String(activeCount)} tone="muted" />
             <SummaryStat
-              label="Needs attention"
-              value={String(failedCount + activeCount)}
+              label="Failed"
+              value={String(failedCount)}
               tone={failedCount > 0 ? "red" : "muted"}
             />
           </div>
+
+          {!exportReady ? (
+            <div className="mb-6">
+              <Notice tone="warn">
+                Only stickers that are <strong>ready</strong> and{" "}
+                <strong>transparency verified</strong> can be exported or published later. The rest
+                of this pack is untouched and nothing has been lost — retry or regenerate them in
+                the previous step whenever you want.
+              </Notice>
+            </div>
+          ) : null}
 
           <div className="mb-6 flex flex-wrap items-center gap-3">
             <Button
@@ -1511,6 +1531,43 @@ function StickerLabBuilder() {
               or published.
             </p>
           </div>
+
+          {omittedLabels.length > 0 ? (
+            <p className="mb-6 text-xs text-muted-foreground">
+              The ZIP will contain {generatedCount} sticker
+              {generatedCount === 1 ? "" : "s"}. Not included ({omittedLabels.length}):{" "}
+              {omittedLabels.join(", ")}.
+            </p>
+          ) : null}
+
+          {historyRows.length > 0 ? (
+            <details className="mb-6 rounded-md border border-border bg-background/40 p-3">
+              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                <FileArchive className="mr-2 inline size-3.5" aria-hidden="true" />
+                Generation history ({historyRows.length})
+              </summary>
+              <ul className="mt-3 space-y-2">
+                {historyRows.map((row) => (
+                  <li
+                    key={row.conceptId}
+                    className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-t border-border/60 pt-2 text-[11px] first:border-t-0 first:pt-0"
+                  >
+                    <span className="font-semibold text-foreground">{row.label}</span>
+                    <span className="text-muted-foreground">
+                      {row.attempts} attempt{row.attempts === 1 ? "" : "s"}
+                    </span>
+                    <span className={row.failed > 0 ? "text-signal" : "text-muted-foreground"}>
+                      {row.failed} failed
+                    </span>
+                    {row.lastFailure ? (
+                      <span className="text-muted-foreground">· last failure: {row.lastFailure}</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+
 
           <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {draft.concepts.map((c, index) => {
