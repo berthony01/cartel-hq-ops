@@ -68,7 +68,8 @@ export async function listWorkspacePacks(workspaceId: string): Promise<PackSumma
     return {
       ...p,
       total: rows.length,
-      ready: rows.filter((s) => s.status === "ready").length,
+      // A published sticker is still a finished, exportable sticker.
+      ready: rows.filter((s) => s.status === "ready" || s.status === "published").length,
       active: rows.filter((s) => s.status === "generating" || s.status === "queued").length,
     };
   });
