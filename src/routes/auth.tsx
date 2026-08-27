@@ -228,6 +228,19 @@ function AuthPage() {
                 </p>
               ) : null}
 
+              {showResend ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy || resendBusy}
+                  onClick={handleResend}
+                  className="min-h-11 w-full"
+                >
+                  {resendBusy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+                  Resend confirmation email
+                </Button>
+              ) : null}
+
               <Button type="submit" disabled={busy} className="min-h-11 w-full">
                 {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
                 {mode === "signin" ? "Sign in" : "Create account"}
