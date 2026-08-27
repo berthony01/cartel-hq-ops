@@ -1008,7 +1008,7 @@ function StickerLabBuilder() {
               variant="outline"
               size="sm"
               className="min-h-10"
-              onClick={() => void configQuery.refetch()}
+              onClick={refreshStatus}
             >
               <RefreshCw className="size-4" aria-hidden="true" />
               Refresh status
