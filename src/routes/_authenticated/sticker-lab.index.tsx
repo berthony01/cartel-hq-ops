@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FLOW_STEPS } from "@/lib/sticker-lab";
 import { useWorkspace } from "@/lib/workspace-context";
 import { listWorkspacePacks } from "@/lib/sticker-packs";
+import { clearDraft } from "@/lib/sticker-lab";
 
 export const Route = createFileRoute("/_authenticated/sticker-lab/")({
   head: () => ({
@@ -59,7 +60,7 @@ function StickerLabHome() {
         status="Live · Telegram pending"
         actions={
           <Button asChild className="min-h-11">
-            <Link to="/sticker-lab/new">
+            <Link to="/sticker-lab/new" search={{}} onClick={() => clearDraft()}>
               <Plus className="size-4" aria-hidden="true" />
               Create Sticker Pack
             </Link>
@@ -110,7 +111,9 @@ function StickerLabHome() {
                 description="Packs you save in the builder are stored in this workspace and appear here."
                 action={
                   <Button asChild variant="outline" size="sm" className="mt-1 min-h-10">
-                    <Link to="/sticker-lab/new">Open the builder</Link>
+                    <Link to="/sticker-lab/new" search={{}} onClick={() => clearDraft()}>
+                      Open the builder
+                    </Link>
                   </Button>
                 }
               />
@@ -130,6 +133,7 @@ function StickerLabHome() {
                         {relativeTime(pack.updated_at)}
                       </p>
                     </div>
+                    <div className="flex items-center gap-2">
                     {(() => {
                       // A pack is only "generating" while stickers are actually active.
                       const label =
@@ -144,6 +148,12 @@ function StickerLabHome() {
                         </StatusBadge>
                       );
                     })()}
+                    <Button asChild variant="outline" size="sm" className="min-h-9">
+                      <Link to="/sticker-lab/new" search={{ pack: pack.id }}>
+                        Resume
+                      </Link>
+                    </Button>
+                    </div>
                   </li>
                 ))}
               </ul>

@@ -243,3 +243,14 @@ export function saveDraft(draft: BuilderDraft) {
     /* session storage unavailable — draft stays in memory only */
   }
 }
+
+/** Clears the session draft so "Create Sticker Pack" starts genuinely empty.
+ *  Never touches persisted Supabase rows. */
+export function clearDraft() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(DRAFT_KEY);
+  } catch {
+    /* session storage unavailable */
+  }
+}
