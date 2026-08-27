@@ -1530,7 +1530,7 @@ function StickerLabBuilder() {
             <Button
               type="button"
               className="min-h-11"
-              disabled={exporting || generatedCount === 0}
+              disabled={exporting || exportableCount === 0}
               onClick={() => void downloadZip()}
             >
               {exporting ? (
@@ -1538,7 +1538,7 @@ function StickerLabBuilder() {
               ) : (
                 <Download className="size-4" aria-hidden="true" />
               )}
-              Download all as ZIP ({generatedCount})
+              Download all as ZIP ({exportableCount})
             </Button>
             <Button type="button" variant="outline" className="min-h-11" onClick={refreshStatus}>
               <RefreshCw className="size-4" aria-hidden="true" />
