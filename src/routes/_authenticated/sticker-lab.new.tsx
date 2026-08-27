@@ -846,8 +846,14 @@ function StickerLabBuilder() {
     const stickerId = stickerIdFor(conceptId);
     const preview = stickerId ? previews[stickerId] : undefined;
     const concept = draft.concepts.find((c) => c.id === conceptId);
-    if (!preview || !concept || !isExportable(conceptId)) {
+    if (!preview || !concept || !backendExportable(conceptId)) {
       toast.error("Only ready, transparency-verified stickers can be downloaded.");
+      return;
+    }
+    if (clientCheckFor(conceptId)?.status === "failed") {
+      toast.error(
+        `Browser transparency check failed — ${clientCheckFor(conceptId)?.reason}. This sticker was not saved.`,
+      );
       return;
     }
     try {
