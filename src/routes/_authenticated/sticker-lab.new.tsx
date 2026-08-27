@@ -73,6 +73,11 @@ import {
   TelegramConnectionCard,
   useTelegramSetup,
 } from "@/components/cartel/TelegramConnectionCard";
+import {
+  TelegramGroupCard,
+  useTelegramGroupSetup,
+} from "@/components/cartel/TelegramGroupCard";
+import { assignPackToGroup, sendGroupTestSticker } from "@/lib/telegram-group";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -334,6 +339,10 @@ function StickerLabBuilder() {
 
   /* ---------------- Telegram publishing (Step 5, explicit clicks only) --------------- */
   const telegram = useTelegramSetup(step === 5);
+  const telegramGroup = useTelegramGroupSetup(step === 5);
+  const [assigning, setAssigning] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const [assignedGroupTitle, setAssignedGroupTitle] = useState<string | null>(null);
   const [tgPack, setTgPack] = useState<PackTelegramState | null>(null);
   const [tgStickers, setTgStickers] = useState<Record<string, StickerTelegramState>>({});
   const [publishing, setPublishing] = useState(false);
@@ -940,6 +949,7 @@ function StickerLabBuilder() {
     !!workspaceId &&
     telegram.botConfigured &&
     telegram.ownerConnected &&
+    telegramGroup.groupReady &&
     reviewedStickerIds.length > 0 &&
     !allPublished &&
     !checksRunning &&
@@ -947,6 +957,35 @@ function StickerLabBuilder() {
   const shortNamePreview = packId
     ? previewShortName(draft.packName, packId, telegram.botUsername)
     : null;
+
+  /** Assign-only path. Never re-publishes stickers. */
+  const doAssignGroup = async () => {
+    if (!packId || !workspaceId || !telegramGroup.groupId) return;
+    setAssigning(true);
+    setAssignError(null);
+    try {
+      const result = await assignPackToGroup({
+        workspaceId,
+        packId,
+        groupConnectionId: telegramGroup.groupId,
+      });
+      await loadTelegramState(packId);
+      if (result.assigned) {
+        const title = result.group?.title ?? telegramGroup.groupTitle ?? "the group";
+        setAssignedGroupTitle(title);
+        toast.success(`Group sticker set active in ${title}.`);
+      } else {
+        const msg = result.message || "Telegram did not accept the group sticker set assignment.";
+        setAssignError(result.technical ? `${msg} (${result.technical})` : msg);
+        toast.error("Sticker set published, group assignment needs attention.");
+      }
+    } catch (err) {
+      setAssignError(telegramErrorMessage(err));
+      toast.error(telegramErrorMessage(err));
+    } finally {
+      setAssigning(false);
+    }
+  };
 
   const doPublish = async () => {
     if (!packId || !workspaceId) return;
@@ -958,6 +997,8 @@ function StickerLabBuilder() {
       await loadTelegramState(packId);
       if (result.status === "published") {
         toast.success(`Published ${result.published} of ${result.total} stickers to Telegram.`);
+        // Group assignment only ever runs after a fully successful publish.
+        await doAssignGroup();
       } else if (result.status === "partial") {
         toast.warning(
           `${result.published} of ${result.total} published, ${result.failed} need retry.`,
@@ -994,22 +1035,23 @@ function StickerLabBuilder() {
   };
 
   const doSendTest = async () => {
-    if (!packId || !workspaceId) return;
+    if (!packId || !workspaceId || !telegramGroup.groupId) return;
     setSendingTest(true);
     setTestResult(null);
     try {
-      const result = await sendTestSticker({ workspaceId, packId });
+      const result = await sendGroupTestSticker({
+        workspaceId,
+        packId,
+        groupConnectionId: telegramGroup.groupId,
+      });
+      const title = telegramGroup.groupTitle ?? "the group";
       if (result.sent) {
-        setTestResult("Test sticker sent — check your Telegram chat with the bot.");
-        toast.success("Native test sticker sent.");
+        setTestResult(`Native sticker sent to ${title}.`);
+        toast.success(`Native sticker sent to ${title}.`);
       } else {
-        const base = result.message || "Telegram could not deliver the test sticker.";
-        setTestResult(
-          result.botStartUrl
-            ? `${base} Open the bot in Telegram, tap Start, then retry.`
-            : base,
-        );
-        toast.error("Telegram could not deliver the test sticker.");
+        const base = result.message || "Telegram could not deliver the test sticker to the group.";
+        setTestResult(result.technical ? `${base} (${result.technical})` : base);
+        toast.error("Telegram could not deliver the test sticker to the group.");
       }
     } catch (err) {
       setTestResult(telegramErrorMessage(err));
