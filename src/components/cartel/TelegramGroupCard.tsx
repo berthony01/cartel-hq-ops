@@ -284,17 +284,35 @@ export function TelegramGroupCard({
               <StatusBadge tone={botAdmin ? "green" : "red"}>
                 {botAdmin ? "Bot admin verified" : "Bot is not an admin"}
               </StatusBadge>
-              <StatusBadge tone={canSet ? "green" : "red"}>
-                {canSet ? "Group sticker permission verified" : "Group sticker permission missing"}
+              {botCanChangeInfo !== undefined ? (
+                <StatusBadge tone={botCanChangeInfo ? "green" : "red"}>
+                  {botCanChangeInfo ? "Change Group Info enabled" : "Change Group Info missing"}
+                </StatusBadge>
+              ) : null}
+              <StatusBadge tone={officialStickerEligible || canSet ? "green" : "gold"}>
+                {officialStickerEligible || canSet
+                  ? "Official group sticker set available"
+                  : belowMinMembers
+                    ? `Official group sticker set at ${minMembers}+ members (${memberCount})`
+                    : "Official group sticker set not available yet"}
               </StatusBadge>
+              {typeof memberCount === "number" ? (
+                <StatusBadge tone="muted">{memberCount} members</StatusBadge>
+              ) : null}
             </div>
             {!ready ? (
               <p className="mt-3 rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
-                This group is not ready. In Telegram, open the group and either make @PepeCartelHQBot
-                an administrator with the right to change group info / set the group sticker set, or,
-                if the bot is already installed, send{" "}
+                This group is not ready. In Telegram, open the group and make @PepeCartelHQBot an
+                administrator with the <strong>Change Group Info</strong> right, or, if the bot is
+                already installed, send{" "}
                 <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
                 once. Then press Re-check group status.
+              </p>
+            ) : !officialStickerEligible ? (
+              <p className="mt-3 rounded-md border border-gold/40 bg-gold/5 p-3 text-xs text-muted-foreground">
+                {belowMinMembers
+                  ? `Official group sticker set unlocks at ${minMembers} members. This group currently has ${memberCount}. You can still publish the pack, share it in the group, and send native stickers through the bot.`
+                  : "Telegram has not reported official group sticker-set eligibility for this group yet. Publishing the pack, sharing it in the group and sending native stickers all work normally."}
               </p>
             ) : null}
             <details className="mt-3 rounded-md border border-border bg-surface-raised p-3 text-xs">
