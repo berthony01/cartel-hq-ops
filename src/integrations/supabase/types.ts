@@ -257,11 +257,15 @@ export type Database = {
       }
       sticker_packs: {
         Row: {
+          brief: string | null
+          character_name: string | null
           created_at: string
           created_by: string | null
           id: string
           pack_size: number
+          reference_asset_id: string | null
           status: string
+          style_notes: string | null
           telegram_set_name: string | null
           telegram_set_url: string | null
           theme: string
@@ -270,11 +274,15 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          brief?: string | null
+          character_name?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
           pack_size: number
+          reference_asset_id?: string | null
           status?: string
+          style_notes?: string | null
           telegram_set_name?: string | null
           telegram_set_url?: string | null
           theme?: string
@@ -283,11 +291,15 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          brief?: string | null
+          character_name?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
           pack_size?: number
+          reference_asset_id?: string | null
           status?: string
+          style_notes?: string | null
           telegram_set_name?: string | null
           telegram_set_url?: string | null
           theme?: string
@@ -301,6 +313,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_packs_reference_asset_id_fkey"
+            columns: ["reference_asset_id"]
+            isOneToOne: false
+            referencedRelation: "media_assets"
             referencedColumns: ["id"]
           },
           {
