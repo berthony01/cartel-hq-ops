@@ -709,19 +709,20 @@ function StickerLabBuilder() {
   const failedConcepts = draft.concepts.filter((c) => isFailure(stageFor(c.id)));
   const failedCount = failedConcepts.length;
   const activeCount = draft.concepts.filter((c) => busy(stageFor(c.id))).length;
-  const transparentCount = readyConcepts.filter((c) => {
-    const id = stickerIdFor(c.id);
-    return !!(id && previews[id]?.transparencyValid);
-  }).length;
+  // Single export invariant: ready AND has a preview AND transparency verified.
+  const isExportable = (conceptId: string) => {
+    if (stageFor(conceptId) !== "ready") return false;
+    const id = stickerIdFor(conceptId);
+    const preview = id ? previews[id] : undefined;
+    return !!preview && preview.transparencyValid === true;
+  };
+  const transparentCount = readyConcepts.filter((c) => isExportable(c.id)).length;
+  const exportableConcepts = draft.concepts.filter((c) => isExportable(c.id));
+  const exportableCount = exportableConcepts.length;
   const allReady = draft.concepts.length > 0 && generatedCount === draft.concepts.length && !anyBusy;
   // Export/publish readiness is stricter than "ready": transparency must be verified.
-  const exportReady =
-    draft.concepts.length > 0 &&
-    generatedCount === draft.concepts.length &&
-    transparentCount === draft.concepts.length;
-  const omittedLabels = draft.concepts
-    .filter((c) => stageFor(c.id) !== "ready")
-    .map((c) => c.label);
+  const exportReady = draft.concepts.length > 0 && exportableCount === draft.concepts.length;
+  const omittedLabels = draft.concepts.filter((c) => !isExportable(c.id)).map((c) => c.label);
   // Read-only history derived from already-loaded ai_jobs rows. No extra queries.
   const historyRows = draft.concepts
     .map((c) => {
