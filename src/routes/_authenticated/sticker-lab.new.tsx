@@ -99,21 +99,25 @@ const POLL_TIMEOUT_MS = 15 * 60 * 1000;
 type Stage =
   | "idle"
   | "saving"
+  | "starting"
   | "generating"
   | "background"
   | "verifying"
   | "ready"
   | "failed"
+  | "replacement_failed"
   | "timeout";
 
 const STAGE_LABEL: Record<Stage, string> = {
   idle: "Not generated",
   saving: "Saving pack…",
+  starting: "Starting…",
   generating: "Generating",
   background: "Background removal",
   verifying: "Transparency check",
   ready: "Ready",
   failed: "Failed",
+  replacement_failed: "Replacement failed",
   timeout: "Timed out",
 };
 
