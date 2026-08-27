@@ -898,8 +898,18 @@ function StickerLabBuilder() {
       return;
     }
     try {
+      // Preview links are deliberately short-lived; mint a fresh one at click time.
+      const freshUrl = preview.storagePath
+        ? await signedUrl(preview.storagePath, ACTION_URL_TTL)
+        : preview.url;
+      if (!freshUrl) {
+        toast.error(
+          "Could not create a secure download link for this private file. Refresh status and try again.",
+        );
+        return;
+      }
       await downloadStickerPng(
-        preview.url,
+        freshUrl,
         stickerFileName(draft.packName || "cartel-pack", index, concept.label),
       );
       toast.success("Transparent PNG verified and saved unchanged.");
@@ -909,31 +919,61 @@ function StickerLabBuilder() {
   };
 
   const downloadZip = async () => {
-    const entries = draft.concepts
+    const candidates = draft.concepts
       .map((c, i) => {
         const id = stickerIdFor(c.id);
         const preview = id ? previews[id] : undefined;
         if (!preview || !isExportable(c.id)) return null;
         return {
           filename: stickerFileName(draft.packName || "cartel-pack", i, c.label),
-          url: preview.url,
+          storagePath: preview.storagePath,
+          fallbackUrl: preview.url,
           label: c.label,
         };
       })
-      .filter(Boolean) as { filename: string; url: string; label: string }[];
-    if (entries.length === 0) {
+      .filter(Boolean) as {
+      filename: string;
+      storagePath?: string;
+      fallbackUrl: string;
+      label: string;
+    }[];
+    if (candidates.length === 0) {
       toast.error("There are no ready, transparency-verified stickers to export yet.");
       return;
     }
     setExporting(true);
     try {
+      // One batched, action-scoped signing call so a multi-sticker export cannot
+      // expire mid-download. Read-only: no storage or table write.
+      const paths = candidates.map((c) => c.storagePath).filter(Boolean) as string[];
+      const fresh = await signedUrlMap(paths, ACTION_URL_TTL);
+
+      const entries: { filename: string; url: string; label: string }[] = [];
+      const linkFailures: { label: string; reason: string }[] = [];
+      for (const c of candidates) {
+        const url = c.storagePath ? fresh[c.storagePath] : c.fallbackUrl;
+        if (!url) {
+          linkFailures.push({ label: c.label, reason: "no secure download link could be created" });
+          continue;
+        }
+        entries.push({ filename: c.filename, url, label: c.label });
+      }
+
+      if (entries.length === 0) {
+        toast.error(
+          "Secure download links could not be created for these private files. Refresh status and try again.",
+        );
+        return;
+      }
+
       const result = await downloadStickersZip(
         entries,
         packZipName(draft.packName || "cartel-pack"),
       );
-      if (result.omitted.length > 0) {
+      const omitted = [...linkFailures, ...result.omitted];
+      if (omitted.length > 0) {
         toast.warning(
-          `${result.exported} verified transparent PNG${result.exported === 1 ? "" : "s"} exported. Omitted: ${result.omitted
+          `${result.exported} verified transparent PNG${result.exported === 1 ? "" : "s"} exported. Omitted: ${omitted
             .map((o) => `${o.label} (${o.reason})`)
             .join(", ")}.`,
         );
