@@ -122,10 +122,10 @@ export function TelegramGroupCard({
       pollRef.current = window.setInterval(async () => {
         try {
           const result = await fetchTelegramGroupLinkStatus(workspaceId, requestId);
+          queryClient.setQueryData(["telegram-group-link", workspaceId], result);
           if (result.connected && result.group) {
             stopPolling();
             setLinkState("connected");
-            queryClient.setQueryData(["telegram-group-link", workspaceId], result);
             void queryClient.invalidateQueries({ queryKey: ["telegram-group-link", workspaceId] });
             toast.success(`Group connected: ${result.group.title}`);
             return;
@@ -139,6 +139,7 @@ export function TelegramGroupCard({
           /* transient poll failure — keep waiting until expiry */
         }
       }, 2000);
+
     },
     [queryClient, stopPolling, workspaceId],
   );
