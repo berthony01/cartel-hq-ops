@@ -317,6 +317,33 @@ function StickerLabBuilder() {
 
   const packId = draft?.packId ?? null;
 
+  /* ---------------- Telegram publishing (Step 5, explicit clicks only) --------------- */
+  const telegram = useTelegramSetup(step === 5);
+  const [tgPack, setTgPack] = useState<PackTelegramState | null>(null);
+  const [tgStickers, setTgStickers] = useState<Record<string, StickerTelegramState>>({});
+  const [publishing, setPublishing] = useState(false);
+  const [tgRefreshing, setTgRefreshing] = useState(false);
+  const [sendingTest, setSendingTest] = useState(false);
+  const [confirmPublish, setConfirmPublish] = useState(false);
+  const [publishResult, setPublishResult] = useState<TelegramPublishResult | null>(null);
+  const [tgError, setTgError] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<string | null>(null);
+
+  const loadTelegramState = useCallback(async (id: string) => {
+    try {
+      const state = await loadPackTelegramState(id);
+      setTgPack(state.pack);
+      setTgStickers(state.stickers);
+    } catch {
+      /* read-only; the panel simply shows no Telegram state */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (step === 5 && packId) void loadTelegramState(packId);
+  }, [step, packId, loadTelegramState]);
+
+
   /**
    * Durable state: reconciles every persisted sticker against Supabase
    * `stickers`, `media_assets` and the latest related `ai_jobs` rows.
