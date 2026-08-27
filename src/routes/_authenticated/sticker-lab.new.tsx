@@ -714,6 +714,23 @@ function StickerLabBuilder() {
     return !!(id && previews[id]?.transparencyValid);
   }).length;
   const allReady = draft.concepts.length > 0 && generatedCount === draft.concepts.length && !anyBusy;
+  // Export/publish readiness is stricter than "ready": transparency must be verified.
+  const exportReady =
+    draft.concepts.length > 0 &&
+    generatedCount === draft.concepts.length &&
+    transparentCount === draft.concepts.length;
+  const omittedLabels = draft.concepts
+    .filter((c) => stageFor(c.id) !== "ready")
+    .map((c) => c.label);
+  // Read-only history derived from already-loaded ai_jobs rows. No extra queries.
+  const historyRows = draft.concepts
+    .map((c) => {
+      const id = stickerIdFor(c.id);
+      const summary = summarizeAttempts(id ? jobHistory[id] : undefined);
+      return { conceptId: c.id, label: c.label, ...summary };
+    })
+    .filter((row) => row.attempts > 1 || row.failed > 0);
+
   const configured = configQuery.data?.configured === true;
 
   /** Retries only the failed stickers. Finished stickers are never touched. */
