@@ -1715,7 +1715,7 @@ function StickerLabBuilder() {
           title="Review"
           hint="Verified static stickers from private storage. Telegram publishing is not connected."
         >
-          <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <SummaryStat
               label="Backend ready"
               value={`${generatedCount}/${draft.concepts.length}`}
@@ -1739,6 +1739,15 @@ function StickerLabBuilder() {
                   : "muted"
               }
             />
+            <SummaryStat
+              label="Telegram cutout verified"
+              value={`${cutoutVerifiedCount}/${draft.concepts.length}`}
+              tone={
+                cutoutVerifiedCount === draft.concepts.length && draft.concepts.length > 0
+                  ? "green"
+                  : "muted"
+              }
+            />
             <SummaryStat label="In progress" value={String(activeCount)} tone="muted" />
             <SummaryStat
               label="Failed / needs attention"
@@ -1755,7 +1764,8 @@ function StickerLabBuilder() {
               <>
                 <Loader2 className="size-4 animate-spin text-gold" aria-hidden="true" />
                 <p className="text-xs text-foreground">
-                  Checking transparency {checkProgress?.done ?? 0}/{checkProgress?.total ?? 0}…
+                  Checking transparency &amp; Telegram cutout {checkProgress?.done ?? 0}/
+                  {checkProgress?.total ?? 0}…
                 </p>
                 <span
                   className="h-1.5 w-40 overflow-hidden rounded-full bg-border"
@@ -1773,9 +1783,10 @@ function StickerLabBuilder() {
               </>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Review re-checks every finished sticker in your browser for a real alpha channel
-                before it can be exported. {browserVerifiedCount} verified
-                {browserFailedCount > 0 ? `, ${browserFailedCount} failed` : ""}.
+                Review re-checks every finished sticker in your browser for a real alpha channel and
+                analyses it for an edge-connected light halo. {browserVerifiedCount} alpha verified,{" "}
+                {cutoutVerifiedCount} Telegram cutout verified
+                {browserFailedCount > 0 ? `, ${browserFailedCount} need attention` : ""}.
               </p>
             )}
             <Button
@@ -1787,7 +1798,7 @@ function StickerLabBuilder() {
               onClick={() => void runClientVerification(true)}
             >
               <RefreshCw className="size-4" aria-hidden="true" />
-              Re-check transparency
+              Re-check transparency &amp; cutout
             </Button>
           </div>
 
@@ -1795,8 +1806,8 @@ function StickerLabBuilder() {
             <div className="mb-6">
               <Notice tone="warn">
                 Only stickers that are <strong>ready</strong>, <strong>transparency verified</strong>{" "}
-                by the backend and <strong>alpha verified in your browser</strong> can be exported or
-                published later. The rest of this pack is untouched and nothing has been lost — retry
+                by the backend, <strong>alpha verified in your browser</strong> and{" "}
+                <strong>Telegram cutout verified</strong> can be exported or published later. The rest of this pack is untouched and nothing has been lost — retry
                 or regenerate them in the previous step whenever you want.
               </Notice>
             </div>
@@ -1822,22 +1833,27 @@ function StickerLabBuilder() {
             </Button>
             <p className="text-xs text-muted-foreground">
               {checksRunning
-                ? "Export is paused until the browser transparency check finishes."
+                ? "Export is paused until the browser transparency and cutout checks finish."
                 : "Exports are transparent PNGs downloaded straight to this device. Nothing is uploaded or published."}
             </p>
           </div>
 
           <div className="mb-6 rounded-md border border-border bg-background/40 p-3">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-pepe">
-              Transparent PNG verified
+              Telegram cutout verified
             </p>
             <p className="mt-1.5 text-xs text-muted-foreground">
               The checkerboard behind each preview marks the pixels that are actually transparent.
               Some image viewers display transparent areas as white or black — that is the viewer
               compositing the image, not a background baked into the file. Telegram places the
               transparent sticker directly over the chat background, so no rectangular background
-              appears. Every download is re-checked in your browser for a real alpha channel before
-              it is saved, and the original PNG bytes are saved unchanged.
+              appears. A transparent canvas alone is not enough, though: some generations bake a
+              thick white or cream contour around the artwork. Before export, CARTEL HQ removes only
+              the light halo that is connected to the transparent outside edge — internal whites such
+              as shirts, teeth, eyes, highlights and lettering interiors are always preserved, and if
+              the halo looks unexpectedly large the sticker is flagged for manual review instead of
+              being cleaned. Cleanup happens in your browser on the exported copy only; the stored
+              original is never modified.
             </p>
           </div>
 
@@ -1937,12 +1953,26 @@ function StickerLabBuilder() {
                           title={check?.reason}
                         >
                           {check?.status === "verified"
-                            ? "Browser verified"
+                            ? "Browser alpha verified"
                             : check?.status === "failed"
                               ? `Browser check failed — ${check.reason}`
                               : check?.status === "checking"
                                 ? "Checking in browser…"
                                 : "Browser check pending"}
+                        </p>
+                      ) : null}
+                      {backendExportable(c.id) && check?.status === "verified" ? (
+                        <p
+                          className={`truncate text-[11px] ${
+                            check.cutout === "failed" ? "text-signal" : "text-pepe"
+                          }`}
+                          title={check.cutout === "failed" ? check.reason : undefined}
+                        >
+                          {check.cutout === "verified"
+                            ? "Telegram cutout verified"
+                            : check.cutout === "will_clean"
+                              ? `Outer halo will be removed on export (${(check.removedPixels ?? 0).toLocaleString()} px)`
+                              : `Telegram cutout failed — ${check.reason ?? "needs manual review"}`}
                         </p>
                       ) : null}
                       {isFailure(stage) && failure ? (
