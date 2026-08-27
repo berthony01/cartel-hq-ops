@@ -850,18 +850,27 @@ function StickerLabBuilder() {
     const id = stickerIdFor(conceptId);
     return id ? clientChecks[id] : undefined;
   };
-  // Export invariant: backend conditions AND a successful browser alpha verification.
+  /** Telegram cutout preparation succeeded (nothing to remove, or a safe edge halo). */
+  const cutoutOk = (conceptId: string) => {
+    const c = clientCheckFor(conceptId)?.cutout;
+    return c === "verified" || c === "will_clean";
+  };
+  // Export invariant: backend conditions AND browser alpha AND a safe Telegram cutout.
   const isExportable = (conceptId: string) =>
-    backendExportable(conceptId) && clientCheckFor(conceptId)?.status === "verified";
+    backendExportable(conceptId) &&
+    clientCheckFor(conceptId)?.status === "verified" &&
+    cutoutOk(conceptId);
   const checksRunning = checkProgress !== null;
   const transparentCount = readyConcepts.filter((c) => backendExportable(c.id)).length;
   const browserVerifiedCount = draft.concepts.filter(
     (c) => clientCheckFor(c.id)?.status === "verified",
   ).length;
+  const cutoutVerifiedCount = draft.concepts.filter((c) => cutoutOk(c.id)).length;
   const browserFailedCount = draft.concepts.filter(
-    (c) => clientCheckFor(c.id)?.status === "failed",
+    (c) => clientCheckFor(c.id)?.status === "failed" || clientCheckFor(c.id)?.cutout === "failed",
   ).length;
   const attentionCount = failedCount + browserFailedCount;
+
   const exportableConcepts = draft.concepts.filter((c) => isExportable(c.id));
   const exportableCount = exportableConcepts.length;
   const allReady = draft.concepts.length > 0 && generatedCount === draft.concepts.length && !anyBusy;
