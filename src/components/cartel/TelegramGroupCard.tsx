@@ -209,6 +209,8 @@ export function TelegramGroupCard({
   const canSet = liveCanSet ?? group?.can_set_sticker_set ?? false;
   const isSupergroup = (live?.chatType ?? group?.chat_type) === "supergroup";
   const ready = !!group && isSupergroup && botAdmin && canSet;
+  const lastCheck = groupQuery.data?.request?.metadata?.last_group_check;
+
 
   return (
     <Card className="cartel-panel">
