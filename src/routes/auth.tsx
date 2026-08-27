@@ -87,7 +87,7 @@ function AuthPage() {
         password,
         options: {
           emailRedirectTo: window.location.origin,
-          data: displayName.trim() ? { display_name: displayName.trim() } : undefined,
+          ...(displayName.trim() ? { data: { display_name: displayName.trim() } } : {}),
         },
       });
       if (signUpError) throw signUpError;
