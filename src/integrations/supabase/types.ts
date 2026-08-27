@@ -447,6 +447,42 @@ export type Database = {
           },
         ]
       }
+      telegram_link_requests: {
+        Row: {
+          consumed_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          metadata: Json
+          status: string
+          telegram_user_id: number | null
+          token_hash: string
+          user_id: string
+        }
+        Insert: {
+          consumed_at?: string | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          metadata?: Json
+          status?: string
+          telegram_user_id?: number | null
+          token_hash: string
+          user_id: string
+        }
+        Update: {
+          consumed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          metadata?: Json
+          status?: string
+          telegram_user_id?: number | null
+          token_hash?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       usage_ledger: {
         Row: {
           action_type: string
