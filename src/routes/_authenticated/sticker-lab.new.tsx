@@ -919,6 +919,92 @@ function StickerLabBuilder() {
   // Export/publish readiness is stricter than "ready": transparency must be verified.
   const exportReady = draft.concepts.length > 0 && exportableCount === draft.concepts.length;
   const omittedLabels = draft.concepts.filter((c) => !isExportable(c.id)).map((c) => c.label);
+
+  /* ---------------- Telegram publish handlers (user-initiated only) ---------------- */
+  const tgPublishedCount = draft.concepts.filter((c) => {
+    const id = stickerIdFor(c.id);
+    return id ? tgStickers[id]?.status === "published" : false;
+  }).length;
+  const packPublished = !!tgPack?.telegram_set_url && tgPublishedCount > 0;
+  const canPublish =
+    !!packId &&
+    !!workspaceId &&
+    telegram.botConfigured &&
+    telegram.ownerConnected &&
+    exportableCount > 0 &&
+    !checksRunning &&
+    !publishing;
+  const shortNamePreview = packId
+    ? previewShortName(draft.packName, packId, telegram.botUsername)
+    : null;
+
+  const doPublish = async () => {
+    if (!packId || !workspaceId) return;
+    setPublishing(true);
+    setTgError(null);
+    try {
+      const result = await publishPack({ workspaceId, packId });
+      setPublishResult(result);
+      await loadTelegramState(packId);
+      if (result.status === "published") {
+        toast.success(`Published ${result.published} of ${result.total} stickers to Telegram.`);
+      } else if (result.status === "partial") {
+        toast.warning(
+          `${result.published} of ${result.total} published, ${result.failed} need retry.`,
+        );
+      } else {
+        toast.error("Telegram publishing failed. See the publish detail below.");
+      }
+    } catch (err) {
+      setTgError(telegramErrorMessage(err));
+      toast.error(telegramErrorMessage(err));
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const doRefresh = async () => {
+    if (!packId || !workspaceId) return;
+    setTgRefreshing(true);
+    setTgError(null);
+    try {
+      const result = await refreshPackStatus({ workspaceId, packId });
+      await loadTelegramState(packId);
+      toast.success(
+        result.exists
+          ? `Telegram set found${result.stickerCount ? ` with ${result.stickerCount} stickers` : ""}.`
+          : "No Telegram set exists for this pack yet.",
+      );
+    } catch (err) {
+      setTgError(telegramErrorMessage(err));
+      toast.error(telegramErrorMessage(err));
+    } finally {
+      setTgRefreshing(false);
+    }
+  };
+
+  const doSendTest = async () => {
+    if (!packId || !workspaceId) return;
+    setSendingTest(true);
+    setTestResult(null);
+    try {
+      const result = await sendTestSticker({ workspaceId, packId });
+      if (result.sent) {
+        setTestResult("Test sticker sent — check your Telegram chat with the bot.");
+        toast.success("Native test sticker sent.");
+      } else {
+        setTestResult(
+          `Telegram could not reach you${result.detail ? `: ${result.detail}` : ""}. Open the bot, tap Start, then retry.`,
+        );
+        toast.error("Telegram could not deliver the test sticker.");
+      }
+    } catch (err) {
+      setTestResult(telegramErrorMessage(err));
+      toast.error(telegramErrorMessage(err));
+    } finally {
+      setSendingTest(false);
+    }
+  };
   // Read-only history derived from already-loaded ai_jobs rows. No extra queries.
   const historyRows = draft.concepts
     .map((c) => {
