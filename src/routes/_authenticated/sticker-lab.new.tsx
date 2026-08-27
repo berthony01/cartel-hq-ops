@@ -276,9 +276,20 @@ function StickerLabBuilder() {
     queryKey: ["sticker-ai-config"],
     enabled: step === 4,
     staleTime: 60_000,
-    retry: false,
+    retry: 1,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
     queryFn: fetchStickerAiConfig,
   });
+
+  // A previously failed probe must never persist as a stale "service down"
+  // impression when the user comes back to Step 4. Re-probe (free) instead.
+  const configRefetch = configQuery.refetch;
+  const configErrored = configQuery.isError;
+  useEffect(() => {
+    if (step === 4 && configErrored) void configRefetch();
+  }, [step, configErrored, configRefetch]);
+
 
   const packId = draft?.packId ?? null;
 
