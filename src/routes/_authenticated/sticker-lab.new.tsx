@@ -981,9 +981,11 @@ function StickerLabBuilder() {
         setAssignedGroupTitle(null);
         setAssignNotice(
           result.message ||
-            (result.reason === "GROUP_STICKER_MIN_MEMBERS"
-              ? `Pack published and announced in ${title}. Official group sticker set unlocks at ${result.minMembers ?? 100} members (${result.memberCount ?? "?"}/${result.minMembers ?? 100}). Members can open the pack link now, and CARTEL HQ can send native stickers in the group.`
-              : `Pack published and announced in ${title}. Telegram's official group sticker set is not available for this group yet.`),
+            (result.reason === "GROUP_STICKER_REQUIRES_SUPERGROUP"
+              ? `Pack published and announced in ${title}. Members can open the pack link now, and CARTEL HQ can send native stickers in the group. Telegram's official group sticker set only exists for supergroups — upgrading ${title} is optional and only needed if you want that feature.`
+              : result.reason === "GROUP_STICKER_MIN_MEMBERS"
+                ? `Pack published and announced in ${title}. Official group sticker set unlocks at ${result.minMembers ?? 100} members (${result.memberCount ?? "?"}/${result.minMembers ?? 100}). Members can open the pack link now, and CARTEL HQ can send native stickers in the group.`
+                : `Pack published and announced in ${title}. Telegram's official group sticker set is not available for this group yet.`),
         );
         toast.success(`Pack published and announced in ${title}.`);
       } else {
