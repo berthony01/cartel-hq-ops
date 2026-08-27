@@ -383,13 +383,13 @@ function StickerLabBuilder() {
   };
 
   /** Runs one sticker through the server pipeline. Only ever user initiated. */
-  const runGeneration = async (conceptId: string, stickerId: string) => {
+  const runGeneration = async (conceptId: string, stickerId: string, packId: string) => {
     setErrors((e) => ({ ...e, [stickerId]: "" }));
     setStages((s) => ({ ...s, [stickerId]: "generating" }));
     try {
       const started = await startStickerGeneration({
         workspaceId: workspaceId!,
-        packId: draft.packId ?? "",
+        packId,
         stickerId,
         referenceAssetIds: draft.referenceAssetIds,
       });
@@ -432,7 +432,7 @@ function StickerLabBuilder() {
             return;
           }
           // Succeeded without an asset yet — refresh from the database.
-          if (draft.packId) await loadExisting(draft.packId);
+          await loadExisting(packId);
           setStages((s) => ({ ...s, [stickerId]: "ready" }));
           return;
         }
