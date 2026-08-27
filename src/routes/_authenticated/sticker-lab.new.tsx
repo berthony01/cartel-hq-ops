@@ -2382,9 +2382,9 @@ function StickerLabBuilder() {
                 <AlertDialogTitle>Publish this pack to Telegram?</AlertDialogTitle>
                 <AlertDialogDescription>
                   This creates a real, shareable Telegram sticker set owned by your Telegram account
-                  ({telegram.connection?.telegram_user_id}). {exportableCount} verified sticker
-                  {exportableCount === 1 ? "" : "s"} will be uploaded. Sets cannot be transferred to
-                  another owner later.
+                  ({telegram.connection?.telegram_user_id}). {reviewedStickerIds.length} reviewed
+                  sticker{reviewedStickerIds.length === 1 ? "" : "s"} will be uploaded. Sets cannot
+                  be transferred to another owner later.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
