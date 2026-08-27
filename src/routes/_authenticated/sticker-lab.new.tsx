@@ -1598,14 +1598,14 @@ function StickerLabBuilder() {
           title="Review"
           hint="Verified static stickers from private storage. Telegram publishing is not connected."
         >
-          <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <SummaryStat
-              label="Ready"
+              label="Backend ready"
               value={`${generatedCount}/${draft.concepts.length}`}
               tone={allReady ? "green" : "muted"}
             />
             <SummaryStat
-              label="Transparency verified"
+              label="Backend transparency verified"
               value={`${transparentCount}/${draft.concepts.length}`}
               tone={
                 transparentCount === draft.concepts.length && draft.concepts.length > 0
@@ -1613,21 +1613,74 @@ function StickerLabBuilder() {
                   : "muted"
               }
             />
+            <SummaryStat
+              label="Browser alpha verified"
+              value={`${browserVerifiedCount}/${draft.concepts.length}`}
+              tone={
+                browserVerifiedCount === draft.concepts.length && draft.concepts.length > 0
+                  ? "green"
+                  : "muted"
+              }
+            />
             <SummaryStat label="In progress" value={String(activeCount)} tone="muted" />
             <SummaryStat
-              label="Failed"
-              value={String(failedCount)}
-              tone={failedCount > 0 ? "red" : "muted"}
+              label="Failed / needs attention"
+              value={String(attentionCount)}
+              tone={attentionCount > 0 ? "red" : "muted"}
             />
+          </div>
+
+          <div
+            className="mb-6 flex flex-wrap items-center gap-3 rounded-md border border-border bg-background/40 p-3"
+            aria-live="polite"
+          >
+            {checksRunning ? (
+              <>
+                <Loader2 className="size-4 animate-spin text-gold" aria-hidden="true" />
+                <p className="text-xs text-foreground">
+                  Checking transparency {checkProgress?.done ?? 0}/{checkProgress?.total ?? 0}…
+                </p>
+                <span
+                  className="h-1.5 w-40 overflow-hidden rounded-full bg-border"
+                  aria-hidden="true"
+                >
+                  <span
+                    className="block h-full bg-gold transition-all duration-300"
+                    style={{
+                      width: `${Math.round(
+                        ((checkProgress?.done ?? 0) / Math.max(1, checkProgress?.total ?? 1)) * 100,
+                      )}%`,
+                    }}
+                  />
+                </span>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Review re-checks every finished sticker in your browser for a real alpha channel
+                before it can be exported. {browserVerifiedCount} verified
+                {browserFailedCount > 0 ? `, ${browserFailedCount} failed` : ""}.
+              </p>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="ml-auto min-h-10"
+              disabled={checksRunning}
+              onClick={() => void runClientVerification(true)}
+            >
+              <RefreshCw className="size-4" aria-hidden="true" />
+              Re-check transparency
+            </Button>
           </div>
 
           {!exportReady ? (
             <div className="mb-6">
               <Notice tone="warn">
-                Only stickers that are <strong>ready</strong> and{" "}
-                <strong>transparency verified</strong> can be exported or published later. The rest
-                of this pack is untouched and nothing has been lost — retry or regenerate them in
-                the previous step whenever you want.
+                Only stickers that are <strong>ready</strong>, <strong>transparency verified</strong>{" "}
+                by the backend and <strong>alpha verified in your browser</strong> can be exported or
+                published later. The rest of this pack is untouched and nothing has been lost — retry
+                or regenerate them in the previous step whenever you want.
               </Notice>
             </div>
           ) : null}
@@ -1636,7 +1689,7 @@ function StickerLabBuilder() {
             <Button
               type="button"
               className="min-h-11"
-              disabled={exporting || exportableCount === 0}
+              disabled={exporting || checksRunning || exportableCount === 0}
               onClick={() => void downloadZip()}
             >
               {exporting ? (
@@ -1651,8 +1704,9 @@ function StickerLabBuilder() {
               Refresh status
             </Button>
             <p className="text-xs text-muted-foreground">
-              Exports are transparent PNGs downloaded straight to this device. Nothing is uploaded
-              or published.
+              {checksRunning
+                ? "Export is paused until the browser transparency check finishes."
+                : "Exports are transparent PNGs downloaded straight to this device. Nothing is uploaded or published."}
             </p>
           </div>
 
