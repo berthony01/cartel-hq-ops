@@ -359,7 +359,7 @@ export function TelegramGroupCard({
               Waiting for Telegram…
             </p>
             <p className="mt-1">
-              Telegram opened. Choose the target supergroup and approve the requested admin right,
+              Telegram opened. Choose the target group or supergroup and approve the requested admin right,
               then return here. If @PepeCartelHQBot is already installed in the group, open that
               group and send{" "}
               <span className="inline-flex items-center gap-1 align-middle">
@@ -409,9 +409,11 @@ export function TelegramGroupCard({
                   >
                     {lastCheck.official_group_sticker_eligible === true
                       ? "Eligible"
-                      : lastCheck.official_group_sticker_reason === "minimum_members"
-                        ? `Unlocks at ${lastCheck.official_group_sticker_min_members ?? 100} members (${lastCheck.member_count ?? "?"})`
-                        : "Not reported by Telegram yet"}
+                      : lastCheck.official_group_sticker_reason === "requires_supergroup"
+                        ? "Requires supergroup"
+                        : lastCheck.official_group_sticker_reason === "minimum_members"
+                          ? `Unlocks at ${lastCheck.official_group_sticker_min_members ?? 100} members (${lastCheck.member_count ?? "?"})`
+                          : "Not reported by Telegram yet"}
                   </StatusBadge>
                 </div>
                 {lastCheck.user_is_admin === true &&
@@ -419,9 +421,11 @@ export function TelegramGroupCard({
                 lastCheck.bot_can_change_info === true ? (
                   <p className="text-xs leading-relaxed text-muted-foreground">
                     Admin rights look correct.{" "}
-                    {lastCheck.official_group_sticker_reason === "minimum_members"
-                      ? `Telegram only allows an official group sticker set from ${lastCheck.official_group_sticker_min_members ?? 100} members (this group has ${lastCheck.member_count ?? "fewer"}). No further permission changes are needed — publishing and native stickers still work.`
-                      : "No further permission changes are needed."}
+                    {lastCheck.official_group_sticker_reason === "requires_supergroup"
+                      ? "This is a basic Telegram group, which is fully valid for CARTEL HQ publishing and native stickers. Telegram’s official group sticker set only exists for supergroups — upgrading is optional and only needed if you want that feature."
+                      : lastCheck.official_group_sticker_reason === "minimum_members"
+                        ? `Telegram only allows an official group sticker set from ${lastCheck.official_group_sticker_min_members ?? 100} members (this group has ${lastCheck.member_count ?? "fewer"}). No further permission changes are needed — publishing and native stickers still work.`
+                        : "No further permission changes are needed."}
                   </p>
                 ) : (
                   <p className="text-xs leading-relaxed text-muted-foreground">
