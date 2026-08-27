@@ -778,14 +778,29 @@ function StickerLabBuilder() {
   const failedConcepts = draft.concepts.filter((c) => isFailure(stageFor(c.id)));
   const failedCount = failedConcepts.length;
   const activeCount = draft.concepts.filter((c) => busy(stageFor(c.id))).length;
-  // Single export invariant: ready AND has a preview AND transparency verified.
-  const isExportable = (conceptId: string) => {
+  // Backend invariant: ready AND has a preview AND backend transparency verified.
+  const backendExportable = (conceptId: string) => {
     if (stageFor(conceptId) !== "ready") return false;
     const id = stickerIdFor(conceptId);
     const preview = id ? previews[id] : undefined;
     return !!preview && preview.transparencyValid === true;
   };
-  const transparentCount = readyConcepts.filter((c) => isExportable(c.id)).length;
+  const clientCheckFor = (conceptId: string) => {
+    const id = stickerIdFor(conceptId);
+    return id ? clientChecks[id] : undefined;
+  };
+  // Export invariant: backend conditions AND a successful browser alpha verification.
+  const isExportable = (conceptId: string) =>
+    backendExportable(conceptId) && clientCheckFor(conceptId)?.status === "verified";
+  const checksRunning = checkProgress !== null;
+  const transparentCount = readyConcepts.filter((c) => backendExportable(c.id)).length;
+  const browserVerifiedCount = draft.concepts.filter(
+    (c) => clientCheckFor(c.id)?.status === "verified",
+  ).length;
+  const browserFailedCount = draft.concepts.filter(
+    (c) => clientCheckFor(c.id)?.status === "failed",
+  ).length;
+  const attentionCount = failedCount + browserFailedCount;
   const exportableConcepts = draft.concepts.filter((c) => isExportable(c.id));
   const exportableCount = exportableConcepts.length;
   const allReady = draft.concepts.length > 0 && generatedCount === draft.concepts.length && !anyBusy;
