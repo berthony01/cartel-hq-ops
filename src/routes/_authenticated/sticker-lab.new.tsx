@@ -1546,13 +1546,35 @@ function StickerLabBuilder() {
                               : "Transparency not verified"
                           : STAGE_LABEL[stage]}
                       </p>
-                      {isFailure(stage) && error ? (
-                        <p className="truncate text-[11px] text-signal" title={error}>
-                          {error}
+                      {isFailure(stage) && failure ? (
+                        <p className="truncate text-[11px] text-signal" title={failure.body}>
+                          {failure.title}
+                        </p>
+                      ) : null}
+                      {attempts.total > 1 ? (
+                        <p className="truncate text-[11px] text-muted-foreground">
+                          {attempts.total} attempts
+                          {attempts.failed > 0 ? ` · ${attempts.failed} failed` : ""}
+                          {attempts.lastFailureTitle && stage === "ready"
+                            ? ` · recovered after “${attempts.lastFailureTitle}”`
+                            : ""}
                         </p>
                       ) : null}
                     </div>
+                    {preview ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="ml-auto min-h-10"
+                        aria-label={`Download ${c.label} as PNG`}
+                        onClick={() => void downloadOne(c.id, index)}
+                      >
+                        <Download className="size-4" aria-hidden="true" />
+                      </Button>
+                    ) : null}
                   </div>
+
                   <div className="mt-3 grid grid-cols-[5rem_1fr] gap-2">
                     <div>
                       <Label htmlFor={`${c.id}-review-emoji`} className="text-xs">
