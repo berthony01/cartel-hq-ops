@@ -5,7 +5,10 @@ import { supabase } from "@/integrations/supabase/client";
 let currentSession: Session | null = null;
 let initialized = false;
 let initialization: Promise<void> | null = null;
-let snapshot = { session: currentSession, initialized };
+let snapshot: { session: Session | null; initialized: boolean } = {
+  session: currentSession,
+  initialized,
+};
 const listeners = new Set<() => void>();
 
 function emitChange() {
@@ -38,7 +41,10 @@ function getSnapshot() {
   return snapshot;
 }
 
-const serverSnapshot = { session: null, initialized: false };
+const serverSnapshot: { session: Session | null; initialized: boolean } = {
+  session: null,
+  initialized: false,
+};
 
 /**
  * Client-side session state. The single global auth listener lives in
