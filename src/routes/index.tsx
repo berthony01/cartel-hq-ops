@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   Sticker,
   Palette,
+  FolderLock,
   Send,
   PackageOpen,
   Sparkles,
@@ -9,6 +10,12 @@ import {
   Target,
   Users,
   BarChart3,
+  ShieldCheck,
+  TerminalSquare,
+  Radar,
+  Award,
+  MessageSquare,
+  type LucideIcon,
 } from "lucide-react";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { EmptyState } from "@/components/cartel/EmptyState";
@@ -212,32 +219,41 @@ function HqDashboard() {
         >
           Upcoming modules
         </h2>
-        <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
-          {ROADMAP.map((item, index) => (
-            <li
-              key={item.label}
-              className={`rise-in flex items-center gap-3 rounded-lg border px-3 py-3 ${
-                item.tone === "gold" ? "border-gold/40 bg-gold/5" : "border-border bg-surface"
-              }`}
-            >
-              <span className="font-display text-sm text-muted-foreground">
-                {String(index + 1).padStart(2, "0")}
-              </span>
-              <item.icon
-                className={`size-4 ${item.tone === "gold" ? "text-gold" : "text-muted-foreground"}`}
-                aria-hidden="true"
-              />
-              <span className="min-w-0 flex-1 text-sm text-foreground">{item.label}</span>
-              <span
-                className={`text-[10px] uppercase tracking-wider ${
-                  item.tone === "gold" ? "text-gold" : "text-muted-foreground/70"
-                }`}
-              >
-                {item.state}
-              </span>
-            </li>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {ROADMAP_GROUPS.map((group) => (
+            <Card key={group.label} className="cartel-panel rise-in">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                  {group.label}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <ul className="space-y-1.5">
+                  {group.modules.map((item) => (
+                    <li key={item.label} className="flex items-center gap-2.5 text-sm">
+                      <item.icon
+                        className={`size-4 shrink-0 ${
+                          item.state === "Active build" ? "text-gold" : "text-muted-foreground"
+                        }`}
+                        aria-hidden="true"
+                      />
+                      <span className="min-w-0 flex-1 truncate text-foreground">{item.label}</span>
+                      {item.state === "Active build" ? (
+                        <span className="shrink-0 rounded-sm border border-gold/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gold">
+                          Active build
+                        </span>
+                      ) : (
+                        <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/70">
+                          Planned
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
           ))}
-        </ol>
+        </div>
       </section>
     </div>
   );
