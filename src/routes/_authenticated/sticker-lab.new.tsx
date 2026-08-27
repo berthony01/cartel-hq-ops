@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
+import { useSession } from "@/hooks/useSession";
+import { useWorkspace } from "@/lib/workspace-context";
+import { signedUrl, uploadWorkspaceAsset, validateImageFile } from "@/lib/media";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -33,7 +37,7 @@ import {
   type PackTheme,
 } from "@/lib/sticker-lab";
 
-export const Route = createFileRoute("/sticker-lab/new")({
+export const Route = createFileRoute("/_authenticated/sticker-lab/new")({
   head: () => ({
     meta: [
       { title: "New Sticker Pack — Sticker Lab — CARTEL HQ" },
@@ -57,9 +61,12 @@ export const Route = createFileRoute("/sticker-lab/new")({
 const ACCEPTED = "image/png,image/jpeg,image/webp,image/gif";
 
 function StickerLabBuilder() {
+  const { workspaceId } = useWorkspace();
+  const { user } = useSession();
   const [step, setStep] = useState(1);
   const [draft, setDraft] = useState<BuilderDraft | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [packNameError, setPackNameError] = useState<string | null>(null);
@@ -73,11 +80,18 @@ function StickerLabBuilder() {
     if (draft) saveDraft(draft);
   }, [draft]);
 
+  // Restore a preview for a reference already stored in the private bucket.
+  const storedPath = draft?.referenceStoragePath ?? null;
   useEffect(() => {
+    let active = true;
+    if (!storedPath) return;
+    signedUrl(storedPath, 3600).then((url) => {
+      if (active && url) setPreviewUrl(url);
+    });
     return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      active = false;
     };
-  }, [previewUrl]);
+  }, [storedPath]);
 
   if (!draft) {
     return (
@@ -88,24 +102,50 @@ function StickerLabBuilder() {
   const update = (patch: Partial<BuilderDraft>) =>
     setDraft((d) => (d ? { ...d, ...patch } : d));
 
-  const applyFile = (file: File | undefined | null) => {
+  const applyFile = async (file: File | undefined | null) => {
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setFileError("That file is not an image. Use PNG, JPG, WEBP or GIF.");
+    const invalid = validateImageFile(file);
+    if (invalid) {
+      setFileError(invalid);
+      return;
+    }
+    if (!workspaceId || !user) {
+      setFileError("Select or create a workspace before uploading a reference.");
       return;
     }
     setFileError(null);
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(URL.createObjectURL(file));
-    update({ imageName: file.name });
+    setUploading(true);
+    try {
+      const asset = await uploadWorkspaceAsset({
+        workspaceId,
+        userId: user.id,
+        file,
+        assetType: "reference_image",
+      });
+      const url = await signedUrl(asset.storage_path, 3600);
+      setPreviewUrl(url);
+      update({
+        imageName: file.name,
+        referenceAssetId: asset.id,
+        referenceStoragePath: asset.storage_path,
+      });
+      toast.success("Reference image stored");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed.";
+      setFileError(message);
+      toast.error(message);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const clearFile = () => {
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(null);
-    update({ imageName: null });
+    update({ imageName: null, referenceAssetId: null, referenceStoragePath: null });
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
+
 
   const setTheme = (theme: PackTheme) =>
     update({ theme, concepts: starterConcepts(theme, draft.size) });
@@ -181,7 +221,7 @@ function StickerLabBuilder() {
       {step === 1 ? (
         <StepCard
           title="Character Reference"
-          hint="Preview only in this phase. Nothing is uploaded or stored."
+          hint="Stored privately in this workspace's Asset Vault and reused for generation later."
         >
           <div className="grid gap-6 md:grid-cols-2">
             <div>
@@ -192,7 +232,7 @@ function StickerLabBuilder() {
                 <div className="cartel-panel flex flex-col items-center gap-3 rounded-lg p-4">
                   <img
                     src={previewUrl}
-                    alt={`Local preview of ${draft.imageName ?? "reference image"}`}
+                    alt={`Reference image ${draft.imageName ?? ""}`}
                     className="max-h-56 w-auto rounded-md border border-border object-contain"
                   />
                   <p className="w-full truncate text-center text-xs text-muted-foreground">
@@ -204,6 +244,7 @@ function StickerLabBuilder() {
                       size="sm"
                       variant="outline"
                       className="min-h-10"
+                      disabled={uploading}
                       onClick={() => fileInputRef.current?.click()}
                     >
                       Change image
@@ -230,7 +271,7 @@ function StickerLabBuilder() {
                   onDrop={(e) => {
                     e.preventDefault();
                     setDragging(false);
-                    applyFile(e.dataTransfer.files?.[0]);
+                    void applyFile(e.dataTransfer.files?.[0]);
                   }}
                   className={`flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed p-8 text-center transition-colors ${
                     dragging ? "border-gold bg-gold/5" : "border-border bg-background/40"
@@ -247,9 +288,10 @@ function StickerLabBuilder() {
                     type="button"
                     variant="outline"
                     className="min-h-11"
+                    disabled={uploading}
                     onClick={() => fileInputRef.current?.click()}
                   >
-                    Choose file
+                    {uploading ? "Uploading…" : "Choose file"}
                   </Button>
                 </div>
               )}
@@ -259,7 +301,7 @@ function StickerLabBuilder() {
                 accept={ACCEPTED}
                 className="sr-only"
                 aria-label="Choose a character reference image"
-                onChange={(e) => applyFile(e.target.files?.[0])}
+                onChange={(e) => void applyFile(e.target.files?.[0])}
               />
               {fileError ? (
                 <p role="alert" className="mt-2 text-xs text-signal">

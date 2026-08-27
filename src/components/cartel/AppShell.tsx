@@ -1,8 +1,10 @@
 import { useState, type ReactNode } from "react";
-import { Menu, Search, Bell, ChevronDown, Building2 } from "lucide-react";
+import { Menu, Search, Bell } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { CartelMark, SidebarNav } from "@/components/cartel/SidebarNav";
+import { WorkspaceSwitcher } from "@/components/cartel/WorkspaceSwitcher";
+import { UserMenu } from "@/components/cartel/UserMenu";
 
 function TopBar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
   return (
@@ -21,17 +23,7 @@ function TopBar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
         <CartelMark />
       </div>
 
-      {/* Workspace selector — visual placeholder only in this phase */}
-      <button
-        type="button"
-        disabled
-        aria-label="Workspace selector (not available yet)"
-        className="hidden min-h-10 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm text-muted-foreground lg:flex"
-      >
-        <Building2 className="size-4 text-gold" aria-hidden="true" />
-        <span className="font-medium text-foreground">PEPECARTEL</span>
-        <ChevronDown className="size-4" aria-hidden="true" />
-      </button>
+      <WorkspaceSwitcher />
 
       <div className="ml-auto flex items-center gap-2">
         <div className="hidden items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm text-muted-foreground sm:flex">
@@ -46,17 +38,7 @@ function TopBar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
         <Button variant="ghost" size="icon" disabled aria-label="Notifications (not available yet)">
           <Bell className="size-5" />
         </Button>
-        <button
-          type="button"
-          disabled
-          aria-label="Account menu (not available yet)"
-          className="flex min-h-10 items-center gap-2 rounded-md border border-border bg-surface px-2 py-1.5"
-        >
-          <span className="flex size-7 items-center justify-center rounded-full border border-gold/40 bg-surface-raised text-[11px] font-semibold text-gold">
-            PC
-          </span>
-          <span className="hidden text-xs text-muted-foreground sm:inline">Guest</span>
-        </button>
+        <UserMenu />
       </div>
     </header>
   );
@@ -75,7 +57,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <SidebarNav />
         </div>
         <p className="px-2 pt-4 text-[10px] leading-relaxed text-muted-foreground/70">
-          Phase 0 foundation. Modules are placeholders until wired up.
+          Phase 1A. Sticker Lab, Brand Kit and Assets are wired to the backend.
         </p>
       </aside>
 

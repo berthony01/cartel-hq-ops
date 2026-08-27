@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Send } from "lucide-react";
 import { PlaceholderPage } from "@/components/cartel/PlaceholderPage";
 
-export const Route = createFileRoute("/distribution")({
+export const Route = createFileRoute("/_authenticated/distribution")({
   head: () => ({
     meta: [
       { title: "Distribution — CARTEL HQ" },

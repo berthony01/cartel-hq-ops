@@ -9,171 +9,192 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as AnalyticsRouteImport } from './routes/analytics'
-import { Route as AssetsRouteImport } from './routes/assets'
-import { Route as BrandKitRouteImport } from './routes/brand-kit'
-import { Route as CartelShieldRouteImport } from './routes/cartel-shield'
-import { Route as ClearanceRouteImport } from './routes/clearance'
-import { Route as CommandTerminalRouteImport } from './routes/command-terminal'
-import { Route as DistributionRouteImport } from './routes/distribution'
-import { Route as MissionsRouteImport } from './routes/missions'
-import { Route as OperationsRouteImport } from './routes/operations'
-import { Route as OperativesRouteImport } from './routes/operatives'
-import { Route as ReputationRouteImport } from './routes/reputation'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as StickerLabRouteImport } from './routes/sticker-lab'
-import { Route as TelegramRouteImport } from './routes/telegram'
-import { Route as StickerLabIndexRouteImport } from './routes/sticker-lab.index'
-import { Route as StickerLabNewRouteImport } from './routes/sticker-lab.new'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
+import { Route as AuthenticatedAssetsRouteImport } from './routes/_authenticated/assets'
+import { Route as AuthenticatedBrandKitRouteImport } from './routes/_authenticated/brand-kit'
+import { Route as AuthenticatedCartelShieldRouteImport } from './routes/_authenticated/cartel-shield'
+import { Route as AuthenticatedClearanceRouteImport } from './routes/_authenticated/clearance'
+import { Route as AuthenticatedCommandTerminalRouteImport } from './routes/_authenticated/command-terminal'
+import { Route as AuthenticatedDistributionRouteImport } from './routes/_authenticated/distribution'
+import { Route as AuthenticatedMissionsRouteImport } from './routes/_authenticated/missions'
+import { Route as AuthenticatedOperationsRouteImport } from './routes/_authenticated/operations'
+import { Route as AuthenticatedOperativesRouteImport } from './routes/_authenticated/operatives'
+import { Route as AuthenticatedReputationRouteImport } from './routes/_authenticated/reputation'
+import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedStickerLabRouteImport } from './routes/_authenticated/sticker-lab'
+import { Route as AuthenticatedTelegramRouteImport } from './routes/_authenticated/telegram'
+import { Route as AuthenticatedStickerLabIndexRouteImport } from './routes/_authenticated/sticker-lab.index'
+import { Route as AuthenticatedStickerLabNewRouteImport } from './routes/_authenticated/sticker-lab.new'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AnalyticsRoute = AnalyticsRouteImport.update({
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAnalyticsRoute = AuthenticatedAnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AssetsRoute = AssetsRouteImport.update({
+const AuthenticatedAssetsRoute = AuthenticatedAssetsRouteImport.update({
   id: '/assets',
   path: '/assets',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const BrandKitRoute = BrandKitRouteImport.update({
+const AuthenticatedBrandKitRoute = AuthenticatedBrandKitRouteImport.update({
   id: '/brand-kit',
   path: '/brand-kit',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const CartelShieldRoute = CartelShieldRouteImport.update({
-  id: '/cartel-shield',
-  path: '/cartel-shield',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ClearanceRoute = ClearanceRouteImport.update({
+const AuthenticatedCartelShieldRoute =
+  AuthenticatedCartelShieldRouteImport.update({
+    id: '/cartel-shield',
+    path: '/cartel-shield',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedClearanceRoute = AuthenticatedClearanceRouteImport.update({
   id: '/clearance',
   path: '/clearance',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const CommandTerminalRoute = CommandTerminalRouteImport.update({
-  id: '/command-terminal',
-  path: '/command-terminal',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DistributionRoute = DistributionRouteImport.update({
-  id: '/distribution',
-  path: '/distribution',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MissionsRoute = MissionsRouteImport.update({
+const AuthenticatedCommandTerminalRoute =
+  AuthenticatedCommandTerminalRouteImport.update({
+    id: '/command-terminal',
+    path: '/command-terminal',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedDistributionRoute =
+  AuthenticatedDistributionRouteImport.update({
+    id: '/distribution',
+    path: '/distribution',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedMissionsRoute = AuthenticatedMissionsRouteImport.update({
   id: '/missions',
   path: '/missions',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const OperationsRoute = OperationsRouteImport.update({
+const AuthenticatedOperationsRoute = AuthenticatedOperationsRouteImport.update({
   id: '/operations',
   path: '/operations',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const OperativesRoute = OperativesRouteImport.update({
+const AuthenticatedOperativesRoute = AuthenticatedOperativesRouteImport.update({
   id: '/operatives',
   path: '/operatives',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const ReputationRoute = ReputationRouteImport.update({
+const AuthenticatedReputationRoute = AuthenticatedReputationRouteImport.update({
   id: '/reputation',
   path: '/reputation',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const SettingsRoute = SettingsRouteImport.update({
+const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const StickerLabRoute = StickerLabRouteImport.update({
+const AuthenticatedStickerLabRoute = AuthenticatedStickerLabRouteImport.update({
   id: '/sticker-lab',
   path: '/sticker-lab',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const TelegramRoute = TelegramRouteImport.update({
+const AuthenticatedTelegramRoute = AuthenticatedTelegramRouteImport.update({
   id: '/telegram',
   path: '/telegram',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const StickerLabIndexRoute = StickerLabIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => StickerLabRoute,
-} as any)
-const StickerLabNewRoute = StickerLabNewRouteImport.update({
-  id: '/new',
-  path: '/new',
-  getParentRoute: () => StickerLabRoute,
-} as any)
+const AuthenticatedStickerLabIndexRoute =
+  AuthenticatedStickerLabIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedStickerLabRoute,
+  } as any)
+const AuthenticatedStickerLabNewRoute =
+  AuthenticatedStickerLabNewRouteImport.update({
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => AuthenticatedStickerLabRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/analytics': typeof AnalyticsRoute
-  '/assets': typeof AssetsRoute
-  '/brand-kit': typeof BrandKitRoute
-  '/cartel-shield': typeof CartelShieldRoute
-  '/clearance': typeof ClearanceRoute
-  '/command-terminal': typeof CommandTerminalRoute
-  '/distribution': typeof DistributionRoute
-  '/missions': typeof MissionsRoute
-  '/operations': typeof OperationsRoute
-  '/operatives': typeof OperativesRoute
-  '/reputation': typeof ReputationRoute
-  '/settings': typeof SettingsRoute
-  '/sticker-lab': typeof StickerLabRouteWithChildren
-  '/telegram': typeof TelegramRoute
-  '/sticker-lab/new': typeof StickerLabNewRoute
-  '/sticker-lab/': typeof StickerLabIndexRoute
+  '/': typeof AuthenticatedIndexRoute
+  '/auth': typeof AuthRoute
+  '/analytics': typeof AuthenticatedAnalyticsRoute
+  '/assets': typeof AuthenticatedAssetsRoute
+  '/brand-kit': typeof AuthenticatedBrandKitRoute
+  '/cartel-shield': typeof AuthenticatedCartelShieldRoute
+  '/clearance': typeof AuthenticatedClearanceRoute
+  '/command-terminal': typeof AuthenticatedCommandTerminalRoute
+  '/distribution': typeof AuthenticatedDistributionRoute
+  '/missions': typeof AuthenticatedMissionsRoute
+  '/operations': typeof AuthenticatedOperationsRoute
+  '/operatives': typeof AuthenticatedOperativesRoute
+  '/reputation': typeof AuthenticatedReputationRoute
+  '/settings': typeof AuthenticatedSettingsRoute
+  '/sticker-lab': typeof AuthenticatedStickerLabRouteWithChildren
+  '/telegram': typeof AuthenticatedTelegramRoute
+  '/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
+  '/sticker-lab/': typeof AuthenticatedStickerLabIndexRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/analytics': typeof AnalyticsRoute
-  '/assets': typeof AssetsRoute
-  '/brand-kit': typeof BrandKitRoute
-  '/cartel-shield': typeof CartelShieldRoute
-  '/clearance': typeof ClearanceRoute
-  '/command-terminal': typeof CommandTerminalRoute
-  '/distribution': typeof DistributionRoute
-  '/missions': typeof MissionsRoute
-  '/operations': typeof OperationsRoute
-  '/operatives': typeof OperativesRoute
-  '/reputation': typeof ReputationRoute
-  '/settings': typeof SettingsRoute
-  '/telegram': typeof TelegramRoute
-  '/sticker-lab/new': typeof StickerLabNewRoute
-  '/sticker-lab': typeof StickerLabIndexRoute
+  '/auth': typeof AuthRoute
+  '/analytics': typeof AuthenticatedAnalyticsRoute
+  '/assets': typeof AuthenticatedAssetsRoute
+  '/brand-kit': typeof AuthenticatedBrandKitRoute
+  '/cartel-shield': typeof AuthenticatedCartelShieldRoute
+  '/clearance': typeof AuthenticatedClearanceRoute
+  '/command-terminal': typeof AuthenticatedCommandTerminalRoute
+  '/distribution': typeof AuthenticatedDistributionRoute
+  '/missions': typeof AuthenticatedMissionsRoute
+  '/operations': typeof AuthenticatedOperationsRoute
+  '/operatives': typeof AuthenticatedOperativesRoute
+  '/reputation': typeof AuthenticatedReputationRoute
+  '/settings': typeof AuthenticatedSettingsRoute
+  '/telegram': typeof AuthenticatedTelegramRoute
+  '/': typeof AuthenticatedIndexRoute
+  '/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
+  '/sticker-lab': typeof AuthenticatedStickerLabIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/analytics': typeof AnalyticsRoute
-  '/assets': typeof AssetsRoute
-  '/brand-kit': typeof BrandKitRoute
-  '/cartel-shield': typeof CartelShieldRoute
-  '/clearance': typeof ClearanceRoute
-  '/command-terminal': typeof CommandTerminalRoute
-  '/distribution': typeof DistributionRoute
-  '/missions': typeof MissionsRoute
-  '/operations': typeof OperationsRoute
-  '/operatives': typeof OperativesRoute
-  '/reputation': typeof ReputationRoute
-  '/settings': typeof SettingsRoute
-  '/sticker-lab': typeof StickerLabRouteWithChildren
-  '/telegram': typeof TelegramRoute
-  '/sticker-lab/new': typeof StickerLabNewRoute
-  '/sticker-lab/': typeof StickerLabIndexRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
+  '/_authenticated/assets': typeof AuthenticatedAssetsRoute
+  '/_authenticated/brand-kit': typeof AuthenticatedBrandKitRoute
+  '/_authenticated/cartel-shield': typeof AuthenticatedCartelShieldRoute
+  '/_authenticated/clearance': typeof AuthenticatedClearanceRoute
+  '/_authenticated/command-terminal': typeof AuthenticatedCommandTerminalRoute
+  '/_authenticated/distribution': typeof AuthenticatedDistributionRoute
+  '/_authenticated/missions': typeof AuthenticatedMissionsRoute
+  '/_authenticated/operations': typeof AuthenticatedOperationsRoute
+  '/_authenticated/operatives': typeof AuthenticatedOperativesRoute
+  '/_authenticated/reputation': typeof AuthenticatedReputationRoute
+  '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/sticker-lab': typeof AuthenticatedStickerLabRouteWithChildren
+  '/_authenticated/telegram': typeof AuthenticatedTelegramRoute
+  '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
+  '/_authenticated/sticker-lab/': typeof AuthenticatedStickerLabIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/auth'
     | '/analytics'
     | '/assets'
     | '/brand-kit'
@@ -192,7 +213,7 @@ export interface FileRouteTypes {
     | '/sticker-lab/'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/'
+    | '/auth'
     | '/analytics'
     | '/assets'
     | '/brand-kit'
@@ -206,201 +227,233 @@ export interface FileRouteTypes {
     | '/reputation'
     | '/settings'
     | '/telegram'
+    | '/'
     | '/sticker-lab/new'
     | '/sticker-lab'
   id:
     | '__root__'
-    | '/'
-    | '/analytics'
-    | '/assets'
-    | '/brand-kit'
-    | '/cartel-shield'
-    | '/clearance'
-    | '/command-terminal'
-    | '/distribution'
-    | '/missions'
-    | '/operations'
-    | '/operatives'
-    | '/reputation'
-    | '/settings'
-    | '/sticker-lab'
-    | '/telegram'
-    | '/sticker-lab/new'
-    | '/sticker-lab/'
+    | '/_authenticated'
+    | '/auth'
+    | '/_authenticated/analytics'
+    | '/_authenticated/assets'
+    | '/_authenticated/brand-kit'
+    | '/_authenticated/cartel-shield'
+    | '/_authenticated/clearance'
+    | '/_authenticated/command-terminal'
+    | '/_authenticated/distribution'
+    | '/_authenticated/missions'
+    | '/_authenticated/operations'
+    | '/_authenticated/operatives'
+    | '/_authenticated/reputation'
+    | '/_authenticated/settings'
+    | '/_authenticated/sticker-lab'
+    | '/_authenticated/telegram'
+    | '/_authenticated/'
+    | '/_authenticated/sticker-lab/new'
+    | '/_authenticated/sticker-lab/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  AnalyticsRoute: typeof AnalyticsRoute
-  AssetsRoute: typeof AssetsRoute
-  BrandKitRoute: typeof BrandKitRoute
-  CartelShieldRoute: typeof CartelShieldRoute
-  ClearanceRoute: typeof ClearanceRoute
-  CommandTerminalRoute: typeof CommandTerminalRoute
-  DistributionRoute: typeof DistributionRoute
-  MissionsRoute: typeof MissionsRoute
-  OperationsRoute: typeof OperationsRoute
-  OperativesRoute: typeof OperativesRoute
-  ReputationRoute: typeof ReputationRoute
-  SettingsRoute: typeof SettingsRoute
-  StickerLabRoute: typeof StickerLabRouteWithChildren
-  TelegramRoute: typeof TelegramRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AuthRoute: typeof AuthRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/': {
+      id: '/_authenticated/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/analytics': {
-      id: '/analytics'
+    '/_authenticated/analytics': {
+      id: '/_authenticated/analytics'
       path: '/analytics'
       fullPath: '/analytics'
-      preLoaderRoute: typeof AnalyticsRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedAnalyticsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/assets': {
-      id: '/assets'
+    '/_authenticated/assets': {
+      id: '/_authenticated/assets'
       path: '/assets'
       fullPath: '/assets'
-      preLoaderRoute: typeof AssetsRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedAssetsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/brand-kit': {
-      id: '/brand-kit'
+    '/_authenticated/brand-kit': {
+      id: '/_authenticated/brand-kit'
       path: '/brand-kit'
       fullPath: '/brand-kit'
-      preLoaderRoute: typeof BrandKitRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedBrandKitRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/cartel-shield': {
-      id: '/cartel-shield'
+    '/_authenticated/cartel-shield': {
+      id: '/_authenticated/cartel-shield'
       path: '/cartel-shield'
       fullPath: '/cartel-shield'
-      preLoaderRoute: typeof CartelShieldRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedCartelShieldRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/clearance': {
-      id: '/clearance'
+    '/_authenticated/clearance': {
+      id: '/_authenticated/clearance'
       path: '/clearance'
       fullPath: '/clearance'
-      preLoaderRoute: typeof ClearanceRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedClearanceRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/command-terminal': {
-      id: '/command-terminal'
+    '/_authenticated/command-terminal': {
+      id: '/_authenticated/command-terminal'
       path: '/command-terminal'
       fullPath: '/command-terminal'
-      preLoaderRoute: typeof CommandTerminalRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedCommandTerminalRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/distribution': {
-      id: '/distribution'
+    '/_authenticated/distribution': {
+      id: '/_authenticated/distribution'
       path: '/distribution'
       fullPath: '/distribution'
-      preLoaderRoute: typeof DistributionRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedDistributionRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/missions': {
-      id: '/missions'
+    '/_authenticated/missions': {
+      id: '/_authenticated/missions'
       path: '/missions'
       fullPath: '/missions'
-      preLoaderRoute: typeof MissionsRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedMissionsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/operations': {
-      id: '/operations'
+    '/_authenticated/operations': {
+      id: '/_authenticated/operations'
       path: '/operations'
       fullPath: '/operations'
-      preLoaderRoute: typeof OperationsRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedOperationsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/operatives': {
-      id: '/operatives'
+    '/_authenticated/operatives': {
+      id: '/_authenticated/operatives'
       path: '/operatives'
       fullPath: '/operatives'
-      preLoaderRoute: typeof OperativesRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedOperativesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/reputation': {
-      id: '/reputation'
+    '/_authenticated/reputation': {
+      id: '/_authenticated/reputation'
       path: '/reputation'
       fullPath: '/reputation'
-      preLoaderRoute: typeof ReputationRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedReputationRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/settings': {
-      id: '/settings'
+    '/_authenticated/settings': {
+      id: '/_authenticated/settings'
       path: '/settings'
       fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/sticker-lab': {
-      id: '/sticker-lab'
+    '/_authenticated/sticker-lab': {
+      id: '/_authenticated/sticker-lab'
       path: '/sticker-lab'
       fullPath: '/sticker-lab'
-      preLoaderRoute: typeof StickerLabRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedStickerLabRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/telegram': {
-      id: '/telegram'
+    '/_authenticated/telegram': {
+      id: '/_authenticated/telegram'
       path: '/telegram'
       fullPath: '/telegram'
-      preLoaderRoute: typeof TelegramRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedTelegramRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/sticker-lab/': {
-      id: '/sticker-lab/'
+    '/_authenticated/sticker-lab/': {
+      id: '/_authenticated/sticker-lab/'
       path: '/'
       fullPath: '/sticker-lab/'
-      preLoaderRoute: typeof StickerLabIndexRouteImport
-      parentRoute: typeof StickerLabRoute
+      preLoaderRoute: typeof AuthenticatedStickerLabIndexRouteImport
+      parentRoute: typeof AuthenticatedStickerLabRoute
     }
-    '/sticker-lab/new': {
-      id: '/sticker-lab/new'
+    '/_authenticated/sticker-lab/new': {
+      id: '/_authenticated/sticker-lab/new'
       path: '/new'
       fullPath: '/sticker-lab/new'
-      preLoaderRoute: typeof StickerLabNewRouteImport
-      parentRoute: typeof StickerLabRoute
+      preLoaderRoute: typeof AuthenticatedStickerLabNewRouteImport
+      parentRoute: typeof AuthenticatedStickerLabRoute
     }
   }
 }
 
-interface StickerLabRouteChildren {
-  StickerLabNewRoute: typeof StickerLabNewRoute
-  StickerLabIndexRoute: typeof StickerLabIndexRoute
+interface AuthenticatedStickerLabRouteChildren {
+  AuthenticatedStickerLabNewRoute: typeof AuthenticatedStickerLabNewRoute
+  AuthenticatedStickerLabIndexRoute: typeof AuthenticatedStickerLabIndexRoute
 }
 
-const StickerLabRouteChildren: StickerLabRouteChildren = {
-  StickerLabNewRoute: StickerLabNewRoute,
-  StickerLabIndexRoute: StickerLabIndexRoute,
+const AuthenticatedStickerLabRouteChildren: AuthenticatedStickerLabRouteChildren =
+  {
+    AuthenticatedStickerLabNewRoute: AuthenticatedStickerLabNewRoute,
+    AuthenticatedStickerLabIndexRoute: AuthenticatedStickerLabIndexRoute,
+  }
+
+const AuthenticatedStickerLabRouteWithChildren =
+  AuthenticatedStickerLabRoute._addFileChildren(
+    AuthenticatedStickerLabRouteChildren,
+  )
+
+interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
+  AuthenticatedAssetsRoute: typeof AuthenticatedAssetsRoute
+  AuthenticatedBrandKitRoute: typeof AuthenticatedBrandKitRoute
+  AuthenticatedCartelShieldRoute: typeof AuthenticatedCartelShieldRoute
+  AuthenticatedClearanceRoute: typeof AuthenticatedClearanceRoute
+  AuthenticatedCommandTerminalRoute: typeof AuthenticatedCommandTerminalRoute
+  AuthenticatedDistributionRoute: typeof AuthenticatedDistributionRoute
+  AuthenticatedMissionsRoute: typeof AuthenticatedMissionsRoute
+  AuthenticatedOperationsRoute: typeof AuthenticatedOperationsRoute
+  AuthenticatedOperativesRoute: typeof AuthenticatedOperativesRoute
+  AuthenticatedReputationRoute: typeof AuthenticatedReputationRoute
+  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedStickerLabRoute: typeof AuthenticatedStickerLabRouteWithChildren
+  AuthenticatedTelegramRoute: typeof AuthenticatedTelegramRoute
+  AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
 }
 
-const StickerLabRouteWithChildren = StickerLabRoute._addFileChildren(
-  StickerLabRouteChildren,
-)
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
+  AuthenticatedAssetsRoute: AuthenticatedAssetsRoute,
+  AuthenticatedBrandKitRoute: AuthenticatedBrandKitRoute,
+  AuthenticatedCartelShieldRoute: AuthenticatedCartelShieldRoute,
+  AuthenticatedClearanceRoute: AuthenticatedClearanceRoute,
+  AuthenticatedCommandTerminalRoute: AuthenticatedCommandTerminalRoute,
+  AuthenticatedDistributionRoute: AuthenticatedDistributionRoute,
+  AuthenticatedMissionsRoute: AuthenticatedMissionsRoute,
+  AuthenticatedOperationsRoute: AuthenticatedOperationsRoute,
+  AuthenticatedOperativesRoute: AuthenticatedOperativesRoute,
+  AuthenticatedReputationRoute: AuthenticatedReputationRoute,
+  AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedStickerLabRoute: AuthenticatedStickerLabRouteWithChildren,
+  AuthenticatedTelegramRoute: AuthenticatedTelegramRoute,
+  AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  AnalyticsRoute: AnalyticsRoute,
-  AssetsRoute: AssetsRoute,
-  BrandKitRoute: BrandKitRoute,
-  CartelShieldRoute: CartelShieldRoute,
-  ClearanceRoute: ClearanceRoute,
-  CommandTerminalRoute: CommandTerminalRoute,
-  DistributionRoute: DistributionRoute,
-  MissionsRoute: MissionsRoute,
-  OperationsRoute: OperationsRoute,
-  OperativesRoute: OperativesRoute,
-  ReputationRoute: ReputationRoute,
-  SettingsRoute: SettingsRoute,
-  StickerLabRoute: StickerLabRouteWithChildren,
-  TelegramRoute: TelegramRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AuthRoute: AuthRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
