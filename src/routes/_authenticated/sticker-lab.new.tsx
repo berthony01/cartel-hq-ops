@@ -1463,7 +1463,46 @@ function StickerLabBuilder() {
           title="Review"
           hint="Verified static stickers from private storage. Telegram publishing is not connected."
         >
+          <div className="mb-6 grid gap-3 sm:grid-cols-3">
+            <SummaryStat label="Ready" value={`${generatedCount}/${draft.concepts.length}`} tone={allReady ? "green" : "muted"} />
+            <SummaryStat
+              label="Transparency verified"
+              value={`${transparentCount}/${draft.concepts.length}`}
+              tone={transparentCount === draft.concepts.length && draft.concepts.length > 0 ? "green" : "muted"}
+            />
+            <SummaryStat
+              label="Needs attention"
+              value={String(failedCount + activeCount)}
+              tone={failedCount > 0 ? "red" : "muted"}
+            />
+          </div>
+
+          <div className="mb-6 flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              className="min-h-11"
+              disabled={exporting || generatedCount === 0}
+              onClick={() => void downloadZip()}
+            >
+              {exporting ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Download className="size-4" aria-hidden="true" />
+              )}
+              Download all as ZIP ({generatedCount})
+            </Button>
+            <Button type="button" variant="outline" className="min-h-11" onClick={refreshStatus}>
+              <RefreshCw className="size-4" aria-hidden="true" />
+              Refresh status
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Exports are transparent PNGs downloaded straight to this device. Nothing is uploaded
+              or published.
+            </p>
+          </div>
+
           <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+
             {draft.concepts.map((c) => {
               const stickerId = stickerIdFor(c.id);
               const preview = stickerId ? previews[stickerId] : undefined;
