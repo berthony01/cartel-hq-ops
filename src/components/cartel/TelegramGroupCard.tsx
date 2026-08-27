@@ -252,9 +252,11 @@ export function TelegramGroupCard({
             </div>
             {!ready ? (
               <p className="mt-3 rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
-                This group is not ready. In Telegram, open the group, make @PepeCartelHQBot an
-                administrator and grant the right to change group info / set the group sticker set,
-                then press Re-check group status.
+                This group is not ready. In Telegram, open the group and either make @PepeCartelHQBot
+                an administrator with the right to change group info / set the group sticker set, or,
+                if the bot is already installed, send{" "}
+                <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
+                once. Then press Re-check group status.
               </p>
             ) : null}
             <details className="mt-3 rounded-md border border-border bg-surface-raised p-3 text-xs">
