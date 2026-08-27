@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ExternalLink, Loader2, Users } from "lucide-react";
+import { Check, Copy, ExternalLink, Loader2, Users } from "lucide-react";
 
 import { useWorkspace } from "@/lib/workspace-context";
 import { useTelegramLauncher } from "@/hooks/useTelegramLauncher";
