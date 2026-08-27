@@ -1551,12 +1551,12 @@ function StickerLabBuilder() {
                           {failure.title}
                         </p>
                       ) : null}
-                      {attempts.total > 1 ? (
+                      {attempts.attempts > 1 ? (
                         <p className="truncate text-[11px] text-muted-foreground">
-                          {attempts.total} attempts
+                          {attempts.attempts} attempts
                           {attempts.failed > 0 ? ` · ${attempts.failed} failed` : ""}
-                          {attempts.lastFailureTitle && stage === "ready"
-                            ? ` · recovered after “${attempts.lastFailureTitle}”`
+                          {attempts.lastFailure && stage === "ready"
+                            ? ` · recovered after “${attempts.lastFailure}”`
                             : ""}
                         </p>
                       ) : null}
