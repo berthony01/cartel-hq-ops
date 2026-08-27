@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { TelegramBot } from "@/lib/telegram-stickers";
+import type { OfficialStickerReason } from "@/lib/telegram-link";
 
 /**
  * Thin client for the authenticated Edge Function `telegram-group`.
