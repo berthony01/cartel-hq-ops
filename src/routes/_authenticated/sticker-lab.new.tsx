@@ -1552,8 +1552,8 @@ function StickerLabBuilder() {
 
           {omittedLabels.length > 0 ? (
             <p className="mb-6 text-xs text-muted-foreground">
-              The ZIP will contain {generatedCount} sticker
-              {generatedCount === 1 ? "" : "s"}. Not included ({omittedLabels.length}):{" "}
+              The ZIP will contain {exportableCount} sticker
+              {exportableCount === 1 ? "" : "s"}. Not included ({omittedLabels.length}):{" "}
               {omittedLabels.join(", ")}.
             </p>
           ) : null}
