@@ -129,6 +129,8 @@ const MAX_REMOVED_RATIO = 0.15;
 
 export type CutoutResult = {
   ok: boolean;
+  /** True when the source PNG already had a real alpha channel. */
+  alphaOk: boolean;
   cleaned: boolean;
   bytes?: Uint8Array;
   removedPixels: number;
@@ -180,7 +182,14 @@ async function encodePng(data: ImageData): Promise<Uint8Array> {
 export async function prepareTelegramCutout(bytes: Uint8Array): Promise<CutoutResult> {
   const base = await verifyAlpha(bytes);
   if (!base.ok) {
-    return { ok: false, cleaned: false, removedPixels: 0, removedRatio: 0, reason: base.reason };
+    return {
+      ok: false,
+      alphaOk: false,
+      cleaned: false,
+      removedPixels: 0,
+      removedRatio: 0,
+      reason: base.reason,
+    };
   }
 
   let img: ImageData;
@@ -189,6 +198,7 @@ export async function prepareTelegramCutout(bytes: Uint8Array): Promise<CutoutRe
   } catch (err) {
     return {
       ok: false,
+      alphaOk: true,
       cleaned: false,
       removedPixels: 0,
       removedRatio: 0,
@@ -272,12 +282,16 @@ export async function prepareTelegramCutout(bytes: Uint8Array): Promise<CutoutRe
   const removedRatio = total > 0 ? removedPixels / total : 0;
 
   if (removedPixels === 0) {
-    return { ok: true, cleaned: false, bytes, removedPixels: 0, removedRatio: 0 };
+    return {
+      ok: true,
+      alphaOk: true,
+      cleaned: false, bytes, removedPixels: 0, removedRatio: 0 };
   }
 
   if (removedRatio > MAX_REMOVED_RATIO) {
     return {
       ok: false,
+      alphaOk: true,
       cleaned: false,
       removedPixels,
       removedRatio,
@@ -293,6 +307,7 @@ export async function prepareTelegramCutout(bytes: Uint8Array): Promise<CutoutRe
   } catch (err) {
     return {
       ok: false,
+      alphaOk: true,
       cleaned: false,
       removedPixels,
       removedRatio,
@@ -304,6 +319,7 @@ export async function prepareTelegramCutout(bytes: Uint8Array): Promise<CutoutRe
   if (!recheck.ok) {
     return {
       ok: false,
+      alphaOk: true,
       cleaned: false,
       removedPixels,
       removedRatio,
@@ -311,7 +327,10 @@ export async function prepareTelegramCutout(bytes: Uint8Array): Promise<CutoutRe
     };
   }
 
-  return { ok: true, cleaned: true, bytes: cleanedBytes, removedPixels, removedRatio };
+  return {
+      ok: true,
+      alphaOk: true,
+      cleaned: true, bytes: cleanedBytes, removedPixels, removedRatio };
 }
 
 /** Read-only: fetches a signed PNG URL and runs the cutout preparation on its bytes. */
@@ -322,6 +341,7 @@ export async function prepareTelegramCutoutAtUrl(url: string): Promise<CutoutRes
   } catch (err) {
     return {
       ok: false,
+      alphaOk: false,
       cleaned: false,
       removedPixels: 0,
       removedRatio: 0,
