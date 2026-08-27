@@ -1003,8 +1003,11 @@ function StickerLabBuilder() {
         setTestResult("Test sticker sent — check your Telegram chat with the bot.");
         toast.success("Native test sticker sent.");
       } else {
+        const base = result.message || "Telegram could not deliver the test sticker.";
         setTestResult(
-          `Telegram could not reach you${result.detail ? `: ${result.detail}` : ""}. Open the bot, tap Start, then retry.`,
+          result.botStartUrl
+            ? `${base} Open the bot in Telegram, tap Start, then retry.`
+            : base,
         );
         toast.error("Telegram could not deliver the test sticker.");
       }
