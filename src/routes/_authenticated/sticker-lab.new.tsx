@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
+import { useSession } from "@/hooks/useSession";
+import { useWorkspace } from "@/lib/workspace-context";
+import { signedUrl, uploadWorkspaceAsset, validateImageFile } from "@/lib/media";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -217,7 +221,7 @@ function StickerLabBuilder() {
       {step === 1 ? (
         <StepCard
           title="Character Reference"
-          hint="Preview only in this phase. Nothing is uploaded or stored."
+          hint="Stored privately in this workspace's Asset Vault and reused for generation later."
         >
           <div className="grid gap-6 md:grid-cols-2">
             <div>
@@ -228,7 +232,7 @@ function StickerLabBuilder() {
                 <div className="cartel-panel flex flex-col items-center gap-3 rounded-lg p-4">
                   <img
                     src={previewUrl}
-                    alt={`Local preview of ${draft.imageName ?? "reference image"}`}
+                    alt={`Reference image ${draft.imageName ?? ""}`}
                     className="max-h-56 w-auto rounded-md border border-border object-contain"
                   />
                   <p className="w-full truncate text-center text-xs text-muted-foreground">
@@ -240,6 +244,7 @@ function StickerLabBuilder() {
                       size="sm"
                       variant="outline"
                       className="min-h-10"
+                      disabled={uploading}
                       onClick={() => fileInputRef.current?.click()}
                     >
                       Change image
@@ -266,7 +271,7 @@ function StickerLabBuilder() {
                   onDrop={(e) => {
                     e.preventDefault();
                     setDragging(false);
-                    applyFile(e.dataTransfer.files?.[0]);
+                    void applyFile(e.dataTransfer.files?.[0]);
                   }}
                   className={`flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed p-8 text-center transition-colors ${
                     dragging ? "border-gold bg-gold/5" : "border-border bg-background/40"
@@ -283,9 +288,10 @@ function StickerLabBuilder() {
                     type="button"
                     variant="outline"
                     className="min-h-11"
+                    disabled={uploading}
                     onClick={() => fileInputRef.current?.click()}
                   >
-                    Choose file
+                    {uploading ? "Uploading…" : "Choose file"}
                   </Button>
                 </div>
               )}
@@ -295,7 +301,7 @@ function StickerLabBuilder() {
                 accept={ACCEPTED}
                 className="sr-only"
                 aria-label="Choose a character reference image"
-                onChange={(e) => applyFile(e.target.files?.[0])}
+                onChange={(e) => void applyFile(e.target.files?.[0])}
               />
               {fileError ? (
                 <p role="alert" className="mt-2 text-xs text-signal">
