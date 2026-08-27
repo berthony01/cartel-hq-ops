@@ -2198,10 +2198,12 @@ function StickerLabBuilder() {
           <Card className="cartel-panel mt-6">
             <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
               <CardTitle className="text-base">Telegram publishing</CardTitle>
-              {packPublished ? (
+              {allPublished ? (
                 <StatusBadge tone="green">Published</StatusBadge>
-              ) : publishResult?.status === "partial" ? (
+              ) : partiallyPublished ? (
                 <StatusBadge tone="gold">Partly published</StatusBadge>
+              ) : publishResult?.status === "failed" ? (
+                <StatusBadge tone="red">Failed</StatusBadge>
               ) : (
                 <StatusBadge tone="muted">Not published</StatusBadge>
               )}
