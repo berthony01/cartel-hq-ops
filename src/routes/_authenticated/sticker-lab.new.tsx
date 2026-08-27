@@ -785,23 +785,38 @@ function StickerLabBuilder() {
         return {
           filename: stickerFileName(draft.packName || "cartel-pack", i, c.label),
           url: preview.url,
+          label: c.label,
         };
       })
-      .filter(Boolean) as { filename: string; url: string }[];
+      .filter(Boolean) as { filename: string; url: string; label: string }[];
     if (entries.length === 0) {
       toast.error("There are no ready, transparency-verified stickers to export yet.");
       return;
     }
     setExporting(true);
     try {
-      const count = await downloadStickersZip(entries, packZipName(draft.packName || "cartel-pack"));
-      toast.success(`${count} sticker${count === 1 ? "" : "s"} exported.`);
+      const result = await downloadStickersZip(
+        entries,
+        packZipName(draft.packName || "cartel-pack"),
+      );
+      if (result.omitted.length > 0) {
+        toast.warning(
+          `${result.exported} verified transparent PNG${result.exported === 1 ? "" : "s"} exported. Omitted: ${result.omitted
+            .map((o) => `${o.label} (${o.reason})`)
+            .join(", ")}.`,
+        );
+      } else {
+        toast.success(
+          `${result.exported} verified transparent PNG${result.exported === 1 ? "" : "s"} exported.`,
+        );
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Export failed.");
     } finally {
       setExporting(false);
     }
   };
+
 
 
   const goNext = () => {
