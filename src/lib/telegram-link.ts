@@ -12,6 +12,8 @@ import type { TelegramGroupConnection } from "@/lib/telegram-group";
 
 export type TelegramLinkStatus = "pending" | "connected" | "expired" | "cancelled";
 
+export type OfficialStickerReason = "minimum_members" | "not_reported" | null;
+
 export type TelegramLinkLastGroupCheck = {
   checked_at?: string;
   telegram_chat_id?: number;
@@ -23,6 +25,10 @@ export type TelegramLinkLastGroupCheck = {
   bot_is_admin?: boolean;
   bot_can_change_info?: boolean;
   can_set_sticker_set?: boolean | null;
+  member_count?: number | null;
+  official_group_sticker_min_members?: number;
+  official_group_sticker_eligible?: boolean;
+  official_group_sticker_reason?: OfficialStickerReason;
 };
 
 export type TelegramLinkRequest = {

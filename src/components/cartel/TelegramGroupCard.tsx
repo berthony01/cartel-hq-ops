@@ -29,27 +29,77 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
  */
 export function useTelegramGroupSetup(enabled = true) {
   const { workspaceId } = useWorkspace();
+  const queryClient = useQueryClient();
   const groupQuery = useQuery({
     queryKey: ["telegram-group-link", workspaceId],
     enabled: enabled && !!workspaceId,
     queryFn: () => fetchTelegramGroupLinkStatus(workspaceId!),
   });
 
+  const [live, setLive] = useState<TelegramGroupStatusResult | null>(null);
+  const [checking, setChecking] = useState(false);
+
   const group: TelegramGroupConnection | null = groupQuery.data?.group ?? null;
+  const groupId = group?.id ?? null;
+
+  const recheck = useCallback(
+    async (silent = false) => {
+      if (!workspaceId || !groupId) return;
+      setChecking(true);
+      try {
+        const result = await fetchTelegramGroupStatus({
+          workspaceId,
+          groupConnectionId: groupId,
+        });
+        setLive(result);
+        void queryClient.invalidateQueries({ queryKey: ["telegram-group-link", workspaceId] });
+        if (!silent) toast.success("Group status re-checked.");
+      } catch (err) {
+        if (!silent) toast.error(telegramErrorMessage(err));
+      } finally {
+        setChecking(false);
+      }
+    },
+    [groupId, queryClient, workspaceId],
+  );
+
+  // Live verification when a connected group appears and on window refocus.
+  useEffect(() => {
+    if (!enabled || !groupId) return;
+    void recheck(true);
+    const onFocus = () => void recheck(true);
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [enabled, groupId, recheck]);
+
+  const isSupergroup = (live?.chatType ?? group?.chat_type) === "supergroup";
+  const botAdmin = live?.botIsAdmin ?? group?.bot_is_admin ?? false;
+  const botCanChangeInfo = live?.botCanChangeInfo;
+  const canSetStickerSet = live?.canSetStickerSet ?? group?.can_set_sticker_set ?? false;
+
+  // Operational readiness never depends on official group-sticker eligibility.
   const ready =
-    !!group &&
-    group.chat_type === "supergroup" &&
-    group.bot_is_admin === true &&
-    group.can_set_sticker_set === true;
+    live?.ready ?? (!!group && isSupergroup && botAdmin && botCanChangeInfo !== false);
 
   return {
     workspaceId,
     groupQuery,
     group,
-    groupId: group?.id ?? null,
+    groupId,
     groupTitle: group?.title ?? null,
     groupConnected: !!group,
-    groupReady: ready,
+    groupReady: !!group && ready,
+    live,
+    checking,
+    recheck,
+    isSupergroup,
+    botAdmin,
+    botCanChangeInfo,
+    canSetStickerSet,
+    memberCount: live?.memberCount ?? null,
+    minMembers: live?.minMembers ?? null,
+    officialStickerEligible: live?.officialStickerEligible ?? false,
+    officialStickerReason: live?.officialStickerReason ?? null,
   };
 }
 
@@ -81,7 +131,24 @@ export function TelegramGroupCard({
 }) {
   const queryClient = useQueryClient();
   const { launchTelegram, isMobileDevice } = useTelegramLauncher();
-  const { workspaceId, group, groupReady, groupQuery } = setup;
+  const {
+    workspaceId,
+    group,
+    groupQuery,
+    live,
+    checking,
+    recheck,
+    isSupergroup,
+    botAdmin,
+    botCanChangeInfo,
+    canSetStickerSet: canSet,
+    memberCount,
+    minMembers,
+    officialStickerEligible,
+    officialStickerReason,
+  } = setup;
+  const ready = setup.groupReady;
+
 
   const [starting, setStarting] = useState(false);
   const [linkState, setLinkState] = useState<TelegramLinkStatus | null>(null);
@@ -89,8 +156,6 @@ export function TelegramGroupCard({
   const [remaining, setRemaining] = useState(0);
   const [launchUrls, setLaunchUrls] = useState<{ app?: string | undefined; web?: string | undefined }>({});
   const [launchBlocked, setLaunchBlocked] = useState(false);
-  const [live, setLive] = useState<TelegramGroupStatusResult | null>(null);
-  const [checking, setChecking] = useState(false);
   const pollRef = useRef<number | null>(null);
 
   const stopPolling = useCallback(() => {
@@ -168,48 +233,15 @@ export function TelegramGroupCard({
     }
   };
 
-  const recheck = useCallback(
-    async (silent = false) => {
-      if (!workspaceId || !group) return;
-      setChecking(true);
-      try {
-        const result = await fetchTelegramGroupStatus({
-          workspaceId,
-          groupConnectionId: group.id,
-        });
-        setLive(result);
-        void queryClient.invalidateQueries({ queryKey: ["telegram-group-link", workspaceId] });
-        if (!silent) toast.success("Group status re-checked.");
-      } catch (err) {
-        if (!silent) toast.error(telegramErrorMessage(err));
-      } finally {
-        setChecking(false);
-      }
-    },
-    [group, queryClient, workspaceId],
-  );
-
-  // Live verification when the card mounts with a connected group and on refocus.
-  const groupId = group?.id ?? null;
-  useEffect(() => {
-    if (!groupId) return;
-    void recheck(true);
-    const onFocus = () => void recheck(true);
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [groupId, recheck]);
-
   const pending = linkState === "pending";
   const manualUrl = isMobileDevice()
     ? (launchUrls.app ?? launchUrls.web)
     : (launchUrls.web ?? launchUrls.app);
-  const liveBotAdmin = live?.botIsAdmin;
-  const liveCanSet = live?.canSetStickerSet;
-  const botAdmin = liveBotAdmin ?? group?.bot_is_admin ?? false;
-  const canSet = liveCanSet ?? group?.can_set_sticker_set ?? false;
-  const isSupergroup = (live?.chatType ?? group?.chat_type) === "supergroup";
-  const ready = !!group && isSupergroup && botAdmin && canSet;
   const lastCheck = groupQuery.data?.request?.metadata?.last_group_check;
+  const belowMinMembers =
+    typeof memberCount === "number" &&
+    typeof minMembers === "number" &&
+    memberCount < minMembers;
 
 
   return (
@@ -228,12 +260,13 @@ export function TelegramGroupCard({
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Connect the supergroup where this sticker pack should become the group sticker set.
-          If @PepeCartelHQBot is already installed there, open the group and send{" "}
+          Connect the supergroup CARTEL HQ should work with. If @PepeCartelHQBot is already
+          installed there, open the group and send{" "}
           <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
           once while a one-time link is active. Otherwise, choose the group and approve admin rights
-          when Telegram opens. Members can then use the set inside that group — installing it globally
-          to a personal Telegram account stays a separate, individual action.
+          when Telegram opens. A verified group can receive the published pack link and native
+          stickers from the bot. Telegram’s <em>official</em> group sticker set is a separate,
+          optional feature that only unlocks once the group meets Telegram’s member minimum.
         </p>
 
         {group ? (
@@ -251,17 +284,35 @@ export function TelegramGroupCard({
               <StatusBadge tone={botAdmin ? "green" : "red"}>
                 {botAdmin ? "Bot admin verified" : "Bot is not an admin"}
               </StatusBadge>
-              <StatusBadge tone={canSet ? "green" : "red"}>
-                {canSet ? "Group sticker permission verified" : "Group sticker permission missing"}
+              {botCanChangeInfo !== undefined ? (
+                <StatusBadge tone={botCanChangeInfo ? "green" : "red"}>
+                  {botCanChangeInfo ? "Change Group Info enabled" : "Change Group Info missing"}
+                </StatusBadge>
+              ) : null}
+              <StatusBadge tone={officialStickerEligible || canSet ? "green" : "gold"}>
+                {officialStickerEligible || canSet
+                  ? "Official group sticker set available"
+                  : belowMinMembers
+                    ? `Official group sticker set at ${minMembers}+ members (${memberCount})`
+                    : "Official group sticker set not available yet"}
               </StatusBadge>
+              {typeof memberCount === "number" ? (
+                <StatusBadge tone="muted">{memberCount} members</StatusBadge>
+              ) : null}
             </div>
             {!ready ? (
               <p className="mt-3 rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
-                This group is not ready. In Telegram, open the group and either make @PepeCartelHQBot
-                an administrator with the right to change group info / set the group sticker set, or,
-                if the bot is already installed, send{" "}
+                This group is not ready. In Telegram, open the group and make @PepeCartelHQBot an
+                administrator with the <strong>Change Group Info</strong> right, or, if the bot is
+                already installed, send{" "}
                 <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
                 once. Then press Re-check group status.
+              </p>
+            ) : !officialStickerEligible ? (
+              <p className="mt-3 rounded-md border border-gold/40 bg-gold/5 p-3 text-xs text-muted-foreground">
+                {belowMinMembers
+                  ? `Official group sticker set unlocks at ${minMembers} members. This group currently has ${memberCount}. You can still publish the pack, share it in the group, and send native stickers through the bot.`
+                  : "Telegram has not reported official group sticker-set eligibility for this group yet. Publishing the pack, sharing it in the group and sending native stickers all work normally."}
               </p>
             ) : null}
             <details className="mt-3 rounded-md border border-border bg-surface-raised p-3 text-xs">
@@ -332,28 +383,33 @@ export function TelegramGroupCard({
                     {lastCheck.bot_can_change_info === true ? "Enabled" : "Needs to be enabled"}
                   </StatusBadge>
 
-                  <span className="text-muted-foreground">Group sticker-set permission</span>
+                  <span className="text-muted-foreground">Official group sticker set</span>
                   <StatusBadge
-                    tone={
-                      lastCheck.can_set_sticker_set === true
-                        ? "green"
-                        : lastCheck.can_set_sticker_set === false
-                          ? "red"
-                          : "muted"
-                    }
+                    tone={lastCheck.official_group_sticker_eligible === true ? "green" : "gold"}
                   >
-                    {lastCheck.can_set_sticker_set === true
-                      ? "Verified"
-                      : lastCheck.can_set_sticker_set === false
-                        ? "Telegram has not granted it yet"
+                    {lastCheck.official_group_sticker_eligible === true
+                      ? "Eligible"
+                      : lastCheck.official_group_sticker_reason === "minimum_members"
+                        ? `Unlocks at ${lastCheck.official_group_sticker_min_members ?? 100} members (${lastCheck.member_count ?? "?"})`
                         : "Not reported by Telegram yet"}
                   </StatusBadge>
                 </div>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  Fix the item shown above, save the admin rights in Telegram, then send{" "}
-                  <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
-                  in the group again while this link is active.
-                </p>
+                {lastCheck.user_is_admin === true &&
+                lastCheck.bot_is_admin === true &&
+                lastCheck.bot_can_change_info === true ? (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Admin rights look correct.{" "}
+                    {lastCheck.official_group_sticker_reason === "minimum_members"
+                      ? `Telegram only allows an official group sticker set from ${lastCheck.official_group_sticker_min_members ?? 100} members (this group has ${lastCheck.member_count ?? "fewer"}). No further permission changes are needed — publishing and native stickers still work.`
+                      : "No further permission changes are needed."}
+                  </p>
+                ) : (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Fix the item shown above, save the admin rights in Telegram, then send{" "}
+                    <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
+                    in the group again while this link is active.
+                  </p>
+                )}
               </div>
             ) : null}
 

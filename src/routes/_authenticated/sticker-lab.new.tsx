@@ -342,6 +342,7 @@ function StickerLabBuilder() {
   const [assigning, setAssigning] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
   const [assignedGroupTitle, setAssignedGroupTitle] = useState<string | null>(null);
+  const [assignNotice, setAssignNotice] = useState<string | null>(null);
   const [tgPack, setTgPack] = useState<PackTelegramState | null>(null);
   const [tgStickers, setTgStickers] = useState<Record<string, StickerTelegramState>>({});
   const [publishing, setPublishing] = useState(false);
@@ -962,6 +963,7 @@ function StickerLabBuilder() {
     if (!packId || !workspaceId || !telegramGroup.groupId) return;
     setAssigning(true);
     setAssignError(null);
+    setAssignNotice(null);
     try {
       const result = await assignPackToGroup({
         workspaceId,
@@ -969,10 +971,21 @@ function StickerLabBuilder() {
         groupConnectionId: telegramGroup.groupId,
       });
       await loadTelegramState(packId);
+      const title = result.group?.title ?? telegramGroup.groupTitle ?? "the group";
       if (result.assigned) {
-        const title = result.group?.title ?? telegramGroup.groupTitle ?? "the group";
         setAssignedGroupTitle(title);
-        toast.success(`Group sticker set active in ${title}.`);
+        setAssignNotice(null);
+        toast.success(`Official group sticker set active in ${title}.`);
+      } else if (result.announced) {
+        // Successful delivery: the pack link was posted in the group instead.
+        setAssignedGroupTitle(null);
+        setAssignNotice(
+          result.message ||
+            (result.reason === "GROUP_STICKER_MIN_MEMBERS"
+              ? `Pack published and announced in ${title}. Official group sticker set unlocks at ${result.minMembers ?? 100} members (${result.memberCount ?? "?"}/${result.minMembers ?? 100}). Members can open the pack link now, and CARTEL HQ can send native stickers in the group.`
+              : `Pack published and announced in ${title}. Telegram's official group sticker set is not available for this group yet.`),
+        );
+        toast.success(`Pack published and announced in ${title}.`);
       } else {
         const msg = result.message || "Telegram did not accept the group sticker set assignment.";
         setAssignError(result.technical ? `${msg} (${result.technical})` : msg);
@@ -2317,7 +2330,13 @@ function StickerLabBuilder() {
 
               {assignedGroupTitle && !assignError ? (
                 <p className="rounded-md border border-pepe/40 bg-pepe/5 p-3 text-xs text-pepe">
-                  Group sticker set active in {assignedGroupTitle}.
+                  Official group sticker set active in {assignedGroupTitle}.
+                </p>
+              ) : null}
+
+              {assignNotice && !assignError ? (
+                <p className="rounded-md border border-gold/40 bg-gold/5 p-3 text-xs text-muted-foreground">
+                  {assignNotice}
                 </p>
               ) : null}
 
@@ -2412,7 +2431,9 @@ function StickerLabBuilder() {
                     </a>
                   </Button>
                 ) : null}
-                {allPublished && (!tgPack?.telegram_group_connection_id || assignError) ? (
+                {allPublished &&
+                telegramGroup.officialStickerEligible &&
+                (!tgPack?.telegram_group_connection_id || assignError) ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -2449,15 +2470,17 @@ function StickerLabBuilder() {
               {testResult ? <p className="text-xs text-muted-foreground">{testResult}</p> : null}
               <p className="text-xs text-muted-foreground">
                 The test sends a <strong>native Telegram sticker</strong> into the connected
-                supergroup, not an image file. Publishing sets the pack as that supergroup's group
-                sticker set — members can use it inside the group, while installing it to a personal
-                Telegram account stays a separate individual action.
+                supergroup, not an image file. Native sticker sending works for any verified
+                connected supergroup. Telegram’s <strong>official group sticker set</strong> is
+                separate and optional — it is assigned only when Telegram reports the group as
+                eligible; otherwise CARTEL HQ posts the pack link in the group instead. Installing
+                the pack to a personal Telegram account stays a separate individual action.
               </p>
               {!canPublish && !publishing && !allPublished ? (
                 <p className="text-xs text-muted-foreground">
                   Publishing needs: a configured bot, your connected Telegram account, a verified
-                  target supergroup (bot admin + group sticker permission), at least one
-                  export-ready sticker, and all browser/cutout checks finished.
+                  target supergroup (bot admin + Change Group Info), at least one export-ready
+                  sticker, and all browser/cutout checks finished.
                 </p>
               ) : null}
             </CardContent>
@@ -2471,9 +2494,10 @@ function StickerLabBuilder() {
                   This creates a real, shareable Telegram sticker set owned by your Telegram account
                   ({telegram.connection?.telegram_user_id}). {reviewedStickerIds.length} reviewed
                   sticker{reviewedStickerIds.length === 1 ? "" : "s"} will be uploaded. After the set
-                  is created, CARTEL HQ assigns it as the group sticker set of{" "}
-                  <strong>{telegramGroup.groupTitle ?? "the connected supergroup"}</strong>. Sets
-                  cannot be transferred to another owner later.
+                  is created, CARTEL HQ either assigns it as the official group sticker set of{" "}
+                  <strong>{telegramGroup.groupTitle ?? "the connected supergroup"}</strong> if
+                  Telegram reports that group as eligible, or posts the pack link into the group if
+                  it is not eligible yet. Sets cannot be transferred to another owner later.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
