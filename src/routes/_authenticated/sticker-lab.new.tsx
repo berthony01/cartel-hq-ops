@@ -920,9 +920,10 @@ function StickerLabBuilder() {
       toast.error("Only ready, transparency-verified stickers can be downloaded.");
       return;
     }
-    if (clientCheckFor(conceptId)?.status === "failed") {
+    const localCheck = clientCheckFor(conceptId);
+    if (localCheck?.status === "failed" || localCheck?.cutout === "failed") {
       toast.error(
-        `Browser transparency check failed — ${clientCheckFor(conceptId)?.reason}. This sticker was not saved.`,
+        `Browser cutout check failed — ${localCheck?.reason ?? "unknown reason"}. This sticker was not saved.`,
       );
       return;
     }
@@ -937,11 +938,15 @@ function StickerLabBuilder() {
         );
         return;
       }
-      await downloadStickerPng(
+      const saved = await downloadStickerPng(
         freshUrl,
         stickerFileName(draft.packName || "cartel-pack", index, concept.label),
       );
-      toast.success("Transparent PNG verified and saved unchanged.");
+      toast.success(
+        saved.cleaned
+          ? `Telegram cutout verified and saved — an outer light halo (${saved.removedPixels.toLocaleString()} pixels) was removed for this download. The stored original is unchanged.`
+          : "Telegram cutout verified and saved — no outer halo was found.",
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Download failed.");
     }
@@ -1002,13 +1007,15 @@ function StickerLabBuilder() {
       const omitted = [...linkFailures, ...result.omitted];
       if (omitted.length > 0) {
         toast.warning(
-          `${result.exported} verified transparent PNG${result.exported === 1 ? "" : "s"} exported. Omitted: ${omitted
+          `${result.exported} Telegram-cutout PNG${result.exported === 1 ? "" : "s"} exported (${result.cleanedCount} had an outer halo removed). Omitted: ${omitted
             .map((o) => `${o.label} (${o.reason})`)
             .join(", ")}.`,
         );
       } else {
         toast.success(
-          `${result.exported} verified transparent PNG${result.exported === 1 ? "" : "s"} exported.`,
+          `${result.exported} Telegram-cutout PNG${result.exported === 1 ? "" : "s"} exported${
+            result.cleanedCount > 0 ? ` (${result.cleanedCount} with an outer halo removed)` : ""
+          }.`,
         );
       }
     } catch (err) {
