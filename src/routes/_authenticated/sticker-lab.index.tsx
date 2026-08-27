@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FLOW_STEPS } from "@/lib/sticker-lab";
 
-export const Route = createFileRoute("/sticker-lab/")({
+export const Route = createFileRoute("/_authenticated/sticker-lab/")({
   head: () => ({
     meta: [
       { title: "Sticker Lab — CARTEL HQ" },

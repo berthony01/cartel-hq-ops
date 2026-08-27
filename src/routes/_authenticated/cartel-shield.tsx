@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Radar } from "lucide-react";
 import { PlaceholderPage } from "@/components/cartel/PlaceholderPage";
 
-export const Route = createFileRoute("/cartel-shield")({
+export const Route = createFileRoute("/_authenticated/cartel-shield")({
   head: () => ({
     meta: [
       { title: "Cartel Shield — CARTEL HQ" },

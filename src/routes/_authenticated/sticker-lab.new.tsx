@@ -33,7 +33,7 @@ import {
   type PackTheme,
 } from "@/lib/sticker-lab";
 
-export const Route = createFileRoute("/sticker-lab/new")({
+export const Route = createFileRoute("/_authenticated/sticker-lab/new")({
   head: () => ({
     meta: [
       { title: "New Sticker Pack — Sticker Lab — CARTEL HQ" },

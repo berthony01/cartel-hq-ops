@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Award } from "lucide-react";
 import { PlaceholderPage } from "@/components/cartel/PlaceholderPage";
 
-export const Route = createFileRoute("/reputation")({
+export const Route = createFileRoute("/_authenticated/reputation")({
   head: () => ({
     meta: [
       { title: "Reputation — CARTEL HQ" },

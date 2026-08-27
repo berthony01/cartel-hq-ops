@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { TerminalSquare } from "lucide-react";
 import { PlaceholderPage } from "@/components/cartel/PlaceholderPage";
 
-export const Route = createFileRoute("/command-terminal")({
+export const Route = createFileRoute("/_authenticated/command-terminal")({
   head: () => ({
     meta: [
       { title: "Command Terminal — CARTEL HQ" },

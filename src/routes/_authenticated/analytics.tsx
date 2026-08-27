@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { BarChart3 } from "lucide-react";
 import { PlaceholderPage } from "@/components/cartel/PlaceholderPage";
 
-export const Route = createFileRoute("/analytics")({
+export const Route = createFileRoute("/_authenticated/analytics")({
   head: () => ({
     meta: [
       { title: "Analytics — CARTEL HQ" },

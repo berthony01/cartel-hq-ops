@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { MessageSquare } from "lucide-react";
 import { PlaceholderPage } from "@/components/cartel/PlaceholderPage";
 
-export const Route = createFileRoute("/telegram")({
+export const Route = createFileRoute("/_authenticated/telegram")({
   head: () => ({
     meta: [
       { title: "Telegram — CARTEL HQ" },

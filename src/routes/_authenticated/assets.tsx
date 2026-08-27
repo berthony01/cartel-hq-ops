@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { FolderLock } from "lucide-react";
 import { PlaceholderPage } from "@/components/cartel/PlaceholderPage";
 
-export const Route = createFileRoute("/assets")({
+export const Route = createFileRoute("/_authenticated/assets")({
   head: () => ({
     meta: [
       { title: "Asset Vault — CARTEL HQ" },

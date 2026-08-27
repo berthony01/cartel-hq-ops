@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Palette } from "lucide-react";
 import { PlaceholderPage } from "@/components/cartel/PlaceholderPage";
 
-export const Route = createFileRoute("/brand-kit")({
+export const Route = createFileRoute("/_authenticated/brand-kit")({
   head: () => ({
     meta: [
       { title: "Brand Kit — CARTEL HQ" },
