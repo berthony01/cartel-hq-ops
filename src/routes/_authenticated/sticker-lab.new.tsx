@@ -388,20 +388,27 @@ function StickerLabBuilder() {
   }, []);
 
   /**
-   * Second, browser-side transparency verification. Read-only: it fetches the
-   * already-signed preview URL and inspects the original PNG bytes with the same
-   * verifyAlpha() helper used at export time. Nothing is uploaded, re-encoded or
-   * written back to Supabase, and no provider call is made.
+   * Second, browser-side transparency verification. Read-only: it mints a fresh,
+   * short-lived signed URL from the immutable storage path immediately before
+   * fetching the original PNG bytes, then inspects them with the same verifyAlpha()
+   * helper used at export time. Nothing is uploaded, re-encoded or written back to
+   * Supabase, and no provider call is made.
    */
   const runClientVerification = useCallback(
     async (force = false) => {
       if (verifyRunRef.current) return;
       const candidates = Object.entries(previews)
-        .filter(([, p]) => p.transparencyValid === true && !!p.url)
-        .map(([stickerId, p]) => ({ stickerId, url: p.url }));
-      const pending = candidates.filter(({ stickerId, url }) => {
+        .filter(([, p]) => p.transparencyValid === true && !!(p.storagePath ?? p.url))
+        .map(([stickerId, p]) => ({
+          stickerId,
+          // Staleness keys off the immutable asset source, never the temporary URL.
+          source: p.storagePath ?? p.url,
+          storagePath: p.storagePath,
+          fallbackUrl: p.url,
+        }));
+      const pending = candidates.filter(({ stickerId, source }) => {
         const existing = clientChecks[stickerId];
-        return force || !existing || existing.url !== url;
+        return force || !existing || existing.source !== source;
       });
       if (pending.length === 0) return;
 
@@ -409,7 +416,7 @@ function StickerLabBuilder() {
       setCheckProgress({ done: 0, total: pending.length });
       setClientChecks((prev) => {
         const next = { ...prev };
-        for (const { stickerId, url } of pending) next[stickerId] = { url, status: "checking" };
+        for (const { stickerId, source } of pending) next[stickerId] = { source, status: "checking" };
         return next;
       });
 
@@ -419,14 +426,37 @@ function StickerLabBuilder() {
         for (;;) {
           const item = queue.shift();
           if (!item) return;
+          // Fresh action-scoped URL so a stale 60s preview link can never fail the check.
           // eslint-disable-next-line no-await-in-loop
-          const check = await verifyAlphaAtUrl(item.url);
+          const freshUrl = item.storagePath
+            ? await signedUrl(item.storagePath, ACTION_URL_TTL)
+            : item.fallbackUrl;
+          if (!aliveRef.current) return;
+          if (!freshUrl) {
+            setClientChecks((prev) => ({
+              ...prev,
+              [item.stickerId]: {
+                source: item.source,
+                status: "failed",
+                reason: "a secure download link could not be created for this private file",
+              },
+            }));
+            done += 1;
+            setCheckProgress({ done, total: pending.length });
+            continue;
+          }
+          // eslint-disable-next-line no-await-in-loop
+          const check = await verifyAlphaAtUrl(freshUrl);
           if (!aliveRef.current) return;
           setClientChecks((prev) => ({
             ...prev,
             [item.stickerId]: check.ok
-              ? { url: item.url, status: "verified" }
-              : { url: item.url, status: "failed", reason: check.reason ?? "transparency check failed" },
+              ? { source: item.source, status: "verified" }
+              : {
+                  source: item.source,
+                  status: "failed",
+                  reason: check.reason ?? "transparency check failed",
+                },
           }));
           done += 1;
           setCheckProgress({ done, total: pending.length });
