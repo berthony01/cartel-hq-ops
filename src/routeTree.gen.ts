@@ -13,11 +13,17 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AssetsRouteImport } from './routes/assets'
 import { Route as BrandKitRouteImport } from './routes/brand-kit'
+import { Route as CartelShieldRouteImport } from './routes/cartel-shield'
+import { Route as ClearanceRouteImport } from './routes/clearance'
+import { Route as CommandTerminalRouteImport } from './routes/command-terminal'
+import { Route as DistributionRouteImport } from './routes/distribution'
 import { Route as MissionsRouteImport } from './routes/missions'
 import { Route as OperationsRouteImport } from './routes/operations'
 import { Route as OperativesRouteImport } from './routes/operatives'
+import { Route as ReputationRouteImport } from './routes/reputation'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as StickerLabRouteImport } from './routes/sticker-lab'
+import { Route as TelegramRouteImport } from './routes/telegram'
 import { Route as StickerLabIndexRouteImport } from './routes/sticker-lab.index'
 import { Route as StickerLabNewRouteImport } from './routes/sticker-lab.new'
 
@@ -41,6 +47,26 @@ const BrandKitRoute = BrandKitRouteImport.update({
   path: '/brand-kit',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CartelShieldRoute = CartelShieldRouteImport.update({
+  id: '/cartel-shield',
+  path: '/cartel-shield',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ClearanceRoute = ClearanceRouteImport.update({
+  id: '/clearance',
+  path: '/clearance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CommandTerminalRoute = CommandTerminalRouteImport.update({
+  id: '/command-terminal',
+  path: '/command-terminal',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DistributionRoute = DistributionRouteImport.update({
+  id: '/distribution',
+  path: '/distribution',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MissionsRoute = MissionsRouteImport.update({
   id: '/missions',
   path: '/missions',
@@ -56,6 +82,11 @@ const OperativesRoute = OperativesRouteImport.update({
   path: '/operatives',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReputationRoute = ReputationRouteImport.update({
+  id: '/reputation',
+  path: '/reputation',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -64,6 +95,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const StickerLabRoute = StickerLabRouteImport.update({
   id: '/sticker-lab',
   path: '/sticker-lab',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TelegramRoute = TelegramRouteImport.update({
+  id: '/telegram',
+  path: '/telegram',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StickerLabIndexRoute = StickerLabIndexRouteImport.update({
@@ -82,11 +118,17 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AnalyticsRoute
   '/assets': typeof AssetsRoute
   '/brand-kit': typeof BrandKitRoute
+  '/cartel-shield': typeof CartelShieldRoute
+  '/clearance': typeof ClearanceRoute
+  '/command-terminal': typeof CommandTerminalRoute
+  '/distribution': typeof DistributionRoute
   '/missions': typeof MissionsRoute
   '/operations': typeof OperationsRoute
   '/operatives': typeof OperativesRoute
+  '/reputation': typeof ReputationRoute
   '/settings': typeof SettingsRoute
   '/sticker-lab': typeof StickerLabRouteWithChildren
+  '/telegram': typeof TelegramRoute
   '/sticker-lab/new': typeof StickerLabNewRoute
   '/sticker-lab/': typeof StickerLabIndexRoute
 }
@@ -95,10 +137,16 @@ export interface FileRoutesByTo {
   '/analytics': typeof AnalyticsRoute
   '/assets': typeof AssetsRoute
   '/brand-kit': typeof BrandKitRoute
+  '/cartel-shield': typeof CartelShieldRoute
+  '/clearance': typeof ClearanceRoute
+  '/command-terminal': typeof CommandTerminalRoute
+  '/distribution': typeof DistributionRoute
   '/missions': typeof MissionsRoute
   '/operations': typeof OperationsRoute
   '/operatives': typeof OperativesRoute
+  '/reputation': typeof ReputationRoute
   '/settings': typeof SettingsRoute
+  '/telegram': typeof TelegramRoute
   '/sticker-lab/new': typeof StickerLabNewRoute
   '/sticker-lab': typeof StickerLabIndexRoute
 }
@@ -108,11 +156,17 @@ export interface FileRoutesById {
   '/analytics': typeof AnalyticsRoute
   '/assets': typeof AssetsRoute
   '/brand-kit': typeof BrandKitRoute
+  '/cartel-shield': typeof CartelShieldRoute
+  '/clearance': typeof ClearanceRoute
+  '/command-terminal': typeof CommandTerminalRoute
+  '/distribution': typeof DistributionRoute
   '/missions': typeof MissionsRoute
   '/operations': typeof OperationsRoute
   '/operatives': typeof OperativesRoute
+  '/reputation': typeof ReputationRoute
   '/settings': typeof SettingsRoute
   '/sticker-lab': typeof StickerLabRouteWithChildren
+  '/telegram': typeof TelegramRoute
   '/sticker-lab/new': typeof StickerLabNewRoute
   '/sticker-lab/': typeof StickerLabIndexRoute
 }
@@ -123,11 +177,17 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/assets'
     | '/brand-kit'
+    | '/cartel-shield'
+    | '/clearance'
+    | '/command-terminal'
+    | '/distribution'
     | '/missions'
     | '/operations'
     | '/operatives'
+    | '/reputation'
     | '/settings'
     | '/sticker-lab'
+    | '/telegram'
     | '/sticker-lab/new'
     | '/sticker-lab/'
   fileRoutesByTo: FileRoutesByTo
@@ -136,10 +196,16 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/assets'
     | '/brand-kit'
+    | '/cartel-shield'
+    | '/clearance'
+    | '/command-terminal'
+    | '/distribution'
     | '/missions'
     | '/operations'
     | '/operatives'
+    | '/reputation'
     | '/settings'
+    | '/telegram'
     | '/sticker-lab/new'
     | '/sticker-lab'
   id:
@@ -148,11 +214,17 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/assets'
     | '/brand-kit'
+    | '/cartel-shield'
+    | '/clearance'
+    | '/command-terminal'
+    | '/distribution'
     | '/missions'
     | '/operations'
     | '/operatives'
+    | '/reputation'
     | '/settings'
     | '/sticker-lab'
+    | '/telegram'
     | '/sticker-lab/new'
     | '/sticker-lab/'
   fileRoutesById: FileRoutesById
@@ -162,11 +234,17 @@ export interface RootRouteChildren {
   AnalyticsRoute: typeof AnalyticsRoute
   AssetsRoute: typeof AssetsRoute
   BrandKitRoute: typeof BrandKitRoute
+  CartelShieldRoute: typeof CartelShieldRoute
+  ClearanceRoute: typeof ClearanceRoute
+  CommandTerminalRoute: typeof CommandTerminalRoute
+  DistributionRoute: typeof DistributionRoute
   MissionsRoute: typeof MissionsRoute
   OperationsRoute: typeof OperationsRoute
   OperativesRoute: typeof OperativesRoute
+  ReputationRoute: typeof ReputationRoute
   SettingsRoute: typeof SettingsRoute
   StickerLabRoute: typeof StickerLabRouteWithChildren
+  TelegramRoute: typeof TelegramRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -199,6 +277,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BrandKitRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/cartel-shield': {
+      id: '/cartel-shield'
+      path: '/cartel-shield'
+      fullPath: '/cartel-shield'
+      preLoaderRoute: typeof CartelShieldRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/clearance': {
+      id: '/clearance'
+      path: '/clearance'
+      fullPath: '/clearance'
+      preLoaderRoute: typeof ClearanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/command-terminal': {
+      id: '/command-terminal'
+      path: '/command-terminal'
+      fullPath: '/command-terminal'
+      preLoaderRoute: typeof CommandTerminalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distribution': {
+      id: '/distribution'
+      path: '/distribution'
+      fullPath: '/distribution'
+      preLoaderRoute: typeof DistributionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/missions': {
       id: '/missions'
       path: '/missions'
@@ -220,6 +326,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperativesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reputation': {
+      id: '/reputation'
+      path: '/reputation'
+      fullPath: '/reputation'
+      preLoaderRoute: typeof ReputationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -232,6 +345,13 @@ declare module '@tanstack/react-router' {
       path: '/sticker-lab'
       fullPath: '/sticker-lab'
       preLoaderRoute: typeof StickerLabRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/telegram': {
+      id: '/telegram'
+      path: '/telegram'
+      fullPath: '/telegram'
+      preLoaderRoute: typeof TelegramRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sticker-lab/': {
@@ -270,11 +390,17 @@ const rootRouteChildren: RootRouteChildren = {
   AnalyticsRoute: AnalyticsRoute,
   AssetsRoute: AssetsRoute,
   BrandKitRoute: BrandKitRoute,
+  CartelShieldRoute: CartelShieldRoute,
+  ClearanceRoute: ClearanceRoute,
+  CommandTerminalRoute: CommandTerminalRoute,
+  DistributionRoute: DistributionRoute,
   MissionsRoute: MissionsRoute,
   OperationsRoute: OperationsRoute,
   OperativesRoute: OperativesRoute,
+  ReputationRoute: ReputationRoute,
   SettingsRoute: SettingsRoute,
   StickerLabRoute: StickerLabRouteWithChildren,
+  TelegramRoute: TelegramRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
