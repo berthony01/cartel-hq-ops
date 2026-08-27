@@ -565,14 +565,18 @@ function StickerLabBuilder() {
         if (!aliveRef.current) return;
 
         if (res.status === "failed") {
+          // A failed replacement never removes the existing valid asset.
           setStages((s) => ({ ...s, [stickerId]: hadPreview ? "replacement_failed" : "failed" }));
-          setErrors((e) => ({ ...e, [stickerId]: friendlyProviderError(res.error, res.stage) }));
-          if (res.error) setDebugErrors((d) => ({ ...d, [stickerId]: res.error as string }));
+          setFailures((e) => ({
+            ...e,
+            [stickerId]: classifyProviderError(res.error, res.stage),
+          }));
           if ((res.stage ?? "").includes("background")) {
-            setNotes((n) => ({ ...n, [stickerId]: "Background removal failed" }));
+            setNotes((n) => ({ ...n, [stickerId]: "Background removal step" }));
           }
           return;
         }
+
         if (res.status === "succeeded") {
           if (res.childJobId) {
             jobId = res.childJobId;
