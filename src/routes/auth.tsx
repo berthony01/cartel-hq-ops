@@ -19,9 +19,9 @@ function safeRedirect(value: unknown): string {
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
-  validateSearch: (search: Record<string, unknown>): AuthSearch => ({
-    redirect: typeof search['redirect'] === "string" ? search['redirect'] : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>): AuthSearch =>
+    typeof search['redirect'] === "string" ? { redirect: search['redirect'] } : {},
+
   head: () => ({
     meta: [
       { title: "Sign in — CARTEL HQ" },
