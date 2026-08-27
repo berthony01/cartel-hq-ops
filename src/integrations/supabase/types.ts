@@ -266,6 +266,8 @@ export type Database = {
           reference_asset_id: string | null
           status: string
           style_notes: string | null
+          telegram_publish_error: string | null
+          telegram_published_at: string | null
           telegram_set_name: string | null
           telegram_set_url: string | null
           theme: string
@@ -283,6 +285,8 @@ export type Database = {
           reference_asset_id?: string | null
           status?: string
           style_notes?: string | null
+          telegram_publish_error?: string | null
+          telegram_published_at?: string | null
           telegram_set_name?: string | null
           telegram_set_url?: string | null
           theme?: string
@@ -300,6 +304,8 @@ export type Database = {
           reference_asset_id?: string | null
           status?: string
           style_notes?: string | null
+          telegram_publish_error?: string | null
+          telegram_published_at?: string | null
           telegram_set_name?: string | null
           telegram_set_url?: string | null
           theme?: string
@@ -345,6 +351,8 @@ export type Database = {
           sort_order: number
           status: string
           telegram_file_id: string | null
+          telegram_publish_error: string | null
+          telegram_published_at: string | null
           updated_at: string
         }
         Insert: {
@@ -360,6 +368,8 @@ export type Database = {
           sort_order: number
           status?: string
           telegram_file_id?: string | null
+          telegram_publish_error?: string | null
+          telegram_published_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -375,6 +385,8 @@ export type Database = {
           sort_order?: number
           status?: string
           telegram_file_id?: string | null
+          telegram_publish_error?: string | null
+          telegram_published_at?: string | null
           updated_at?: string
         }
         Relationships: [
