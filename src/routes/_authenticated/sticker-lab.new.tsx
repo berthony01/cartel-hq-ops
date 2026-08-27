@@ -2471,12 +2471,13 @@ function StickerLabBuilder() {
               ) : null}
               {testResult ? <p className="text-xs text-muted-foreground">{testResult}</p> : null}
               <p className="text-xs text-muted-foreground">
-                The test sends a <strong>native Telegram sticker</strong> into the connected
-                supergroup, not an image file. Native sticker sending works for any verified
-                connected supergroup. Telegram’s <strong>official group sticker set</strong> is
-                separate and optional — it is assigned only when Telegram reports the group as
-                eligible; otherwise CARTEL HQ posts the pack link in the group instead. Installing
-                the pack to a personal Telegram account stays a separate individual action.
+                The test sends a <strong>native Telegram sticker</strong> into the connected group,
+                not an image file. Native sticker sending works for any verified connected group —
+                basic group or supergroup. Telegram’s <strong>official group sticker set</strong> is
+                separate and optional — it only exists for supergroups and is assigned only when
+                Telegram reports the group as eligible; otherwise CARTEL HQ posts the pack link in
+                the group instead. Installing the pack to a personal Telegram account stays a
+                separate individual action.
               </p>
               {!canPublish && !publishing && !allPublished ? (
                 <p className="text-xs text-muted-foreground">
