@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 let currentSession: Session | null = null;
 let initialized = false;
 let initialization: Promise<void> | null = null;
+let snapshot = { session: currentSession, initialized };
 const listeners = new Set<() => void>();
 
 function emitChange() {
@@ -14,6 +15,7 @@ function emitChange() {
 export function setAuthSession(session: Session | null) {
   currentSession = session;
   initialized = true;
+  snapshot = { session: currentSession, initialized };
   emitChange();
 }
 
@@ -33,7 +35,7 @@ function subscribe(listener: () => void) {
 }
 
 function getSnapshot() {
-  return { session: currentSession, initialized };
+  return snapshot;
 }
 
 const serverSnapshot = { session: null, initialized: false };
