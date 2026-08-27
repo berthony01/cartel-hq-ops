@@ -182,6 +182,8 @@ export const BUILDER_STEPS = [
 export type BuilderDraft = {
   characterName: string;
   imageName: string | null;
+  referenceAssetId: string | null;
+  referenceStoragePath: string | null;
   packName: string;
   theme: PackTheme;
   size: PackSize;
@@ -197,6 +199,8 @@ export function emptyDraft(): BuilderDraft {
   return {
     characterName: "",
     imageName: null,
+    referenceAssetId: null,
+    referenceStoragePath: null,
     packName: "",
     theme: "Crypto",
     size: 12,
