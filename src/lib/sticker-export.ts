@@ -91,7 +91,7 @@ export async function verifyAlpha(bytes: Uint8Array): Promise<AlphaCheck> {
     ctx.drawImage(bitmap, 0, 0);
     const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
     for (let i = 3; i < data.length; i += 4) {
-      if (data[i] < 255) return { ok: true };
+      if ((data[i] ?? 255) < 255) return { ok: true };
     }
     return { ok: false, reason: "every pixel is fully opaque" };
   } catch {
