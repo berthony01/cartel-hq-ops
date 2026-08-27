@@ -57,9 +57,12 @@ export const Route = createFileRoute("/_authenticated/sticker-lab/new")({
 const ACCEPTED = "image/png,image/jpeg,image/webp,image/gif";
 
 function StickerLabBuilder() {
+  const { workspaceId } = useWorkspace();
+  const { user } = useSession();
   const [step, setStep] = useState(1);
   const [draft, setDraft] = useState<BuilderDraft | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [packNameError, setPackNameError] = useState<string | null>(null);
@@ -73,11 +76,18 @@ function StickerLabBuilder() {
     if (draft) saveDraft(draft);
   }, [draft]);
 
+  // Restore a preview for a reference already stored in the private bucket.
+  const storedPath = draft?.referenceStoragePath ?? null;
   useEffect(() => {
+    let active = true;
+    if (!storedPath) return;
+    signedUrl(storedPath, 3600).then((url) => {
+      if (active && url) setPreviewUrl(url);
+    });
     return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      active = false;
     };
-  }, [previewUrl]);
+  }, [storedPath]);
 
   if (!draft) {
     return (
@@ -88,24 +98,50 @@ function StickerLabBuilder() {
   const update = (patch: Partial<BuilderDraft>) =>
     setDraft((d) => (d ? { ...d, ...patch } : d));
 
-  const applyFile = (file: File | undefined | null) => {
+  const applyFile = async (file: File | undefined | null) => {
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setFileError("That file is not an image. Use PNG, JPG, WEBP or GIF.");
+    const invalid = validateImageFile(file);
+    if (invalid) {
+      setFileError(invalid);
+      return;
+    }
+    if (!workspaceId || !user) {
+      setFileError("Select or create a workspace before uploading a reference.");
       return;
     }
     setFileError(null);
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(URL.createObjectURL(file));
-    update({ imageName: file.name });
+    setUploading(true);
+    try {
+      const asset = await uploadWorkspaceAsset({
+        workspaceId,
+        userId: user.id,
+        file,
+        assetType: "reference_image",
+      });
+      const url = await signedUrl(asset.storage_path, 3600);
+      setPreviewUrl(url);
+      update({
+        imageName: file.name,
+        referenceAssetId: asset.id,
+        referenceStoragePath: asset.storage_path,
+      });
+      toast.success("Reference image stored");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed.";
+      setFileError(message);
+      toast.error(message);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const clearFile = () => {
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(null);
-    update({ imageName: null });
+    update({ imageName: null, referenceAssetId: null, referenceStoragePath: null });
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
+
 
   const setTheme = (theme: PackTheme) =>
     update({ theme, concepts: starterConcepts(theme, draft.size) });
