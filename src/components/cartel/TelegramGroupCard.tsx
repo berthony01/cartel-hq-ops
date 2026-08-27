@@ -344,7 +344,7 @@ export function TelegramGroupCard({
             ) : (
               <Users className="size-4" aria-hidden="true" />
             )}
-            {group ? "Reconnect / choose another group" : "Add bot to Telegram group"}
+            {group ? "Reconnect / choose another group" : "Connect Telegram group"}
           </Button>
           {group ? (
             <Button
