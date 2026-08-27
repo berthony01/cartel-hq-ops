@@ -465,7 +465,7 @@ function StickerLabBuilder() {
       toast.error("That concept could not be matched to a saved sticker.");
       return;
     }
-    await runGeneration(conceptId, stickerId);
+    await runGeneration(conceptId, stickerId, result.packId);
   };
 
   const generateRemaining = async () => {
@@ -477,7 +477,7 @@ function StickerLabBuilder() {
       if (!stickerId) continue;
       if (stages[stickerId] === "ready" || previews[stickerId]) continue;
       // eslint-disable-next-line no-await-in-loop
-      await runGeneration(concept.id, stickerId);
+      await runGeneration(concept.id, stickerId, result.packId);
       if (!aliveRef.current) return;
     }
   };
