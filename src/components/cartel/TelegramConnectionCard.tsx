@@ -88,6 +88,8 @@ export function TelegramConnectionCard({
   const [launchBlocked, setLaunchBlocked] = useState(false);
   const pollRef = useRef<number | null>(null);
   const fallbackRef = useRef<number | null>(null);
+  const handoffRef = useRef(false);
+  const listenerCleanupRef = useRef<(() => void) | null>(null);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current !== null) {
@@ -97,6 +99,16 @@ export function TelegramConnectionCard({
   }, []);
 
   useEffect(() => stopPolling, [stopPolling]);
+
+  const clearListeners = useCallback(() => {
+    if (listenerCleanupRef.current) {
+      listenerCleanupRef.current();
+      listenerCleanupRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => clearListeners, [clearListeners]);
+
 
   // Countdown ticker while a link request is pending.
   useEffect(() => {
