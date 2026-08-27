@@ -74,7 +74,14 @@ import {
   type PackTheme,
 } from "@/lib/sticker-lab";
 
+type BuilderSearch = { pack?: string };
+
 export const Route = createFileRoute("/_authenticated/sticker-lab/new")({
+  validateSearch: (search: Record<string, unknown>): BuilderSearch => {
+    const pack = typeof search.pack === "string" ? search.pack.trim() : "";
+    return pack ? { pack } : {};
+  },
+
   head: () => ({
     meta: [
       { title: "New Sticker Pack — Sticker Lab — CARTEL HQ" },
