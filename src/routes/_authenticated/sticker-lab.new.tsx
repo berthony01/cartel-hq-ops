@@ -1951,6 +1951,16 @@ function FailureBlock({
           Edit concept wording
         </Button>
       ) : null}
+      {failure.raw ? (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-[11px] text-muted-foreground">
+            Technical detail
+          </summary>
+          <p className="mt-1 break-words font-mono text-[10px] leading-relaxed text-muted-foreground">
+            {failure.raw}
+          </p>
+        </details>
+      ) : null}
     </div>
   );
 }
