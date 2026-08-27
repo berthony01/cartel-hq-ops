@@ -1502,12 +1502,12 @@ function StickerLabBuilder() {
           </div>
 
           <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-
-            {draft.concepts.map((c) => {
+            {draft.concepts.map((c, index) => {
               const stickerId = stickerIdFor(c.id);
               const preview = stickerId ? previews[stickerId] : undefined;
               const stage = stageFor(c.id);
-              const error = stickerId ? errors[stickerId] : undefined;
+              const failure = stickerId ? failures[stickerId] : undefined;
+              const attempts = summarizeAttempts(stickerId ? jobHistory[stickerId] : undefined);
               return (
                 <li key={c.id} className="cartel-panel rounded-lg p-4">
                   <div className="flex items-center gap-3">
