@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ExternalLink, Loader2, Users } from "lucide-react";
+import { Copy, ExternalLink, Loader2, Users } from "lucide-react";
 
 import { useWorkspace } from "@/lib/workspace-context";
 import { useTelegramLauncher } from "@/hooks/useTelegramLauncher";
@@ -55,6 +55,17 @@ function secondsLeft(expiresAt?: string | null): number {
   if (!expiresAt) return 0;
   const ms = new Date(expiresAt).getTime() - Date.now();
   return ms > 0 ? Math.ceil(ms / 1000) : 0;
+}
+
+const CARTELHQ_COMMAND = "/cartelhq";
+
+async function copyCommandToClipboard() {
+  try {
+    await navigator.clipboard.writeText(CARTELHQ_COMMAND);
+    toast.success("Copied /cartelhq");
+  } catch {
+    toast.error("Could not copy command");
+  }
 }
 
 export function TelegramGroupCard({
@@ -213,8 +224,11 @@ export function TelegramGroupCard({
       <CardContent className="space-y-4 text-sm">
         <p className="text-xs leading-relaxed text-muted-foreground">
           Connect the supergroup where this sticker pack should become the group sticker set.
-          Members can then use the set inside that group — installing it globally to a personal
-          Telegram account stays a separate, individual action.
+          If @PepeCartelHQBot is already installed there, open the group and send{" "}
+          <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
+          once while a one-time link is active. Otherwise, choose the group and approve admin rights
+          when Telegram opens. Members can then use the set inside that group — installing it globally
+          to a personal Telegram account stays a separate, individual action.
         </p>
 
         {group ? (
@@ -238,9 +252,11 @@ export function TelegramGroupCard({
             </div>
             {!ready ? (
               <p className="mt-3 rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
-                This group is not ready. In Telegram, open the group, make @PepeCartelHQBot an
-                administrator and grant the right to change group info / set the group sticker set,
-                then press Re-check group status.
+                This group is not ready. In Telegram, open the group and either make @PepeCartelHQBot
+                an administrator with the right to change group info / set the group sticker set, or,
+                if the bot is already installed, send{" "}
+                <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
+                once. Then press Re-check group status.
               </p>
             ) : null}
             <details className="mt-3 rounded-md border border-border bg-surface-raised p-3 text-xs">
@@ -267,8 +283,23 @@ export function TelegramGroupCard({
               Waiting for Telegram…
             </p>
             <p className="mt-1">
-              Telegram opened. Choose the supergroup, approve the requested admin right, then return
-              here. CARTEL HQ will verify the group automatically.{" "}
+              Telegram opened. Choose the target supergroup and approve the requested admin right,
+              then return here. If @PepeCartelHQBot is already installed in the group, open that
+              group and send{" "}
+              <span className="inline-flex items-center gap-1 align-middle">
+                <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>
+                <button
+                  type="button"
+                  onClick={() => void copyCommandToClipboard()}
+                  className="inline-flex items-center rounded p-0.5 text-muted-foreground hover:bg-surface-raised hover:text-foreground"
+                  aria-label="Copy /cartelhq"
+                  title="Copy /cartelhq"
+                >
+                  <Copy className="size-3" aria-hidden="true" />
+                </button>
+              </span>{" "}
+              once while this link is active, then return here. CARTEL HQ will verify the group
+              automatically.{" "}
               {launchBlocked ? "If Telegram did not open, use Open Telegram below." : null}{" "}
               {remaining > 0
                 ? `This one-time link expires in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}.`
@@ -313,7 +344,7 @@ export function TelegramGroupCard({
             ) : (
               <Users className="size-4" aria-hidden="true" />
             )}
-            {group ? "Reconnect / choose another group" : "Add bot to Telegram group"}
+            {group ? "Reconnect / choose another group" : "Connect Telegram group"}
           </Button>
           {group ? (
             <Button
