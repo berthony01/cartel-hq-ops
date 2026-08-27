@@ -156,8 +156,6 @@ export function TelegramGroupCard({
   const [remaining, setRemaining] = useState(0);
   const [launchUrls, setLaunchUrls] = useState<{ app?: string | undefined; web?: string | undefined }>({});
   const [launchBlocked, setLaunchBlocked] = useState(false);
-  const [live, setLive] = useState<TelegramGroupStatusResult | null>(null);
-  const [checking, setChecking] = useState(false);
   const pollRef = useRef<number | null>(null);
 
   const stopPolling = useCallback(() => {
