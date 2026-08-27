@@ -146,6 +146,8 @@ export function TelegramGroupCard({
     checking,
     recheck,
     isSupergroup,
+    isBasicGroup,
+    supportedChatType,
     botAdmin,
     botCanChangeInfo,
     canSetStickerSet: canSet,
