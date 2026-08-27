@@ -107,13 +107,61 @@ const ROADMAP_GROUPS: {
 ];
 
 function HqDashboard() {
+  const { workspace, workspaceId, loading: workspaceLoading } = useWorkspace();
+  const { user } = useSession();
+
+  const packsQuery = useQuery({
+    queryKey: ["recent-packs", workspaceId],
+    enabled: !!workspaceId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sticker_packs")
+        .select("id,title,theme,pack_size,status,created_at")
+        .eq("workspace_id", workspaceId!)
+        .order("created_at", { ascending: false })
+        .limit(5);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const usageQuery = useQuery({
+    queryKey: ["ai-usage", workspaceId],
+    enabled: !!workspaceId,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("ai_jobs")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", workspaceId!);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+
+  const telegramQuery = useQuery({
+    queryKey: ["telegram-connection", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("telegram_connections")
+        .select("id,telegram_username,connected_at")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const packs = packsQuery.data ?? [];
+  const telegram = telegramQuery.data;
+
   return (
     <div className="space-y-8">
       <PageHeader
         eyebrow="Command Center"
         title="CARTEL HQ"
         description="The operating layer for PEPECARTEL creative tools, campaigns, creators, and distribution."
-        status="Phase 0 · Foundation"
+        status="Phase 1A · Foundation live"
       />
 
       <section
@@ -131,16 +179,23 @@ function HqDashboard() {
               Active workspace
             </p>
             <h2 id="workspace-heading" className="mt-1 font-display text-2xl uppercase text-gold">
-              PEPECARTEL
+              {workspaceLoading ? "Loading…" : (workspace?.name ?? "No workspace")}
             </h2>
             <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-              Placeholder workspace. Multi-workspace switching, membership, and roles are not
-              implemented in this phase.
+              {workspace
+                ? "Brand Kit, Asset Vault, and Sticker Lab all read and write against this workspace."
+                : "Create a workspace from the switcher in the header to start using CARTEL HQ."}
             </p>
           </div>
-          <Badge variant="outline" className="w-fit border-gold/40 text-gold">
-            Placeholder
-          </Badge>
+          {workspace ? (
+            <Badge variant="outline" className="w-fit border-pepe/45 text-pepe">
+              Connected
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="w-fit border-gold/40 text-gold">
+              Setup required
+            </Badge>
+          )}
         </div>
       </section>
 
@@ -161,13 +216,8 @@ function HqDashboard() {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-foreground">{action.label}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{action.note}</p>
-                  <Button
-                    disabled
-                    size="sm"
-                    variant="outline"
-                    className="mt-3 border-border text-xs"
-                  >
-                    Unavailable
+                  <Button asChild size="sm" variant="outline" className="mt-3 min-h-9 text-xs">
+                    <Link to={action.to}>Open</Link>
                   </Button>
                 </div>
               </CardContent>
@@ -182,11 +232,27 @@ function HqDashboard() {
             <CardTitle className="text-sm uppercase tracking-widest">Recent packs</CardTitle>
           </CardHeader>
           <CardContent>
-            <EmptyState
-              icon={PackageOpen}
-              title="No packs yet"
-              description="Sticker packs will appear here once Sticker Lab is built. Nothing is stored today."
-            />
+            {packs.length === 0 ? (
+              <EmptyState
+                icon={PackageOpen}
+                title="No packs yet"
+                description="Sticker packs saved from Sticker Lab appear here for this workspace."
+              />
+            ) : (
+              <ul className="divide-y divide-border">
+                {packs.map((pack) => (
+                  <li key={pack.id} className="flex items-center gap-3 py-3 text-sm">
+                    <span className="min-w-0 flex-1 truncate text-foreground">{pack.title}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {pack.pack_size} · {pack.theme}
+                    </span>
+                    <Badge variant="outline" className="shrink-0 border-border text-[10px] uppercase">
+                      {pack.status}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
 
@@ -195,7 +261,7 @@ function HqDashboard() {
             <CardHeader className="flex-row items-center justify-between space-y-0">
               <CardTitle className="text-sm uppercase tracking-widest">AI usage</CardTitle>
               <Badge variant="outline" className="border-border text-[10px] uppercase">
-                Not tracked
+                {usageQuery.data ? `${usageQuery.data} jobs` : "No jobs"}
               </Badge>
             </CardHeader>
             <CardContent>
@@ -203,7 +269,7 @@ function HqDashboard() {
                 compact
                 icon={Sparkles}
                 title="No AI providers connected"
-                description="Generation credits and usage metering arrive with the Sticker Lab backend."
+                description="Generation credits and usage metering arrive with the Sticker Lab generation backend."
               />
             </CardContent>
           </Card>
@@ -211,21 +277,29 @@ function HqDashboard() {
           <Card className="cartel-panel rise-in">
             <CardHeader className="flex-row items-center justify-between space-y-0">
               <CardTitle className="text-sm uppercase tracking-widest">Telegram status</CardTitle>
-              <Badge variant="outline" className="border-signal/45 text-signal text-[10px] uppercase">
-                Disconnected
+              <Badge
+                variant="outline"
+                className={
+                  telegram
+                    ? "border-pepe/45 text-pepe text-[10px] uppercase"
+                    : "border-signal/45 text-signal text-[10px] uppercase"
+                }
+              >
+                {telegram ? "Linked" : "Disconnected"}
               </Badge>
             </CardHeader>
             <CardContent>
               <EmptyState
                 compact
                 icon={Send}
-                title="No bot linked"
+                title={telegram ? `@${telegram.telegram_username ?? "account"}` : "No bot linked"}
                 description="Telegram publishing is not configured in this phase."
               />
             </CardContent>
           </Card>
         </div>
       </div>
+
 
       <section aria-labelledby="roadmap-heading" className="space-y-3">
         <h2
