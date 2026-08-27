@@ -762,8 +762,8 @@ function StickerLabBuilder() {
     const stickerId = stickerIdFor(conceptId);
     const preview = stickerId ? previews[stickerId] : undefined;
     const concept = draft.concepts.find((c) => c.id === conceptId);
-    if (!preview || !concept) {
-      toast.error("That sticker is not ready yet.");
+    if (!preview || !concept || !isExportable(conceptId)) {
+      toast.error("Only ready, transparency-verified stickers can be downloaded.");
       return;
     }
     try {
@@ -781,7 +781,7 @@ function StickerLabBuilder() {
       .map((c, i) => {
         const id = stickerIdFor(c.id);
         const preview = id ? previews[id] : undefined;
-        if (!preview || stageFor(c.id) !== "ready") return null;
+        if (!preview || !isExportable(c.id)) return null;
         return {
           filename: stickerFileName(draft.packName || "cartel-pack", i, c.label),
           url: preview.url,
@@ -789,7 +789,7 @@ function StickerLabBuilder() {
       })
       .filter(Boolean) as { filename: string; url: string }[];
     if (entries.length === 0) {
-      toast.error("There are no ready stickers to export yet.");
+      toast.error("There are no ready, transparency-verified stickers to export yet.");
       return;
     }
     setExporting(true);
