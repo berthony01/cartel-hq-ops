@@ -1798,3 +1798,75 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+function SummaryStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "green" | "red" | "muted";
+}) {
+  return (
+    <div
+      className={`rounded-md border p-3 ${
+        tone === "green"
+          ? "border-pepe/40 bg-pepe/5"
+          : tone === "red"
+            ? "border-signal/40 bg-signal/5"
+            : "border-border bg-background/40"
+      }`}
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        {label}
+      </p>
+      <p
+        className={`mt-1 text-lg font-semibold ${
+          tone === "green" ? "text-pepe" : tone === "red" ? "text-signal" : "text-foreground"
+        }`}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+/** Plain-English failure explanation plus the one action that actually helps. */
+function FailureBlock({
+  failure,
+  replacement,
+  onEditConcept,
+}: {
+  failure: ProviderFailure;
+  replacement: boolean;
+  onEditConcept: () => void;
+}) {
+  return (
+    <div
+      role="alert"
+      className="mt-3 rounded-md border border-signal/40 bg-signal/5 p-3 text-[11px] leading-relaxed"
+    >
+      <p className="font-semibold text-signal">{failure.title}</p>
+      <p className="mt-1 text-muted-foreground">{failure.body}</p>
+      {replacement ? (
+        <p className="mt-1 text-muted-foreground">
+          Your previous sticker is still saved and unchanged.
+        </p>
+      ) : null}
+      {failure.kind === "safety" ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="mt-2 min-h-9"
+          onClick={onEditConcept}
+        >
+          <Pencil className="size-3.5" aria-hidden="true" />
+          Edit concept wording
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
