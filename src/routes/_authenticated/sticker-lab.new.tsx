@@ -203,7 +203,11 @@ function StickerLabBuilder() {
 
   const packId = draft?.packId ?? null;
 
-  // Load already-persisted sticker rows and their verified assets (no provider call).
+  /**
+   * Durable state: reconciles every persisted sticker against Supabase
+   * `stickers`, `media_assets` and the latest related `ai_jobs` rows.
+   * Read-only — never calls the provider and never spends credits.
+   */
   const loadExisting = useCallback(async (id: string) => {
     let rows: StickerRow[] = [];
     try {
@@ -212,22 +216,64 @@ function StickerLabBuilder() {
       return;
     }
     const assetIds = rows.map((r) => r.image_asset_id).filter(Boolean) as string[];
-    const assets = await loadAssets(assetIds);
+    let assets: Awaited<ReturnType<typeof loadAssets>> = {};
+    let jobs: Record<string, AiJobRow[]> = {};
+    try {
+      [assets, jobs] = await Promise.all([
+        loadAssets(assetIds),
+        loadLatestJobs(rows.map((r) => r.id)),
+      ]);
+    } catch {
+      /* keep whatever resolved; states below degrade safely */
+    }
     const paths = Object.values(assets).map((a) => a.storage_path);
     const urls = await signedUrlMap(paths);
     if (!aliveRef.current) return;
+
     const nextPreviews: Record<string, Preview> = {};
     const nextStages: Record<string, Stage> = {};
+    const nextErrors: Record<string, string> = {};
+    const nextNotes: Record<string, string> = {};
+    const nextDebug: Record<string, string> = {};
+
     for (const row of rows) {
       const asset = row.image_asset_id ? assets[row.image_asset_id] : undefined;
       const url = asset ? urls[asset.storage_path] : undefined;
+      const hasAsset = !!(asset && url);
       if (asset && url) {
         nextPreviews[row.id] = { url, transparencyValid: asset.transparency_valid === true };
+      }
+      // A locally polling sticker owns its own transient stage.
+      if (pollingRef.current.has(row.id)) continue;
+
+      const latest = jobs[row.id]?.[0];
+      const isBackground = (latest?.job_type ?? "").toLowerCase().includes("background");
+
+      if (latest && (latest.status === "queued" || latest.status === "running")) {
+        nextStages[row.id] = isBackground ? "background" : "generating";
+        nextErrors[row.id] = "";
+      } else if (latest && latest.status === "failed") {
+        nextStages[row.id] = hasAsset ? "replacement_failed" : "failed";
+        nextErrors[row.id] = friendlyProviderError(latest.error_message, latest.job_type);
+        if (isBackground) nextNotes[row.id] = "Background removal failed";
+        if (latest.error_message) nextDebug[row.id] = latest.error_message;
+      } else if (hasAsset) {
         nextStages[row.id] = "ready";
+        nextErrors[row.id] = "";
+      } else if (latest) {
+        // Job finished without a stored asset — not a usable sticker.
+        nextStages[row.id] = "failed";
+        nextErrors[row.id] = "The last attempt finished without a stored image. Retry this sticker.";
+      } else {
+        nextStages[row.id] = "idle";
       }
     }
-    setPreviews((p) => ({ ...nextPreviews, ...p }));
-    setStages((s) => ({ ...nextStages, ...s }));
+
+    setPreviews((p) => ({ ...p, ...nextPreviews }));
+    setStages((s) => ({ ...s, ...nextStages }));
+    setErrors((e) => ({ ...e, ...nextErrors }));
+    setNotes((n) => ({ ...n, ...nextNotes }));
+    setDebugErrors((d) => ({ ...d, ...nextDebug }));
   }, []);
 
   useEffect(() => {
