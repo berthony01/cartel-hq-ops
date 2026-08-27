@@ -145,8 +145,11 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 function StickerLabBuilder() {
   const { workspaceId } = useWorkspace();
   const { user } = useSession();
+  const { pack: urlPackId } = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
   const [step, setStep] = useState(1);
   const [draft, setDraft] = useState<BuilderDraft | null>(null);
+  const [hydrateError, setHydrateError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -171,9 +174,52 @@ function StickerLabBuilder() {
     };
   }, []);
 
+  /**
+   * Durable identity: when the URL carries a pack id it wins over the session
+   * draft. The session draft may only supplement unpersisted fields, and only
+   * when it belongs to the same pack.
+   */
   useEffect(() => {
-    setDraft(loadDraft());
-  }, []);
+    let active = true;
+    if (!urlPackId) {
+      setDraft(loadDraft());
+      return;
+    }
+    if (!workspaceId) return;
+    setDraft(null);
+    setHydrateError(null);
+    hydrateDraftFromPack({ packId: urlPackId, workspaceId })
+      .then((hydrated) => {
+        if (!active) return;
+        if (!hydrated) {
+          setHydrateError(
+            "That pack could not be found in this workspace. It may belong to another workspace, or the link is wrong. Nothing was created or changed.",
+          );
+          return;
+        }
+        const session = loadDraft();
+        const supplement =
+          session.packId === urlPackId
+            ? {
+                imageName: session.imageName,
+                referenceStoragePath: session.referenceStoragePath,
+                referenceAssetIds:
+                  session.referenceAssetIds.length > 0
+                    ? session.referenceAssetIds
+                    : hydrated.referenceAssetIds,
+              }
+            : {};
+        setDraft({ ...hydrated, ...supplement });
+      })
+      .catch(() => {
+        if (active)
+          setHydrateError("Could not load that pack. Check your connection and try again.");
+      });
+    return () => {
+      active = false;
+    };
+  }, [urlPackId, workspaceId]);
+
 
   useEffect(() => {
     if (draft) saveDraft(draft);
