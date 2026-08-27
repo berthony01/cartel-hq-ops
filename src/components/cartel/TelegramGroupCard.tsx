@@ -9,8 +9,10 @@ import { telegramErrorMessage } from "@/lib/telegram-stickers";
 import {
   createTelegramGroupLink,
   fetchTelegramGroupLinkStatus,
+  type TelegramLinkLastGroupCheck,
   type TelegramLinkStatus,
 } from "@/lib/telegram-link";
+
 import {
   fetchTelegramGroupStatus,
   type TelegramGroupConnection,
@@ -120,10 +122,10 @@ export function TelegramGroupCard({
       pollRef.current = window.setInterval(async () => {
         try {
           const result = await fetchTelegramGroupLinkStatus(workspaceId, requestId);
+          queryClient.setQueryData(["telegram-group-link", workspaceId], result);
           if (result.connected && result.group) {
             stopPolling();
             setLinkState("connected");
-            queryClient.setQueryData(["telegram-group-link", workspaceId], result);
             void queryClient.invalidateQueries({ queryKey: ["telegram-group-link", workspaceId] });
             toast.success(`Group connected: ${result.group.title}`);
             return;
@@ -137,6 +139,7 @@ export function TelegramGroupCard({
           /* transient poll failure — keep waiting until expiry */
         }
       }, 2000);
+
     },
     [queryClient, stopPolling, workspaceId],
   );
@@ -206,6 +209,8 @@ export function TelegramGroupCard({
   const canSet = liveCanSet ?? group?.can_set_sticker_set ?? false;
   const isSupergroup = (live?.chatType ?? group?.chat_type) === "supergroup";
   const ready = !!group && isSupergroup && botAdmin && canSet;
+  const lastCheck = groupQuery.data?.request?.metadata?.last_group_check;
+
 
   return (
     <Card className="cartel-panel">
@@ -305,7 +310,55 @@ export function TelegramGroupCard({
                 ? `This one-time link expires in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}.`
                 : "This one-time link is about to expire."}
             </p>
+
+            {pending && lastCheck ? (
+              <div className="mt-3 rounded-md border border-border/60 bg-background/40 p-3 space-y-2">
+                {lastCheck.group_title ? (
+                  <p className="text-sm font-semibold text-foreground">{lastCheck.group_title}</p>
+                ) : null}
+                <div className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 text-xs">
+                  <span className="text-muted-foreground">Your admin status</span>
+                  <StatusBadge tone={lastCheck.user_is_admin === true ? "green" : "red"}>
+                    {lastCheck.user_is_admin === true ? "Verified" : "Needs admin access"}
+                  </StatusBadge>
+
+                  <span className="text-muted-foreground">Bot admin status</span>
+                  <StatusBadge tone={lastCheck.bot_is_admin === true ? "green" : "red"}>
+                    {lastCheck.bot_is_admin === true ? "Verified" : "Bot must be admin"}
+                  </StatusBadge>
+
+                  <span className="text-muted-foreground">Change Group Info</span>
+                  <StatusBadge tone={lastCheck.bot_can_change_info === true ? "green" : "red"}>
+                    {lastCheck.bot_can_change_info === true ? "Enabled" : "Needs to be enabled"}
+                  </StatusBadge>
+
+                  <span className="text-muted-foreground">Group sticker-set permission</span>
+                  <StatusBadge
+                    tone={
+                      lastCheck.can_set_sticker_set === true
+                        ? "green"
+                        : lastCheck.can_set_sticker_set === false
+                          ? "red"
+                          : "muted"
+                    }
+                  >
+                    {lastCheck.can_set_sticker_set === true
+                      ? "Verified"
+                      : lastCheck.can_set_sticker_set === false
+                        ? "Telegram has not granted it yet"
+                        : "Not reported by Telegram yet"}
+                  </StatusBadge>
+                </div>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Fix the item shown above, save the admin rights in Telegram, then send{" "}
+                  <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
+                  in the group again while this link is active.
+                </p>
+              </div>
+            ) : null}
+
             {manualUrl ? (
+
               <Button
                 type="button"
                 variant="outline"
