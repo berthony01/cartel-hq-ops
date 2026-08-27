@@ -2431,7 +2431,9 @@ function StickerLabBuilder() {
                     </a>
                   </Button>
                 ) : null}
-                {allPublished && (!tgPack?.telegram_group_connection_id || assignError) ? (
+                {allPublished &&
+                telegramGroup.officialStickerEligible &&
+                (!tgPack?.telegram_group_connection_id || assignError) ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -2468,15 +2470,17 @@ function StickerLabBuilder() {
               {testResult ? <p className="text-xs text-muted-foreground">{testResult}</p> : null}
               <p className="text-xs text-muted-foreground">
                 The test sends a <strong>native Telegram sticker</strong> into the connected
-                supergroup, not an image file. Publishing sets the pack as that supergroup's group
-                sticker set — members can use it inside the group, while installing it to a personal
-                Telegram account stays a separate individual action.
+                supergroup, not an image file. Native sticker sending works for any verified
+                connected supergroup. Telegram’s <strong>official group sticker set</strong> is
+                separate and optional — it is assigned only when Telegram reports the group as
+                eligible; otherwise CARTEL HQ posts the pack link in the group instead. Installing
+                the pack to a personal Telegram account stays a separate individual action.
               </p>
               {!canPublish && !publishing && !allPublished ? (
                 <p className="text-xs text-muted-foreground">
                   Publishing needs: a configured bot, your connected Telegram account, a verified
-                  target supergroup (bot admin + group sticker permission), at least one
-                  export-ready sticker, and all browser/cutout checks finished.
+                  target supergroup (bot admin + Change Group Info), at least one export-ready
+                  sticker, and all browser/cutout checks finished.
                 </p>
               ) : null}
             </CardContent>
