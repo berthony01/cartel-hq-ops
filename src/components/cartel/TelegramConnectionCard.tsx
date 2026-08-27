@@ -88,6 +88,8 @@ export function TelegramConnectionCard({
   const [launchBlocked, setLaunchBlocked] = useState(false);
   const pollRef = useRef<number | null>(null);
   const fallbackRef = useRef<number | null>(null);
+  const handoffRef = useRef(false);
+  const listenerCleanupRef = useRef<(() => void) | null>(null);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current !== null) {
@@ -97,6 +99,16 @@ export function TelegramConnectionCard({
   }, []);
 
   useEffect(() => stopPolling, [stopPolling]);
+
+  const clearListeners = useCallback(() => {
+    if (listenerCleanupRef.current) {
+      listenerCleanupRef.current();
+      listenerCleanupRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => clearListeners, [clearListeners]);
+
 
   // Countdown ticker while a link request is pending.
   useEffect(() => {
@@ -157,31 +169,65 @@ export function TelegramConnectionCard({
   const launchTelegram = useCallback(
     (appUrl?: string, webUrl?: string): boolean => {
       const mobile = isMobileDevice();
+      clearListeners();
+      clearFallback();
+
       if (mobile && appUrl) {
+        handoffRef.current = false;
+
+        const onVisibility = () => {
+          if (document.hidden) {
+            handoffRef.current = true;
+            clearFallback();
+            clearListeners();
+          }
+        };
+        const onPageHide = () => {
+          handoffRef.current = true;
+          clearFallback();
+          clearListeners();
+        };
+
+        document.addEventListener("visibilitychange", onVisibility);
+        window.addEventListener("pagehide", onPageHide);
+        listenerCleanupRef.current = () => {
+          document.removeEventListener("visibilitychange", onVisibility);
+          window.removeEventListener("pagehide", onPageHide);
+        };
+
         window.location.href = appUrl;
-        clearFallback();
         fallbackRef.current = window.setTimeout(() => {
           fallbackRef.current = null;
-          if (document.visibilityState === "visible" && webUrl) {
+          clearListeners();
+          if (!handoffRef.current && document.visibilityState === "visible" && webUrl) {
             window.location.href = webUrl;
           }
         }, 1300);
         return true;
       }
+
       const url = webUrl ?? appUrl;
       if (!url) return false;
       if (mobile) {
         window.location.href = url;
         return true;
       }
-      const opened = window.open(url, "_blank", "noopener,noreferrer");
-      if (!opened) {
-        window.location.href = url;
+
+      const opened = window.open(url, "_blank");
+      if (opened) {
+        try {
+          opened.opener = null;
+        } catch {
+          /* noop — some browsers restrict cross-origin opener mutation */
+        }
+        return true;
       }
+      window.location.href = url;
       return true;
     },
-    [clearFallback],
+    [clearFallback, clearListeners],
   );
+
 
   const connect = async () => {
     if (!userId || starting) return;
