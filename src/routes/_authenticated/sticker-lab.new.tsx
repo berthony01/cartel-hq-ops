@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { useSession } from "@/hooks/useSession";
@@ -943,7 +943,7 @@ function StickerLabBuilder() {
                     : "Status unavailable"}
               </p>
             </div>
-            <StatusBadge tone={configured ? "pepe" : "muted"}>
+            <StatusBadge tone={configured ? "green" : "muted"}>
               {configured ? "Configured" : "Not configured"}
             </StatusBadge>
           </div>
@@ -1009,9 +1009,9 @@ function StickerLabBuilder() {
                     <StatusBadge
                       tone={
                         stage === "ready"
-                          ? "pepe"
+                          ? "green"
                           : stage === "failed" || stage === "timeout"
-                            ? "signal"
+                            ? "red"
                             : busy(stage)
                               ? "gold"
                               : "muted"
