@@ -1190,6 +1190,8 @@ function StickerLabBuilder() {
             {draft.concepts.map((c) => {
               const stickerId = stickerIdFor(c.id);
               const preview = stickerId ? previews[stickerId] : undefined;
+              const stage = stageFor(c.id);
+              const error = stickerId ? errors[stickerId] : undefined;
               return (
                 <li key={c.id} className="cartel-panel rounded-lg p-4">
                   <div className="flex items-center gap-3">
@@ -1213,15 +1215,26 @@ function StickerLabBuilder() {
                       <p className="truncate text-sm font-semibold text-foreground">{c.label}</p>
                       <p
                         className={`truncate text-xs ${
-                          preview?.transparencyValid ? "text-pepe" : "text-muted-foreground"
+                          stage === "ready" && preview?.transparencyValid
+                            ? "text-pepe"
+                            : isFailure(stage)
+                              ? "text-signal"
+                              : "text-muted-foreground"
                         }`}
                       >
                         {preview
-                          ? preview.transparencyValid
-                            ? "Transparency verified"
-                            : "Transparency not verified"
-                          : "Not generated yet"}
+                          ? isFailure(stage)
+                            ? STAGE_LABEL[stage]
+                            : preview.transparencyValid
+                              ? "Transparency verified"
+                              : "Transparency not verified"
+                          : STAGE_LABEL[stage]}
                       </p>
+                      {isFailure(stage) && error ? (
+                        <p className="truncate text-[11px] text-signal" title={error}>
+                          {error}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                   <div className="mt-3 grid grid-cols-[5rem_1fr] gap-2">
