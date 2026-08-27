@@ -2498,9 +2498,9 @@ function StickerLabBuilder() {
                   ({telegram.connection?.telegram_user_id}). {reviewedStickerIds.length} reviewed
                   sticker{reviewedStickerIds.length === 1 ? "" : "s"} will be uploaded. After the set
                   is created, CARTEL HQ either assigns it as the official group sticker set of{" "}
-                  <strong>{telegramGroup.groupTitle ?? "the connected supergroup"}</strong> if
-                  Telegram reports that group as eligible, or posts the pack link into the group if
-                  it is not eligible yet. Sets cannot be transferred to another owner later.
+                  <strong>{telegramGroup.groupTitle ?? "the connected group"}</strong> if Telegram
+                  reports that group as eligible (supergroups only), or posts the pack link into the
+                  group if it is not eligible. Sets cannot be transferred to another owner later.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
