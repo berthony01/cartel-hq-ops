@@ -1,5 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { TelegramBot, TelegramConnection } from "@/lib/telegram-stickers";
+import type { TelegramGroupConnection } from "@/lib/telegram-group";
+
 
 /**
  * Thin client for the authenticated Edge Function `telegram-link`.
@@ -74,3 +76,48 @@ export function fetchTelegramLinkStatus(requestId?: string): Promise<TelegramLin
     ...(requestId ? { requestId } : {}),
   });
 }
+
+/* ------------------------------------------------------------------ */
+/* Target supergroup linking (telegram-link v3)                        */
+/* ------------------------------------------------------------------ */
+
+export type TelegramCreateGroupLinkResult = {
+  requestId: string;
+  status: TelegramLinkStatus;
+  expiresAt?: string;
+  bot?: TelegramBot;
+  startParam?: string;
+  /** Official https t.me `startgroup` flow requesting the change_info admin right. */
+  groupStartUrl?: string;
+  /** `tg://resolve?...&startgroup=...` deep link for installed Telegram apps. */
+  groupAppUrl?: string;
+  webhookUrl?: string;
+};
+
+export type TelegramGroupLinkStatusResult = {
+  bot?: TelegramBot;
+  request?: TelegramLinkRequest | null;
+  connected: boolean;
+  group?: TelegramGroupConnection | null;
+  groups?: TelegramGroupConnection[];
+};
+
+/** Starts a one-time supergroup link request for the given workspace. */
+export function createTelegramGroupLink(
+  workspaceId: string,
+): Promise<TelegramCreateGroupLinkResult> {
+  return invoke<TelegramCreateGroupLinkResult>({ action: "create_group_link", workspaceId });
+}
+
+/** Polls the state of a supergroup link request and the workspace's groups. */
+export function fetchTelegramGroupLinkStatus(
+  workspaceId: string,
+  requestId?: string,
+): Promise<TelegramGroupLinkStatusResult> {
+  return invoke<TelegramGroupLinkStatusResult>({
+    action: "group_status",
+    workspaceId,
+    ...(requestId ? { requestId } : {}),
+  });
+}
+

@@ -7,6 +7,11 @@ import {
   TelegramConnectionCard,
   useTelegramSetup,
 } from "@/components/cartel/TelegramConnectionCard";
+import {
+  TelegramGroupCard,
+  useTelegramGroupSetup,
+} from "@/components/cartel/TelegramGroupCard";
+
 
 export const Route = createFileRoute("/_authenticated/telegram")({
   head: () => ({
@@ -31,17 +36,25 @@ export const Route = createFileRoute("/_authenticated/telegram")({
 
 function TelegramPage() {
   const setup = useTelegramSetup();
+  const groupSetup = useTelegramGroupSetup();
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <PageHeader
         eyebrow="System"
         title="Telegram"
-        description="The official CARTEL HQ bot publishes static sticker packs from Sticker Lab. The bot token lives server-side only."
+        description="The official CARTEL HQ bot publishes static sticker packs from Sticker Lab and can set a published pack as a supergroup's group sticker set. The bot token lives server-side only."
         status={setup.botConfigured ? "Bot configured" : "Bot not configured"}
       />
 
       <TelegramConnectionCard setup={setup} />
+
+      <TelegramGroupCard
+        setup={groupSetup}
+        personalConnected={setup.ownerConnected}
+        botConfigured={setup.botConfigured}
+      />
+
 
       <Card className="cartel-panel">
         <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">

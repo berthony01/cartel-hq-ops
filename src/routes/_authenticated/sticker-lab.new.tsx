@@ -63,7 +63,6 @@ import {
   previewShortName,
   publishPack,
   refreshPackStatus,
-  sendTestSticker,
   telegramErrorMessage,
   type PackTelegramState,
   type StickerTelegramState,
@@ -73,6 +72,11 @@ import {
   TelegramConnectionCard,
   useTelegramSetup,
 } from "@/components/cartel/TelegramConnectionCard";
+import {
+  TelegramGroupCard,
+  useTelegramGroupSetup,
+} from "@/components/cartel/TelegramGroupCard";
+import { assignPackToGroup, sendGroupTestSticker } from "@/lib/telegram-group";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -334,6 +338,10 @@ function StickerLabBuilder() {
 
   /* ---------------- Telegram publishing (Step 5, explicit clicks only) --------------- */
   const telegram = useTelegramSetup(step === 5);
+  const telegramGroup = useTelegramGroupSetup(step === 5);
+  const [assigning, setAssigning] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const [assignedGroupTitle, setAssignedGroupTitle] = useState<string | null>(null);
   const [tgPack, setTgPack] = useState<PackTelegramState | null>(null);
   const [tgStickers, setTgStickers] = useState<Record<string, StickerTelegramState>>({});
   const [publishing, setPublishing] = useState(false);
@@ -940,6 +948,7 @@ function StickerLabBuilder() {
     !!workspaceId &&
     telegram.botConfigured &&
     telegram.ownerConnected &&
+    telegramGroup.groupReady &&
     reviewedStickerIds.length > 0 &&
     !allPublished &&
     !checksRunning &&
@@ -947,6 +956,35 @@ function StickerLabBuilder() {
   const shortNamePreview = packId
     ? previewShortName(draft.packName, packId, telegram.botUsername)
     : null;
+
+  /** Assign-only path. Never re-publishes stickers. */
+  const doAssignGroup = async () => {
+    if (!packId || !workspaceId || !telegramGroup.groupId) return;
+    setAssigning(true);
+    setAssignError(null);
+    try {
+      const result = await assignPackToGroup({
+        workspaceId,
+        packId,
+        groupConnectionId: telegramGroup.groupId,
+      });
+      await loadTelegramState(packId);
+      if (result.assigned) {
+        const title = result.group?.title ?? telegramGroup.groupTitle ?? "the group";
+        setAssignedGroupTitle(title);
+        toast.success(`Group sticker set active in ${title}.`);
+      } else {
+        const msg = result.message || "Telegram did not accept the group sticker set assignment.";
+        setAssignError(result.technical ? `${msg} (${result.technical})` : msg);
+        toast.error("Sticker set published, group assignment needs attention.");
+      }
+    } catch (err) {
+      setAssignError(telegramErrorMessage(err));
+      toast.error(telegramErrorMessage(err));
+    } finally {
+      setAssigning(false);
+    }
+  };
 
   const doPublish = async () => {
     if (!packId || !workspaceId) return;
@@ -958,6 +996,8 @@ function StickerLabBuilder() {
       await loadTelegramState(packId);
       if (result.status === "published") {
         toast.success(`Published ${result.published} of ${result.total} stickers to Telegram.`);
+        // Group assignment only ever runs after a fully successful publish.
+        await doAssignGroup();
       } else if (result.status === "partial") {
         toast.warning(
           `${result.published} of ${result.total} published, ${result.failed} need retry.`,
@@ -994,22 +1034,23 @@ function StickerLabBuilder() {
   };
 
   const doSendTest = async () => {
-    if (!packId || !workspaceId) return;
+    if (!packId || !workspaceId || !telegramGroup.groupId) return;
     setSendingTest(true);
     setTestResult(null);
     try {
-      const result = await sendTestSticker({ workspaceId, packId });
+      const result = await sendGroupTestSticker({
+        workspaceId,
+        packId,
+        groupConnectionId: telegramGroup.groupId,
+      });
+      const title = telegramGroup.groupTitle ?? "the group";
       if (result.sent) {
-        setTestResult("Test sticker sent — check your Telegram chat with the bot.");
-        toast.success("Native test sticker sent.");
+        setTestResult(`Native sticker sent to ${title}.`);
+        toast.success(`Native sticker sent to ${title}.`);
       } else {
-        const base = result.message || "Telegram could not deliver the test sticker.";
-        setTestResult(
-          result.botStartUrl
-            ? `${base} Open the bot in Telegram, tap Start, then retry.`
-            : base,
-        );
-        toast.error("Telegram could not deliver the test sticker.");
+        const base = result.message || "Telegram could not deliver the test sticker to the group.";
+        setTestResult(result.technical ? `${base} (${result.technical})` : base);
+        toast.error("Telegram could not deliver the test sticker to the group.");
       }
     } catch (err) {
       setTestResult(telegramErrorMessage(err));
@@ -2195,6 +2236,14 @@ function StickerLabBuilder() {
             <TelegramConnectionCard setup={telegram} compact />
           </div>
 
+          <div className="mt-6">
+            <TelegramGroupCard
+              setup={telegramGroup}
+              personalConnected={telegram.ownerConnected}
+              botConfigured={telegram.botConfigured}
+            />
+          </div>
+
           <Card className="cartel-panel mt-6">
             <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
               <CardTitle className="text-base">Telegram publishing</CardTitle>
@@ -2216,9 +2265,18 @@ function StickerLabBuilder() {
                   <StatusBadge tone="red">Bot not configured</StatusBadge>
                 )}
                 {telegram.ownerConnected ? (
-                  <StatusBadge tone="green">Owner ID connected</StatusBadge>
+                  <StatusBadge tone="green">Telegram account connected</StatusBadge>
                 ) : (
-                  <StatusBadge tone="red">Owner Telegram ID missing</StatusBadge>
+                  <StatusBadge tone="red">Telegram account not connected</StatusBadge>
+                )}
+                {telegramGroup.groupReady ? (
+                  <StatusBadge tone="green">
+                    Target group verified — {telegramGroup.groupTitle}
+                  </StatusBadge>
+                ) : telegramGroup.groupConnected ? (
+                  <StatusBadge tone="red">Target group not verified</StatusBadge>
+                ) : (
+                  <StatusBadge tone="red">No target group connected</StatusBadge>
                 )}
                 <StatusBadge tone={exportableCount > 0 ? "gold" : "muted"}>
                   {exportableCount} export-ready
@@ -2254,6 +2312,18 @@ function StickerLabBuilder() {
                 <p className="text-xs text-muted-foreground">
                   {publishResult.published} of {publishResult.total} published
                   {publishResult.failed > 0 ? `, ${publishResult.failed} need retry` : ""}.
+                </p>
+              ) : null}
+
+              {assignedGroupTitle && !assignError ? (
+                <p className="rounded-md border border-pepe/40 bg-pepe/5 p-3 text-xs text-pepe">
+                  Group sticker set active in {assignedGroupTitle}.
+                </p>
+              ) : null}
+
+              {assignError ? (
+                <p className="rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
+                  Sticker set published, group assignment needs attention. {assignError}
                 </p>
               ) : null}
 
@@ -2342,17 +2412,31 @@ function StickerLabBuilder() {
                     </a>
                   </Button>
                 ) : null}
+                {allPublished && (!tgPack?.telegram_group_connection_id || assignError) ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11"
+                    disabled={assigning || !telegramGroup.groupReady}
+                    onClick={() => void doAssignGroup()}
+                  >
+                    {assigning ? (
+                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                    ) : null}
+                    {assignError ? "Retry assign to group" : "Assign to group"}
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant="outline"
                   className="min-h-11"
-                  disabled={tgPublishedCount === 0 || sendingTest}
+                  disabled={tgPublishedCount === 0 || sendingTest || !telegramGroup.groupId}
                   onClick={() => void doSendTest()}
                 >
                   {sendingTest ? (
                     <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                   ) : null}
-                  Send test sticker
+                  Send test sticker to group
                 </Button>
               </div>
 
@@ -2364,12 +2448,15 @@ function StickerLabBuilder() {
               ) : null}
               {testResult ? <p className="text-xs text-muted-foreground">{testResult}</p> : null}
               <p className="text-xs text-muted-foreground">
-                The test sends a <strong>native Telegram sticker</strong>, not an image file. If
-                Telegram cannot reach you, open the bot, tap Start, then retry.
+                The test sends a <strong>native Telegram sticker</strong> into the connected
+                supergroup, not an image file. Publishing sets the pack as that supergroup's group
+                sticker set — members can use it inside the group, while installing it to a personal
+                Telegram account stays a separate individual action.
               </p>
               {!canPublish && !publishing && !allPublished ? (
                 <p className="text-xs text-muted-foreground">
-                  Publishing needs: a configured bot, your numeric Telegram owner ID, at least one
+                  Publishing needs: a configured bot, your connected Telegram account, a verified
+                  target supergroup (bot admin + group sticker permission), at least one
                   export-ready sticker, and all browser/cutout checks finished.
                 </p>
               ) : null}
@@ -2383,8 +2470,10 @@ function StickerLabBuilder() {
                 <AlertDialogDescription>
                   This creates a real, shareable Telegram sticker set owned by your Telegram account
                   ({telegram.connection?.telegram_user_id}). {reviewedStickerIds.length} reviewed
-                  sticker{reviewedStickerIds.length === 1 ? "" : "s"} will be uploaded. Sets cannot
-                  be transferred to another owner later.
+                  sticker{reviewedStickerIds.length === 1 ? "" : "s"} will be uploaded. After the set
+                  is created, CARTEL HQ assigns it as the group sticker set of{" "}
+                  <strong>{telegramGroup.groupTitle ?? "the connected supergroup"}</strong>. Sets
+                  cannot be transferred to another owner later.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

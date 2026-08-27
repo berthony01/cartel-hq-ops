@@ -266,6 +266,7 @@ export type Database = {
           reference_asset_id: string | null
           status: string
           style_notes: string | null
+          telegram_group_connection_id: string | null
           telegram_publish_error: string | null
           telegram_published_at: string | null
           telegram_set_name: string | null
@@ -285,6 +286,7 @@ export type Database = {
           reference_asset_id?: string | null
           status?: string
           style_notes?: string | null
+          telegram_group_connection_id?: string | null
           telegram_publish_error?: string | null
           telegram_published_at?: string | null
           telegram_set_name?: string | null
@@ -304,6 +306,7 @@ export type Database = {
           reference_asset_id?: string | null
           status?: string
           style_notes?: string | null
+          telegram_group_connection_id?: string | null
           telegram_publish_error?: string | null
           telegram_published_at?: string | null
           telegram_set_name?: string | null
@@ -326,6 +329,13 @@ export type Database = {
             columns: ["reference_asset_id"]
             isOneToOne: false
             referencedRelation: "media_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_packs_telegram_group_connection_id_fkey"
+            columns: ["telegram_group_connection_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_group_connections"
             referencedColumns: ["id"]
           },
           {
@@ -443,6 +453,62 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: true
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      telegram_group_connections: {
+        Row: {
+          bot_is_admin: boolean
+          can_set_sticker_set: boolean
+          chat_type: string
+          connected_at: string
+          connected_by: string
+          created_at: string
+          id: string
+          metadata: Json
+          telegram_chat_id: number
+          title: string
+          username: string | null
+          verified_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          bot_is_admin?: boolean
+          can_set_sticker_set?: boolean
+          chat_type: string
+          connected_at?: string
+          connected_by: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          telegram_chat_id: number
+          title: string
+          username?: string | null
+          verified_at?: string | null
+          workspace_id: string
+        }
+        Update: {
+          bot_is_admin?: boolean
+          can_set_sticker_set?: boolean
+          chat_type?: string
+          connected_at?: string
+          connected_by?: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          telegram_chat_id?: number
+          title?: string
+          username?: string | null
+          verified_at?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_group_connections_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
         ]

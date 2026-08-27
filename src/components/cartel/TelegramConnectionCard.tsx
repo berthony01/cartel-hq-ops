@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import { ExternalLink, Loader2, Send } from "lucide-react";
 
 import { useSession } from "@/hooks/useSession";
+import { useTelegramLauncher } from "@/hooks/useTelegramLauncher";
+
 import {
   fetchTelegramConfig,
   loadTelegramConnection,
@@ -60,13 +62,6 @@ function secondsLeft(expiresAt?: string | null): number {
   return ms > 0 ? Math.ceil(ms / 1000) : 0;
 }
 
-/** Android / iPhone / iPod / iPad incl. modern iPadOS (Macintosh + touch). */
-function isMobileDevice(): boolean {
-  if (typeof navigator === "undefined") return false;
-  const ua = navigator.userAgent || "";
-  if (/Android|iPhone|iPod|iPad/i.test(ua)) return true;
-  return /Macintosh/i.test(ua) && (navigator.maxTouchPoints ?? 0) > 1;
-}
 
 
 export function TelegramConnectionCard({
@@ -77,6 +72,7 @@ export function TelegramConnectionCard({
   compact?: boolean;
 }) {
   const queryClient = useQueryClient();
+  const { launchTelegram, isMobileDevice } = useTelegramLauncher();
   const { userId, configQuery, connection, botConfigured, botUsername, botStartUrl, config } = setup;
 
   const [starting, setStarting] = useState(false);
@@ -87,9 +83,6 @@ export function TelegramConnectionCard({
   const [launchUrls, setLaunchUrls] = useState<{ app?: string | undefined; web?: string | undefined }>({});
   const [launchBlocked, setLaunchBlocked] = useState(false);
   const pollRef = useRef<number | null>(null);
-  const fallbackRef = useRef<number | null>(null);
-  const handoffRef = useRef(false);
-  const listenerCleanupRef = useRef<(() => void) | null>(null);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current !== null) {
@@ -100,14 +93,6 @@ export function TelegramConnectionCard({
 
   useEffect(() => stopPolling, [stopPolling]);
 
-  const clearListeners = useCallback(() => {
-    if (listenerCleanupRef.current) {
-      listenerCleanupRef.current();
-      listenerCleanupRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => clearListeners, [clearListeners]);
 
 
   // Countdown ticker while a link request is pending.
@@ -156,77 +141,8 @@ export function TelegramConnectionCard({
     [queryClient, stopPolling, userId],
   );
 
-  const clearFallback = useCallback(() => {
-    if (fallbackRef.current !== null) {
-      window.clearTimeout(fallbackRef.current);
-      fallbackRef.current = null;
-    }
-  }, []);
 
-  useEffect(() => clearFallback, [clearFallback]);
 
-  /** Launches Telegram: app deep link first on mobile, https t.me otherwise. */
-  const launchTelegram = useCallback(
-    (appUrl?: string, webUrl?: string): boolean => {
-      const mobile = isMobileDevice();
-      clearListeners();
-      clearFallback();
-
-      if (mobile && appUrl) {
-        handoffRef.current = false;
-
-        const onVisibility = () => {
-          if (document.hidden) {
-            handoffRef.current = true;
-            clearFallback();
-            clearListeners();
-          }
-        };
-        const onPageHide = () => {
-          handoffRef.current = true;
-          clearFallback();
-          clearListeners();
-        };
-
-        document.addEventListener("visibilitychange", onVisibility);
-        window.addEventListener("pagehide", onPageHide);
-        listenerCleanupRef.current = () => {
-          document.removeEventListener("visibilitychange", onVisibility);
-          window.removeEventListener("pagehide", onPageHide);
-        };
-
-        window.location.href = appUrl;
-        fallbackRef.current = window.setTimeout(() => {
-          fallbackRef.current = null;
-          clearListeners();
-          if (!handoffRef.current && document.visibilityState === "visible" && webUrl) {
-            window.location.href = webUrl;
-          }
-        }, 1300);
-        return true;
-      }
-
-      const url = webUrl ?? appUrl;
-      if (!url) return false;
-      if (mobile) {
-        window.location.href = url;
-        return true;
-      }
-
-      const opened = window.open(url, "_blank");
-      if (opened) {
-        try {
-          opened.opener = null;
-        } catch {
-          /* noop — some browsers restrict cross-origin opener mutation */
-        }
-        return true;
-      }
-      window.location.href = url;
-      return true;
-    },
-    [clearFallback, clearListeners],
-  );
 
 
   const connect = async () => {

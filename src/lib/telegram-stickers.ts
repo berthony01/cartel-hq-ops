@@ -183,6 +183,7 @@ export type PackTelegramState = {
   telegram_set_url: string | null;
   telegram_publish_error: string | null;
   telegram_published_at: string | null;
+  telegram_group_connection_id: string | null;
 };
 
 export type StickerTelegramState = {
@@ -201,7 +202,7 @@ export async function loadPackTelegramState(packId: string): Promise<{
     supabase
       .from("sticker_packs")
       .select(
-        "status,telegram_set_name,telegram_set_url,telegram_publish_error,telegram_published_at",
+        "status,telegram_set_name,telegram_set_url,telegram_publish_error,telegram_published_at,telegram_group_connection_id",
       )
       .eq("id", packId)
       .maybeSingle(),
