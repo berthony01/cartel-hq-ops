@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { setAuthSession } from "@/hooks/useSession";
 
 function NotFoundComponent() {
   return (
@@ -135,10 +136,14 @@ function RootComponent() {
   // Single global auth listener. The AppShell lives in the authenticated
   // layout so public routes such as /auth render standalone.
   useEffect(() => {
-    const { data } = supabase.auth.onAuthStateChange((event) => {
-      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
-      router.invalidate();
-      if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      setAuthSession(session);
+
+      if (event !== "SIGNED_OUT") return;
+      void queryClient.cancelQueries().then(() => {
+        queryClient.clear();
+        void router.invalidate();
+      });
     });
     return () => data.subscription.unsubscribe();
   }, [router, queryClient]);
