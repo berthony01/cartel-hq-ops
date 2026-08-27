@@ -147,7 +147,10 @@ const STAGE_LABEL: Record<Stage, string> = {
   timeout: "Timed out",
 };
 
-type Preview = { url: string; transparencyValid: boolean };
+type Preview = { url: string; transparencyValid: boolean; storagePath?: string };
+
+/** Action-scoped signed URL lifetime (seconds) for verify/download only. */
+const ACTION_URL_TTL = 300;
 
 const CHECKERBOARD: React.CSSProperties = {
   backgroundImage:
