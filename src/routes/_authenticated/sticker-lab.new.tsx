@@ -667,6 +667,7 @@ function StickerLabBuilder() {
     }
   };
 
+  /** Reconciles provider config AND durable sticker/job state. Never generates. */
   const refreshStatus = () => {
     void configQuery.refetch();
     const id = draft.packId;
@@ -691,9 +692,88 @@ function StickerLabBuilder() {
     stage === "failed" || stage === "replacement_failed" || stage === "timeout";
 
   const anyBusy = draft.concepts.some((c) => busy(stageFor(c.id)));
-  const generatedCount = draft.concepts.filter((c) => stageFor(c.id) === "ready").length;
+  const readyConcepts = draft.concepts.filter((c) => stageFor(c.id) === "ready");
+  const generatedCount = readyConcepts.length;
   const remainingCount = draft.concepts.length - generatedCount;
+  const failedConcepts = draft.concepts.filter((c) => isFailure(stageFor(c.id)));
+  const failedCount = failedConcepts.length;
+  const activeCount = draft.concepts.filter((c) => busy(stageFor(c.id))).length;
+  const transparentCount = readyConcepts.filter((c) => {
+    const id = stickerIdFor(c.id);
+    return !!(id && previews[id]?.transparencyValid);
+  }).length;
+  const allReady = draft.concepts.length > 0 && generatedCount === draft.concepts.length && !anyBusy;
   const configured = configQuery.data?.configured === true;
+
+  /** Retries only the failed stickers. Finished stickers are never touched. */
+  const retryFailed = async () => {
+    const result = await persist();
+    if (!result) return;
+    for (const concept of failedConcepts) {
+      const stickerId = result.stickerIds[concept.id];
+      if (!stickerId) continue;
+      // eslint-disable-next-line no-await-in-loop
+      await runGeneration(concept.id, stickerId, result.packId);
+      if (!aliveRef.current) return;
+    }
+  };
+
+  /** Sends the user back to Step 3 with the offending concept focused. */
+  const editConceptFromFailure = (conceptId: string) => {
+    setStep(3);
+    if (typeof window === "undefined") return;
+    window.setTimeout(() => {
+      const el = document.getElementById(`${conceptId}-action`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      (el as HTMLInputElement | null)?.focus();
+    }, 120);
+  };
+
+  const downloadOne = async (conceptId: string, index: number) => {
+    const stickerId = stickerIdFor(conceptId);
+    const preview = stickerId ? previews[stickerId] : undefined;
+    const concept = draft.concepts.find((c) => c.id === conceptId);
+    if (!preview || !concept) {
+      toast.error("That sticker is not ready yet.");
+      return;
+    }
+    try {
+      await downloadStickerPng(
+        preview.url,
+        stickerFileName(draft.packName || "cartel-pack", index, concept.label),
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Download failed.");
+    }
+  };
+
+  const downloadZip = async () => {
+    const entries = draft.concepts
+      .map((c, i) => {
+        const id = stickerIdFor(c.id);
+        const preview = id ? previews[id] : undefined;
+        if (!preview || stageFor(c.id) !== "ready") return null;
+        return {
+          filename: stickerFileName(draft.packName || "cartel-pack", i, c.label),
+          url: preview.url,
+        };
+      })
+      .filter(Boolean) as { filename: string; url: string }[];
+    if (entries.length === 0) {
+      toast.error("There are no ready stickers to export yet.");
+      return;
+    }
+    setExporting(true);
+    try {
+      const count = await downloadStickersZip(entries, packZipName(draft.packName || "cartel-pack"));
+      toast.success(`${count} sticker${count === 1 ? "" : "s"} exported.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Export failed.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
 
   const goNext = () => {
     if (step === 2 && !draft.packName.trim()) {
