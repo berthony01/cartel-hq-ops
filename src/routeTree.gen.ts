@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as AuthenticatedAssetsRouteImport } from './routes/_authenticated/assets'
@@ -27,6 +28,11 @@ import { Route as AuthenticatedTelegramRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedStickerLabIndexRouteImport } from './routes/_authenticated/sticker-lab.index'
 import { Route as AuthenticatedStickerLabNewRouteImport } from './routes/_authenticated/sticker-lab.new'
 
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/_authenticated/',
   path: '/',
@@ -119,6 +125,7 @@ const AuthenticatedStickerLabNewRoute =
   } as any)
 
 export interface FileRoutesByFullPath {
+  '/auth': typeof AuthRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/assets': typeof AuthenticatedAssetsRoute
   '/brand-kit': typeof AuthenticatedBrandKitRoute
@@ -138,6 +145,7 @@ export interface FileRoutesByFullPath {
   '/sticker-lab/': typeof AuthenticatedStickerLabIndexRoute
 }
 export interface FileRoutesByTo {
+  '/auth': typeof AuthRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/assets': typeof AuthenticatedAssetsRoute
   '/brand-kit': typeof AuthenticatedBrandKitRoute
@@ -157,6 +165,7 @@ export interface FileRoutesByTo {
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/auth': typeof AuthRoute
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/assets': typeof AuthenticatedAssetsRoute
   '/_authenticated/brand-kit': typeof AuthenticatedBrandKitRoute
@@ -178,6 +187,7 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/auth'
     | '/analytics'
     | '/assets'
     | '/brand-kit'
@@ -197,6 +207,7 @@ export interface FileRouteTypes {
     | '/sticker-lab/'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/auth'
     | '/analytics'
     | '/assets'
     | '/brand-kit'
@@ -215,6 +226,7 @@ export interface FileRouteTypes {
     | '/sticker-lab'
   id:
     | '__root__'
+    | '/auth'
     | '/_authenticated/analytics'
     | '/_authenticated/assets'
     | '/_authenticated/brand-kit'
@@ -235,6 +247,7 @@ export interface FileRouteTypes {
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  AuthRoute: typeof AuthRoute
   AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
   AuthenticatedAssetsRoute: typeof AuthenticatedAssetsRoute
   AuthenticatedBrandKitRoute: typeof AuthenticatedBrandKitRoute
@@ -254,6 +267,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/': {
       id: '/_authenticated/'
       path: '/'
@@ -393,6 +413,7 @@ const AuthenticatedStickerLabRouteWithChildren =
   )
 
 const rootRouteChildren: RootRouteChildren = {
+  AuthRoute: AuthRoute,
   AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
   AuthenticatedAssetsRoute: AuthenticatedAssetsRoute,
   AuthenticatedBrandKitRoute: AuthenticatedBrandKitRoute,
