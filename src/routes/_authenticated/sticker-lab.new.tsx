@@ -17,24 +17,36 @@ import {
   syncStickerJob,
 } from "@/lib/sticker-ai";
 import {
-  friendlyProviderError,
+  classifyProviderError,
   hydrateDraftFromPack,
   loadAssets,
   loadLatestJobs,
   loadPackStickers,
   persistDraft,
+  summarizeAttempts,
   type AiJobRow,
   type PersistResult,
+  type ProviderFailure,
   type StickerRow,
 } from "@/lib/sticker-packs";
+import {
+  downloadStickerPng,
+  downloadStickersZip,
+  packZipName,
+  stickerFileName,
+} from "@/lib/sticker-export";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
   ArrowRight,
   Check,
+  CircleCheck,
+  Download,
+  FileArchive,
   ImagePlus,
   Info,
   Loader2,
+  Pencil,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -44,6 +56,7 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
+
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { Button } from "@/components/ui/button";
