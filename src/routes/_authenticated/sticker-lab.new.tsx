@@ -284,8 +284,10 @@ function StickerLabBuilder() {
   }, []);
 
   useEffect(() => {
-    if (packId) void loadExisting(packId);
-  }, [packId, loadExisting]);
+    if (!packId) return;
+    if (step !== 4 && step !== 5) return;
+    void loadExisting(packId);
+  }, [packId, step, loadExisting]);
 
   if (!draft) {
     return (
