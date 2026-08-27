@@ -182,8 +182,11 @@ export const BUILDER_STEPS = [
 export type BuilderDraft = {
   characterName: string;
   imageName: string | null;
+  /** Primary uploaded reference (legacy single-reference field). */
   referenceAssetId: string | null;
   referenceStoragePath: string | null;
+  /** Up to 3 workspace references explicitly selected for generation. */
+  referenceAssetIds: string[];
   packName: string;
   theme: PackTheme;
   size: PackSize;
@@ -191,7 +194,13 @@ export type BuilderDraft = {
   styleNotes: string;
   concepts: Concept[];
   keywords: Record<string, string>;
+  /** Persisted pack row id, so retries reuse the same rows. */
+  packId: string | null;
+  /** Local concept id -> persisted sticker row id. */
+  stickerIds: Record<string, string>;
 };
+
+export const MAX_REFERENCES = 3;
 
 export const DRAFT_KEY = "cartel-hq:sticker-lab:draft";
 
@@ -201,6 +210,7 @@ export function emptyDraft(): BuilderDraft {
     imageName: null,
     referenceAssetId: null,
     referenceStoragePath: null,
+    referenceAssetIds: [],
     packName: "",
     theme: "Crypto",
     size: 12,
@@ -208,8 +218,11 @@ export function emptyDraft(): BuilderDraft {
     styleNotes: "",
     concepts: starterConcepts("Crypto", 12),
     keywords: {},
+    packId: null,
+    stickerIds: {},
   };
 }
+
 
 export function loadDraft(): BuilderDraft {
   if (typeof window === "undefined") return emptyDraft();
