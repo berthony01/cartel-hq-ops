@@ -23,10 +23,16 @@ export type TelegramGroupConnection = {
 export type TelegramGroupStatusResult = {
   bot?: TelegramBot;
   group?: TelegramGroupConnection | null;
+  /** Basic operational readiness: supergroup + bot admin + Change Group Info. */
   ready?: boolean;
   botIsAdmin?: boolean;
+  botCanChangeInfo?: boolean;
   canSetStickerSet?: boolean;
   chatType?: string;
+  memberCount?: number | null;
+  minMembers?: number;
+  officialStickerEligible?: boolean;
+  officialStickerReason?: OfficialStickerReason;
   currentStickerSetName?: string | null;
   message?: string;
   technical?: string;
@@ -34,6 +40,11 @@ export type TelegramGroupStatusResult = {
 
 export type TelegramAssignPackResult = {
   assigned: boolean;
+  /** Server posted the pack link into the group instead of assigning it. */
+  announced?: boolean;
+  reason?: "GROUP_STICKER_MIN_MEMBERS" | "GROUP_STICKER_NOT_AVAILABLE" | string;
+  memberCount?: number | null;
+  minMembers?: number;
   group?: TelegramGroupConnection | null;
   setName?: string;
   setUrl?: string;
