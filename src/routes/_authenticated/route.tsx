@@ -4,23 +4,33 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/cartel/AppShell";
 import { WorkspaceProvider } from "@/lib/workspace-context";
 
-/** Never let a hung auth call leave the whole app rendering nothing. */
-const AUTH_TIMEOUT_MS = 8000;
+/** Fail-safe against Supabase auth storage lock hangs. getSession() is local,
+ *  so this should resolve almost instantly; the timeout guards pathological
+ *  lock contention, not normal network latency. */
+const AUTH_INIT_TIMEOUT_MS = 2000;
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async ({ location }) => {
-    const timeout = new Promise<never>((_, reject) => {
-      setTimeout(
-        () => reject(new Error("Session check timed out. Check your connection and try again.")),
-        AUTH_TIMEOUT_MS,
-      );
-    });
-    const { data, error } = await Promise.race([supabase.auth.getUser(), timeout]);
-    if (error || !data.user) {
+    const { data, error } = await Promise.race([
+      supabase.auth.getSession(),
+      new Promise<{ data: { session: null }; error: Error }>((resolve) => {
+        setTimeout(() => {
+          resolve({
+            data: { session: null },
+            error: new Error(
+              "Auth storage is taking too long to initialize. Please refresh the page.",
+            ),
+          });
+        }, AUTH_INIT_TIMEOUT_MS);
+      }),
+    ]);
+
+    const session = data?.session;
+    if (error || !session?.user) {
       throw redirect({ to: "/auth", search: { redirect: location.href } });
     }
-    return { user: data.user };
+    return { user: session.user };
   },
   // Without this the pathless layout renders literally nothing while
   // beforeLoad is in flight, which reads as a blank black screen.
@@ -39,7 +49,6 @@ function AuthPending() {
     </div>
   );
 }
-
 
 function AuthenticatedLayout() {
   return (
