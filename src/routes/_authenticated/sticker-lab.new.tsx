@@ -456,19 +456,28 @@ function StickerLabBuilder() {
             setCheckProgress({ done, total: pending.length });
             continue;
           }
+          // Single fetch: real-alpha verification plus Telegram-cutout analysis.
           // eslint-disable-next-line no-await-in-loop
-          const check = await verifyAlphaAtUrl(freshUrl);
+          const check = await prepareTelegramCutoutAtUrl(freshUrl);
           if (!aliveRef.current) return;
           setClientChecks((prev) => ({
             ...prev,
-            [item.stickerId]: check.ok
-              ? { source: item.source, status: "verified" }
-              : {
+            [item.stickerId]: !check.alphaOk
+              ? {
                   source: item.source,
                   status: "failed",
                   reason: check.reason ?? "transparency check failed",
+                  cutout: "failed",
+                }
+              : {
+                  source: item.source,
+                  status: "verified",
+                  reason: check.ok ? undefined : check.reason,
+                  cutout: check.ok ? (check.cleaned ? "will_clean" : "verified") : "failed",
+                  removedPixels: check.removedPixels,
                 },
           }));
+
           done += 1;
           setCheckProgress({ done, total: pending.length });
         }
