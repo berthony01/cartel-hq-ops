@@ -383,13 +383,13 @@ function StickerLabBuilder() {
   };
 
   /** Runs one sticker through the server pipeline. Only ever user initiated. */
-  const runGeneration = async (conceptId: string, stickerId: string) => {
+  const runGeneration = async (conceptId: string, stickerId: string, packId: string) => {
     setErrors((e) => ({ ...e, [stickerId]: "" }));
     setStages((s) => ({ ...s, [stickerId]: "generating" }));
     try {
       const started = await startStickerGeneration({
         workspaceId: workspaceId!,
-        packId: draft.packId ?? "",
+        packId,
         stickerId,
         referenceAssetIds: draft.referenceAssetIds,
       });
@@ -432,7 +432,7 @@ function StickerLabBuilder() {
             return;
           }
           // Succeeded without an asset yet — refresh from the database.
-          if (draft.packId) await loadExisting(draft.packId);
+          await loadExisting(packId);
           setStages((s) => ({ ...s, [stickerId]: "ready" }));
           return;
         }
@@ -465,7 +465,7 @@ function StickerLabBuilder() {
       toast.error("That concept could not be matched to a saved sticker.");
       return;
     }
-    await runGeneration(conceptId, stickerId);
+    await runGeneration(conceptId, stickerId, result.packId);
   };
 
   const generateRemaining = async () => {
@@ -477,7 +477,7 @@ function StickerLabBuilder() {
       if (!stickerId) continue;
       if (stages[stickerId] === "ready" || previews[stickerId]) continue;
       // eslint-disable-next-line no-await-in-loop
-      await runGeneration(concept.id, stickerId);
+      await runGeneration(concept.id, stickerId, result.packId);
       if (!aliveRef.current) return;
     }
   };
