@@ -441,8 +441,12 @@ function StickerLabBuilder() {
 
   /** Runs one sticker through the server pipeline. Only ever user initiated. */
   const runGeneration = async (conceptId: string, stickerId: string, packId: string) => {
+    const hadPreview = !!previews[stickerId];
     setErrors((e) => ({ ...e, [stickerId]: "" }));
-    setStages((s) => ({ ...s, [stickerId]: "generating" }));
+    setNotes((n) => ({ ...n, [stickerId]: "" }));
+    // No "Generating" until the server confirms a job id.
+    setStages((s) => ({ ...s, [stickerId]: "starting" }));
+    pollingRef.current.add(stickerId);
     try {
       const started = await startStickerGeneration({
         workspaceId: workspaceId!,
@@ -450,7 +454,9 @@ function StickerLabBuilder() {
         stickerId,
         referenceAssetIds: draft.referenceAssetIds,
       });
+      if (!started.aiJobId) throw new Error("The generation service did not return a job id.");
       let jobId = started.aiJobId;
+      setStages((s) => ({ ...s, [stickerId]: "generating" }));
       let delay = 3000;
       const deadline = Date.now() + POLL_TIMEOUT_MS;
 
@@ -462,11 +468,12 @@ function StickerLabBuilder() {
         if (!aliveRef.current) return;
 
         if (res.status === "failed") {
-          setStages((s) => ({ ...s, [stickerId]: "failed" }));
-          setErrors((e) => ({
-            ...e,
-            [stickerId]: res.error || "Generation failed. The previous image was kept.",
-          }));
+          setStages((s) => ({ ...s, [stickerId]: hadPreview ? "replacement_failed" : "failed" }));
+          setErrors((e) => ({ ...e, [stickerId]: friendlyProviderError(res.error, res.stage) }));
+          if (res.error) setDebugErrors((d) => ({ ...d, [stickerId]: res.error as string }));
+          if ((res.stage ?? "").includes("background")) {
+            setNotes((n) => ({ ...n, [stickerId]: "Background removal failed" }));
+          }
           return;
         }
         if (res.status === "succeeded") {
@@ -479,7 +486,10 @@ function StickerLabBuilder() {
           if (res.assetId) {
             setStages((s) => ({ ...s, [stickerId]: "verifying" }));
             const ok = await attachAsset(stickerId, res.assetId);
-            setStages((s) => ({ ...s, [stickerId]: ok ? "ready" : "failed" }));
+            setStages((s) => ({
+              ...s,
+              [stickerId]: ok ? "ready" : hadPreview ? "replacement_failed" : "failed",
+            }));
             if (!ok) {
               setErrors((e) => ({
                 ...e,
@@ -488,9 +498,9 @@ function StickerLabBuilder() {
             }
             return;
           }
-          // Succeeded without an asset yet — refresh from the database.
+          // Succeeded without an asset yet — reconcile from the database.
+          pollingRef.current.delete(stickerId);
           await loadExisting(packId);
-          setStages((s) => ({ ...s, [stickerId]: "ready" }));
           return;
         }
         if (res.stage === "background_removal") {
@@ -504,8 +514,13 @@ function StickerLabBuilder() {
       }));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Generation could not start.";
-      setStages((s) => ({ ...s, [stickerId]: "failed" }));
+      toast.error(message);
       setErrors((e) => ({ ...e, [stickerId]: message }));
+      // Fall back to durable, backend-derived state.
+      pollingRef.current.delete(stickerId);
+      await loadExisting(packId);
+    } finally {
+      pollingRef.current.delete(stickerId);
     }
     void conceptId;
   };
@@ -517,6 +532,7 @@ function StickerLabBuilder() {
       setStages((s) => ({ ...s, [`concept:${conceptId}`]: "idle" }));
       return;
     }
+    setStages((s) => ({ ...s, [`concept:${conceptId}`]: "idle" }));
     const stickerId = result.stickerIds[conceptId];
     if (!stickerId) {
       toast.error("That concept could not be matched to a saved sticker.");
@@ -539,6 +555,12 @@ function StickerLabBuilder() {
     }
   };
 
+  const refreshStatus = () => {
+    void configQuery.refetch();
+    const id = draft.packId;
+    if (id) void loadExisting(id);
+  };
+
   const stickerIdFor = (conceptId: string) => draft.stickerIds[conceptId] ?? null;
   const stageFor = (conceptId: string): Stage => {
     const id = stickerIdFor(conceptId);
@@ -548,7 +570,13 @@ function StickerLabBuilder() {
     return stages[id] ?? (previews[id] ? "ready" : "idle");
   };
   const busy = (stage: Stage) =>
-    stage === "saving" || stage === "generating" || stage === "background" || stage === "verifying";
+    stage === "saving" ||
+    stage === "starting" ||
+    stage === "generating" ||
+    stage === "background" ||
+    stage === "verifying";
+  const isFailure = (stage: Stage) =>
+    stage === "failed" || stage === "replacement_failed" || stage === "timeout";
 
   const anyBusy = draft.concepts.some((c) => busy(stageFor(c.id)));
   const generatedCount = draft.concepts.filter((c) => stageFor(c.id) === "ready").length;
