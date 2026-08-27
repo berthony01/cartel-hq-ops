@@ -79,7 +79,8 @@ type BuilderSearch = { pack?: string };
 
 export const Route = createFileRoute("/_authenticated/sticker-lab/new")({
   validateSearch: (search: Record<string, unknown>): BuilderSearch => {
-    const pack = typeof search.pack === "string" ? search.pack.trim() : "";
+    const raw = search["pack"];
+    const pack = typeof raw === "string" ? raw.trim() : "";
     return pack ? { pack } : {};
   },
 
