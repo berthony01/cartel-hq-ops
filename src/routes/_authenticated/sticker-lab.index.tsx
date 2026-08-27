@@ -130,9 +130,20 @@ function StickerLabHome() {
                         {relativeTime(pack.updated_at)}
                       </p>
                     </div>
-                    <StatusBadge tone={pack.status === "review" ? "green" : "muted"}>
-                      {pack.status}
-                    </StatusBadge>
+                    {(() => {
+                      // A pack is only "generating" while stickers are actually active.
+                      const label =
+                        pack.status === "generating" && pack.active === 0
+                          ? pack.ready > 0
+                            ? "review"
+                            : "draft"
+                          : pack.status;
+                      return (
+                        <StatusBadge tone={label === "review" ? "green" : "muted"}>
+                          {label}
+                        </StatusBadge>
+                      );
+                    })()}
                   </li>
                 ))}
               </ul>

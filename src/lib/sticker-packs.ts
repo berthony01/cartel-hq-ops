@@ -33,7 +33,7 @@ const PACK_COLUMNS =
 const STICKER_COLUMNS =
   "id,pack_id,sort_order,label,action_description,emoji_list,keyword_list,status,image_asset_id,updated_at";
 
-export type PackSummary = PackRow & { total: number; ready: number };
+export type PackSummary = PackRow & { total: number; ready: number; active: number };
 
 /** Real workspace packs for the Sticker Lab home list. */
 export async function listWorkspacePacks(workspaceId: string): Promise<PackSummary[]> {
@@ -62,9 +62,65 @@ export async function listWorkspacePacks(workspaceId: string): Promise<PackSumma
       ...p,
       total: rows.length,
       ready: rows.filter((s) => s.status === "ready").length,
+      active: rows.filter((s) => s.status === "generating" || s.status === "queued").length,
     };
   });
 }
+
+export type AiJobRow = {
+  id: string;
+  sticker_id: string | null;
+  job_type: string;
+  status: string;
+  error_message: string | null;
+  created_at: string;
+};
+
+/**
+ * Latest ai_jobs rows per sticker, newest first. Read-only; never touches the
+ * provider. Used to derive durable card state after a browser refresh.
+ */
+export async function loadLatestJobs(
+  stickerIds: string[],
+): Promise<Record<string, AiJobRow[]>> {
+  const out: Record<string, AiJobRow[]> = {};
+  const unique = Array.from(new Set(stickerIds.filter(Boolean)));
+  if (unique.length === 0) return out;
+  const { data, error } = await supabase
+    .from("ai_jobs")
+    .select("id,sticker_id,job_type,status,error_message,created_at")
+    .in("sticker_id", unique)
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (error) throw error;
+  for (const row of (data ?? []) as AiJobRow[]) {
+    if (!row.sticker_id) continue;
+    (out[row.sticker_id] ??= []).push(row);
+  }
+  return out;
+}
+
+/**
+ * Maps a raw provider error to a user-safe English message. The raw text is
+ * kept by callers for developer/debug surfaces only.
+ */
+export function friendlyProviderError(raw: string | null | undefined, jobType?: string): string {
+  const fallback =
+    jobType && jobType.includes("background")
+      ? "Background removal failed. Retry this sticker."
+      : "The last attempt failed. Retry this sticker.";
+  if (!raw) return fallback;
+  if (raw.includes("服务繁忙") || /busy/i.test(raw)) {
+    const queued = raw.match(/(\d+)/)?.[1];
+    return queued
+      ? `Kie is temporarily busy (${queued} tasks were queued). Please retry this sticker in a few minutes.`
+      : "Kie is temporarily busy. Please retry this sticker in a few minutes.";
+  }
+  // Avoid surfacing non-Latin provider text directly in the UI.
+  if (/[^\u0000-\u024F]/.test(raw)) return fallback;
+  return raw;
+}
+
 
 export async function loadPackStickers(packId: string): Promise<StickerRow[]> {
   const { data, error } = await supabase

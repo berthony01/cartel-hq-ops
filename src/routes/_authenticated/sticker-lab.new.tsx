@@ -17,9 +17,12 @@ import {
   syncStickerJob,
 } from "@/lib/sticker-ai";
 import {
+  friendlyProviderError,
   loadAssets,
+  loadLatestJobs,
   loadPackStickers,
   persistDraft,
+  type AiJobRow,
   type PersistResult,
   type StickerRow,
 } from "@/lib/sticker-packs";
@@ -99,21 +102,25 @@ const POLL_TIMEOUT_MS = 15 * 60 * 1000;
 type Stage =
   | "idle"
   | "saving"
+  | "starting"
   | "generating"
   | "background"
   | "verifying"
   | "ready"
   | "failed"
+  | "replacement_failed"
   | "timeout";
 
 const STAGE_LABEL: Record<Stage, string> = {
   idle: "Not generated",
   saving: "Saving pack…",
+  starting: "Starting…",
   generating: "Generating",
   background: "Background removal",
   verifying: "Transparency check",
   ready: "Ready",
   failed: "Failed",
+  replacement_failed: "Replacement failed",
   timeout: "Timed out",
 };
 
@@ -141,10 +148,14 @@ function StickerLabBuilder() {
   const [saving, setSaving] = useState(false);
   const [stages, setStages] = useState<Record<string, Stage>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [debugErrors, setDebugErrors] = useState<Record<string, string>>({});
   const [previews, setPreviews] = useState<Record<string, Preview>>({});
   const [confirmRemaining, setConfirmRemaining] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const aliveRef = useRef(true);
+  /** Sticker ids currently polled in this tab — their live stage wins. */
+  const pollingRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     aliveRef.current = true;
@@ -199,7 +210,11 @@ function StickerLabBuilder() {
 
   const packId = draft?.packId ?? null;
 
-  // Load already-persisted sticker rows and their verified assets (no provider call).
+  /**
+   * Durable state: reconciles every persisted sticker against Supabase
+   * `stickers`, `media_assets` and the latest related `ai_jobs` rows.
+   * Read-only — never calls the provider and never spends credits.
+   */
   const loadExisting = useCallback(async (id: string) => {
     let rows: StickerRow[] = [];
     try {
@@ -208,27 +223,71 @@ function StickerLabBuilder() {
       return;
     }
     const assetIds = rows.map((r) => r.image_asset_id).filter(Boolean) as string[];
-    const assets = await loadAssets(assetIds);
+    let assets: Awaited<ReturnType<typeof loadAssets>> = {};
+    let jobs: Record<string, AiJobRow[]> = {};
+    try {
+      [assets, jobs] = await Promise.all([
+        loadAssets(assetIds),
+        loadLatestJobs(rows.map((r) => r.id)),
+      ]);
+    } catch {
+      /* keep whatever resolved; states below degrade safely */
+    }
     const paths = Object.values(assets).map((a) => a.storage_path);
     const urls = await signedUrlMap(paths);
     if (!aliveRef.current) return;
+
     const nextPreviews: Record<string, Preview> = {};
     const nextStages: Record<string, Stage> = {};
+    const nextErrors: Record<string, string> = {};
+    const nextNotes: Record<string, string> = {};
+    const nextDebug: Record<string, string> = {};
+
     for (const row of rows) {
       const asset = row.image_asset_id ? assets[row.image_asset_id] : undefined;
       const url = asset ? urls[asset.storage_path] : undefined;
+      const hasAsset = !!(asset && url);
       if (asset && url) {
         nextPreviews[row.id] = { url, transparencyValid: asset.transparency_valid === true };
+      }
+      // A locally polling sticker owns its own transient stage.
+      if (pollingRef.current.has(row.id)) continue;
+
+      const latest = jobs[row.id]?.[0];
+      const isBackground = (latest?.job_type ?? "").toLowerCase().includes("background");
+
+      if (latest && (latest.status === "queued" || latest.status === "running")) {
+        nextStages[row.id] = isBackground ? "background" : "generating";
+        nextErrors[row.id] = "";
+      } else if (latest && latest.status === "failed") {
+        nextStages[row.id] = hasAsset ? "replacement_failed" : "failed";
+        nextErrors[row.id] = friendlyProviderError(latest.error_message, latest.job_type);
+        if (isBackground) nextNotes[row.id] = "Background removal failed";
+        if (latest.error_message) nextDebug[row.id] = latest.error_message;
+      } else if (hasAsset) {
         nextStages[row.id] = "ready";
+        nextErrors[row.id] = "";
+      } else if (latest) {
+        // Job finished without a stored asset — not a usable sticker.
+        nextStages[row.id] = "failed";
+        nextErrors[row.id] = "The last attempt finished without a stored image. Retry this sticker.";
+      } else {
+        nextStages[row.id] = "idle";
       }
     }
-    setPreviews((p) => ({ ...nextPreviews, ...p }));
-    setStages((s) => ({ ...nextStages, ...s }));
+
+    setPreviews((p) => ({ ...p, ...nextPreviews }));
+    setStages((s) => ({ ...s, ...nextStages }));
+    setErrors((e) => ({ ...e, ...nextErrors }));
+    setNotes((n) => ({ ...n, ...nextNotes }));
+    setDebugErrors((d) => ({ ...d, ...nextDebug }));
   }, []);
 
   useEffect(() => {
-    if (packId) void loadExisting(packId);
-  }, [packId, loadExisting]);
+    if (!packId) return;
+    if (step !== 4 && step !== 5) return;
+    void loadExisting(packId);
+  }, [packId, step, loadExisting]);
 
   if (!draft) {
     return (
@@ -384,8 +443,12 @@ function StickerLabBuilder() {
 
   /** Runs one sticker through the server pipeline. Only ever user initiated. */
   const runGeneration = async (conceptId: string, stickerId: string, packId: string) => {
+    const hadPreview = !!previews[stickerId];
     setErrors((e) => ({ ...e, [stickerId]: "" }));
-    setStages((s) => ({ ...s, [stickerId]: "generating" }));
+    setNotes((n) => ({ ...n, [stickerId]: "" }));
+    // No "Generating" until the server confirms a job id.
+    setStages((s) => ({ ...s, [stickerId]: "starting" }));
+    pollingRef.current.add(stickerId);
     try {
       const started = await startStickerGeneration({
         workspaceId: workspaceId!,
@@ -393,7 +456,9 @@ function StickerLabBuilder() {
         stickerId,
         referenceAssetIds: draft.referenceAssetIds,
       });
+      if (!started.aiJobId) throw new Error("The generation service did not return a job id.");
       let jobId = started.aiJobId;
+      setStages((s) => ({ ...s, [stickerId]: "generating" }));
       let delay = 3000;
       const deadline = Date.now() + POLL_TIMEOUT_MS;
 
@@ -405,11 +470,12 @@ function StickerLabBuilder() {
         if (!aliveRef.current) return;
 
         if (res.status === "failed") {
-          setStages((s) => ({ ...s, [stickerId]: "failed" }));
-          setErrors((e) => ({
-            ...e,
-            [stickerId]: res.error || "Generation failed. The previous image was kept.",
-          }));
+          setStages((s) => ({ ...s, [stickerId]: hadPreview ? "replacement_failed" : "failed" }));
+          setErrors((e) => ({ ...e, [stickerId]: friendlyProviderError(res.error, res.stage) }));
+          if (res.error) setDebugErrors((d) => ({ ...d, [stickerId]: res.error as string }));
+          if ((res.stage ?? "").includes("background")) {
+            setNotes((n) => ({ ...n, [stickerId]: "Background removal failed" }));
+          }
           return;
         }
         if (res.status === "succeeded") {
@@ -422,7 +488,10 @@ function StickerLabBuilder() {
           if (res.assetId) {
             setStages((s) => ({ ...s, [stickerId]: "verifying" }));
             const ok = await attachAsset(stickerId, res.assetId);
-            setStages((s) => ({ ...s, [stickerId]: ok ? "ready" : "failed" }));
+            setStages((s) => ({
+              ...s,
+              [stickerId]: ok ? "ready" : hadPreview ? "replacement_failed" : "failed",
+            }));
             if (!ok) {
               setErrors((e) => ({
                 ...e,
@@ -431,9 +500,9 @@ function StickerLabBuilder() {
             }
             return;
           }
-          // Succeeded without an asset yet — refresh from the database.
+          // Succeeded without an asset yet — reconcile from the database.
+          pollingRef.current.delete(stickerId);
           await loadExisting(packId);
-          setStages((s) => ({ ...s, [stickerId]: "ready" }));
           return;
         }
         if (res.stage === "background_removal") {
@@ -447,8 +516,13 @@ function StickerLabBuilder() {
       }));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Generation could not start.";
-      setStages((s) => ({ ...s, [stickerId]: "failed" }));
+      toast.error(message);
       setErrors((e) => ({ ...e, [stickerId]: message }));
+      // Fall back to durable, backend-derived state.
+      pollingRef.current.delete(stickerId);
+      await loadExisting(packId);
+    } finally {
+      pollingRef.current.delete(stickerId);
     }
     void conceptId;
   };
@@ -460,6 +534,7 @@ function StickerLabBuilder() {
       setStages((s) => ({ ...s, [`concept:${conceptId}`]: "idle" }));
       return;
     }
+    setStages((s) => ({ ...s, [`concept:${conceptId}`]: "idle" }));
     const stickerId = result.stickerIds[conceptId];
     if (!stickerId) {
       toast.error("That concept could not be matched to a saved sticker.");
@@ -482,6 +557,12 @@ function StickerLabBuilder() {
     }
   };
 
+  const refreshStatus = () => {
+    void configQuery.refetch();
+    const id = draft.packId;
+    if (id) void loadExisting(id);
+  };
+
   const stickerIdFor = (conceptId: string) => draft.stickerIds[conceptId] ?? null;
   const stageFor = (conceptId: string): Stage => {
     const id = stickerIdFor(conceptId);
@@ -491,7 +572,13 @@ function StickerLabBuilder() {
     return stages[id] ?? (previews[id] ? "ready" : "idle");
   };
   const busy = (stage: Stage) =>
-    stage === "saving" || stage === "generating" || stage === "background" || stage === "verifying";
+    stage === "saving" ||
+    stage === "starting" ||
+    stage === "generating" ||
+    stage === "background" ||
+    stage === "verifying";
+  const isFailure = (stage: Stage) =>
+    stage === "failed" || stage === "replacement_failed" || stage === "timeout";
 
   const anyBusy = draft.concepts.some((c) => busy(stageFor(c.id)));
   const generatedCount = draft.concepts.filter((c) => stageFor(c.id) === "ready").length;
@@ -923,7 +1010,7 @@ function StickerLabBuilder() {
               variant="outline"
               size="sm"
               className="min-h-10"
-              onClick={() => void configQuery.refetch()}
+              onClick={refreshStatus}
             >
               <RefreshCw className="size-4" aria-hidden="true" />
               Refresh status
@@ -1000,6 +1087,8 @@ function StickerLabBuilder() {
               const stickerId = stickerIdFor(c.id);
               const preview = stickerId ? previews[stickerId] : undefined;
               const error = stickerId ? errors[stickerId] : undefined;
+              const note = stickerId ? notes[stickerId] : undefined;
+              const debug = stickerId ? debugErrors[stickerId] : undefined;
               return (
                 <li key={c.id} className="cartel-panel rounded-lg p-4">
                   <div className="mb-3 flex items-center justify-between gap-2">
@@ -1010,7 +1099,7 @@ function StickerLabBuilder() {
                       tone={
                         stage === "ready"
                           ? "green"
-                          : stage === "failed" || stage === "timeout"
+                          : isFailure(stage)
                             ? "red"
                             : busy(stage)
                               ? "gold"
@@ -1047,8 +1136,11 @@ function StickerLabBuilder() {
                         : "Transparency not verified"}
                     </p>
                   ) : null}
+                  {note ? (
+                    <p className="mt-2 text-[11px] text-muted-foreground">{note}</p>
+                  ) : null}
                   {error ? (
-                    <p role="alert" className="mt-2 text-[11px] text-signal">
+                    <p role="alert" title={debug || undefined} className="mt-2 text-[11px] text-signal">
                       {error}
                     </p>
                   ) : null}
@@ -1063,7 +1155,7 @@ function StickerLabBuilder() {
                     {busy(stage) ? (
                       <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                     ) : null}
-                    {preview ? "Regenerate" : "Generate"}
+                    {isFailure(stage) ? "Retry" : preview ? "Regenerate" : "Generate"}
                   </Button>
                 </li>
               );
@@ -1100,6 +1192,8 @@ function StickerLabBuilder() {
             {draft.concepts.map((c) => {
               const stickerId = stickerIdFor(c.id);
               const preview = stickerId ? previews[stickerId] : undefined;
+              const stage = stageFor(c.id);
+              const error = stickerId ? errors[stickerId] : undefined;
               return (
                 <li key={c.id} className="cartel-panel rounded-lg p-4">
                   <div className="flex items-center gap-3">
@@ -1123,15 +1217,26 @@ function StickerLabBuilder() {
                       <p className="truncate text-sm font-semibold text-foreground">{c.label}</p>
                       <p
                         className={`truncate text-xs ${
-                          preview?.transparencyValid ? "text-pepe" : "text-muted-foreground"
+                          stage === "ready" && preview?.transparencyValid
+                            ? "text-pepe"
+                            : isFailure(stage)
+                              ? "text-signal"
+                              : "text-muted-foreground"
                         }`}
                       >
                         {preview
-                          ? preview.transparencyValid
-                            ? "Transparency verified"
-                            : "Transparency not verified"
-                          : "Not generated yet"}
+                          ? isFailure(stage)
+                            ? STAGE_LABEL[stage]
+                            : preview.transparencyValid
+                              ? "Transparency verified"
+                              : "Transparency not verified"
+                          : STAGE_LABEL[stage]}
                       </p>
+                      {isFailure(stage) && error ? (
+                        <p className="truncate text-[11px] text-signal" title={error}>
+                          {error}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                   <div className="mt-3 grid grid-cols-[5rem_1fr] gap-2">
