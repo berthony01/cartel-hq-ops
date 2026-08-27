@@ -383,28 +383,33 @@ export function TelegramGroupCard({
                     {lastCheck.bot_can_change_info === true ? "Enabled" : "Needs to be enabled"}
                   </StatusBadge>
 
-                  <span className="text-muted-foreground">Group sticker-set permission</span>
+                  <span className="text-muted-foreground">Official group sticker set</span>
                   <StatusBadge
-                    tone={
-                      lastCheck.can_set_sticker_set === true
-                        ? "green"
-                        : lastCheck.can_set_sticker_set === false
-                          ? "red"
-                          : "muted"
-                    }
+                    tone={lastCheck.official_group_sticker_eligible === true ? "green" : "gold"}
                   >
-                    {lastCheck.can_set_sticker_set === true
-                      ? "Verified"
-                      : lastCheck.can_set_sticker_set === false
-                        ? "Telegram has not granted it yet"
+                    {lastCheck.official_group_sticker_eligible === true
+                      ? "Eligible"
+                      : lastCheck.official_group_sticker_reason === "minimum_members"
+                        ? `Unlocks at ${lastCheck.official_group_sticker_min_members ?? 100} members (${lastCheck.member_count ?? "?"})`
                         : "Not reported by Telegram yet"}
                   </StatusBadge>
                 </div>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  Fix the item shown above, save the admin rights in Telegram, then send{" "}
-                  <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
-                  in the group again while this link is active.
-                </p>
+                {lastCheck.user_is_admin === true &&
+                lastCheck.bot_is_admin === true &&
+                lastCheck.bot_can_change_info === true ? (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Admin rights look correct.{" "}
+                    {lastCheck.official_group_sticker_reason === "minimum_members"
+                      ? `Telegram only allows an official group sticker set from ${lastCheck.official_group_sticker_min_members ?? 100} members (this group has ${lastCheck.member_count ?? "fewer"}). No further permission changes are needed — publishing and native stickers still work.`
+                      : "No further permission changes are needed."}
+                  </p>
+                ) : (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Fix the item shown above, save the admin rights in Telegram, then send{" "}
+                    <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
+                    in the group again while this link is active.
+                  </p>
+                )}
               </div>
             ) : null}
 
