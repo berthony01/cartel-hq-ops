@@ -380,6 +380,65 @@ function StickerLabBuilder() {
     setJobHistory((h) => ({ ...h, ...jobs }));
   }, []);
 
+  /**
+   * Second, browser-side transparency verification. Read-only: it fetches the
+   * already-signed preview URL and inspects the original PNG bytes with the same
+   * verifyAlpha() helper used at export time. Nothing is uploaded, re-encoded or
+   * written back to Supabase, and no provider call is made.
+   */
+  const runClientVerification = useCallback(
+    async (force = false) => {
+      if (verifyRunRef.current) return;
+      const candidates = Object.entries(previews)
+        .filter(([, p]) => p.transparencyValid === true && !!p.url)
+        .map(([stickerId, p]) => ({ stickerId, url: p.url }));
+      const pending = candidates.filter(({ stickerId, url }) => {
+        const existing = clientChecks[stickerId];
+        return force || !existing || existing.url !== url;
+      });
+      if (pending.length === 0) return;
+
+      verifyRunRef.current = true;
+      setCheckProgress({ done: 0, total: pending.length });
+      setClientChecks((prev) => {
+        const next = { ...prev };
+        for (const { stickerId, url } of pending) next[stickerId] = { url, status: "checking" };
+        return next;
+      });
+
+      let done = 0;
+      const queue = [...pending];
+      const worker = async () => {
+        for (;;) {
+          const item = queue.shift();
+          if (!item) return;
+          // eslint-disable-next-line no-await-in-loop
+          const check = await verifyAlphaAtUrl(item.url);
+          if (!aliveRef.current) return;
+          setClientChecks((prev) => ({
+            ...prev,
+            [item.stickerId]: check.ok
+              ? { url: item.url, status: "verified" }
+              : { url: item.url, status: "failed", reason: check.reason ?? "transparency check failed" },
+          }));
+          done += 1;
+          setCheckProgress({ done, total: pending.length });
+        }
+      };
+      try {
+        await Promise.all([worker(), worker(), worker()]);
+      } finally {
+        verifyRunRef.current = false;
+        if (aliveRef.current) setCheckProgress(null);
+      }
+    },
+    [previews, clientChecks],
+  );
+
+  useEffect(() => {
+    if (step !== 5) return;
+    void runClientVerification(false);
+  }, [step, runClientVerification]);
 
   useEffect(() => {
     if (!packId) return;
