@@ -963,6 +963,7 @@ function StickerLabBuilder() {
     if (!packId || !workspaceId || !telegramGroup.groupId) return;
     setAssigning(true);
     setAssignError(null);
+    setAssignNotice(null);
     try {
       const result = await assignPackToGroup({
         workspaceId,
