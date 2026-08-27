@@ -7,6 +7,11 @@ import {
   TelegramConnectionCard,
   useTelegramSetup,
 } from "@/components/cartel/TelegramConnectionCard";
+import {
+  TelegramGroupCard,
+  useTelegramGroupSetup,
+} from "@/components/cartel/TelegramGroupCard";
+
 
 export const Route = createFileRoute("/_authenticated/telegram")({
   head: () => ({
