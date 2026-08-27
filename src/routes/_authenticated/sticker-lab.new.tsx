@@ -709,19 +709,20 @@ function StickerLabBuilder() {
   const failedConcepts = draft.concepts.filter((c) => isFailure(stageFor(c.id)));
   const failedCount = failedConcepts.length;
   const activeCount = draft.concepts.filter((c) => busy(stageFor(c.id))).length;
-  const transparentCount = readyConcepts.filter((c) => {
-    const id = stickerIdFor(c.id);
-    return !!(id && previews[id]?.transparencyValid);
-  }).length;
+  // Single export invariant: ready AND has a preview AND transparency verified.
+  const isExportable = (conceptId: string) => {
+    if (stageFor(conceptId) !== "ready") return false;
+    const id = stickerIdFor(conceptId);
+    const preview = id ? previews[id] : undefined;
+    return !!preview && preview.transparencyValid === true;
+  };
+  const transparentCount = readyConcepts.filter((c) => isExportable(c.id)).length;
+  const exportableConcepts = draft.concepts.filter((c) => isExportable(c.id));
+  const exportableCount = exportableConcepts.length;
   const allReady = draft.concepts.length > 0 && generatedCount === draft.concepts.length && !anyBusy;
   // Export/publish readiness is stricter than "ready": transparency must be verified.
-  const exportReady =
-    draft.concepts.length > 0 &&
-    generatedCount === draft.concepts.length &&
-    transparentCount === draft.concepts.length;
-  const omittedLabels = draft.concepts
-    .filter((c) => stageFor(c.id) !== "ready")
-    .map((c) => c.label);
+  const exportReady = draft.concepts.length > 0 && exportableCount === draft.concepts.length;
+  const omittedLabels = draft.concepts.filter((c) => !isExportable(c.id)).map((c) => c.label);
   // Read-only history derived from already-loaded ai_jobs rows. No extra queries.
   const historyRows = draft.concepts
     .map((c) => {
@@ -761,8 +762,8 @@ function StickerLabBuilder() {
     const stickerId = stickerIdFor(conceptId);
     const preview = stickerId ? previews[stickerId] : undefined;
     const concept = draft.concepts.find((c) => c.id === conceptId);
-    if (!preview || !concept) {
-      toast.error("That sticker is not ready yet.");
+    if (!preview || !concept || !isExportable(conceptId)) {
+      toast.error("Only ready, transparency-verified stickers can be downloaded.");
       return;
     }
     try {
@@ -780,7 +781,7 @@ function StickerLabBuilder() {
       .map((c, i) => {
         const id = stickerIdFor(c.id);
         const preview = id ? previews[id] : undefined;
-        if (!preview || stageFor(c.id) !== "ready") return null;
+        if (!preview || !isExportable(c.id)) return null;
         return {
           filename: stickerFileName(draft.packName || "cartel-pack", i, c.label),
           url: preview.url,
@@ -788,7 +789,7 @@ function StickerLabBuilder() {
       })
       .filter(Boolean) as { filename: string; url: string }[];
     if (entries.length === 0) {
-      toast.error("There are no ready stickers to export yet.");
+      toast.error("There are no ready, transparency-verified stickers to export yet.");
       return;
     }
     setExporting(true);
@@ -1446,7 +1447,7 @@ function StickerLabBuilder() {
                           ? "Regenerate"
                           : "Generate"}
                     </Button>
-                    {preview ? (
+                    {isExportable(c.id) ? (
                       <Button
                         type="button"
                         size="sm"
@@ -1529,7 +1530,7 @@ function StickerLabBuilder() {
             <Button
               type="button"
               className="min-h-11"
-              disabled={exporting || generatedCount === 0}
+              disabled={exporting || exportableCount === 0}
               onClick={() => void downloadZip()}
             >
               {exporting ? (
@@ -1537,7 +1538,7 @@ function StickerLabBuilder() {
               ) : (
                 <Download className="size-4" aria-hidden="true" />
               )}
-              Download all as ZIP ({generatedCount})
+              Download all as ZIP ({exportableCount})
             </Button>
             <Button type="button" variant="outline" className="min-h-11" onClick={refreshStatus}>
               <RefreshCw className="size-4" aria-hidden="true" />
@@ -1551,8 +1552,8 @@ function StickerLabBuilder() {
 
           {omittedLabels.length > 0 ? (
             <p className="mb-6 text-xs text-muted-foreground">
-              The ZIP will contain {generatedCount} sticker
-              {generatedCount === 1 ? "" : "s"}. Not included ({omittedLabels.length}):{" "}
+              The ZIP will contain {exportableCount} sticker
+              {exportableCount === 1 ? "" : "s"}. Not included ({omittedLabels.length}):{" "}
               {omittedLabels.join(", ")}.
             </p>
           ) : null}
@@ -1646,7 +1647,7 @@ function StickerLabBuilder() {
                         </p>
                       ) : null}
                     </div>
-                    {preview ? (
+                    {isExportable(c.id) ? (
                       <Button
                         type="button"
                         size="sm"
