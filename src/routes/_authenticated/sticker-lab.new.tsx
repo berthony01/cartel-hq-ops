@@ -2482,8 +2482,8 @@ function StickerLabBuilder() {
               {!canPublish && !publishing && !allPublished ? (
                 <p className="text-xs text-muted-foreground">
                   Publishing needs: a configured bot, your connected Telegram account, a verified
-                  target supergroup (bot admin + Change Group Info), at least one export-ready
-                  sticker, and all browser/cutout checks finished.
+                  target group or supergroup (bot admin + Change Group Info), at least one
+                  export-ready sticker, and all browser/cutout checks finished.
                 </p>
               ) : null}
             </CardContent>
