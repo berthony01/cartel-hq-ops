@@ -181,9 +181,18 @@ function StickerLabBuilder() {
   const [jobHistory, setJobHistory] = useState<Record<string, AiJobRow[]>>({});
   const [confirmRemaining, setConfirmRemaining] = useState(false);
   const [exporting, setExporting] = useState(false);
+  /**
+   * Local-only, second transparency verification performed in the browser on the
+   * already-signed PNG bytes. Never written back to Supabase.
+   */
+  const [clientChecks, setClientChecks] = useState<
+    Record<string, { url: string; status: "checking" | "verified" | "failed"; reason?: string }>
+  >({});
+  const [checkProgress, setCheckProgress] = useState<{ done: number; total: number } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const aliveRef = useRef(true);
+  const verifyRunRef = useRef(false);
   /** Sticker ids currently polled in this tab — their live stage wins. */
   const pollingRef = useRef<Set<string>>(new Set());
 
