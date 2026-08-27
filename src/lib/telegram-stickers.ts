@@ -7,7 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
  * api.telegram.org and no bot token is ever read, stored or accepted client-side.
  */
 
-export type TelegramBot = { id?: number; username?: string; firstName?: string };
+export type TelegramBot = { id?: string; username?: string; firstName?: string };
 
 export type TelegramConfig = {
   configured: boolean;
@@ -16,7 +16,12 @@ export type TelegramConfig = {
   botStartUrl?: string;
 };
 
-export type TelegramPublishFailure = { stickerId?: string; label?: string; reason?: string };
+export type TelegramPublishFailure = {
+  stickerId?: string;
+  label?: string;
+  message?: string;
+  technical?: string;
+};
 
 export type TelegramPublishResult = {
   status: "published" | "partial" | "failed";
@@ -41,20 +46,38 @@ export type TelegramRefreshResult = {
 export type TelegramSendTestResult = {
   sent: boolean;
   bot?: TelegramBot;
-  detail?: string;
+  message?: string;
+  technical?: string;
   botStartUrl?: string;
 };
+
+/** Best-effort read of the server's JSON `message` from a non-2xx FunctionsHttpError. */
+async function readServerMessage(error: unknown): Promise<string | null> {
+  const ctx = (error as { context?: { json?: () => Promise<unknown> } } | null)?.context;
+  if (!ctx || typeof ctx.json !== "function") return null;
+  try {
+    const body = (await ctx.json()) as { message?: unknown; error?: unknown } | null;
+    const msg = body?.message ?? body?.error;
+    return typeof msg === "string" && msg.trim() ? msg.trim() : null;
+  } catch {
+    return null;
+  }
+}
 
 async function invoke<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke("telegram-stickers", { body });
   if (error) {
-    throw new Error(error.message || "The Telegram service is unavailable right now.");
+    const serverMessage = await readServerMessage(error);
+    throw new Error(
+      serverMessage || error.message || "The Telegram service is unavailable right now.",
+    );
   }
   const payload = data as (T & { error?: string; code?: string }) | null;
   if (!payload) throw new Error("Empty response from the Telegram service.");
   if (payload.error) throw new Error(payload.error);
   return payload as T;
 }
+
 
 /** Free probe. Reports whether the bot secret is configured server-side. */
 export function fetchTelegramConfig(): Promise<TelegramConfig> {
@@ -65,11 +88,14 @@ export function fetchTelegramConfig(): Promise<TelegramConfig> {
 export function publishPack(params: {
   workspaceId: string;
   packId: string;
+  /** Review/export-approved sticker row IDs. The server attempts only these. */
+  stickerIds: string[];
 }): Promise<TelegramPublishResult> {
   return invoke<TelegramPublishResult>({
     action: "publish",
     workspaceId: params.workspaceId,
     packId: params.packId,
+    stickerIds: params.stickerIds,
   });
 }
 

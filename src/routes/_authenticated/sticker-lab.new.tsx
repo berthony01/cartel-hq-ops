@@ -925,13 +925,23 @@ function StickerLabBuilder() {
     const id = stickerIdFor(c.id);
     return id ? tgStickers[id]?.status === "published" : false;
   }).length;
-  const packPublished = !!tgPack?.telegram_set_url && tgPublishedCount > 0;
+  const totalConcepts = draft.concepts.length;
+  const allPublished = totalConcepts > 0 && tgPublishedCount === totalConcepts;
+  const partiallyPublished = tgPublishedCount > 0 && !allPublished;
+  const telegramSetExists = !!tgPack?.telegram_set_url || !!tgPack?.telegram_set_name;
+  const canRetryPublish = !allPublished && (partiallyPublished || telegramSetExists);
+  // Only Review/export-approved sticker rows are ever sent to the server.
+  const reviewedStickerIds = draft.concepts
+    .filter((c) => isExportable(c.id))
+    .map((c) => stickerIdFor(c.id))
+    .filter((id): id is string => !!id);
   const canPublish =
     !!packId &&
     !!workspaceId &&
     telegram.botConfigured &&
     telegram.ownerConnected &&
-    exportableCount > 0 &&
+    reviewedStickerIds.length > 0 &&
+    !allPublished &&
     !checksRunning &&
     !publishing;
   const shortNamePreview = packId
@@ -943,7 +953,7 @@ function StickerLabBuilder() {
     setPublishing(true);
     setTgError(null);
     try {
-      const result = await publishPack({ workspaceId, packId });
+      const result = await publishPack({ workspaceId, packId, stickerIds: reviewedStickerIds });
       setPublishResult(result);
       await loadTelegramState(packId);
       if (result.status === "published") {
@@ -993,8 +1003,11 @@ function StickerLabBuilder() {
         setTestResult("Test sticker sent — check your Telegram chat with the bot.");
         toast.success("Native test sticker sent.");
       } else {
+        const base = result.message || "Telegram could not deliver the test sticker.";
         setTestResult(
-          `Telegram could not reach you${result.detail ? `: ${result.detail}` : ""}. Open the bot, tap Start, then retry.`,
+          result.botStartUrl
+            ? `${base} Open the bot in Telegram, tap Start, then retry.`
+            : base,
         );
         toast.error("Telegram could not deliver the test sticker.");
       }
@@ -2185,10 +2198,12 @@ function StickerLabBuilder() {
           <Card className="cartel-panel mt-6">
             <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
               <CardTitle className="text-base">Telegram publishing</CardTitle>
-              {packPublished ? (
+              {allPublished ? (
                 <StatusBadge tone="green">Published</StatusBadge>
-              ) : publishResult?.status === "partial" ? (
+              ) : partiallyPublished ? (
                 <StatusBadge tone="gold">Partly published</StatusBadge>
+              ) : publishResult?.status === "failed" ? (
+                <StatusBadge tone="red">Failed</StatusBadge>
               ) : (
                 <StatusBadge tone="muted">Not published</StatusBadge>
               )}
@@ -2251,11 +2266,16 @@ function StickerLabBuilder() {
               {publishResult?.failures?.length ? (
                 <details className="rounded-md border border-border bg-surface-raised p-3 text-xs">
                   <summary className="cursor-pointer font-semibold">Technical detail</summary>
-                  <ul className="mt-2 space-y-1 text-muted-foreground">
+                  <ul className="mt-2 space-y-2 text-muted-foreground">
                     {publishResult.failures.map((f, i) => (
                       <li key={`${f.stickerId ?? i}`}>
                         <span className="text-foreground">{f.label ?? f.stickerId ?? "Sticker"}</span>
-                        {f.reason ? ` — ${f.reason}` : ""}
+                        {f.message ? ` — ${f.message}` : ""}
+                        {f.technical ? (
+                          <span className="mt-1 block font-mono text-[11px] text-muted-foreground/80">
+                            {f.technical}
+                          </span>
+                        ) : null}
                       </li>
                     ))}
                   </ul>
@@ -2287,15 +2307,19 @@ function StickerLabBuilder() {
                 <Button
                   type="button"
                   className="min-h-11"
-                  disabled={!canPublish}
-                  onClick={() => (packPublished ? void doPublish() : setConfirmPublish(true))}
+                  disabled={allPublished || !canPublish}
+                  onClick={() => (canRetryPublish ? void doPublish() : setConfirmPublish(true))}
                 >
                   {publishing ? (
                     <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                   ) : (
                     <Send className="size-4" aria-hidden="true" />
                   )}
-                  {packPublished ? "Retry failed stickers" : "Publish sticker pack"}
+                  {allPublished
+                    ? "Published"
+                    : canRetryPublish
+                      ? "Retry failed stickers"
+                      : "Publish sticker pack"}
                 </Button>
                 <Button
                   type="button"
@@ -2332,7 +2356,7 @@ function StickerLabBuilder() {
                 </Button>
               </div>
 
-              {packPublished ? (
+              {canRetryPublish ? (
                 <p className="text-xs text-muted-foreground">
                   Retrying only re-attempts stickers that are not published yet — the existing set is
                   not recreated.
@@ -2343,7 +2367,7 @@ function StickerLabBuilder() {
                 The test sends a <strong>native Telegram sticker</strong>, not an image file. If
                 Telegram cannot reach you, open the bot, tap Start, then retry.
               </p>
-              {!canPublish && !publishing ? (
+              {!canPublish && !publishing && !allPublished ? (
                 <p className="text-xs text-muted-foreground">
                   Publishing needs: a configured bot, your numeric Telegram owner ID, at least one
                   export-ready sticker, and all browser/cutout checks finished.
@@ -2358,9 +2382,9 @@ function StickerLabBuilder() {
                 <AlertDialogTitle>Publish this pack to Telegram?</AlertDialogTitle>
                 <AlertDialogDescription>
                   This creates a real, shareable Telegram sticker set owned by your Telegram account
-                  ({telegram.connection?.telegram_user_id}). {exportableCount} verified sticker
-                  {exportableCount === 1 ? "" : "s"} will be uploaded. Sets cannot be transferred to
-                  another owner later.
+                  ({telegram.connection?.telegram_user_id}). {reviewedStickerIds.length} reviewed
+                  sticker{reviewedStickerIds.length === 1 ? "" : "s"} will be uploaded. Sets cannot
+                  be transferred to another owner later.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
