@@ -771,6 +771,7 @@ function StickerLabBuilder() {
         preview.url,
         stickerFileName(draft.packName || "cartel-pack", index, concept.label),
       );
+      toast.success("Transparent PNG verified and saved unchanged.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Download failed.");
     }
