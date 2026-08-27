@@ -311,9 +311,8 @@ function StickerLabBuilder() {
 
     const nextPreviews: Record<string, Preview> = {};
     const nextStages: Record<string, Stage> = {};
-    const nextErrors: Record<string, string> = {};
+    const nextFailures: Record<string, ProviderFailure | undefined> = {};
     const nextNotes: Record<string, string> = {};
-    const nextDebug: Record<string, string> = {};
 
     for (const row of rows) {
       const asset = row.image_asset_id ? assets[row.image_asset_id] : undefined;
@@ -330,19 +329,24 @@ function StickerLabBuilder() {
 
       if (latest && (latest.status === "queued" || latest.status === "running")) {
         nextStages[row.id] = isBackground ? "background" : "generating";
-        nextErrors[row.id] = "";
+        nextFailures[row.id] = undefined;
       } else if (latest && latest.status === "failed") {
+        // An existing valid asset is never discarded by a failed replacement.
         nextStages[row.id] = hasAsset ? "replacement_failed" : "failed";
-        nextErrors[row.id] = friendlyProviderError(latest.error_message, latest.job_type);
-        if (isBackground) nextNotes[row.id] = "Background removal failed";
-        if (latest.error_message) nextDebug[row.id] = latest.error_message;
+        nextFailures[row.id] = classifyProviderError(latest.error_message, latest.job_type);
+        if (isBackground) nextNotes[row.id] = "Background removal step";
       } else if (hasAsset) {
         nextStages[row.id] = "ready";
-        nextErrors[row.id] = "";
+        nextFailures[row.id] = undefined;
       } else if (latest) {
         // Job finished without a stored asset — not a usable sticker.
         nextStages[row.id] = "failed";
-        nextErrors[row.id] = "The last attempt finished without a stored image. Retry this sticker.";
+        nextFailures[row.id] = {
+          kind: "unknown",
+          title: "No image was stored",
+          body: "The last attempt finished but no transparent image was saved to your workspace. Retry this sticker.",
+          raw: null,
+        };
       } else {
         nextStages[row.id] = "idle";
       }
@@ -350,10 +354,11 @@ function StickerLabBuilder() {
 
     setPreviews((p) => ({ ...p, ...nextPreviews }));
     setStages((s) => ({ ...s, ...nextStages }));
-    setErrors((e) => ({ ...e, ...nextErrors }));
+    setFailures((e) => ({ ...e, ...nextFailures }));
     setNotes((n) => ({ ...n, ...nextNotes }));
-    setDebugErrors((d) => ({ ...d, ...nextDebug }));
+    setJobHistory((h) => ({ ...h, ...jobs }));
   }, []);
+
 
   useEffect(() => {
     if (!packId) return;
