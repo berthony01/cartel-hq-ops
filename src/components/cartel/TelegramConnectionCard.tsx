@@ -84,7 +84,7 @@ export function TelegramConnectionCard({
   const [linkState, setLinkState] = useState<TelegramLinkStatus | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [remaining, setRemaining] = useState(0);
-  const [launchUrls, setLaunchUrls] = useState<{ app?: string; web?: string }>({});
+  const [launchUrls, setLaunchUrls] = useState<{ app?: string | undefined; web?: string | undefined }>({});
   const [launchBlocked, setLaunchBlocked] = useState(false);
   const pollRef = useRef<number | null>(null);
   const fallbackRef = useRef<number | null>(null);
