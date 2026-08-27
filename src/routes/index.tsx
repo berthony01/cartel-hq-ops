@@ -42,12 +42,46 @@ const QUICK_ACTIONS = [
   { label: "Connect Telegram", icon: Send, note: "Distribution — not built yet" },
 ];
 
-const ROADMAP = [
-  { label: "Sticker Lab", icon: Sticker, state: "Next up", tone: "gold" as const },
-  { label: "Operations", icon: Radio, state: "Planned", tone: "muted" as const },
-  { label: "Missions", icon: Target, state: "Planned", tone: "muted" as const },
-  { label: "Operatives", icon: Users, state: "Planned", tone: "muted" as const },
-  { label: "Analytics", icon: BarChart3, state: "Planned", tone: "muted" as const },
+const ROADMAP_GROUPS: {
+  label: string;
+  modules: { label: string; icon: LucideIcon; state: "Active build" | "Planned" }[];
+}[] = [
+  {
+    label: "Command",
+    modules: [
+      { label: "Cartel Clearance", icon: ShieldCheck, state: "Planned" },
+      { label: "Command Terminal", icon: TerminalSquare, state: "Planned" },
+    ],
+  },
+  {
+    label: "Create",
+    modules: [
+      { label: "Sticker Lab", icon: Sticker, state: "Active build" },
+      { label: "Brand Kit", icon: Palette, state: "Planned" },
+      { label: "Assets", icon: FolderLock, state: "Planned" },
+    ],
+  },
+  {
+    label: "Operations",
+    modules: [
+      { label: "Operations", icon: Radio, state: "Planned" },
+      { label: "Missions", icon: Target, state: "Planned" },
+      { label: "Operatives", icon: Users, state: "Planned" },
+      { label: "Distribution", icon: Send, state: "Planned" },
+    ],
+  },
+  {
+    label: "Intelligence",
+    modules: [
+      { label: "Cartel Shield", icon: Radar, state: "Planned" },
+      { label: "Reputation", icon: Award, state: "Planned" },
+      { label: "Analytics", icon: BarChart3, state: "Planned" },
+    ],
+  },
+  {
+    label: "System",
+    modules: [{ label: "Telegram", icon: MessageSquare, state: "Planned" }],
+  },
 ];
 
 function HqDashboard() {
