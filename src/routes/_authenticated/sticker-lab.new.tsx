@@ -343,7 +343,11 @@ function StickerLabBuilder() {
       const url = asset ? urls[asset.storage_path] : undefined;
       const hasAsset = !!(asset && url);
       if (asset && url) {
-        nextPreviews[row.id] = { url, transparencyValid: asset.transparency_valid === true };
+        nextPreviews[row.id] = {
+          url,
+          transparencyValid: asset.transparency_valid === true,
+          storagePath: asset.storage_path,
+        };
       }
       // A locally polling sticker owns its own transient stage.
       if (pollingRef.current.has(row.id)) continue;
