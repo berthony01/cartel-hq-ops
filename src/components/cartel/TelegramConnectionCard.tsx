@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import { ExternalLink, Loader2, Send } from "lucide-react";
 
 import { useSession } from "@/hooks/useSession";
+import { useTelegramLauncher } from "@/hooks/useTelegramLauncher";
+
 import {
   fetchTelegramConfig,
   loadTelegramConnection,
