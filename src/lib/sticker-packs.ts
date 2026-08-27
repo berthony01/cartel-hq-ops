@@ -1,5 +1,12 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { BuilderDraft, Concept } from "@/lib/sticker-lab";
+import {
+  PACK_SIZES,
+  PACK_THEMES,
+  emptyDraft,
+  type BuilderDraft,
+  type Concept,
+  type PackSize,
+} from "@/lib/sticker-lab";
 
 export type StickerRow = {
   id: string;
@@ -274,4 +281,58 @@ export async function loadAssets(ids: string[]): Promise<Record<string, Generate
   if (error) throw error;
   for (const row of (data ?? []) as GeneratedAsset[]) out[row.id] = row;
   return out;
+}
+
+/**
+ * Rebuilds a builder draft from persisted Supabase rows so `/sticker-lab/new?pack=<id>`
+ * is a durable, resumable identity independent of sessionStorage.
+ * Read-only: never inserts, updates or deletes rows.
+ */
+export async function hydrateDraftFromPack(params: {
+  packId: string;
+  workspaceId: string;
+}): Promise<BuilderDraft | null> {
+  const { packId, workspaceId } = params;
+  const pack = await loadPack(packId);
+  if (!pack || pack.workspace_id !== workspaceId) return null;
+
+  const rows = await loadPackStickers(packId);
+  const base = emptyDraft();
+
+  const theme =
+    PACK_THEMES.find((t) => t.toLowerCase() === (pack.theme ?? "").toLowerCase()) ??
+    base.theme;
+  const size = (PACK_SIZES as readonly number[]).includes(pack.pack_size)
+    ? (pack.pack_size as PackSize)
+    : base.size;
+
+  const concepts: Concept[] = rows.map((row, i) => ({
+    id: `c${i + 1}`,
+    label: row.label,
+    action: row.action_description ?? "",
+    emoji: row.emoji_list?.[0] ?? "",
+  }));
+  const keywords: Record<string, string> = {};
+  const stickerIds: Record<string, string> = {};
+  rows.forEach((row, i) => {
+    const localId = `c${i + 1}`;
+    stickerIds[localId] = row.id;
+    keywords[localId] = (row.keyword_list ?? []).join(", ");
+  });
+
+  return {
+    ...base,
+    characterName: pack.character_name ?? "",
+    referenceAssetId: pack.reference_asset_id,
+    referenceAssetIds: pack.reference_asset_id ? [pack.reference_asset_id] : [],
+    packName: pack.title,
+    theme,
+    size,
+    brief: pack.brief ?? "",
+    styleNotes: pack.style_notes ?? "",
+    concepts: concepts.length > 0 ? concepts : base.concepts,
+    keywords,
+    packId: pack.id,
+    stickerIds,
+  };
 }
