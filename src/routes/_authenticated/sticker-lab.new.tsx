@@ -1153,7 +1153,7 @@ function StickerLabBuilder() {
                     {busy(stage) ? (
                       <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                     ) : null}
-                    {preview ? "Regenerate" : "Generate"}
+                    {isFailure(stage) ? "Retry" : preview ? "Regenerate" : "Generate"}
                   </Button>
                 </li>
               );
