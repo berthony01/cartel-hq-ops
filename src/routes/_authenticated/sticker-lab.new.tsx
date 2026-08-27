@@ -648,7 +648,11 @@ function StickerLabBuilder() {
     if (!url || !aliveRef.current) return false;
     setPreviews((p) => ({
       ...p,
-      [stickerId]: { url, transparencyValid: asset.transparency_valid === true },
+      [stickerId]: {
+        url,
+        transparencyValid: asset.transparency_valid === true,
+        storagePath: asset.storage_path,
+      },
     }));
     return true;
   };
