@@ -1447,7 +1447,7 @@ function StickerLabBuilder() {
                           ? "Regenerate"
                           : "Generate"}
                     </Button>
-                    {preview ? (
+                    {isExportable(c.id) ? (
                       <Button
                         type="button"
                         size="sm"
