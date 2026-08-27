@@ -131,7 +131,24 @@ export function TelegramGroupCard({
 }) {
   const queryClient = useQueryClient();
   const { launchTelegram, isMobileDevice } = useTelegramLauncher();
-  const { workspaceId, group, groupReady, groupQuery } = setup;
+  const {
+    workspaceId,
+    group,
+    groupQuery,
+    live,
+    checking,
+    recheck,
+    isSupergroup,
+    botAdmin,
+    botCanChangeInfo,
+    canSetStickerSet: canSet,
+    memberCount,
+    minMembers,
+    officialStickerEligible,
+    officialStickerReason,
+  } = setup;
+  const ready = setup.groupReady;
+
 
   const [starting, setStarting] = useState(false);
   const [linkState, setLinkState] = useState<TelegramLinkStatus | null>(null);
