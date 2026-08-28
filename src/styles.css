@@ -133,6 +133,8 @@
   --topbar-h-mobile: 3.5rem;
   --topbar-h-desktop: 4rem;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* Workflow action bar height (Phase 1C-2) */
+  --action-bar-h: 4.25rem;
 }
 
 
