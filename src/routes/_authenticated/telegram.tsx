@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { PageHeader } from "@/components/cartel/PageHeader";
+import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
 import {
   TelegramConnectionCard,
   useTelegramSetup,
