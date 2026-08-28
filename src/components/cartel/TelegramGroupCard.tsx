@@ -683,8 +683,8 @@ export function TelegramGroupCard({
           <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
           once while a one-time link is active. A verified group — basic group or supergroup — can
           receive the published pack link and native stickers. Telegram’s <em>official</em> group
-          sticker set is a separate, optional feature for supergroups that also meet Telegram’s
-          member minimum.
+          sticker set is a separate, optional capability that Telegram enables for some supergroups.
+
         </p>
 
         {groups.length > 0 && selectable ? (
