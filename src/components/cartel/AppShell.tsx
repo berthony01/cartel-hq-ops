@@ -60,7 +60,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <SidebarNav />
         </div>
         <p className="px-2 pt-4 text-[10px] leading-relaxed text-muted-foreground/70">
-          Phase 1A. Sticker Lab, Brand Kit and Assets are wired to the backend.
+          CARTEL HQ — Private Beta
         </p>
       </aside>
 

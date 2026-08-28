@@ -50,7 +50,6 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "Sticker Lab",
         to: "/sticker-lab",
         icon: Sticker,
-        status: "next",
         mobilePrimary: true,
         mobileLabel: "Lab",
       },
