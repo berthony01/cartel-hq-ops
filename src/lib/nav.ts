@@ -22,7 +22,12 @@ export type NavItem = {
   to: string;
   icon: LucideIcon;
   status?: "next" | "planned";
+  /** Presentation only: surfaced as a primary destination in the mobile tab bar. */
+  mobilePrimary?: boolean;
+  /** Presentation only: shorter label used in the mobile tab bar. */
+  mobileLabel?: string;
 };
+
 
 export type NavSection = {
   label: string;
