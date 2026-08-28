@@ -1773,7 +1773,17 @@ function StickerLabBuilder() {
             </div>
           ) : null}
 
-          <Pipeline />
+          {/* Pipeline detail is secondary on mobile, always visible on desktop. */}
+          <details className="mt-6 rounded-md border border-border bg-background/40 p-3 lg:hidden">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Generation pipeline
+            </summary>
+            <Pipeline />
+          </details>
+          <div className="hidden lg:block">
+            <Pipeline />
+          </div>
+
 
           {allReady ? (
             <div className="mt-6 rounded-lg border border-pepe/40 bg-pepe/5 p-4">
