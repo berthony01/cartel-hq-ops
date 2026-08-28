@@ -187,15 +187,17 @@ export function useTelegramGroupSetup(enabled = true) {
     [groups, recheckGroup],
   );
 
-  // Live verification when connected groups appear and on window refocus.
+  // Stored connection metadata is enough to render. We do ONE lightweight live
+  // check of the newest group per workspace mount — never N calls, never on focus.
+  const autoCheckedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!enabled || !groupIdsKey) return;
-    void recheckAll(true);
-    const onFocus = () => void recheckAll(true);
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    if (!enabled || !workspaceId || groups.length === 0) return;
+    if (autoCheckedRef.current === workspaceId) return;
+    autoCheckedRef.current = workspaceId;
+    void recheckGroup(groups[0]!.id, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, groupIdsKey]);
+  }, [enabled, workspaceId, groupIdsKey]);
+
 
   const readiness: GroupReadiness[] = useMemo(
     () => groups.map((g) => readinessFor(g, liveById[g.id] ?? null)),
@@ -219,7 +221,7 @@ export function useTelegramGroupSetup(enabled = true) {
     hydratedRef.current = workspaceId;
     setSelectedGroupIds((prev) => {
       const base = firstHydration ? readStoredSelection(workspaceId) : prev;
-      const kept = base.filter((id) => valid.has(id));
+      const kept = base.filter((id) => valid.has(id)).slice(0, MAX_DISTRIBUTION_TARGETS);
       const same = kept.length === prev.length && kept.every((id, i) => id === prev[i]);
       // Defaults only apply on first hydration: a deliberate Clear selection sticks.
       if (kept.length === 0 && firstHydration) return [groups[0]!.id];
@@ -234,14 +236,27 @@ export function useTelegramGroupSetup(enabled = true) {
   }, [workspaceId, selectedGroupIds]);
 
   const toggleGroup = useCallback((id: string) => {
-    setSelectedGroupIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
+    setSelectedGroupIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= MAX_DISTRIBUTION_TARGETS) {
+        toast.error(
+          `You can distribute to up to ${MAX_DISTRIBUTION_TARGETS} groups in one run.`,
+        );
+        return prev;
+      }
+      return [...prev, id];
+    });
   }, []);
   const selectAllGroups = useCallback(() => {
     setSelectedGroupIds(groups.slice(0, MAX_DISTRIBUTION_TARGETS).map((g) => g.id));
+    if (groups.length > MAX_DISTRIBUTION_TARGETS) {
+      toast.message(
+        `Selected the first ${MAX_DISTRIBUTION_TARGETS} groups — one distribution run is capped at ${MAX_DISTRIBUTION_TARGETS}.`,
+      );
+    }
   }, [groups]);
   const clearGroupSelection = useCallback(() => setSelectedGroupIds([]), []);
+
 
   const selectedGroups = useMemo(
     () => groups.filter((g) => selectedGroupIds.includes(g.id)),
@@ -518,13 +533,19 @@ export function TelegramGroupCard({
           queryClient.setQueryData(["telegram-group-link", workspaceId], result);
           const list = result.groups ?? (result.group ? [result.group] : []);
           const fresh = list.find((g) => g && !before.has(g.id));
-          if (result.connected && (fresh || result.group)) {
+          // Success only when THIS request reports connected, or a genuinely new
+          // group id appeared. Legacy `result.group` alone proves nothing.
+          const requestConnected = result.request?.status === "connected";
+          if (fresh || requestConnected) {
             stopPolling();
             setLinkState("connected");
             void queryClient.invalidateQueries({ queryKey: ["telegram-group-link", workspaceId] });
-            toast.success(`Group connected: ${(fresh ?? result.group)!.title}`);
+            toast.success(
+              fresh ? `Group connected: ${fresh.title}` : "Telegram group connection confirmed.",
+            );
             return;
           }
+
           const status = result.request?.status;
           if (status === "expired" || status === "cancelled") {
             stopPolling();
@@ -604,10 +625,18 @@ export function TelegramGroupCard({
 
         {groups.length > 0 && selectable ? (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-surface-raised p-3">
-            <p className="text-xs font-semibold text-foreground">
-              {selectedGroupIds.length} of {groups.length} group
-              {groups.length === 1 ? "" : "s"} selected for distribution
-            </p>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-foreground">
+                {selectedGroupIds.length} of {groups.length} group
+                {groups.length === 1 ? "" : "s"} selected for distribution
+              </p>
+              {groups.length > MAX_DISTRIBUTION_TARGETS ? (
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  One distribution run covers up to {MAX_DISTRIBUTION_TARGETS} groups. Run it again
+                  for the rest — the sticker set is never recreated.
+                </p>
+              ) : null}
+            </div>
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
@@ -615,10 +644,16 @@ export function TelegramGroupCard({
                 size="sm"
                 className="min-h-9"
                 onClick={selectAllGroups}
-                disabled={selectedGroupIds.length === groups.length}
+                disabled={
+                  selectedGroupIds.length ===
+                  Math.min(groups.length, MAX_DISTRIBUTION_TARGETS)
+                }
               >
-                Select all
+                {groups.length > MAX_DISTRIBUTION_TARGETS
+                  ? `Select first ${MAX_DISTRIBUTION_TARGETS}`
+                  : "Select all"}
               </Button>
+
               <Button
                 type="button"
                 variant="outline"

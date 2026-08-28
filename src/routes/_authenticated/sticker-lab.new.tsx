@@ -984,7 +984,12 @@ function StickerLabBuilder() {
     !checksRunning &&
     !publishing;
   const canDistribute =
-    !!packId && !!workspaceId && allPublished && selectedGroupIds.length > 0 && !distributing;
+    !!packId &&
+    !!workspaceId &&
+    allPublished &&
+    selectedGroupIds.length > 0 &&
+    groupsSelectedAndReady &&
+    !distributing;
   const shortNamePreview = packId
     ? previewShortName(draft.packName, packId, telegram.botUsername)
     : null;
@@ -2378,14 +2383,10 @@ function StickerLabBuilder() {
 
               {distTargets.length > 0 || distResult ? (
                 <ul className="space-y-2 text-xs">
-                  {(distResult
-                    ? distResult.results.map((r) => ({
-                        id: r.groupConnectionId,
-                        title: r.title,
-                        status: r.status,
-                        detail: r.message ?? r.reason ?? null,
-                      }))
-                    : distTargets.map((t) => ({
+                  {/* Durable per-group history is authoritative; the most recent
+                      run only fills in before the persisted state has loaded. */}
+                  {(distTargets.length > 0
+                    ? distTargets.map((t) => ({
                         id: t.group_connection_id,
                         title:
                           telegramGroup.groups.find((g) => g.id === t.group_connection_id)?.title ??
@@ -2393,6 +2394,13 @@ function StickerLabBuilder() {
                         status: t.status,
                         detail: t.last_error,
                       }))
+                    : (distResult?.results ?? []).map((r) => ({
+                        id: r.groupConnectionId,
+                        title: r.title,
+                        status: r.status,
+                        detail: r.message ?? r.reason ?? null,
+                      }))
+
                   ).map((row) => (
                     <li
                       key={row.id}
