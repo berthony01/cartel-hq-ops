@@ -1864,7 +1864,7 @@ function StickerLabBuilder() {
           ) : null}
 
 
-          <ul className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="mt-6 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-4">
             {draft.concepts.map((c, index) => {
               const stage = stageFor(c.id);
               const stickerId = stickerIdFor(c.id);
@@ -1872,7 +1872,7 @@ function StickerLabBuilder() {
               const failure = stickerId ? failures[stickerId] : undefined;
               const note = stickerId ? notes[stickerId] : undefined;
               return (
-                <li key={c.id} className="cartel-panel rounded-lg p-4">
+                <li key={c.id} className="cartel-panel rounded-lg p-2.5 sm:p-4">
                   <div className="mb-3 flex items-center justify-between gap-2">
                     <span className="truncate text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
                       {c.emoji} {c.label}
@@ -1991,7 +1991,7 @@ function StickerLabBuilder() {
           title="Review"
           hint="Verified static stickers from private storage, ready for export and Telegram publishing."
         >
-          <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="mb-6 grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-3">
             <SummaryStat
               label="Backend ready"
               value={`${generatedCount}/${draft.concepts.length}`}
@@ -2171,7 +2171,7 @@ function StickerLabBuilder() {
           ) : null}
 
 
-          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid gap-2 sm:gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {draft.concepts.map((c, index) => {
               const stickerId = stickerIdFor(c.id);
               const preview = stickerId ? previews[stickerId] : undefined;
