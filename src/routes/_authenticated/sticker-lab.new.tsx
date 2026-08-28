@@ -852,8 +852,9 @@ function StickerLabBuilder() {
       }));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Generation could not start.";
-      toast.error(message);
-      setFailures((e) => ({ ...e, [stickerId]: classifyProviderError(message) }));
+      const failure = classifyProviderError(message);
+      toast.error(failure.title, { description: failure.body });
+      setFailures((e) => ({ ...e, [stickerId]: failure }));
       // Fall back to durable, backend-derived state.
       pollingRef.current.delete(stickerId);
       await loadExisting(packId);
@@ -1954,7 +1955,7 @@ function StickerLabBuilder() {
       {step === 5 ? (
         <StepCard
           title="Review"
-          hint="Verified static stickers from private storage. Telegram publishing is not connected."
+          hint="Verified static stickers from private storage, ready for export and Telegram publishing."
         >
           <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <SummaryStat
