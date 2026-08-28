@@ -474,7 +474,7 @@ export function TelegramGroupCard({
   selectable?: boolean;
 }) {
   const queryClient = useQueryClient();
-  const { launchTelegram, isMobileDevice } = useTelegramLauncher();
+  const { isMobileDevice } = useTelegramLauncher();
   const {
     workspaceId,
     groups,
