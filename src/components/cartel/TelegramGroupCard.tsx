@@ -573,47 +573,78 @@ export function TelegramGroupCard({
     [queryClient, stopPolling, workspaceId],
   );
 
+  /**
+   * Opens a same-origin "Opening Telegram…" tab synchronously (inside the click
+   * gesture) so the desktop handoff survives the async link request. Never a
+   * blank tab: the placeholder paints immediately and is replaced by Telegram.
+   */
+  const openHandoffWindow = (): Window | null => {
+    try {
+      const w = window.open("", "_blank");
+      if (!w) return null;
+      w.document.write(
+        '<!doctype html><meta charset="utf-8"><title>Opening Telegram…</title>' +
+          '<body style="margin:0;display:flex;align-items:center;justify-content:center;' +
+          'height:100vh;background:#070707;color:#E9E0C9;font:600 16px system-ui,sans-serif">' +
+          "Opening Telegram…</body>",
+      );
+      w.document.close();
+      return w;
+    } catch {
+      return null;
+    }
+  };
+
   const connect = async () => {
     if (!workspaceId || starting) return;
     setStarting(true);
-    
+    setLaunchBlocked(false);
+
+    const mobile = isMobileDevice();
+    // Desktop: reserve the tab now, while the user gesture is still live.
+    const handoff = mobile ? null : openHandoffWindow();
+
     try {
       const result = await createTelegramGroupLink(workspaceId);
-      const username = result.bot?.username;
-      let primaryWeb: string | undefined;
-      let primaryApp: string | undefined;
-      let fallbackWeb: string | undefined;
-      let fallbackApp: string | undefined;
+      // Server URLs are authoritative: they carry the secure startgroup payload
+      // and the minimal `admin=change_info` suggestion.
+      const web = result.groupStartUrl;
+      const app = result.groupAppUrl;
 
-      if (username) {
-        // Primary = plain official add-to-group form. Requesting admin rights in
-        // the deep link makes Telegram Desktop drop the picker and open the bot's
-        // private chat instead, so promotion is an explicit in-app step.
-        const basic = makeTelegramGroupBasicUrls(username);
-        const admin = makeTelegramGroupAdminUrls(username);
-        primaryWeb = basic.web;
-        primaryApp = basic.app;
-        fallbackWeb = admin.web;
-        fallbackApp = admin.app;
-      } else {
-        // Bot username missing from response — preserve legacy server URLs rather than break.
-        primaryWeb = result.groupStartUrl;
-        primaryApp = result.groupAppUrl;
-      }
-
-
-      if (!primaryWeb && !primaryApp) throw new Error("The Telegram group link is unavailable right now.");
+      if (!web && !app) throw new Error("The Telegram group link is unavailable right now.");
       setExpiresAt(result.expiresAt ?? null);
-      setLaunchUrls({ app: primaryApp, web: primaryWeb });
-      setFallbackUrls({ app: fallbackApp, web: fallbackWeb });
+      setLaunchUrls({ app, web });
       setLinkState("pending");
       setRemaining(secondsLeft(result.expiresAt));
       startPolling(result.requestId);
-      // Deliberately no programmatic launch here: this runs after an await, so the
-      // user gesture is gone and desktop/preview iframes block the popup. The
-      // pending panel renders a real anchor the user clicks directly instead.
 
+      let launched = false;
+      if (handoff && !handoff.closed && web) {
+        try {
+          handoff.location.replace(web);
+          launched = true;
+        } catch {
+          launched = false;
+        }
+      } else if (mobile) {
+        launched = launchTelegram(app, web);
+      } else {
+        launched = launchTelegram(undefined, web ?? app);
+      }
+      if (!launched) {
+        try {
+          handoff?.close();
+        } catch {
+          /* noop */
+        }
+        setLaunchBlocked(true);
+      }
     } catch (err) {
+      try {
+        handoff?.close();
+      } catch {
+        /* noop */
+      }
       setLinkState(null);
       toast.error(telegramErrorMessage(err));
     } finally {
@@ -625,9 +656,6 @@ export function TelegramGroupCard({
   const manualUrl = isMobileDevice()
     ? (launchUrls.app ?? launchUrls.web)
     : (launchUrls.web ?? launchUrls.app);
-  const fallbackManualUrl = isMobileDevice()
-    ? (fallbackUrls.app ?? fallbackUrls.web)
-    : (fallbackUrls.web ?? fallbackUrls.app);
   const lastCheck = groupQuery.data?.request?.metadata?.last_group_check;
   const readyCount = readiness.filter((r) => r.ready).length;
 
