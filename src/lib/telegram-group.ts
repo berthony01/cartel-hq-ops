@@ -145,3 +145,81 @@ export function sendGroupTestSticker(params: {
     ...(params.stickerId ? { stickerId: params.stickerId } : {}),
   });
 }
+
+/* ------------------------------------------------------------------ */
+/* Multi-group distribution (telegram-group v4)                        */
+/* ------------------------------------------------------------------ */
+
+export type TelegramDistributionStatus = "assigned" | "announced" | "failed";
+
+export type TelegramDistributeResultRow = {
+  groupConnectionId: string;
+  title: string;
+  chatType?: string;
+  status: TelegramDistributionStatus;
+  assigned: boolean;
+  announced: boolean;
+  reason?: string;
+  memberCount?: number | null;
+  minMembers?: number;
+  message?: string;
+};
+
+export type TelegramDistributePackResult = {
+  status: "complete" | "partial" | "failed";
+  total: number;
+  assigned: number;
+  announced: number;
+  failed: number;
+  results: TelegramDistributeResultRow[];
+  setName?: string;
+  setUrl?: string;
+};
+
+/** Durable per-group distribution row persisted server-side. */
+export type TelegramPackGroupTarget = {
+  id: string;
+  workspace_id: string;
+  pack_id: string;
+  group_connection_id: string;
+  status: string;
+  last_error: string | null;
+  announced_at: string | null;
+  assigned_at: string | null;
+  last_attempt_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Max group IDs accepted by the server in one distribute call. */
+export const MAX_DISTRIBUTION_TARGETS = 50;
+
+/**
+ * Distributes an already-published pack to many connected groups in one call.
+ * The Telegram sticker set itself is never re-created here.
+ */
+export function distributePackToGroups(params: {
+  workspaceId: string;
+  packId: string;
+  groupConnectionIds: string[];
+}): Promise<TelegramDistributePackResult> {
+  const ids = Array.from(new Set(params.groupConnectionIds)).slice(0, MAX_DISTRIBUTION_TARGETS);
+  return invoke<TelegramDistributePackResult>({
+    action: "distribute_pack",
+    workspaceId: params.workspaceId,
+    packId: params.packId,
+    groupConnectionIds: ids,
+  });
+}
+
+/** Reads the persisted per-group distribution state for a pack. */
+export function fetchPackGroupDistribution(params: {
+  workspaceId: string;
+  packId: string;
+}): Promise<{ targets: TelegramPackGroupTarget[] }> {
+  return invoke<{ targets: TelegramPackGroupTarget[] }>({
+    action: "distribution_status",
+    workspaceId: params.workspaceId,
+    packId: params.packId,
+  });
+}
