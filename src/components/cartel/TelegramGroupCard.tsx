@@ -608,6 +608,9 @@ export function TelegramGroupCard({
   const manualUrl = isMobileDevice()
     ? (launchUrls.app ?? launchUrls.web)
     : (launchUrls.web ?? launchUrls.app);
+  const fallbackManualUrl = isMobileDevice()
+    ? (fallbackUrls.app ?? fallbackUrls.web)
+    : (fallbackUrls.web ?? fallbackUrls.app);
   const lastCheck = groupQuery.data?.request?.metadata?.last_group_check;
   const readyCount = readiness.filter((r) => r.ready).length;
 
