@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Copy, ExternalLink, Loader2, Users } from "lucide-react";
+import { Copy, Loader2, Users } from "lucide-react";
 
 import { useWorkspace } from "@/lib/workspace-context";
 import { useTelegramLauncher } from "@/hooks/useTelegramLauncher";
@@ -9,8 +9,6 @@ import { telegramErrorMessage } from "@/lib/telegram-stickers";
 import {
   createTelegramGroupLink,
   fetchTelegramGroupLinkStatus,
-  makeTelegramGroupAdminUrls,
-  makeTelegramGroupBasicUrls,
   type TelegramLinkStatus,
 } from "@/lib/telegram-link";
 
