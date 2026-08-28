@@ -185,6 +185,32 @@
   animation: cartel-rise 420ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
+/* --- Mobile application system (Phase 1C-1, additive) --- */
+
+@utility app-gutter {
+  padding-inline: var(--gutter-mobile);
+  @media (min-width: 768px) {
+    padding-inline: var(--gutter-desktop);
+  }
+}
+
+@utility touch-target {
+  min-height: var(--tap-min);
+  min-width: var(--tap-min);
+}
+
+@utility safe-bottom {
+  padding-bottom: var(--safe-bottom);
+}
+
+@utility app-scroll-pad {
+  padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 1.5rem);
+  @media (min-width: 1024px) {
+    padding-bottom: 2.5rem;
+  }
+}
+
+
 @keyframes cartel-rise {
   from {
     opacity: 0;
