@@ -735,6 +735,16 @@ export function TelegramGroupCard({
                 : "This one-time link is about to expire."}
             </p>
 
+            <p className="mt-2 rounded-md border border-border/60 bg-background/40 p-2 text-xs leading-relaxed text-muted-foreground">
+              <strong>Telegram Desktop fallback:</strong> if Telegram adds @PepeCartelHQBot as a
+              normal member instead of an admin, open the selected group, promote the bot to
+              administrator, enable <strong>Change Group Info</strong>, then send{" "}
+              <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
+              in that group while this link is still active. Or use{" "}
+              <strong>Try basic install</strong> below to add the bot without requesting admin
+              rights, then promote it manually.
+            </p>
+
             {lastCheck ? (
               <div className="mt-3 space-y-2 rounded-md border border-border/60 bg-background/40 p-3">
                 {lastCheck.group_title ? (
@@ -790,18 +800,31 @@ export function TelegramGroupCard({
               </div>
             ) : null}
 
-            {manualUrl ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-3 min-h-9"
-                onClick={() => launchTelegram(launchUrls.app, launchUrls.web)}
-              >
-                <ExternalLink className="size-4" aria-hidden="true" />
-                Open Telegram
-              </Button>
-            ) : null}
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              {manualUrl ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-9"
+                  onClick={() => launchTelegram(launchUrls.app, launchUrls.web)}
+                >
+                  <ExternalLink className="size-4" aria-hidden="true" />
+                  Open Telegram
+                </Button>
+              ) : null}
+              {fallbackManualUrl ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="min-h-9 text-muted-foreground hover:text-foreground"
+                  onClick={() => launchTelegram(fallbackUrls.app, fallbackUrls.web)}
+                >
+                  Try basic install
+                </Button>
+              ) : null}
+            </div>
           </div>
         ) : null}
 
