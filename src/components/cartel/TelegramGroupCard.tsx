@@ -719,9 +719,9 @@ export function TelegramGroupCard({
               Waiting for Telegram…
             </p>
             <p className="mt-1">
-              Telegram opened. Choose the group or supergroup and approve the requested admin right,
-              then return here. If @PepeCartelHQBot is already installed in the group, open that
-              group and send{" "}
+              Telegram opened its group picker. Choose the group or supergroup and confirm adding
+              @PepeCartelHQBot. Then, in that group, promote the bot to administrator and enable{" "}
+              <strong>Change Group Info</strong>, and send{" "}
               <span className="inline-flex items-center gap-1 align-middle">
                 <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>
                 <button
@@ -734,8 +734,7 @@ export function TelegramGroupCard({
                   <Copy className="size-3" aria-hidden="true" />
                 </button>
               </span>{" "}
-              once while this link is active, then return here. CARTEL HQ will verify the group
-              automatically.{" "}
+              once while this link is active. CARTEL HQ will verify the group automatically.{" "}
               {launchBlocked ? "If Telegram did not open, use Open Telegram below." : null}{" "}
               {remaining > 0
                 ? `This one-time link expires in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}.`
@@ -743,14 +742,14 @@ export function TelegramGroupCard({
             </p>
 
             <p className="mt-2 rounded-md border border-border/60 bg-background/40 p-2 text-xs leading-relaxed text-muted-foreground">
-              <strong>Telegram Desktop fallback:</strong> if Telegram adds @PepeCartelHQBot as a
-              normal member instead of an admin, open the selected group, promote the bot to
-              administrator, enable <strong>Change Group Info</strong>, then send{" "}
-              <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
-              in that group while this link is still active. Or use{" "}
-              <strong>Try basic install</strong> below to add the bot without requesting admin
-              rights, then promote it manually.
+              <strong>If the picker never appeared</strong> and Telegram opened the bot’s private
+              chat instead, come back here and use <strong>Open Telegram</strong> — it uses
+              Telegram’s plain add-to-group link. <strong>Request admin rights</strong> asks
+              Telegram to pre-select <strong>Change Group Info</strong> during the add step; some
+              desktop clients mishandle it, so promoting the bot manually inside the group is always
+              a valid path.
             </p>
+
 
             {lastCheck ? (
               <div className="mt-3 space-y-2 rounded-md border border-border/60 bg-background/40 p-3">
