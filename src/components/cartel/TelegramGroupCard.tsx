@@ -875,23 +875,7 @@ export function TelegramGroupCard({
               </div>
             ) : null}
 
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              {fallbackManualUrl ? (
-                <Button
-                  asChild
-                  variant="ghost"
-                  size="sm"
-                  className="min-h-9 text-muted-foreground hover:text-foreground"
-                >
-                  <a href={fallbackManualUrl} target="_blank" rel="noopener noreferrer">
-                    Request admin rights
-                  </a>
-                </Button>
-              ) : null}
-            </div>
 
-
-          </div>
         ) : null}
 
         {linkState === "expired" || linkState === "cancelled" ? (
