@@ -43,10 +43,9 @@ export type GroupReadiness = {
   canSetStickerSet: boolean;
   memberCount: number | null;
   officialStickerEligible: boolean;
-
   officialStickerReason: string | null;
-  belowMinMembers: boolean;
   ready: boolean;
+
 };
 
 function selectionKey(workspaceId: string) {
