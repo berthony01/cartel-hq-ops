@@ -120,39 +120,12 @@ export type TelegramCreateGroupLinkResult = {
   webhookUrl?: string;
 };
 
-/**
- * Primary add-to-group URLs: the exact payload-free official form documented by
- * Telegram — bare `startgroup` with no `=` and no value. No hidden payload
- * (pending requests are actor-correlated server-side) and no `admin=` rights
- * request, which Telegram Desktop/macOS mishandles on the group picker.
- * Admin promotion is an explicit in-app step.
+/*
+ * The server-returned `groupStartUrl` / `groupAppUrl` are the authoritative
+ * launch URLs: they carry the secure one-time `startgroup` payload and the
+ * minimal `admin=change_info` suggestion. The client never reconstructs them.
  */
-export function makeTelegramGroupBasicUrls(botUsername: string): {
-  web: string;
-  app: string;
-} {
-  const user = encodeURIComponent(botUsername);
-  return {
-    web: `https://t.me/${user}?startgroup`,
-    app: `tg://resolve?domain=${user}&startgroup`,
-  };
-}
 
-/**
- * Optional secondary URLs that also request the `change_info` admin right
- * up-front. Works on most mobile clients; manual promotion is more reliable on
- * Telegram Desktop.
- */
-export function makeTelegramGroupAdminUrls(botUsername: string): {
-  web: string;
-  app: string;
-} {
-  const user = encodeURIComponent(botUsername);
-  return {
-    web: `https://t.me/${user}?startgroup&admin=change_info`,
-    app: `tg://resolve?domain=${user}&startgroup&admin=change_info`,
-  };
-}
 
 
 
