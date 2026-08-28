@@ -367,74 +367,60 @@ function GroupRow({
             id={inputId}
             checked={selected}
             onCheckedChange={onToggle}
-            className="mt-1"
+            className="mt-1 size-5"
             aria-label={`Select ${g.title} as a distribution target`}
           />
         ) : null}
         <div className="min-w-0 flex-1">
           <label
             htmlFor={selectable ? inputId : undefined}
-            className="block cursor-pointer text-sm font-semibold text-foreground"
+            className="flex min-h-6 cursor-pointer items-baseline gap-2 text-sm font-semibold text-foreground"
           >
-            {g.title}
+            <span className="min-w-0 truncate">{g.title}</span>
             {g.username ? (
-              <span className="ml-2 font-normal text-muted-foreground">@{g.username}</span>
+              <span className="shrink-0 text-xs font-normal text-muted-foreground">
+                @{g.username}
+              </span>
             ) : null}
           </label>
-          <div className="mt-2 flex flex-wrap gap-2">
+
+          {/* Essential readiness only — capability nuance lives in the disclosure. */}
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
             <StatusBadge tone={r.supportedChatType ? "green" : "red"}>
               {r.isSupergroup
                 ? "Supergroup"
                 : r.isBasicGroup
                   ? "Basic group"
-                  : `Unsupported chat type (${g.chat_type})`}
+                  : `Unsupported (${g.chat_type})`}
             </StatusBadge>
             <StatusBadge tone={r.botAdmin ? "green" : "red"}>
-              {r.botAdmin ? "Bot admin verified" : "Bot is not an admin"}
+              {r.botAdmin ? "Bot admin" : "Bot not admin"}
             </StatusBadge>
-            {r.botCanChangeInfo !== undefined ? (
-              <StatusBadge tone={r.botCanChangeInfo ? "green" : "red"}>
-                {r.botCanChangeInfo ? "Change Group Info enabled" : "Change Group Info missing"}
-              </StatusBadge>
-            ) : null}
-            <StatusBadge
-              tone={r.officialStickerEligible || r.canSetStickerSet ? "green" : "muted"}
-            >
-              {officialSetLabel(r)}
-            </StatusBadge>
-
             {typeof r.memberCount === "number" ? (
               <StatusBadge tone="muted">{r.memberCount} members</StatusBadge>
             ) : null}
+            <StatusBadge tone={r.ready ? "green" : "red"}>
+              {r.ready ? "Ready" : "Needs setup"}
+            </StatusBadge>
           </div>
 
           {!r.ready ? (
-            <p className="mt-3 rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
-              This group is not ready. In Telegram, open the group and make @PepeCartelHQBot an
-              administrator with the <strong>Change Group Info</strong> right, or, if the bot is
-              already installed, send{" "}
+            <p className="mt-2 rounded-md border border-signal/40 bg-signal/5 p-2.5 text-xs leading-relaxed text-signal">
+              In Telegram, make @PepeCartelHQBot an administrator with the{" "}
+              <strong>Change Group Info</strong> right, or, if the bot is already installed, send{" "}
               <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">
                 /cartelhq
               </code>{" "}
-              once. Then re-check this group.
+              once. Then re-check.
             </p>
-          ) : !r.officialStickerEligible ? (
-            <p className="mt-3 rounded-md border border-border/60 bg-surface-raised p-3 text-xs text-muted-foreground">
-              This group is ready: the published pack link can be shared here and CARTEL HQ can send
-              native stickers.{" "}
-              {r.isBasicGroup
-                ? "Assigning an official group sticker set is an optional Telegram feature that requires a supergroup."
-                : "Telegram has not enabled official group sticker-set assignment for this group yet — that step is optional."}
-            </p>
-
           ) : null}
 
-          <div className="mt-3 flex flex-wrap items-center gap-3">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="min-h-9"
+              className="min-h-11"
               disabled={checking}
               onClick={onRecheck}
             >
@@ -443,19 +429,42 @@ function GroupRow({
             </Button>
           </div>
 
-          <details className="mt-3 rounded-md border border-border bg-surface-raised p-3 text-xs">
-            <summary className="cursor-pointer font-semibold">Technical detail</summary>
-            <p className="mt-2 font-mono text-[11px] text-muted-foreground">
-              chat_id {g.telegram_chat_id}
-              {r.live?.currentStickerSetName
-                ? ` · current group sticker set ${r.live.currentStickerSetName}`
-                : ""}
-            </p>
-            {r.live?.technical ? (
-              <p className="mt-1 font-mono text-[11px] text-muted-foreground/80">
-                {r.live.technical}
+          <details className="mt-2 rounded-md border border-border bg-surface-raised p-2.5 text-xs">
+            <summary className="flex min-h-9 cursor-pointer list-none items-center font-semibold text-muted-foreground">
+              Capability & technical detail
+            </summary>
+            <div className="mt-2 space-y-2">
+              <div className="flex flex-wrap gap-1.5">
+                {r.botCanChangeInfo !== undefined ? (
+                  <StatusBadge tone={r.botCanChangeInfo ? "green" : "red"}>
+                    {r.botCanChangeInfo ? "Change Group Info enabled" : "Change Group Info missing"}
+                  </StatusBadge>
+                ) : null}
+                <StatusBadge
+                  tone={r.officialStickerEligible || r.canSetStickerSet ? "green" : "muted"}
+                >
+                  {officialSetLabel(r)}
+                </StatusBadge>
+              </div>
+              {r.ready && !r.officialStickerEligible ? (
+                <p className="leading-relaxed text-muted-foreground">
+                  This group is ready: the published pack link can be shared here and CARTEL HQ can
+                  send native stickers.{" "}
+                  {r.isBasicGroup
+                    ? "Assigning an official group sticker set is an optional Telegram feature that requires a supergroup."
+                    : "Telegram has not enabled official group sticker-set assignment for this group yet — that step is optional."}
+                </p>
+              ) : null}
+              <p className="font-mono text-[11px] text-muted-foreground">
+                chat_id {g.telegram_chat_id}
+                {r.live?.currentStickerSetName
+                  ? ` · current group sticker set ${r.live.currentStickerSetName}`
+                  : ""}
               </p>
-            ) : null}
+              {r.live?.technical ? (
+                <p className="font-mono text-[11px] text-muted-foreground/80">{r.live.technical}</p>
+              ) : null}
+            </div>
           </details>
         </div>
       </div>
@@ -656,8 +665,8 @@ export function TelegramGroupCard({
 
   return (
     <Card className="cartel-panel">
-      <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
-        <CardTitle className="text-base">Connected Telegram groups</CardTitle>
+      <CardHeader className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 space-y-0 p-4 sm:p-6">
+        <CardTitle className="min-w-0 truncate text-base">Connected Telegram groups</CardTitle>
         {groupQuery.isLoading ? (
           <StatusBadge tone="muted">Checking groups…</StatusBadge>
         ) : groups.length === 0 ? (
@@ -672,23 +681,30 @@ export function TelegramGroupCard({
           </StatusBadge>
         )}
       </CardHeader>
-      <CardContent className="space-y-4 text-sm">
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          Connect every Telegram group or supergroup CARTEL HQ should work with. Telegram only lets
-          you pick <strong>one group per add-bot flow</strong>, so use{" "}
-          <strong>Connect another group</strong> once for each community — connecting a new group
-          never removes the ones already connected. Once connected, CARTEL HQ can distribute one
-          published pack to many groups together. If @PepeCartelHQBot is already installed in a
-          group, open it and send{" "}
-          <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
-          once while a one-time link is active. A verified group — basic group or supergroup — can
-          receive the published pack link and native stickers. Telegram’s <em>official</em> group
-          sticker set is a separate, optional capability that Telegram enables for some supergroups.
-
-        </p>
+      <CardContent className="space-y-3 p-4 pt-0 text-sm sm:space-y-4 sm:p-6 sm:pt-0">
+        <details className="rounded-md border border-border/60 bg-background/40 p-3">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            How connecting groups works
+          </summary>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            Connect every Telegram group or supergroup CARTEL HQ should work with. Telegram only
+            lets you pick <strong>one group per add-bot flow</strong>, so use{" "}
+            <strong>Connect another group</strong> once for each community — connecting a new group
+            never removes the ones already connected. Once connected, CARTEL HQ can distribute one
+            published pack to many groups together. If @PepeCartelHQBot is already installed in a
+            group, open it and send{" "}
+            <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">
+              /cartelhq
+            </code>{" "}
+            once while a one-time link is active. A verified group — basic group or supergroup — can
+            receive the published pack link and native stickers. Telegram’s <em>official</em> group
+            sticker set is a separate, optional capability that Telegram enables for some
+            supergroups.
+          </p>
+        </details>
 
         {groups.length > 0 && selectable ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-surface-raised p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-surface-raised p-2.5 sm:p-3">
             <div className="min-w-0">
               <p className="text-xs font-semibold text-foreground">
                 {selectedGroupIds.length} of {groups.length} group
@@ -706,7 +722,7 @@ export function TelegramGroupCard({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="min-h-9"
+                className="min-h-11"
                 onClick={selectAllGroups}
                 disabled={
                   selectedGroupIds.length ===
@@ -722,7 +738,7 @@ export function TelegramGroupCard({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="min-h-9"
+                className="min-h-11"
                 onClick={clearGroupSelection}
                 disabled={selectedGroupIds.length === 0}
               >
@@ -733,7 +749,7 @@ export function TelegramGroupCard({
         ) : null}
 
         {groups.length > 0 ? (
-          <ul className="space-y-3">
+          <ul className="space-y-2 sm:space-y-3">
             {readiness.map((r) => (
               <GroupRow
                 key={r.group.id}
@@ -774,7 +790,7 @@ export function TelegramGroupCard({
                     type="button"
                     variant="outline"
                     size="icon"
-                    className="size-9 shrink-0"
+                    className="size-11 shrink-0"
                     onClick={() => void copyTelegramUrlToClipboard(manualUrl)}
                     aria-label="Copy Telegram group link"
                     title="Copy Telegram group link"
@@ -783,7 +799,7 @@ export function TelegramGroupCard({
                   </Button>
                 </div>
                 <div className="mt-2">
-                  <Button asChild size="sm" className="min-h-9">
+                  <Button asChild size="sm" className="min-h-11">
                     <a href={manualUrl} target="_blank" rel="noopener noreferrer">
                       Open Telegram
                     </a>
