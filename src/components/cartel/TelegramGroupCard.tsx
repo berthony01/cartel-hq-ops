@@ -9,6 +9,8 @@ import { telegramErrorMessage } from "@/lib/telegram-stickers";
 import {
   createTelegramGroupLink,
   fetchTelegramGroupLinkStatus,
+  makeTelegramGroupAdminUrls,
+  makeTelegramGroupBasicUrls,
   type TelegramLinkStatus,
 } from "@/lib/telegram-link";
 
