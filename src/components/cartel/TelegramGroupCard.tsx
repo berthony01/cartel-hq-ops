@@ -665,8 +665,8 @@ export function TelegramGroupCard({
 
   return (
     <Card className="cartel-panel">
-      <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
-        <CardTitle className="text-base">Connected Telegram groups</CardTitle>
+      <CardHeader className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 space-y-0 p-4 sm:p-6">
+        <CardTitle className="min-w-0 truncate text-base">Connected Telegram groups</CardTitle>
         {groupQuery.isLoading ? (
           <StatusBadge tone="muted">Checking groups…</StatusBadge>
         ) : groups.length === 0 ? (
@@ -681,23 +681,30 @@ export function TelegramGroupCard({
           </StatusBadge>
         )}
       </CardHeader>
-      <CardContent className="space-y-4 text-sm">
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          Connect every Telegram group or supergroup CARTEL HQ should work with. Telegram only lets
-          you pick <strong>one group per add-bot flow</strong>, so use{" "}
-          <strong>Connect another group</strong> once for each community — connecting a new group
-          never removes the ones already connected. Once connected, CARTEL HQ can distribute one
-          published pack to many groups together. If @PepeCartelHQBot is already installed in a
-          group, open it and send{" "}
-          <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
-          once while a one-time link is active. A verified group — basic group or supergroup — can
-          receive the published pack link and native stickers. Telegram’s <em>official</em> group
-          sticker set is a separate, optional capability that Telegram enables for some supergroups.
-
-        </p>
+      <CardContent className="space-y-3 p-4 pt-0 text-sm sm:space-y-4 sm:p-6 sm:pt-0">
+        <details className="rounded-md border border-border/60 bg-background/40 p-3">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            How connecting groups works
+          </summary>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            Connect every Telegram group or supergroup CARTEL HQ should work with. Telegram only
+            lets you pick <strong>one group per add-bot flow</strong>, so use{" "}
+            <strong>Connect another group</strong> once for each community — connecting a new group
+            never removes the ones already connected. Once connected, CARTEL HQ can distribute one
+            published pack to many groups together. If @PepeCartelHQBot is already installed in a
+            group, open it and send{" "}
+            <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">
+              /cartelhq
+            </code>{" "}
+            once while a one-time link is active. A verified group — basic group or supergroup — can
+            receive the published pack link and native stickers. Telegram’s <em>official</em> group
+            sticker set is a separate, optional capability that Telegram enables for some
+            supergroups.
+          </p>
+        </details>
 
         {groups.length > 0 && selectable ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-surface-raised p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-surface-raised p-2.5 sm:p-3">
             <div className="min-w-0">
               <p className="text-xs font-semibold text-foreground">
                 {selectedGroupIds.length} of {groups.length} group
@@ -715,7 +722,7 @@ export function TelegramGroupCard({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="min-h-9"
+                className="min-h-11"
                 onClick={selectAllGroups}
                 disabled={
                   selectedGroupIds.length ===
@@ -731,7 +738,7 @@ export function TelegramGroupCard({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="min-h-9"
+                className="min-h-11"
                 onClick={clearGroupSelection}
                 disabled={selectedGroupIds.length === 0}
               >
@@ -742,7 +749,7 @@ export function TelegramGroupCard({
         ) : null}
 
         {groups.length > 0 ? (
-          <ul className="space-y-3">
+          <ul className="space-y-2 sm:space-y-3">
             {readiness.map((r) => (
               <GroupRow
                 key={r.group.id}
