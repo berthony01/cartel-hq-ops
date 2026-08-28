@@ -2655,7 +2655,7 @@ function StickerLabBuilder() {
 
       <nav
         aria-label="Builder navigation"
-        className="flex flex-col-reverse gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between"
+        className="hidden flex-col-reverse gap-3 border-t border-border pt-6 sm:flex sm:flex-row sm:items-center sm:justify-between"
       >
         <Button
           type="button"
@@ -2681,9 +2681,40 @@ function StickerLabBuilder() {
           </Button>
         )}
       </nav>
+
+      {/* Mobile workflow bar — reuses the same goBack / goNext handlers. */}
+      <StickyActionBar
+        desktop="hidden"
+        className="sm:hidden"
+        start={
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            onClick={goBack}
+            disabled={step === 1}
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
+            Back
+          </Button>
+        }
+        end={
+          step < BUILDER_STEPS.length ? (
+            <Button type="button" className="min-h-11" onClick={goNext}>
+              Continue
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </Button>
+          ) : (
+            <Button asChild variant="outline" className="min-h-11">
+              <Link to="/sticker-lab">Finish</Link>
+            </Button>
+          )
+        }
+      />
     </div>
   );
 }
+
 
 function Stepper({
   current,
