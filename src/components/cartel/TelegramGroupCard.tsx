@@ -598,8 +598,10 @@ export function TelegramGroupCard({
       setLinkState("pending");
       setRemaining(secondsLeft(result.expiresAt));
       startPolling(result.requestId);
-      const launched = launchTelegram(primaryApp, primaryWeb);
-      setLaunchBlocked(!launched);
+      // Deliberately no programmatic launch here: this runs after an await, so the
+      // user gesture is gone and desktop/preview iframes block the popup. The
+      // pending panel renders a real anchor the user clicks directly instead.
+
     } catch (err) {
       setLinkState(null);
       toast.error(telegramErrorMessage(err));
