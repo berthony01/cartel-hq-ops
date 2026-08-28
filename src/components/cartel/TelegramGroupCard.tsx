@@ -495,23 +495,18 @@ export function TelegramGroupCard({
     clearGroupSelection,
   } = setup;
 
+  const { launchTelegram } = useTelegramLauncher();
   const [starting, setStarting] = useState(false);
   const [linkState, setLinkState] = useState<TelegramLinkStatus | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [remaining, setRemaining] = useState(0);
+  /** Server-provided official admin deep links for the active request. */
   const [launchUrls, setLaunchUrls] = useState<{ app?: string | undefined; web?: string | undefined }>({});
-  const [fallbackUrls, setFallbackUrls] = useState<{ app?: string | undefined; web?: string | undefined }>({});
-  const [embedded, setEmbedded] = useState(false);
-  
+  /** Only true when the launch attempt itself failed (sandbox / popup block). */
+  const [launchBlocked, setLaunchBlocked] = useState(false);
+
   const pollRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    try {
-      setEmbedded(window.self !== window.top);
-    } catch {
-      setEmbedded(true);
-    }
-  }, []);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current !== null) {
