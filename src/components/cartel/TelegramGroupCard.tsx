@@ -236,14 +236,27 @@ export function useTelegramGroupSetup(enabled = true) {
   }, [workspaceId, selectedGroupIds]);
 
   const toggleGroup = useCallback((id: string) => {
-    setSelectedGroupIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
+    setSelectedGroupIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= MAX_DISTRIBUTION_TARGETS) {
+        toast.error(
+          `You can distribute to up to ${MAX_DISTRIBUTION_TARGETS} groups in one run.`,
+        );
+        return prev;
+      }
+      return [...prev, id];
+    });
   }, []);
   const selectAllGroups = useCallback(() => {
     setSelectedGroupIds(groups.slice(0, MAX_DISTRIBUTION_TARGETS).map((g) => g.id));
+    if (groups.length > MAX_DISTRIBUTION_TARGETS) {
+      toast.message(
+        `Selected the first ${MAX_DISTRIBUTION_TARGETS} groups — one distribution run is capped at ${MAX_DISTRIBUTION_TARGETS}.`,
+      );
+    }
   }, [groups]);
   const clearGroupSelection = useCallback(() => setSelectedGroupIds([]), []);
+
 
   const selectedGroups = useMemo(
     () => groups.filter((g) => selectedGroupIds.includes(g.id)),
