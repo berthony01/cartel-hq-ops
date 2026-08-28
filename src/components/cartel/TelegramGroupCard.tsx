@@ -112,10 +112,9 @@ function readinessFor(
     botCanChangeInfo,
     canSetStickerSet,
     memberCount,
-    minMembers,
     officialStickerEligible,
     officialStickerReason,
-    belowMinMembers,
+
     ready: !!ready,
   };
 }
