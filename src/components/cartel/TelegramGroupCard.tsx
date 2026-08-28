@@ -790,7 +790,7 @@ export function TelegramGroupCard({
                     type="button"
                     variant="outline"
                     size="icon"
-                    className="size-9 shrink-0"
+                    className="size-11 shrink-0"
                     onClick={() => void copyTelegramUrlToClipboard(manualUrl)}
                     aria-label="Copy Telegram group link"
                     title="Copy Telegram group link"
@@ -799,7 +799,7 @@ export function TelegramGroupCard({
                   </Button>
                 </div>
                 <div className="mt-2">
-                  <Button asChild size="sm" className="min-h-9">
+                  <Button asChild size="sm" className="min-h-11">
                     <a href={manualUrl} target="_blank" rel="noopener noreferrer">
                       Open Telegram
                     </a>

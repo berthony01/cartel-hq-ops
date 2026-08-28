@@ -251,7 +251,7 @@ export function TelegramConnectionCard({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="mt-3 min-h-9"
+                className="mt-3 min-h-11"
                 onClick={() => launchTelegram(launchUrls.app, launchUrls.web)}
               >
                 <ExternalLink className="size-4" aria-hidden="true" />
