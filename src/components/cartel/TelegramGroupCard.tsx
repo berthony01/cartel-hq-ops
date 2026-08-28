@@ -757,77 +757,65 @@ export function TelegramGroupCard({
           <div className="rounded-md border border-gold/40 bg-gold/5 p-3 text-xs text-muted-foreground">
             <p className="flex items-center gap-2 font-semibold text-foreground">
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-              Secure link ready — choose your group in Telegram
+              Waiting for Telegram… Choose a group and confirm admin permissions.
+            </p>
+            <p className="mt-2">
+              {remaining > 0
+                ? `This one-time link expires in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}.`
+                : "This one-time link is about to expire."}
             </p>
 
-            {manualUrl ? (
-              <div className="mt-3">
-                <Button asChild className="min-h-11">
-                  {/* Real anchor: the user's own click opens Telegram, so no popup blocker. */}
-                  <a href={manualUrl} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="size-4" aria-hidden="true" />
-                    Choose group in Telegram
-                  </a>
-                </Button>
-              </div>
-            ) : null}
-
-            {embedded && launchUrls.web ? (
+            {launchBlocked && manualUrl ? (
               <div className="mt-3 rounded-md border border-border/60 bg-background/40 p-3">
                 <p className="leading-relaxed text-foreground">
-                  Lovable Preview can block Telegram windows. Copy this HTTPS link, open a new
-                  browser tab outside Preview, and paste it there while this secure link is active.
+                  Your browser blocked the Telegram window. Open this link yourself while the
+                  one-time link is active:
                 </p>
                 <div className="mt-2 flex min-w-0 items-center gap-2">
                   <code className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded bg-surface-raised px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
-                    {launchUrls.web}
+                    {manualUrl}
                   </code>
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
                     className="size-9 shrink-0"
-                    onClick={() => void copyTelegramUrlToClipboard(launchUrls.web ?? "")}
+                    onClick={() => void copyTelegramUrlToClipboard(manualUrl)}
                     aria-label="Copy Telegram group link"
                     title="Copy Telegram group link"
                   >
                     <Copy className="size-4" aria-hidden="true" />
                   </Button>
                 </div>
+                <div className="mt-2">
+                  <Button asChild size="sm" className="min-h-9">
+                    <a href={manualUrl} target="_blank" rel="noopener noreferrer">
+                      Open Telegram
+                    </a>
+                  </Button>
+                </div>
+                <p className="mt-2 leading-relaxed">
+                  If @PepeCartelHQBot is already in the group, open that group instead, give it the{" "}
+                  <strong>Change Group Info</strong> admin right and send{" "}
+                  <span className="inline-flex items-center gap-1 align-middle">
+                    <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">
+                      /cartelhq
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => void copyCommandToClipboard()}
+                      className="inline-flex items-center rounded p-0.5 text-muted-foreground hover:bg-surface-raised hover:text-foreground"
+                      aria-label="Copy /cartelhq"
+                      title="Copy /cartelhq"
+                    >
+                      <Copy className="size-3" aria-hidden="true" />
+                    </button>
+                  </span>{" "}
+                  once.
+                </p>
               </div>
             ) : null}
 
-            <p className="mt-3">
-              Telegram opens its group picker. Choose the group or supergroup and confirm adding
-              @PepeCartelHQBot. Then, in that group, promote the bot to administrator, enable{" "}
-              <strong>Change Group Info</strong>, and send{" "}
-              <span className="inline-flex items-center gap-1 align-middle">
-                <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>
-                <button
-                  type="button"
-                  onClick={() => void copyCommandToClipboard()}
-                  className="inline-flex items-center rounded p-0.5 text-muted-foreground hover:bg-surface-raised hover:text-foreground"
-                  aria-label="Copy /cartelhq"
-                  title="Copy /cartelhq"
-                >
-                  <Copy className="size-3" aria-hidden="true" />
-                </button>
-              </span>{" "}
-              once while this link is active. CARTEL HQ will verify the group automatically.{" "}
-              {remaining > 0
-                ? `This one-time link expires in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}.`
-                : "This one-time link is about to expire."}
-            </p>
-
-            <p className="mt-2 rounded-md border border-border/60 bg-background/40 p-2 text-xs leading-relaxed text-muted-foreground">
-              If @PepeCartelHQBot is already installed in the group, skip the picker: open that
-              group and send{" "}
-              <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
-              while this link is active. <strong>Request admin rights</strong> below asks Telegram to
-              pre-select <strong>Change Group Info</strong> during the add step — on Telegram Desktop
-              that request is unreliable, so promoting the bot manually inside the group is the
-              dependable path.
-            </p>
 
 
 
