@@ -300,7 +300,7 @@ export function useTelegramGroupSetup(enabled = true) {
     botCanChangeInfo: primary?.botCanChangeInfo,
     canSetStickerSet: !!primary?.canSetStickerSet,
     memberCount: primary?.memberCount ?? null,
-    minMembers: primary?.minMembers ?? null,
+    
     officialStickerEligible: !!primary?.officialStickerEligible,
     officialStickerReason: primary?.officialStickerReason ?? null,
   };
