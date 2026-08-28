@@ -43,7 +43,7 @@ function TelegramPage() {
       <PageHeader
         eyebrow="System"
         title="Telegram"
-        description="The official CARTEL HQ bot publishes static sticker packs from Sticker Lab into a verified Telegram group or supergroup. Telegram's official group sticker set applies only to eligible supergroups; otherwise the pack link is posted in the group. The bot token lives server-side only."
+        description="The official CARTEL HQ bot publishes static sticker packs from Sticker Lab and distributes them to the Telegram groups connected to this workspace. You can keep several groups connected at once — Telegram allows one group per add-bot flow, so connect them one at a time. Telegram's official group sticker set applies only to eligible supergroups; otherwise the pack link is posted in the group. The bot token lives server-side only."
         status={setup.botConfigured ? "Bot configured" : "Bot not configured"}
       />
 
