@@ -4,28 +4,21 @@ import {
   Sticker,
   Palette,
   FolderLock,
-  Send,
+  MessageSquare,
   PackageOpen,
   Sparkles,
-  Radio,
-  Target,
-  Users,
-  BarChart3,
-  ShieldCheck,
-  TerminalSquare,
-  Radar,
-  Award,
-  MessageSquare,
+  ChevronRight,
   type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { useWorkspace } from "@/lib/workspace-context";
+import { NAV_SECTIONS } from "@/lib/nav";
 import { PageHeader } from "@/components/cartel/PageHeader";
+import { Section } from "@/components/cartel/Section";
+import { InlineRow } from "@/components/cartel/InlineRow";
+import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { EmptyState } from "@/components/cartel/EmptyState";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
@@ -47,64 +40,30 @@ export const Route = createFileRoute("/_authenticated/")({
   component: HqDashboard,
 });
 
-const QUICK_ACTIONS: {
-  label: string;
-  icon: LucideIcon;
-  note: string;
-  to: string;
-}[] = [
-  {
-    label: "Create Sticker Pack",
-    icon: Sticker,
-    note: "Sticker Lab — first production module",
-    to: "/sticker-lab",
-  },
-  { label: "Manage Brand Kit", icon: Palette, note: "Colours, type, marks, AI rules", to: "/brand-kit" },
-  { label: "Open Asset Vault", icon: FolderLock, note: "Private workspace storage", to: "/assets" },
+const QUICK_ACTIONS: { label: string; icon: LucideIcon; note: string; to: string }[] = [
+  { label: "Sticker Lab", icon: Sticker, note: "Create a pack", to: "/sticker-lab" },
+  { label: "Brand Kit", icon: Palette, note: "Colours & marks", to: "/brand-kit" },
+  { label: "Assets", icon: FolderLock, note: "Private vault", to: "/assets" },
+  { label: "Telegram", icon: MessageSquare, note: "Link & publish", to: "/telegram" },
 ];
 
+/** Presentational roadmap vocabulary derived from live nav metadata. */
+function moduleState(status?: "next" | "planned") {
+  if (status === "planned") return { label: "Planned", tone: "muted" as const };
+  if (status === "next") return { label: "Active build", tone: "gold" as const };
+  return { label: "Live beta", tone: "green" as const };
+}
 
-const ROADMAP_GROUPS: {
-  label: string;
-  modules: { label: string; icon: LucideIcon; state: "Active build" | "Planned" }[];
-}[] = [
-  {
-    label: "Command",
-    modules: [
-      { label: "Cartel Clearance", icon: ShieldCheck, state: "Planned" },
-      { label: "Command Terminal", icon: TerminalSquare, state: "Planned" },
-    ],
-  },
-  {
-    label: "Create",
-    modules: [
-      { label: "Sticker Lab", icon: Sticker, state: "Active build" },
-      { label: "Brand Kit", icon: Palette, state: "Planned" },
-      { label: "Assets", icon: FolderLock, state: "Planned" },
-    ],
-  },
-  {
-    label: "Operations",
-    modules: [
-      { label: "Operations", icon: Radio, state: "Planned" },
-      { label: "Missions", icon: Target, state: "Planned" },
-      { label: "Operatives", icon: Users, state: "Planned" },
-      { label: "Distribution", icon: Send, state: "Planned" },
-    ],
-  },
-  {
-    label: "Intelligence",
-    modules: [
-      { label: "Cartel Shield", icon: Radar, state: "Planned" },
-      { label: "Reputation", icon: Award, state: "Planned" },
-      { label: "Analytics", icon: BarChart3, state: "Planned" },
-    ],
-  },
-  {
-    label: "System",
-    modules: [{ label: "Telegram", icon: MessageSquare, state: "Planned" }],
-  },
-];
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border/60 bg-surface-raised/40 px-3 py-2.5">
+      <p className="truncate text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 truncate font-display text-lg uppercase text-gold sm:text-xl">{value}</p>
+    </div>
+  );
+}
 
 function HqDashboard() {
   const { workspace, workspaceId, loading: workspaceLoading } = useWorkspace();
@@ -154,196 +113,213 @@ function HqDashboard() {
 
   const packs = packsQuery.data ?? [];
   const telegram = telegramQuery.data;
+  const publishedRecent = packs.filter((pack) =>
+    String(pack.status ?? "").toLowerCase().includes("publish"),
+  ).length;
+  const telegramHandle = telegram?.telegram_username
+    ? `@${telegram.telegram_username}`
+    : telegram
+      ? "Account linked"
+      : null;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5 sm:space-y-8">
       <PageHeader
         eyebrow="Command Center"
         title="CARTEL HQ"
         description="The operating layer for PEPECARTEL creative tools, campaigns, creators, and distribution."
-        status="Phase 1A · Foundation live"
+        status="Private Beta"
       />
 
-      <section
-        aria-labelledby="workspace-heading"
-        className="rise-in cartel-panel relative overflow-hidden rounded-xl p-6"
-      >
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{ background: "var(--gradient-hq)" }}
-          aria-hidden="true"
-        />
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
-              Active workspace
-            </p>
-            <h2 id="workspace-heading" className="mt-1 font-display text-2xl uppercase text-gold">
-              {workspaceLoading ? "Loading…" : (workspace?.name ?? "No workspace")}
-            </h2>
-            <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-              {workspace
-                ? "Brand Kit, Asset Vault, and Sticker Lab all read and write against this workspace."
-                : "Create a workspace from the switcher in the header to start using CARTEL HQ."}
-            </p>
-          </div>
-          {workspace ? (
-            <Badge variant="outline" className="w-fit border-pepe/45 text-pepe">
-              Connected
-            </Badge>
+      {/* Compact workspace summary */}
+      <Section
+        variant="surface"
+        className="rise-in"
+        title={workspaceLoading ? "Loading…" : (workspace?.name ?? "No workspace")}
+        description={
+          workspace
+            ? "Brand Kit, Asset Vault, and Sticker Lab all read and write against this workspace."
+            : "Create a workspace from the switcher in the header to start using CARTEL HQ."
+        }
+        actions={
+          workspace ? (
+            <StatusBadge tone="green">Connected</StatusBadge>
           ) : (
-            <Badge variant="outline" className="w-fit border-gold/40 text-gold">
-              Setup required
-            </Badge>
-          )}
-        </div>
-      </section>
+            <StatusBadge tone="gold">Setup required</StatusBadge>
+          )
+        }
+        headerClassName="mb-0"
+      />
 
+      {/* Live metrics */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Metric label="Recent packs" value={packsQuery.isPending ? "—" : String(packs.length)} />
+        <Metric
+          label="Published (recent)"
+          value={packsQuery.isPending ? "—" : String(publishedRecent)}
+        />
+        <Metric label="AI jobs" value={usageQuery.isPending ? "—" : String(usageQuery.data ?? 0)} />
+        <Metric
+          label="Telegram"
+          value={telegramQuery.isPending ? "—" : telegram ? "Linked" : "Not linked"}
+        />
+      </div>
+
+      {/* Quick actions — 2 columns on mobile */}
       <section aria-labelledby="quick-actions-heading" className="space-y-3">
         <h2
           id="quick-actions-heading"
-          className="font-display text-lg uppercase tracking-widest text-foreground"
+          className="font-display text-base uppercase tracking-widest text-foreground sm:text-lg"
         >
           Quick actions
         </h2>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {QUICK_ACTIONS.map((action) => (
-            <Card key={action.label} className="cartel-panel rise-in hover-lift">
-              <CardContent className="flex items-start gap-3 p-5">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-surface-raised text-gold">
-                  <action.icon className="size-5" aria-hidden="true" />
+            <Link
+              key={action.label}
+              to={action.to}
+              className="touch-target hover-lift flex flex-col gap-2 rounded-lg border border-border/70 bg-surface-raised/50 p-3 transition-colors hover:border-gold/40 hover:bg-gold/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50"
+            >
+              <span className="flex size-9 items-center justify-center rounded-md border border-border bg-surface-raised text-gold">
+                <action.icon className="size-4.5" aria-hidden="true" />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold text-foreground">
+                  {action.label}
                 </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-foreground">{action.label}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{action.note}</p>
-                  <Button asChild size="sm" variant="outline" className="mt-3 min-h-9 text-xs">
-                    <Link to={action.to}>Open</Link>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                <span className="block truncate text-xs text-muted-foreground">{action.note}</span>
+              </span>
+            </Link>
           ))}
         </div>
       </section>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="cartel-panel rise-in self-start lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-sm uppercase tracking-widest">Recent packs</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {packs.length === 0 ? (
-              <EmptyState
-                icon={PackageOpen}
-                title="No packs yet"
-                description="Sticker packs saved from Sticker Lab appear here for this workspace."
-              />
-            ) : (
-              <ul className="divide-y divide-border">
-                {packs.map((pack) => (
-                  <li key={pack.id} className="flex items-center gap-3 py-3 text-sm">
-                    <span className="min-w-0 flex-1 truncate text-foreground">{pack.title}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {pack.pack_size} · {pack.theme}
-                    </span>
-                    <Badge variant="outline" className="shrink-0 border-border text-[10px] uppercase">
+        {/* Recent packs as compact rows */}
+        <Section
+          variant="surface"
+          className="rise-in self-start lg:col-span-2"
+          title="Recent packs"
+          actions={
+            <Link
+              to="/sticker-lab"
+              className="text-xs uppercase tracking-[0.14em] text-gold hover:underline"
+            >
+              Open Lab
+            </Link>
+          }
+          contentClassName="space-y-2"
+        >
+          {packs.length === 0 ? (
+            <EmptyState
+              icon={PackageOpen}
+              title="No packs yet"
+              description="Sticker packs saved from Sticker Lab appear here for this workspace."
+            />
+          ) : (
+            packs.map((pack) => (
+              <InlineRow
+                key={pack.id}
+                leading={<Sticker className="size-4" aria-hidden="true" />}
+                title={pack.title}
+                subtitle={`${pack.pack_size} stickers · ${pack.theme}`}
+                trailing={
+                  <span className="flex items-center gap-2">
+                    <StatusBadge
+                      tone={
+                        String(pack.status ?? "").toLowerCase().includes("publish")
+                          ? "green"
+                          : "muted"
+                      }
+                    >
                       {pack.status}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+                    </StatusBadge>
+                    <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
+                  </span>
+                }
+              />
+            ))
+          )}
+        </Section>
 
         <div className="space-y-4">
-          <Card className="cartel-panel rise-in">
-            <CardHeader className="flex-row items-center justify-between space-y-0">
-              <CardTitle className="text-sm uppercase tracking-widest">AI usage</CardTitle>
-              <Badge variant="outline" className="border-border text-[10px] uppercase">
+          <Section
+            variant="surface"
+            className="rise-in"
+            title="AI usage"
+            actions={
+              <StatusBadge tone="muted">
                 {usageQuery.data ? `${usageQuery.data} jobs` : "No jobs"}
-              </Badge>
-            </CardHeader>
-            <CardContent>
-              <EmptyState
-                compact
-                icon={Sparkles}
-                title="No AI providers connected"
-                description="Generation credits and usage metering arrive with the Sticker Lab generation backend."
-              />
-            </CardContent>
-          </Card>
+              </StatusBadge>
+            }
+          >
+            <EmptyState
+              compact
+              icon={Sparkles}
+              title="Generation activity"
+              description="Sticker Lab generation jobs for this workspace are counted here."
+            />
+          </Section>
 
-          <Card className="cartel-panel rise-in">
-            <CardHeader className="flex-row items-center justify-between space-y-0">
-              <CardTitle className="text-sm uppercase tracking-widest">Telegram status</CardTitle>
-              <Badge
-                variant="outline"
-                className={
-                  telegram
-                    ? "border-pepe/45 text-pepe text-[10px] uppercase"
-                    : "border-signal/45 text-signal text-[10px] uppercase"
-                }
-              >
-                {telegram ? "Linked" : "Disconnected"}
-              </Badge>
-            </CardHeader>
-            <CardContent>
-              <EmptyState
-                compact
-                icon={Send}
-                title={telegram ? `@${telegram.telegram_username ?? "account"}` : "No bot linked"}
-                description="Telegram publishing is not configured in this phase."
-              />
-            </CardContent>
-          </Card>
+          <Section
+            variant="surface"
+            className="rise-in"
+            title="Telegram"
+            actions={
+              telegram ? (
+                <StatusBadge tone="green">Linked</StatusBadge>
+              ) : (
+                <StatusBadge tone="gold">Not linked</StatusBadge>
+              )
+            }
+            contentClassName="space-y-2"
+          >
+            <InlineRow
+              leading={<MessageSquare className="size-4" aria-hidden="true" />}
+              title={telegramHandle ?? "No account linked"}
+              subtitle={
+                telegram
+                  ? "Publish sticker packs and send them to your connected groups."
+                  : "Link your Telegram account to publish packs from Sticker Lab."
+              }
+            />
+            <Link
+              to="/telegram"
+              className="inline-flex text-xs uppercase tracking-[0.14em] text-gold hover:underline"
+            >
+              {telegram ? "Manage Telegram" : "Set up Telegram"}
+            </Link>
+          </Section>
         </div>
       </div>
 
-
-      <section aria-labelledby="roadmap-heading" className="space-y-3">
-        <h2
-          id="roadmap-heading"
-          className="font-display text-lg uppercase tracking-widest text-foreground"
-        >
-          Upcoming modules
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {ROADMAP_GROUPS.map((group) => (
-            <Card key={group.label} className="cartel-panel rise-in">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
-                  {group.label}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <ul className="space-y-1.5">
-                  {group.modules.map((item) => (
-                    <li key={item.label} className="flex items-center gap-2.5 text-sm">
-                      <item.icon
-                        className={`size-4 shrink-0 ${
-                          item.state === "Active build" ? "text-gold" : "text-muted-foreground"
-                        }`}
-                        aria-hidden="true"
-                      />
-                      <span className="min-w-0 flex-1 truncate text-foreground">{item.label}</span>
-                      {item.state === "Active build" ? (
-                        <span className="shrink-0 rounded-sm border border-gold/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gold">
-                          Active build
-                        </span>
-                      ) : (
-                        <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/70">
-                          Planned
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </section>
+      {/* Roadmap — low prominence, derived from nav metadata */}
+      <Section variant="plain" title="Modules" contentClassName="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {NAV_SECTIONS.map((group) => (
+          <div key={group.label} className="min-w-0">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+              {group.label}
+            </p>
+            <ul className="mt-2 space-y-1.5">
+              {group.items.map((item) => {
+                const state = moduleState(item.status);
+                return (
+                  <li key={item.to} className="flex items-center gap-2.5 text-sm">
+                    <item.icon
+                      className={`size-4 shrink-0 ${
+                        item.status === "planned" ? "text-muted-foreground" : "text-gold"
+                      }`}
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 flex-1 truncate text-foreground">{item.label}</span>
+                    <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </Section>
     </div>
   );
 }

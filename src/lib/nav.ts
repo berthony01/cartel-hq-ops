@@ -54,8 +54,8 @@ export const NAV_SECTIONS: NavSection[] = [
         mobilePrimary: true,
         mobileLabel: "Lab",
       },
-      { label: "Brand Kit", to: "/brand-kit", icon: Palette, status: "planned" },
-      { label: "Assets", to: "/assets", icon: FolderLock, status: "planned", mobilePrimary: true },
+      { label: "Brand Kit", to: "/brand-kit", icon: Palette },
+      { label: "Assets", to: "/assets", icon: FolderLock, mobilePrimary: true },
     ],
   },
   {
@@ -82,7 +82,6 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "Telegram",
         to: "/telegram",
         icon: MessageSquare,
-        status: "planned",
         mobilePrimary: true,
       },
       { label: "Settings", to: "/settings", icon: Settings },
