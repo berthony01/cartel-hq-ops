@@ -1,101 +1,80 @@
-# Private Beta / Early Access Acquisition Layer for @PepeCartelHQBot
+# Phase 1C — Responsive Application System (audit + plan)
 
-Goal: anyone who finds the bot before Cartel HQ launches gets an intentional Private Beta message and an opt-in path, instead of a silent or broken experience. Sticker generation, publishing, personal linking, group linking and distribution stay byte-for-byte unchanged.
+Read-only audit complete. No files were edited.
 
-## Verified current state
+## 1. Current-state inventory
 
-- Telegram Edge Functions (`telegram-link`, `telegram-group`, `telegram-stickers`, and the webhook) live only in the external Supabase project `ocoinbnjgstkmnwwvnhi`. Their source is not in this repo, so all bot-side work is Supabase-side and must be authorised separately.
-- Existing tables: `telegram_connections` (one row per linked Cartel HQ user, unique `user_id`, holds `telegram_user_id`), `telegram_group_connections` (per workspace group, `telegram_chat_id`, `chat_type`, `connected_by`, `metadata`), `telegram_link_requests` (one-time hashed tokens, `status`, `expires_at`, `metadata`).
-- The webhook is already the authoritative writer for link consumption and group verification, so it is the correct and only place to add beta routing.
-- Frontend has no bot-discovery surface: `src/routes/_authenticated/telegram.tsx` is authenticated-only.
+### Shell and global
+- `src/routes/_authenticated/route.tsx` — auth gate, `WorkspaceProvider`, `AppShell`.
+- `src/components/cartel/AppShell.tsx` — fixed 64-wide desktop sidebar (`lg:flex`), mobile `Sheet` drawer, `TopBar` (hamburger, mark, `WorkspaceSwitcher`, disabled search input, disabled bell, `UserMenu`), main `max-w-6xl px-4 py-8 md:px-6 lg:py-10`. Footer copy hard-codes "Phase 1A. Sticker Lab, Brand Kit and Assets are wired to the backend."
+- `src/components/cartel/SidebarNav.tsx` + `src/lib/nav.ts` — single nav source, 15 items in 5 sections, `status: "next" | "planned"` flags.
+- `src/styles.css` — Tailwind v4 `@theme inline`, full oklch black/gold/red/green palette, `cartel-panel`, `hover-lift`, `rise-in`, Bebas/Sora fonts. Tokens are healthy; no mobile-specific tokens (gutter, safe-area, touch target, density).
 
-## 1) Private `/start` UX
+### Routes (all under `/_authenticated`)
+| Route | State | Mobile issues |
+|---|---|---|
+| `/` (index, 349 ln) | Live data (packs, ai_jobs count, telegram_connections) | Stale `status="Phase 1A · Foundation live"`; 3 giant quick-action cards; "Telegram publishing is not configured in this phase" (false); 5-card roadmap block marks Telegram/Brand Kit/Assets "Planned" though live |
+| `/sticker-lab` index (198 ln) | Live | `status="Live · Telegram pending"` stale; horizontal 5-step arrow flow wraps badly |
+| `/sticker-lab/new` (2878 ln) | Live, 5-step builder | Wrap-flex stepper, 12–24 full concept forms stacked, non-sticky Back/Continue at page bottom, `md:grid-cols-2` form stacks, always-expanded diagnostics |
+| `/brand-kit` (455 ln) | Live | `md:grid-cols-2/3` form grids collapse to long single column |
+| `/assets` (243 ln) | Live | `md:grid-cols-[220px_1fr]` uploader, 4-col gallery |
+| `/telegram` (87 ln) | Live | Hosts `TelegramConnectionCard` (315 ln) + `TelegramGroupCard` (910 ln) — the densest mobile surface |
+| `/settings` + 10 module routes | Placeholder via `PlaceholderPage` | Two equal-weight cards, no mobile density rule |
 
-Webhook branches on `chat.type === 'private'`:
+### Shared components
+`PageHeader`, `PlaceholderPage`, `EmptyState`, `StatusBadge`, `AssetUploader`, `WorkspaceSwitcher`, `UserMenu`, `TelegramConnectionCard`, `TelegramGroupCard`, plus builder-local `Stepper`, `StepCard`, `Notice`, `Pipeline`, `SummaryRow`, `SummaryStat`, `FailureBlock`.
 
-- **Payload present** (`/start <token>`) → existing link-consumption path, untouched. No beta message.
-- **No payload, sender already in `telegram_connections`** → short "You're already connected to Cartel HQ" card with `Open Cartel HQ` + `/help`. No lead row.
-- **No payload, unknown sender** → Private Beta card:
-  - Copy states plainly: Cartel HQ is in private beta, sticker tooling is live for beta workspaces, more modules are coming. No claims that unbuilt features work.
-  - Inline buttons: `Join Early Access` (callback), `What's Coming` (callback), `Open Cartel HQ` (URL to the app).
+### Breakpoint / density findings
+- Only `sm/md/lg/xl` used; no `xs`-first reasoning — layouts are desktop grids that degrade to one long column.
+- Every content block is a `Card.cartel-panel`, so nothing reads as primary vs secondary on a phone.
+- No bottom navigation, no sticky action bars, no safe-area insets, no scroll-snap rails.
+- Touch targets are mostly `min-h-11` already (good baseline to keep).
 
-`Join Early Access` writes/updates the lead row and replies with a one-line confirmation by editing the same message (no new message spam).
+### Authoritative statuses already available (replaces hard-coded phase copy)
+- `sticker_packs` rows + `status` column (per-workspace, already queried on `/` and `/sticker-lab`).
+- `ai_jobs` count (already queried).
+- `telegram_connections` row for the user (already queried on `/`) — gives real Linked/Not linked.
+- `telegram-link` `group_status` and `telegram-stickers` pack metadata (already used in `TelegramGroupCard` / builder step 5) — gives real group + published state.
+- `NAV_SECTIONS[].status` — single source for module state; the HQ roadmap block duplicates it wrongly and should read from it.
 
-## 2) Group-install UX
+## 2. Proposed shared system
 
-On `my_chat_member` where the bot's new status becomes `member`/`administrator`:
+New files (small, token-driven, no logic):
+- `src/components/cartel/MobileTabBar.tsx` — fixed bottom nav: HQ / Sticker Lab / Assets / Telegram / More; "More" opens the existing `Sheet` with the full `SidebarNav`. Driven by `src/lib/nav.ts` (add a `mobilePrimary` flag — data only).
+- `src/components/cartel/StickyActionBar.tsx` — bottom-docked action container with safe-area padding, sits above the tab bar; used by the builder and any future form.
+- `src/components/cartel/Section.tsx` — surface hierarchy primitive: `variant="primary" | "surface" | "plain"`, so secondary content becomes inline rows instead of cards on mobile.
+- `src/components/cartel/InlineRow.tsx` — label / value / status row (recent packs, roadmap, diagnostics).
+- `src/components/cartel/ScrollRail.tsx` — horizontal snap rail for references/steps/thumbnails.
 
-- If the chat already exists in `telegram_group_connections` (a real Cartel HQ workspace group link) → current verification flow only, **no beta message**.
-- Otherwise → one concise group intro posted once: what the bot is, that it's private beta, and inline buttons `Join Early Access` (deep-links the installer to the bot in private, carrying source context) and `Open Cartel HQ`.
-- Never DM group members unprompted; only the person who taps the button starts a private chat.
+Token additions in `src/styles.css` (additive only): `--gutter-mobile: 1rem`, `--tap-min: 2.75rem`, `--bottom-nav-h`, `@utility app-gutter`, `@utility safe-bottom`, `@utility touch-target`.
 
-## 3) Commands and buttons
+Modified shared components: `AppShell` (mobile tab bar + bottom padding + compact 56px top bar; desktop unchanged), `PageHeader` (compact mobile variant, smaller display type, status inline), `PlaceholderPage` (single-column inline lists on mobile), `StatusBadge` (compact size).
 
-- `/start` — as above.
-- `/help` — short command list plus current beta status.
-- `/roadmap` — same content as the `What's Coming` button: shipped (sticker packs, group distribution) vs planned (Brand Kit, Assets, Operations, Clearance) clearly separated.
-- Inline buttons: `Join Early Access`, `What's Coming`, `Open Cartel HQ`.
-- Register the command list once via `setMyCommands` (private scope + group scope).
+## 3. Route migration matrix
+| Route | Change |
+|---|---|
+| `_authenticated/route.tsx` | none |
+| `/` | compact workspace summary, 2-col quick actions, small metric row, recent packs as `InlineRow`s, roadmap collapsed and sourced from `NAV_SECTIONS`; replace stale phase/Telegram copy with live query state |
+| `/sticker-lab` | `ScrollRail` workflow strip, data-derived status, pack list as inline rows |
+| `/sticker-lab/new` | compact progress rail + current-step label, `StickyActionBar` for Back/Continue, `ScrollRail` references, collapsible concept rows, gallery grid on step 4, step 5 summary with diagnostics in an accordion |
+| `/brand-kit`, `/assets` | gutter + grid pass, uploader stacks cleanly, gallery `grid-cols-2` on mobile |
+| `/telegram` | group/connection cards adopt `Section` + collapsed diagnostics; **no change to link/group/publish logic** |
+| `/settings` + 10 placeholders | inherit new `PlaceholderPage` — zero per-route edits |
 
-## 4) Lead-capture data model
+## 4. Risk areas and regression checks
+- **Highest risk:** `sticker-lab.new.tsx` (2878 ln). Presentation-only edits; every handler, query key, Supabase call, KIE call and Telegram invocation stays byte-identical. Verify by diffing that no `supabase.`/`invoke(` line changed.
+- `TelegramGroupCard.tsx` (910 ln): only wrappers/visibility change; polling, launcher, 50-group cap, `can_set_sticker_set` logic untouched.
+- Sticky bars must not cover the last form control (bottom padding equal to bar + safe area).
+- Checks per phase: `tsgo` typecheck, production build, and browser passes at 390px / 768px / 1440px on `/`, `/sticker-lab/new` (all 5 steps), `/telegram`, `/assets`.
 
-One new table is justified; existing tables all require an authenticated Cartel HQ user and cannot hold anonymous prospects.
+## 5. Phased implementation order
+1. **1C-1 Tokens + shell** — styles.css additions, `AppShell`, `MobileTabBar`, nav flag, compact top bar.
+2. **1C-2 Shared primitives** — `Section`, `InlineRow`, `ScrollRail`, `StickyActionBar`, `PageHeader`/`PlaceholderPage`/`StatusBadge` responsive variants. Ships the whole placeholder set for free.
+3. **1C-3 HQ dashboard** — layout rework + stale-copy removal using existing queries and `NAV_SECTIONS`.
+4. **1C-4 Sticker Lab index + Brand Kit + Assets** — rail, grids, gutters.
+5. **1C-5 Sticker Lab builder** — progress rail, sticky actions, collapsible concepts, gallery, collapsed diagnostics. Largest phase, done last against a proven system.
+6. **1C-6 Telegram surfaces** — `Section` adoption and diagnostics collapse.
 
-`public.telegram_leads`
-- `id uuid pk`
-- `telegram_user_id bigint not null unique` — dedupe key, one row per person
-- `telegram_username`, `first_name`, `last_name` (nullable, refreshed on each touch)
-- `source text not null` — `private_start` | `group_install` | `group_button`
-- `source_chat_id bigint null`, `source_chat_title text null`, `source_chat_type text null`
-- `opted_in boolean not null default false`, `opted_in_at timestamptz null` — opt-in only flips true on an explicit `Join Early Access` tap
-- `is_linked_user boolean not null default false` — set when the same `telegram_user_id` later appears in `telegram_connections`
-- `welcome_sent_at timestamptz null`, `last_seen_at timestamptz not null default now()`
-- `metadata jsonb not null default '{}'`, `created_at`, `updated_at` + `set_updated_at` trigger
+Each phase is its own commit with typecheck + build + viewport verification; nothing is published.
 
-Access: `GRANT ALL ... TO service_role` only. No `anon`/`authenticated` grants — writes come from the webhook (service role). RLS enabled with no permissive policies (owner-read later via a dedicated admin view if requested).
-
-Dedupe: `upsert ... on conflict (telegram_user_id)` — never insert twice; only refresh names, `last_seen_at`, and first-write `source`/`source_chat_*`.
-
-## 5) Distinguishing linked users from prospects
-
-Single service-role lookup at the top of the private-message branch: `select 1 from telegram_connections where telegram_user_id = $1`. Hit → treat as a Cartel HQ user (no beta pitch, no lead). Miss → prospect path. For group events, additionally check `telegram_group_connections.telegram_chat_id` to skip beta messaging in real workspace groups.
-
-## 6) Group-sourced context
-
-The group-install `Join Early Access` button is a `t.me/PepeCartelHQBot?start=beta_g<chat_id>` URL. The webhook parses the `beta_` prefix as a **non-secret beta source token** (explicitly distinct from the existing hashed link tokens, which stay untouched) and records `source = 'group_button'`, `source_chat_id`, `source_chat_title`, `source_chat_type`. Installer identity comes from `my_chat_member.from` and is recorded as a `group_install` lead when unknown.
-
-## 7) No duplicate welcomes / leads
-
-- Private: welcome sent only when `welcome_sent_at is null` or older than 7 days; timestamp written in the same upsert.
-- Group: intro posted only when no lead/message record exists for that `chat_id` — tracked in `metadata` on the lead row of the installer plus a guard on `telegram_group_connections` existence; a re-add within 7 days stays silent.
-- Telegram retries the same `update_id`; the webhook must remain idempotent on it (same guard style already used for link consumption).
-- All lead writes are upserts on `telegram_user_id`.
-
-## 8) Preserving existing workflows
-
-- Beta routing is added as branches **before** falling through to today's handlers, and only on paths that currently produce no response: payload-less private `/start`, unknown-chat `my_chat_member`.
-- Zero changes to `telegram-link`, `telegram-group`, `telegram-stickers`, `sticker_packs`, `stickers`, storage, or any frontend file.
-- Regression invariants: personal link via deep link still connects; group add still verifies and appears in `TelegramGroupCard`; publish + multi-group distribution unchanged.
-
-## 9) Deferred
-
-Broadcast/newsletter sending, email capture, waitlist ranking or invite codes, an admin leads dashboard in Cartel HQ, Mini App, inline mode, referral attribution, analytics dashboards, any token/billing tie-in.
-
-## 10) Phases and QA
-
-**Phase B-0 (migration only)** — create `telegram_leads` with grants, RLS, trigger. Accept: table exists, `service_role` can upsert, `anon`/`authenticated` cannot select.
-
-**Phase B-1 (webhook: private beta)** — prospect detection, beta card, `Join Early Access`, `/help`, `/roadmap`, `setMyCommands`. Accept:
-1. Fresh Telegram account sends `/start` → beta card once; second `/start` within 7 days → no duplicate welcome.
-2. Linked Cartel HQ user sends `/start` → "already connected", zero rows in `telegram_leads`.
-3. `Join Early Access` → `opted_in = true`, `opted_in_at` set, exactly one row.
-4. Existing deep-link `/start <token>` still links the account (unchanged behaviour).
-
-**Phase B-2 (webhook: group install)** — group intro, source token parsing. Accept:
-5. Add bot to a fresh group → one intro message; remove and re-add → no second intro.
-6. Add bot to a group already in `telegram_group_connections` → no intro, verification still succeeds.
-7. Tapping `Join Early Access` from a group → lead has `source = 'group_button'` with the correct `source_chat_id`/title.
-
-**Phase B-3 (regression gate)** — publish a pack and distribute to a connected group; confirm identical behaviour and no new errors in function logs.
-
-Stop after each phase and report the resulting commit/state. No publish, no billing, no new project, no frontend change in any phase.
+Constraints honoured: no backend/schema/contract/Edge Function/storage/auth changes, no route URL changes, no feature removal, shared components over one-off CSS.
