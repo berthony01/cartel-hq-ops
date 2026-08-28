@@ -2587,25 +2587,46 @@ function StickerLabBuilder() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Publish this pack to Telegram?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This creates a real, shareable Telegram sticker set owned by your Telegram account
-                  ({telegram.connection?.telegram_user_id}). {reviewedStickerIds.length} reviewed
-                  sticker{reviewedStickerIds.length === 1 ? "" : "s"} will be uploaded. After the set
-                  is created, CARTEL HQ either assigns it as the official group sticker set of{" "}
-                  <strong>{telegramGroup.groupTitle ?? "the connected group"}</strong> if Telegram
-                  reports that group as eligible (supergroups only), or posts the pack link into the
-                  group if it is not eligible. Sets cannot be transferred to another owner later.
+                  <strong>One</strong> Telegram sticker set will be created for this pack, owned by
+                  your connected Telegram account ({telegram.connection?.telegram_user_id}).{" "}
+                  {reviewedStickerIds.length} reviewed sticker
+                  {reviewedStickerIds.length === 1 ? "" : "s"} will be uploaded. Sets cannot be
+                  transferred to another owner later.
+                  <br />
+                  <br />
+                  {selectedGroupIds.length === 0 ? (
+                    <>
+                      No connected group is selected. Select at least one group above before
+                      publishing and distributing.
+                    </>
+                  ) : (
+                    <>
+                      After the set is created it will be distributed once to the{" "}
+                      <strong>
+                        {selectedGroupIds.length} selected group
+                        {selectedGroupIds.length === 1 ? "" : "s"}
+                      </strong>
+                      {selectedGroupNames.length <= 4 ? (
+                        <> — {selectedGroupNames.join(", ")}</>
+                      ) : null}{" "}
+                      by sharing the pack link, or by assigning it as the official group sticker set
+                      where Telegram permits (eligible supergroups only).
+                    </>
+                  )}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction
+                  disabled={selectedGroupIds.length === 0}
                   onClick={() => {
                     setConfirmPublish(false);
                     void doPublish();
                   }}
                 >
-                  Publish now
+                  Publish &amp; distribute
                 </AlertDialogAction>
+
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
