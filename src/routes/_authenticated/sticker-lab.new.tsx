@@ -2114,10 +2114,10 @@ function StickerLabBuilder() {
             </p>
           </div>
 
-          <div className="mb-6 rounded-md border border-border bg-background/40 p-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-pepe">
-              Telegram cutout verified
-            </p>
+          <details className="mb-6 rounded-md border border-border bg-background/40 p-3">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center text-xs font-semibold uppercase tracking-[0.14em] text-pepe">
+              How Telegram cutout verification works
+            </summary>
             <p className="mt-1.5 text-xs text-muted-foreground">
               The checkerboard behind each preview marks the pixels that are actually transparent.
               Some image viewers display transparent areas as white or black — that is the viewer
@@ -2131,7 +2131,8 @@ function StickerLabBuilder() {
               being cleaned. Cleanup happens in your browser on the exported copy only; the stored
               original is never modified.
             </p>
-          </div>
+          </details>
+
 
 
           {omittedLabels.length > 0 ? (
