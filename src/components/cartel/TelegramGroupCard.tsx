@@ -215,15 +215,17 @@ export function useTelegramGroupSetup(enabled = true) {
   useEffect(() => {
     if (!workspaceId || groups.length === 0) return;
     const valid = new Set(groups.map((g) => g.id));
+    const firstHydration = hydratedRef.current !== workspaceId;
+    hydratedRef.current = workspaceId;
     setSelectedGroupIds((prev) => {
-      const firstHydration = hydratedRef.current !== workspaceId;
       const base = firstHydration ? readStoredSelection(workspaceId) : prev;
-      hydratedRef.current = workspaceId;
       const kept = base.filter((id) => valid.has(id));
-      if (kept.length > 0) return kept.length === prev.length && kept.every((id, i) => id === prev[i]) ? prev : kept;
-      // No valid prior selection: one group auto-selects; several pick the newest.
-      return [groups[0]!.id];
+      const same = kept.length === prev.length && kept.every((id, i) => id === prev[i]);
+      // Defaults only apply on first hydration: a deliberate Clear selection sticks.
+      if (kept.length === 0 && firstHydration) return [groups[0]!.id];
+      return same ? prev : kept;
     });
+
   }, [workspaceId, groups]);
 
   useEffect(() => {
