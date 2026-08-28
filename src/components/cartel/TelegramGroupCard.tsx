@@ -336,8 +336,9 @@ async function copyTelegramUrlToClipboard(url: string) {
 
 function officialSetLabel(r: GroupReadiness): string {
   if (r.officialStickerEligible || r.canSetStickerSet) return "Official group sticker set available";
-  if (r.isBasicGroup) return "Official group sticker set requires a supergroup";
-  return "Official group sticker set not enabled by Telegram yet";
+  if (r.isBasicGroup) return "Optional: official group sticker set requires a supergroup";
+  return "Optional: official group sticker set not enabled by Telegram yet";
+
 }
 
 
