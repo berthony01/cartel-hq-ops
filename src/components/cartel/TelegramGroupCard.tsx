@@ -417,13 +417,14 @@ function GroupRow({
               once. Then re-check this group.
             </p>
           ) : !r.officialStickerEligible ? (
-            <p className="mt-3 rounded-md border border-gold/40 bg-gold/5 p-3 text-xs text-muted-foreground">
+            <p className="mt-3 rounded-md border border-border/60 bg-surface-raised p-3 text-xs text-muted-foreground">
+              This group is ready: the published pack link can be shared here and CARTEL HQ can send
+              native stickers.{" "}
               {r.isBasicGroup
-                ? "This basic group is fully set up for CARTEL HQ: the published pack can be shared here and native stickers can be sent through the bot. Telegram’s official group sticker set only exists for supergroups — converting is optional."
-                : r.belowMinMembers
-                  ? `Official group sticker set unlocks at ${r.minMembers} members. This group currently has ${r.memberCount}. The pack link and native stickers still work.`
-                  : "Telegram has not reported official group sticker-set eligibility for this group yet. Sharing the pack and sending native stickers still work normally."}
+                ? "Assigning an official group sticker set is an optional Telegram feature that requires a supergroup."
+                : "Telegram has not enabled official group sticker-set assignment for this group yet — that step is optional."}
             </p>
+
           ) : null}
 
           <div className="mt-3 flex flex-wrap items-center gap-3">
