@@ -203,7 +203,12 @@ export function distributePackToGroups(params: {
   packId: string;
   groupConnectionIds: string[];
 }): Promise<TelegramDistributePackResult> {
-  const ids = Array.from(new Set(params.groupConnectionIds)).slice(0, MAX_DISTRIBUTION_TARGETS);
+  const ids = Array.from(new Set(params.groupConnectionIds));
+  if (ids.length > MAX_DISTRIBUTION_TARGETS) {
+    throw new Error(
+      `You selected ${ids.length} groups. You can distribute to up to ${MAX_DISTRIBUTION_TARGETS} groups in one run — deselect some and run the distribution again for the rest.`,
+    );
+  }
   return invoke<TelegramDistributePackResult>({
     action: "distribute_pack",
     workspaceId: params.workspaceId,
