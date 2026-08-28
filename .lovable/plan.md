@@ -1,103 +1,101 @@
-# Phase 1B-2 — Generation Failure Clarity & Review/Export
+# Private Beta / Early Access Acquisition Layer for @PepeCartelHQBot
 
-Frontend-only phase. No schema, no policy, no bucket, no Edge Function, no provider change. Existing packs, assets and `ai_jobs` history are read-only inputs; nothing is deleted or rewritten.
+Goal: anyone who finds the bot before Cartel HQ launches gets an intentional Private Beta message and an opt-in path, instead of a silent or broken experience. Sticker generation, publishing, personal linking, group linking and distribution stay byte-for-byte unchanged.
 
-## Verified current behaviour (read before planning)
+## Verified current state
 
-- `sticker-lab.new.tsx` Step 4 renders a red global notice `Could not reach the generation service. Try "Refresh status".` purely from `configQuery.isError` (line ~1111). That query is `retry: false`, `staleTime: 60_000`, `enabled: step === 4`. Once it errors (cold Edge Function start, transient network), `isError` stays true until a later `refetch()` succeeds — it is completely independent of whether stickers are ready. This matches the observed stale banner with 12/12 READY.
-- Failure copy comes from `friendlyProviderError()` in `src/lib/sticker-packs.ts`. It only special-cases "busy"; every other Latin-script provider string is passed through verbatim — which is how the safety-filter sentence reaches the card. The card then shows only that sentence plus a bare `Retry` button, with no cause label and no "what to change".
-- Step 4 primary controls are unconditional: `Generate first test sticker` (disabled once `generatedCount > 0`) and `Generate remaining (0)` (disabled at 0). Both remain visible in the completed state.
-- Step 5 Review shows per-sticker thumb, transparency text, emoji/keyword inputs, and a Telegram summary. There is no ready count headline, no failure/retry history, and no download action.
-- Downloads are feasible with no backend change: assets already resolve through `signedUrl()` / `signedUrlMap()` in `src/lib/media.ts` against the existing private `workspace-assets` bucket.
+- Telegram Edge Functions (`telegram-link`, `telegram-group`, `telegram-stickers`, and the webhook) live only in the external Supabase project `ocoinbnjgstkmnwwvnhi`. Their source is not in this repo, so all bot-side work is Supabase-side and must be authorised separately.
+- Existing tables: `telegram_connections` (one row per linked Cartel HQ user, unique `user_id`, holds `telegram_user_id`), `telegram_group_connections` (per workspace group, `telegram_chat_id`, `chat_type`, `connected_by`, `metadata`), `telegram_link_requests` (one-time hashed tokens, `status`, `expires_at`, `metadata`).
+- The webhook is already the authoritative writer for link consumption and group verification, so it is the correct and only place to add beta routing.
+- Frontend has no bot-discovery surface: `src/routes/_authenticated/telegram.tsx` is authenticated-only.
 
-## Scope
+## 1) Private `/start` UX
 
-### 1. Failure taxonomy and copy (`src/lib/sticker-packs.ts`)
+Webhook branches on `chat.type === 'private'`:
 
-Replace the pass-through in `friendlyProviderError` with a classifier returning `{ kind, title, body, action }`, matched on the raw provider/job message. Raw text stays available for the existing `title=` debug tooltip only.
+- **Payload present** (`/start <token>`) → existing link-consumption path, untouched. No beta message.
+- **No payload, sender already in `telegram_connections`** → short "You're already connected to Cartel HQ" card with `Open Cartel HQ` + `/help`. No lead row.
+- **No payload, unknown sender** → Private Beta card:
+  - Copy states plainly: Cartel HQ is in private beta, sticker tooling is live for beta workspaces, more modules are coming. No claims that unbuilt features work.
+  - Inline buttons: `Join Early Access` (callback), `What's Coming` (callback), `Open Cartel HQ` (URL to the app).
 
-Kinds and user-facing copy:
+`Join Early Access` writes/updates the lead row and replies with a one-line confirmation by editing the same message (no new message spam).
 
-- **safety** (`flagged as sensitive`, `content policy`, `moderation`)
-  Title: "Blocked by the image filter"
-  Body: "The provider's safety filter rejected this sticker's reference image or wording. Try a milder action description (for example remove weapons, blood, or brand names), or pick a different reference image."
-  Action: "Edit concept" (jumps to Step 3, that concept focused) + "Retry"
-- **busy** (`服务繁忙`, `busy`, `queue`)
-  Title: "Provider is busy"
-  Body: "Kie is handling too many tasks right now. Nothing was lost — wait a minute and retry this sticker."
-  Action: "Retry"
-- **rate_limit** (`rate limit`, `429`, `too many requests`)
-  Title: "Rate limit reached"
-  Body: "Too many generations were sent in a short window. Wait about a minute, then retry. Stickers already finished are unaffected."
-  Action: "Retry"
-- **network** (`fetch failed`, `network`, `ECONNRESET`, `abort`)
-  Title: "Connection interrupted"
-  Body: "The request to the generation service did not complete. This is usually temporary — check your connection and retry."
-  Action: "Retry"
-- **service** (`503`, `502`, `unavailable`, `timeout`, function invoke failure)
-  Title: "Generation service unavailable"
-  Body: "The generation service did not respond. Your pack and finished stickers are safe. Try again shortly."
-  Action: "Retry"
-- **unknown** (fallback, and any non-Latin text)
-  Title: "This sticker didn't finish"
-  Body: "The last attempt failed before an image was stored. Nothing else in the pack was affected. Retry this sticker."
-  Action: "Retry"
+## 2) Group-install UX
 
-Card layout for a failed sticker: red status badge, bold title, one-sentence body, `Retry this sticker` button (explicit label, not bare "Retry"), and a small "Technical detail" disclosure holding the raw message.
+On `my_chat_member` where the bot's new status becomes `member`/`administrator`:
 
-### 2. Kill the stale global provider banner (`sticker-lab.new.tsx`)
+- If the chat already exists in `telegram_group_connections` (a real Cartel HQ workspace group link) → current verification flow only, **no beta message**.
+- Otherwise → one concise group intro posted once: what the bot is, that it's private beta, and inline buttons `Join Early Access` (deep-links the installer to the bot in private, carrying source context) and `Open Cartel HQ`.
+- Never DM group members unprompted; only the person who taps the button starts a private chat.
 
-- The red banner renders only when `configQuery.isError && generatedCount === 0 && !anyBusy` — i.e. only when it can actually explain a blocked user.
-- When some stickers are ready, degrade to a neutral inline chip next to the Provider row: "Provider status unknown — finished stickers are unaffected."
-- Add `retry: 1` and clear the error state on any successful `refreshStatus()`; refetch config when Step 4 is re-entered rather than trusting a 60s-stale failure.
-- Never let a config probe failure imply the pack failed.
+## 3) Commands and buttons
 
-### 3. Step 4 completed state
+- `/start` — as above.
+- `/help` — short command list plus current beta status.
+- `/roadmap` — same content as the `What's Coming` button: shipped (sticker packs, group distribution) vs planned (Brand Kit, Assets, Operations, Clearance) clearly separated.
+- Inline buttons: `Join Early Access`, `What's Coming`, `Open Cartel HQ`.
+- Register the command list once via `setMyCommands` (private scope + group scope).
 
-When `generatedCount === draft.concepts.length && !anyBusy`:
+## 4) Lead-capture data model
 
-- Hide `Generate first test sticker` and `Generate remaining (n)`.
-- Show a green completion panel: "All {n} stickers ready · {t}/{n} transparency verified", plus `Continue to Review` (primary) and `Refresh status` (secondary).
-- Per-card `Regenerate` stays available (with the existing credit-cost confirm, extended to single regenerate) so a user can redo one sticker without a bulk control.
+One new table is justified; existing tables all require an authenticated Cartel HQ user and cannot hold anonymous prospects.
 
-When some are ready and some failed: keep a single primary `Retry failed ({k})` button in place of `Generate remaining`, plus a line "{k} of {n} need another attempt — retries only re-run the failed stickers."
+`public.telegram_leads`
+- `id uuid pk`
+- `telegram_user_id bigint not null unique` — dedupe key, one row per person
+- `telegram_username`, `first_name`, `last_name` (nullable, refreshed on each touch)
+- `source text not null` — `private_start` | `group_install` | `group_button`
+- `source_chat_id bigint null`, `source_chat_title text null`, `source_chat_type text null`
+- `opted_in boolean not null default false`, `opted_in_at timestamptz null` — opt-in only flips true on an explicit `Join Early Access` tap
+- `is_linked_user boolean not null default false` — set when the same `telegram_user_id` later appears in `telegram_connections`
+- `welcome_sent_at timestamptz null`, `last_seen_at timestamptz not null default now()`
+- `metadata jsonb not null default '{}'`, `created_at`, `updated_at` + `set_updated_at` trigger
 
-### 4. Review step (Step 5)
+Access: `GRANT ALL ... TO service_role` only. No `anon`/`authenticated` grants — writes come from the webhook (service role). RLS enabled with no permissive policies (owner-read later via a dedicated admin view if requested).
 
-Add above the grid:
+Dedupe: `upsert ... on conflict (telegram_user_id)` — never insert twice; only refresh names, `last_seen_at`, and first-write `source`/`source_chat_*`.
 
-- Readiness header: `12 / 12 ready` · `12 / 12 transparent` · `0 in progress` · `k failed` (each as a StatusBadge, derived from existing state).
-- Attempt history: for each sticker with more than one `ai_jobs` row, a compact "2 attempts" note; a collapsible "Generation history" listing sticker label, attempt count, and last failure reason. Uses existing `loadLatestJobs()` — no new query surface, no new table.
-- Blocking notice if any sticker is not ready or not transparency-verified, stating publishing will require all stickers ready.
+## 5) Distinguishing linked users from prospects
 
-Export controls (no backend change):
+Single service-role lookup at the top of the private-message branch: `select 1 from telegram_connections where telegram_user_id = $1`. Hit → treat as a Cartel HQ user (no beta pitch, no lead). Miss → prospect path. For group events, additionally check `telegram_group_connections.telegram_chat_id` to skip beta messaging in real workspace groups.
 
-- Per sticker: `Download PNG` — fetch the existing signed URL, save as `{pack-slug}-{NN}-{label}.png`.
-- Pack level: `Download all as ZIP` — client-side zip of the ready stickers built from the same signed URLs, named `{pack-slug}-stickers.zip`. This needs one small client dependency (`fflate`, ~10 kB, pure JS). If adding a dependency is not authorised, the fallback is `Download all` looping individual downloads, and the ZIP is dropped.
-- Copy for both: only ready stickers are included; failed ones are listed by name and excluded.
+## 6) Group-sourced context
 
-## Backend changes needed
+The group-install `Join Early Access` button is a `t.me/PepeCartelHQBot?start=beta_g<chat_id>` URL. The webhook parses the `beta_` prefix as a **non-secret beta source token** (explicitly distinct from the existing hashed link tokens, which stay untouched) and records `source = 'group_button'`, `source_chat_id`, `source_chat_title`, `source_chat_type`. Installer identity comes from `my_chat_member.from` and is recorded as a `group_install` lead when unknown.
 
-None. No migration, no policy, no grant, no bucket change, no Edge Function edit, no secret. All new state is derived from tables and jobs already read by `loadPackStickers`, `loadAssets` and `loadLatestJobs`.
+## 7) No duplicate welcomes / leads
 
-Only external change requiring approval: adding `fflate` for the ZIP. Explicitly out of scope: Telegram publishing, motion stickers, payments, any new provider, any new table.
+- Private: welcome sent only when `welcome_sent_at is null` or older than 7 days; timestamp written in the same upsert.
+- Group: intro posted only when no lead/message record exists for that `chat_id` — tracked in `metadata` on the lead row of the installer plus a guard on `telegram_group_connections` existence; a re-add within 7 days stays silent.
+- Telegram retries the same `update_id`; the webhook must remain idempotent on it (same guard style already used for link consumption).
+- All lead writes are upserts on `telegram_user_id`.
 
-## Files touched
+## 8) Preserving existing workflows
 
-- `src/lib/sticker-packs.ts` — failure classifier, attempt-count helper.
-- `src/routes/_authenticated/sticker-lab.new.tsx` — banner gating, Step 4 completed state, Step 5 readiness/history/export.
-- `src/lib/media.ts` — small download helper (blob fetch + filename), if not inlined.
-- `package.json` — only if ZIP is approved.
+- Beta routing is added as branches **before** falling through to today's handlers, and only on paths that currently produce no response: payload-less private `/start`, unknown-chat `my_chat_member`.
+- Zero changes to `telegram-link`, `telegram-group`, `telegram-stickers`, `sticker_packs`, `stickers`, storage, or any frontend file.
+- Regression invariants: personal link via deep link still connects; group add still verifies and appears in `TelegramGroupCard`; publish + multi-group distribution unchanged.
 
-## Verification checklist
+## 9) Deferred
 
-1. Typecheck and production build clean.
-2. Load `/sticker-lab/new?pack=<the 12/12 pack>`: Step 4 shows the completed panel, no bulk generate buttons, no red banner, `12/12 transparency verified`.
-3. Simulate a failed config probe with ready stickers present: red banner must not appear; neutral chip appears instead.
-4. Simulate a failed sticker with a safety-filter message: card shows "Blocked by the image filter", the guidance sentence, `Retry this sticker`, and the raw text only under the disclosure.
-5. Review step shows `12/12 ready`, `12/12 transparent`, attempt history reflecting the three real retries.
-6. `Download PNG` yields a transparent PNG; ZIP (if approved) opens with 12 PNGs.
-7. Confirm no generation call fires anywhere in this verification — zero Kie credits spent.
-8. Confirm no rows in `stickers`, `media_assets`, `ai_jobs` or storage were created, altered or deleted.
+Broadcast/newsletter sending, email capture, waitlist ranking or invite codes, an admin leads dashboard in Cartel HQ, Mini App, inline mode, referral attribution, analytics dashboards, any token/billing tie-in.
 
-Stop after this phase; report resulting commit, changed files, and verification results.
+## 10) Phases and QA
+
+**Phase B-0 (migration only)** — create `telegram_leads` with grants, RLS, trigger. Accept: table exists, `service_role` can upsert, `anon`/`authenticated` cannot select.
+
+**Phase B-1 (webhook: private beta)** — prospect detection, beta card, `Join Early Access`, `/help`, `/roadmap`, `setMyCommands`. Accept:
+1. Fresh Telegram account sends `/start` → beta card once; second `/start` within 7 days → no duplicate welcome.
+2. Linked Cartel HQ user sends `/start` → "already connected", zero rows in `telegram_leads`.
+3. `Join Early Access` → `opted_in = true`, `opted_in_at` set, exactly one row.
+4. Existing deep-link `/start <token>` still links the account (unchanged behaviour).
+
+**Phase B-2 (webhook: group install)** — group intro, source token parsing. Accept:
+5. Add bot to a fresh group → one intro message; remove and re-add → no second intro.
+6. Add bot to a group already in `telegram_group_connections` → no intro, verification still succeeds.
+7. Tapping `Join Early Access` from a group → lead has `source = 'group_button'` with the correct `source_chat_id`/title.
+
+**Phase B-3 (regression gate)** — publish a pack and distribute to a connected group; confirm identical behaviour and no new errors in function logs.
+
+Stop after each phase and report the resulting commit/state. No publish, no billing, no new project, no frontend change in any phase.
