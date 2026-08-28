@@ -334,6 +334,15 @@ async function copyCommandToClipboard() {
   }
 }
 
+async function copyTelegramUrlToClipboard(url: string) {
+  try {
+    await navigator.clipboard.writeText(url);
+    toast.success("Telegram link copied");
+  } catch {
+    toast.error("Could not copy Telegram link");
+  }
+}
+
 function officialSetLabel(r: GroupReadiness): string {
   if (r.officialStickerEligible || r.canSetStickerSet) return "Official group sticker set available";
   if (r.isBasicGroup) return "Official group sticker set requires supergroup";
@@ -494,8 +503,17 @@ export function TelegramGroupCard({
   const [remaining, setRemaining] = useState(0);
   const [launchUrls, setLaunchUrls] = useState<{ app?: string | undefined; web?: string | undefined }>({});
   const [fallbackUrls, setFallbackUrls] = useState<{ app?: string | undefined; web?: string | undefined }>({});
+  const [embedded, setEmbedded] = useState(false);
   
   const pollRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    try {
+      setEmbedded(window.self !== window.top);
+    } catch {
+      setEmbedded(true);
+    }
+  }, []);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current !== null) {
@@ -730,6 +748,31 @@ export function TelegramGroupCard({
                     Choose group in Telegram
                   </a>
                 </Button>
+              </div>
+            ) : null}
+
+            {embedded && launchUrls.web ? (
+              <div className="mt-3 rounded-md border border-border/60 bg-background/40 p-3">
+                <p className="leading-relaxed text-foreground">
+                  Lovable Preview can block Telegram windows. Copy this HTTPS link, open a new
+                  browser tab outside Preview, and paste it there while this secure link is active.
+                </p>
+                <div className="mt-2 flex min-w-0 items-center gap-2">
+                  <code className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded bg-surface-raised px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
+                    {launchUrls.web}
+                  </code>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="size-9 shrink-0"
+                    onClick={() => void copyTelegramUrlToClipboard(launchUrls.web ?? "")}
+                    aria-label="Copy Telegram group link"
+                    title="Copy Telegram group link"
+                  >
+                    <Copy className="size-4" aria-hidden="true" />
+                  </Button>
+                </div>
               </div>
             ) : null}
 
