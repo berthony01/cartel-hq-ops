@@ -808,29 +808,28 @@ export function TelegramGroupCard({
 
             <div className="mt-3 flex flex-wrap items-center gap-3">
               {manualUrl ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="min-h-9"
-                  onClick={() => launchTelegram(launchUrls.app, launchUrls.web)}
-                >
-                  <ExternalLink className="size-4" aria-hidden="true" />
-                  Open Telegram
+                <Button asChild variant="outline" size="sm" className="min-h-9">
+                  {/* Real anchor: cannot be popup-blocked and cannot throw inside React. */}
+                  <a href={manualUrl} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="size-4" aria-hidden="true" />
+                    Open Telegram
+                  </a>
                 </Button>
               ) : null}
               {fallbackManualUrl ? (
                 <Button
-                  type="button"
+                  asChild
                   variant="ghost"
                   size="sm"
                   className="min-h-9 text-muted-foreground hover:text-foreground"
-                  onClick={() => launchTelegram(fallbackUrls.app, fallbackUrls.web)}
                 >
-                  Try basic install
+                  <a href={fallbackManualUrl} target="_blank" rel="noopener noreferrer">
+                    Request admin rights
+                  </a>
                 </Button>
               ) : null}
             </div>
+
           </div>
         ) : null}
 
