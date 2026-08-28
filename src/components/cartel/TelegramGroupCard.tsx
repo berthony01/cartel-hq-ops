@@ -474,7 +474,7 @@ export function TelegramGroupCard({
   selectable?: boolean;
 }) {
   const queryClient = useQueryClient();
-  const { launchTelegram, isMobileDevice } = useTelegramLauncher();
+  const { isMobileDevice } = useTelegramLauncher();
   const {
     workspaceId,
     groups,
@@ -494,7 +494,7 @@ export function TelegramGroupCard({
   const [remaining, setRemaining] = useState(0);
   const [launchUrls, setLaunchUrls] = useState<{ app?: string | undefined; web?: string | undefined }>({});
   const [fallbackUrls, setFallbackUrls] = useState<{ app?: string | undefined; web?: string | undefined }>({});
-  const [launchBlocked, setLaunchBlocked] = useState(false);
+  
   const pollRef = useRef<number | null>(null);
 
   const stopPolling = useCallback(() => {
@@ -565,7 +565,7 @@ export function TelegramGroupCard({
   const connect = async () => {
     if (!workspaceId || starting) return;
     setStarting(true);
-    setLaunchBlocked(false);
+    
     try {
       const result = await createTelegramGroupLink(workspaceId);
       const username = result.bot?.username;
@@ -598,8 +598,10 @@ export function TelegramGroupCard({
       setLinkState("pending");
       setRemaining(secondsLeft(result.expiresAt));
       startPolling(result.requestId);
-      const launched = launchTelegram(primaryApp, primaryWeb);
-      setLaunchBlocked(!launched);
+      // Deliberately no programmatic launch here: this runs after an await, so the
+      // user gesture is gone and desktop/preview iframes block the popup. The
+      // pending panel renders a real anchor the user clicks directly instead.
+
     } catch (err) {
       setLinkState(null);
       toast.error(telegramErrorMessage(err));
@@ -716,11 +718,24 @@ export function TelegramGroupCard({
           <div className="rounded-md border border-gold/40 bg-gold/5 p-3 text-xs text-muted-foreground">
             <p className="flex items-center gap-2 font-semibold text-foreground">
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-              Waiting for Telegram…
+              Secure link ready — choose your group in Telegram
             </p>
-            <p className="mt-1">
-              Telegram opened its group picker. Choose the group or supergroup and confirm adding
-              @PepeCartelHQBot. Then, in that group, promote the bot to administrator and enable{" "}
+
+            {manualUrl ? (
+              <div className="mt-3">
+                <Button asChild className="min-h-11">
+                  {/* Real anchor: the user's own click opens Telegram, so no popup blocker. */}
+                  <a href={manualUrl} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="size-4" aria-hidden="true" />
+                    Choose group in Telegram
+                  </a>
+                </Button>
+              </div>
+            ) : null}
+
+            <p className="mt-3">
+              Telegram opens its group picker. Choose the group or supergroup and confirm adding
+              @PepeCartelHQBot. Then, in that group, promote the bot to administrator, enable{" "}
               <strong>Change Group Info</strong>, and send{" "}
               <span className="inline-flex items-center gap-1 align-middle">
                 <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>
@@ -735,20 +750,22 @@ export function TelegramGroupCard({
                 </button>
               </span>{" "}
               once while this link is active. CARTEL HQ will verify the group automatically.{" "}
-              {launchBlocked ? "If Telegram did not open, use Open Telegram below." : null}{" "}
               {remaining > 0
                 ? `This one-time link expires in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}.`
                 : "This one-time link is about to expire."}
             </p>
 
             <p className="mt-2 rounded-md border border-border/60 bg-background/40 p-2 text-xs leading-relaxed text-muted-foreground">
-              <strong>If the picker never appeared</strong> and Telegram opened the bot’s private
-              chat instead, come back here and use <strong>Open Telegram</strong> — it uses
-              Telegram’s plain add-to-group link. <strong>Request admin rights</strong> asks
-              Telegram to pre-select <strong>Change Group Info</strong> during the add step; some
-              desktop clients mishandle it, so promoting the bot manually inside the group is always
-              a valid path.
+              If @PepeCartelHQBot is already installed in the group, skip the picker: open that
+              group and send{" "}
+              <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
+              while this link is active. <strong>Request admin rights</strong> below asks Telegram to
+              pre-select <strong>Change Group Info</strong> during the add step — on Telegram Desktop
+              that request is unreliable, so promoting the bot manually inside the group is the
+              dependable path.
             </p>
+
+
 
 
             {lastCheck ? (
@@ -807,15 +824,6 @@ export function TelegramGroupCard({
             ) : null}
 
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              {manualUrl ? (
-                <Button asChild variant="outline" size="sm" className="min-h-9">
-                  {/* Real anchor: cannot be popup-blocked and cannot throw inside React. */}
-                  <a href={manualUrl} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="size-4" aria-hidden="true" />
-                    Open Telegram
-                  </a>
-                </Button>
-              ) : null}
               {fallbackManualUrl ? (
                 <Button
                   asChild
@@ -829,6 +837,7 @@ export function TelegramGroupCard({
                 </Button>
               ) : null}
             </div>
+
 
           </div>
         ) : null}
