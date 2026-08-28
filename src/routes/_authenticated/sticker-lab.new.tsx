@@ -984,7 +984,12 @@ function StickerLabBuilder() {
     !checksRunning &&
     !publishing;
   const canDistribute =
-    !!packId && !!workspaceId && allPublished && selectedGroupIds.length > 0 && !distributing;
+    !!packId &&
+    !!workspaceId &&
+    allPublished &&
+    selectedGroupIds.length > 0 &&
+    groupsSelectedAndReady &&
+    !distributing;
   const shortNamePreview = packId
     ? previewShortName(draft.packName, packId, telegram.botUsername)
     : null;
