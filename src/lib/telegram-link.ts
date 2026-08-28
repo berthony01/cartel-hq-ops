@@ -121,11 +121,11 @@ export type TelegramCreateGroupLinkResult = {
 };
 
 /**
- * Primary add-to-group URLs: the plain, official `startgroup=true` form.
- * No hidden payload (pending requests are actor-correlated server-side) and no
- * `admin=` rights request — Telegram Desktop/macOS mishandles `admin=` on the
- * group picker and can dump the user into the bot's private chat instead of
- * adding it to the chosen group. Admin promotion is an explicit in-app step.
+ * Primary add-to-group URLs: the exact payload-free official form documented by
+ * Telegram — bare `startgroup` with no `=` and no value. No hidden payload
+ * (pending requests are actor-correlated server-side) and no `admin=` rights
+ * request, which Telegram Desktop/macOS mishandles on the group picker.
+ * Admin promotion is an explicit in-app step.
  */
 export function makeTelegramGroupBasicUrls(botUsername: string): {
   web: string;
@@ -133,14 +133,15 @@ export function makeTelegramGroupBasicUrls(botUsername: string): {
 } {
   const user = encodeURIComponent(botUsername);
   return {
-    web: `https://t.me/${user}?startgroup=true`,
-    app: `tg://resolve?domain=${user}&startgroup=true`,
+    web: `https://t.me/${user}?startgroup`,
+    app: `tg://resolve?domain=${user}&startgroup`,
   };
 }
 
 /**
- * Secondary URLs that also request the `change_info` admin right up-front.
- * Works on most mobile clients; kept as an optional convenience fallback.
+ * Optional secondary URLs that also request the `change_info` admin right
+ * up-front. Works on most mobile clients; manual promotion is more reliable on
+ * Telegram Desktop.
  */
 export function makeTelegramGroupAdminUrls(botUsername: string): {
   web: string;
@@ -148,10 +149,11 @@ export function makeTelegramGroupAdminUrls(botUsername: string): {
 } {
   const user = encodeURIComponent(botUsername);
   return {
-    web: `https://t.me/${user}?startgroup=true&admin=change_info`,
-    app: `tg://resolve?domain=${user}&startgroup=true&admin=change_info`,
+    web: `https://t.me/${user}?startgroup&admin=change_info`,
+    app: `tg://resolve?domain=${user}&startgroup&admin=change_info`,
   };
 }
+
 
 
 export type TelegramGroupLinkStatusResult = {
