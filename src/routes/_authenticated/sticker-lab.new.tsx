@@ -345,10 +345,10 @@ function StickerLabBuilder() {
   /* ---------------- Telegram publishing (Step 5, explicit clicks only) --------------- */
   const telegram = useTelegramSetup(step === 5);
   const telegramGroup = useTelegramGroupSetup(step === 5);
-  const [assigning, setAssigning] = useState(false);
-  const [assignError, setAssignError] = useState<string | null>(null);
-  const [assignedGroupTitle, setAssignedGroupTitle] = useState<string | null>(null);
-  const [assignNotice, setAssignNotice] = useState<string | null>(null);
+  const [distributing, setDistributing] = useState(false);
+  const [distError, setDistError] = useState<string | null>(null);
+  const [distResult, setDistResult] = useState<TelegramDistributePackResult | null>(null);
+  const [distTargets, setDistTargets] = useState<TelegramPackGroupTarget[]>([]);
   const [tgPack, setTgPack] = useState<PackTelegramState | null>(null);
   const [tgStickers, setTgStickers] = useState<Record<string, StickerTelegramState>>({});
   const [publishing, setPublishing] = useState(false);
@@ -369,9 +369,27 @@ function StickerLabBuilder() {
     }
   }, []);
 
+  /** Durable per-group distribution rows. Read-only. */
+  const loadDistribution = useCallback(
+    async (id: string) => {
+      if (!workspaceId) return;
+      try {
+        const { targets } = await fetchPackGroupDistribution({ workspaceId, packId: id });
+        setDistTargets(targets ?? []);
+      } catch {
+        /* read-only; the panel simply shows no distribution history */
+      }
+    },
+    [workspaceId],
+  );
+
   useEffect(() => {
-    if (step === 5 && packId) void loadTelegramState(packId);
-  }, [step, packId, loadTelegramState]);
+    if (step === 5 && packId) {
+      void loadTelegramState(packId);
+      void loadDistribution(packId);
+    }
+  }, [step, packId, loadTelegramState, loadDistribution]);
+
 
 
   /**
