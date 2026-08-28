@@ -386,9 +386,20 @@ function StickerLabBuilder() {
   useEffect(() => {
     if (step === 5 && packId) {
       void loadTelegramState(packId);
+    }
+  }, [step, packId, loadTelegramState]);
+
+  // Distribution history exists only once the pack has an actual Telegram set.
+  // Querying `distribution_status` for an unpublished pack is not applicable and
+  // previously surfaced a background Edge Function error to the user.
+  const telegramSetPublished = !!tgPack?.telegram_set_url || !!tgPack?.telegram_set_name;
+
+  useEffect(() => {
+    if (step === 5 && packId && telegramSetPublished) {
       void loadDistribution(packId);
     }
-  }, [step, packId, loadTelegramState, loadDistribution]);
+  }, [step, packId, telegramSetPublished, loadDistribution]);
+
 
 
 
