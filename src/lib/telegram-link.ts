@@ -121,11 +121,26 @@ export type TelegramCreateGroupLinkResult = {
 };
 
 /**
- * Payload-free group-add URLs that avoid a known Telegram Desktop/macOS bug
- * where `startgroup=<payload>` combined with `admin=change_info` drops the
- * payload and opens the bot's private chat instead of adding the bot to the
- * selected group. CARTEL HQ already identifies the pending request by actor,
- * so the hidden payload is unnecessary.
+ * Primary add-to-group URLs: the plain, official `startgroup=true` form.
+ * No hidden payload (pending requests are actor-correlated server-side) and no
+ * `admin=` rights request — Telegram Desktop/macOS mishandles `admin=` on the
+ * group picker and can dump the user into the bot's private chat instead of
+ * adding it to the chosen group. Admin promotion is an explicit in-app step.
+ */
+export function makeTelegramGroupBasicUrls(botUsername: string): {
+  web: string;
+  app: string;
+} {
+  const user = encodeURIComponent(botUsername);
+  return {
+    web: `https://t.me/${user}?startgroup=true`,
+    app: `tg://resolve?domain=${user}&startgroup=true`,
+  };
+}
+
+/**
+ * Secondary URLs that also request the `change_info` admin right up-front.
+ * Works on most mobile clients; kept as an optional convenience fallback.
  */
 export function makeTelegramGroupAdminUrls(botUsername: string): {
   web: string;
@@ -133,22 +148,11 @@ export function makeTelegramGroupAdminUrls(botUsername: string): {
 } {
   const user = encodeURIComponent(botUsername);
   return {
-    web: `https://t.me/${user}?startgroup&admin=change_info`,
-    app: `tg://resolve?domain=${user}&startgroup&admin=change_info`,
+    web: `https://t.me/${user}?startgroup=true&admin=change_info`,
+    app: `tg://resolve?domain=${user}&startgroup=true&admin=change_info`,
   };
 }
 
-/** Payload-free, no-admin fallback for clients that still mishandle admin links. */
-export function makeTelegramGroupBasicUrls(botUsername: string): {
-  web: string;
-  app: string;
-} {
-  const user = encodeURIComponent(botUsername);
-  return {
-    web: `https://t.me/${user}?startgroup`,
-    app: `tg://resolve?domain=${user}&startgroup`,
-  };
-}
 
 export type TelegramGroupLinkStatusResult = {
   bot?: TelegramBot;
