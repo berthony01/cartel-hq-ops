@@ -76,7 +76,13 @@ import {
   TelegramGroupCard,
   useTelegramGroupSetup,
 } from "@/components/cartel/TelegramGroupCard";
-import { assignPackToGroup, sendGroupTestSticker } from "@/lib/telegram-group";
+import {
+  distributePackToGroups,
+  fetchPackGroupDistribution,
+  sendGroupTestSticker,
+  type TelegramDistributePackResult,
+  type TelegramPackGroupTarget,
+} from "@/lib/telegram-group";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { Button } from "@/components/ui/button";
