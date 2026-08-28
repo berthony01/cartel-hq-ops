@@ -568,15 +568,33 @@ export function TelegramGroupCard({
     setLaunchBlocked(false);
     try {
       const result = await createTelegramGroupLink(workspaceId);
-      const web = result.groupStartUrl;
-      const app = result.groupAppUrl;
-      if (!web && !app) throw new Error("The Telegram group link is unavailable right now.");
+      const username = result.bot?.username;
+      let primaryWeb: string | undefined;
+      let primaryApp: string | undefined;
+      let fallbackWeb: string | undefined;
+      let fallbackApp: string | undefined;
+
+      if (username) {
+        const admin = makeTelegramGroupAdminUrls(username);
+        const basic = makeTelegramGroupBasicUrls(username);
+        primaryWeb = admin.web;
+        primaryApp = admin.app;
+        fallbackWeb = basic.web;
+        fallbackApp = basic.app;
+      } else {
+        // Bot username missing from response — preserve legacy server URLs rather than break.
+        primaryWeb = result.groupStartUrl;
+        primaryApp = result.groupAppUrl;
+      }
+
+      if (!primaryWeb && !primaryApp) throw new Error("The Telegram group link is unavailable right now.");
       setExpiresAt(result.expiresAt ?? null);
-      setLaunchUrls({ app, web });
+      setLaunchUrls({ app: primaryApp, web: primaryWeb });
+      setFallbackUrls({ app: fallbackApp, web: fallbackWeb });
       setLinkState("pending");
       setRemaining(secondsLeft(result.expiresAt));
       startPolling(result.requestId);
-      const launched = launchTelegram(app, web);
+      const launched = launchTelegram(primaryApp, primaryWeb);
       setLaunchBlocked(!launched);
     } catch (err) {
       setLinkState(null);
