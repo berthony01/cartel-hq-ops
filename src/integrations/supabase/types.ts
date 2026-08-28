@@ -255,6 +255,70 @@ export type Database = {
         }
         Relationships: []
       }
+      sticker_pack_group_targets: {
+        Row: {
+          announced_at: string | null
+          assigned_at: string | null
+          created_at: string
+          group_connection_id: string
+          id: string
+          last_attempt_at: string | null
+          last_error: string | null
+          pack_id: string
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          announced_at?: string | null
+          assigned_at?: string | null
+          created_at?: string
+          group_connection_id: string
+          id?: string
+          last_attempt_at?: string | null
+          last_error?: string | null
+          pack_id: string
+          status?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          announced_at?: string | null
+          assigned_at?: string | null
+          created_at?: string
+          group_connection_id?: string
+          id?: string
+          last_attempt_at?: string | null
+          last_error?: string | null
+          pack_id?: string
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sticker_pack_group_targets_group_connection_id_fkey"
+            columns: ["group_connection_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_group_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_pack_group_targets_pack_id_fkey"
+            columns: ["pack_id"]
+            isOneToOne: false
+            referencedRelation: "sticker_packs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_pack_group_targets_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sticker_packs: {
         Row: {
           brief: string | null
