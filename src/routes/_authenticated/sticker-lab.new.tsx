@@ -2692,38 +2692,74 @@ function Stepper({
   current: number;
   onSelect: (n: number) => void;
 }) {
+  const active = BUILDER_STEPS[current - 1];
   return (
-    <ol className="flex flex-wrap gap-2" aria-label="Builder steps">
-      {BUILDER_STEPS.map((s) => {
-        const state = s.id === current ? "current" : s.id < current ? "done" : "todo";
-        return (
-          <li key={s.id} className="min-w-0 flex-1 basis-[8rem]">
-            <button
-              type="button"
-              onClick={() => onSelect(s.id)}
-              aria-current={state === "current" ? "step" : undefined}
-              className={`flex min-h-11 w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-                state === "current"
-                  ? "border-gold bg-gold/10 text-gold"
-                  : state === "done"
-                    ? "border-pepe/40 bg-surface-raised text-pepe"
-                    : "border-border bg-surface-raised text-muted-foreground hover:border-gold/40"
-              }`}
-            >
-              <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-current text-[10px] font-bold">
-                {state === "done" ? <Check className="size-3" aria-hidden="true" /> : s.id}
-              </span>
-              <span className="truncate font-semibold uppercase tracking-[0.12em]">
-                <span className="sm:hidden">{s.short}</span>
-                <span className="hidden sm:inline">{s.title}</span>
-              </span>
-            </button>
-          </li>
-        );
-      })}
-    </ol>
+    <div className="rise-in space-y-2.5">
+      {/* Mobile: compact numbered rail + explicit current-step label (never truncated). */}
+      <div className="lg:hidden">
+        <p className="text-sm font-semibold leading-snug text-foreground">
+          <span className="text-gold">
+            Step {current} of {BUILDER_STEPS.length}
+          </span>{" "}
+          · {active?.title}
+        </p>
+        <ol className="no-scrollbar mt-2 flex items-center gap-2" aria-label="Builder steps">
+          {BUILDER_STEPS.map((s) => {
+            const state = s.id === current ? "current" : s.id < current ? "done" : "todo";
+            return (
+              <li key={s.id} className="flex-1">
+                <button
+                  type="button"
+                  onClick={() => onSelect(s.id)}
+                  aria-current={state === "current" ? "step" : undefined}
+                  aria-label={`Step ${s.id}: ${s.title}`}
+                  className={`flex min-h-11 w-full items-center justify-center rounded-md border text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    state === "current"
+                      ? "border-gold bg-gold/10 text-gold"
+                      : state === "done"
+                        ? "border-pepe/40 bg-surface-raised text-pepe"
+                        : "border-border bg-surface-raised text-muted-foreground"
+                  }`}
+                >
+                  {state === "done" ? <Check className="size-4" aria-hidden="true" /> : s.id}
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+
+      {/* Desktop: full step labels, no truncation. */}
+      <ol className="hidden gap-2 lg:flex" aria-label="Builder steps">
+        {BUILDER_STEPS.map((s) => {
+          const state = s.id === current ? "current" : s.id < current ? "done" : "todo";
+          return (
+            <li key={s.id} className="min-w-0 flex-1">
+              <button
+                type="button"
+                onClick={() => onSelect(s.id)}
+                aria-current={state === "current" ? "step" : undefined}
+                className={`flex min-h-11 w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                  state === "current"
+                    ? "border-gold bg-gold/10 text-gold"
+                    : state === "done"
+                      ? "border-pepe/40 bg-surface-raised text-pepe"
+                      : "border-border bg-surface-raised text-muted-foreground hover:border-gold/40"
+                }`}
+              >
+                <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-current text-[10px] font-bold">
+                  {state === "done" ? <Check className="size-3" aria-hidden="true" /> : s.id}
+                </span>
+                <span className="font-semibold uppercase tracking-[0.12em]">{s.title}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
+
 
 function StepCard({
   title,
