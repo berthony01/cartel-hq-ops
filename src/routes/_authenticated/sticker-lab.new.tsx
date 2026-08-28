@@ -2312,15 +2312,19 @@ function StickerLabBuilder() {
                 ) : (
                   <StatusBadge tone="red">Telegram account not connected</StatusBadge>
                 )}
-                {telegramGroup.groupReady ? (
+                {telegramGroup.connectedGroupCount === 0 ? (
+                  <StatusBadge tone="red">No group connected</StatusBadge>
+                ) : selectedGroupIds.length === 0 ? (
+                  <StatusBadge tone="red">No distribution group selected</StatusBadge>
+                ) : groupsSelectedAndReady ? (
                   <StatusBadge tone="green">
-                    Target group verified — {telegramGroup.groupTitle}
+                    {selectedGroupIds.length} of {telegramGroup.connectedGroupCount} group
+                    {telegramGroup.connectedGroupCount === 1 ? "" : "s"} selected
                   </StatusBadge>
-                ) : telegramGroup.groupConnected ? (
-                  <StatusBadge tone="red">Target group not verified</StatusBadge>
                 ) : (
-                  <StatusBadge tone="red">No target group connected</StatusBadge>
+                  <StatusBadge tone="red">A selected group is not verified</StatusBadge>
                 )}
+
                 <StatusBadge tone={exportableCount > 0 ? "gold" : "muted"}>
                   {exportableCount} export-ready
                 </StatusBadge>
