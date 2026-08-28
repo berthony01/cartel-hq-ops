@@ -575,17 +575,21 @@ export function TelegramGroupCard({
       let fallbackApp: string | undefined;
 
       if (username) {
-        const admin = makeTelegramGroupAdminUrls(username);
+        // Primary = plain official add-to-group form. Requesting admin rights in
+        // the deep link makes Telegram Desktop drop the picker and open the bot's
+        // private chat instead, so promotion is an explicit in-app step.
         const basic = makeTelegramGroupBasicUrls(username);
-        primaryWeb = admin.web;
-        primaryApp = admin.app;
-        fallbackWeb = basic.web;
-        fallbackApp = basic.app;
+        const admin = makeTelegramGroupAdminUrls(username);
+        primaryWeb = basic.web;
+        primaryApp = basic.app;
+        fallbackWeb = admin.web;
+        fallbackApp = admin.app;
       } else {
         // Bot username missing from response — preserve legacy server URLs rather than break.
         primaryWeb = result.groupStartUrl;
         primaryApp = result.groupAppUrl;
       }
+
 
       if (!primaryWeb && !primaryApp) throw new Error("The Telegram group link is unavailable right now.");
       setExpiresAt(result.expiresAt ?? null);
