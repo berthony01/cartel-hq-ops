@@ -518,13 +518,19 @@ export function TelegramGroupCard({
           queryClient.setQueryData(["telegram-group-link", workspaceId], result);
           const list = result.groups ?? (result.group ? [result.group] : []);
           const fresh = list.find((g) => g && !before.has(g.id));
-          if (result.connected && (fresh || result.group)) {
+          // Success only when THIS request reports connected, or a genuinely new
+          // group id appeared. Legacy `result.group` alone proves nothing.
+          const requestConnected = result.request?.status === "connected";
+          if (fresh || requestConnected) {
             stopPolling();
             setLinkState("connected");
             void queryClient.invalidateQueries({ queryKey: ["telegram-group-link", workspaceId] });
-            toast.success(`Group connected: ${(fresh ?? result.group)!.title}`);
+            toast.success(
+              fresh ? `Group connected: ${fresh.title}` : "Telegram group connection confirmed.",
+            );
             return;
           }
+
           const status = result.request?.status;
           if (status === "expired" || status === "cancelled") {
             stopPolling();
