@@ -184,7 +184,7 @@ export function TelegramConnectionCard({
 
   return (
     <Card className="cartel-panel">
-      <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+      <CardHeader className="flex-row items-center justify-between gap-3 space-y-0 p-4 sm:p-6">
         <CardTitle className="text-base">Telegram connection</CardTitle>
         {configQuery.isLoading ? (
           <StatusBadge tone="muted">Checking bot…</StatusBadge>
@@ -194,7 +194,7 @@ export function TelegramConnectionCard({
           <StatusBadge tone="red">Bot not configured</StatusBadge>
         )}
       </CardHeader>
-      <CardContent className="space-y-4 text-sm">
+      <CardContent className="space-y-3 p-4 pt-0 text-sm sm:space-y-4 sm:p-6 sm:pt-0">
         {configQuery.isError ? (
           <p className="rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
             The Telegram service could not be reached. Nothing was changed — retry in a moment.
@@ -213,22 +213,15 @@ export function TelegramConnectionCard({
           </div>
         ) : null}
 
-        {botConfigured ? (
-          <p className="text-xs text-muted-foreground">
-            Bot: <span className="font-mono text-foreground">@{botUsername ?? "PepeCartelHQBot"}</span>
-          </p>
-        ) : null}
-
         {connection ? (
           <div className="rounded-md border border-border/60 bg-background/40 p-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <p className="text-sm font-semibold text-foreground">Connected as {connectedName}</p>
-              <StatusBadge tone="green">Telegram linked</StatusBadge>
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+              <p className="min-w-0 truncate text-sm font-semibold text-foreground">
+                Connected as {connectedName}
+              </p>
+              <StatusBadge tone="green">Linked</StatusBadge>
             </div>
-            <p className="mt-1 font-mono text-xs text-muted-foreground">
-              ID {connection.telegram_user_id}
-            </p>
-            <p className="mt-2 text-xs text-muted-foreground">
+            <p className="mt-1 text-xs text-muted-foreground">
               This Telegram account will own the published sticker set.
             </p>
           </div>
@@ -303,10 +296,28 @@ export function TelegramConnectionCard({
         </div>
 
         {!compact ? (
-          <p className="text-xs text-muted-foreground">
-            Publishing uses the official CARTEL HQ bot server-side. The bot token never reaches this
-            browser and CARTEL HQ never calls the Telegram API from your device.
-          </p>
+          <details className="rounded-md border border-border/60 bg-background/40 p-3">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Bot & security detail
+            </summary>
+            <div className="mt-2 space-y-1.5 text-xs text-muted-foreground">
+              {botConfigured ? (
+                <p>
+                  Bot:{" "}
+                  <span className="font-mono text-foreground">
+                    @{botUsername ?? "PepeCartelHQBot"}
+                  </span>
+                </p>
+              ) : null}
+              {connection ? (
+                <p className="font-mono">Telegram ID {connection.telegram_user_id}</p>
+              ) : null}
+              <p className="leading-relaxed">
+                Publishing uses the official CARTEL HQ bot server-side. The bot token never reaches
+                this browser and CARTEL HQ never calls the Telegram API from your device.
+              </p>
+            </div>
+          </details>
         ) : null}
         {requestId ? <span className="sr-only">Link request {requestId}</span> : null}
       </CardContent>
