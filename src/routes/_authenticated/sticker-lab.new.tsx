@@ -1622,8 +1622,8 @@ function StickerLabBuilder() {
               <li key={c.id}>
                 <details
                   ref={(el) => {
-                    if (el && !el.dataset.initOpen) {
-                      el.dataset.initOpen = "1";
+                    if (el && !el.dataset["initOpen"]) {
+                      el.dataset["initOpen"] = "1";
                       el.open = i === 0;
                     }
                   }}
