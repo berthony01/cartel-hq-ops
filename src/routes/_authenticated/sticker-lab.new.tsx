@@ -2518,27 +2518,27 @@ function StickerLabBuilder() {
                     </a>
                   </Button>
                 ) : null}
-                {allPublished &&
-                telegramGroup.officialStickerEligible &&
-                (!tgPack?.telegram_group_connection_id || assignError) ? (
+                {allPublished ? (
                   <Button
                     type="button"
                     variant="outline"
                     className="min-h-11"
-                    disabled={assigning || !telegramGroup.groupReady}
-                    onClick={() => void doAssignGroup()}
+                    disabled={!canDistribute}
+                    onClick={() => void doDistribute()}
                   >
-                    {assigning ? (
+                    {distributing ? (
                       <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                     ) : null}
-                    {assignError ? "Retry assign to group" : "Assign to group"}
+                    {distError || distResult?.failed
+                      ? "Retry distribution to selected groups"
+                      : "Distribute to selected groups"}
                   </Button>
                 ) : null}
                 <Button
                   type="button"
                   variant="outline"
                   className="min-h-11"
-                  disabled={tgPublishedCount === 0 || sendingTest || !telegramGroup.groupId}
+                  disabled={tgPublishedCount === 0 || sendingTest || !testTargetGroup}
                   onClick={() => void doSendTest()}
                 >
                   {sendingTest ? (
@@ -2548,6 +2548,11 @@ function StickerLabBuilder() {
                 </Button>
               </div>
 
+              {!testTargetGroup ? (
+                <p className="text-xs text-muted-foreground">
+                  Select exactly one group to send a test sticker.
+                </p>
+              ) : null}
               {canRetryPublish ? (
                 <p className="text-xs text-muted-foreground">
                   Retrying only re-attempts stickers that are not published yet — the existing set is
@@ -2556,21 +2561,24 @@ function StickerLabBuilder() {
               ) : null}
               {testResult ? <p className="text-xs text-muted-foreground">{testResult}</p> : null}
               <p className="text-xs text-muted-foreground">
-                The test sends a <strong>native Telegram sticker</strong> into the connected group,
-                not an image file. Native sticker sending works for any verified connected group —
-                basic group or supergroup. Telegram’s <strong>official group sticker set</strong> is
-                separate and optional — it only exists for supergroups and is assigned only when
-                Telegram reports the group as eligible; otherwise CARTEL HQ posts the pack link in
-                the group instead. Installing the pack to a personal Telegram account stays a
-                separate individual action.
+                One Telegram sticker set is created for this pack and then distributed to the groups
+                you selected — connecting more groups later lets you distribute the same set again
+                without recreating it. The test sends a <strong>native Telegram sticker</strong> into
+                a single selected group, not an image file, and works for any verified connected
+                group — basic group or supergroup. Telegram’s{" "}
+                <strong>official group sticker set</strong> is separate and optional — it only
+                exists for eligible supergroups; otherwise CARTEL HQ posts the pack link in the
+                group instead. Installing the pack to a personal Telegram account stays a separate
+                individual action.
               </p>
               {!canPublish && !publishing && !allPublished ? (
                 <p className="text-xs text-muted-foreground">
-                  Publishing needs: a configured bot, your connected Telegram account, a verified
-                  target group or supergroup (bot admin + Change Group Info), at least one
-                  export-ready sticker, and all browser/cutout checks finished.
+                  Publishing needs: a configured bot, your connected Telegram account, at least one
+                  selected and verified group or supergroup (bot admin + Change Group Info), at
+                  least one export-ready sticker, and all browser/cutout checks finished.
                 </p>
               ) : null}
+
             </CardContent>
           </Card>
 
