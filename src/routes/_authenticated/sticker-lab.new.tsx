@@ -1621,7 +1621,12 @@ function StickerLabBuilder() {
             {draft.concepts.map((c, i) => (
               <li key={c.id}>
                 <details
-                  open={i === 0}
+                  ref={(el) => {
+                    if (el && !el.dataset["initOpen"]) {
+                      el.dataset["initOpen"] = "1";
+                      el.open = i === 0;
+                    }
+                  }}
                   className="cartel-panel group rounded-lg [&[open]>summary]:border-b [&[open]>summary]:border-border/60"
                 >
                   <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 p-3 sm:p-4">
