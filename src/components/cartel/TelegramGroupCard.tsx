@@ -824,15 +824,6 @@ export function TelegramGroupCard({
             ) : null}
 
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              {manualUrl ? (
-                <Button asChild variant="outline" size="sm" className="min-h-9">
-                  {/* Real anchor: cannot be popup-blocked and cannot throw inside React. */}
-                  <a href={manualUrl} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="size-4" aria-hidden="true" />
-                    Open Telegram
-                  </a>
-                </Button>
-              ) : null}
               {fallbackManualUrl ? (
                 <Button
                   asChild
@@ -846,6 +837,7 @@ export function TelegramGroupCard({
                 </Button>
               ) : null}
             </div>
+
 
           </div>
         ) : null}
