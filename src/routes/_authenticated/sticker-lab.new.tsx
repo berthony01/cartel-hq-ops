@@ -968,60 +968,60 @@ function StickerLabBuilder() {
     .filter((c) => isExportable(c.id))
     .map((c) => stickerIdFor(c.id))
     .filter((id): id is string => !!id);
+  const selectedGroups = telegramGroup.selectedGroups;
+  const selectedGroupIds = telegramGroup.selectedGroupIds;
+  const selectedGroupNames = selectedGroups.map((g) => g.title);
+  const groupsSelectedAndReady =
+    selectedGroupIds.length > 0 && telegramGroup.allSelectedReady;
   const canPublish =
     !!packId &&
     !!workspaceId &&
     telegram.botConfigured &&
     telegram.ownerConnected &&
-    telegramGroup.groupReady &&
+    groupsSelectedAndReady &&
     reviewedStickerIds.length > 0 &&
     !allPublished &&
     !checksRunning &&
     !publishing;
+  const canDistribute =
+    !!packId && !!workspaceId && allPublished && selectedGroupIds.length > 0 && !distributing;
   const shortNamePreview = packId
     ? previewShortName(draft.packName, packId, telegram.botUsername)
     : null;
 
-  /** Assign-only path. Never re-publishes stickers. */
-  const doAssignGroup = async () => {
-    if (!packId || !workspaceId || !telegramGroup.groupId) return;
-    setAssigning(true);
-    setAssignError(null);
-    setAssignNotice(null);
+  /**
+   * Batch distribution of the ALREADY published sticker set to the selected
+   * connected groups. Never creates or re-creates a Telegram sticker set.
+   */
+  const doDistribute = async () => {
+    if (!packId || !workspaceId || selectedGroupIds.length === 0) return;
+    setDistributing(true);
+    setDistError(null);
     try {
-      const result = await assignPackToGroup({
+      const result = await distributePackToGroups({
         workspaceId,
         packId,
-        groupConnectionId: telegramGroup.groupId,
+        groupConnectionIds: selectedGroupIds,
       });
+      setDistResult(result);
       await loadTelegramState(packId);
-      const title = result.group?.title ?? telegramGroup.groupTitle ?? "the group";
-      if (result.assigned) {
-        setAssignedGroupTitle(title);
-        setAssignNotice(null);
-        toast.success(`Official group sticker set active in ${title}.`);
-      } else if (result.announced) {
-        // Successful delivery: the pack link was posted in the group instead.
-        setAssignedGroupTitle(null);
-        setAssignNotice(
-          result.message ||
-            (result.reason === "GROUP_STICKER_REQUIRES_SUPERGROUP"
-              ? `Pack published and announced in ${title}. Members can open the pack link now, and CARTEL HQ can send native stickers in the group. Telegram's official group sticker set only exists for supergroups — upgrading ${title} is optional and only needed if you want that feature.`
-              : result.reason === "GROUP_STICKER_MIN_MEMBERS"
-                ? `Pack published and announced in ${title}. Official group sticker set unlocks at ${result.minMembers ?? 100} members (${result.memberCount ?? "?"}/${result.minMembers ?? 100}). Members can open the pack link now, and CARTEL HQ can send native stickers in the group.`
-                : `Pack published and announced in ${title}. Telegram's official group sticker set is not available for this group yet.`),
+      await loadDistribution(packId);
+      if (result.status === "complete") {
+        toast.success(
+          `${result.total} group${result.total === 1 ? "" : "s"} updated: ${result.assigned} official set, ${result.announced} announced.`,
         );
-        toast.success(`Pack published and announced in ${title}.`);
+      } else if (result.status === "partial") {
+        toast.warning(
+          `${result.total - result.failed} of ${result.total} groups updated, ${result.failed} need retry.`,
+        );
       } else {
-        const msg = result.message || "Telegram did not accept the group sticker set assignment.";
-        setAssignError(result.technical ? `${msg} (${result.technical})` : msg);
-        toast.error("Sticker set published, group assignment needs attention.");
+        toast.error("Distribution to the selected groups failed. The sticker set stays published.");
       }
     } catch (err) {
-      setAssignError(telegramErrorMessage(err));
+      setDistError(telegramErrorMessage(err));
       toast.error(telegramErrorMessage(err));
     } finally {
-      setAssigning(false);
+      setDistributing(false);
     }
   };
 
@@ -1035,8 +1035,8 @@ function StickerLabBuilder() {
       await loadTelegramState(packId);
       if (result.status === "published") {
         toast.success(`Published ${result.published} of ${result.total} stickers to Telegram.`);
-        // Group assignment only ever runs after a fully successful publish.
-        await doAssignGroup();
+        // One publish, then exactly one batch distribution to the selected groups.
+        await doDistribute();
       } else if (result.status === "partial") {
         toast.warning(
           `${result.published} of ${result.total} published, ${result.failed} need retry.`,
@@ -1051,6 +1051,7 @@ function StickerLabBuilder() {
       setPublishing(false);
     }
   };
+
 
   const doRefresh = async () => {
     if (!packId || !workspaceId) return;
