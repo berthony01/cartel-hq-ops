@@ -874,8 +874,7 @@ export function TelegramGroupCard({
                 )}
               </div>
             ) : null}
-
-
+          </div>
         ) : null}
 
         {linkState === "expired" || linkState === "cancelled" ? (
