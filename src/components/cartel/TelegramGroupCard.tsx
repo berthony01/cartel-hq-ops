@@ -495,7 +495,7 @@ export function TelegramGroupCard({
     clearGroupSelection,
   } = setup;
 
-  const { launchTelegram } = useTelegramLauncher();
+  
   const [starting, setStarting] = useState(false);
   const [linkState, setLinkState] = useState<TelegramLinkStatus | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
