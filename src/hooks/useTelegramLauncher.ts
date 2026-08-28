@@ -43,6 +43,17 @@ export function useTelegramLauncher() {
       clearListeners();
       clearFallback();
 
+      // Sandboxed preview iframes can throw SecurityError on window.open or on a
+      // top-level navigation. Never let that escape into the React error boundary.
+      const navigate = (url: string): boolean => {
+        try {
+          window.location.href = url;
+          return true;
+        } catch {
+          return false;
+        }
+      };
+
       if (mobile && appUrl) {
         handoffRef.current = false;
 
@@ -66,25 +77,28 @@ export function useTelegramLauncher() {
           window.removeEventListener("pagehide", onPageHide);
         };
 
-        window.location.href = appUrl;
+        const started = navigate(appUrl);
         fallbackRef.current = window.setTimeout(() => {
           fallbackRef.current = null;
           clearListeners();
           if (!handoffRef.current && document.visibilityState === "visible" && webUrl) {
-            window.location.href = webUrl;
+            navigate(webUrl);
           }
         }, 1300);
-        return true;
+        if (started) return true;
+        return webUrl ? navigate(webUrl) : false;
       }
 
       const url = webUrl ?? appUrl;
       if (!url) return false;
-      if (mobile) {
-        window.location.href = url;
-        return true;
-      }
+      if (mobile) return navigate(url);
 
-      const opened = window.open(url, "_blank");
+      let opened: Window | null = null;
+      try {
+        opened = window.open(url, "_blank");
+      } catch {
+        opened = null;
+      }
       if (opened) {
         try {
           opened.opener = null;
@@ -93,11 +107,11 @@ export function useTelegramLauncher() {
         }
         return true;
       }
-      window.location.href = url;
-      return true;
+      return navigate(url);
     },
     [clearFallback, clearListeners],
   );
+
 
   return { launchTelegram, isMobileDevice };
 }
