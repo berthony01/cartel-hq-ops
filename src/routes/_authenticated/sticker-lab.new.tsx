@@ -1073,17 +1073,20 @@ function StickerLabBuilder() {
     }
   };
 
+  /** A native test always targets exactly one selected group — never a broadcast. */
+  const testTargetGroup = selectedGroups.length === 1 ? selectedGroups[0]! : null;
   const doSendTest = async () => {
-    if (!packId || !workspaceId || !telegramGroup.groupId) return;
+    if (!packId || !workspaceId || !testTargetGroup) return;
     setSendingTest(true);
     setTestResult(null);
     try {
       const result = await sendGroupTestSticker({
         workspaceId,
         packId,
-        groupConnectionId: telegramGroup.groupId,
+        groupConnectionId: testTargetGroup.id,
       });
-      const title = telegramGroup.groupTitle ?? "the group";
+      const title = testTargetGroup.title;
+
       if (result.sent) {
         setTestResult(`Native sticker sent to ${title}.`);
         toast.success(`Native sticker sent to ${title}.`);
