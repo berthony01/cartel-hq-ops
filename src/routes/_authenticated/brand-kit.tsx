@@ -15,8 +15,9 @@ import {
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { AssetUploader } from "@/components/cartel/AssetUploader";
+import { Section } from "@/components/cartel/Section";
+import { StickyActionBar } from "@/components/cartel/StickyActionBar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -187,7 +188,7 @@ function BrandKitPage() {
   const set = (patch: Partial<BrandKitForm>) => setForm((f) => ({ ...f, ...patch }));
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 pb-24 sm:space-y-8 lg:pb-0">
       <PageHeader
         eyebrow="Module"
         title="Brand Kit"
@@ -204,17 +205,15 @@ function BrandKitPage() {
       ) : (
         <>
           <form
+            id="brand-kit-form"
             onSubmit={(e) => {
               e.preventDefault();
               save.mutate();
             }}
-            className="space-y-6"
+            className="space-y-4 sm:space-y-6"
           >
-            <Card className="cartel-panel">
-              <CardHeader>
-                <CardTitle className="text-sm uppercase tracking-widest">Identity</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-5 md:grid-cols-2">
+            <Section variant="surface" title="Identity">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <Label htmlFor="brand_name">Brand name</Label>
                   <Input
@@ -245,14 +244,11 @@ function BrandKitPage() {
                     onChange={(e) => set({ description: e.target.value })}
                   />
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </Section>
 
-            <Card className="cartel-panel">
-              <CardHeader>
-                <CardTitle className="text-sm uppercase tracking-widest">Links</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-5 md:grid-cols-3">
+            <Section variant="surface" title="Links">
+              <div className="grid gap-4 md:grid-cols-3">
                 <div>
                   <Label htmlFor="website_url">Website</Label>
                   <Input
@@ -283,14 +279,11 @@ function BrandKitPage() {
                     onChange={(e) => set({ telegram_url: e.target.value })}
                   />
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </Section>
 
-            <Card className="cartel-panel">
-              <CardHeader>
-                <CardTitle className="text-sm uppercase tracking-widest">Visual system</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-5 md:grid-cols-2">
+            <Section variant="surface" title="Visual system">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <Label htmlFor="colors">Colours</Label>
                   <Textarea
@@ -318,7 +311,7 @@ function BrandKitPage() {
                   />
                 </div>
                 {form.colors.trim() ? (
-                  <div className="md:col-span-2 flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 md:col-span-2">
                     {toList(form.colors).map((c) => (
                       <span
                         key={c}
@@ -334,16 +327,11 @@ function BrandKitPage() {
                     ))}
                   </div>
                 ) : null}
-              </CardContent>
-            </Card>
+              </div>
+            </Section>
 
-            <Card className="cartel-panel">
-              <CardHeader>
-                <CardTitle className="text-sm uppercase tracking-widest">
-                  AI style guidance
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-5 md:grid-cols-2">
+            <Section variant="surface" title="AI style guidance">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div className="md:col-span-2">
                   <Label htmlFor="ai_style_notes">Style notes</Label>
                   <Textarea
@@ -374,10 +362,10 @@ function BrandKitPage() {
                     onChange={(e) => set({ prohibited_styles: e.target.value })}
                   />
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </Section>
 
-            <div className="flex items-center gap-3">
+            <div className="hidden items-center gap-3 lg:flex">
               <Button
                 type="submit"
                 className="min-h-11"
@@ -396,14 +384,13 @@ function BrandKitPage() {
             </div>
           </form>
 
-          <section aria-labelledby="brand-assets-heading" className="space-y-4">
-            <h2
-              id="brand-assets-heading"
-              className="font-display text-lg uppercase tracking-widest text-foreground"
-            >
-              Logos, mascots & references
-            </h2>
-            <div className="grid gap-4 md:grid-cols-3">
+          <Section
+            variant="plain"
+            title="Logos, mascots & references"
+            description="Uploads stay private to this workspace."
+            contentClassName="space-y-4"
+          >
+            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
               {BRAND_ASSET_TYPES.map((type) => (
                 <AssetUploader
                   key={type}
@@ -425,9 +412,9 @@ function BrandKitPage() {
                 description="Uploaded logos, mascots and references appear here and stay private to this workspace."
               />
             ) : (
-              <ul className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
+              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
                 {brandAssets.map((asset: MediaAsset) => (
-                  <li key={asset.id} className="cartel-panel rounded-lg p-3">
+                  <li key={asset.id} className="cartel-panel rounded-lg p-2.5 sm:p-3">
                     <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md border border-border bg-background/40">
                       {urls[asset.storage_path] ? (
                         <img
@@ -447,9 +434,38 @@ function BrandKitPage() {
                 ))}
               </ul>
             )}
-          </section>
+          </Section>
+
+          <StickyActionBar
+            desktop="hidden"
+            end={
+              <Button
+                type="submit"
+                form="brand-kit-form"
+                className="min-h-11"
+                disabled={save.isPending || brandKitQuery.isLoading || !form.brand_name.trim()}
+              >
+                {save.isPending ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Save className="size-4" aria-hidden="true" />
+                )}
+                {loaded ? "Save changes" : "Create Brand Kit"}
+              </Button>
+            }
+            start={
+              <span className="truncate text-xs text-muted-foreground">
+                {brandKitQuery.isLoading
+                  ? "Loading…"
+                  : loaded
+                    ? "Brand Kit active"
+                    : "Not created yet"}
+              </span>
+            }
+          />
         </>
       )}
     </div>
   );
 }
+

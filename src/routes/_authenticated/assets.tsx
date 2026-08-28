@@ -19,6 +19,8 @@ import {
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { AssetUploader } from "@/components/cartel/AssetUploader";
+import { Section } from "@/components/cartel/Section";
+import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -100,7 +102,7 @@ function AssetsPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       <PageHeader
         eyebrow="Module"
         title="Asset Vault"
@@ -116,14 +118,8 @@ function AssetsPage() {
         />
       ) : (
         <>
-          <section aria-labelledby="upload-heading" className="space-y-4">
-            <h2
-              id="upload-heading"
-              className="font-display text-lg uppercase tracking-widest text-foreground"
-            >
-              Upload
-            </h2>
-            <div className="grid gap-4 md:grid-cols-[220px_1fr] md:items-start">
+          <Section variant="surface" title="Upload" contentClassName="space-y-3">
+            <div className="grid gap-3 md:grid-cols-[220px_1fr] md:items-start">
               <div>
                 <label
                   htmlFor="asset-type"
@@ -131,11 +127,8 @@ function AssetsPage() {
                 >
                   Asset type
                 </label>
-                <Select
-                  value={uploadType}
-                  onValueChange={(v) => setUploadType(v as AssetType)}
-                >
-                  <SelectTrigger id="asset-type" className="min-h-11">
+                <Select value={uploadType} onValueChange={(v) => setUploadType(v as AssetType)}>
+                  <SelectTrigger id="asset-type" className="min-h-11 w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -155,43 +148,48 @@ function AssetsPage() {
                 onUploaded={refresh}
               />
             </div>
-          </section>
+          </Section>
 
-          <section aria-labelledby="library-heading" className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2
-                id="library-heading"
-                className="font-display text-lg uppercase tracking-widest text-foreground"
-              >
-                Library
-              </h2>
-              <Select value={filter} onValueChange={(v) => setFilter(v as AssetType | "all")}>
-                <SelectTrigger className="min-h-10 w-48" aria-label="Filter by asset type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All types</SelectItem>
-                  {ASSET_TYPES.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {ASSET_TYPE_LABELS[t]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
+          <Section
+            variant="plain"
+            title="Library"
+            actions={
+              <div className="flex items-center gap-2">
+                <StatusBadge tone={assets.length > 0 ? "gold" : "muted"}>
+                  {assetsQuery.isLoading ? "Loading" : `${assets.length}`}
+                </StatusBadge>
+                <Select value={filter} onValueChange={(v) => setFilter(v as AssetType | "all")}>
+                  <SelectTrigger
+                    className="min-h-10 w-[9.5rem] sm:w-48"
+                    aria-label="Filter by asset type"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All types</SelectItem>
+                    {ASSET_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {ASSET_TYPE_LABELS[t]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            }
+          >
             {assetsQuery.isLoading ? (
               <p className="text-sm text-muted-foreground">Loading assets…</p>
             ) : assets.length === 0 ? (
               <EmptyState
+                compact
                 icon={FolderLock}
                 title="No assets yet"
                 description="Uploads appear here. Files are private to this workspace and never publicly accessible."
               />
             ) : (
-              <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
                 {assets.map((asset) => (
-                  <li key={asset.id} className="cartel-panel rise-in rounded-lg p-3">
+                  <li key={asset.id} className="cartel-panel rise-in rounded-lg p-2.5 sm:p-3">
                     <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md border border-border bg-background/40">
                       {urls[asset.storage_path] ? (
                         <img
@@ -204,18 +202,18 @@ function AssetsPage() {
                         <span className="text-[10px] text-muted-foreground">Loading preview…</span>
                       )}
                     </div>
-                    <p className="mt-2 text-[11px] uppercase tracking-wider text-gold">
+                    <p className="mt-2 truncate text-[11px] uppercase tracking-wider text-gold">
                       {ASSET_TYPE_LABELS[asset.asset_type as AssetType] ?? asset.asset_type}
                     </p>
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="truncate text-[11px] text-muted-foreground">
                       {asset.width && asset.height ? `${asset.width}×${asset.height} · ` : ""}
                       {formatBytes(asset.file_size_bytes)}
                     </p>
-                    <div className="mt-2 flex gap-1">
+                    <div className="mt-2 flex gap-2">
                       <Button
                         size="sm"
                         variant="outline"
-                        className="min-h-9 flex-1 text-xs"
+                        className="min-h-10 flex-1 text-xs"
                         onClick={() => void download(asset)}
                       >
                         <Download className="size-3.5" aria-hidden="true" />
@@ -224,18 +222,18 @@ function AssetsPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="min-h-9 text-signal hover:text-signal"
+                        className="min-h-10 min-w-10 text-signal hover:text-signal"
                         aria-label="Delete asset"
                         onClick={() => void remove(asset)}
                       >
-                        <Trash2 className="size-3.5" aria-hidden="true" />
+                        <Trash2 className="size-4" aria-hidden="true" />
                       </Button>
                     </div>
                   </li>
                 ))}
               </ul>
             )}
-          </section>
+          </Section>
         </>
       )}
     </div>
