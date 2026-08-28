@@ -1470,8 +1470,13 @@ function StickerLabBuilder() {
                             <span className="text-[10px] text-muted-foreground">No preview</span>
                           )}
                         </span>
-                        <span className="mt-2 block truncate text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-                          {asset.asset_type.replace("_", " ")}
+                        <span className="mt-2 flex items-center justify-between gap-1">
+                          <span className="min-w-0 truncate text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                            {asset.asset_type.replace("_", " ")}
+                          </span>
+                          {selected ? (
+                            <Check className="size-3.5 shrink-0 text-gold" aria-hidden="true" />
+                          ) : null}
                         </span>
                       </button>
                     </li>
@@ -2840,14 +2845,14 @@ function StepCard({
 }) {
   return (
     <Card className="cartel-panel rise-in">
-      <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
-        <div>
-          <CardTitle className="text-lg">{title}</CardTitle>
+      <CardHeader className="gap-3 p-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0 sm:p-6">
+        <div className="min-w-0">
+          <CardTitle className="text-base sm:text-lg">{title}</CardTitle>
           <p className="mt-1.5 text-xs text-muted-foreground">{hint}</p>
         </div>
         {action}
       </CardHeader>
-      <CardContent>{children}</CardContent>
+      <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">{children}</CardContent>
     </Card>
   );
 }
