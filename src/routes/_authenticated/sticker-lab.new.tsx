@@ -2362,23 +2362,76 @@ function StickerLabBuilder() {
                 </p>
               ) : null}
 
-              {assignedGroupTitle && !assignError ? (
-                <p className="rounded-md border border-pepe/40 bg-pepe/5 p-3 text-xs text-pepe">
-                  Official group sticker set active in {assignedGroupTitle}.
+              {distResult ? (
+                <p
+                  className={`rounded-md border p-3 text-xs ${
+                    distResult.failed > 0
+                      ? "border-gold/40 bg-gold/5 text-muted-foreground"
+                      : "border-pepe/40 bg-pepe/5 text-pepe"
+                  }`}
+                >
+                  {distResult.total} group{distResult.total === 1 ? "" : "s"} updated:{" "}
+                  {distResult.assigned} official set, {distResult.announced} announced,{" "}
+                  {distResult.failed} failed.
                 </p>
               ) : null}
 
-              {assignNotice && !assignError ? (
-                <p className="rounded-md border border-gold/40 bg-gold/5 p-3 text-xs text-muted-foreground">
-                  {assignNotice}
-                </p>
+              {distTargets.length > 0 || distResult ? (
+                <ul className="space-y-2 text-xs">
+                  {(distResult
+                    ? distResult.results.map((r) => ({
+                        id: r.groupConnectionId,
+                        title: r.title,
+                        status: r.status,
+                        detail: r.message ?? r.reason ?? null,
+                      }))
+                    : distTargets.map((t) => ({
+                        id: t.group_connection_id,
+                        title:
+                          telegramGroup.groups.find((g) => g.id === t.group_connection_id)?.title ??
+                          "Connected group",
+                        status: t.status,
+                        detail: t.last_error,
+                      }))
+                  ).map((row) => (
+                    <li
+                      key={row.id}
+                      className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-background/40 p-2"
+                    >
+                      <span className="font-medium text-foreground">{row.title}</span>
+                      <StatusBadge
+                        tone={
+                          row.status === "assigned"
+                            ? "green"
+                            : row.status === "announced"
+                              ? "gold"
+                              : row.status === "failed"
+                                ? "red"
+                                : "muted"
+                        }
+                      >
+                        {row.status === "assigned"
+                          ? "Assigned as official group set"
+                          : row.status === "announced"
+                            ? "Pack announced in group"
+                            : row.status === "failed"
+                              ? "Failed — retry needed"
+                              : row.status}
+                      </StatusBadge>
+                      {row.detail ? (
+                        <span className="text-muted-foreground">{row.detail}</span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
               ) : null}
 
-              {assignError ? (
+              {distError ? (
                 <p className="rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
-                  Sticker set published, group assignment needs attention. {assignError}
+                  Sticker set stays published — group distribution needs attention. {distError}
                 </p>
               ) : null}
+
 
               {tgError ? (
                 <p className="rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
