@@ -85,6 +85,8 @@ import {
 } from "@/lib/telegram-group";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
+import { StickyActionBar } from "@/components/cartel/StickyActionBar";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -1285,7 +1287,7 @@ function StickerLabBuilder() {
   };
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6 pb-28 sm:gap-8 sm:pb-0">
       <PageHeader
         eyebrow="Sticker Lab"
         title="New Sticker Pack"
@@ -1468,8 +1470,13 @@ function StickerLabBuilder() {
                             <span className="text-[10px] text-muted-foreground">No preview</span>
                           )}
                         </span>
-                        <span className="mt-2 block truncate text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-                          {asset.asset_type.replace("_", " ")}
+                        <span className="mt-2 flex items-center justify-between gap-1">
+                          <span className="min-w-0 truncate text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                            {asset.asset_type.replace("_", " ")}
+                          </span>
+                          {selected ? (
+                            <Check className="size-3.5 shrink-0 text-gold" aria-hidden="true" />
+                          ) : null}
                         </span>
                       </button>
                     </li>
@@ -1610,62 +1617,84 @@ function StickerLabBuilder() {
             </span>{" "}
             concepts used for this pack size.
           </p>
-          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid gap-2 sm:gap-3 xl:grid-cols-2">
             {draft.concepts.map((c, i) => (
-              <li key={c.id} className="cartel-panel rounded-lg p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">
-                    {String(i + 1).padStart(2, "0")}
-                  </span>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="size-9 text-muted-foreground hover:text-signal"
-                    onClick={() => removeConcept(c.id)}
-                    aria-label={`Remove concept ${i + 1}`}
-                  >
-                    <Trash2 className="size-4" aria-hidden="true" />
-                  </Button>
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <Label htmlFor={`${c.id}-label`} className="text-xs">
-                      Label
-                    </Label>
-                    <Input
-                      id={`${c.id}-label`}
-                      className="mt-1.5 min-h-10"
-                      value={c.label}
-                      onChange={(e) => editConcept(c.id, { label: e.target.value })}
-                    />
+              <li key={c.id}>
+                <details
+                  open={i === 0}
+                  className="cartel-panel group rounded-lg [&[open]>summary]:border-b [&[open]>summary]:border-border/60"
+                >
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 p-3 sm:p-4">
+                    <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-foreground">
+                        {c.emoji} {c.label || "Untitled concept"}
+                      </span>
+                      {c.action ? (
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {c.action}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="shrink-0 text-[11px] uppercase tracking-[0.12em] text-muted-foreground group-open:hidden">
+                      Edit
+                    </span>
+                  </summary>
+                  <div className="space-y-3 p-3 sm:p-4">
+                    <div>
+                      <Label htmlFor={`${c.id}-label`} className="text-xs">
+                        Label
+                      </Label>
+                      <Input
+                        id={`${c.id}-label`}
+                        className="mt-1.5 min-h-10"
+                        value={c.label}
+                        onChange={(e) => editConcept(c.id, { label: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor={`${c.id}-action`} className="text-xs">
+                        Action / expression
+                      </Label>
+                      <Input
+                        id={`${c.id}-action`}
+                        className="mt-1.5 min-h-10"
+                        value={c.action}
+                        onChange={(e) => editConcept(c.id, { action: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex items-end justify-between gap-3">
+                      <div>
+                        <Label htmlFor={`${c.id}-emoji`} className="text-xs">
+                          Emoji
+                        </Label>
+                        <Input
+                          id={`${c.id}-emoji`}
+                          className="mt-1.5 min-h-10 w-24"
+                          value={c.emoji}
+                          onChange={(e) => editConcept(c.id, { emoji: e.target.value })}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="min-h-10 text-muted-foreground hover:text-signal"
+                        onClick={() => removeConcept(c.id)}
+                        aria-label={`Remove concept ${i + 1}`}
+                      >
+                        <Trash2 className="size-4" aria-hidden="true" />
+                        Remove
+                      </Button>
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor={`${c.id}-action`} className="text-xs">
-                      Action / expression
-                    </Label>
-                    <Input
-                      id={`${c.id}-action`}
-                      className="mt-1.5 min-h-10"
-                      value={c.action}
-                      onChange={(e) => editConcept(c.id, { action: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor={`${c.id}-emoji`} className="text-xs">
-                      Emoji
-                    </Label>
-                    <Input
-                      id={`${c.id}-emoji`}
-                      className="mt-1.5 min-h-10 w-24"
-                      value={c.emoji}
-                      onChange={(e) => editConcept(c.id, { emoji: e.target.value })}
-                    />
-                  </div>
-                </div>
+                </details>
               </li>
             ))}
           </ul>
+
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <Button
               type="button"
@@ -1749,7 +1778,17 @@ function StickerLabBuilder() {
             </div>
           ) : null}
 
-          <Pipeline />
+          {/* Pipeline detail is secondary on mobile, always visible on desktop. */}
+          <details className="mt-6 rounded-md border border-border bg-background/40 p-3 lg:hidden">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Generation pipeline
+            </summary>
+            <Pipeline />
+          </details>
+          <div className="hidden lg:block">
+            <Pipeline />
+          </div>
+
 
           {allReady ? (
             <div className="mt-6 rounded-lg border border-pepe/40 bg-pepe/5 p-4">
@@ -1830,7 +1869,7 @@ function StickerLabBuilder() {
           ) : null}
 
 
-          <ul className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="mt-6 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-4">
             {draft.concepts.map((c, index) => {
               const stage = stageFor(c.id);
               const stickerId = stickerIdFor(c.id);
@@ -1838,7 +1877,7 @@ function StickerLabBuilder() {
               const failure = stickerId ? failures[stickerId] : undefined;
               const note = stickerId ? notes[stickerId] : undefined;
               return (
-                <li key={c.id} className="cartel-panel rounded-lg p-4">
+                <li key={c.id} className="cartel-panel rounded-lg p-2.5 sm:p-4">
                   <div className="mb-3 flex items-center justify-between gap-2">
                     <span className="truncate text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
                       {c.emoji} {c.label}
@@ -1957,7 +1996,7 @@ function StickerLabBuilder() {
           title="Review"
           hint="Verified static stickers from private storage, ready for export and Telegram publishing."
         >
-          <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="mb-6 grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-3">
             <SummaryStat
               label="Backend ready"
               value={`${generatedCount}/${draft.concepts.length}`}
@@ -2080,10 +2119,10 @@ function StickerLabBuilder() {
             </p>
           </div>
 
-          <div className="mb-6 rounded-md border border-border bg-background/40 p-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-pepe">
-              Telegram cutout verified
-            </p>
+          <details className="mb-6 rounded-md border border-border bg-background/40 p-3">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center text-xs font-semibold uppercase tracking-[0.14em] text-pepe">
+              How Telegram cutout verification works
+            </summary>
             <p className="mt-1.5 text-xs text-muted-foreground">
               The checkerboard behind each preview marks the pixels that are actually transparent.
               Some image viewers display transparent areas as white or black — that is the viewer
@@ -2097,7 +2136,8 @@ function StickerLabBuilder() {
               being cleaned. Cleanup happens in your browser on the exported copy only; the stored
               original is never modified.
             </p>
-          </div>
+          </details>
+
 
 
           {omittedLabels.length > 0 ? (
@@ -2137,7 +2177,7 @@ function StickerLabBuilder() {
           ) : null}
 
 
-          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid gap-2 sm:gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {draft.concepts.map((c, index) => {
               const stickerId = stickerIdFor(c.id);
               const preview = stickerId ? previews[stickerId] : undefined;
@@ -2655,7 +2695,7 @@ function StickerLabBuilder() {
 
       <nav
         aria-label="Builder navigation"
-        className="flex flex-col-reverse gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between"
+        className="hidden flex-col-reverse gap-3 border-t border-border pt-6 sm:flex sm:flex-row sm:items-center sm:justify-between"
       >
         <Button
           type="button"
@@ -2681,9 +2721,40 @@ function StickerLabBuilder() {
           </Button>
         )}
       </nav>
+
+      {/* Mobile workflow bar — reuses the same goBack / goNext handlers. */}
+      <StickyActionBar
+        desktop="hidden"
+        className="sm:hidden"
+        start={
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            onClick={goBack}
+            disabled={step === 1}
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
+            Back
+          </Button>
+        }
+        end={
+          step < BUILDER_STEPS.length ? (
+            <Button type="button" className="min-h-11" onClick={goNext}>
+              Continue
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </Button>
+          ) : (
+            <Button asChild variant="outline" className="min-h-11">
+              <Link to="/sticker-lab">Finish</Link>
+            </Button>
+          )
+        }
+      />
     </div>
   );
 }
+
 
 function Stepper({
   current,
@@ -2692,38 +2763,74 @@ function Stepper({
   current: number;
   onSelect: (n: number) => void;
 }) {
+  const active = BUILDER_STEPS[current - 1];
   return (
-    <ol className="flex flex-wrap gap-2" aria-label="Builder steps">
-      {BUILDER_STEPS.map((s) => {
-        const state = s.id === current ? "current" : s.id < current ? "done" : "todo";
-        return (
-          <li key={s.id} className="min-w-0 flex-1 basis-[8rem]">
-            <button
-              type="button"
-              onClick={() => onSelect(s.id)}
-              aria-current={state === "current" ? "step" : undefined}
-              className={`flex min-h-11 w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-                state === "current"
-                  ? "border-gold bg-gold/10 text-gold"
-                  : state === "done"
-                    ? "border-pepe/40 bg-surface-raised text-pepe"
-                    : "border-border bg-surface-raised text-muted-foreground hover:border-gold/40"
-              }`}
-            >
-              <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-current text-[10px] font-bold">
-                {state === "done" ? <Check className="size-3" aria-hidden="true" /> : s.id}
-              </span>
-              <span className="truncate font-semibold uppercase tracking-[0.12em]">
-                <span className="sm:hidden">{s.short}</span>
-                <span className="hidden sm:inline">{s.title}</span>
-              </span>
-            </button>
-          </li>
-        );
-      })}
-    </ol>
+    <div className="rise-in space-y-2.5">
+      {/* Mobile: compact numbered rail + explicit current-step label (never truncated). */}
+      <div className="lg:hidden">
+        <p className="text-sm font-semibold leading-snug text-foreground">
+          <span className="text-gold">
+            Step {current} of {BUILDER_STEPS.length}
+          </span>{" "}
+          · {active?.title}
+        </p>
+        <ol className="no-scrollbar mt-2 flex items-center gap-2" aria-label="Builder steps">
+          {BUILDER_STEPS.map((s) => {
+            const state = s.id === current ? "current" : s.id < current ? "done" : "todo";
+            return (
+              <li key={s.id} className="flex-1">
+                <button
+                  type="button"
+                  onClick={() => onSelect(s.id)}
+                  aria-current={state === "current" ? "step" : undefined}
+                  aria-label={`Step ${s.id}: ${s.title}`}
+                  className={`flex min-h-11 w-full items-center justify-center rounded-md border text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    state === "current"
+                      ? "border-gold bg-gold/10 text-gold"
+                      : state === "done"
+                        ? "border-pepe/40 bg-surface-raised text-pepe"
+                        : "border-border bg-surface-raised text-muted-foreground"
+                  }`}
+                >
+                  {state === "done" ? <Check className="size-4" aria-hidden="true" /> : s.id}
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+
+      {/* Desktop: full step labels, no truncation. */}
+      <ol className="hidden gap-2 lg:flex" aria-label="Builder steps">
+        {BUILDER_STEPS.map((s) => {
+          const state = s.id === current ? "current" : s.id < current ? "done" : "todo";
+          return (
+            <li key={s.id} className="min-w-0 flex-1">
+              <button
+                type="button"
+                onClick={() => onSelect(s.id)}
+                aria-current={state === "current" ? "step" : undefined}
+                className={`flex min-h-11 w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                  state === "current"
+                    ? "border-gold bg-gold/10 text-gold"
+                    : state === "done"
+                      ? "border-pepe/40 bg-surface-raised text-pepe"
+                      : "border-border bg-surface-raised text-muted-foreground hover:border-gold/40"
+                }`}
+              >
+                <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-current text-[10px] font-bold">
+                  {state === "done" ? <Check className="size-3" aria-hidden="true" /> : s.id}
+                </span>
+                <span className="font-semibold uppercase tracking-[0.12em]">{s.title}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
+
 
 function StepCard({
   title,
@@ -2738,14 +2845,14 @@ function StepCard({
 }) {
   return (
     <Card className="cartel-panel rise-in">
-      <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
-        <div>
-          <CardTitle className="text-lg">{title}</CardTitle>
+      <CardHeader className="gap-3 p-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0 sm:p-6">
+        <div className="min-w-0">
+          <CardTitle className="text-base sm:text-lg">{title}</CardTitle>
           <p className="mt-1.5 text-xs text-muted-foreground">{hint}</p>
         </div>
         {action}
       </CardHeader>
-      <CardContent>{children}</CardContent>
+      <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">{children}</CardContent>
     </Card>
   );
 }
