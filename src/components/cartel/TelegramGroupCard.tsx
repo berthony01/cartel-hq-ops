@@ -89,20 +89,15 @@ function readinessFor(
   const canSetStickerSet = live?.canSetStickerSet ?? group.can_set_sticker_set ?? false;
   const memberCount =
     live?.memberCount ?? (typeof meta?.member_count === "number" ? meta.member_count : null);
-  const minMembers =
-    live?.minMembers ??
-    (typeof meta?.official_group_sticker_min_members === "number"
-      ? meta.official_group_sticker_min_members
-      : null);
+  // Telegram's live `can_set_sticker_set` capability is authoritative. No
+  // member threshold is documented as stable, so none is derived or displayed.
   const officialStickerEligible =
-    live?.officialStickerEligible ?? meta?.official_group_sticker_eligible === true;
-  const officialStickerReason =
-    live?.officialStickerReason ?? (meta?.official_group_sticker_reason ?? null);
-  const belowMinMembers =
-    isSupergroup &&
-    typeof memberCount === "number" &&
-    typeof minMembers === "number" &&
-    memberCount < minMembers;
+    canSetStickerSet ||
+    (live?.officialStickerEligible ?? meta?.official_group_sticker_eligible === true);
+  const rawReason = live?.officialStickerReason ?? meta?.official_group_sticker_reason ?? null;
+  // Stale rows may still carry a fixed-threshold reason — normalize it away.
+  const officialStickerReason = rawReason === "minimum_members" ? "not_reported" : rawReason;
+
 
   const ready = live?.ready ?? (supportedChatType && botAdmin && botCanChangeInfo !== false);
 
