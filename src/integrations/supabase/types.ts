@@ -480,6 +480,81 @@ export type Database = {
           },
         ]
       }
+      telegram_beta_contacts: {
+        Row: {
+          chat_title: string | null
+          chat_type: string | null
+          created_at: string
+          first_name: string | null
+          id: string
+          installer_telegram_user_id: number | null
+          is_linked_user: boolean
+          last_name: string | null
+          last_seen_at: string
+          metadata: Json
+          opted_in: boolean
+          opted_in_at: string | null
+          source: string
+          source_chat_id: number | null
+          source_chat_title: string | null
+          source_chat_type: string | null
+          subject_type: string
+          telegram_chat_id: number | null
+          telegram_user_id: number | null
+          telegram_username: string | null
+          updated_at: string
+          welcome_sent_at: string | null
+        }
+        Insert: {
+          chat_title?: string | null
+          chat_type?: string | null
+          created_at?: string
+          first_name?: string | null
+          id?: string
+          installer_telegram_user_id?: number | null
+          is_linked_user?: boolean
+          last_name?: string | null
+          last_seen_at?: string
+          metadata?: Json
+          opted_in?: boolean
+          opted_in_at?: string | null
+          source: string
+          source_chat_id?: number | null
+          source_chat_title?: string | null
+          source_chat_type?: string | null
+          subject_type: string
+          telegram_chat_id?: number | null
+          telegram_user_id?: number | null
+          telegram_username?: string | null
+          updated_at?: string
+          welcome_sent_at?: string | null
+        }
+        Update: {
+          chat_title?: string | null
+          chat_type?: string | null
+          created_at?: string
+          first_name?: string | null
+          id?: string
+          installer_telegram_user_id?: number | null
+          is_linked_user?: boolean
+          last_name?: string | null
+          last_seen_at?: string
+          metadata?: Json
+          opted_in?: boolean
+          opted_in_at?: string | null
+          source?: string
+          source_chat_id?: number | null
+          source_chat_title?: string | null
+          source_chat_type?: string | null
+          subject_type?: string
+          telegram_chat_id?: number | null
+          telegram_user_id?: number | null
+          telegram_username?: string | null
+          updated_at?: string
+          welcome_sent_at?: string | null
+        }
+        Relationships: []
+      }
       telegram_connections: {
         Row: {
           connected_at: string
