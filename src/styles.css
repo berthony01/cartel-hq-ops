@@ -124,7 +124,17 @@
   --glow-gold: 0 0 0 1px color-mix(in oklab, var(--gold) 35%, transparent),
     0 10px 30px -18px color-mix(in oklab, var(--gold) 60%, transparent);
   --transition-cartel: 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  /* Mobile application metrics (Phase 1C-1) */
+  --gutter-mobile: 1rem;
+  --gutter-desktop: 1.5rem;
+  --tap-min: 2.75rem; /* 44px */
+  --bottom-nav-h: 4rem;
+  --topbar-h-mobile: 3.5rem;
+  --topbar-h-desktop: 4rem;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
+
 
 .dark {
   color-scheme: dark;
