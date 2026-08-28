@@ -42,8 +42,8 @@ export type GroupReadiness = {
   botCanChangeInfo: boolean | undefined;
   canSetStickerSet: boolean;
   memberCount: number | null;
-  minMembers: number | null;
   officialStickerEligible: boolean;
+
   officialStickerReason: string | null;
   belowMinMembers: boolean;
   ready: boolean;
