@@ -22,7 +22,12 @@ export type NavItem = {
   to: string;
   icon: LucideIcon;
   status?: "next" | "planned";
+  /** Presentation only: surfaced as a primary destination in the mobile tab bar. */
+  mobilePrimary?: boolean;
+  /** Presentation only: shorter label used in the mobile tab bar. */
+  mobileLabel?: string;
 };
+
 
 export type NavSection = {
   label: string;
@@ -33,7 +38,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Command",
     items: [
-      { label: "HQ", to: "/", icon: LayoutDashboard },
+      { label: "HQ", to: "/", icon: LayoutDashboard, mobilePrimary: true },
       { label: "Cartel Clearance", to: "/clearance", icon: ShieldCheck, status: "planned" },
       { label: "Command Terminal", to: "/command-terminal", icon: TerminalSquare, status: "planned" },
     ],
@@ -41,9 +46,16 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Create",
     items: [
-      { label: "Sticker Lab", to: "/sticker-lab", icon: Sticker, status: "next" },
+      {
+        label: "Sticker Lab",
+        to: "/sticker-lab",
+        icon: Sticker,
+        status: "next",
+        mobilePrimary: true,
+        mobileLabel: "Lab",
+      },
       { label: "Brand Kit", to: "/brand-kit", icon: Palette, status: "planned" },
-      { label: "Assets", to: "/assets", icon: FolderLock, status: "planned" },
+      { label: "Assets", to: "/assets", icon: FolderLock, status: "planned", mobilePrimary: true },
     ],
   },
   {
@@ -66,8 +78,18 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "System",
     items: [
-      { label: "Telegram", to: "/telegram", icon: MessageSquare, status: "planned" },
+      {
+        label: "Telegram",
+        to: "/telegram",
+        icon: MessageSquare,
+        status: "planned",
+        mobilePrimary: true,
+      },
       { label: "Settings", to: "/settings", icon: Settings },
     ],
   },
 ];
+
+export const MOBILE_PRIMARY_ITEMS: NavItem[] = NAV_SECTIONS.flatMap((section) =>
+  section.items.filter((item) => item.mobilePrimary),
+);

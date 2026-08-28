@@ -5,28 +5,31 @@ import { Button } from "@/components/ui/button";
 import { CartelMark, SidebarNav } from "@/components/cartel/SidebarNav";
 import { WorkspaceSwitcher } from "@/components/cartel/WorkspaceSwitcher";
 import { UserMenu } from "@/components/cartel/UserMenu";
+import { MobileTabBar } from "@/components/cartel/MobileTabBar";
 
 function TopBar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-border bg-background/85 px-4 backdrop-blur md:px-6">
+    <header className="app-gutter sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/85 backdrop-blur lg:h-16">
       <Button
         variant="ghost"
         size="icon"
-        className="lg:hidden"
+        className="-ml-1 shrink-0 lg:hidden"
         aria-label="Open navigation"
         onClick={onOpenMobileNav}
       >
         <Menu className="size-5" />
       </Button>
 
-      <div className="lg:hidden">
+      <div className="hidden sm:block lg:hidden">
         <CartelMark />
       </div>
 
-      <WorkspaceSwitcher />
+      <div className="flex min-w-0 flex-1 items-center">
+        <WorkspaceSwitcher />
+      </div>
 
-      <div className="ml-auto flex items-center gap-2">
-        <div className="hidden items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm text-muted-foreground sm:flex">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+        <div className="hidden items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm text-muted-foreground lg:flex">
           <Search className="size-4" aria-hidden="true" />
           <input
             disabled
@@ -63,7 +66,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetTrigger className="sr-only">Open navigation</SheetTrigger>
-        <SheetContent side="left" className="w-72 border-border bg-sidebar px-3 py-4">
+        <SheetContent
+          side="left"
+          className="safe-bottom w-72 overflow-y-auto border-border bg-sidebar px-3 py-4"
+        >
           <SheetTitle className="sr-only">CARTEL HQ navigation</SheetTitle>
           <div className="px-1">
             <CartelMark />
@@ -76,8 +82,12 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="lg:pl-64">
         <TopBar onOpenMobileNav={() => setMobileOpen(true)} />
-        <main className="mx-auto w-full max-w-6xl px-4 py-8 md:px-6 lg:py-10">{children}</main>
+        <main className="app-gutter app-scroll-pad mx-auto w-full max-w-6xl py-6 lg:py-10">
+          {children}
+        </main>
       </div>
+
+      <MobileTabBar onOpenMore={() => setMobileOpen(true)} />
     </div>
   );
 }
