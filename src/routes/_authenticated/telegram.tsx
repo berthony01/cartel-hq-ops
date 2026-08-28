@@ -38,14 +38,31 @@ function TelegramPage() {
   const setup = useTelegramSetup();
   const groupSetup = useTelegramGroupSetup();
 
+  const connected = setup.ownerConnected;
+  const groupCount = groupSetup.connectedGroupCount;
+
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
+    <div className="flex max-w-3xl flex-col gap-4 sm:gap-6">
       <PageHeader
         eyebrow="System"
         title="Telegram"
-        description="The official CARTEL HQ bot publishes static sticker packs from Sticker Lab and distributes them to the Telegram groups connected to this workspace. You can keep several groups connected at once — Telegram allows one group per add-bot flow, so connect them one at a time. Telegram's official group sticker set applies only to eligible supergroups; otherwise the pack link is posted in the group. The bot token lives server-side only."
-        status={setup.botConfigured ? "Bot configured" : "Bot not configured"}
+        description="Publish static sticker packs from Sticker Lab and distribute them to the Telegram groups connected to this workspace."
+        status={connected ? "Connected · Live Beta" : "Live Beta"}
       />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge tone={setup.botConfigured ? "green" : "red"}>
+          {setup.botConfigured ? "Bot configured" : "Bot not configured"}
+        </StatusBadge>
+        <StatusBadge tone={connected ? "green" : "muted"}>
+          {connected ? "Account linked" : "Account not linked"}
+        </StatusBadge>
+        <StatusBadge tone={groupCount > 0 ? "green" : "muted"}>
+          {groupCount > 0
+            ? `${groupCount} group${groupCount === 1 ? "" : "s"} connected`
+            : "No groups connected"}
+        </StatusBadge>
+      </div>
 
       <TelegramConnectionCard setup={setup} />
 
@@ -55,33 +72,39 @@ function TelegramPage() {
         botConfigured={setup.botConfigured}
       />
 
-
-      <Card className="cartel-panel">
-        <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
-          <CardTitle className="text-base">Capabilities</CardTitle>
-          <StatusBadge tone="gold">Sticker publishing active</StatusBadge>
-        </CardHeader>
-        <CardContent className="space-y-2 text-xs text-muted-foreground">
-          <p>
-            Static sticker pack publishing is active: publish, retry failed stickers, refresh set
-            status and send a native test sticker from Sticker Lab Step 5. These work for any
-            verified connected target — both <strong>basic Telegram groups</strong> and{" "}
-            <strong>supergroups</strong> can receive pack announcements and native stickers.
-          </p>
-          <p>
-            Assigning a pack as a group's <strong>official</strong> Telegram sticker set is an
-            optional Telegram capability that exists only for <strong>supergroups</strong>, and
-            Telegram decides when it is available for a given group. In a basic group, or a
-            supergroup where Telegram has not enabled it, CARTEL HQ posts the pack link in the group
-            instead — publishing and native sticker sending are unaffected.
-
-          </p>
-          <p>
-            Inline mode, the Telegram Mini App, channel posting and distribution automation remain
-            future phases and are not part of this build.
-          </p>
-        </CardContent>
-      </Card>
+      <Section
+        variant="surface"
+        title="Capabilities"
+        actions={<StatusBadge tone="gold">Sticker publishing active</StatusBadge>}
+      >
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Publish, retry, refresh set status and send a native test sticker from Sticker Lab Step 5.
+          Both basic Telegram groups and supergroups can receive pack announcements and native
+          stickers.
+        </p>
+        <details className="mt-3 rounded-md border border-border/60 bg-background/40 p-3">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Scope & limitations
+          </summary>
+          <div className="mt-2 space-y-2 text-xs leading-relaxed text-muted-foreground">
+            <p>
+              Assigning a pack as a group’s <strong>official</strong> Telegram sticker set is an
+              optional Telegram capability that exists only for <strong>supergroups</strong>, and
+              Telegram decides when it is available for a given group. Otherwise CARTEL HQ posts the
+              pack link in the group instead — publishing and native sticker sending are unaffected.
+            </p>
+            <p>
+              Telegram allows one group per add-bot flow, so connect groups one at a time. The bot
+              token lives server-side only.
+            </p>
+            <p>
+              Inline mode, the Telegram Mini App, channel posting and distribution automation remain
+              future phases and are not part of this build.
+            </p>
+          </div>
+        </details>
+      </Section>
     </div>
   );
 }
+
