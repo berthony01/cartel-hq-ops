@@ -336,11 +336,10 @@ async function copyTelegramUrlToClipboard(url: string) {
 
 function officialSetLabel(r: GroupReadiness): string {
   if (r.officialStickerEligible || r.canSetStickerSet) return "Official group sticker set available";
-  if (r.isBasicGroup) return "Official group sticker set requires supergroup";
-  if (r.belowMinMembers)
-    return `Official group sticker set at ${r.minMembers}+ members (${r.memberCount})`;
-  return "Official group sticker set not available yet";
+  if (r.isBasicGroup) return "Official group sticker set requires a supergroup";
+  return "Official group sticker set not enabled by Telegram yet";
 }
+
 
 function GroupRow({
   readiness: r,
