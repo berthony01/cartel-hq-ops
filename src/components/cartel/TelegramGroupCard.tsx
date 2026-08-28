@@ -565,7 +565,7 @@ export function TelegramGroupCard({
   const connect = async () => {
     if (!workspaceId || starting) return;
     setStarting(true);
-    setLaunchBlocked(false);
+    
     try {
       const result = await createTelegramGroupLink(workspaceId);
       const username = result.bot?.username;
