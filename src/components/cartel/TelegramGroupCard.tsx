@@ -221,7 +221,7 @@ export function useTelegramGroupSetup(enabled = true) {
     hydratedRef.current = workspaceId;
     setSelectedGroupIds((prev) => {
       const base = firstHydration ? readStoredSelection(workspaceId) : prev;
-      const kept = base.filter((id) => valid.has(id));
+      const kept = base.filter((id) => valid.has(id)).slice(0, MAX_DISTRIBUTION_TARGETS);
       const same = kept.length === prev.length && kept.every((id, i) => id === prev[i]);
       // Defaults only apply on first hydration: a deliberate Clear selection sticks.
       if (kept.length === 0 && firstHydration) return [groups[0]!.id];
