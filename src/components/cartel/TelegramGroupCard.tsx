@@ -187,15 +187,17 @@ export function useTelegramGroupSetup(enabled = true) {
     [groups, recheckGroup],
   );
 
-  // Live verification when connected groups appear and on window refocus.
+  // Stored connection metadata is enough to render. We do ONE lightweight live
+  // check of the newest group per workspace mount — never N calls, never on focus.
+  const autoCheckedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!enabled || !groupIdsKey) return;
-    void recheckAll(true);
-    const onFocus = () => void recheckAll(true);
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    if (!enabled || !workspaceId || groups.length === 0) return;
+    if (autoCheckedRef.current === workspaceId) return;
+    autoCheckedRef.current = workspaceId;
+    void recheckGroup(groups[0]!.id, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, groupIdsKey]);
+  }, [enabled, workspaceId, groupIdsKey]);
+
 
   const readiness: GroupReadiness[] = useMemo(
     () => groups.map((g) => readinessFor(g, liveById[g.id] ?? null)),
