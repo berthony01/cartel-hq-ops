@@ -9,6 +9,8 @@ import { telegramErrorMessage } from "@/lib/telegram-stickers";
 import {
   createTelegramGroupLink,
   fetchTelegramGroupLinkStatus,
+  makeTelegramGroupAdminUrls,
+  makeTelegramGroupBasicUrls,
   type TelegramLinkStatus,
 } from "@/lib/telegram-link";
 
@@ -491,6 +493,7 @@ export function TelegramGroupCard({
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [remaining, setRemaining] = useState(0);
   const [launchUrls, setLaunchUrls] = useState<{ app?: string | undefined; web?: string | undefined }>({});
+  const [fallbackUrls, setFallbackUrls] = useState<{ app?: string | undefined; web?: string | undefined }>({});
   const [launchBlocked, setLaunchBlocked] = useState(false);
   const pollRef = useRef<number | null>(null);
 
@@ -565,15 +568,33 @@ export function TelegramGroupCard({
     setLaunchBlocked(false);
     try {
       const result = await createTelegramGroupLink(workspaceId);
-      const web = result.groupStartUrl;
-      const app = result.groupAppUrl;
-      if (!web && !app) throw new Error("The Telegram group link is unavailable right now.");
+      const username = result.bot?.username;
+      let primaryWeb: string | undefined;
+      let primaryApp: string | undefined;
+      let fallbackWeb: string | undefined;
+      let fallbackApp: string | undefined;
+
+      if (username) {
+        const admin = makeTelegramGroupAdminUrls(username);
+        const basic = makeTelegramGroupBasicUrls(username);
+        primaryWeb = admin.web;
+        primaryApp = admin.app;
+        fallbackWeb = basic.web;
+        fallbackApp = basic.app;
+      } else {
+        // Bot username missing from response — preserve legacy server URLs rather than break.
+        primaryWeb = result.groupStartUrl;
+        primaryApp = result.groupAppUrl;
+      }
+
+      if (!primaryWeb && !primaryApp) throw new Error("The Telegram group link is unavailable right now.");
       setExpiresAt(result.expiresAt ?? null);
-      setLaunchUrls({ app, web });
+      setLaunchUrls({ app: primaryApp, web: primaryWeb });
+      setFallbackUrls({ app: fallbackApp, web: fallbackWeb });
       setLinkState("pending");
       setRemaining(secondsLeft(result.expiresAt));
       startPolling(result.requestId);
-      const launched = launchTelegram(app, web);
+      const launched = launchTelegram(primaryApp, primaryWeb);
       setLaunchBlocked(!launched);
     } catch (err) {
       setLinkState(null);
@@ -587,6 +608,9 @@ export function TelegramGroupCard({
   const manualUrl = isMobileDevice()
     ? (launchUrls.app ?? launchUrls.web)
     : (launchUrls.web ?? launchUrls.app);
+  const fallbackManualUrl = isMobileDevice()
+    ? (fallbackUrls.app ?? fallbackUrls.web)
+    : (fallbackUrls.web ?? fallbackUrls.app);
   const lastCheck = groupQuery.data?.request?.metadata?.last_group_check;
   const readyCount = readiness.filter((r) => r.ready).length;
 
@@ -714,6 +738,16 @@ export function TelegramGroupCard({
                 : "This one-time link is about to expire."}
             </p>
 
+            <p className="mt-2 rounded-md border border-border/60 bg-background/40 p-2 text-xs leading-relaxed text-muted-foreground">
+              <strong>Telegram Desktop fallback:</strong> if Telegram adds @PepeCartelHQBot as a
+              normal member instead of an admin, open the selected group, promote the bot to
+              administrator, enable <strong>Change Group Info</strong>, then send{" "}
+              <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
+              in that group while this link is still active. Or use{" "}
+              <strong>Try basic install</strong> below to add the bot without requesting admin
+              rights, then promote it manually.
+            </p>
+
             {lastCheck ? (
               <div className="mt-3 space-y-2 rounded-md border border-border/60 bg-background/40 p-3">
                 {lastCheck.group_title ? (
@@ -769,18 +803,31 @@ export function TelegramGroupCard({
               </div>
             ) : null}
 
-            {manualUrl ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-3 min-h-9"
-                onClick={() => launchTelegram(launchUrls.app, launchUrls.web)}
-              >
-                <ExternalLink className="size-4" aria-hidden="true" />
-                Open Telegram
-              </Button>
-            ) : null}
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              {manualUrl ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-9"
+                  onClick={() => launchTelegram(launchUrls.app, launchUrls.web)}
+                >
+                  <ExternalLink className="size-4" aria-hidden="true" />
+                  Open Telegram
+                </Button>
+              ) : null}
+              {fallbackManualUrl ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="min-h-9 text-muted-foreground hover:text-foreground"
+                  onClick={() => launchTelegram(fallbackUrls.app, fallbackUrls.web)}
+                >
+                  Try basic install
+                </Button>
+              ) : null}
+            </div>
           </div>
         ) : null}
 

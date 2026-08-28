@@ -120,6 +120,36 @@ export type TelegramCreateGroupLinkResult = {
   webhookUrl?: string;
 };
 
+/**
+ * Payload-free group-add URLs that avoid a known Telegram Desktop/macOS bug
+ * where `startgroup=<payload>` combined with `admin=change_info` drops the
+ * payload and opens the bot's private chat instead of adding the bot to the
+ * selected group. CARTEL HQ already identifies the pending request by actor,
+ * so the hidden payload is unnecessary.
+ */
+export function makeTelegramGroupAdminUrls(botUsername: string): {
+  web: string;
+  app: string;
+} {
+  const user = encodeURIComponent(botUsername);
+  return {
+    web: `https://t.me/${user}?startgroup&admin=change_info`,
+    app: `tg://resolve?domain=${user}&startgroup&admin=change_info`,
+  };
+}
+
+/** Payload-free, no-admin fallback for clients that still mishandle admin links. */
+export function makeTelegramGroupBasicUrls(botUsername: string): {
+  web: string;
+  app: string;
+} {
+  const user = encodeURIComponent(botUsername);
+  return {
+    web: `https://t.me/${user}?startgroup`,
+    app: `tg://resolve?domain=${user}&startgroup`,
+  };
+}
+
 export type TelegramGroupLinkStatusResult = {
   bot?: TelegramBot;
   request?: TelegramLinkRequest | null;
