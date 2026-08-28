@@ -1612,62 +1612,84 @@ function StickerLabBuilder() {
             </span>{" "}
             concepts used for this pack size.
           </p>
-          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid gap-2 sm:gap-3 xl:grid-cols-2">
             {draft.concepts.map((c, i) => (
-              <li key={c.id} className="cartel-panel rounded-lg p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">
-                    {String(i + 1).padStart(2, "0")}
-                  </span>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="size-9 text-muted-foreground hover:text-signal"
-                    onClick={() => removeConcept(c.id)}
-                    aria-label={`Remove concept ${i + 1}`}
-                  >
-                    <Trash2 className="size-4" aria-hidden="true" />
-                  </Button>
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <Label htmlFor={`${c.id}-label`} className="text-xs">
-                      Label
-                    </Label>
-                    <Input
-                      id={`${c.id}-label`}
-                      className="mt-1.5 min-h-10"
-                      value={c.label}
-                      onChange={(e) => editConcept(c.id, { label: e.target.value })}
-                    />
+              <li key={c.id}>
+                <details
+                  open={i === 0}
+                  className="cartel-panel group rounded-lg [&[open]>summary]:border-b [&[open]>summary]:border-border/60"
+                >
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 p-3 sm:p-4">
+                    <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-foreground">
+                        {c.emoji} {c.label || "Untitled concept"}
+                      </span>
+                      {c.action ? (
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {c.action}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="shrink-0 text-[11px] uppercase tracking-[0.12em] text-muted-foreground group-open:hidden">
+                      Edit
+                    </span>
+                  </summary>
+                  <div className="space-y-3 p-3 sm:p-4">
+                    <div>
+                      <Label htmlFor={`${c.id}-label`} className="text-xs">
+                        Label
+                      </Label>
+                      <Input
+                        id={`${c.id}-label`}
+                        className="mt-1.5 min-h-10"
+                        value={c.label}
+                        onChange={(e) => editConcept(c.id, { label: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor={`${c.id}-action`} className="text-xs">
+                        Action / expression
+                      </Label>
+                      <Input
+                        id={`${c.id}-action`}
+                        className="mt-1.5 min-h-10"
+                        value={c.action}
+                        onChange={(e) => editConcept(c.id, { action: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex items-end justify-between gap-3">
+                      <div>
+                        <Label htmlFor={`${c.id}-emoji`} className="text-xs">
+                          Emoji
+                        </Label>
+                        <Input
+                          id={`${c.id}-emoji`}
+                          className="mt-1.5 min-h-10 w-24"
+                          value={c.emoji}
+                          onChange={(e) => editConcept(c.id, { emoji: e.target.value })}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="min-h-10 text-muted-foreground hover:text-signal"
+                        onClick={() => removeConcept(c.id)}
+                        aria-label={`Remove concept ${i + 1}`}
+                      >
+                        <Trash2 className="size-4" aria-hidden="true" />
+                        Remove
+                      </Button>
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor={`${c.id}-action`} className="text-xs">
-                      Action / expression
-                    </Label>
-                    <Input
-                      id={`${c.id}-action`}
-                      className="mt-1.5 min-h-10"
-                      value={c.action}
-                      onChange={(e) => editConcept(c.id, { action: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor={`${c.id}-emoji`} className="text-xs">
-                      Emoji
-                    </Label>
-                    <Input
-                      id={`${c.id}-emoji`}
-                      className="mt-1.5 min-h-10 w-24"
-                      value={c.emoji}
-                      onChange={(e) => editConcept(c.id, { emoji: e.target.value })}
-                    />
-                  </div>
-                </div>
+                </details>
               </li>
             ))}
           </ul>
+
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <Button
               type="button"
