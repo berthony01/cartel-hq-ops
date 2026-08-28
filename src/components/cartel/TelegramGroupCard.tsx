@@ -42,11 +42,10 @@ export type GroupReadiness = {
   botCanChangeInfo: boolean | undefined;
   canSetStickerSet: boolean;
   memberCount: number | null;
-  minMembers: number | null;
   officialStickerEligible: boolean;
   officialStickerReason: string | null;
-  belowMinMembers: boolean;
   ready: boolean;
+
 };
 
 function selectionKey(workspaceId: string) {
@@ -90,20 +89,15 @@ function readinessFor(
   const canSetStickerSet = live?.canSetStickerSet ?? group.can_set_sticker_set ?? false;
   const memberCount =
     live?.memberCount ?? (typeof meta?.member_count === "number" ? meta.member_count : null);
-  const minMembers =
-    live?.minMembers ??
-    (typeof meta?.official_group_sticker_min_members === "number"
-      ? meta.official_group_sticker_min_members
-      : null);
+  // Telegram's live `can_set_sticker_set` capability is authoritative. No
+  // member threshold is documented as stable, so none is derived or displayed.
   const officialStickerEligible =
-    live?.officialStickerEligible ?? meta?.official_group_sticker_eligible === true;
-  const officialStickerReason =
-    live?.officialStickerReason ?? (meta?.official_group_sticker_reason ?? null);
-  const belowMinMembers =
-    isSupergroup &&
-    typeof memberCount === "number" &&
-    typeof minMembers === "number" &&
-    memberCount < minMembers;
+    canSetStickerSet ||
+    (live?.officialStickerEligible ?? meta?.official_group_sticker_eligible === true);
+  const rawReason = live?.officialStickerReason ?? meta?.official_group_sticker_reason ?? null;
+  // Stale rows may still carry a fixed-threshold reason — normalize it away.
+  const officialStickerReason = rawReason === "minimum_members" ? "not_reported" : rawReason;
+
 
   const ready = live?.ready ?? (supportedChatType && botAdmin && botCanChangeInfo !== false);
 
@@ -118,10 +112,9 @@ function readinessFor(
     botCanChangeInfo,
     canSetStickerSet,
     memberCount,
-    minMembers,
     officialStickerEligible,
     officialStickerReason,
-    belowMinMembers,
+
     ready: !!ready,
   };
 }
@@ -307,7 +300,7 @@ export function useTelegramGroupSetup(enabled = true) {
     botCanChangeInfo: primary?.botCanChangeInfo,
     canSetStickerSet: !!primary?.canSetStickerSet,
     memberCount: primary?.memberCount ?? null,
-    minMembers: primary?.minMembers ?? null,
+    
     officialStickerEligible: !!primary?.officialStickerEligible,
     officialStickerReason: primary?.officialStickerReason ?? null,
   };
@@ -343,11 +336,11 @@ async function copyTelegramUrlToClipboard(url: string) {
 
 function officialSetLabel(r: GroupReadiness): string {
   if (r.officialStickerEligible || r.canSetStickerSet) return "Official group sticker set available";
-  if (r.isBasicGroup) return "Official group sticker set requires supergroup";
-  if (r.belowMinMembers)
-    return `Official group sticker set at ${r.minMembers}+ members (${r.memberCount})`;
-  return "Official group sticker set not available yet";
+  if (r.isBasicGroup) return "Optional: official group sticker set requires a supergroup";
+  return "Optional: official group sticker set not enabled by Telegram yet";
+
 }
+
 
 function GroupRow({
   readiness: r,
@@ -405,10 +398,11 @@ function GroupRow({
               </StatusBadge>
             ) : null}
             <StatusBadge
-              tone={r.officialStickerEligible || r.canSetStickerSet ? "green" : "gold"}
+              tone={r.officialStickerEligible || r.canSetStickerSet ? "green" : "muted"}
             >
               {officialSetLabel(r)}
             </StatusBadge>
+
             {typeof r.memberCount === "number" ? (
               <StatusBadge tone="muted">{r.memberCount} members</StatusBadge>
             ) : null}
@@ -425,13 +419,14 @@ function GroupRow({
               once. Then re-check this group.
             </p>
           ) : !r.officialStickerEligible ? (
-            <p className="mt-3 rounded-md border border-gold/40 bg-gold/5 p-3 text-xs text-muted-foreground">
+            <p className="mt-3 rounded-md border border-border/60 bg-surface-raised p-3 text-xs text-muted-foreground">
+              This group is ready: the published pack link can be shared here and CARTEL HQ can send
+              native stickers.{" "}
               {r.isBasicGroup
-                ? "This basic group is fully set up for CARTEL HQ: the published pack can be shared here and native stickers can be sent through the bot. Telegram’s official group sticker set only exists for supergroups — converting is optional."
-                : r.belowMinMembers
-                  ? `Official group sticker set unlocks at ${r.minMembers} members. This group currently has ${r.memberCount}. The pack link and native stickers still work.`
-                  : "Telegram has not reported official group sticker-set eligibility for this group yet. Sharing the pack and sending native stickers still work normally."}
+                ? "Assigning an official group sticker set is an optional Telegram feature that requires a supergroup."
+                : "Telegram has not enabled official group sticker-set assignment for this group yet — that step is optional."}
             </p>
+
           ) : null}
 
           <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -688,8 +683,8 @@ export function TelegramGroupCard({
           <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">/cartelhq</code>{" "}
           once while a one-time link is active. A verified group — basic group or supergroup — can
           receive the published pack link and native stickers. Telegram’s <em>official</em> group
-          sticker set is a separate, optional feature for supergroups that also meet Telegram’s
-          member minimum.
+          sticker set is a separate, optional capability that Telegram enables for some supergroups.
+
         </p>
 
         {groups.length > 0 && selectable ? (
@@ -841,30 +836,35 @@ export function TelegramGroupCard({
                     {lastCheck.bot_can_change_info === true ? "Enabled" : "Needs to be enabled"}
                   </StatusBadge>
 
-                  <span className="text-muted-foreground">Official group sticker set</span>
+                  <span className="text-muted-foreground">
+                    Official group sticker set (optional)
+                  </span>
                   <StatusBadge
-                    tone={lastCheck.official_group_sticker_eligible === true ? "green" : "gold"}
+                    tone={
+                      lastCheck.official_group_sticker_eligible === true ||
+                      lastCheck.can_set_sticker_set === true
+                        ? "green"
+                        : "muted"
+                    }
                   >
-                    {lastCheck.official_group_sticker_eligible === true
-                      ? "Eligible"
+                    {lastCheck.official_group_sticker_eligible === true ||
+                    lastCheck.can_set_sticker_set === true
+                      ? "Available"
                       : lastCheck.official_group_sticker_reason === "requires_supergroup"
-                        ? "Requires supergroup"
-                        : lastCheck.official_group_sticker_reason === "minimum_members"
-                          ? `Unlocks at ${lastCheck.official_group_sticker_min_members ?? 100} members (${lastCheck.member_count ?? "?"})`
-                          : "Not reported by Telegram yet"}
+                        ? "Requires a supergroup"
+                        : "Not enabled by Telegram yet"}
                   </StatusBadge>
                 </div>
                 {lastCheck.user_is_admin === true &&
                 lastCheck.bot_is_admin === true &&
                 lastCheck.bot_can_change_info === true ? (
                   <p className="text-xs leading-relaxed text-muted-foreground">
-                    Admin rights look correct.{" "}
+                    Admin rights look correct — no further permission changes are needed.{" "}
                     {lastCheck.official_group_sticker_reason === "requires_supergroup"
-                      ? "This is a basic Telegram group, which is fully valid for CARTEL HQ publishing and native stickers. Telegram’s official group sticker set only exists for supergroups — upgrading is optional."
-                      : lastCheck.official_group_sticker_reason === "minimum_members"
-                        ? `Telegram only allows an official group sticker set from ${lastCheck.official_group_sticker_min_members ?? 100} members (this group has ${lastCheck.member_count ?? "fewer"}). No further permission changes are needed.`
-                        : "No further permission changes are needed."}
+                      ? "Assigning an official group sticker set is optional and requires a supergroup; publishing, pack links and native stickers work here already."
+                      : ""}
                   </p>
+
                 ) : (
                   <p className="text-xs leading-relaxed text-muted-foreground">
                     Fix the item shown above, save the admin rights in Telegram, then send{" "}

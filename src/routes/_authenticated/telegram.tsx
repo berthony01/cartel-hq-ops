@@ -69,11 +69,12 @@ function TelegramPage() {
             <strong>supergroups</strong> can receive pack announcements and native stickers.
           </p>
           <p>
-            Assigning a pack as a group's <strong>official</strong> Telegram sticker set is a
-            Telegram feature that exists only for <strong>supergroups</strong> that also meet
-            Telegram's member minimum. In a basic group, or a supergroup that is not eligible yet,
-            CARTEL HQ posts the pack link in the group instead — publishing and native sticker
-            sending are unaffected, and converting the group is optional.
+            Assigning a pack as a group's <strong>official</strong> Telegram sticker set is an
+            optional Telegram capability that exists only for <strong>supergroups</strong>, and
+            Telegram decides when it is available for a given group. In a basic group, or a
+            supergroup where Telegram has not enabled it, CARTEL HQ posts the pack link in the group
+            instead — publishing and native sticker sending are unaffected.
+
           </p>
           <p>
             Inline mode, the Telegram Mini App, channel posting and distribution automation remain
