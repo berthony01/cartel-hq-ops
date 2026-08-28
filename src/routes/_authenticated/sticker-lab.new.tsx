@@ -85,6 +85,8 @@ import {
 } from "@/lib/telegram-group";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
+import { StickyActionBar } from "@/components/cartel/StickyActionBar";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
