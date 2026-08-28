@@ -4,8 +4,6 @@ import { cn } from "@/lib/utils";
 type ScrollRailProps = {
   children: ReactNode;
   className?: string;
-  /** Item wrapper class applied to the rail's direct-child spacing. */
-  itemClassName?: string;
   /** Class applied from lg+ when the rail should stop scrolling (e.g. a grid). */
   desktopClassName?: string;
   /** Enable scroll snapping on touch devices. */
@@ -21,7 +19,6 @@ type ScrollRailProps = {
 export function ScrollRail({
   children,
   className,
-  itemClassName,
   desktopClassName,
   snap = true,
   ...rest
@@ -35,7 +32,6 @@ export function ScrollRail({
         snap && "snap-x snap-mandatory",
         "[&>*]:shrink-0",
         snap && "[&>*]:snap-start",
-        itemClassName && `[&>*]:${itemClassName}`,
         desktopClassName,
         className,
       )}

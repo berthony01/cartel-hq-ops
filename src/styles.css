@@ -220,6 +220,30 @@
   }
 }
 
+/* Extra clearance when a StickyActionBar is also mounted (Phase 1C-2). */
+@utility app-scroll-pad-actions {
+  padding-bottom: calc(var(--bottom-nav-h) + var(--action-bar-h) + var(--safe-bottom) + 1.5rem);
+  @media (min-width: 1024px) {
+    padding-bottom: 2.5rem;
+  }
+}
+
+/* Fixed workflow action bar, layered directly above the mobile tab bar. */
+@utility action-bar-fixed {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--bottom-nav-h) + var(--safe-bottom));
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 
 @keyframes cartel-rise {
   from {
