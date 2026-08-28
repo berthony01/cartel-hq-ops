@@ -397,10 +397,11 @@ function GroupRow({
               </StatusBadge>
             ) : null}
             <StatusBadge
-              tone={r.officialStickerEligible || r.canSetStickerSet ? "green" : "gold"}
+              tone={r.officialStickerEligible || r.canSetStickerSet ? "green" : "muted"}
             >
-              {officialSetLabel(r)}
+              {officialSetLabel(r)} (optional)
             </StatusBadge>
+
             {typeof r.memberCount === "number" ? (
               <StatusBadge tone="muted">{r.memberCount} members</StatusBadge>
             ) : null}
