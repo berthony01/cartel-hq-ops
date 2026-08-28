@@ -836,30 +836,35 @@ export function TelegramGroupCard({
                     {lastCheck.bot_can_change_info === true ? "Enabled" : "Needs to be enabled"}
                   </StatusBadge>
 
-                  <span className="text-muted-foreground">Official group sticker set</span>
+                  <span className="text-muted-foreground">
+                    Official group sticker set (optional)
+                  </span>
                   <StatusBadge
-                    tone={lastCheck.official_group_sticker_eligible === true ? "green" : "gold"}
+                    tone={
+                      lastCheck.official_group_sticker_eligible === true ||
+                      lastCheck.can_set_sticker_set === true
+                        ? "green"
+                        : "muted"
+                    }
                   >
-                    {lastCheck.official_group_sticker_eligible === true
-                      ? "Eligible"
+                    {lastCheck.official_group_sticker_eligible === true ||
+                    lastCheck.can_set_sticker_set === true
+                      ? "Available"
                       : lastCheck.official_group_sticker_reason === "requires_supergroup"
-                        ? "Requires supergroup"
-                        : lastCheck.official_group_sticker_reason === "minimum_members"
-                          ? `Unlocks at ${lastCheck.official_group_sticker_min_members ?? 100} members (${lastCheck.member_count ?? "?"})`
-                          : "Not reported by Telegram yet"}
+                        ? "Requires a supergroup"
+                        : "Not enabled by Telegram yet"}
                   </StatusBadge>
                 </div>
                 {lastCheck.user_is_admin === true &&
                 lastCheck.bot_is_admin === true &&
                 lastCheck.bot_can_change_info === true ? (
                   <p className="text-xs leading-relaxed text-muted-foreground">
-                    Admin rights look correct.{" "}
+                    Admin rights look correct — no further permission changes are needed.{" "}
                     {lastCheck.official_group_sticker_reason === "requires_supergroup"
-                      ? "This is a basic Telegram group, which is fully valid for CARTEL HQ publishing and native stickers. Telegram’s official group sticker set only exists for supergroups — upgrading is optional."
-                      : lastCheck.official_group_sticker_reason === "minimum_members"
-                        ? `Telegram only allows an official group sticker set from ${lastCheck.official_group_sticker_min_members ?? 100} members (this group has ${lastCheck.member_count ?? "fewer"}). No further permission changes are needed.`
-                        : "No further permission changes are needed."}
+                      ? "Assigning an official group sticker set is optional and requires a supergroup; publishing, pack links and native stickers work here already."
+                      : ""}
                   </p>
+
                 ) : (
                   <p className="text-xs leading-relaxed text-muted-foreground">
                     Fix the item shown above, save the admin rights in Telegram, then send{" "}
