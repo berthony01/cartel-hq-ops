@@ -103,7 +103,8 @@ export function fetchTelegramLinkStatus(requestId?: string): Promise<TelegramLin
 }
 
 /* ------------------------------------------------------------------ */
-/* Target supergroup linking (telegram-link v3)                        */
+/* Target group linking (telegram-link v3)                             */
+/* Both basic Telegram groups and supergroups are supported targets.   */
 /* ------------------------------------------------------------------ */
 
 export type TelegramCreateGroupLinkResult = {
@@ -123,18 +124,21 @@ export type TelegramGroupLinkStatusResult = {
   bot?: TelegramBot;
   request?: TelegramLinkRequest | null;
   connected: boolean;
+  /** Legacy single-group field: identical to `groups[0]`. */
   group?: TelegramGroupConnection | null;
+  /** Authoritative list of every group connected to the workspace, newest first. */
   groups?: TelegramGroupConnection[];
 };
 
-/** Starts a one-time supergroup link request for the given workspace. */
+/** Starts a one-time group link request for the given workspace. */
 export function createTelegramGroupLink(
   workspaceId: string,
 ): Promise<TelegramCreateGroupLinkResult> {
   return invoke<TelegramCreateGroupLinkResult>({ action: "create_group_link", workspaceId });
 }
 
-/** Polls the state of a supergroup link request and the workspace's groups. */
+/** Polls the state of a group link request and the workspace's connected groups. */
+
 export function fetchTelegramGroupLinkStatus(
   workspaceId: string,
   requestId?: string,
