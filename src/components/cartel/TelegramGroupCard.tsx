@@ -625,10 +625,18 @@ export function TelegramGroupCard({
 
         {groups.length > 0 && selectable ? (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-surface-raised p-3">
-            <p className="text-xs font-semibold text-foreground">
-              {selectedGroupIds.length} of {groups.length} group
-              {groups.length === 1 ? "" : "s"} selected for distribution
-            </p>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-foreground">
+                {selectedGroupIds.length} of {groups.length} group
+                {groups.length === 1 ? "" : "s"} selected for distribution
+              </p>
+              {groups.length > MAX_DISTRIBUTION_TARGETS ? (
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  One distribution run covers up to {MAX_DISTRIBUTION_TARGETS} groups. Run it again
+                  for the rest — the sticker set is never recreated.
+                </p>
+              ) : null}
+            </div>
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
@@ -636,10 +644,16 @@ export function TelegramGroupCard({
                 size="sm"
                 className="min-h-9"
                 onClick={selectAllGroups}
-                disabled={selectedGroupIds.length === groups.length}
+                disabled={
+                  selectedGroupIds.length ===
+                  Math.min(groups.length, MAX_DISTRIBUTION_TARGETS)
+                }
               >
-                Select all
+                {groups.length > MAX_DISTRIBUTION_TARGETS
+                  ? `Select first ${MAX_DISTRIBUTION_TARGETS}`
+                  : "Select all"}
               </Button>
+
               <Button
                 type="button"
                 variant="outline"
