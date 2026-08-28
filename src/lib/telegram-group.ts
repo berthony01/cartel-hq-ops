@@ -8,6 +8,17 @@ import type { OfficialStickerReason } from "@/lib/telegram-link";
  * and never writes `telegram_group_connections` (the webhook is authoritative).
  */
 
+export type TelegramGroupConnectionMetadata = {
+  bot_can_change_info?: boolean | null;
+  can_set_sticker_set?: boolean | null;
+  member_count?: number | null;
+  official_group_sticker_min_members?: number | null;
+  official_group_sticker_eligible?: boolean | null;
+  official_group_sticker_reason?: OfficialStickerReason;
+  checked_at?: string | null;
+  [key: string]: unknown;
+};
+
 export type TelegramGroupConnection = {
   id: string;
   workspace_id: string;
@@ -19,7 +30,10 @@ export type TelegramGroupConnection = {
   can_set_sticker_set: boolean;
   connected_at: string;
   verified_at: string | null;
+  /** Stored verification details written by the webhook / group verification. */
+  metadata?: TelegramGroupConnectionMetadata | null;
 };
+
 
 export type TelegramGroupStatusResult = {
   bot?: TelegramBot;
