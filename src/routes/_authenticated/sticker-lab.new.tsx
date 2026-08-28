@@ -1285,7 +1285,7 @@ function StickerLabBuilder() {
   };
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6 pb-28 sm:gap-8 sm:pb-0">
       <PageHeader
         eyebrow="Sticker Lab"
         title="New Sticker Pack"
