@@ -297,6 +297,34 @@ Deno.serve(async (req: Request) => {
     return (pending ?? []).find((r: any) => r?.metadata?.link_type === "group" && new Date(r.expires_at).getTime() > Date.now()) ?? null;
   };
 
+  const communityConnectedText = (groupTitle: string) => {
+    const title = escapeHtml(groupTitle && groupTitle.trim() ? groupTitle : "This community");
+    return [
+      "<b>✅ CARTEL HQ CONNECTED</b>",
+      "",
+      `<b>${title}</b> is now connected to Cartel HQ.`,
+      "",
+      "🐸 <b>@PepeCartelHQBot is active in this community.</b>",
+      "",
+      "Community owners configure tools and automations inside <b>Cartel HQ</b>, and the bot carries them out here in Telegram.",
+      "",
+      "<b>Available now</b>",
+      "👋 Welcome &amp; onboarding",
+      "🎨 Telegram sticker packs",
+      "🤖 Native Sticker Drops",
+      "",
+      "<b>Coming through Cartel HQ</b>",
+      "📢 Community automations",
+      "📊 Polls, milestones &amp; community intelligence",
+      "🚀 Launch Watch &amp; official launch alerts",
+      "🛡 Project verification",
+      "⚡ More community &amp; launch tools",
+      "",
+      "Return to Cartel HQ to configure this community.",
+    ].join("\n");
+  };
+
+
   const bindGroup = async (params: { chat: any; actor: any; link: any }) => {
     const { chat, actor, link } = params;
     const chatId = String(chat?.id ?? ""), actorId = String(actor?.id ?? ""), now = new Date().toISOString();
