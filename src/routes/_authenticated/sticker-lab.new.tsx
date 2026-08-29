@@ -2479,16 +2479,16 @@ function StickerLabBuilder() {
                   <StatusBadge tone="red">Connect a Telegram community</StatusBadge>
                 )}
                 {telegramGroup.connectedGroupCount === 0 ? (
-                  <StatusBadge tone="red">No group connected</StatusBadge>
+                  <StatusBadge tone="red">No community connected</StatusBadge>
                 ) : selectedGroupIds.length === 0 ? (
-                  <StatusBadge tone="red">No distribution group selected</StatusBadge>
+                  <StatusBadge tone="red">No community selected</StatusBadge>
                 ) : groupsSelectedAndReady ? (
                   <StatusBadge tone="green">
-                    {selectedGroupIds.length} of {telegramGroup.connectedGroupCount} group
-                    {telegramGroup.connectedGroupCount === 1 ? "" : "s"} selected
+                    {selectedGroupIds.length} of {telegramGroup.connectedGroupCount} communit
+                    {telegramGroup.connectedGroupCount === 1 ? "y" : "ies"} selected
                   </StatusBadge>
                 ) : (
-                  <StatusBadge tone="red">A selected group is not verified</StatusBadge>
+                  <StatusBadge tone="red">A selected community is not verified</StatusBadge>
                 )}
 
                 <StatusBadge tone={exportableCount > 0 ? "gold" : "muted"}>
@@ -2648,6 +2648,18 @@ function StickerLabBuilder() {
                 </ul>
               ) : null}
 
+              <p className="min-w-0 rounded-md border border-border/70 bg-surface-raised/50 p-3 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                {lifecycleMode === "publish"
+                  ? "This pack has not been published to Telegram yet. Publishing creates one sticker set and distributes it to the communities you selected."
+                  : lifecycleMode === "update"
+                    ? `${unpublishedReviewedIds.length} reviewed sticker${unpublishedReviewedIds.length === 1 ? "" : "s"} are not on the existing Telegram set yet. Publishing adds them — the set is never recreated.`
+                    : lifecycleMode === "add"
+                      ? `The set is live in ${deliveredTargetIds.length} communit${deliveredTargetIds.length === 1 ? "y" : "ies"}. ${newTargetIds.length} newly selected communit${newTargetIds.length === 1 ? "y has" : "ies have"} not received it yet.`
+                      : lifecycleMode === "retry"
+                        ? `Every sticker is published. ${failedTargetIds.length} communit${failedTargetIds.length === 1 ? "y" : "ies"} failed distribution and can be retried safely.`
+                        : `Everything is current: all reviewed stickers are published and all ${deliveredTargetIds.length} selected communit${deliveredTargetIds.length === 1 ? "y has" : "ies have"} the pack.`}
+              </p>
+
               <div className="flex flex-wrap gap-3">
                 <Button
                   type="button"
@@ -2729,6 +2741,109 @@ function StickerLabBuilder() {
 
             </CardContent>
           </Card>
+
+
+          {telegramSetExists ? (
+            <Card className="cartel-panel mt-6">
+              <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+                <CardTitle className="text-base">Sticker Drops for this pack</CardTitle>
+                <StatusBadge tone={packSchedules.length > 0 ? "green" : "muted"}>
+                  {packSchedules.length > 0
+                    ? `${packSchedules.length} automated`
+                    : "Not automated"}
+                </StatusBadge>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <p className="text-xs text-muted-foreground">
+                  Scheduled, capped delivery of this pack into a community. Drops run server-side
+                  and stay disabled until you enable them.
+                </p>
+
+                {dropStatusQuery.isLoading ? (
+                  <p className="text-xs text-muted-foreground">Loading drop automation…</p>
+                ) : dropGroups.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No connected community is available for automation yet.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {dropGroups.map((g) => {
+                      const sched = dropScheduleByGroup[g.id] ?? null;
+                      const forThisPack = sched?.pack_id === packId;
+                      const state = sched ? scheduleState(sched, dropKillSwitch) : "unconfigured";
+                      const due = sched ? nextRunAt(sched) : null;
+                      const otherPackTitle = sched
+                        ? (dropPacks.find((dp) => dp.id === sched.pack_id)?.title ?? "another pack")
+                        : null;
+                      return (
+                        <li
+                          key={g.id}
+                          className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-background/40 p-3"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-foreground">{g.title}</p>
+                            <p className="mt-0.5 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
+                              {!sched
+                                ? "No drop automation configured."
+                                : forThisPack
+                                  ? `${SCHEDULE_STATE_LABEL[state]} · ${formatCadence(sched)} · ${formatNextRun(due)}`
+                                  : `Currently dropping ${otherPackTitle}.`}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={forThisPack ? "outline" : "secondary"}
+                            className="min-h-10 shrink-0"
+                            disabled={!dropCanManage}
+                            onClick={() => {
+                              setDropDialogGroup(g);
+                              setDropDialogSchedule(sched);
+                              setDropDialogOpen(true);
+                            }}
+                          >
+                            {forThisPack
+                              ? "Edit drops"
+                              : sched
+                                ? "Switch to this pack"
+                                : "Set up drops"}
+                          </Button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+
+                {!dropCanManage && !dropStatusQuery.isLoading ? (
+                  <p className="text-xs text-muted-foreground">
+                    Only a workspace owner or admin can change drop automation.
+                  </p>
+                ) : null}
+
+                <Button asChild variant="ghost" size="sm" className="min-h-10">
+                  <Link to="/distribution" search={{ pack: packId ?? undefined }}>
+                    Open Distribution Center
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {packId ? (
+            <StickerDropScheduleDialog
+              open={dropDialogOpen}
+              onOpenChange={setDropDialogOpen}
+              workspaceId={workspaceId ?? ""}
+              group={dropDialogGroup}
+              groups={dropGroups}
+              schedule={dropDialogSchedule}
+              packs={dropPacks}
+              stickers={dropStickers}
+              canManage={dropCanManage}
+              lockedPackId={packId}
+              onChanged={() => void dropStatusQuery.refetch()}
+            />
+          ) : null}
 
           <AlertDialog open={confirmPublish} onOpenChange={setConfirmPublish}>
             <AlertDialogContent>
