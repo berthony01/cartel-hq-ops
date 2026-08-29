@@ -86,7 +86,6 @@ import {
   fetchDropStatus,
   formatCadence,
   formatNextRun,
-  nextRunAt,
   scheduleState,
   type DropGroup,
   type DropSchedule,
@@ -2783,7 +2782,6 @@ function StickerLabBuilder() {
                       const sched = dropScheduleByGroup[g.id] ?? null;
                       const forThisPack = sched?.pack_id === packId;
                       const state = sched ? scheduleState(sched, dropKillSwitch) : "unconfigured";
-                      const due = sched ? nextRunAt(sched) : null;
                       const otherPackTitle = sched
                         ? (dropPacks.find((dp) => dp.id === sched.pack_id)?.title ?? "another pack")
                         : null;
@@ -2798,7 +2796,13 @@ function StickerLabBuilder() {
                               {!sched
                                 ? "No drop automation configured."
                                 : forThisPack
-                                  ? `${SCHEDULE_STATE_LABEL[state]} · ${formatCadence(sched)} · ${formatNextRun(due)}`
+                                  ? [
+                                      SCHEDULE_STATE_LABEL[state],
+                                      formatCadence(sched.interval_minutes),
+                                      formatNextRun(sched.next_run_at),
+                                    ]
+                                      .filter(Boolean)
+                                      .join(" · ")
                                   : `Currently dropping ${otherPackTitle}.`}
                             </p>
                           </div>
@@ -2833,7 +2837,7 @@ function StickerLabBuilder() {
                 ) : null}
 
                 <Button asChild variant="ghost" size="sm" className="min-h-10">
-                  <Link to="/distribution" search={{ pack: packId ?? undefined }}>
+                  <Link to="/distribution" search={packId ? { pack: packId } : {}}>
                     Open Distribution Center
                   </Link>
                 </Button>
