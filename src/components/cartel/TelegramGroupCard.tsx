@@ -853,8 +853,10 @@ export function TelegramGroupCard({
         <CardTitle className="min-w-0 text-base [overflow-wrap:anywhere]">
           Telegram communities
         </CardTitle>
-        {groupQuery.isLoading ? (
+        {groupQuery.isPending && groups.length === 0 ? (
           <StatusBadge tone="muted">Checking groups…</StatusBadge>
+        ) : groupQuery.isError && groups.length === 0 ? (
+          <StatusBadge tone="red">Could not load communities</StatusBadge>
         ) : groups.length === 0 ? (
           <StatusBadge tone="muted">No groups connected</StatusBadge>
         ) : readyCount === groups.length ? (
@@ -868,6 +870,24 @@ export function TelegramGroupCard({
         )}
       </CardHeader>
       <CardContent className="space-y-3 p-4 pt-0 text-sm sm:space-y-4 sm:p-6 sm:pt-0">
+        {groupQuery.isError ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-2.5 text-xs">
+            <p className="min-w-0 text-muted-foreground">
+              {groups.length > 0
+                ? "Showing the last loaded communities. Refreshing the list failed."
+                : "Could not load your connected communities."}
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void groupQuery.refetch()}
+              disabled={groupQuery.isFetching}
+            >
+              {groupQuery.isFetching ? "Retrying…" : "Retry"}
+            </Button>
+          </div>
+        ) : null}
         <details className="rounded-md border border-border/60 bg-background/40 p-3">
           <summary className="flex min-h-11 cursor-pointer list-none items-center text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             How connecting a community works
