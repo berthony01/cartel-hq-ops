@@ -23,12 +23,20 @@ async function sha256Hex(value: string) {
 async function webhookSecret(token: string) {
   return (await sha256Hex(`cartelhq-webhook:${token}`)).slice(0, 48);
 }
+/** Hard timeout around every api.telegram.org call so a hung request cannot stall the function. */
+const TELEGRAM_TIMEOUT_MS = 10_000;
 async function telegramJson(token: string, method: string, body: Record<string, unknown> = {}) {
-  const res = await fetch(`${TG_BASE}/bot${token}/${method}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${TG_BASE}/bot${token}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
+    });
+  } catch {
+    throw new Error("Could not reach Telegram. Try again shortly.");
+  }
   const payload = await res.json().catch(() => null) as any;
   if (!res.ok || !payload?.ok) throw new Error(String(payload?.description ?? `Telegram request failed (${res.status}).`));
   return payload.result;
