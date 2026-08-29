@@ -164,7 +164,12 @@ export function CommunityWelcomeDialog({
       });
       setCanManage(result.canManage === true || result.saved === true);
       setDirty(false);
-      toast.success(`Welcome settings saved for ${group.title}.`);
+      setSavedEnabled(enabled);
+      toast.success(
+        enabled
+          ? `Saved. Real join welcomes are now ON for ${group.title}.`
+          : `Saved. Real join welcomes are now OFF for ${group.title}. New members receive nothing.`,
+      );
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Could not save community welcome settings.",
@@ -182,11 +187,14 @@ export function CommunityWelcomeDialog({
         workspaceId,
         groupConnectionId: group.id,
       });
-      toast.success(
-        result.autoDeleteSeconds
-          ? `Test welcome posted in ${group.title}. The bot removes it in ${result.autoDeleteSeconds}s.`
-          : `Test welcome posted in ${group.title}.`,
-      );
+      const base = result.autoDeleteSeconds
+        ? `Test welcome posted in ${group.title}. The bot removes it in ${result.autoDeleteSeconds}s.`
+        : `Test welcome posted in ${group.title}.`;
+      if (savedEnabled) toast.success(base);
+      else
+        toast.warning(
+          `${base} This was a preview only. Real join welcomes are OFF, so new members receive nothing.`,
+        );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not send the test welcome.");
     } finally {
