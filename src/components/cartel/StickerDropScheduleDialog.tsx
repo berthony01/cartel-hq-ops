@@ -111,8 +111,11 @@ export function StickerDropScheduleDialog({
     setNoImmediateRepeat(
       schedule?.no_immediate_repeat ?? DEFAULT_SCHEDULE_FORM.noImmediateRepeat,
     );
-    const selected = schedule?.selected_sticker_ids ?? [];
-    setLimitStickers(selected.length > 0);
+    // Switching an existing schedule onto a locked pack invalidates its saved
+    // sticker selection, because those IDs belong to the previous pack.
+    const switchingPack = !!lockedPackId && !!schedule && schedule.pack_id !== lockedPackId;
+    const selected = switchingPack ? [] : (schedule?.selected_sticker_ids ?? []);
+    setLimitStickers(!switchingPack && selected.length > 0);
     setSelectedStickerIds(selected);
   }, [open, group?.id, schedule, packs, lockedPackId]);
 
@@ -278,7 +281,10 @@ export function StickerDropScheduleDialog({
                 <strong className="text-foreground">
                   {packs.find((p) => p.id === lockedPackId)?.title ?? "this pack"}
                 </strong>
-                .
+                .{" "}
+                {schedule.enabled
+                  ? "This schedule is active right now, so saving switches its live Sticker Drops to this pack. Pause it first if you do not want that."
+                  : ""}
               </p>
             ) : null}
             {packs.length === 0 ? (

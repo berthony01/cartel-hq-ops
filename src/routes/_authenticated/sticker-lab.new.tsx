@@ -1073,15 +1073,18 @@ function StickerLabBuilder() {
   const unpublishedReviewedIds = reviewedStickerIds.filter(
     (id) => tgStickers[id]?.status !== "published",
   );
-  const lifecycleMode: "publish" | "update" | "add" | "retry" | "current" = !telegramSetExists
-    ? "publish"
-    : unpublishedReviewedIds.length > 0
-      ? "update"
-      : newTargetIds.length > 0
-        ? "add"
-        : failedTargetIds.length > 0
-          ? "retry"
-          : "current";
+  const lifecycleMode: "publish" | "update" | "add" | "retry" | "attention" | "current" =
+    !telegramSetExists
+      ? "publish"
+      : unpublishedReviewedIds.length > 0
+        ? "update"
+        : newTargetIds.length > 0
+          ? "add"
+          : failedTargetIds.length > 0
+            ? "retry"
+            : tgPublishedCount < totalConcepts
+              ? "attention"
+              : "current";
   const lifecycleBusy = publishing || distributing;
   const lifecycleEnabled =
     lifecycleMode === "publish" || lifecycleMode === "update"
@@ -1095,10 +1098,12 @@ function StickerLabBuilder() {
       : lifecycleMode === "update"
         ? `Publish ${unpublishedReviewedIds.length} sticker update${unpublishedReviewedIds.length === 1 ? "" : "s"}`
         : lifecycleMode === "add"
-          ? `Distribute to ${newTargetIds.length} new communit${newTargetIds.length === 1 ? "y" : "ies"}`
+          ? `Add to ${newTargetIds.length} New Communit${newTargetIds.length === 1 ? "y" : "ies"}`
           : lifecycleMode === "retry"
             ? `Retry ${failedTargetIds.length} failed distribution${failedTargetIds.length === 1 ? "" : "s"}`
-            : "Pack is up to date";
+            : lifecycleMode === "attention"
+              ? "Finish Review for Remaining Stickers"
+              : "Pack is up to date";
   const runLifecycleAction = () => {
     if (lifecycleMode === "publish") {
       setConfirmPublish(true);
@@ -2553,56 +2558,59 @@ function StickerLabBuilder() {
                 </p>
               ) : null}
 
-              {distTargets.length > 0 || distResult ? (
+              {telegramGroup.groups.length > 0 ? (
                 <ul className="space-y-2 text-xs">
-                  {/* Durable per-group history is authoritative; the most recent
-                      run only fills in before the persisted state has loaded. */}
-                  {(distTargets.length > 0
-                    ? distTargets.map((t) => ({
-                        id: t.group_connection_id,
-                        title:
-                          telegramGroup.groups.find((g) => g.id === t.group_connection_id)?.title ??
-                          "Connected group",
-                        status: t.status,
-                        detail: t.last_error,
-                      }))
-                    : (distResult?.results ?? []).map((r) => ({
-                        id: r.groupConnectionId,
-                        title: r.title,
-                        status: r.status,
-                        detail: r.message ?? r.reason ?? null,
-                      }))
-
-                  ).map((row) => (
-                    <li
-                      key={row.id}
-                      className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-background/40 p-2"
-                    >
-                      <span className="font-medium text-foreground">{row.title}</span>
-                      <StatusBadge
-                        tone={
-                          row.status === "assigned"
-                            ? "green"
-                            : row.status === "announced"
-                              ? "gold"
-                              : row.status === "failed"
-                                ? "red"
-                                : "muted"
-                        }
+                  {/* Every connected community is listed for THIS pack. Durable
+                      per-group rows are authoritative; the most recent run only
+                      fills in before the persisted state has loaded. */}
+                  {telegramGroup.groups.map((g) => {
+                    const persisted = distTargets.find((t) => t.group_connection_id === g.id);
+                    const live = distResult?.results.find((r) => r.groupConnectionId === g.id);
+                    const status = persisted?.status ?? live?.status ?? null;
+                    const detail = persisted?.last_error ?? live?.message ?? live?.reason ?? null;
+                    const isSelected = selectedGroupIds.includes(g.id);
+                    return (
+                      <li
+                        key={g.id}
+                        className="flex min-w-0 flex-wrap items-center gap-2 rounded-md border border-border/60 bg-background/40 p-2"
                       >
-                        {row.status === "assigned"
-                          ? "Assigned as official group set"
-                          : row.status === "announced"
-                            ? "Pack announced in group"
-                            : row.status === "failed"
-                              ? "Failed — retry needed"
-                              : row.status}
-                      </StatusBadge>
-                      {row.detail ? (
-                        <span className="text-muted-foreground">{row.detail}</span>
-                      ) : null}
-                    </li>
-                  ))}
+                        <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+                          {g.title}
+                        </span>
+                        <StatusBadge
+                          tone={
+                            status === "assigned"
+                              ? "green"
+                              : status === "announced"
+                                ? "gold"
+                                : status === "failed"
+                                  ? "red"
+                                  : "muted"
+                          }
+                        >
+                          {status === "assigned"
+                            ? "Official set"
+                            : status === "announced"
+                              ? "Pack announced"
+                              : status === "failed"
+                                ? "Needs retry"
+                                : status
+                                  ? status
+                                  : "Not added yet"}
+                        </StatusBadge>
+                        {isSelected ? (
+                          <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                            selected
+                          </span>
+                        ) : null}
+                        {detail ? (
+                          <span className="w-full text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
+                            {detail}
+                          </span>
+                        ) : null}
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : null}
 
@@ -2668,7 +2676,9 @@ function StickerLabBuilder() {
                       ? `The set is live in ${deliveredTargetIds.length} communit${deliveredTargetIds.length === 1 ? "y" : "ies"}. ${newTargetIds.length} newly selected communit${newTargetIds.length === 1 ? "y has" : "ies have"} not received it yet.`
                       : lifecycleMode === "retry"
                         ? `Every sticker is published. ${failedTargetIds.length} communit${failedTargetIds.length === 1 ? "y" : "ies"} failed distribution and can be retried safely.`
-                        : `Everything is current: all reviewed stickers are published and all ${deliveredTargetIds.length} selected communit${deliveredTargetIds.length === 1 ? "y has" : "ies have"} the pack.`}
+                        : lifecycleMode === "attention"
+                          ? `${totalConcepts - tgPublishedCount} sticker${totalConcepts - tgPublishedCount === 1 ? " is" : "s are"} still not published. Finish Review so they pass the transparency and cutout checks, then publish the update.`
+                          : `Everything is current: all reviewed stickers are published and all ${deliveredTargetIds.length} selected communit${deliveredTargetIds.length === 1 ? "y has" : "ies have"} the pack.`}
               </p>
 
               <div className="flex flex-wrap gap-3">
@@ -2754,8 +2764,7 @@ function StickerLabBuilder() {
           </Card>
 
 
-          {telegramSetExists ? (
-            <Card className="cartel-panel mt-6">
+          <Card className="cartel-panel mt-6">
               <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
                 <CardTitle className="text-base">Sticker Drops for this pack</CardTitle>
                 <StatusBadge tone={packSchedules.length > 0 ? "green" : "muted"}>
@@ -2770,7 +2779,12 @@ function StickerLabBuilder() {
                   and stay disabled until you enable them.
                 </p>
 
-                {dropStatusQuery.isLoading ? (
+                {!telegramSetExists ? (
+                  <p className="rounded-md border border-border/70 bg-surface-raised/50 p-3 text-xs text-muted-foreground">
+                    Sticker Drops become available after this pack is published and distributed to a
+                    community.
+                  </p>
+                ) : dropStatusQuery.isLoading ? (
                   <p className="text-xs text-muted-foreground">Loading drop automation…</p>
                 ) : dropGroups.length === 0 ? (
                   <p className="text-xs text-muted-foreground">
@@ -2781,6 +2795,14 @@ function StickerLabBuilder() {
                     {dropGroups.map((g) => {
                       const sched = dropScheduleByGroup[g.id] ?? null;
                       const forThisPack = sched?.pack_id === packId;
+                      // Automation may only be pointed at a pack this community
+                      // has actually received.
+                      const deliveredStatus = distStatusFor(g.id);
+                      const packDeliveredHere =
+                        deliveredStatus === "assigned" || deliveredStatus === "announced";
+                      const actionEnabled = forThisPack
+                        ? dropCanManage
+                        : dropCanManage && packDeliveredHere;
                       const state = sched ? scheduleState(sched, dropKillSwitch) : "unconfigured";
                       const otherPackTitle = sched
                         ? (dropPacks.find((dp) => dp.id === sched.pack_id)?.title ?? "another pack")
@@ -2793,17 +2815,19 @@ function StickerLabBuilder() {
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium text-foreground">{g.title}</p>
                             <p className="mt-0.5 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
-                              {!sched
-                                ? "No drop automation configured."
-                                : forThisPack
-                                  ? [
-                                      SCHEDULE_STATE_LABEL[state],
-                                      formatCadence(sched.interval_minutes),
-                                      formatNextRun(sched.next_run_at),
-                                    ]
-                                      .filter(Boolean)
-                                      .join(" · ")
-                                  : `Currently dropping ${otherPackTitle}.`}
+                              {!forThisPack && !packDeliveredHere
+                                ? "Distribute this pack to this community first."
+                                : !sched
+                                  ? "No drop automation configured."
+                                  : forThisPack
+                                    ? [
+                                        SCHEDULE_STATE_LABEL[state],
+                                        formatCadence(sched.interval_minutes),
+                                        formatNextRun(sched.next_run_at),
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" · ")
+                                    : `Currently dropping ${otherPackTitle}.`}
                             </p>
                           </div>
                           <Button
@@ -2811,7 +2835,7 @@ function StickerLabBuilder() {
                             size="sm"
                             variant={forThisPack ? "outline" : "secondary"}
                             className="min-h-10 shrink-0"
-                            disabled={!dropCanManage}
+                            disabled={!actionEnabled}
                             onClick={() => {
                               setDropDialogGroup(g);
                               setDropDialogSchedule(sched);
@@ -2841,9 +2865,8 @@ function StickerLabBuilder() {
                     Open Distribution Center
                   </Link>
                 </Button>
-              </CardContent>
-            </Card>
-          ) : null}
+            </CardContent>
+          </Card>
 
           {packId ? (
             <StickerDropScheduleDialog
