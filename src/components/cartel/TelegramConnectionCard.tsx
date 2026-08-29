@@ -185,7 +185,7 @@ export function TelegramConnectionCard({
   return (
     <Card className="cartel-panel">
       <CardHeader className="flex-row items-center justify-between gap-3 space-y-0 p-4 sm:p-6">
-        <CardTitle className="text-base">Telegram connection</CardTitle>
+        <CardTitle className="text-base">Owner Telegram Identity</CardTitle>
         {configQuery.isLoading ? (
           <StatusBadge tone="muted">Checking bot…</StatusBadge>
         ) : botConfigured ? (

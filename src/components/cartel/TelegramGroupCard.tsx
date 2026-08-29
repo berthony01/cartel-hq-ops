@@ -8,9 +8,13 @@ import { useTelegramLauncher } from "@/hooks/useTelegramLauncher";
 import { telegramErrorMessage } from "@/lib/telegram-stickers";
 import {
   createTelegramGroupLink,
+  createTelegramLink,
   fetchTelegramGroupLinkStatus,
+  fetchTelegramLinkStatus,
   type TelegramLinkStatus,
 } from "@/lib/telegram-link";
+import { useSession } from "@/hooks/useSession";
+
 
 import {
   fetchTelegramGroupStatus,
@@ -509,7 +513,15 @@ export function TelegramGroupCard({
   /** Only true when the launch attempt itself failed (sandbox / popup block). */
   const [launchBlocked, setLaunchBlocked] = useState(false);
 
+  /* Step 1 (identity) state — presented as part of connecting a community. */
+  const { user } = useSession();
+  const [identityState, setIdentityState] = useState<TelegramLinkStatus | null>(null);
+  const [identityExpiresAt, setIdentityExpiresAt] = useState<string | null>(null);
+  const [identityRemaining, setIdentityRemaining] = useState(0);
+  const [identityUrl, setIdentityUrl] = useState<string | null>(null);
+
   const pollRef = useRef<number | null>(null);
+  const identityPollRef = useRef<number | null>(null);
 
 
   const stopPolling = useCallback(() => {
@@ -519,6 +531,60 @@ export function TelegramGroupCard({
     }
   }, []);
   useEffect(() => stopPolling, [stopPolling]);
+
+  const stopIdentityPolling = useCallback(() => {
+    if (identityPollRef.current !== null) {
+      window.clearInterval(identityPollRef.current);
+      identityPollRef.current = null;
+    }
+  }, []);
+  useEffect(() => stopIdentityPolling, [stopIdentityPolling]);
+
+  const startIdentityPolling = useCallback(
+    (requestId: string) => {
+      stopIdentityPolling();
+      identityPollRef.current = window.setInterval(async () => {
+        try {
+          const result = await fetchTelegramLinkStatus(requestId);
+          if (result.connected) {
+            stopIdentityPolling();
+            setIdentityState("connected");
+            if (user?.id) {
+              if (result.connection) {
+                queryClient.setQueryData(["telegram-connection", user.id], result.connection);
+              }
+              void queryClient.invalidateQueries({
+                queryKey: ["telegram-connection", user.id],
+              });
+            }
+            return;
+          }
+          const status = result.request?.status;
+          if (status === "expired" || status === "cancelled") {
+            stopIdentityPolling();
+            setIdentityState(status);
+          }
+        } catch {
+          /* transient poll failure — keep waiting until expiry */
+        }
+      }, 2000);
+    },
+    [queryClient, stopIdentityPolling, user?.id],
+  );
+
+  useEffect(() => {
+    if (identityState !== "pending" || !identityExpiresAt) return;
+    setIdentityRemaining(secondsLeft(identityExpiresAt));
+    const id = window.setInterval(() => {
+      const left = secondsLeft(identityExpiresAt);
+      setIdentityRemaining(left);
+      if (left <= 0) {
+        setIdentityState("expired");
+        stopIdentityPolling();
+      }
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [identityState, identityExpiresAt, stopIdentityPolling]);
 
   useEffect(() => {
     if (linkState !== "pending" || !expiresAt) return;
@@ -533,6 +599,7 @@ export function TelegramGroupCard({
     }, 1000);
     return () => window.clearInterval(id);
   }, [linkState, expiresAt, stopPolling]);
+
 
   const knownIdsRef = useRef<string[]>([]);
   useEffect(() => {
@@ -616,6 +683,7 @@ export function TelegramGroupCard({
       const app = result.groupAppUrl;
 
       if (!web && !app) throw new Error("The Telegram group link is unavailable right now.");
+      setIdentityState(null);
       setExpiresAt(result.expiresAt ?? null);
       setLaunchUrls({ app, web });
       setLinkState("pending");
@@ -656,6 +724,75 @@ export function TelegramGroupCard({
     }
   };
 
+  /**
+   * Step 1 of community connection: the existing secure personal identity link.
+   * Telegram requires a user identity to own sticker sets and to verify group
+   * admin rights — it is presented here as part of connecting a community, not
+   * as a separate account feature.
+   */
+  const startIdentity = async () => {
+    if (starting) return;
+    setStarting(true);
+    const mobile = isMobileDevice();
+    const handoff = mobile ? null : openHandoffWindow();
+    try {
+      const result = await createTelegramLink();
+      const web = result.botStartUrl;
+      const app = result.botAppUrl;
+      if (!web && !app) throw new Error("The Telegram link is unavailable right now.");
+      setIdentityUrl((mobile ? (app ?? web) : (web ?? app)) ?? null);
+      setIdentityExpiresAt(result.expiresAt ?? null);
+      setIdentityRemaining(secondsLeft(result.expiresAt));
+      setIdentityState("pending");
+      startIdentityPolling(result.requestId);
+
+      let launched = false;
+      if (handoff && !handoff.closed && web) {
+        try {
+          handoff.location.replace(web);
+          launched = true;
+        } catch {
+          launched = false;
+        }
+      } else if (mobile) {
+        launched = launchTelegram(app, web);
+      } else {
+        launched = launchTelegram(undefined, web ?? app);
+      }
+      if (!launched) {
+        try {
+          handoff?.close();
+        } catch {
+          /* noop */
+        }
+      }
+    } catch (err) {
+      try {
+        handoff?.close();
+      } catch {
+        /* noop */
+      }
+      setIdentityState(null);
+      toast.error(telegramErrorMessage(err));
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  /**
+   * One customer-facing action. Identity verification (when missing) is step 1;
+   * the group picker always opens from an explicit second click so browsers
+   * never block the handoff.
+   */
+  const handlePrimary = async () => {
+    if (!personalConnected && identityState !== "connected") {
+      await startIdentity();
+      return;
+    }
+    await connect();
+  };
+
+
   const pending = linkState === "pending";
   const manualUrl = isMobileDevice()
     ? (launchUrls.app ?? launchUrls.web)
@@ -667,7 +804,7 @@ export function TelegramGroupCard({
     <Card className="cartel-panel">
       <CardHeader className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 space-y-0 p-4 sm:p-6">
         <CardTitle className="min-w-0 text-base [overflow-wrap:anywhere]">
-          Connected Telegram groups
+          Telegram communities
         </CardTitle>
         {groupQuery.isLoading ? (
           <StatusBadge tone="muted">Checking groups…</StatusBadge>
@@ -686,12 +823,12 @@ export function TelegramGroupCard({
       <CardContent className="space-y-3 p-4 pt-0 text-sm sm:space-y-4 sm:p-6 sm:pt-0">
         <details className="rounded-md border border-border/60 bg-background/40 p-3">
           <summary className="flex min-h-11 cursor-pointer list-none items-center text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            How connecting groups works
+            How connecting a community works
           </summary>
           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
             Connect every Telegram group or supergroup CARTEL HQ should work with. Telegram only
             lets you pick <strong>one group per add-bot flow</strong>, so use{" "}
-            <strong>Connect another group</strong> once for each community — connecting a new group
+            <strong>Connect another community</strong> once for each community — connecting a new group
             never removes the ones already connected. Once connected, CARTEL HQ can distribute one
             published pack to many groups together. If @PepeCartelHQBot is already installed in a
             group, open it and send{" "}
@@ -897,31 +1034,70 @@ export function TelegramGroupCard({
 
         {linkState === "expired" || linkState === "cancelled" ? (
           <p className="rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
-            Group link expired. Try again.
+            This community connection expired before it finished. Start it again below.
           </p>
         ) : null}
 
-        {!personalConnected ? (
-          <p className="text-xs text-muted-foreground">
-            Connect your personal Telegram account first — groups are linked by the same account.
+        {identityState === "pending" ? (
+          <div className="rounded-md border border-gold/40 bg-gold/5 p-3 text-xs text-muted-foreground">
+            <p className="flex items-center gap-2 font-semibold text-foreground">
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              Step 1 of 2 · Verifying your Telegram identity
+            </p>
+            <p className="mt-2 leading-relaxed">
+              Telegram opened. Tap <strong>Start</strong> in the CARTEL HQ bot chat, then return
+              here — we continue to the community picker automatically.
+              {identityRemaining > 0
+                ? ` This one-time link expires in ${Math.floor(identityRemaining / 60)}:${String(identityRemaining % 60).padStart(2, "0")}.`
+                : " This one-time link is about to expire."}
+            </p>
+            {identityUrl ? (
+              <div className="mt-3">
+                <Button asChild size="sm" variant="outline" className="min-h-11">
+                  <a href={identityUrl} target="_blank" rel="noopener noreferrer">
+                    Open Telegram
+                  </a>
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {identityState === "expired" || identityState === "cancelled" ? (
+          <p className="rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
+            This community connection expired before it finished. Start it again below.
           </p>
+        ) : null}
+
+        {identityState === "connected" && !pending ? (
+          <div className="rounded-md border border-gold/40 bg-gold/5 p-3 text-xs text-muted-foreground">
+            <p className="font-semibold text-foreground">Step 2 of 2 · Choose your community</p>
+            <p className="mt-1 leading-relaxed">
+              Telegram is verified. Continue to pick the group or supergroup CARTEL HQ should join.
+            </p>
+          </div>
         ) : null}
 
         <div className="flex flex-wrap items-center gap-3">
           <Button
             type="button"
             className="min-h-11"
-            disabled={!workspaceId || starting || pending || !botConfigured || !personalConnected}
-            onClick={() => void connect()}
+            disabled={!workspaceId || starting || pending || identityState === "pending" || !botConfigured}
+            onClick={() => void handlePrimary()}
           >
-            {starting || pending ? (
+            {starting || pending || identityState === "pending" ? (
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
             ) : (
               <Users className="size-4" aria-hidden="true" />
             )}
-            {groups.length > 0 ? "Connect another group" : "Connect Telegram group"}
+            {identityState === "connected"
+              ? "Choose Telegram Community"
+              : groups.length > 0
+                ? "Connect another community"
+                : "Connect Community"}
           </Button>
         </div>
+
       </CardContent>
     </Card>
   );

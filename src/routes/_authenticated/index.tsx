@@ -119,7 +119,7 @@ function HqDashboard() {
   const telegramHandle = telegram?.telegram_username
     ? `@${telegram.telegram_username}`
     : telegram
-      ? "Account linked"
+      ? "Telegram connected"
       : null;
 
   return (
@@ -267,27 +267,27 @@ function HqDashboard() {
             title="Telegram"
             actions={
               telegram ? (
-                <StatusBadge tone="green">Linked</StatusBadge>
+                <StatusBadge tone="green">Connected</StatusBadge>
               ) : (
-                <StatusBadge tone="gold">Not linked</StatusBadge>
+                <StatusBadge tone="gold">No community connected</StatusBadge>
               )
             }
             contentClassName="space-y-2"
           >
             <InlineRow
               leading={<MessageSquare className="size-4" aria-hidden="true" />}
-              title={telegramHandle ?? "No account linked"}
+              title={telegramHandle ?? "No community connected"}
               subtitle={
                 telegram
-                  ? "Publish sticker packs and send them to your connected groups."
-                  : "Link your Telegram account to publish packs from Sticker Lab."
+                  ? "Publish sticker packs and send them to your connected communities."
+                  : "Connect a Telegram community to publish packs from Sticker Lab."
               }
             />
             <Link
               to="/telegram"
               className="inline-flex text-xs uppercase tracking-[0.14em] text-gold hover:underline"
             >
-              {telegram ? "Manage Telegram" : "Set up Telegram"}
+              {telegram ? "Manage communities" : "Connect a community"}
             </Link>
           </Section>
         </div>
