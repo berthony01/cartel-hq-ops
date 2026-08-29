@@ -1,101 +1,53 @@
-# Phase 1D Start-Gate Audit — Distribution Center + Sticker Pack Manager
+# Phase 1E Start-Gate Audit — Platform Owner + Admin Console Foundation
 
-Read-only. No files were edited. This is an audit and a proposed scope, not an implementation.
+Read-only inspection at HEAD `d479936`, clean tree. No files changed.
 
-## 1. Repository state
+## 1. Current architecture
 
-- HEAD: `ecc9096` ("Update plan"), preceded by `af920df`, `9e739ea`.
-- Working tree: clean (`git status --porcelain` empty).
-- Phase 1C-8 containment work is in history; no uncommitted drift.
+- **Auth/session**: `src/routes/_authenticated/route.tsx` (`ssr: false`, `beforeLoad` uses `supabase.auth.getSession()` with a 2s timeout, redirects to `/auth`). `src/hooks/useSession.ts` is a global external-store mirror; single `onAuthStateChange` listener lives in `src/routes/__root.tsx`.
+- **Layout**: `AppShell` (sidebar + top bar + `MobileTabBar`), wrapped by `WorkspaceProvider`.
+- **Workspace scope**: `src/lib/workspace-context.tsx` — reads `workspaces` directly via the browser client (RLS-scoped), persists active workspace in localStorage. No role is fetched client-side.
+- **Nav**: `src/lib/nav.ts` — static section/item array with `status: "planned"` presentation and `mobilePrimary` metadata. No role/entitlement filtering exists.
+- **Data patterns**: two shapes in use — (a) direct RLS-scoped table reads via the browser Supabase client (`sticker-packs.ts`, `telegram-group.ts`, `media.ts`); (b) authenticated Edge Function RPC with a tolerant frontend contract type (`sticker-drops.ts` → `sticker-drop-config`, actions + `canManage`/`role` returned by the server). Pattern (b) is the correct precedent for anything privileged.
+- **Settings** (`/settings`) is still a `PlaceholderPage` and already lists "Billing and usage limits" as planned — the natural host for a platform/plan surface.
 
-## 2. Current Distribution route and pack management UI
+## 2. Is there a platform-level role/entitlement mechanism today?
 
-- `src/routes/_authenticated/distribution.tsx` — 37 lines, renders `PlaceholderPage` only. Status string `"Planned — not active"`, `availableNow` = ["Route and navigation entry", "Roadmap placement in OPERATIONS"], `plannedLater` = campaign/creator/outcome bullets. No data queries, no Telegram wiring.
-- `src/lib/nav.ts` — Distribution still carries `status: "planned"`.
-- There is no Sticker Pack Manager route. Pack surfaces today:
-  - `sticker-lab.index.tsx` — workspace pack list via `listWorkspacePacks`, workflow rail, live/future capability copy.
-  - `sticker-lab.new.tsx` — the 5-step builder (concepts → generation → review/export → Telegram publish → multi-group distribute).
-  - There is no per-pack detail route; a pack is only reachable by re-entering the builder.
+No. What exists is **workspace-scoped only**:
 
-## 3. Telegram components and data helpers that already exist
+- `workspaces.owner_id`, `workspace_members.role` (free-text `string`, not an enum), DB functions `is_workspace_owner`, `is_workspace_member`, `can_access_pack`.
+- `sticker-drop-config` returns `role: "owner" | "admin" | "member"` and `canManage` — but that is per-workspace authority, not platform authority.
+- `usage_ledger` (units, provider/internal cost) exists as metering data, with no quota, plan, or entitlement table anywhere.
+- There is no `user_roles` table, no `app_role` enum (`Enums` is empty), no `platform_admins`, no plan/subscription table, and no client-side notion of a superuser.
 
-- `src/components/cartel/TelegramGroupCard.tsx` (928 lines) — owns `useTelegramGroupSetup()` (query key `["telegram-group-link", workspaceId]`), `GroupReadiness` derivation (chat type, bot admin, change-info, `can_set_sticker_set`, member count, official-sticker eligibility), group linking/polling, and the 50-group selection cap persisted in `localStorage` under `cartelhq.telegram.groupTargets.<workspaceId>`.
-- `src/components/cartel/TelegramConnectionCard.tsx` — personal account linking.
-- `src/lib/telegram-group.ts` — `fetchTelegramGroupStatus`, `assignPackToGroup`, `sendGroupTestSticker`, `distributePackToGroups` (cap `MAX_DISTRIBUTION_TARGETS = 50`), `fetchPackGroupDistribution` → `TelegramPackGroupTarget[]` (status, last_error, announced_at, assigned_at, last_attempt_at).
-- `src/lib/telegram-stickers.ts` — config/publish/refresh/send-test plus `loadPackTelegramState` (pack set name/url/publish error/published_at + per-sticker telegram state).
-- `src/lib/sticker-packs.ts` — `listWorkspacePacks` (PackSummary with total/ready/active), `loadPack`, `loadPackStickers`, `loadAssets`, `hydrateDraftFromPack`, `classifyProviderError`, `loadLatestJobs`.
-- `src/lib/media.ts` — `signedUrl` / `signedUrlMap` for private storage previews.
-- Backend tables available read-side: `sticker_packs`, `stickers`, `telegram_group_connections`, `sticker_pack_group_targets` (SELECT only; INSERT/UPDATE/DELETE denied — the webhook / Edge Functions are the authoritative writers).
+Conclusion: a platform owner concept must be introduced server-side; nothing today can be reused as-is.
 
-## 4. Phase 1C responsive primitives available for reuse
+## 3. Recommended minimal frontend surface for an owner console
 
-`PageHeader`, `Section` (primary/surface/plain), `InlineRow` (min-h-11, bounded meta/trailing), `StatusBadge` (gold/green/red/muted, self-truncating), `ScrollRail` (mask fade + snap), `StickyActionBar` (fixed above `--bottom-nav-h`), `EmptyState`, `PlaceholderPage`, `MobileTabBar` + `MOBILE_PRIMARY_ITEMS`, `AppShell`. Grid containers use `[&>*]:min-w-0`.
+Frontend only; all authority comes from the server response.
 
-## 5. Scope reality check — what is buildable frontend-only
+- `src/lib/platform.ts` — thin authenticated client mirroring `sticker-drops.ts`: one `supabase.functions.invoke("platform-admin", { action: "status" })` call returning `{ isPlatformOwner, capabilities, metrics }`, plus shared error parsing. No email checks, no table reads.
+- `src/hooks/usePlatformAccess.ts` — `useQuery` wrapper exposing `{ isPlatformOwner, loading }`, cached per session, fail-closed on error.
+- `src/routes/_authenticated/admin.tsx` — Owner Console route. Renders a plain "not available" state (not a redirect, not a 404 leak) when the server says the caller is not the platform owner.
+- `src/lib/nav.ts` — add an `ownerOnly?: boolean` presentation flag on the Admin item; `SidebarNav`/`MobileTabBar` hide it when `isPlatformOwner` is false. Hiding is cosmetic only; the route and the Edge Function enforce.
+- Reuse existing primitives (`PageHeader`, `Section`, `InlineRow`, `StatusBadge`, `EmptyState`) — no new visual architecture.
 
-Buildable now against existing data:
+Backend (separately authorized, not in this phase): a `platform_admins` / `user_roles` table keyed on `auth.users.id` with a `SECURITY DEFINER` `is_platform_owner(_user_id)` check, seeded once by user id for the confirmed account, plus a `platform-admin` Edge Function that reads the caller's JWT `sub` and never trusts request-supplied identity.
 
-- Connected groups roster with live readiness (reuse `useTelegramGroupSetup`).
-- Per-pack distribution state from `sticker_pack_group_targets` (`fetchPackGroupDistribution`): assigned / announced / failed, last attempt, last error.
-- Activity feed derived from `assigned_at` / `announced_at` / `last_attempt_at` / `updated_at`, sorted desc.
-- "Sends today" as a derived count of target rows whose `assigned_at`/`announced_at` falls in the current UTC day.
-- Manual re-distribute / assign / send-test using existing Edge Function actions.
-- Published/draft pack overview and sticker gallery from `listWorkspacePacks`, `loadPackStickers`, `loadAssets`, `signedUrlMap`, `loadPackTelegramState`.
+## 4. Email-based bypass vs user-id/role
 
-Not buildable frontend-only (blockers to state before design freeze):
+- **Email in client code**: worthless as a control — bundle-visible, trivially edited in devtools, and any data it unlocks must already be RLS-open, i.e. open to everyone. Reject outright.
+- **Email compared server-side**: still weak. Emails are mutable, can be changed via Auth, and unverified sign-ups can claim a domain/address; a compare that ignores `email_confirmed_at` is a direct privilege-escalation path.
+- **Correct**: authority is a row keyed on the immutable `auth.users.id`, seeded once out-of-band, checked by a `SECURITY DEFINER` function under RLS and re-checked inside every privileged Edge Function from the verified JWT subject. The UI only ever *renders* what the server already decided.
 
-- **Drop schedules, "next drop", recurring sends, pause/kill controls** have no backing table, no scheduler, and no Edge Function action. `sticker_pack_group_targets` is a one-shot distribution ledger with no schedule, cadence, next_run_at, or enabled flag. Delivering these as UI now would be demoware.
-- **Per-group configuration** likewise has no writable store (`telegram_group_connections` is INSERT/UPDATE/DELETE denied to the client).
+## 5. Recommended Phase 1E boundary (no Stripe, no paid plans)
 
-Recommendation: split Phase 1D.
+In scope:
+1. Server-side platform-owner identity + `is_platform_owner` check, seeded by user id (authorized migration, separate contract).
+2. `platform-admin` Edge Function with a read-only `status` action.
+3. Frontend: `platform.ts`, `usePlatformAccess.ts`, `/admin` route, owner-only nav flag.
+4. Owner Console v1 shows read-only platform metrics already derivable from existing tables (workspaces, packs, published packs, connected groups, drop events, usage_ledger totals).
 
-- **1D-A (frontend-only, safe):** Distribution Center built strictly on real distribution-ledger + group-readiness data, plus the Sticker Pack Manager. No scheduling UI, no fake counters, no controls that do not map to an existing server action.
-- **1D-B (requires an authorized backend contract):** drop schedules table + scheduler Edge Function + per-group config writes + pause/kill state machine. Frontend follows only after that contract exists.
+Explicitly out of scope: Stripe, plan/price/subscription tables, entitlement enforcement, quota blocking, feature flags, per-workspace plan assignment, impersonation, member management writes, and any change to Sticker Lab generation, transparency/export, Telegram link/publish/distribution, drop scheduling, auth, or routing for existing surfaces.
 
-## 6. Recommended frontend changes (1D-A)
-
-Distribution Center (`/distribution`):
-
-- Replace the placeholder with a live module page: `PageHeader` (eyebrow "Operations", status "Live Beta").
-- Summary strip (`ScrollRail` on mobile, grid at lg): connected groups, distribution-ready groups, packs distributed, sends today — every tile derived from real rows, with an explicit empty state instead of zeros-as-decoration.
-- Connected groups list: `InlineRow` per group, title/username, chat-type badge, readiness badge, last distribution outcome. Reuses `useTelegramGroupSetup` — no new Telegram logic.
-- Per-pack distribution panel: pack selector limited to Telegram-published packs, then `fetchPackGroupDistribution` rows as assigned/announced/failed with error text collapsed behind a disclosure.
-- Actions limited to existing server actions: re-run distribution for selected groups (`distributePackToGroups`, 50 cap preserved), assign as group set (`assignPackToGroup`), send test sticker (`sendGroupTestSticker`).
-- Activity feed: chronological derived events from the target rows, `InlineRow` based, capped list length.
-- Scheduling / pause / kill surfaces: represented as an explicit, honestly labelled "not yet available" note, not as disabled fake controls — or omitted entirely until 1D-B.
-
-Sticker Pack Manager (`/sticker-lab/$packId`, new leaf under the existing `sticker-lab` layout):
-
-- Pack header: title, theme, size, status badge (draft / ready / published), Telegram set link when present.
-- Sticker gallery: 2-col mobile / 4-col lg, signed-URL thumbnails via `signedUrlMap`, per-sticker status and telegram publish state.
-- Actions: open in builder (existing `hydrateDraftFromPack` path), open Telegram set, jump to Distribution for that pack. No new mutations.
-- Pack list on `sticker-lab.index.tsx` gains rows linking into the manager.
-
-## 7. Stale copy / status corrections
-
-- `distribution.tsx`: "Planned — not active", the two `availableNow` roadmap bullets, and the placeholder framing are all stale once the module is live.
-- `src/lib/nav.ts`: Distribution `status: "planned"` must drop once 1D-A ships. All other planned modules stay planned.
-- `sticker-lab.index.tsx`: "Multi-group Telegram distribution" capability line should point at the new Distribution Center.
-- Consider whether Distribution earns a `mobilePrimary` tab slot; the bar is already at five destinations, so this is a deliberate trade, not an automatic add.
-
-## 8. Files that would change (1D-A)
-
-- `src/routes/_authenticated/distribution.tsx` (rewrite)
-- `src/routes/_authenticated/sticker-lab.$packId.tsx` (new)
-- `src/routes/_authenticated/sticker-lab.index.tsx` (link rows into manager, copy)
-- `src/lib/nav.ts` (status only)
-- Possibly one new presentational component (e.g. `DistributionActivityFeed.tsx`) and one small read-only helper file for date/derivation utilities.
-- Possibly `src/lib/telegram-group.ts` — only if a read-only "all packs" distribution query is required; if it is, it is a new read helper over an existing action, and if no such action exists server-side, that is a 1D-B blocker, not an improvisation.
-
-## 9. Must NOT change
-
-- Sticker generation pipeline, prompts, KIE/provider calls, `sticker-ai.ts`.
-- Transparency validation and cutout logic (`sticker-export.ts`).
-- Telegram publish, connect, link, launcher, webhook contracts, install URLs, polling, capability derivation, the 50-group cap, payload shapes, or any Edge Function.
-- Auth, RLS, grants, schema, migrations, storage buckets, secrets.
-- Existing route paths for `/sticker-lab`, `/sticker-lab/new`, `/telegram`.
-- No publish/deploy.
-
-## Stop point
-
-Audit complete at `ecc9096`, tree clean. Awaiting a decision on the 1D-A / 1D-B split before any implementation contract is issued.
+Suggested split: **1E-A** backend owner identity + status function; **1E-B** frontend console and nav gating. Pricing/entitlements begin at Phase 1F on top of the same `is_platform_owner` primitive.
