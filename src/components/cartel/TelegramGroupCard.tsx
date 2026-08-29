@@ -438,11 +438,19 @@ function GroupRow({
           </div>
 
           {/* Community controls — shared per-community tooling context. */}
-          <div className="mt-2 rounded-md border border-gold/30 bg-gold/5 p-2.5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold">
-              Community controls
+          <div className="mt-3 rounded-md border border-gold/30 bg-gold/5 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold">
+                Community controls
+              </p>
+              <StatusBadge tone="green" className="text-[10px]">
+                Live
+              </StatusBadge>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              Manage the tools that operate inside this specific community.
             </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
               <Button
                 type="button"
                 variant="outline"
