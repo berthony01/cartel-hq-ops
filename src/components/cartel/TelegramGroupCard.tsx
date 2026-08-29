@@ -11,6 +11,7 @@ import {
   createTelegramLink,
   fetchTelegramGroupLinkStatus,
   fetchTelegramLinkStatus,
+  loadSavedTelegramGroupConnections,
   type TelegramLinkStatus,
 } from "@/lib/telegram-link";
 import { useSession } from "@/hooks/useSession";
