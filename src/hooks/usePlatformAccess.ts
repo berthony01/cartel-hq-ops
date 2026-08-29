@@ -36,12 +36,11 @@ export function usePlatformAccess(options?: { fresh?: boolean }): PlatformAccess
     enabled,
     staleTime: fresh ? 0 : 60_000,
     refetchOnMount: fresh ? "always" : true,
-    gcTime: fresh ? 0 : undefined,
     retry: false,
   });
 
   const data = query.data;
-  const ok = enabled && !query.isError && !!data;
+  const ok = enabled && !query.isError && data !== undefined;
   const loading =
     sessionLoading || !userId || query.isPending || (fresh && query.isFetching);
 
@@ -60,8 +59,8 @@ export function usePlatformAccess(options?: { fresh?: boolean }): PlatformAccess
   return {
     loading: false,
     error: query.isError ? platformErrorMessage(query.error) : null,
-    isPlatformOwner: ok && data.isPlatformOwner === true,
-    hasUnrestrictedAccess: ok && data.hasUnrestrictedAccess === true,
+    isPlatformOwner: ok ? data.isPlatformOwner === true : false,
+    hasUnrestrictedAccess: ok ? data.hasUnrestrictedAccess === true : false,
     role: ok ? data.role : null,
     capabilities: ok ? data.capabilities : [],
     metrics: ok && data.isPlatformOwner ? data.metrics : null,
