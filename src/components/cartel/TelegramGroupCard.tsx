@@ -804,7 +804,7 @@ export function TelegramGroupCard({
     <Card className="cartel-panel">
       <CardHeader className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 space-y-0 p-4 sm:p-6">
         <CardTitle className="min-w-0 text-base [overflow-wrap:anywhere]">
-          Connected Telegram groups
+          Telegram communities
         </CardTitle>
         {groupQuery.isLoading ? (
           <StatusBadge tone="muted">Checking groups…</StatusBadge>
@@ -823,12 +823,12 @@ export function TelegramGroupCard({
       <CardContent className="space-y-3 p-4 pt-0 text-sm sm:space-y-4 sm:p-6 sm:pt-0">
         <details className="rounded-md border border-border/60 bg-background/40 p-3">
           <summary className="flex min-h-11 cursor-pointer list-none items-center text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            How connecting groups works
+            How connecting a community works
           </summary>
           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
             Connect every Telegram group or supergroup CARTEL HQ should work with. Telegram only
             lets you pick <strong>one group per add-bot flow</strong>, so use{" "}
-            <strong>Connect another group</strong> once for each community — connecting a new group
+            <strong>Connect another community</strong> once for each community — connecting a new group
             never removes the ones already connected. Once connected, CARTEL HQ can distribute one
             published pack to many groups together. If @PepeCartelHQBot is already installed in a
             group, open it and send{" "}
