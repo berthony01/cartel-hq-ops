@@ -10,6 +10,7 @@ import {
   fetchCommunityWelcomeSettings,
   saveCommunityWelcomeSettings,
   sendCommunityWelcomeTest,
+  type TelegramCommunitySettingsMetadata,
   type TelegramGroupConnection,
 } from "@/lib/telegram-group";
 import { Button } from "@/components/ui/button";
@@ -229,14 +230,14 @@ export function CommunityWelcomeDialog({
             <div
               className={
                 savedEnabled
-                  ? "rounded-md border border-emerald/50 bg-emerald/10 p-3"
+                  ? "rounded-md border border-pepe/50 bg-pepe/10 p-3"
                   : "rounded-md border border-signal/50 bg-signal/10 p-3"
               }
             >
               <p
                 className={
                   savedEnabled
-                    ? "text-xs font-semibold uppercase tracking-[0.14em] text-emerald"
+                    ? "text-xs font-semibold uppercase tracking-[0.14em] text-pepe"
                     : "text-xs font-semibold uppercase tracking-[0.14em] text-signal"
                 }
               >
@@ -419,9 +420,9 @@ export function CommunityWelcomeDialog({
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               {dirty
                 ? "Save your changes before sending a test. The test uses the saved settings."
-                : enabled
+                : savedEnabled
                   ? "Real joins will receive this message."
-                  : "Welcome is disabled, so real joins get nothing. A test still posts the saved message so you can check it."}
+                  : "Real join welcomes are OFF, so new members get nothing. A test still posts the saved message as a preview so you can check it."}
             </p>
           </div>
         )}
