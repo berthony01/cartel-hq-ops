@@ -248,10 +248,47 @@ function AdminPage() {
             hint="Configure & pause Sticker Drops"
           />
           <QuickAction to="/sticker-lab" icon={Sticker} label="Sticker Lab" hint="Packs & generation" />
-          <QuickAction to="/telegram" icon={Bot} label="Telegram" hint="Bot, account & groups" />
+          <QuickAction
+            to="/telegram"
+            icon={Bot}
+            label="Telegram Communities"
+            hint="Customer group connections"
+          />
           <QuickAction to="/settings" icon={Settings} label="Settings" hint="Workspace & account" />
         </div>
       </Section>
+
+      <Section
+        leading={<Bot className="size-4" aria-hidden="true" />}
+        title="Telegram Bot Integration"
+        description="Platform bot service status. The bot token and webhook stay server-side and are never exposed here."
+        actions={
+          <StatusBadge tone={telegramSetup.botConfigured ? "green" : "red"}>
+            {telegramSetup.botConfigured ? "Bot service live" : "Bot not configured"}
+          </StatusBadge>
+        }
+        contentClassName="space-y-3"
+      >
+        <InlineRow
+          leading={<Bot className="size-4" aria-hidden="true" />}
+          title={
+            telegramSetup.botUsername ? `@${telegramSetup.botUsername}` : "Bot username unavailable"
+          }
+          subtitle="Official CARTEL HQ bot used for all publishing, group verification and Sticker Drops."
+        />
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+            Owner Telegram Identity
+          </p>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Telegram requires a real user identity to own and manage published sticker sets. This is
+            your owner identity used for platform testing — it is not the bot service and it is not
+            a customer community connection.
+          </p>
+          <TelegramConnectionCard setup={telegramSetup} />
+        </div>
+      </Section>
+
 
       <Section
         variant="primary"
