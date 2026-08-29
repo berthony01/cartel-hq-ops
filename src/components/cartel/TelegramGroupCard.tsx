@@ -436,6 +436,35 @@ function GroupRow({
             </Button>
           </div>
 
+          {/* Community controls — shared per-community tooling context. */}
+          <div className="mt-2 rounded-md border border-gold/30 bg-gold/5 p-2.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold">
+              Community controls
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-11"
+                onClick={() => setWelcomeOpen(true)}
+              >
+                <MessageSquarePlus className="size-4" aria-hidden="true" />
+                Welcome &amp; onboarding
+              </Button>
+            </div>
+          </div>
+          {welcomeOpen ? (
+            <CommunityWelcomeDialog
+              open={welcomeOpen}
+              onOpenChange={setWelcomeOpen}
+              workspaceId={workspaceId}
+              group={g}
+            />
+          ) : null}
+
+
+
           <details className="mt-2 rounded-md border border-border bg-surface-raised p-2.5 text-xs">
             <summary className="flex min-h-9 cursor-pointer list-none items-center font-semibold text-muted-foreground">
               Capability & technical detail
