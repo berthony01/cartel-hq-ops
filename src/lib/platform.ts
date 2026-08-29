@@ -37,13 +37,170 @@ export type PlatformMetrics = {
   scheduler_last_run_at?: string | null;
 };
 
+/**
+ * `details` is a v2 owner-only payload. Every field is optional and tolerant:
+ * the server may enrich rows with joined labels, so we accept both the raw
+ * column name and a common enriched alias, and never assume presence.
+ */
+export type PlatformUserDetail = {
+  id?: string | null;
+  email?: string | null;
+  created_at?: string | null;
+  last_sign_in_at?: string | null;
+  email_confirmed_at?: string | null;
+  confirmed?: boolean | null;
+};
+
+export type PlatformWorkspaceDetail = {
+  id?: string | null;
+  name?: string | null;
+  slug?: string | null;
+  created_at?: string | null;
+  members_count?: number | null;
+  groups_count?: number | null;
+  packs_count?: number | null;
+  published_packs_count?: number | null;
+  schedules_count?: number | null;
+  enabled_schedules_count?: number | null;
+};
+
+export type PlatformTelegramGroupDetail = {
+  id?: string | null;
+  workspace_id?: string | null;
+  workspace_name?: string | null;
+  title?: string | null;
+  username?: string | null;
+  chat_type?: string | null;
+  bot_is_admin?: boolean | null;
+  can_set_sticker_set?: boolean | null;
+  verified_at?: string | null;
+  connected_at?: string | null;
+};
+
+export type PlatformStickerPackDetail = {
+  id?: string | null;
+  name?: string | null;
+  workspace_id?: string | null;
+  workspace_name?: string | null;
+  status?: string | null;
+  sticker_count?: number | null;
+  telegram_set_name?: string | null;
+  created_at?: string | null;
+};
+
+export type PlatformDropScheduleDetail = {
+  id?: string | null;
+  workspace_id?: string | null;
+  workspace_name?: string | null;
+  group_connection_id?: string | null;
+  group_title?: string | null;
+  group_username?: string | null;
+  pack_id?: string | null;
+  pack_name?: string | null;
+  enabled?: boolean | null;
+  paused_reason?: string | null;
+  interval_minutes?: number | null;
+  daily_cap?: number | null;
+  active_start?: string | null;
+  active_end?: string | null;
+  timezone?: string | null;
+  next_run_at?: string | null;
+  last_sent_at?: string | null;
+  consecutive_failures?: number | null;
+  selected_sticker_ids?: string[] | null;
+};
+
+export type PlatformDropEventDetail = {
+  id?: string | null;
+  workspace_id?: string | null;
+  workspace_name?: string | null;
+  group_title?: string | null;
+  pack_name?: string | null;
+  status?: string | null;
+  error_message?: string | null;
+  created_at?: string | null;
+};
+
+export type PlatformAiJobDetail = {
+  id?: string | null;
+  workspace_id?: string | null;
+  workspace_name?: string | null;
+  job_type?: string | null;
+  provider?: string | null;
+  provider_model?: string | null;
+  status?: string | null;
+  error_code?: string | null;
+  error_message?: string | null;
+  created_at?: string | null;
+  completed_at?: string | null;
+};
+
+export type PlatformBetaContactDetail = {
+  id?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  telegram_username?: string | null;
+  chat_title?: string | null;
+  chat_type?: string | null;
+  subject_type?: string | null;
+  source?: string | null;
+  source_chat_title?: string | null;
+  source_chat_type?: string | null;
+  opted_in?: boolean | null;
+  last_seen_at?: string | null;
+};
+
+export type PlatformDetails = {
+  users: PlatformUserDetail[];
+  workspaces: PlatformWorkspaceDetail[];
+  telegramGroups: PlatformTelegramGroupDetail[];
+  stickerPacks: PlatformStickerPackDetail[];
+  stickerDropSchedules: PlatformDropScheduleDetail[];
+  recentDropEvents: PlatformDropEventDetail[];
+  recentAiJobs: PlatformAiJobDetail[];
+  betaContacts: PlatformBetaContactDetail[];
+};
+
 export type PlatformStatus = {
   isPlatformOwner: boolean;
   hasUnrestrictedAccess: boolean;
   role: PlatformRole | null;
   capabilities: string[];
   metrics: PlatformMetrics | null;
+  details: PlatformDetails | null;
 };
+
+const EMPTY_DETAILS: PlatformDetails = {
+  users: [],
+  workspaces: [],
+  telegramGroups: [],
+  stickerPacks: [],
+  stickerDropSchedules: [],
+  recentDropEvents: [],
+  recentAiJobs: [],
+  betaContacts: [],
+};
+
+function rows<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value.filter((r) => r && typeof r === "object") as T[]) : [];
+}
+
+/** Fails closed: unknown/absent payload becomes empty lists, never partial guesses. */
+function normalizeDetails(input: unknown): PlatformDetails {
+  if (!input || typeof input !== "object") return EMPTY_DETAILS;
+  const d = input as Record<string, unknown>;
+  return {
+    users: rows<PlatformUserDetail>(d["users"]),
+    workspaces: rows<PlatformWorkspaceDetail>(d["workspaces"]),
+    telegramGroups: rows<PlatformTelegramGroupDetail>(d["telegramGroups"]),
+    stickerPacks: rows<PlatformStickerPackDetail>(d["stickerPacks"]),
+    stickerDropSchedules: rows<PlatformDropScheduleDetail>(d["stickerDropSchedules"]),
+    recentDropEvents: rows<PlatformDropEventDetail>(d["recentDropEvents"]),
+    recentAiJobs: rows<PlatformAiJobDetail>(d["recentAiJobs"]),
+    betaContacts: rows<PlatformBetaContactDetail>(d["betaContacts"]),
+  };
+}
+
 
 async function readServerMessage(error: unknown): Promise<string | null> {
   const ctx = (error as { context?: { json?: () => Promise<unknown> } } | null)?.context;
@@ -77,17 +234,27 @@ export async function fetchPlatformStatus(): Promise<PlatformStatus> {
     );
   }
 
-  const payload = data as (Partial<PlatformStatus> & { error?: string; message?: string }) | null;
+  const payload = data as
+    | (Partial<Omit<PlatformStatus, "details">> & {
+        details?: unknown;
+        error?: string;
+        message?: string;
+      })
+    | null;
   if (!payload) throw new Error("Empty response from the platform service.");
   if (payload.error) throw new Error(payload.message || payload.error);
 
+  const owner = payload.isPlatformOwner === true;
+
   return {
-    isPlatformOwner: payload.isPlatformOwner === true,
+    isPlatformOwner: owner,
     hasUnrestrictedAccess: payload.hasUnrestrictedAccess === true,
     role: payload.role ?? null,
     capabilities: Array.isArray(payload.capabilities) ? payload.capabilities : [],
-    metrics: payload.isPlatformOwner === true ? (payload.metrics ?? null) : null,
+    metrics: owner ? (payload.metrics ?? null) : null,
+    details: owner ? normalizeDetails(payload.details) : null,
   };
+
 }
 
 export function formatCount(value: number | null | undefined): string {
