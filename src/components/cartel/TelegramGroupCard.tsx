@@ -513,7 +513,15 @@ export function TelegramGroupCard({
   /** Only true when the launch attempt itself failed (sandbox / popup block). */
   const [launchBlocked, setLaunchBlocked] = useState(false);
 
+  /* Step 1 (identity) state — presented as part of connecting a community. */
+  const { user } = useSession();
+  const [identityState, setIdentityState] = useState<TelegramLinkStatus | null>(null);
+  const [identityExpiresAt, setIdentityExpiresAt] = useState<string | null>(null);
+  const [identityRemaining, setIdentityRemaining] = useState(0);
+  const [identityUrl, setIdentityUrl] = useState<string | null>(null);
+
   const pollRef = useRef<number | null>(null);
+  const identityPollRef = useRef<number | null>(null);
 
 
   const stopPolling = useCallback(() => {
@@ -523,6 +531,60 @@ export function TelegramGroupCard({
     }
   }, []);
   useEffect(() => stopPolling, [stopPolling]);
+
+  const stopIdentityPolling = useCallback(() => {
+    if (identityPollRef.current !== null) {
+      window.clearInterval(identityPollRef.current);
+      identityPollRef.current = null;
+    }
+  }, []);
+  useEffect(() => stopIdentityPolling, [stopIdentityPolling]);
+
+  const startIdentityPolling = useCallback(
+    (requestId: string) => {
+      stopIdentityPolling();
+      identityPollRef.current = window.setInterval(async () => {
+        try {
+          const result = await fetchTelegramLinkStatus(requestId);
+          if (result.connected) {
+            stopIdentityPolling();
+            setIdentityState("connected");
+            if (user?.id) {
+              if (result.connection) {
+                queryClient.setQueryData(["telegram-connection", user.id], result.connection);
+              }
+              void queryClient.invalidateQueries({
+                queryKey: ["telegram-connection", user.id],
+              });
+            }
+            return;
+          }
+          const status = result.request?.status;
+          if (status === "expired" || status === "cancelled") {
+            stopIdentityPolling();
+            setIdentityState(status);
+          }
+        } catch {
+          /* transient poll failure — keep waiting until expiry */
+        }
+      }, 2000);
+    },
+    [queryClient, stopIdentityPolling, user?.id],
+  );
+
+  useEffect(() => {
+    if (identityState !== "pending" || !identityExpiresAt) return;
+    setIdentityRemaining(secondsLeft(identityExpiresAt));
+    const id = window.setInterval(() => {
+      const left = secondsLeft(identityExpiresAt);
+      setIdentityRemaining(left);
+      if (left <= 0) {
+        setIdentityState("expired");
+        stopIdentityPolling();
+      }
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [identityState, identityExpiresAt, stopIdentityPolling]);
 
   useEffect(() => {
     if (linkState !== "pending" || !expiresAt) return;
@@ -537,6 +599,7 @@ export function TelegramGroupCard({
     }, 1000);
     return () => window.clearInterval(id);
   }, [linkState, expiresAt, stopPolling]);
+
 
   const knownIdsRef = useRef<string[]>([]);
   useEffect(() => {
