@@ -86,11 +86,11 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "System",
     items: [
       {
-        label: "Telegram Communities",
+        label: "Community Hub",
         to: "/telegram",
         icon: MessageSquare,
         mobilePrimary: true,
-        mobileLabel: "Telegram",
+        mobileLabel: "Community",
       },
 
       { label: "Settings", to: "/settings", icon: Settings },

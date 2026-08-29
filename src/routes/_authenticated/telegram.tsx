@@ -14,16 +14,16 @@ import {
 export const Route = createFileRoute("/_authenticated/telegram")({
   head: () => ({
     meta: [
-      { title: "Telegram Communities — CARTEL HQ" },
+      { title: "Community Hub — CARTEL HQ" },
       {
         name: "description",
         content:
-          "Connect your Telegram communities to CARTEL HQ, welcome new members automatically and distribute published sticker packs.",
+          "Manage connected Telegram communities, welcome new members automatically, distribute sticker packs, and run Sticker Drops from one place.",
       },
-      { property: "og:title", content: "Telegram Communities — CARTEL HQ" },
+      { property: "og:title", content: "Community Hub — CARTEL HQ" },
       {
         property: "og:description",
-        content: "Connect Telegram communities and distribute CARTEL HQ sticker packs.",
+        content: "Manage connected Telegram communities, welcomes, sticker distribution, and Sticker Drops.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -42,8 +42,8 @@ function TelegramPage() {
     <div className="flex max-w-3xl flex-col gap-4 sm:gap-6">
       <PageHeader
         eyebrow="Telegram"
-        title="Telegram Communities"
-        description="Connect the Telegram groups and supergroups CARTEL HQ should work with, then run community controls there: welcome and onboarding messages, published sticker pack distribution and automated Sticker Drops."
+        title="Community Hub"
+        description="Every connected Telegram community lives here. Choose a community below, then open its Community controls to manage Welcome and onboarding, Sticker Drops, sticker distribution, and future community tools."
         status={groupCount > 0 ? "Connected · Live Beta" : "Live Beta"}
       />
 
@@ -57,6 +57,16 @@ function TelegramPage() {
             : "No communities connected"}
         </StatusBadge>
       </div>
+
+      {groupCount > 0 ? (
+        <div className="rounded-md border border-gold/30 bg-gold/5 p-3 text-xs leading-relaxed text-foreground">
+          <p className="font-semibold text-gold">Welcome and onboarding is live.</p>
+          <p className="mt-1 text-muted-foreground">
+            Select a connected community, open Community controls, then choose Welcome and onboarding
+            to set the join message, member mention, and auto-delete timer.
+          </p>
+        </div>
+      ) : null}
 
       <TelegramGroupCard
         setup={groupSetup}
