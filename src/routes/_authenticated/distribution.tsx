@@ -207,7 +207,15 @@ function DistributionPage() {
         <SummaryTile label="Sent today" value={String(todayCount)} hint="Your local day" />
         <SummaryTile
           label="Next drop"
-          value={next ? formatClock(next) : killSwitch ? "Paused" : "Not scheduled"}
+          value={
+            next
+              ? next.isDue
+                ? "Due now"
+                : formatClock(next.at)
+              : killSwitch
+                ? "Paused"
+                : "Not scheduled"
+          }
         />
       </ScrollRail>
 
