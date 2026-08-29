@@ -68,10 +68,7 @@ import {
   type StickerTelegramState,
   type TelegramPublishResult,
 } from "@/lib/telegram-stickers";
-import {
-  TelegramConnectionCard,
-  useTelegramSetup,
-} from "@/components/cartel/TelegramConnectionCard";
+import { useTelegramSetup } from "@/components/cartel/TelegramConnectionCard";
 import {
   TelegramGroupCard,
   useTelegramGroupSetup,
@@ -2338,10 +2335,6 @@ function StickerLabBuilder() {
           </div>
 
           <div className="mt-6">
-            <TelegramConnectionCard setup={telegram} compact />
-          </div>
-
-          <div className="mt-6">
             <TelegramGroupCard
               setup={telegramGroup}
               personalConnected={telegram.ownerConnected}
@@ -2370,9 +2363,9 @@ function StickerLabBuilder() {
                   <StatusBadge tone="red">Bot not configured</StatusBadge>
                 )}
                 {telegram.ownerConnected ? (
-                  <StatusBadge tone="green">Telegram account connected</StatusBadge>
+                  <StatusBadge tone="green">Telegram verified</StatusBadge>
                 ) : (
-                  <StatusBadge tone="red">Telegram account not connected</StatusBadge>
+                  <StatusBadge tone="red">Connect a Telegram community</StatusBadge>
                 )}
                 {telegramGroup.connectedGroupCount === 0 ? (
                   <StatusBadge tone="red">No group connected</StatusBadge>
@@ -2633,13 +2626,12 @@ function StickerLabBuilder() {
                 group — basic group or supergroup. Telegram’s{" "}
                 <strong>official group sticker set</strong> is separate and optional — it only
                 exists for eligible supergroups; otherwise CARTEL HQ posts the pack link in the
-                group instead. Installing the pack to a personal Telegram account stays a separate
-                individual action.
+                community instead.
               </p>
               {!canPublish && !publishing && !allPublished ? (
                 <p className="text-xs text-muted-foreground">
-                  Publishing needs: a configured bot, your connected Telegram account, at least one
-                  selected and verified group or supergroup (bot admin + Change Group Info), at
+                  Publishing needs: an available Telegram service, a connected Telegram community
+                  (use Connect Community above), at least one selected and verified group or supergroup (bot admin + Change Group Info), at
                   least one export-ready sticker, and all browser/cutout checks finished.
                 </p>
               ) : null}
