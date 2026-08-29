@@ -42,10 +42,18 @@ function friendlyTelegramError(description: string, code?: number) {
   return description || "Telegram returned an unexpected error.";
 }
 
+/** Hard timeout around every api.telegram.org call so a hung request cannot stall the function. */
+const TELEGRAM_TIMEOUT_MS = 10_000;
+/** Multipart sticker uploads legitimately take longer than JSON calls. */
+const TELEGRAM_UPLOAD_TIMEOUT_MS = 30_000;
+async function tgFetch(url: string, init: RequestInit, timeoutMs = TELEGRAM_TIMEOUT_MS) {
+  return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+}
+
 async function telegramJson(token: string, method: string, body?: Record<string, unknown>) {
   let res: Response;
   try {
-    res = await fetch(`${TG_BASE}/bot${token}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
+    res = await tgFetch(`${TG_BASE}/bot${token}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
   } catch {
     throw new TelegramError("Could not reach Telegram. Try again shortly.");
   }
@@ -76,7 +84,7 @@ async function uploadStickerFile(token: string, userId: string, pngBytes: Uint8A
   form.append("sticker_format", "static");
   form.append("sticker", new Blob([pngBytes as BlobPart], { type: "image/png" }), "sticker.png");
   let res: Response;
-  try { res = await fetch(`${TG_BASE}/bot${token}/uploadStickerFile`, { method: "POST", body: form }); }
+  try { res = await tgFetch(`${TG_BASE}/bot${token}/uploadStickerFile`, { method: "POST", body: form }, TELEGRAM_UPLOAD_TIMEOUT_MS); }
   catch { throw new TelegramError("Could not upload the sticker to Telegram. Try again shortly."); }
   let payload: any = null;
   try { payload = await res.json(); } catch { payload = null; }

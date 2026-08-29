@@ -8,7 +8,9 @@ const DEFAULT_WELCOME_MESSAGE = "\u{1F44B} Welcome {first_name} to {community_na
 function escapeHtml(value: string) { return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 function respond(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } }); }
-async function telegramJson(token: string, method: string, body: Record<string, unknown> = {}) { const res = await fetch(`${TG_BASE}/bot${token}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const payload = await res.json().catch(() => null) as any; if (!res.ok || !payload?.ok) throw new Error(String(payload?.description ?? `Telegram request failed (${res.status}).`)); return payload.result; }
+/** Hard timeout around every api.telegram.org call so a hung request cannot stall the function. */
+const TELEGRAM_TIMEOUT_MS = 10_000;
+async function telegramJson(token: string, method: string, body: Record<string, unknown> = {}) { let res: Response; try { res = await fetch(`${TG_BASE}/bot${token}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS) }); } catch { throw new Error("Could not reach Telegram. Try again shortly."); } const payload = await res.json().catch(() => null) as any; if (!res.ok || !payload?.ok) throw new Error(String(payload?.description ?? `Telegram request failed (${res.status}).`)); return payload.result; }
 function firstEmoji(value: unknown) { return Array.isArray(value) && typeof value[0] === "string" ? value[0] : ""; }
 
 Deno.serve(async (req: Request) => {

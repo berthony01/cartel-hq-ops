@@ -159,3 +159,29 @@ export function fetchTelegramGroupLinkStatus(
   });
 }
 
+/**
+ * Reads the workspace's saved Telegram group connections straight from Supabase
+ * (RLS-protected, read-only). This never touches the Telegram API, so saved
+ * communities keep rendering even when Telegram is slow or unreachable.
+ */
+export async function loadSavedTelegramGroupConnections(
+  workspaceId: string,
+): Promise<TelegramGroupLinkStatusResult> {
+  const { data, error } = await supabase
+    .from("telegram_group_connections")
+    .select(
+      "id,workspace_id,telegram_chat_id,title,username,chat_type,bot_is_admin,can_set_sticker_set,connected_at,verified_at,metadata",
+    )
+    .eq("workspace_id", workspaceId)
+    .order("connected_at", { ascending: false });
+  if (error) throw new Error(error.message || "Could not load connected communities.");
+  const groups = (data ?? []) as unknown as TelegramGroupConnection[];
+  return {
+    request: null,
+    connected: groups.length > 0,
+    group: groups[0] ?? null,
+    groups,
+  };
+}
+
+

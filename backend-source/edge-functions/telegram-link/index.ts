@@ -12,9 +12,11 @@ function respond(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 }
 class TelegramApiError extends Error { technical?: string; constructor(message: string, technical?: string) { super(message); this.technical = technical; } }
+/** Hard timeout around every api.telegram.org call so a hung request cannot stall the function. */
+const TELEGRAM_TIMEOUT_MS = 10_000;
 async function telegramJson(token: string, method: string, body: Record<string, unknown> = {}) {
   let res: Response;
-  try { res = await fetch(`${TG_BASE}/bot${token}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); }
+  try { res = await fetch(`${TG_BASE}/bot${token}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS) }); }
   catch { throw new TelegramApiError("Could not reach Telegram. Try again shortly."); }
   const payload = await res.json().catch(() => null) as any;
   if (!res.ok || !payload?.ok) { const raw = String(payload?.description ?? `Telegram request failed (${res.status}).`); throw new TelegramApiError(raw, raw); }
@@ -50,6 +52,31 @@ Deno.serve(async (req: Request) => {
   let body: Record<string, unknown> = {}; try { body = await req.json(); } catch { return respond({ error: "INVALID_BODY", message: "Invalid request." }, 400); }
   const action = String(body.action ?? "");
   try {
+    // Database-only status actions run first and never touch api.telegram.org,
+    // so saved state stays readable even while Telegram is slow or unreachable.
+    if (action === "link_status") {
+      const requestId = body.requestId ? String(body.requestId) : ""; let q = admin.from("telegram_link_requests").select("id,status,expires_at,consumed_at,telegram_user_id,metadata").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1); if (requestId) q = q.eq("id", requestId);
+      const { data: rows, error } = await q; if (error) throw error; const link = rows?.[0] ?? null;
+      if (link?.status === "pending" && new Date(link.expires_at).getTime() <= Date.now()) { await admin.from("telegram_link_requests").update({ status: "expired" }).eq("id", link.id); link.status = "expired"; }
+      const { data: connection } = await admin.from("telegram_connections").select("user_id,telegram_user_id,telegram_username,first_name,last_name,connected_at").eq("user_id", user.id).maybeSingle();
+      return respond({ request: link, connected: Boolean(connection?.telegram_user_id), connection: connection ?? null });
+    }
+
+    if (action === "group_status") {
+      const workspaceId = String(body.workspaceId ?? ""), requestId = body.requestId ? String(body.requestId) : "";
+      if (!workspaceId) return respond({ error: "WORKSPACE_REQUIRED", message: "Workspace is required." }, 400);
+      const { data: membership } = await admin.from("workspace_members").select("user_id").eq("workspace_id", workspaceId).eq("user_id", user.id).maybeSingle();
+      if (!membership) return respond({ error: "FORBIDDEN", message: "You do not have access to this workspace." }, 403);
+      let link: any = null;
+      if (requestId) { const { data } = await admin.from("telegram_link_requests").select("id,status,expires_at,consumed_at,metadata").eq("id", requestId).eq("user_id", user.id).maybeSingle(); link = data; if (link?.status === "pending" && new Date(link.expires_at).getTime() <= Date.now()) { await admin.from("telegram_link_requests").update({ status: "expired" }).eq("id", link.id); link.status = "expired"; } }
+      const { data: groups } = await admin.from("telegram_group_connections").select("id,workspace_id,telegram_chat_id,title,username,chat_type,bot_is_admin,can_set_sticker_set,connected_at,verified_at,metadata").eq("workspace_id", workspaceId).order("connected_at", { ascending: false });
+      return respond({ request: link, connected: Boolean(groups?.length), group: groups?.[0] ?? null, groups: groups ?? [] });
+    }
+
+    if (action !== "create_link" && action !== "create_group_link") {
+      return respond({ error: "UNKNOWN_ACTION", message: "Unknown Telegram link action." }, 400);
+    }
+
     const me = await telegramJson(TELEGRAM_BOT_TOKEN, "getMe");
     const bot = { id: String(me.id), username: String(me.username ?? ""), firstName: String(me.first_name ?? "") };
     if (!bot.username) return respond({ error: "BOT_USERNAME_MISSING", message: "The Telegram bot does not have a username." }, 500);
@@ -61,6 +88,7 @@ Deno.serve(async (req: Request) => {
       if (error || !link) throw new Error(error?.message ?? "Could not create Telegram link request.");
       return { link, nonce };
     };
+
 
     if (action === "create_link") {
       const { link, nonce } = await createRequest({ link_type: "user" });
@@ -84,24 +112,7 @@ Deno.serve(async (req: Request) => {
       } catch (err) { await admin.from("telegram_link_requests").update({ status: "cancelled" }).eq("id", link.id); const technical = err instanceof TelegramApiError ? err.technical : undefined; return respond({ error: "WEBHOOK_SETUP_FAILED", message: "Telegram could not prepare group connection. Try again shortly.", ...(technical ? { technical } : {}) }, 502); }
     }
 
-    if (action === "link_status") {
-      const requestId = body.requestId ? String(body.requestId) : ""; let q = admin.from("telegram_link_requests").select("id,status,expires_at,consumed_at,telegram_user_id,metadata").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1); if (requestId) q = q.eq("id", requestId);
-      const { data: rows, error } = await q; if (error) throw error; const link = rows?.[0] ?? null;
-      if (link?.status === "pending" && new Date(link.expires_at).getTime() <= Date.now()) { await admin.from("telegram_link_requests").update({ status: "expired" }).eq("id", link.id); link.status = "expired"; }
-      const { data: connection } = await admin.from("telegram_connections").select("user_id,telegram_user_id,telegram_username,first_name,last_name,connected_at").eq("user_id", user.id).maybeSingle();
-      return respond({ bot, request: link, connected: Boolean(connection?.telegram_user_id), connection: connection ?? null });
-    }
 
-    if (action === "group_status") {
-      const workspaceId = String(body.workspaceId ?? ""), requestId = body.requestId ? String(body.requestId) : "";
-      if (!workspaceId) return respond({ error: "WORKSPACE_REQUIRED", message: "Workspace is required." }, 400);
-      const { data: membership } = await admin.from("workspace_members").select("user_id").eq("workspace_id", workspaceId).eq("user_id", user.id).maybeSingle();
-      if (!membership) return respond({ error: "FORBIDDEN", message: "You do not have access to this workspace." }, 403);
-      let link: any = null;
-      if (requestId) { const { data } = await admin.from("telegram_link_requests").select("id,status,expires_at,consumed_at,metadata").eq("id", requestId).eq("user_id", user.id).maybeSingle(); link = data; if (link?.status === "pending" && new Date(link.expires_at).getTime() <= Date.now()) { await admin.from("telegram_link_requests").update({ status: "expired" }).eq("id", link.id); link.status = "expired"; } }
-      const { data: groups } = await admin.from("telegram_group_connections").select("id,workspace_id,telegram_chat_id,title,username,chat_type,bot_is_admin,can_set_sticker_set,connected_at,verified_at,metadata").eq("workspace_id", workspaceId).order("connected_at", { ascending: false });
-      return respond({ bot, request: link, connected: Boolean(groups?.length), group: groups?.[0] ?? null, groups: groups ?? [] });
-    }
 
     return respond({ error: "UNKNOWN_ACTION", message: "Unknown Telegram link action." }, 400);
   } catch (err) { console.error("[telegram-link]", err instanceof Error ? err.message : "unknown error"); const technical = err instanceof TelegramApiError ? err.technical : undefined; return respond({ error: "TELEGRAM_LINK_ERROR", message: err instanceof Error ? err.message : "Telegram link failed.", ...(technical ? { technical } : {}) }, 500); }
