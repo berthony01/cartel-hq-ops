@@ -88,6 +88,9 @@ export function CommunityWelcomeDialog({
   const [dirty, setDirty] = useState(false);
 
   const [enabled, setEnabled] = useState(false);
+  /** Last state confirmed by the server. Drives the unmistakable ON/OFF banner. */
+  const [savedEnabled, setSavedEnabled] = useState(false);
+  const [diagnostic, setDiagnostic] = useState<TelegramCommunitySettingsMetadata | null>(null);
   const [message, setMessage] = useState(DEFAULT_WELCOME_MESSAGE);
   const [mention, setMention] = useState(true);
   const [autoDelete, setAutoDelete] = useState(true);
@@ -103,6 +106,12 @@ export function CommunityWelcomeDialog({
         if (cancelled) return;
         const s = result.settings;
         setEnabled(s.welcome_enabled === true);
+        setSavedEnabled(s.welcome_enabled === true);
+        setDiagnostic(
+          s.metadata && typeof s.metadata === "object"
+            ? (s.metadata as TelegramCommunitySettingsMetadata)
+            : null,
+        );
         setMessage(s.welcome_message || DEFAULT_WELCOME_MESSAGE);
         setMention(s.mention_member !== false);
         setAutoDelete(s.auto_delete_enabled !== false);
