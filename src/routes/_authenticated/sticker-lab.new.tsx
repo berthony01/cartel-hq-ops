@@ -1050,6 +1050,18 @@ function StickerLabBuilder() {
     selectedGroupIds.length > 0 &&
     groupsSelectedAndReady &&
     !distributing;
+  /* ---------------- Sticker Drops (this pack) ---------------- */
+  const dropStatus = dropStatusQuery.data;
+  const dropGroups = dropStatus?.groups ?? [];
+  const dropPacks = dropStatus?.packs ?? [];
+  const dropStickers = dropStatus?.stickers ?? [];
+  const dropSchedules = dropStatus?.schedules ?? [];
+  const dropCanManage = dropStatus?.canManage === true;
+  const dropKillSwitch = dropStatus?.control?.kill_switch === true;
+  const dropScheduleByGroup: Record<string, DropSchedule> = {};
+  for (const sc of dropSchedules) dropScheduleByGroup[sc.group_connection_id] = sc;
+  const packSchedules = dropSchedules.filter((sc) => sc.pack_id === packId);
+
   /* ---------------- Pack lifecycle: exactly one primary action ---------------- */
   const distStatusFor = (groupId: string) =>
     distTargets.find((t) => t.group_connection_id === groupId)?.status ?? null;
