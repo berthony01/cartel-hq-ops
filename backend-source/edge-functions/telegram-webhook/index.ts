@@ -585,13 +585,30 @@ Deno.serve(async (req: Request) => {
     const nonce = (groupMatch?.[1] ?? userMatch?.[1] ?? "").toLowerCase();
     if (nonce) {
       const tokenHash = await sha256Hex(nonce), now = new Date().toISOString();
-      const { data: link } = await admin.from("telegram_link_requests").select("id,user_id,status,expires_at,metadata").eq("token_hash", tokenHash).eq("status", "pending").maybeSingle();
-      if (!link || new Date(link.expires_at).getTime() <= Date.now()) {
-        if (link?.id) await admin.from("telegram_link_requests").update({ status: "expired" }).eq("id", link.id);
+      const { data: link } = await admin.from("telegram_link_requests").select("id,user_id,status,expires_at,metadata").eq("token_hash", tokenHash).maybeSingle();
+      if (groupMatch) {
+        const linkChatId = typeof link?.metadata?.telegram_chat_id === "string" ? link.metadata.telegram_chat_id : "";
+        if (link?.status === "connected" && linkChatId && linkChatId === chatId) return json({ ok: true });
+        const usable = link && link.status === "pending" && new Date(link.expires_at).getTime() > Date.now();
+        if (usable) { await bindGroup({ chat, actor: from, link }); return json({ ok: true }); }
+        const linkWorkspaceId = typeof link?.metadata?.workspace_id === "string" ? link.metadata.workspace_id : "";
+        if (linkWorkspaceId) {
+          const { data: alreadyConnected } = await admin.from("telegram_group_connections").select("id,workspace_id").eq("telegram_chat_id", chatId).maybeSingle();
+          if (alreadyConnected && alreadyConnected.workspace_id === linkWorkspaceId) {
+            await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "<b>✅ This community is already connected to Cartel HQ.</b>\n\nReturn to Cartel HQ to manage its community tools and automations.", { parse_mode: "HTML" });
+            return json({ ok: true });
+          }
+        }
+        if (link?.id && link.status === "pending") await admin.from("telegram_link_requests").update({ status: "expired" }).eq("id", link.id);
         await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "This CARTEL HQ connection link expired. Return to CARTEL HQ and try again.");
         return json({ ok: true });
       }
-      if (groupMatch) { await bindGroup({ chat, actor: from, link }); return json({ ok: true }); }
+      if (!link || link.status !== "pending" || new Date(link.expires_at).getTime() <= Date.now()) {
+        if (link?.id && link.status === "pending") await admin.from("telegram_link_requests").update({ status: "expired" }).eq("id", link.id);
+        await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "This CARTEL HQ connection link expired. Return to CARTEL HQ and try again.");
+        return json({ ok: true });
+      }
+
       if (chat?.type !== "private") return json({ ok: true });
       const telegramUserId = String(from.id);
       const { data: claimedByOther } = await admin.from("telegram_connections").select("id,user_id").eq("telegram_user_id", telegramUserId).maybeSingle();
