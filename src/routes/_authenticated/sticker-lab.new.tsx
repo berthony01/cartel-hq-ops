@@ -113,12 +113,24 @@ import {
   type PackTheme,
 } from "@/lib/sticker-lab";
 
-type BuilderSearch = { pack?: string };
+type BuilderSearch = { pack?: string; step?: number };
 
 export const Route = createFileRoute("/_authenticated/sticker-lab/new")({
   validateSearch: (search: Record<string, unknown>): BuilderSearch => {
     const raw = search["pack"];
     const pack = typeof raw === "string" ? raw.trim() : "";
+    // Optional deep-link into a specific builder step. Anything unusable is
+    // dropped so existing `?pack=<id>` links behave exactly as before.
+    const rawStep = search["step"];
+    const parsed =
+      typeof rawStep === "number"
+        ? rawStep
+        : typeof rawStep === "string"
+          ? Number.parseInt(rawStep, 10)
+          : Number.NaN;
+    const step =
+      Number.isInteger(parsed) && parsed >= 1 && parsed <= BUILDER_STEPS.length ? parsed : undefined;
+    if (pack && step) return { pack, step };
     return pack ? { pack } : {};
   },
 
@@ -188,7 +200,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 function StickerLabBuilder() {
   const { workspaceId } = useWorkspace();
   const { user } = useSession();
-  const { pack: urlPackId } = Route.useSearch();
+  const { pack: urlPackId, step: urlStep } = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
   const [step, setStep] = useState(1);
   const [draft, setDraft] = useState<BuilderDraft | null>(null);
