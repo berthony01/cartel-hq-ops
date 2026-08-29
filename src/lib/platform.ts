@@ -234,17 +234,27 @@ export async function fetchPlatformStatus(): Promise<PlatformStatus> {
     );
   }
 
-  const payload = data as (Partial<PlatformStatus> & { error?: string; message?: string }) | null;
+  const payload = data as
+    | (Partial<Omit<PlatformStatus, "details">> & {
+        details?: unknown;
+        error?: string;
+        message?: string;
+      })
+    | null;
   if (!payload) throw new Error("Empty response from the platform service.");
   if (payload.error) throw new Error(payload.message || payload.error);
 
+  const owner = payload.isPlatformOwner === true;
+
   return {
-    isPlatformOwner: payload.isPlatformOwner === true,
+    isPlatformOwner: owner,
     hasUnrestrictedAccess: payload.hasUnrestrictedAccess === true,
     role: payload.role ?? null,
     capabilities: Array.isArray(payload.capabilities) ? payload.capabilities : [],
-    metrics: payload.isPlatformOwner === true ? (payload.metrics ?? null) : null,
+    metrics: owner ? (payload.metrics ?? null) : null,
+    details: owner ? normalizeDetails(payload.details) : null,
   };
+
 }
 
 export function formatCount(value: number | null | undefined): string {
