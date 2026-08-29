@@ -353,6 +353,7 @@ function GroupRow({
   onRecheck,
   checking,
   selectable,
+  workspaceId,
 }: {
   readiness: GroupReadiness;
   selected: boolean;
@@ -360,7 +361,9 @@ function GroupRow({
   onRecheck: () => void;
   checking: boolean;
   selectable: boolean;
+  workspaceId: string | null | undefined;
 }) {
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
   const g = r.group;
   const inputId = `tg-group-${g.id}`;
   return (
