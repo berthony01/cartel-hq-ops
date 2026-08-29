@@ -98,29 +98,26 @@ function HqDashboard() {
   });
 
   const telegramQuery = useQuery({
-    queryKey: ["telegram-connection", user?.id],
-    enabled: !!user?.id,
+    queryKey: ["telegram-group-connections", workspaceId],
+    enabled: !!workspaceId,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("telegram_connections")
-        .select("id,telegram_username,connected_at")
-        .eq("user_id", user!.id)
-        .maybeSingle();
+        .from("telegram_group_connections")
+        .select("id,title,connected_at")
+        .eq("workspace_id", workspaceId!)
+        .order("connected_at", { ascending: false });
       if (error) throw error;
-      return data;
+      return data ?? [];
     },
   });
 
   const packs = packsQuery.data ?? [];
-  const telegram = telegramQuery.data;
+  const groups = telegramQuery.data ?? [];
+  const groupCount = groups.length;
+  const newestGroupTitle = groups[0]?.title ?? null;
   const publishedRecent = packs.filter((pack) =>
     String(pack.status ?? "").toLowerCase().includes("publish"),
   ).length;
-  const telegramHandle = telegram?.telegram_username
-    ? `@${telegram.telegram_username}`
-    : telegram
-      ? "Telegram connected"
-      : null;
 
   return (
     <div className="space-y-5 sm:space-y-8">
