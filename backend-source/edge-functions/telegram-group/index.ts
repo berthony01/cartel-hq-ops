@@ -159,6 +159,59 @@ Deno.serve(async (req: Request) => {
       if (!msg?.sticker?.file_id) throw new Error("Telegram did not return a native sticker message. Native group test delivery was not confirmed.");
       return respond({ sent: true, nativeStickerConfirmed: true, stickerId: sticker.id, label: sticker.label, messageId: msg?.message_id ?? null, groupTitle: group.title });
     }
+    if (action === "welcome_settings" || action === "save_welcome_settings" || action === "send_welcome_test") {
+      const group = await getGroup();
+      if (!group) return respond({ error: "GROUP_NOT_FOUND", message: "That Telegram community is no longer connected." }, 404);
+      const loadSettings = async () => {
+        const { data } = await admin.from("telegram_community_settings").select("*").eq("group_connection_id", group.id).maybeSingle();
+        return data ?? { group_connection_id: group.id, workspace_id: workspaceId, welcome_enabled: false, welcome_message: DEFAULT_WELCOME_MESSAGE, mention_member: true, auto_delete_enabled: true, auto_delete_seconds: 45, metadata: {}, created_at: null, updated_at: null };
+      };
+
+      if (action === "welcome_settings") return respond({ settings: await loadSettings(), canManage: canManageCommunity });
+      if (!canManageCommunity) return respond({ error: "FORBIDDEN", message: "Only workspace owners and admins can change community welcome settings." }, 403);
+
+      if (action === "save_welcome_settings") {
+        const raw = (body.settings && typeof body.settings === "object" ? body.settings : {}) as Record<string, unknown>;
+        const welcomeMessage = typeof raw.welcomeMessage === "string" ? raw.welcomeMessage.trim() : "";
+        if (!welcomeMessage) return respond({ error: "INVALID_MESSAGE", message: "Enter a welcome message." }, 400);
+        if (welcomeMessage.length > 3500) return respond({ error: "INVALID_MESSAGE", message: "Welcome messages are limited to 3500 characters." }, 400);
+        if (typeof raw.welcomeEnabled !== "boolean" || typeof raw.mentionMember !== "boolean" || typeof raw.autoDeleteEnabled !== "boolean") {
+          return respond({ error: "INVALID_SETTINGS", message: "Invalid welcome settings." }, 400);
+        }
+        const seconds = Number(raw.autoDeleteSeconds);
+        if (!Number.isInteger(seconds) || seconds < 10 || seconds > 120) return respond({ error: "INVALID_SECONDS", message: "Auto-delete must be between 10 and 120 seconds." }, 400);
+        const now = new Date().toISOString();
+        const { data: saved, error } = await admin.from("telegram_community_settings").upsert({
+          group_connection_id: group.id, workspace_id: workspaceId, welcome_enabled: raw.welcomeEnabled, welcome_message: welcomeMessage,
+          mention_member: raw.mentionMember, auto_delete_enabled: raw.autoDeleteEnabled, auto_delete_seconds: seconds, updated_at: now,
+        }, { onConflict: "group_connection_id" }).select("*").maybeSingle();
+        if (error) throw error;
+        return respond({ saved: true, settings: saved ?? (await loadSettings()), canManage: true });
+      }
+
+      const settings: any = await loadSettings();
+      const communityName = escapeHtml(String(group.title ?? "this community"));
+      const sampleName = escapeHtml("New Member");
+      const memberToken = settings.mention_member ? `<a href="tg://user?id=${String(group.telegram_chat_id)}">${sampleName}</a>` : sampleName;
+      const rendered = escapeHtml(String(settings.welcome_message ?? DEFAULT_WELCOME_MESSAGE))
+        .replaceAll("{first_name}", sampleName)
+        .replaceAll("{username}", "@newmember")
+        .replaceAll("{member}", memberToken)
+        .replaceAll("{community_name}", communityName);
+      const sent = await telegramJson(TELEGRAM_BOT_TOKEN, "sendMessage", { chat_id: String(group.telegram_chat_id), text: `${rendered}\n\n<i>(CARTEL HQ welcome preview)</i>`, parse_mode: "HTML", disable_web_page_preview: true });
+      const messageId = sent?.message_id ?? null;
+      if (settings.auto_delete_enabled && messageId) {
+        const delayMs = Math.min(120, Math.max(10, Number(settings.auto_delete_seconds) || 45)) * 1000;
+        const cleanup = (async () => {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          try { await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", { chat_id: String(group.telegram_chat_id), message_id: messageId }); }
+          catch (e) { console.error("[telegram-group] welcome test cleanup", e instanceof Error ? e.message : "unknown"); }
+        })();
+        try { (globalThis as any).EdgeRuntime?.waitUntil?.(cleanup); } catch { }
+      }
+      return respond({ sent: true, messageId, autoDeleteSeconds: settings.auto_delete_enabled ? settings.auto_delete_seconds : null, groupTitle: group.title });
+    }
+
     return respond({ error: "UNKNOWN_ACTION", message: "Unknown Telegram group action." }, 400);
   } catch (err) { console.error("[telegram-group]", err instanceof Error ? err.message : "unknown error"); return respond({ error: "TELEGRAM_GROUP_ERROR", message: err instanceof Error ? err.message : "Telegram group action failed." }, 400); }
 });
