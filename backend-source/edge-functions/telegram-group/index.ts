@@ -4,6 +4,8 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const TG_BASE = "https://api.telegram.org";
 const MAX_BATCH_GROUPS = 50;
 const NATIVE_SYNC_ERROR = "Published Telegram sticker set is out of sync with this Cartel HQ pack. Refresh or republish before native delivery.";
+const DEFAULT_WELCOME_MESSAGE = "\u{1F44B} Welcome {first_name} to {community_name}!\n\nPlease check the pinned messages and official links before getting started.";
+function escapeHtml(value: string) { return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 function respond(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } }); }
 async function telegramJson(token: string, method: string, body: Record<string, unknown> = {}) { const res = await fetch(`${TG_BASE}/bot${token}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const payload = await res.json().catch(() => null) as any; if (!res.ok || !payload?.ok) throw new Error(String(payload?.description ?? `Telegram request failed (${res.status}).`)); return payload.result; }
