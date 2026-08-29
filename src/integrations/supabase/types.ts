@@ -263,7 +263,7 @@ export type Database = {
           id: string
           local_date: string
           pack_id: string
-          schedule_id: string
+          schedule_id: string | null
           status: string
           sticker_id: string | null
           telegram_message_id: number | null
@@ -276,7 +276,7 @@ export type Database = {
           id?: string
           local_date: string
           pack_id: string
-          schedule_id: string
+          schedule_id?: string | null
           status: string
           sticker_id?: string | null
           telegram_message_id?: number | null
@@ -289,7 +289,7 @@ export type Database = {
           id?: string
           local_date?: string
           pack_id?: string
-          schedule_id?: string
+          schedule_id?: string | null
           status?: string
           sticker_id?: string | null
           telegram_message_id?: number | null
