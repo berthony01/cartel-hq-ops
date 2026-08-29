@@ -69,7 +69,7 @@ const GRID = "grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3";
 function AdminPage() {
   // Always re-checked against the server; never derived from email or storage.
   const { loading, error, isPlatformOwner, hasUnrestrictedAccess, role, capabilities, metrics } =
-    usePlatformAccess();
+    usePlatformAccess({ fresh: true });
 
   if (loading) {
     return (
