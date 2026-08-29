@@ -298,15 +298,29 @@ export function sentToday(events: DropEvent[]): number {
   }).length;
 }
 
-/** Earliest `next_run_at` across enabled schedules, ignoring stale past values. */
-export function nextRunAt(schedules: DropSchedule[], killSwitch: boolean): Date | null {
+export type NextRun = { at: Date; isDue: boolean };
+
+/**
+ * Earliest `next_run_at` across enabled schedules. The cron runs every 5 minutes,
+ * so a timestamp at or before now means the drop is due rather than upcoming.
+ */
+export function nextRunAt(schedules: DropSchedule[], killSwitch: boolean): NextRun | null {
   if (killSwitch) return null;
   const times = schedules
     .filter((s) => s.enabled && s.next_run_at)
     .map((s) => new Date(s.next_run_at as string))
     .filter((d) => !Number.isNaN(d.getTime()));
   if (times.length === 0) return null;
-  return times.reduce((min, d) => (d < min ? d : min));
+  const at = times.reduce((min, d) => (d < min ? d : min));
+  return { at, isDue: at.getTime() <= Date.now() };
+}
+
+/** Label for a schedule's own next run, tolerant of stale past timestamps. */
+export function formatNextRun(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const at = new Date(value);
+  if (Number.isNaN(at.getTime())) return null;
+  return at.getTime() <= Date.now() ? "Due now" : `Next ${formatClock(at)}`;
 }
 
 export function formatCadence(minutes: number): string {
