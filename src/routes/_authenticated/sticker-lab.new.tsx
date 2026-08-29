@@ -384,6 +384,16 @@ function StickerLabBuilder() {
   const [distError, setDistError] = useState<string | null>(null);
   const [distResult, setDistResult] = useState<TelegramDistributePackResult | null>(null);
   const [distTargets, setDistTargets] = useState<TelegramPackGroupTarget[]>([]);
+
+  /**
+   * Sticker Drops for THIS pack. Read-only reuse of the same workspace status
+   * endpoint the Distribution Center uses — no new server behaviour.
+   */
+  const dropStatusQuery = useQuery({
+    queryKey: ["sticker-drops", workspaceId],
+    enabled: !!workspaceId && step === 5,
+    queryFn: () => fetchDropStatus(workspaceId!),
+  });
   const [tgPack, setTgPack] = useState<PackTelegramState | null>(null);
   const [tgStickers, setTgStickers] = useState<Record<string, StickerTelegramState>>({});
   const [publishing, setPublishing] = useState(false);
