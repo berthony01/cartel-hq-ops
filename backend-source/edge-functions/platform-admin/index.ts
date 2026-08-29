@@ -1,0 +1,220 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
+
+const cors = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+function respond(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...cors, "Content-Type": "application/json" },
+  });
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  if (req.method !== "POST") return respond({ error: "METHOD_NOT_ALLOWED" }, 405);
+
+  const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+  const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const authHeader = req.headers.get("Authorization") ?? "";
+
+  if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
+    return respond({ error: "ADMIN_SERVICE_NOT_CONFIGURED" }, 503);
+  }
+  if (!authHeader.startsWith("Bearer ")) {
+    return respond({ error: "UNAUTHENTICATED", message: "Sign in to CARTEL HQ first." }, 401);
+  }
+
+  const userClient = createClient(SUPABASE_URL, ANON_KEY, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data: authData, error: authError } = await userClient.auth.getUser();
+  if (authError || !authData.user) {
+    return respond({ error: "UNAUTHENTICATED", message: "Your session expired. Sign in again." }, 401);
+  }
+
+  const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  let body: Record<string, unknown> = {};
+  try {
+    body = await req.json();
+  } catch {
+    return respond({ error: "INVALID_BODY", message: "Invalid request." }, 400);
+  }
+
+  const action = String(body.action ?? "status");
+  if (action !== "status") {
+    return respond({ error: "UNKNOWN_ACTION", message: "Unknown owner-console action." }, 400);
+  }
+
+  const userId = authData.user.id;
+  const [{ data: ownerCheck, error: ownerError }, { data: unrestricted, error: unrestrictedError }] =
+    await Promise.all([
+      admin.rpc("is_platform_owner", { _user_id: userId }),
+      admin.rpc("has_platform_unrestricted_access", { _user_id: userId }),
+    ]);
+
+  if (ownerError || unrestrictedError) {
+    console.error("[platform-admin] role lookup failed", ownerError ?? unrestrictedError);
+    return respond({ error: "OWNER_CHECK_FAILED" }, 500);
+  }
+
+  const isPlatformOwner = ownerCheck === true;
+  if (!isPlatformOwner) {
+    return respond({
+      isPlatformOwner: false,
+      hasUnrestrictedAccess: false,
+      role: null,
+      capabilities: [],
+      metrics: null,
+      details: null,
+    });
+  }
+
+  const [
+    roleRes,
+    metricsRes,
+    workspacesRes,
+    membersRes,
+    groupsRes,
+    packsRes,
+    schedulesRes,
+    eventsRes,
+    aiJobsRes,
+    betaRes,
+    authUsersRes,
+  ] = await Promise.all([
+    admin.from("platform_user_roles").select("role,created_at,updated_at").eq("user_id", userId).maybeSingle(),
+    admin.rpc("get_platform_owner_dashboard_metrics"),
+    admin.from("workspaces").select("id,name,slug,owner_id,created_at,updated_at").order("created_at", { ascending: false }).limit(25),
+    admin.from("workspace_members").select("workspace_id,user_id,role,created_at").limit(500),
+    admin.from("telegram_group_connections").select("id,workspace_id,title,username,chat_type,bot_is_admin,verified_at,connected_at").order("connected_at", { ascending: false }).limit(50),
+    admin.from("sticker_packs").select("id,workspace_id,title,status,telegram_set_name,telegram_set_url,telegram_published_at,created_at,updated_at").order("updated_at", { ascending: false }).limit(50),
+    admin.from("sticker_drop_schedules").select("id,workspace_id,group_connection_id,pack_id,enabled,interval_minutes,timezone,active_start,active_end,daily_cap,silent,approved_only,no_immediate_repeat,selected_sticker_ids,last_sent_at,next_run_at,consecutive_failures,paused_reason,created_at,updated_at").order("created_at", { ascending: false }).limit(50),
+    admin.from("sticker_drop_events").select("id,schedule_id,workspace_id,group_connection_id,pack_id,sticker_id,status,error_message,created_at").order("created_at", { ascending: false }).limit(50),
+    admin.from("ai_jobs").select("id,workspace_id,job_type,provider,provider_model,status,error_code,error_message,created_at,completed_at").order("created_at", { ascending: false }).limit(30),
+    admin.from("telegram_beta_contacts").select("id,subject_type,telegram_username,first_name,last_name,chat_title,source,source_chat_title,opted_in,last_seen_at,created_at").order("created_at", { ascending: false }).limit(30),
+    admin.auth.admin.listUsers({ page: 1, perPage: 50 }),
+  ]);
+
+  const queryErrors = [
+    roleRes.error,
+    metricsRes.error,
+    workspacesRes.error,
+    membersRes.error,
+    groupsRes.error,
+    packsRes.error,
+    schedulesRes.error,
+    eventsRes.error,
+    aiJobsRes.error,
+    betaRes.error,
+    authUsersRes.error,
+  ].filter(Boolean);
+
+  if (queryErrors.length > 0) {
+    console.error("[platform-admin] dashboard load failed", queryErrors[0]);
+    return respond({ error: "OWNER_DASHBOARD_FAILED" }, 500);
+  }
+
+  const workspaces = workspacesRes.data ?? [];
+  const members = membersRes.data ?? [];
+  const groups = groupsRes.data ?? [];
+  const packs = packsRes.data ?? [];
+  const schedules = schedulesRes.data ?? [];
+  const events = eventsRes.data ?? [];
+  const aiJobs = aiJobsRes.data ?? [];
+  const betaContacts = betaRes.data ?? [];
+
+  const workspaceName = new Map(workspaces.map((w: any) => [String(w.id), String(w.name)]));
+  const groupById = new Map(groups.map((g: any) => [String(g.id), g]));
+  const packById = new Map(packs.map((p: any) => [String(p.id), p]));
+
+  const workspaceSummaries = workspaces.map((w: any) => {
+    const id = String(w.id);
+    const wsMembers = members.filter((m: any) => String(m.workspace_id) === id);
+    const wsGroups = groups.filter((g: any) => String(g.workspace_id) === id);
+    const wsPacks = packs.filter((p: any) => String(p.workspace_id) === id);
+    const wsSchedules = schedules.filter((s: any) => String(s.workspace_id) === id);
+    return {
+      id: w.id,
+      name: w.name,
+      slug: w.slug,
+      created_at: w.created_at,
+      members: wsMembers.length,
+      groups: wsGroups.length,
+      packs: wsPacks.length,
+      published_packs: wsPacks.filter((p: any) => p.status === "published").length,
+      schedules: wsSchedules.length,
+      enabled_schedules: wsSchedules.filter((s: any) => s.enabled === true).length,
+    };
+  });
+
+  const scheduleDetails = schedules.map((s: any) => {
+    const group = groupById.get(String(s.group_connection_id));
+    const pack = packById.get(String(s.pack_id));
+    return {
+      ...s,
+      workspace_name: workspaceName.get(String(s.workspace_id)) ?? "Workspace",
+      group_title: group?.title ?? "Telegram group",
+      group_username: group?.username ?? null,
+      group_bot_is_admin: group?.bot_is_admin === true,
+      pack_title: pack?.title ?? "Sticker pack",
+    };
+  });
+
+  const recentDropEvents = events.map((e: any) => {
+    const group = groupById.get(String(e.group_connection_id));
+    const pack = packById.get(String(e.pack_id));
+    return {
+      ...e,
+      workspace_name: workspaceName.get(String(e.workspace_id)) ?? "Workspace",
+      group_title: group?.title ?? "Telegram group",
+      pack_title: pack?.title ?? "Sticker pack",
+    };
+  });
+
+  const recentAiJobs = aiJobs.map((j: any) => ({
+    ...j,
+    workspace_name: workspaceName.get(String(j.workspace_id)) ?? "Workspace",
+  }));
+
+  const recentUsers = (authUsersRes.data?.users ?? []).map((u: any) => ({
+    id: u.id,
+    email: u.email ?? null,
+    created_at: u.created_at ?? null,
+    last_sign_in_at: u.last_sign_in_at ?? null,
+    email_confirmed_at: u.email_confirmed_at ?? null,
+  }));
+
+  return respond({
+    isPlatformOwner: true,
+    hasUnrestrictedAccess: unrestricted === true,
+    role: roleRes.data?.role ?? "owner",
+    capabilities: [
+      "owner_console",
+      "unrestricted_platform_access",
+      "future_billing_bypass",
+      "read_platform_metrics",
+      "read_platform_operations",
+    ],
+    metrics: metricsRes.data ?? {},
+    details: {
+      users: recentUsers,
+      workspaces: workspaceSummaries,
+      telegramGroups: groups,
+      stickerPacks: packs,
+      stickerDropSchedules: scheduleDetails,
+      recentDropEvents,
+      recentAiJobs,
+      betaContacts,
+    },
+  });
+});
