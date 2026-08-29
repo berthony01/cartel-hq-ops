@@ -3,7 +3,7 @@ import { MoreHorizontal } from "lucide-react";
 import { MOBILE_PRIMARY_ITEMS } from "@/lib/nav";
 
 const TAB_BASE =
-  "touch-target flex flex-1 min-w-0 flex-col items-center justify-center gap-1 rounded-md px-1 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors duration-200";
+  "touch-target flex flex-1 min-w-0 flex-col items-center justify-center gap-1 rounded-md px-0.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.02em] transition-colors duration-200";
 
 /**
  * Fixed mobile application navigation. Visible below lg only; the desktop

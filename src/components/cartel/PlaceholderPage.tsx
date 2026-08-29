@@ -37,7 +37,7 @@ export function PlaceholderPage({
         </div>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
         <Section
           variant="surface"
           className="rise-in"

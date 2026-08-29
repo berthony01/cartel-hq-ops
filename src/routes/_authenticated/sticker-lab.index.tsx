@@ -108,7 +108,7 @@ function StickerLabHome() {
         </ScrollRail>
       </Section>
 
-      <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-3 [&>*]:min-w-0">
         <Section
           variant="primary"
           className="lg:col-span-2"

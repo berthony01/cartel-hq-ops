@@ -1310,7 +1310,7 @@ function StickerLabBuilder() {
           title="Character Reference"
           hint="Stored privately in this workspace's Asset Vault and reused for generation."
         >
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid gap-6 md:grid-cols-2 [&>*]:min-w-0">
             <div>
               <span className="mb-2 block text-sm font-medium text-foreground">
                 Upload a new reference
@@ -1440,7 +1440,7 @@ function StickerLabBuilder() {
                 No mascot, reference or logo assets yet. Upload one above or from the Asset Vault.
               </p>
             ) : (
-              <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+              <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5 [&>*]:min-w-0">
                 {referencesQuery.data!.assets.map((asset) => {
                   const selected = draft.referenceAssetIds.includes(asset.id);
                   const url = referencesQuery.data!.urls[asset.storage_path];
@@ -1490,7 +1490,7 @@ function StickerLabBuilder() {
 
       {step === 2 ? (
         <StepCard title="Pack Setup" hint="Saved to this workspace's sticker packs.">
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid gap-6 md:grid-cols-2 [&>*]:min-w-0">
             <div>
               <Label htmlFor="pack-name">Pack name</Label>
               <Input
@@ -1617,7 +1617,7 @@ function StickerLabBuilder() {
             </span>{" "}
             concepts used for this pack size.
           </p>
-          <ul className="grid gap-2 sm:gap-3 xl:grid-cols-2">
+          <ul className="grid gap-2 sm:gap-3 xl:grid-cols-2 [&>*]:min-w-0">
             {draft.concepts.map((c, i) => (
               <li key={c.id}>
                 <details
@@ -1874,7 +1874,7 @@ function StickerLabBuilder() {
           ) : null}
 
 
-          <ul className="mt-6 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-4">
+          <ul className="mt-6 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-4 [&>*]:min-w-0">
             {draft.concepts.map((c, index) => {
               const stage = stageFor(c.id);
               const stickerId = stickerIdFor(c.id);
@@ -2001,7 +2001,7 @@ function StickerLabBuilder() {
           title="Review"
           hint="Verified static stickers from private storage, ready for export and Telegram publishing."
         >
-          <div className="mb-6 grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-3">
+          <div className="mb-6 grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-3 [&>*]:min-w-0">
             <SummaryStat
               label="Backend ready"
               value={`${generatedCount}/${draft.concepts.length}`}
@@ -2182,7 +2182,7 @@ function StickerLabBuilder() {
           ) : null}
 
 
-          <ul className="grid gap-2 sm:gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid gap-2 sm:gap-3 sm:grid-cols-2 xl:grid-cols-3 [&>*]:min-w-0">
             {draft.concepts.map((c, index) => {
               const stickerId = stickerIdFor(c.id);
               const preview = stickerId ? previews[stickerId] : undefined;
@@ -2292,7 +2292,7 @@ function StickerLabBuilder() {
                     ) : null}
                   </div>
 
-                  <div className="mt-3 grid grid-cols-[5rem_1fr] gap-2">
+                  <div className="mt-3 grid grid-cols-[5rem_1fr] gap-2 [&>*]:min-w-0">
                     <div>
                       <Label htmlFor={`${c.id}-review-emoji`} className="text-xs">
                         Emoji
@@ -2392,7 +2392,7 @@ function StickerLabBuilder() {
                 </StatusBadge>
               </div>
 
-              <dl className="grid gap-3 sm:grid-cols-2">
+              <dl className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
                 <SummaryRow label="Sticker set title" value={draft.packName || "Not set"} />
                 <SummaryRow
                   label="Pack status"

@@ -374,11 +374,11 @@ function GroupRow({
         <div className="min-w-0 flex-1">
           <label
             htmlFor={selectable ? inputId : undefined}
-            className="flex min-h-6 cursor-pointer items-baseline gap-2 text-sm font-semibold text-foreground"
+            className="flex min-h-6 min-w-0 cursor-pointer flex-wrap items-baseline gap-x-2 text-sm font-semibold text-foreground"
           >
-            <span className="min-w-0 truncate">{g.title}</span>
+            <span className="min-w-0 max-w-full truncate">{g.title}</span>
             {g.username ? (
-              <span className="shrink-0 text-xs font-normal text-muted-foreground">
+              <span className="min-w-0 max-w-full truncate text-xs font-normal text-muted-foreground">
                 @{g.username}
               </span>
             ) : null}
@@ -666,7 +666,9 @@ export function TelegramGroupCard({
   return (
     <Card className="cartel-panel">
       <CardHeader className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 space-y-0 p-4 sm:p-6">
-        <CardTitle className="min-w-0 truncate text-base">Connected Telegram groups</CardTitle>
+        <CardTitle className="min-w-0 text-base [overflow-wrap:anywhere]">
+          Connected Telegram groups
+        </CardTitle>
         {groupQuery.isLoading ? (
           <StatusBadge tone="muted">Checking groups…</StatusBadge>
         ) : groups.length === 0 ? (
