@@ -897,31 +897,70 @@ export function TelegramGroupCard({
 
         {linkState === "expired" || linkState === "cancelled" ? (
           <p className="rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
-            Group link expired. Try again.
+            This community connection expired before it finished. Start it again below.
           </p>
         ) : null}
 
-        {!personalConnected ? (
-          <p className="text-xs text-muted-foreground">
-            Connect your personal Telegram account first — groups are linked by the same account.
+        {identityState === "pending" ? (
+          <div className="rounded-md border border-gold/40 bg-gold/5 p-3 text-xs text-muted-foreground">
+            <p className="flex items-center gap-2 font-semibold text-foreground">
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              Step 1 of 2 · Verifying your Telegram identity
+            </p>
+            <p className="mt-2 leading-relaxed">
+              Telegram opened. Tap <strong>Start</strong> in the CARTEL HQ bot chat, then return
+              here — we continue to the community picker automatically.
+              {identityRemaining > 0
+                ? ` This one-time link expires in ${Math.floor(identityRemaining / 60)}:${String(identityRemaining % 60).padStart(2, "0")}.`
+                : " This one-time link is about to expire."}
+            </p>
+            {identityUrl ? (
+              <div className="mt-3">
+                <Button asChild size="sm" variant="outline" className="min-h-11">
+                  <a href={identityUrl} target="_blank" rel="noopener noreferrer">
+                    Open Telegram
+                  </a>
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {identityState === "expired" || identityState === "cancelled" ? (
+          <p className="rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
+            This community connection expired before it finished. Start it again below.
           </p>
+        ) : null}
+
+        {identityState === "connected" && !pending ? (
+          <div className="rounded-md border border-gold/40 bg-gold/5 p-3 text-xs text-muted-foreground">
+            <p className="font-semibold text-foreground">Step 2 of 2 · Choose your community</p>
+            <p className="mt-1 leading-relaxed">
+              Telegram is verified. Continue to pick the group or supergroup CARTEL HQ should join.
+            </p>
+          </div>
         ) : null}
 
         <div className="flex flex-wrap items-center gap-3">
           <Button
             type="button"
             className="min-h-11"
-            disabled={!workspaceId || starting || pending || !botConfigured || !personalConnected}
-            onClick={() => void connect()}
+            disabled={!workspaceId || starting || pending || identityState === "pending" || !botConfigured}
+            onClick={() => void handlePrimary()}
           >
-            {starting || pending ? (
+            {starting || pending || identityState === "pending" ? (
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
             ) : (
               <Users className="size-4" aria-hidden="true" />
             )}
-            {groups.length > 0 ? "Connect another group" : "Connect Telegram group"}
+            {identityState === "connected" && !personalConnected
+              ? "Choose Telegram Community"
+              : groups.length > 0
+                ? "Connect another community"
+                : "Connect Community"}
           </Button>
         </div>
+
       </CardContent>
     </Card>
   );
