@@ -107,14 +107,21 @@ export const MIN_DAILY_CAP = 1;
 export const MAX_DAILY_CAP = 24;
 export const INTERVAL_PRESETS = [15, 30, 60, 120] as const;
 
-export const DEFAULT_SCHEDULE_FORM = {
+export const DEFAULT_SCHEDULE_FORM: {
+  intervalMinutes: number;
+  activeStart: string;
+  activeEnd: string;
+  dailyCap: number;
+  silent: boolean;
+  noImmediateRepeat: boolean;
+} = {
   intervalMinutes: 60,
   activeStart: "08:00",
   activeEnd: "23:00",
   dailyCap: 8,
   silent: true,
   noImmediateRepeat: true,
-} as const;
+};
 
 export function browserTimezone(): string {
   try {

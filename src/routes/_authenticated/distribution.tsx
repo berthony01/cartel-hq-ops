@@ -37,9 +37,10 @@ import {
 } from "@/lib/sticker-drops";
 
 export const Route = createFileRoute("/_authenticated/distribution")({
-  validateSearch: (search: Record<string, unknown>): { pack?: string } => ({
-    pack: typeof search.pack === "string" && search.pack ? search.pack : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>): { pack?: string } => {
+    const raw = search["pack"];
+    return typeof raw === "string" && raw ? { pack: raw } : {};
+  },
   head: () => ({
     meta: [
       { title: "Distribution Center — CARTEL HQ" },
@@ -69,7 +70,15 @@ const STATE_TONE: Record<ScheduleState, "gold" | "green" | "red" | "muted"> = {
   unconfigured: "muted",
 };
 
-function SummaryTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function SummaryTile({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string | undefined;
+}) {
   return (
     <div className="min-w-[9.5rem] rounded-lg border border-border/70 bg-surface-raised/60 px-3 py-2.5">
       <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
@@ -318,11 +327,9 @@ function DistributionPage() {
                   <InlineRow
                     title={group.title}
                     subtitle={detail}
-                    meta={
-                      state === "active" && schedule?.next_run_at
-                        ? `Next ${formatClock(new Date(schedule.next_run_at))}`
-                        : undefined
-                    }
+                    {...(state === "active" && schedule?.next_run_at
+                      ? { meta: `Next ${formatClock(new Date(schedule.next_run_at))}` }
+                      : {})}
                     trailing={
                       <>
                         <StatusBadge tone={STATE_TONE[state]}>
@@ -382,7 +389,7 @@ function DistributionPage() {
               return (
                 <li key={event.id}>
                   <InlineRow
-                    className={failed ? "border-signal/40 bg-signal/5" : undefined}
+                    {...(failed ? { className: "border-signal/40 bg-signal/5" } : {})}
                     title={groupTitle[event.group_connection_id] ?? "Group"}
                     subtitle={
                       failed

@@ -162,7 +162,7 @@ function PackManagerPage() {
                   key={sticker.id}
                   className="min-w-0 rounded-lg border border-border/70 bg-surface-raised/50 p-2"
                 >
-                  <div className="cartel-checker flex aspect-square items-center justify-center overflow-hidden rounded-md border border-border/60 bg-background/60">
+                  <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md border border-border/60 bg-background/60">
                     {url ? (
                       <img
                         src={url}
