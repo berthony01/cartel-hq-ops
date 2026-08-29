@@ -50,7 +50,7 @@ const LIVE_CAPABILITIES = [
   "Pack and sticker persistence",
   "Server-side AI generation with transparency validation",
   "Review, export and Telegram pack publishing",
-  "Scheduled multi-group delivery in the Distribution Center",
+  "Scheduled Sticker Drops per pack in Review & Telegram, managed workspace wide in the Distribution Center",
 ];
 
 const FUTURE_CAPABILITIES = ["Motion and video stickers"];

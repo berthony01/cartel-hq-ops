@@ -71,8 +71,9 @@ function TelegramPage() {
       >
         <p className="text-xs leading-relaxed text-muted-foreground">
           Publish, retry, refresh set status and send a native test sticker from Sticker Lab Step 5.
-          Scheduled Sticker Drops are live — configure them in Distribution. Both basic Telegram
-          groups and supergroups can receive pack announcements and native stickers.
+          Scheduled Sticker Drops are live: set them up per pack in Sticker Lab Review &amp;
+          Telegram, and manage every community and schedule in the Distribution Center. Both basic
+          Telegram groups and supergroups can receive pack announcements and native stickers.
         </p>
         <details className="mt-3 rounded-md border border-border/60 bg-background/40 p-3">
           <summary className="flex min-h-11 cursor-pointer list-none items-center text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
