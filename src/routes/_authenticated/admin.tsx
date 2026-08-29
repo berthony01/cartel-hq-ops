@@ -174,6 +174,17 @@ function AdminPage() {
   const failedJobs = aiJobs.filter(
     (j) => text(j.status).toLowerCase() === "failed" || !!text(j.error_message, ""),
   );
+  const workspaceNames = new Map<string, string>();
+  for (const w of d?.workspaces ?? []) {
+    const id = text(w.id, "");
+    const name = text(w.name, "");
+    if (id && name) workspaceNames.set(id, name);
+  }
+  const workspaceName = (id: string | null | undefined, fallback = "Workspace") =>
+    (id ? workspaceNames.get(id) : undefined) ?? fallback;
+  const num = (...values: Array<number | null | undefined>) =>
+    values.find((v) => typeof v === "number" && Number.isFinite(v)) ?? null;
+
   const schedulerActive = m.scheduler_job_active === true;
   const schedulerFailing = text(m.scheduler_last_run_status, "").toLowerCase() === "failed";
   const healthIssue = !schedulerActive || schedulerFailing || autoPaused > 0;
@@ -288,7 +299,7 @@ function AdminPage() {
                 <InlineRow
                   key={text(s.id, `schedule-${i}`)}
                   leading={<CalendarClock className="size-4" aria-hidden="true" />}
-                  title={`${text(s.group_title, "Telegram group")} · ${text(s.pack_name, "Pack")}`}
+                  title={`${text(s.group_title, "Telegram group")} · ${text(s.pack_title, text(s.pack_name, "Pack"))}`}
                   subtitle={`${text(s.workspace_name, "Workspace")} · ${cadence(s.interval_minutes)} · Cap ${formatCount(s.daily_cap)} · ${text(s.active_start, "—")}–${text(s.active_end, "—")} ${text(s.timezone, "")}`.trim()}
                   meta={
                     s.enabled === true
@@ -350,7 +361,7 @@ function AdminPage() {
                 <InlineRow
                   key={text(e.id, `event-${i}`)}
                   leading={<Send className="size-4" aria-hidden="true" />}
-                  title={`${text(e.group_title, "Telegram group")} · ${text(e.pack_name, "Pack")}`}
+                  title={`${text(e.group_title, "Telegram group")} · ${text(e.pack_title, text(e.pack_name, "Pack"))}`}
                   subtitle={
                     text(e.error_message, "") || text(e.workspace_name, "Workspace")
                   }
@@ -398,10 +409,12 @@ function AdminPage() {
                 key={text(w.id, `workspace-${i}`)}
                 leading={<Layers className="size-4" aria-hidden="true" />}
                 title={text(w.name, "Untitled workspace")}
-                subtitle={`Members ${formatCount(w.members_count)} · Groups ${formatCount(w.groups_count)} · Packs ${formatCount(w.packs_count)} (${formatCount(w.published_packs_count)} published)`}
+                subtitle={`Members ${formatCount(num(w.members, w.members_count))} · Groups ${formatCount(num(w.groups, w.groups_count))} · Packs ${formatCount(num(w.packs, w.packs_count))} (${formatCount(num(w.published_packs, w.published_packs_count))} published)`}
                 trailing={
-                  <StatusBadge tone={(w.enabled_schedules_count ?? 0) > 0 ? "green" : "muted"}>
-                    <span>{`${formatCount(w.enabled_schedules_count)}/${formatCount(w.schedules_count)} auto`}</span>
+                  <StatusBadge
+                    tone={(num(w.enabled_schedules, w.enabled_schedules_count) ?? 0) > 0 ? "green" : "muted"}
+                  >
+                    <span>{`${formatCount(num(w.enabled_schedules, w.enabled_schedules_count))}/${formatCount(num(w.schedules, w.schedules_count))} auto`}</span>
                   </StatusBadge>
                 }
               />
@@ -483,7 +496,7 @@ function AdminPage() {
                 key={text(g.id, `group-${i}`)}
                 leading={<Bot className="size-4" aria-hidden="true" />}
                 title={text(g.title, "Telegram group")}
-                subtitle={`${text(g.workspace_name, "Workspace")}${g.username ? ` · @${g.username}` : ""} · ${text(g.chat_type, "group")}`}
+                subtitle={`${workspaceName(g.workspace_id)}${g.username ? ` · @${g.username}` : ""} · ${text(g.chat_type, "group")}`}
                 meta={formatTimestamp(g.verified_at ?? g.connected_at)}
                 trailing={
                   <StatusBadge tone={g.bot_is_admin === true ? "green" : "muted"}>
