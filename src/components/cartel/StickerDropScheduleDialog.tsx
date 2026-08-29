@@ -121,7 +121,6 @@ export function StickerDropScheduleDialog({
     if (!packId) return "Choose a published Telegram pack.";
     if (!TIME_PATTERN.test(activeStart) || !TIME_PATTERN.test(activeEnd))
       return "Active hours must use 24-hour HH:MM values.";
-    if (activeStart === activeEnd) return "Active hours start and end cannot match.";
     if (
       !Number.isInteger(intervalMinutes) ||
       intervalMinutes < MIN_INTERVAL_MINUTES ||
@@ -334,6 +333,10 @@ export function StickerDropScheduleDialog({
               />
             </div>
           </div>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            Use the same start and end time for all-day delivery. The server scheduler checks due
+            drops every 5 minutes, so a drop may arrive a few minutes after the displayed due time.
+          </p>
 
           <div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
             <div className="space-y-2">
