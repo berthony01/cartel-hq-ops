@@ -1,15 +1,23 @@
 import { Link } from "@tanstack/react-router";
 import { NAV_SECTIONS } from "@/lib/nav";
+import { usePlatformAccess } from "@/hooks/usePlatformAccess";
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
+  // Presentation-only gate. Route + Edge Function remain the security boundary.
+  const { isPlatformOwner } = usePlatformAccess();
+
   return (
     <nav aria-label="Primary" className="flex flex-col gap-5">
-      {NAV_SECTIONS.map((section) => (
+      {NAV_SECTIONS.map((section) => {
+        const items = section.items.filter((item) => !item.ownerOnly || isPlatformOwner);
+        if (items.length === 0) return null;
+        return (
         <div key={section.label} className="flex flex-col gap-1">
           <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground/60">
             {section.label}
           </p>
-          {section.items.map((item) => (
+          {items.map((item) => (
+
             <Link
               key={item.to}
               to={item.to}
