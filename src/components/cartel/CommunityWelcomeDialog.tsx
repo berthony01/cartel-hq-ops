@@ -28,7 +28,7 @@ import { StatusBadge } from "@/components/cartel/StatusBadge";
 
 /**
  * Welcome & onboarding controls for ONE connected Telegram community.
- * Settings are fetched lazily when the dialog opens — never per group on load.
+ * Settings are fetched lazily when the dialog opens, never per group on load.
  */
 
 const PLACEHOLDERS: Array<{ token: string; hint: string }> = [
@@ -153,7 +153,7 @@ export function CommunityWelcomeDialog({
       });
       toast.success(
         result.autoDeleteSeconds
-          ? `Test welcome posted in ${group.title} — the bot removes it in ${result.autoDeleteSeconds}s.`
+          ? `Test welcome posted in ${group.title}. The bot removes it in ${result.autoDeleteSeconds}s.`
           : `Test welcome posted in ${group.title}.`,
       );
     } catch (error) {
@@ -172,7 +172,7 @@ export function CommunityWelcomeDialog({
           </DialogTitle>
           <DialogDescription className="text-xs leading-relaxed">
             Posted publicly in <strong>{group.title}</strong> when someone joins. CARTEL HQ only
-            deletes its own welcome message — Telegram’s join notice is never touched.
+            deletes its own welcome message. Telegram’s join notice is never touched.
           </DialogDescription>
         </DialogHeader>
 
@@ -237,7 +237,7 @@ export function CommunityWelcomeDialog({
                 ))}
               </div>
               <p className="text-[11px] leading-relaxed text-muted-foreground">
-                {PLACEHOLDERS.map((p) => `${p.token} — ${p.hint}`).join(" · ")}
+                {PLACEHOLDERS.map((p) => `${p.token}: ${p.hint}`).join(" · ")}
               </p>
             </div>
 
@@ -335,7 +335,7 @@ export function CommunityWelcomeDialog({
             </div>
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               {dirty
-                ? "Save your changes before sending a test — the test uses the saved settings."
+                ? "Save your changes before sending a test. The test uses the saved settings."
                 : enabled
                   ? "Real joins will receive this message."
                   : "Welcome is disabled, so real joins get nothing. A test still posts the saved message so you can check it."}
