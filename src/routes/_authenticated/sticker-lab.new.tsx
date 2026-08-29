@@ -2644,11 +2644,11 @@ function StickerLabBuilder() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Publish this pack to Telegram?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  <strong>One</strong> Telegram sticker set will be created for this pack, owned by
-                  your connected Telegram account ({telegram.connection?.telegram_user_id}).{" "}
+                  <strong>One</strong> Telegram sticker set will be created for this pack, using
+                  the Telegram identity verified during community connection.{" "}
                   {reviewedStickerIds.length} reviewed sticker
-                  {reviewedStickerIds.length === 1 ? "" : "s"} will be uploaded. Sets cannot be
-                  transferred to another owner later.
+                  {reviewedStickerIds.length === 1 ? "" : "s"} will be uploaded. Telegram
+                  sticker-set ownership cannot be transferred later.
                   <br />
                   <br />
                   {selectedGroupIds.length === 0 ? (

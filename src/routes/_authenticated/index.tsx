@@ -11,7 +11,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useSession } from "@/hooks/useSession";
 import { useWorkspace } from "@/lib/workspace-context";
 import { NAV_SECTIONS } from "@/lib/nav";
 import { PageHeader } from "@/components/cartel/PageHeader";
@@ -44,7 +43,7 @@ const QUICK_ACTIONS: { label: string; icon: LucideIcon; note: string; to: string
   { label: "Sticker Lab", icon: Sticker, note: "Create a pack", to: "/sticker-lab" },
   { label: "Brand Kit", icon: Palette, note: "Colours & marks", to: "/brand-kit" },
   { label: "Assets", icon: FolderLock, note: "Private vault", to: "/assets" },
-  { label: "Telegram", icon: MessageSquare, note: "Link & publish", to: "/telegram" },
+  { label: "Telegram", icon: MessageSquare, note: "Communities & publishing", to: "/telegram" },
 ];
 
 /** Presentational roadmap vocabulary derived from live nav metadata. */
@@ -67,7 +66,6 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function HqDashboard() {
   const { workspace, workspaceId, loading: workspaceLoading } = useWorkspace();
-  const { user } = useSession();
 
   const packsQuery = useQuery({
     queryKey: ["recent-packs", workspaceId],
@@ -98,29 +96,26 @@ function HqDashboard() {
   });
 
   const telegramQuery = useQuery({
-    queryKey: ["telegram-connection", user?.id],
-    enabled: !!user?.id,
+    queryKey: ["telegram-group-connections", workspaceId],
+    enabled: !!workspaceId,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("telegram_connections")
-        .select("id,telegram_username,connected_at")
-        .eq("user_id", user!.id)
-        .maybeSingle();
+        .from("telegram_group_connections")
+        .select("id,title,connected_at")
+        .eq("workspace_id", workspaceId!)
+        .order("connected_at", { ascending: false });
       if (error) throw error;
-      return data;
+      return data ?? [];
     },
   });
 
   const packs = packsQuery.data ?? [];
-  const telegram = telegramQuery.data;
+  const groups = telegramQuery.data ?? [];
+  const groupCount = groups.length;
+  const newestGroupTitle = groups[0]?.title ?? null;
   const publishedRecent = packs.filter((pack) =>
     String(pack.status ?? "").toLowerCase().includes("publish"),
   ).length;
-  const telegramHandle = telegram?.telegram_username
-    ? `@${telegram.telegram_username}`
-    : telegram
-      ? "Telegram connected"
-      : null;
 
   return (
     <div className="space-y-5 sm:space-y-8">
@@ -161,7 +156,7 @@ function HqDashboard() {
         <Metric label="AI jobs" value={usageQuery.isPending ? "—" : String(usageQuery.data ?? 0)} />
         <Metric
           label="Telegram"
-          value={telegramQuery.isPending ? "—" : telegram ? "Linked" : "Not linked"}
+          value={telegramQuery.isPending ? "—" : String(groupCount)}
         />
       </div>
 
@@ -266,8 +261,10 @@ function HqDashboard() {
             className="rise-in"
             title="Telegram"
             actions={
-              telegram ? (
-                <StatusBadge tone="green">Connected</StatusBadge>
+              groupCount > 0 ? (
+                <StatusBadge tone="green">
+                  {groupCount} connected
+                </StatusBadge>
               ) : (
                 <StatusBadge tone="gold">No community connected</StatusBadge>
               )
@@ -276,10 +273,16 @@ function HqDashboard() {
           >
             <InlineRow
               leading={<MessageSquare className="size-4" aria-hidden="true" />}
-              title={telegramHandle ?? "No community connected"}
+              title={
+                groupCount > 0
+                  ? `${groupCount} communit${groupCount === 1 ? "y" : "ies"} connected`
+                  : "No community connected"
+              }
               subtitle={
-                telegram
-                  ? "Publish sticker packs and send them to your connected communities."
+                groupCount > 0
+                  ? newestGroupTitle
+                    ? `Newest: ${newestGroupTitle}. Publish sticker packs and send them to your communities.`
+                    : "Publish sticker packs and send them to your communities."
                   : "Connect a Telegram community to publish packs from Sticker Lab."
               }
             />
@@ -287,7 +290,7 @@ function HqDashboard() {
               to="/telegram"
               className="inline-flex text-xs uppercase tracking-[0.14em] text-gold hover:underline"
             >
-              {telegram ? "Manage communities" : "Connect a community"}
+              {groupCount > 0 ? "Manage communities" : "Connect a community"}
             </Link>
           </Section>
         </div>
