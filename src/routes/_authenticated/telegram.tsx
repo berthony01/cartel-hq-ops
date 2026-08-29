@@ -48,8 +48,22 @@ function TelegramPage() {
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge tone={setup.botConfigured ? "green" : "muted"}>
-          {setup.botConfigured ? "Telegram service available" : "Telegram service unavailable"}
+        <StatusBadge
+          tone={
+            setup.configQuery.isPending
+              ? "muted"
+              : setup.botConfigured
+                ? "green"
+                : "red"
+          }
+        >
+          {setup.configQuery.isPending
+            ? "Checking Telegram service…"
+            : setup.configQuery.isError
+              ? "Telegram service status unavailable"
+              : setup.botConfigured
+                ? "Telegram service available"
+                : "Telegram service unavailable"}
         </StatusBadge>
         <StatusBadge tone={groupCount > 0 ? "green" : "muted"}>
           {groupCount > 0
