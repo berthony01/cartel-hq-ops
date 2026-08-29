@@ -355,7 +355,7 @@ function DistributionPage() {
                       </>
                     }
                   />
-                  {schedule?.paused_reason && !killSwitch ? (
+                  {state === "auto_paused" && schedule?.paused_reason ? (
                     <p className="mt-1 px-3 text-[11px] leading-relaxed text-signal [overflow-wrap:anywhere]">
                       Auto-paused: {schedule.paused_reason}
                     </p>
