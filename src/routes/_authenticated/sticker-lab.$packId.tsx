@@ -131,11 +131,17 @@ function PackManagerPage() {
           </Button>
         ) : null}
         <Button asChild variant="outline" className="min-h-11 flex-1 sm:flex-none">
-          <Link to="/distribution" search={{ pack: pack.id }}>
+          <Link to="/sticker-lab/new" search={{ pack: pack.id, step: 5 }}>
             <Send className="size-4" aria-hidden="true" />
-            Manage distribution
+            Manage Telegram &amp; Distribution
           </Link>
         </Button>
+        <Button asChild variant="ghost" size="sm" className="min-h-11">
+          <Link to="/distribution" search={{ pack: pack.id }}>
+            Distribution Center
+          </Link>
+        </Button>
+
       </div>
 
       <Section
