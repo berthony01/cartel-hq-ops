@@ -12,9 +12,11 @@ function respond(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 }
 class TelegramApiError extends Error { technical?: string; constructor(message: string, technical?: string) { super(message); this.technical = technical; } }
+/** Hard timeout around every api.telegram.org call so a hung request cannot stall the function. */
+const TELEGRAM_TIMEOUT_MS = 10_000;
 async function telegramJson(token: string, method: string, body: Record<string, unknown> = {}) {
   let res: Response;
-  try { res = await fetch(`${TG_BASE}/bot${token}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); }
+  try { res = await fetch(`${TG_BASE}/bot${token}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS) }); }
   catch { throw new TelegramApiError("Could not reach Telegram. Try again shortly."); }
   const payload = await res.json().catch(() => null) as any;
   if (!res.ok || !payload?.ok) { const raw = String(payload?.description ?? `Telegram request failed (${res.status}).`); throw new TelegramApiError(raw, raw); }
