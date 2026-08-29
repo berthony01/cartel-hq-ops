@@ -129,6 +129,11 @@ function AdminPage() {
     details,
   } = usePlatformAccess({ fresh: true });
 
+  // Owner-only: bot service status + the owner's own Telegram identity link.
+  const telegramSetup = useTelegramSetup(isPlatformOwner === true);
+
+
+
   if (loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
