@@ -47,6 +47,28 @@ function renderPreview(template: string, communityName: string, mention: boolean
     .replaceAll("{community_name}", communityName);
 }
 
+/** Human wording for the webhook's last-join diagnostic codes. */
+function describeJoinResult(result: string | null | undefined) {
+  switch (result) {
+    case "sent":
+      return "Welcome sent to the community.";
+    case "send_failed":
+      return "Welcome could not be delivered by Telegram.";
+    case "skipped_disabled":
+      return "Welcome skipped because real joins were disabled.";
+    case "skipped_no_message":
+      return "Welcome skipped because no message was saved.";
+    default:
+      return result ? `Result: ${result}` : "No result recorded.";
+  }
+}
+
+function formatDiagnosticTime(value: string | null | undefined) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toLocaleString();
+}
+
 export function CommunityWelcomeDialog({
   open,
   onOpenChange,
