@@ -192,7 +192,10 @@ Deno.serve(async (req: Request) => {
       const settings: any = await loadSettings();
       const communityName = escapeHtml(String(group.title ?? "this community"));
       const sampleName = escapeHtml("New Member");
-      const memberToken = settings.mention_member ? `<a href="tg://user?id=${String(group.telegram_chat_id)}">${sampleName}</a>` : sampleName;
+      // Synthetic test: there is no real joining user, and a group chat id is NOT a
+      // user id. Always render {member} as escaped plain text here. Real tg://user
+      // mentions are created only by the join webhook, which has actual user ids.
+      const memberToken = sampleName;
       const rendered = escapeHtml(String(settings.welcome_message ?? DEFAULT_WELCOME_MESSAGE))
         .replaceAll("{first_name}", sampleName)
         .replaceAll("{username}", "@newmember")
