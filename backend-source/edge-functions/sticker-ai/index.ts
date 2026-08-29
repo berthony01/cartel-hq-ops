@@ -1,0 +1,400 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  ImageMagick,
+  initializeImageMagick,
+  MagickFormat,
+} from "npm:@imagemagick/magick-wasm@0.0.36";
+
+const wasmBytes = await Deno.readFile(
+  new URL("magick.wasm", import.meta.resolve("npm:@imagemagick/magick-wasm@0.0.36")),
+);
+await initializeImageMagick(wasmBytes);
+
+const KIE_BASE = "https://api.kie.ai";
+const DEFAULT_MODEL = "flux-2/pro-image-to-image";
+const BG_MODEL = "recraft/remove-background";
+const BUCKET = "workspace-assets";
+const SIGNED_URL_TTL = 900;
+
+const cors = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+function respond(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...cors, "Content-Type": "application/json" },
+  });
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+    : [];
+}
+
+function mapKieState(value: unknown): "running" | "success" | "fail" {
+  const state = String(value ?? "").toLowerCase();
+  if (["success", "succeeded", "completed", "complete"].includes(state)) return "success";
+  if (["fail", "failed", "error", "cancelled", "canceled"].includes(state)) return "fail";
+  return "running";
+}
+
+function resultUrlFrom(data: Record<string, unknown>): string | null {
+  let parsed: Record<string, unknown> | null = null;
+  const raw = data.resultJson;
+  if (typeof raw === "string" && raw.trim()) {
+    try { parsed = JSON.parse(raw) as Record<string, unknown>; } catch { parsed = null; }
+  } else if (raw && typeof raw === "object") {
+    parsed = raw as Record<string, unknown>;
+  }
+  const urls = parsed?.resultUrls;
+  if (Array.isArray(urls) && typeof urls[0] === "string") return urls[0];
+  if (typeof parsed?.resultUrl === "string") return parsed.resultUrl;
+  if (typeof data.resultUrl === "string") return data.resultUrl;
+  return null;
+}
+
+function creditsFrom(data: Record<string, unknown>): number | null {
+  for (const key of ["creditsConsumed", "consumeCredits", "credits"]) {
+    const value = data[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+async function kieRequest(path: string, apiKey: string, init: RequestInit) {
+  let response: Response;
+  try {
+    response = await fetch(`${KIE_BASE}${path}`, {
+      ...init,
+      headers: { ...(init.headers ?? {}), Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    });
+  } catch {
+    return { ok: false as const, status: 0, message: "Could not reach Kie.ai." };
+  }
+
+  let payload: Record<string, unknown> = {};
+  try { payload = (await response.json()) as Record<string, unknown>; } catch { payload = {}; }
+  if (!response.ok) {
+    const friendly = response.status === 401
+      ? "Kie.ai rejected the API key."
+      : response.status === 403
+        ? "Kie.ai denied this request."
+        : response.status === 429
+          ? "Kie.ai is rate limiting requests. Try again shortly."
+          : response.status >= 500
+            ? "Kie.ai is temporarily unavailable."
+            : typeof payload.msg === "string" ? payload.msg : "Kie.ai returned an unexpected error.";
+    return { ok: false as const, status: response.status, message: friendly, payload };
+  }
+
+  return {
+    ok: true as const,
+    status: response.status,
+    payload,
+    data: (payload.data && typeof payload.data === "object" ? payload.data : {}) as Record<string, unknown>,
+  };
+}
+
+function buildPrompt(brand: Record<string, unknown> | null, pack: Record<string, unknown>, sticker: Record<string, unknown>) {
+  const parts: string[] = [];
+  const label = String(sticker.label ?? "").trim();
+  const action = String(sticker.action_description ?? "").trim();
+  const characterName = String(pack.character_name ?? "").trim();
+  parts.push("Create exactly ONE clean die-cut messaging sticker using the SAME character identity shown in the supplied reference image.");
+  parts.push("Preserve the character's face, proportions, colors, wardrobe, accessories and overall identity. Only change the pose and expression requested.");
+  if (characterName) parts.push(`Character or brand subject: ${characterName}.`);
+  if (action) parts.push(`Pose or expression: ${action}.`);
+  if (label) parts.push(`Include the short caption text \"${label}\" spelled exactly as written, in bold readable sticker lettering. Do not add any other words.`);
+  if (brand) {
+    const brandName = String(brand.brand_name ?? "").trim();
+    const ticker = String(brand.ticker ?? "").trim();
+    if (brandName) parts.push(`Brand: ${brandName}${ticker ? ` (${ticker})` : ""}.`);
+    const colors = stringArray(brand.colors);
+    if (colors.length) parts.push(`Use this brand palette: ${colors.slice(0, 8).join(", ")}.`);
+    const fonts = stringArray(brand.fonts);
+    if (fonts.length) parts.push(`Lettering direction: ${fonts.slice(0, 3).join(", ")}.`);
+    const styleNotes = String(brand.ai_style_notes ?? "").trim();
+    if (styleNotes) parts.push(`Brand art direction: ${styleNotes}`);
+    const prohibited = stringArray(brand.prohibited_styles);
+    if (prohibited.length) parts.push(`Strictly avoid: ${prohibited.slice(0, 12).join(", ")}.`);
+  }
+  const brief = String(pack.brief ?? "").trim();
+  if (brief) parts.push(`Pack brief: ${brief}`);
+  const packStyle = String(pack.style_notes ?? "").trim();
+  if (packStyle) parts.push(`Pack-specific style direction: ${packStyle}`);
+  parts.push("Square 1:1 composition. Center the subject with generous margin. Use a simple flat solid backdrop only, with no environment, no scene, no background objects, no ground shadow and no gradient backdrop.");
+  parts.push("Use crisp edges, a strong silhouette, high contrast and a thick clean outline suitable for automatic background removal.");
+  parts.push("No watermark, no signature, no frame, no unrelated logos, no extra characters and no extra text.");
+  return parts.join(" ");
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  if (req.method !== "POST") return respond({ error: "METHOD_NOT_ALLOWED" }, 405);
+
+  const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+  const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const KIE_API_KEY = Deno.env.get("KIE_API_KEY") ?? "";
+  const MODEL = Deno.env.get("KIE_STICKER_MODEL") || DEFAULT_MODEL;
+
+  const authHeader = req.headers.get("Authorization") ?? "";
+  if (!authHeader.startsWith("Bearer ")) return respond({ error: "UNAUTHENTICATED" }, 401);
+
+  const userClient = createClient(SUPABASE_URL, ANON_KEY, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data: authData, error: authError } = await userClient.auth.getUser();
+  if (authError || !authData.user) return respond({ error: "UNAUTHENTICATED" }, 401);
+  const user = authData.user;
+
+  const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  let body: Record<string, unknown>;
+  try { body = (await req.json()) as Record<string, unknown>; } catch { return respond({ error: "INVALID_BODY" }, 400); }
+
+  const isMember = async (workspaceId: string) => {
+    const { data } = await admin.from("workspace_members").select("user_id").eq("workspace_id", workspaceId).eq("user_id", user.id).maybeSingle();
+    return Boolean(data);
+  };
+
+  const action = String(body.action ?? "");
+  if (action === "config") {
+    return respond({ configured: Boolean(KIE_API_KEY), model: MODEL, backgroundModel: BG_MODEL });
+  }
+  if (!KIE_API_KEY) {
+    return respond({ error: "KIE_NOT_CONFIGURED", message: "KIE_API_KEY is not configured in Supabase Edge Function secrets." }, 503);
+  }
+
+  const failSticker = async (job: Record<string, unknown>, message: string, code = "PROVIDER_FAILED") => {
+    await admin.from("ai_jobs").update({
+      status: "failed", error_code: code, error_message: message.slice(0, 500), completed_at: new Date().toISOString(),
+    }).eq("id", String(job.id));
+    if (job.sticker_id) {
+      const input = (job.input_json && typeof job.input_json === "object" ? job.input_json : {}) as Record<string, unknown>;
+      const prior = typeof input.prior_image_asset_id === "string" ? input.prior_image_asset_id : null;
+      await admin.from("stickers").update({ status: prior ? "ready" : "failed" }).eq("id", String(job.sticker_id));
+    }
+    return respond({ aiJobId: job.id, jobType: job.job_type, status: "failed", error: message });
+  };
+
+  const logCredits = async (job: Record<string, unknown>, credits: number | null) => {
+    if (credits == null) return;
+    const { data: existing } = await admin.from("usage_ledger").select("id").eq("ai_job_id", String(job.id)).maybeSingle();
+    if (existing) return;
+    await admin.from("usage_ledger").insert({
+      workspace_id: job.workspace_id, user_id: job.user_id, ai_job_id: job.id,
+      action_type: String(job.job_type), units: credits, provider_cost: null, internal_cost: null,
+    });
+  };
+
+  try {
+    if (action === "start") {
+      const workspaceId = String(body.workspaceId ?? "");
+      const packId = String(body.packId ?? "");
+      const stickerId = String(body.stickerId ?? "");
+      if (!workspaceId || !packId || !stickerId) return respond({ error: "INVALID_INPUT" }, 400);
+      if (!(await isMember(workspaceId))) return respond({ error: "FORBIDDEN" }, 403);
+
+      const { data: pack } = await admin.from("sticker_packs").select("*").eq("id", packId).eq("workspace_id", workspaceId).maybeSingle();
+      if (!pack) return respond({ error: "PACK_NOT_FOUND" }, 404);
+      const { data: sticker } = await admin.from("stickers").select("*").eq("id", stickerId).eq("pack_id", packId).maybeSingle();
+      if (!sticker) return respond({ error: "STICKER_NOT_FOUND" }, 404);
+
+      let refs: Array<{ id: string; storage_path: string; asset_type: string }> = [];
+      const explicit = stringArray(body.referenceAssetIds).slice(0, 3);
+      if (explicit.length) {
+        const { data } = await admin.from("media_assets").select("id,storage_path,asset_type").eq("workspace_id", workspaceId).in("id", explicit);
+        refs = data ?? [];
+      }
+      if (!refs.length && pack.reference_asset_id) {
+        const { data } = await admin.from("media_assets").select("id,storage_path,asset_type").eq("workspace_id", workspaceId).eq("id", pack.reference_asset_id).maybeSingle();
+        if (data) refs = [data];
+      }
+      if (!refs.length) {
+        const { data } = await admin.from("media_assets").select("id,storage_path,asset_type,created_at").eq("workspace_id", workspaceId).in("asset_type", ["mascot", "reference_image", "logo"]).order("created_at", { ascending: false });
+        const priority = ["mascot", "reference_image", "logo"];
+        const candidate = (data ?? []).sort((a, b) => priority.indexOf(a.asset_type) - priority.indexOf(b.asset_type))[0];
+        if (candidate) refs = [candidate];
+      }
+      if (!refs.length) return respond({ error: "NO_REFERENCE", message: "Upload or select a mascot/reference image before generating." }, 400);
+
+      const signedUrls: string[] = [];
+      for (const ref of refs) {
+        const { data } = await admin.storage.from(BUCKET).createSignedUrl(ref.storage_path, SIGNED_URL_TTL);
+        if (data?.signedUrl) signedUrls.push(data.signedUrl);
+      }
+      if (!signedUrls.length) return respond({ error: "REFERENCE_UNAVAILABLE" }, 400);
+
+      const { data: brand } = await admin.from("brand_kits").select("*").eq("workspace_id", workspaceId).maybeSingle();
+      const prompt = buildPrompt(brand, pack, sticker);
+      const priorAssetId = sticker.image_asset_id ?? null;
+
+      const { data: job, error: jobError } = await admin.from("ai_jobs").insert({
+        workspace_id: workspaceId, user_id: user.id, pack_id: packId, sticker_id: stickerId,
+        job_type: "sticker_generate", provider: "kie", provider_model: MODEL, status: "queued",
+        input_json: { model: MODEL, prompt, reference_asset_ids: refs.map((r) => r.id), prior_image_asset_id: priorAssetId },
+      }).select("*").single();
+      if (jobError || !job) return respond({ error: "JOB_CREATE_FAILED" }, 500);
+
+      const create = await kieRequest("/api/v1/jobs/createTask", KIE_API_KEY, {
+        method: "POST",
+        body: JSON.stringify({ model: MODEL, input: { input_urls: signedUrls, prompt, aspect_ratio: "1:1", resolution: "1K", nsfw_checker: true } }),
+      });
+      const taskId = create.ok ? String(create.data.taskId ?? create.data.task_id ?? "") : "";
+      if (!create.ok || !taskId) return await failSticker(job, create.ok ? "Kie.ai returned no task ID." : create.message, "PROVIDER_START_FAILED");
+
+      await admin.from("ai_jobs").update({ status: "running", provider_task_id: taskId }).eq("id", job.id);
+      await admin.from("stickers").update({ status: "generating" }).eq("id", stickerId);
+      await admin.from("sticker_packs").update({ status: "generating" }).eq("id", packId);
+      return respond({ aiJobId: job.id, status: "running", model: MODEL });
+    }
+
+    if (action === "sync") {
+      const aiJobId = String(body.aiJobId ?? "");
+      if (!aiJobId) return respond({ error: "INVALID_INPUT" }, 400);
+      const { data: job } = await admin.from("ai_jobs").select("*").eq("id", aiJobId).maybeSingle();
+      if (!job) return respond({ error: "JOB_NOT_FOUND" }, 404);
+      if (!(await isMember(job.workspace_id))) return respond({ error: "FORBIDDEN" }, 403);
+
+      if (job.status === "failed") return respond({ aiJobId: job.id, jobType: job.job_type, status: "failed", error: job.error_message });
+      if (job.status === "succeeded") {
+        const output = (job.output_json ?? {}) as Record<string, unknown>;
+        return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", childJobId: output.child_job_id ?? null, assetId: output.asset_id ?? null, transparencyValid: output.transparency_valid ?? null });
+      }
+      if (!job.provider_task_id) return respond({ aiJobId: job.id, jobType: job.job_type, status: job.status });
+
+      const query = await kieRequest(`/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(job.provider_task_id)}`, KIE_API_KEY, { method: "GET" });
+      if (!query.ok) return respond({ aiJobId: job.id, jobType: job.job_type, status: "running", providerMessage: query.message });
+
+      const data = query.data;
+      const state = mapKieState(data.state ?? data.status);
+      if (state === "running") {
+        if (job.status !== "running") await admin.from("ai_jobs").update({ status: "running" }).eq("id", job.id);
+        return respond({ aiJobId: job.id, jobType: job.job_type, status: "running" });
+      }
+      if (state === "fail") {
+        const failMessage = typeof data.failMsg === "string" && data.failMsg ? data.failMsg : "Kie.ai could not complete this task.";
+        return await failSticker(job, failMessage);
+      }
+
+      const resultUrl = resultUrlFrom(data);
+      if (!resultUrl) return await failSticker(job, "Kie.ai returned no usable image URL.");
+      const credits = creditsFrom(data);
+
+      if (job.job_type === "sticker_generate") {
+        const existingOutput = (job.output_json ?? {}) as Record<string, unknown>;
+        let childJobId = typeof existingOutput.child_job_id === "string" ? existingOutput.child_job_id : null;
+        if (!childJobId) {
+          const { data: existingChild } = await admin.from("ai_jobs").select("id").eq("job_type", "remove_background").eq("sticker_id", job.sticker_id).contains("input_json", { parent_job_id: job.id }).maybeSingle();
+          childJobId = existingChild?.id ?? null;
+        }
+        if (!childJobId) {
+          const priorAssetId = job.input_json && typeof job.input_json === "object" ? (job.input_json as Record<string, unknown>).prior_image_asset_id ?? null : null;
+          const { data: child, error: childError } = await admin.from("ai_jobs").insert({
+            workspace_id: job.workspace_id, user_id: job.user_id, pack_id: job.pack_id, sticker_id: job.sticker_id,
+            job_type: "remove_background", provider: "kie", provider_model: BG_MODEL, status: "queued",
+            input_json: { parent_job_id: job.id, prior_image_asset_id: priorAssetId, model: BG_MODEL },
+          }).select("*").single();
+          if (childError || !child) return await failSticker(job, "Could not create the background-removal job.");
+          childJobId = child.id;
+
+          const bgCreate = await kieRequest("/api/v1/jobs/createTask", KIE_API_KEY, {
+            method: "POST",
+            body: JSON.stringify({ model: BG_MODEL, input: { image: resultUrl, nsfw_checker: true } }),
+          });
+          const bgTaskId = bgCreate.ok ? String(bgCreate.data.taskId ?? bgCreate.data.task_id ?? "") : "";
+          if (!bgCreate.ok || !bgTaskId) {
+            await admin.from("ai_jobs").update({ status: "failed", error_code: "BACKGROUND_START_FAILED", error_message: bgCreate.ok ? "Kie.ai returned no background-removal task ID." : bgCreate.message, completed_at: new Date().toISOString() }).eq("id", childJobId);
+            const prior = typeof priorAssetId === "string" ? priorAssetId : null;
+            await admin.from("stickers").update({ status: prior ? "ready" : "failed" }).eq("id", job.sticker_id);
+          } else {
+            await admin.from("ai_jobs").update({ status: "running", provider_task_id: bgTaskId }).eq("id", childJobId);
+          }
+        }
+
+        await admin.from("ai_jobs").update({ status: "succeeded", completed_at: new Date().toISOString(), output_json: { generation_result_received: true, child_job_id: childJobId } }).eq("id", job.id);
+        await logCredits(job, credits);
+        return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", childJobId, stage: "background_removal" });
+      }
+
+      if (job.job_type === "remove_background") {
+        let sourceBytes: Uint8Array;
+        try {
+          const imageResponse = await fetch(resultUrl);
+          if (!imageResponse.ok) throw new Error("download failed");
+          sourceBytes = new Uint8Array(await imageResponse.arrayBuffer());
+        } catch {
+          return await failSticker(job, "Could not download the background-removed image.", "IMAGE_DOWNLOAD_FAILED");
+        }
+
+        let width = 0;
+        let height = 0;
+        let transparent = false;
+        let finalPng: Uint8Array | null = null;
+        try {
+          ImageMagick.read(sourceBytes, (img) => {
+            width = img.width;
+            height = img.height;
+            transparent = img.hasAlpha === true && img.isOpaque === false;
+            if (transparent) img.write(MagickFormat.Png, (bytes) => { finalPng = Uint8Array.from(bytes); });
+          });
+        } catch {
+          return await failSticker(job, "The processed image could not be decoded for transparency validation.", "TRANSPARENCY_DECODE_FAILED");
+        }
+        if (!transparent || !finalPng) return await failSticker(job, "Transparency validation failed: the processed image does not contain real transparent pixels.", "TRANSPARENCY_FAILED");
+
+        const path = `${job.workspace_id}/generated_sticker/${crypto.randomUUID()}.png`;
+        const { error: uploadError } = await admin.storage.from(BUCKET).upload(path, finalPng, { contentType: "image/png", upsert: false });
+        if (uploadError) return await failSticker(job, "Could not save the finished sticker image.", "STORAGE_UPLOAD_FAILED");
+
+        const parentJobId = job.input_json && typeof job.input_json === "object" ? (job.input_json as Record<string, unknown>).parent_job_id : null;
+        let parentTaskId: string | null = null;
+        let parentModel: string | null = null;
+        if (typeof parentJobId === "string") {
+          const { data: parent } = await admin.from("ai_jobs").select("provider_task_id,provider_model").eq("id", parentJobId).maybeSingle();
+          parentTaskId = parent?.provider_task_id ?? null;
+          parentModel = parent?.provider_model ?? null;
+        }
+
+        const { data: asset, error: assetError } = await admin.from("media_assets").insert({
+          workspace_id: job.workspace_id, uploaded_by: job.user_id, storage_path: path, asset_type: "generated_sticker",
+          mime_type: "image/png", width, height, file_size_bytes: finalPng.byteLength, transparency_valid: true,
+          metadata: { source: "kie", generation_model: parentModel, generation_task_id: parentTaskId, background_model: job.provider_model, background_task_id: job.provider_task_id, generation_job_id: parentJobId, background_job_id: job.id },
+        }).select("id").single();
+        if (assetError || !asset) {
+          await admin.storage.from(BUCKET).remove([path]);
+          return await failSticker(job, "Could not record the finished sticker asset.", "ASSET_RECORD_FAILED");
+        }
+
+        await admin.from("stickers").update({ image_asset_id: asset.id, status: "ready" }).eq("id", job.sticker_id);
+        await admin.from("ai_jobs").update({ status: "succeeded", completed_at: new Date().toISOString(), output_json: { asset_id: asset.id, storage_path: path, transparency_valid: true, width, height } }).eq("id", job.id);
+        await logCredits(job, credits);
+
+        if (job.pack_id) {
+          const { data: siblings } = await admin.from("stickers").select("status").eq("pack_id", job.pack_id);
+          const all = siblings ?? [];
+          const allReady = all.length > 0 && all.every((s) => s.status === "ready");
+          await admin.from("sticker_packs").update({ status: allReady ? "review" : "draft" }).eq("id", job.pack_id);
+        }
+
+        return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", assetId: asset.id, transparencyValid: true, stage: "ready" });
+      }
+
+      return respond({ aiJobId: job.id, jobType: job.job_type, status: job.status });
+    }
+
+    return respond({ error: "UNKNOWN_ACTION" }, 400);
+  } catch (error) {
+    console.error("[sticker-ai] unexpected error", error instanceof Error ? error.message : "unknown");
+    return respond({ error: "INTERNAL_ERROR", message: "Unexpected server error." }, 500);
+  }
+});
