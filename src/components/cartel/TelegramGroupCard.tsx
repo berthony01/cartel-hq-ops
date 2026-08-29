@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Copy, Loader2, Users } from "lucide-react";
+import { Copy, Loader2, MessageSquarePlus, Users } from "lucide-react";
 
 import { useWorkspace } from "@/lib/workspace-context";
 import { useTelegramLauncher } from "@/hooks/useTelegramLauncher";
@@ -22,6 +22,7 @@ import {
   type TelegramGroupConnection,
   type TelegramGroupStatusResult,
 } from "@/lib/telegram-group";
+import { CommunityWelcomeDialog } from "@/components/cartel/CommunityWelcomeDialog";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -930,6 +931,7 @@ export function TelegramGroupCard({
                 onToggle={() => toggleGroup(r.group.id)}
                 onRecheck={() => void recheckGroup(r.group.id, false)}
                 checking={checkingId === r.group.id}
+                workspaceId={workspaceId}
               />
             ))}
           </ul>
