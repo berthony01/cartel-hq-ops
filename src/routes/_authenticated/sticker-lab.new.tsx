@@ -1034,29 +1034,31 @@ function StickerLabBuilder() {
    * Batch distribution of the ALREADY published sticker set to the selected
    * connected groups. Never creates or re-creates a Telegram sticker set.
    */
-  const doDistribute = async () => {
-    if (!packId || !workspaceId || selectedGroupIds.length === 0) return;
+  const doDistribute = async (groupIds: string[] = selectedGroupIds) => {
+    if (!packId || !workspaceId || groupIds.length === 0) return;
     setDistributing(true);
     setDistError(null);
     try {
       const result = await distributePackToGroups({
         workspaceId,
         packId,
-        groupConnectionIds: selectedGroupIds,
+        groupConnectionIds: groupIds,
       });
       setDistResult(result);
       await loadTelegramState(packId);
       await loadDistribution(packId);
       if (result.status === "complete") {
         toast.success(
-          `${result.total} group${result.total === 1 ? "" : "s"} updated: ${result.assigned} official set, ${result.announced} announced.`,
+          `${result.total} communit${result.total === 1 ? "y" : "ies"} updated: ${result.assigned} official set, ${result.announced} announced.`,
         );
       } else if (result.status === "partial") {
         toast.warning(
-          `${result.total - result.failed} of ${result.total} groups updated, ${result.failed} need retry.`,
+          `${result.total - result.failed} of ${result.total} communities updated, ${result.failed} need retry.`,
         );
       } else {
-        toast.error("Distribution to the selected groups failed. The sticker set stays published.");
+        toast.error(
+          "Distribution to the selected communities failed. The sticker set stays published.",
+        );
       }
     } catch (err) {
       setDistError(telegramErrorMessage(err));
@@ -1066,7 +1068,13 @@ function StickerLabBuilder() {
     }
   };
 
-  const doPublish = async () => {
+  /**
+   * `publishPack()` creates the set once and afterwards only adds stickers that
+   * are not published yet. `distributeIds` controls exactly which communities
+   * receive a follow-up distribution — already-successful ones are never
+   * re-announced.
+   */
+  const doPublish = async (distributeIds: string[] = selectedGroupIds) => {
     if (!packId || !workspaceId) return;
     setPublishing(true);
     setTgError(null);
@@ -1076,8 +1084,9 @@ function StickerLabBuilder() {
       await loadTelegramState(packId);
       if (result.status === "published") {
         toast.success(`Published ${result.published} of ${result.total} stickers to Telegram.`);
-        // One publish, then exactly one batch distribution to the selected groups.
-        await doDistribute();
+        // One publish, then at most one batch distribution to the communities
+        // that actually need it.
+        if (distributeIds.length > 0) await doDistribute(distributeIds);
       } else if (result.status === "partial") {
         toast.warning(
           `${result.published} of ${result.total} published, ${result.failed} need retry.`,
