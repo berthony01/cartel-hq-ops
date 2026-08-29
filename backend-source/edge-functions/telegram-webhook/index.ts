@@ -391,13 +391,8 @@ Deno.serve(async (req: Request) => {
     if (groupError || !groupRow) throw new Error(groupError?.message ?? "Could not save Telegram group connection.");
     await admin.from("telegram_link_requests").update({ status: "connected", consumed_at: now, telegram_user_id: actorId, metadata: { ...(link.metadata ?? {}), group_connection_id: groupRow.id, telegram_chat_id: chatId, group_title: groupRow.title, last_group_check: diagnostic } }).eq("id", link.id);
     await markGroupLinked(chatId, workspaceId);
-    if (resolvedChatType === "group") {
-      await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "✅ This Telegram group is connected to CARTEL HQ. You can publish sticker packs, share pack links here, and send native stickers through the bot. Assigning an official group sticker set is an optional Telegram feature that requires a supergroup.");
-    } else if (canSetStickerSet) {
-      await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "✅ This supergroup is connected to CARTEL HQ and Telegram reports that official group sticker-set assignment is available. Return to CARTEL HQ to publish.");
-    } else {
-      await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "✅ This supergroup is connected to CARTEL HQ. You can publish the pack, share its link here, and send native stickers through the bot. Telegram has not enabled optional official group sticker-set assignment for this group yet.");
-    }
+    await sendMessage(TELEGRAM_BOT_TOKEN, chatId, communityConnectedText(String(groupRow.title ?? "")), { parse_mode: "HTML" });
+
     return { ok: true, groupRow };
   };
 
