@@ -2553,56 +2553,59 @@ function StickerLabBuilder() {
                 </p>
               ) : null}
 
-              {distTargets.length > 0 || distResult ? (
+              {telegramGroup.groups.length > 0 ? (
                 <ul className="space-y-2 text-xs">
-                  {/* Durable per-group history is authoritative; the most recent
-                      run only fills in before the persisted state has loaded. */}
-                  {(distTargets.length > 0
-                    ? distTargets.map((t) => ({
-                        id: t.group_connection_id,
-                        title:
-                          telegramGroup.groups.find((g) => g.id === t.group_connection_id)?.title ??
-                          "Connected group",
-                        status: t.status,
-                        detail: t.last_error,
-                      }))
-                    : (distResult?.results ?? []).map((r) => ({
-                        id: r.groupConnectionId,
-                        title: r.title,
-                        status: r.status,
-                        detail: r.message ?? r.reason ?? null,
-                      }))
-
-                  ).map((row) => (
-                    <li
-                      key={row.id}
-                      className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-background/40 p-2"
-                    >
-                      <span className="font-medium text-foreground">{row.title}</span>
-                      <StatusBadge
-                        tone={
-                          row.status === "assigned"
-                            ? "green"
-                            : row.status === "announced"
-                              ? "gold"
-                              : row.status === "failed"
-                                ? "red"
-                                : "muted"
-                        }
+                  {/* Every connected community is listed for THIS pack. Durable
+                      per-group rows are authoritative; the most recent run only
+                      fills in before the persisted state has loaded. */}
+                  {telegramGroup.groups.map((g) => {
+                    const persisted = distTargets.find((t) => t.group_connection_id === g.id);
+                    const live = distResult?.results.find((r) => r.groupConnectionId === g.id);
+                    const status = persisted?.status ?? live?.status ?? null;
+                    const detail = persisted?.last_error ?? live?.message ?? live?.reason ?? null;
+                    const isSelected = selectedGroupIds.includes(g.id);
+                    return (
+                      <li
+                        key={g.id}
+                        className="flex min-w-0 flex-wrap items-center gap-2 rounded-md border border-border/60 bg-background/40 p-2"
                       >
-                        {row.status === "assigned"
-                          ? "Assigned as official group set"
-                          : row.status === "announced"
-                            ? "Pack announced in group"
-                            : row.status === "failed"
-                              ? "Failed — retry needed"
-                              : row.status}
-                      </StatusBadge>
-                      {row.detail ? (
-                        <span className="text-muted-foreground">{row.detail}</span>
-                      ) : null}
-                    </li>
-                  ))}
+                        <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+                          {g.title}
+                        </span>
+                        <StatusBadge
+                          tone={
+                            status === "assigned"
+                              ? "green"
+                              : status === "announced"
+                                ? "gold"
+                                : status === "failed"
+                                  ? "red"
+                                  : "muted"
+                          }
+                        >
+                          {status === "assigned"
+                            ? "Official set"
+                            : status === "announced"
+                              ? "Pack announced"
+                              : status === "failed"
+                                ? "Needs retry"
+                                : status
+                                  ? status
+                                  : "Not added yet"}
+                        </StatusBadge>
+                        {isSelected ? (
+                          <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                            selected
+                          </span>
+                        ) : null}
+                        {detail ? (
+                          <span className="w-full text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
+                            {detail}
+                          </span>
+                        ) : null}
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : null}
 
