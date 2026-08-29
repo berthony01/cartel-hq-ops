@@ -28,6 +28,7 @@ import { Route as AuthenticatedStickerLabRouteImport } from './routes/_authentic
 import { Route as AuthenticatedTelegramRouteImport } from './routes/_authenticated/telegram'
 import { Route as AuthCallbackRouteImport } from './routes/auth_.callback'
 import { Route as AuthenticatedStickerLabIndexRouteImport } from './routes/_authenticated/sticker-lab.index'
+import { Route as AuthenticatedStickerLabPackIdRouteImport } from './routes/_authenticated/sticker-lab.$packId'
 import { Route as AuthenticatedStickerLabNewRouteImport } from './routes/_authenticated/sticker-lab.new'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -128,6 +129,12 @@ const AuthenticatedStickerLabIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedStickerLabRoute,
   } as any)
+const AuthenticatedStickerLabPackIdRoute =
+  AuthenticatedStickerLabPackIdRouteImport.update({
+    id: '/$packId',
+    path: '/$packId',
+    getParentRoute: () => AuthenticatedStickerLabRoute,
+  } as any)
 const AuthenticatedStickerLabNewRoute =
   AuthenticatedStickerLabNewRouteImport.update({
     id: '/new',
@@ -153,6 +160,7 @@ export interface FileRoutesByFullPath {
   '/sticker-lab': typeof AuthenticatedStickerLabRouteWithChildren
   '/telegram': typeof AuthenticatedTelegramRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
   '/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
   '/sticker-lab/': typeof AuthenticatedStickerLabIndexRoute
 }
@@ -173,6 +181,7 @@ export interface FileRoutesByTo {
   '/telegram': typeof AuthenticatedTelegramRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/': typeof AuthenticatedIndexRoute
+  '/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
   '/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
   '/sticker-lab': typeof AuthenticatedStickerLabIndexRoute
 }
@@ -196,6 +205,7 @@ export interface FileRoutesById {
   '/_authenticated/telegram': typeof AuthenticatedTelegramRoute
   '/auth_/callback': typeof AuthCallbackRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
   '/_authenticated/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
   '/_authenticated/sticker-lab/': typeof AuthenticatedStickerLabIndexRoute
 }
@@ -219,6 +229,7 @@ export interface FileRouteTypes {
     | '/sticker-lab'
     | '/telegram'
     | '/auth/callback'
+    | '/sticker-lab/$packId'
     | '/sticker-lab/new'
     | '/sticker-lab/'
   fileRoutesByTo: FileRoutesByTo
@@ -239,6 +250,7 @@ export interface FileRouteTypes {
     | '/telegram'
     | '/auth/callback'
     | '/'
+    | '/sticker-lab/$packId'
     | '/sticker-lab/new'
     | '/sticker-lab'
   id:
@@ -261,6 +273,7 @@ export interface FileRouteTypes {
     | '/_authenticated/telegram'
     | '/auth_/callback'
     | '/_authenticated/'
+    | '/_authenticated/sticker-lab/$packId'
     | '/_authenticated/sticker-lab/new'
     | '/_authenticated/sticker-lab/'
   fileRoutesById: FileRoutesById
@@ -406,6 +419,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStickerLabIndexRouteImport
       parentRoute: typeof AuthenticatedStickerLabRoute
     }
+    '/_authenticated/sticker-lab/$packId': {
+      id: '/_authenticated/sticker-lab/$packId'
+      path: '/$packId'
+      fullPath: '/sticker-lab/$packId'
+      preLoaderRoute: typeof AuthenticatedStickerLabPackIdRouteImport
+      parentRoute: typeof AuthenticatedStickerLabRoute
+    }
     '/_authenticated/sticker-lab/new': {
       id: '/_authenticated/sticker-lab/new'
       path: '/new'
@@ -417,12 +437,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedStickerLabRouteChildren {
+  AuthenticatedStickerLabPackIdRoute: typeof AuthenticatedStickerLabPackIdRoute
   AuthenticatedStickerLabNewRoute: typeof AuthenticatedStickerLabNewRoute
   AuthenticatedStickerLabIndexRoute: typeof AuthenticatedStickerLabIndexRoute
 }
 
 const AuthenticatedStickerLabRouteChildren: AuthenticatedStickerLabRouteChildren =
   {
+    AuthenticatedStickerLabPackIdRoute: AuthenticatedStickerLabPackIdRoute,
     AuthenticatedStickerLabNewRoute: AuthenticatedStickerLabNewRoute,
     AuthenticatedStickerLabIndexRoute: AuthenticatedStickerLabIndexRoute,
   }
