@@ -27,6 +27,11 @@ import { EmptyState } from "@/components/cartel/EmptyState";
 import { Button } from "@/components/ui/button";
 import { usePlatformAccess } from "@/hooks/usePlatformAccess";
 import {
+  TelegramConnectionCard,
+  useTelegramSetup,
+} from "@/components/cartel/TelegramConnectionCard";
+
+import {
   formatCost,
   formatCount,
   formatTimestamp,
