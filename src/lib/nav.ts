@@ -13,6 +13,8 @@ import {
   Award,
   BarChart3,
   MessageSquare,
+  ShieldHalf,
+
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -90,6 +92,8 @@ export const NAV_SECTIONS: NavSection[] = [
         mobilePrimary: true,
       },
       { label: "Settings", to: "/settings", icon: Settings },
+      { label: "Owner Console", to: "/admin", icon: ShieldHalf, ownerOnly: true },
+
     ],
   },
 ];
