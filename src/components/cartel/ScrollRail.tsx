@@ -29,6 +29,9 @@ export function ScrollRail({
       aria-label={rest["aria-label"]}
       className={cn(
         "no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0",
+        // Right-edge fade so horizontal scrolling reads as intentional on mobile.
+        "[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%-1.75rem),transparent_100%)] lg:[mask-image:none]",
+        "pr-8 sm:pr-6 lg:pr-0",
         snap && "snap-x snap-mandatory",
         "[&>*]:shrink-0",
         snap && "[&>*]:snap-start",

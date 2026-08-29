@@ -22,9 +22,10 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase leading-tight tracking-[0.12em]",
+        "inline-flex min-w-0 max-w-full items-center gap-1 overflow-hidden rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase leading-tight tracking-[0.12em]",
+        "whitespace-nowrap text-ellipsis",
         "sm:gap-1.5 sm:px-2.5 sm:py-1 sm:text-[11px] sm:tracking-[0.14em]",
-        "[&>span]:truncate",
+        "[&>span]:min-w-0 [&>span]:truncate",
         TONES[tone],
         className,
       )}

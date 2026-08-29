@@ -56,19 +56,21 @@ export function Section({
             {leading ? <span className="mt-0.5 shrink-0 text-gold">{leading}</span> : null}
             <div className="min-w-0">
               {title ? (
-                <h2 className="truncate text-sm font-semibold uppercase tracking-[0.14em] text-foreground">
+                <h2 className="min-w-0 text-sm font-semibold uppercase tracking-[0.14em] text-foreground [overflow-wrap:anywhere]">
                   {title}
                 </h2>
               ) : null}
               {description ? (
-                <p className="mt-1 max-w-prose text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                <p className="mt-1 max-w-prose text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere] sm:text-sm">
                   {description}
                 </p>
               ) : null}
             </div>
           </div>
           {actions ? (
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{actions}</div>
+            <div className="flex min-w-0 max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
+              {actions}
+            </div>
           ) : null}
         </div>
       ) : null}

@@ -43,16 +43,20 @@ export function InlineRow({
         ) : null}
       </span>
       {meta ? (
-        <span className="shrink-0 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+        <span className="min-w-0 max-w-[40%] shrink-0 truncate text-[11px] uppercase tracking-[0.12em] text-muted-foreground sm:max-w-none">
           {meta}
         </span>
       ) : null}
-      {trailing ? <span className="shrink-0">{trailing}</span> : null}
+      {trailing ? (
+        <span className="flex min-w-0 max-w-[60%] shrink-0 flex-wrap items-center justify-end gap-1.5 sm:max-w-none sm:flex-nowrap">
+          {trailing}
+        </span>
+      ) : null}
     </>
   );
 
   const base = cn(
-    "touch-target flex w-full items-center gap-3 rounded-lg border border-border/60 bg-surface-raised/40 px-3 py-2.5",
+    "flex w-full min-w-0 min-h-11 items-center gap-3 rounded-lg border border-border/60 bg-surface-raised/40 px-3 py-2.5",
     active && "border-gold/50 bg-gold/10",
     className,
   );
