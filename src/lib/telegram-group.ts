@@ -240,6 +240,23 @@ export const WELCOME_MESSAGE_MAX = 3500;
 export const WELCOME_AUTO_DELETE_MIN = 10;
 export const WELCOME_AUTO_DELETE_MAX = 120;
 
+/** Result code written by the webhook after a real member join. */
+export type WelcomeJoinResult =
+  | "sent"
+  | "send_failed"
+  | "skipped_disabled"
+  | "skipped_no_message"
+  | (string & {});
+
+/** Diagnostics the webhook records on `telegram_community_settings.metadata`. */
+export type TelegramCommunitySettingsMetadata = {
+  last_join_detected_at?: string | null;
+  last_welcome_result?: WelcomeJoinResult | null;
+  last_welcome_sent_at?: string | null;
+  last_welcome_message_id?: number | null;
+  [key: string]: unknown;
+};
+
 /** Persisted per-community welcome configuration (`telegram_community_settings`). */
 export type TelegramCommunitySettings = {
   group_connection_id: string;
@@ -249,6 +266,8 @@ export type TelegramCommunitySettings = {
   mention_member: boolean;
   auto_delete_enabled: boolean;
   auto_delete_seconds: number;
+  /** Present only when the server includes it; diagnostics are read-only here. */
+  metadata?: TelegramCommunitySettingsMetadata | null;
 };
 
 export type TelegramCommunitySettingsResult = {

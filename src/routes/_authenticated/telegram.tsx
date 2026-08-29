@@ -74,10 +74,12 @@ function TelegramPage() {
 
       {groupCount > 0 ? (
         <div className="rounded-md border border-gold/30 bg-gold/5 p-3 text-xs leading-relaxed text-foreground">
-          <p className="font-semibold text-gold">Welcome and onboarding is live.</p>
+          <p className="font-semibold text-gold">Welcome and onboarding controls are available.</p>
           <p className="mt-1 text-muted-foreground">
             Select a connected community, open Community controls, then choose Welcome and onboarding
-            to set the join message, member mention, and auto-delete timer.
+            to set the join message, member mention, and auto-delete timer. Each community must
+            explicitly enable its real join welcome. Until that switch is on for a community, new
+            members there receive nothing.
           </p>
         </div>
       ) : null}
