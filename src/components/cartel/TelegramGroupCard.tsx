@@ -953,7 +953,7 @@ export function TelegramGroupCard({
             ) : (
               <Users className="size-4" aria-hidden="true" />
             )}
-            {identityState === "connected" && !personalConnected
+            {identityState === "connected"
               ? "Choose Telegram Community"
               : groups.length > 0
                 ? "Connect another community"
