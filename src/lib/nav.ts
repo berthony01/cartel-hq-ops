@@ -71,6 +71,13 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Operations", to: "/operations", icon: Radio, status: "planned" },
       { label: "Missions", to: "/missions", icon: Target, status: "planned" },
       { label: "Operatives", to: "/operatives", icon: Users, status: "planned" },
+      {
+        label: "Community Hub",
+        to: "/telegram",
+        icon: MessageSquare,
+        mobilePrimary: true,
+        mobileLabel: "Community",
+      },
       { label: "Distribution Center", to: "/distribution", icon: Send },
     ],
   },
@@ -85,17 +92,8 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "System",
     items: [
-      {
-        label: "Community Hub",
-        to: "/telegram",
-        icon: MessageSquare,
-        mobilePrimary: true,
-        mobileLabel: "Community",
-      },
-
       { label: "Settings", to: "/settings", icon: Settings },
       { label: "Owner Console", to: "/admin", icon: ShieldHalf, ownerOnly: true },
-
     ],
   },
 ];
