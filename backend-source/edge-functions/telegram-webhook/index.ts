@@ -492,7 +492,7 @@ Deno.serve(async (req: Request) => {
     if (newMembers.length > 0 && chatId && (chat?.type === "group" || chat?.type === "supergroup")) {
       const humans = newMembers.filter((m: any) => m && m.is_bot !== true && m.id != null);
       if (humans.length === 0) return json({ ok: true });
-      const { data: connection } = await admin.from("telegram_group_connections").select("id,title").eq("telegram_chat_id", Number(chatId)).maybeSingle();
+      const { data: connection } = await admin.from("telegram_group_connections").select("id,title").eq("telegram_chat_id", chatId).maybeSingle();
       if (!connection?.id) return json({ ok: true });
       const { data: settings } = await admin.from("telegram_community_settings").select("welcome_enabled,welcome_message,mention_member,auto_delete_enabled,auto_delete_seconds").eq("group_connection_id", connection.id).maybeSingle();
       if (!settings?.welcome_enabled || typeof settings.welcome_message !== "string" || !settings.welcome_message.trim()) return json({ ok: true });
