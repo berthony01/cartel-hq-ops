@@ -78,7 +78,7 @@ export type DropSchedule = {
 
 export type DropEvent = {
   id: string;
-  schedule_id?: string;
+  schedule_id?: string | null;
   group_connection_id: string;
   pack_id?: string;
   sticker_id?: string | null;
