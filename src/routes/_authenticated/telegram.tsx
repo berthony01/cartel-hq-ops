@@ -43,7 +43,7 @@ function TelegramPage() {
       <PageHeader
         eyebrow="Telegram"
         title="Telegram Communities"
-        description="Connect the Telegram groups and supergroups CARTEL HQ should work with, then run community controls there — welcome &amp; onboarding messages, published sticker pack distribution and automated Sticker Drops."
+        description="Connect the Telegram groups and supergroups CARTEL HQ should work with, then run community controls there — welcome and onboarding messages, published sticker pack distribution and automated Sticker Drops."
         status={groupCount > 0 ? "Connected · Live Beta" : "Live Beta"}
       />
 
