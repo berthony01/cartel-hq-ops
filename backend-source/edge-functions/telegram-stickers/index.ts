@@ -84,7 +84,7 @@ async function uploadStickerFile(token: string, userId: string, pngBytes: Uint8A
   form.append("sticker_format", "static");
   form.append("sticker", new Blob([pngBytes as BlobPart], { type: "image/png" }), "sticker.png");
   let res: Response;
-  try { res = await fetch(`${TG_BASE}/bot${token}/uploadStickerFile`, { method: "POST", body: form }); }
+  try { res = await tgFetch(`${TG_BASE}/bot${token}/uploadStickerFile`, { method: "POST", body: form }, TELEGRAM_UPLOAD_TIMEOUT_MS); }
   catch { throw new TelegramError("Could not upload the sticker to Telegram. Try again shortly."); }
   let payload: any = null;
   try { payload = await res.json(); } catch { payload = null; }
