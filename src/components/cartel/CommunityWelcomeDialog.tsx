@@ -226,6 +226,50 @@ export function CommunityWelcomeDialog({
           </p>
         ) : (
           <div className="space-y-4">
+            <div
+              className={
+                savedEnabled
+                  ? "rounded-md border border-emerald/50 bg-emerald/10 p-3"
+                  : "rounded-md border border-signal/50 bg-signal/10 p-3"
+              }
+            >
+              <p
+                className={
+                  savedEnabled
+                    ? "text-xs font-semibold uppercase tracking-[0.14em] text-emerald"
+                    : "text-xs font-semibold uppercase tracking-[0.14em] text-signal"
+                }
+              >
+                {savedEnabled ? "Real join welcome: ON" : "Real join welcome: OFF"}
+              </p>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                {savedEnabled
+                  ? "New members joining this community receive the saved welcome message."
+                  : "Test sends are previews only. New members joining this community receive nothing until you turn this on and save."}
+              </p>
+              {dirty ? (
+                <p className="mt-1 text-[11px] leading-relaxed text-gold">
+                  Unsaved changes. This state updates only after you press Save.
+                </p>
+              ) : null}
+            </div>
+
+            {diagnostic?.last_join_detected_at ? (
+              <div className="rounded-md border border-border/60 bg-background/40 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Last join diagnostic
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-foreground">
+                  Join detected
+                  {formatDiagnosticTime(diagnostic.last_join_detected_at)
+                    ? ` ${formatDiagnosticTime(diagnostic.last_join_detected_at)}`
+                    : ""}
+                  {" · "}
+                  {describeJoinResult(diagnostic.last_welcome_result)}
+                </p>
+              </div>
+            ) : null}
+
             {!canManage ? (
               <p className="rounded-md border border-border bg-surface-raised p-2.5 text-xs text-muted-foreground">
                 Only workspace owners and admins can change these settings.
@@ -234,7 +278,7 @@ export function CommunityWelcomeDialog({
 
             <div className="flex min-h-11 items-center justify-between gap-3">
               <Label htmlFor={`welcome-enabled-${group.id}`} className="text-xs">
-                Enable welcome message
+                Enable for real member joins
               </Label>
               <Switch
                 id={`welcome-enabled-${group.id}`}
