@@ -56,6 +56,13 @@ export type PlatformWorkspaceDetail = {
   name?: string | null;
   slug?: string | null;
   created_at?: string | null;
+  members?: number | null;
+  groups?: number | null;
+  packs?: number | null;
+  published_packs?: number | null;
+  schedules?: number | null;
+  enabled_schedules?: number | null;
+  /** Legacy aliases, tolerated if an older payload is served. */
   members_count?: number | null;
   groups_count?: number | null;
   packs_count?: number | null;
@@ -67,7 +74,6 @@ export type PlatformWorkspaceDetail = {
 export type PlatformTelegramGroupDetail = {
   id?: string | null;
   workspace_id?: string | null;
-  workspace_name?: string | null;
   title?: string | null;
   username?: string | null;
   chat_type?: string | null;
@@ -79,13 +85,14 @@ export type PlatformTelegramGroupDetail = {
 
 export type PlatformStickerPackDetail = {
   id?: string | null;
-  name?: string | null;
   workspace_id?: string | null;
-  workspace_name?: string | null;
+  title?: string | null;
   status?: string | null;
-  sticker_count?: number | null;
   telegram_set_name?: string | null;
+  telegram_set_url?: string | null;
+  telegram_published_at?: string | null;
   created_at?: string | null;
+  updated_at?: string | null;
 };
 
 export type PlatformDropScheduleDetail = {
@@ -96,6 +103,8 @@ export type PlatformDropScheduleDetail = {
   group_title?: string | null;
   group_username?: string | null;
   pack_id?: string | null;
+  pack_title?: string | null;
+  /** Legacy alias. */
   pack_name?: string | null;
   enabled?: boolean | null;
   paused_reason?: string | null;
@@ -115,6 +124,8 @@ export type PlatformDropEventDetail = {
   workspace_id?: string | null;
   workspace_name?: string | null;
   group_title?: string | null;
+  pack_title?: string | null;
+  /** Legacy alias. */
   pack_name?: string | null;
   status?: string | null;
   error_message?: string | null;
