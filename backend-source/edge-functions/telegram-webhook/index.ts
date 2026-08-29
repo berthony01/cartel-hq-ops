@@ -502,8 +502,24 @@ Deno.serve(async (req: Request) => {
       if (humans.length === 0) return json({ ok: true });
       const { data: connection } = await admin.from("telegram_group_connections").select("id,title").eq("telegram_chat_id", chatId).maybeSingle();
       if (!connection?.id) return json({ ok: true });
-      const { data: settings } = await admin.from("telegram_community_settings").select("welcome_enabled,welcome_message,mention_member,auto_delete_enabled,auto_delete_seconds").eq("group_connection_id", connection.id).maybeSingle();
-      if (!settings?.welcome_enabled || typeof settings.welcome_message !== "string" || !settings.welcome_message.trim()) return json({ ok: true });
+      const { data: settings } = await admin.from("telegram_community_settings").select("welcome_enabled,welcome_message,mention_member,auto_delete_enabled,auto_delete_seconds,metadata").eq("group_connection_id", connection.id).maybeSingle();
+      if (!settings) return json({ ok: true });
+
+      // Diagnostics only. No joining member identity is ever stored here.
+      const detectedAt = new Date().toISOString();
+      const priorMeta = settings.metadata && typeof settings.metadata === "object" ? settings.metadata as Record<string, unknown> : {};
+      const recordDiagnostic = async (result: string, extra: Record<string, unknown> = {}) => {
+        try {
+          await admin.from("telegram_community_settings")
+            .update({ metadata: { ...priorMeta, last_join_detected_at: detectedAt, last_welcome_result: result, ...extra } })
+            .eq("group_connection_id", connection.id);
+        } catch (e) {
+          console.error("[telegram-webhook] welcome diagnostic", e instanceof Error ? e.message : "unknown");
+        }
+      };
+
+      if (!settings.welcome_enabled) { await recordDiagnostic("skipped_disabled"); return json({ ok: true }); }
+      if (typeof settings.welcome_message !== "string" || !settings.welcome_message.trim()) { await recordDiagnostic("skipped_no_message"); return json({ ok: true }); }
 
       const communityName = escapeHtml(String(chat?.title ?? connection.title ?? "this community"));
       const single = humans.length === 1 ? humans[0] : null;
@@ -523,6 +539,8 @@ Deno.serve(async (req: Request) => {
 
       const sent = await sendMessage(TELEGRAM_BOT_TOKEN, chatId, rendered, { parse_mode: "HTML" });
       const sentId = (sent as any)?.message_id;
+      if (sentId) await recordDiagnostic("sent", { last_welcome_sent_at: new Date().toISOString(), last_welcome_message_id: sentId });
+      else await recordDiagnostic("send_failed");
       if (settings.auto_delete_enabled && sentId) {
         const delayMs = Math.min(120, Math.max(10, Number(settings.auto_delete_seconds) || 45)) * 1000;
         const cleanup = (async () => {
