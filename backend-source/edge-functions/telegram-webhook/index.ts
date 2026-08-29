@@ -558,12 +558,19 @@ Deno.serve(async (req: Request) => {
     if ((chat?.type === "group" || chat?.type === "supergroup") && /^\/(?:cartelhq|connect)(?:@\w+)?$/i.test(text)) {
       const link = await findPendingGroupLink(String(from.id));
       if (!link) {
+        const { data: existingConnection } = await admin.from("telegram_group_connections").select("id,title").eq("telegram_chat_id", chatId).maybeSingle();
+        if (existingConnection) {
+          const connectedTitle = escapeHtml(String(existingConnection.title ?? chat?.title ?? "This community"));
+          await sendMessage(TELEGRAM_BOT_TOKEN, chatId, `<b>✅ ${connectedTitle} is already connected to Cartel HQ.</b>\n\nReturn to Cartel HQ to manage its community tools and automations.`, { parse_mode: "HTML" });
+          return json({ ok: true });
+        }
         await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "No active CARTEL HQ group-link request was found. Return to CARTEL HQ, press Connect Telegram group / Reconnect, then send /cartelhq here within 10 minutes.");
         return json({ ok: true });
       }
       await bindGroup({ chat, actor: from, link });
       return json({ ok: true });
     }
+
 
     const isHelp = /^\/help(?:@\w+)?$/i.test(text);
     const isRoadmap = /^\/roadmap(?:@\w+)?$/i.test(text);
