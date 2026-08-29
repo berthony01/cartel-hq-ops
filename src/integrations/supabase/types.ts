@@ -255,6 +255,231 @@ export type Database = {
         }
         Relationships: []
       }
+      sticker_drop_events: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          group_connection_id: string
+          id: string
+          local_date: string
+          pack_id: string
+          schedule_id: string
+          status: string
+          sticker_id: string | null
+          telegram_message_id: number | null
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          group_connection_id: string
+          id?: string
+          local_date: string
+          pack_id: string
+          schedule_id: string
+          status: string
+          sticker_id?: string | null
+          telegram_message_id?: number | null
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          group_connection_id?: string
+          id?: string
+          local_date?: string
+          pack_id?: string
+          schedule_id?: string
+          status?: string
+          sticker_id?: string | null
+          telegram_message_id?: number | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sticker_drop_events_group_connection_id_fkey"
+            columns: ["group_connection_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_group_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_drop_events_pack_id_fkey"
+            columns: ["pack_id"]
+            isOneToOne: false
+            referencedRelation: "sticker_packs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_drop_events_schedule_id_fkey"
+            columns: ["schedule_id"]
+            isOneToOne: false
+            referencedRelation: "sticker_drop_schedules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_drop_events_sticker_id_fkey"
+            columns: ["sticker_id"]
+            isOneToOne: false
+            referencedRelation: "stickers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_drop_events_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sticker_drop_schedules: {
+        Row: {
+          active_end: string
+          active_start: string
+          approved_only: boolean
+          consecutive_failures: number
+          created_at: string
+          created_by: string | null
+          daily_cap: number
+          enabled: boolean
+          group_connection_id: string
+          id: string
+          interval_minutes: number
+          last_sent_at: string | null
+          last_sticker_id: string | null
+          next_run_at: string | null
+          no_immediate_repeat: boolean
+          pack_id: string
+          paused_reason: string | null
+          selected_sticker_ids: string[]
+          silent: boolean
+          timezone: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          active_end?: string
+          active_start?: string
+          approved_only?: boolean
+          consecutive_failures?: number
+          created_at?: string
+          created_by?: string | null
+          daily_cap?: number
+          enabled?: boolean
+          group_connection_id: string
+          id?: string
+          interval_minutes?: number
+          last_sent_at?: string | null
+          last_sticker_id?: string | null
+          next_run_at?: string | null
+          no_immediate_repeat?: boolean
+          pack_id: string
+          paused_reason?: string | null
+          selected_sticker_ids?: string[]
+          silent?: boolean
+          timezone?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          active_end?: string
+          active_start?: string
+          approved_only?: boolean
+          consecutive_failures?: number
+          created_at?: string
+          created_by?: string | null
+          daily_cap?: number
+          enabled?: boolean
+          group_connection_id?: string
+          id?: string
+          interval_minutes?: number
+          last_sent_at?: string | null
+          last_sticker_id?: string | null
+          next_run_at?: string | null
+          no_immediate_repeat?: boolean
+          pack_id?: string
+          paused_reason?: string | null
+          selected_sticker_ids?: string[]
+          silent?: boolean
+          timezone?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sticker_drop_schedules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_drop_schedules_group_connection_id_fkey"
+            columns: ["group_connection_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_group_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_drop_schedules_last_sticker_id_fkey"
+            columns: ["last_sticker_id"]
+            isOneToOne: false
+            referencedRelation: "stickers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_drop_schedules_pack_id_fkey"
+            columns: ["pack_id"]
+            isOneToOne: false
+            referencedRelation: "sticker_packs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_drop_schedules_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sticker_drop_workspace_controls: {
+        Row: {
+          kill_switch: boolean
+          updated_at: string
+          updated_by: string | null
+          workspace_id: string
+        }
+        Insert: {
+          kill_switch?: boolean
+          updated_at?: string
+          updated_by?: string | null
+          workspace_id: string
+        }
+        Update: {
+          kill_switch?: boolean
+          updated_at?: string
+          updated_by?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sticker_drop_workspace_controls_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_drop_workspace_controls_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sticker_pack_group_targets: {
         Row: {
           announced_at: string | null
@@ -826,12 +1051,17 @@ export type Database = {
         Args: { _pack_id: string; _user_id: string }
         Returns: boolean
       }
+      invoke_sticker_drop_scheduler: { Args: never; Returns: number }
       is_workspace_member: {
         Args: { _user_id: string; _workspace_id: string }
         Returns: boolean
       }
       is_workspace_owner: {
         Args: { _user_id: string; _workspace_id: string }
+        Returns: boolean
+      }
+      sticker_drop_scheduler_secret_matches: {
+        Args: { p_secret: string }
         Returns: boolean
       }
     }

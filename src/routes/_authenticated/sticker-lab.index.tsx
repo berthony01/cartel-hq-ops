@@ -50,7 +50,7 @@ const LIVE_CAPABILITIES = [
   "Pack and sticker persistence",
   "Server-side AI generation with transparency validation",
   "Review, export and Telegram pack publishing",
-  "Multi-group Telegram distribution",
+  "Scheduled multi-group delivery in the Distribution Center",
 ];
 
 const FUTURE_CAPABILITIES = ["Motion and video stickers"];
@@ -151,10 +151,15 @@ function StickerLabHome() {
                       title={pack.title}
                       subtitle={`${pack.pack_size} stickers · ${pack.ready}/${pack.total} ready · updated ${relativeTime(pack.updated_at)}`}
                       trailing={
-                        <div className="flex items-center gap-2">
+                        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
                           <StatusBadge tone={label === "review" ? "green" : "muted"}>
                             {label}
                           </StatusBadge>
+                          <Button asChild variant="outline" size="sm" className="min-h-9">
+                            <Link to="/sticker-lab/$packId" params={{ packId: pack.id }}>
+                              Manage
+                            </Link>
+                          </Button>
                           <Button asChild variant="outline" size="sm" className="min-h-9">
                             <Link to="/sticker-lab/new" search={{ pack: pack.id }}>
                               Resume

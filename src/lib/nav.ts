@@ -63,7 +63,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Operations", to: "/operations", icon: Radio, status: "planned" },
       { label: "Missions", to: "/missions", icon: Target, status: "planned" },
       { label: "Operatives", to: "/operatives", icon: Users, status: "planned" },
-      { label: "Distribution", to: "/distribution", icon: Send, status: "planned" },
+      { label: "Distribution", to: "/distribution", icon: Send },
     ],
   },
   {
