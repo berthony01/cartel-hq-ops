@@ -335,8 +335,8 @@ function DistributionPage() {
                   <InlineRow
                     title={group.title}
                     subtitle={detail}
-                    {...(state === "active" && schedule?.next_run_at
-                      ? { meta: `Next ${formatClock(new Date(schedule.next_run_at))}` }
+                    {...(state === "active" && formatNextRun(schedule?.next_run_at)
+                      ? { meta: formatNextRun(schedule?.next_run_at) as string }
                       : {})}
                     trailing={
                       <>
