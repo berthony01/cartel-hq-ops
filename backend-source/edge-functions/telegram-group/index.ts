@@ -23,7 +23,8 @@ Deno.serve(async (req: Request) => {
   let body: Record<string, unknown> = {}; try { body = await req.json(); } catch { return respond({ error: "INVALID_BODY", message: "Invalid request." }, 400); }
   const action = String(body.action ?? ""), workspaceId = String(body.workspaceId ?? ""), groupConnectionId = String(body.groupConnectionId ?? "");
   if (!workspaceId) return respond({ error: "WORKSPACE_REQUIRED", message: "Workspace is required." }, 400);
-  const { data: membership } = await admin.from("workspace_members").select("user_id").eq("workspace_id", workspaceId).eq("user_id", user.id).maybeSingle(); if (!membership) return respond({ error: "FORBIDDEN", message: "You do not have access to this workspace." }, 403);
+  const { data: membership } = await admin.from("workspace_members").select("user_id,role").eq("workspace_id", workspaceId).eq("user_id", user.id).maybeSingle(); if (!membership) return respond({ error: "FORBIDDEN", message: "You do not have access to this workspace." }, 403);
+  const canManageCommunity = membership.role === "owner" || membership.role === "admin";
 
   const getGroup = async (id = groupConnectionId) => { if (!id) return null; const { data } = await admin.from("telegram_group_connections").select("*").eq("id", id).eq("workspace_id", workspaceId).maybeSingle(); return data; };
   const verifyGroup = async (group: any) => {
