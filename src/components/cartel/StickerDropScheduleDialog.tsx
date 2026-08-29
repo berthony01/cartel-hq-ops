@@ -50,6 +50,13 @@ type Props = {
   stickers: DropSticker[];
   canManage: boolean;
   onChanged: () => void;
+  /**
+   * Pack-specific context (Sticker Lab). When set, the pack picker is locked to
+   * this pack so a community's automation can never be pointed elsewhere by
+   * accident. The workspace-wide Distribution Center omits it and keeps the
+   * full published-pack choice.
+   */
+  lockedPackId?: string;
 };
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -65,6 +72,7 @@ export function StickerDropScheduleDialog({
   stickers,
   canManage,
   onChanged,
+  lockedPackId,
 }: Props) {
   const [groupId, setGroupId] = useState("");
   const [packId, setPackId] = useState("");
@@ -91,7 +99,7 @@ export function StickerDropScheduleDialog({
     setConfirmDelete(false);
     setSavedScheduleId(schedule?.id ?? null);
     setGroupId(group?.id ?? schedule?.group_connection_id ?? "");
-    setPackId(schedule?.pack_id ?? packs[0]?.id ?? "");
+    setPackId(lockedPackId ?? schedule?.pack_id ?? packs[0]?.id ?? "");
     const interval = schedule?.interval_minutes ?? DEFAULT_SCHEDULE_FORM.intervalMinutes;
     setIntervalMinutes(interval);
     setCustomInterval(!(INTERVAL_PRESETS as readonly number[]).includes(interval));
@@ -106,7 +114,7 @@ export function StickerDropScheduleDialog({
     const selected = schedule?.selected_sticker_ids ?? [];
     setLimitStickers(selected.length > 0);
     setSelectedStickerIds(selected);
-  }, [open, group?.id, schedule, packs]);
+  }, [open, group?.id, schedule, packs, lockedPackId]);
 
   const packStickers = useMemo(
     () => stickers.filter((s) => s.pack_id === packId),
@@ -244,7 +252,11 @@ export function StickerDropScheduleDialog({
 
           <div className="space-y-2">
             <Label className="text-xs uppercase tracking-[0.14em]">Published pack</Label>
-            <Select value={packId} onValueChange={setPackId} disabled={!canManage}>
+            <Select
+              value={packId}
+              onValueChange={setPackId}
+              disabled={!canManage || !!lockedPackId}
+            >
               <SelectTrigger className="min-h-11 w-full min-w-0">
                 <SelectValue placeholder="Choose a published Telegram pack" />
               </SelectTrigger>
@@ -256,6 +268,19 @@ export function StickerDropScheduleDialog({
                 ))}
               </SelectContent>
             </Select>
+            {lockedPackId && schedule && schedule.pack_id !== lockedPackId ? (
+              <p className="rounded-md border border-gold/40 bg-gold/5 p-3 text-xs text-muted-foreground">
+                This community currently drops{" "}
+                <strong className="text-foreground">
+                  {packs.find((p) => p.id === schedule.pack_id)?.title ?? "another pack"}
+                </strong>
+                . Saving switches its Sticker Drops to{" "}
+                <strong className="text-foreground">
+                  {packs.find((p) => p.id === lockedPackId)?.title ?? "this pack"}
+                </strong>
+                .
+              </p>
+            ) : null}
             {packs.length === 0 ? (
               <p className="text-xs text-muted-foreground">
                 No published Telegram packs yet. Publish a pack in Sticker Lab first.

@@ -167,8 +167,8 @@ function DistributionPage() {
     <div className="flex min-w-0 flex-col gap-6 sm:gap-8">
       <PageHeader
         eyebrow="Operations"
-        title="Distribution"
-        description="Admin-controlled delivery of your own branded sticker packs into Telegram communities you have connected. Every drop is scheduled, capped and logged — this is not engagement farming, raiding or automated human activity."
+        title="Distribution Center"
+        description="Your workspace-wide control center for Sticker Drop automation: every connected community, every schedule, recent delivery activity and the emergency pause. Pack-specific publishing and distribution live in Sticker Lab under Review & Telegram."
         status="Live Beta"
       />
 

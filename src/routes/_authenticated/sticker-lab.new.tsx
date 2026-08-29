@@ -80,6 +80,16 @@ import {
   type TelegramDistributePackResult,
   type TelegramPackGroupTarget,
 } from "@/lib/telegram-group";
+import { StickerDropScheduleDialog } from "@/components/cartel/StickerDropScheduleDialog";
+import {
+  SCHEDULE_STATE_LABEL,
+  fetchDropStatus,
+  formatCadence,
+  formatNextRun,
+  scheduleState,
+  type DropGroup,
+  type DropSchedule,
+} from "@/lib/sticker-drops";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { StickyActionBar } from "@/components/cartel/StickyActionBar";
@@ -113,12 +123,24 @@ import {
   type PackTheme,
 } from "@/lib/sticker-lab";
 
-type BuilderSearch = { pack?: string };
+type BuilderSearch = { pack?: string; step?: number };
 
 export const Route = createFileRoute("/_authenticated/sticker-lab/new")({
   validateSearch: (search: Record<string, unknown>): BuilderSearch => {
     const raw = search["pack"];
     const pack = typeof raw === "string" ? raw.trim() : "";
+    // Optional deep-link into a specific builder step. Anything unusable is
+    // dropped so existing `?pack=<id>` links behave exactly as before.
+    const rawStep = search["step"];
+    const parsed =
+      typeof rawStep === "number"
+        ? rawStep
+        : typeof rawStep === "string"
+          ? Number.parseInt(rawStep, 10)
+          : Number.NaN;
+    const step =
+      Number.isInteger(parsed) && parsed >= 1 && parsed <= BUILDER_STEPS.length ? parsed : undefined;
+    if (pack && step) return { pack, step };
     return pack ? { pack } : {};
   },
 
@@ -188,7 +210,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 function StickerLabBuilder() {
   const { workspaceId } = useWorkspace();
   const { user } = useSession();
-  const { pack: urlPackId } = Route.useSearch();
+  const { pack: urlPackId, step: urlStep } = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
   const [step, setStep] = useState(1);
   const [draft, setDraft] = useState<BuilderDraft | null>(null);
@@ -288,6 +310,19 @@ function StickerLabBuilder() {
   }, [urlPackId, workspaceId]);
 
 
+  /**
+   * Deep link support: `?pack=<id>&step=5` opens Review & Telegram for that pack
+   * once it has hydrated. Applied once so the user can still navigate freely.
+   */
+  const deepStepRef = useRef(false);
+  useEffect(() => {
+    if (deepStepRef.current) return;
+    if (!urlStep || !urlPackId) return;
+    if (!draft || draft.packId !== urlPackId) return;
+    deepStepRef.current = true;
+    setStep(urlStep);
+  }, [urlStep, urlPackId, draft]);
+
   useEffect(() => {
     if (draft) saveDraft(draft);
   }, [draft]);
@@ -348,12 +383,25 @@ function StickerLabBuilder() {
   const [distError, setDistError] = useState<string | null>(null);
   const [distResult, setDistResult] = useState<TelegramDistributePackResult | null>(null);
   const [distTargets, setDistTargets] = useState<TelegramPackGroupTarget[]>([]);
+
+  /**
+   * Sticker Drops for THIS pack. Read-only reuse of the same workspace status
+   * endpoint the Distribution Center uses — no new server behaviour.
+   */
+  const dropStatusQuery = useQuery({
+    queryKey: ["sticker-drops", workspaceId],
+    enabled: !!workspaceId && step === 5,
+    queryFn: () => fetchDropStatus(workspaceId!),
+  });
   const [tgPack, setTgPack] = useState<PackTelegramState | null>(null);
   const [tgStickers, setTgStickers] = useState<Record<string, StickerTelegramState>>({});
   const [publishing, setPublishing] = useState(false);
   const [tgRefreshing, setTgRefreshing] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
   const [confirmPublish, setConfirmPublish] = useState(false);
+  const [dropDialogOpen, setDropDialogOpen] = useState(false);
+  const [dropDialogGroup, setDropDialogGroup] = useState<DropGroup | null>(null);
+  const [dropDialogSchedule, setDropDialogSchedule] = useState<DropSchedule | null>(null);
   const [publishResult, setPublishResult] = useState<TelegramPublishResult | null>(null);
   const [tgError, setTgError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
@@ -1001,6 +1049,71 @@ function StickerLabBuilder() {
     selectedGroupIds.length > 0 &&
     groupsSelectedAndReady &&
     !distributing;
+  /* ---------------- Sticker Drops (this pack) ---------------- */
+  const dropStatus = dropStatusQuery.data;
+  const dropGroups = dropStatus?.groups ?? [];
+  const dropPacks = dropStatus?.packs ?? [];
+  const dropStickers = dropStatus?.stickers ?? [];
+  const dropSchedules = dropStatus?.schedules ?? [];
+  const dropCanManage = dropStatus?.canManage === true;
+  const dropKillSwitch = dropStatus?.control?.kill_switch === true;
+  const dropScheduleByGroup: Record<string, DropSchedule> = {};
+  for (const sc of dropSchedules) dropScheduleByGroup[sc.group_connection_id] = sc;
+  const packSchedules = dropSchedules.filter((sc) => sc.pack_id === packId);
+
+  /* ---------------- Pack lifecycle: exactly one primary action ---------------- */
+  const distStatusFor = (groupId: string) =>
+    distTargets.find((t) => t.group_connection_id === groupId)?.status ?? null;
+  const newTargetIds = selectedGroupIds.filter((id) => !distStatusFor(id));
+  const failedTargetIds = selectedGroupIds.filter((id) => distStatusFor(id) === "failed");
+  const deliveredTargetIds = selectedGroupIds.filter((id) => {
+    const st = distStatusFor(id);
+    return st === "assigned" || st === "announced";
+  });
+  const unpublishedReviewedIds = reviewedStickerIds.filter(
+    (id) => tgStickers[id]?.status !== "published",
+  );
+  const lifecycleMode: "publish" | "update" | "add" | "retry" | "current" = !telegramSetExists
+    ? "publish"
+    : unpublishedReviewedIds.length > 0
+      ? "update"
+      : newTargetIds.length > 0
+        ? "add"
+        : failedTargetIds.length > 0
+          ? "retry"
+          : "current";
+  const lifecycleBusy = publishing || distributing;
+  const lifecycleEnabled =
+    lifecycleMode === "publish" || lifecycleMode === "update"
+      ? canPublish
+      : lifecycleMode === "add" || lifecycleMode === "retry"
+        ? canDistribute
+        : false;
+  const lifecycleLabel =
+    lifecycleMode === "publish"
+      ? "Publish & distribute pack"
+      : lifecycleMode === "update"
+        ? `Publish ${unpublishedReviewedIds.length} sticker update${unpublishedReviewedIds.length === 1 ? "" : "s"}`
+        : lifecycleMode === "add"
+          ? `Distribute to ${newTargetIds.length} new communit${newTargetIds.length === 1 ? "y" : "ies"}`
+          : lifecycleMode === "retry"
+            ? `Retry ${failedTargetIds.length} failed distribution${failedTargetIds.length === 1 ? "" : "s"}`
+            : "Pack is up to date";
+  const runLifecycleAction = () => {
+    if (lifecycleMode === "publish") {
+      setConfirmPublish(true);
+      return;
+    }
+    if (lifecycleMode === "update") {
+      // Adds only the not-yet-published stickers, then reaches only the
+      // communities that still need this pack.
+      void doPublish([...newTargetIds, ...failedTargetIds]);
+      return;
+    }
+    if (lifecycleMode === "add") void doDistribute(newTargetIds);
+    if (lifecycleMode === "retry") void doDistribute(failedTargetIds);
+  };
+
   const shortNamePreview = packId
     ? previewShortName(draft.packName, packId, telegram.botUsername)
     : null;
@@ -1009,29 +1122,31 @@ function StickerLabBuilder() {
    * Batch distribution of the ALREADY published sticker set to the selected
    * connected groups. Never creates or re-creates a Telegram sticker set.
    */
-  const doDistribute = async () => {
-    if (!packId || !workspaceId || selectedGroupIds.length === 0) return;
+  const doDistribute = async (groupIds: string[] = selectedGroupIds) => {
+    if (!packId || !workspaceId || groupIds.length === 0) return;
     setDistributing(true);
     setDistError(null);
     try {
       const result = await distributePackToGroups({
         workspaceId,
         packId,
-        groupConnectionIds: selectedGroupIds,
+        groupConnectionIds: groupIds,
       });
       setDistResult(result);
       await loadTelegramState(packId);
       await loadDistribution(packId);
       if (result.status === "complete") {
         toast.success(
-          `${result.total} group${result.total === 1 ? "" : "s"} updated: ${result.assigned} official set, ${result.announced} announced.`,
+          `${result.total} communit${result.total === 1 ? "y" : "ies"} updated: ${result.assigned} official set, ${result.announced} announced.`,
         );
       } else if (result.status === "partial") {
         toast.warning(
-          `${result.total - result.failed} of ${result.total} groups updated, ${result.failed} need retry.`,
+          `${result.total - result.failed} of ${result.total} communities updated, ${result.failed} need retry.`,
         );
       } else {
-        toast.error("Distribution to the selected groups failed. The sticker set stays published.");
+        toast.error(
+          "Distribution to the selected communities failed. The sticker set stays published.",
+        );
       }
     } catch (err) {
       setDistError(telegramErrorMessage(err));
@@ -1041,7 +1156,13 @@ function StickerLabBuilder() {
     }
   };
 
-  const doPublish = async () => {
+  /**
+   * `publishPack()` creates the set once and afterwards only adds stickers that
+   * are not published yet. `distributeIds` controls exactly which communities
+   * receive a follow-up distribution — already-successful ones are never
+   * re-announced.
+   */
+  const doPublish = async (distributeIds: string[] = selectedGroupIds) => {
     if (!packId || !workspaceId) return;
     setPublishing(true);
     setTgError(null);
@@ -1051,8 +1172,9 @@ function StickerLabBuilder() {
       await loadTelegramState(packId);
       if (result.status === "published") {
         toast.success(`Published ${result.published} of ${result.total} stickers to Telegram.`);
-        // One publish, then exactly one batch distribution to the selected groups.
-        await doDistribute();
+        // One publish, then at most one batch distribution to the communities
+        // that actually need it.
+        if (distributeIds.length > 0) await doDistribute(distributeIds);
       } else if (result.status === "partial") {
         toast.warning(
           `${result.published} of ${result.total} published, ${result.failed} need retry.`,
@@ -2344,7 +2466,7 @@ function StickerLabBuilder() {
 
           <Card className="cartel-panel mt-6">
             <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
-              <CardTitle className="text-base">Telegram publishing</CardTitle>
+              <CardTitle className="text-base">Publish &amp; distribute</CardTitle>
               {allPublished ? (
                 <StatusBadge tone="green">Published</StatusBadge>
               ) : partiallyPublished ? (
@@ -2368,16 +2490,16 @@ function StickerLabBuilder() {
                   <StatusBadge tone="red">Connect a Telegram community</StatusBadge>
                 )}
                 {telegramGroup.connectedGroupCount === 0 ? (
-                  <StatusBadge tone="red">No group connected</StatusBadge>
+                  <StatusBadge tone="red">No community connected</StatusBadge>
                 ) : selectedGroupIds.length === 0 ? (
-                  <StatusBadge tone="red">No distribution group selected</StatusBadge>
+                  <StatusBadge tone="red">No community selected</StatusBadge>
                 ) : groupsSelectedAndReady ? (
                   <StatusBadge tone="green">
-                    {selectedGroupIds.length} of {telegramGroup.connectedGroupCount} group
-                    {telegramGroup.connectedGroupCount === 1 ? "" : "s"} selected
+                    {selectedGroupIds.length} of {telegramGroup.connectedGroupCount} communit
+                    {telegramGroup.connectedGroupCount === 1 ? "y" : "ies"} selected
                   </StatusBadge>
                 ) : (
-                  <StatusBadge tone="red">A selected group is not verified</StatusBadge>
+                  <StatusBadge tone="red">A selected community is not verified</StatusBadge>
                 )}
 
                 <StatusBadge tone={exportableCount > 0 ? "gold" : "muted"}>
@@ -2537,23 +2659,31 @@ function StickerLabBuilder() {
                 </ul>
               ) : null}
 
+              <p className="min-w-0 rounded-md border border-border/70 bg-surface-raised/50 p-3 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                {lifecycleMode === "publish"
+                  ? "This pack has not been published to Telegram yet. Publishing creates one sticker set and distributes it to the communities you selected."
+                  : lifecycleMode === "update"
+                    ? `${unpublishedReviewedIds.length} reviewed sticker${unpublishedReviewedIds.length === 1 ? "" : "s"} are not on the existing Telegram set yet. Publishing adds them — the set is never recreated.`
+                    : lifecycleMode === "add"
+                      ? `The set is live in ${deliveredTargetIds.length} communit${deliveredTargetIds.length === 1 ? "y" : "ies"}. ${newTargetIds.length} newly selected communit${newTargetIds.length === 1 ? "y has" : "ies have"} not received it yet.`
+                      : lifecycleMode === "retry"
+                        ? `Every sticker is published. ${failedTargetIds.length} communit${failedTargetIds.length === 1 ? "y" : "ies"} failed distribution and can be retried safely.`
+                        : `Everything is current: all reviewed stickers are published and all ${deliveredTargetIds.length} selected communit${deliveredTargetIds.length === 1 ? "y has" : "ies have"} the pack.`}
+              </p>
+
               <div className="flex flex-wrap gap-3">
                 <Button
                   type="button"
-                  className="min-h-11"
-                  disabled={allPublished || !canPublish}
-                  onClick={() => (canRetryPublish ? void doPublish() : setConfirmPublish(true))}
+                  className="min-h-11 flex-1 sm:flex-none"
+                  disabled={!lifecycleEnabled || lifecycleBusy}
+                  onClick={runLifecycleAction}
                 >
-                  {publishing ? (
+                  {lifecycleBusy ? (
                     <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                   ) : (
                     <Send className="size-4" aria-hidden="true" />
                   )}
-                  {allPublished
-                    ? "Published"
-                    : canRetryPublish
-                      ? "Retry failed stickers"
-                      : "Publish sticker pack"}
+                  {lifecycleLabel}
                 </Button>
                 <Button
                   type="button"
@@ -2576,22 +2706,6 @@ function StickerLabBuilder() {
                     </a>
                   </Button>
                 ) : null}
-                {allPublished ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="min-h-11"
-                    disabled={!canDistribute}
-                    onClick={() => void doDistribute()}
-                  >
-                    {distributing ? (
-                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                    ) : null}
-                    {distError || distResult?.failed
-                      ? "Retry distribution to selected groups"
-                      : "Distribute to selected groups"}
-                  </Button>
-                ) : null}
                 <Button
                   type="button"
                   variant="outline"
@@ -2602,7 +2716,7 @@ function StickerLabBuilder() {
                   {sendingTest ? (
                     <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                   ) : null}
-                  Send test sticker to group
+                  Send test sticker to community
                 </Button>
               </div>
 
@@ -2638,6 +2752,114 @@ function StickerLabBuilder() {
 
             </CardContent>
           </Card>
+
+
+          {telegramSetExists ? (
+            <Card className="cartel-panel mt-6">
+              <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+                <CardTitle className="text-base">Sticker Drops for this pack</CardTitle>
+                <StatusBadge tone={packSchedules.length > 0 ? "green" : "muted"}>
+                  {packSchedules.length > 0
+                    ? `${packSchedules.length} automated`
+                    : "Not automated"}
+                </StatusBadge>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <p className="text-xs text-muted-foreground">
+                  Scheduled, capped delivery of this pack into a community. Drops run server-side
+                  and stay disabled until you enable them.
+                </p>
+
+                {dropStatusQuery.isLoading ? (
+                  <p className="text-xs text-muted-foreground">Loading drop automation…</p>
+                ) : dropGroups.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No connected community is available for automation yet.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {dropGroups.map((g) => {
+                      const sched = dropScheduleByGroup[g.id] ?? null;
+                      const forThisPack = sched?.pack_id === packId;
+                      const state = sched ? scheduleState(sched, dropKillSwitch) : "unconfigured";
+                      const otherPackTitle = sched
+                        ? (dropPacks.find((dp) => dp.id === sched.pack_id)?.title ?? "another pack")
+                        : null;
+                      return (
+                        <li
+                          key={g.id}
+                          className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-background/40 p-3"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-foreground">{g.title}</p>
+                            <p className="mt-0.5 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
+                              {!sched
+                                ? "No drop automation configured."
+                                : forThisPack
+                                  ? [
+                                      SCHEDULE_STATE_LABEL[state],
+                                      formatCadence(sched.interval_minutes),
+                                      formatNextRun(sched.next_run_at),
+                                    ]
+                                      .filter(Boolean)
+                                      .join(" · ")
+                                  : `Currently dropping ${otherPackTitle}.`}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={forThisPack ? "outline" : "secondary"}
+                            className="min-h-10 shrink-0"
+                            disabled={!dropCanManage}
+                            onClick={() => {
+                              setDropDialogGroup(g);
+                              setDropDialogSchedule(sched);
+                              setDropDialogOpen(true);
+                            }}
+                          >
+                            {forThisPack
+                              ? "Edit drops"
+                              : sched
+                                ? "Switch to this pack"
+                                : "Set up drops"}
+                          </Button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+
+                {!dropCanManage && !dropStatusQuery.isLoading ? (
+                  <p className="text-xs text-muted-foreground">
+                    Only a workspace owner or admin can change drop automation.
+                  </p>
+                ) : null}
+
+                <Button asChild variant="ghost" size="sm" className="min-h-10">
+                  <Link to="/distribution" search={packId ? { pack: packId } : {}}>
+                    Open Distribution Center
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {packId ? (
+            <StickerDropScheduleDialog
+              open={dropDialogOpen}
+              onOpenChange={setDropDialogOpen}
+              workspaceId={workspaceId ?? ""}
+              group={dropDialogGroup}
+              groups={dropGroups}
+              schedule={dropDialogSchedule}
+              packs={dropPacks}
+              stickers={dropStickers}
+              canManage={dropCanManage}
+              lockedPackId={packId}
+              onChanged={() => void dropStatusQuery.refetch()}
+            />
+          ) : null}
 
           <AlertDialog open={confirmPublish} onOpenChange={setConfirmPublish}>
             <AlertDialogContent>
@@ -2678,7 +2900,7 @@ function StickerLabBuilder() {
                   disabled={selectedGroupIds.length === 0}
                   onClick={() => {
                     setConfirmPublish(false);
-                    void doPublish();
+                    void doPublish(selectedGroupIds);
                   }}
                 >
                   Publish &amp; distribute
