@@ -1,75 +1,101 @@
-# Phase 1C-8 — Mobile Containment Audit + Surgical Fix Plan
+# Phase 1D Start-Gate Audit — Distribution Center + Sticker Pack Manager
 
-Read-only audit complete at HEAD `fdc1275` (clean tree). Presentation-only remediation proposed; no backend, Supabase, auth, KIE, Telegram logic, route paths, or business behaviour touched.
+Read-only. No files were edited. This is an audit and a proposed scope, not an implementation.
 
-## Verification limitation (disclosed)
+## 1. Repository state
 
-The cloud browser reports `LOVABLE_BROWSER_AUTH_STATUS=external_unmanaged`: Lovable cannot mint a session for the external Supabase project, so no authenticated route can be measured here. The audit below is a static structural audit. The scrollWidth === clientWidth requirement at 360/390/412/430px must be proven on a real authenticated device, or via a temporary unauthenticated measurement harness (see "Optional verification harness"), which is out of scope unless you authorize it.
+- HEAD: `ecc9096` ("Update plan"), preceded by `af920df`, `9e739ea`.
+- Working tree: clean (`git status --porcelain` empty).
+- Phase 1C-8 containment work is in history; no uncommitted drift.
 
-## Root causes identified
+## 2. Current Distribution route and pack management UI
 
-### RC-1 — Grid children default to `min-width: auto` (primary cause of defects 1, 2, 3, 5)
+- `src/routes/_authenticated/distribution.tsx` — 37 lines, renders `PlaceholderPage` only. Status string `"Planned — not active"`, `availableNow` = ["Route and navigation entry", "Roadmap placement in OPERATIONS"], `plannedLater` = campaign/creator/outcome bullets. No data queries, no Telegram wiring.
+- `src/lib/nav.ts` — Distribution still carries `status: "planned"`.
+- There is no Sticker Pack Manager route. Pack surfaces today:
+  - `sticker-lab.index.tsx` — workspace pack list via `listWorkspacePacks`, workflow rail, live/future capability copy.
+  - `sticker-lab.new.tsx` — the 5-step builder (concepts → generation → review/export → Telegram publish → multi-group distribute).
+  - There is no per-pack detail route; a pack is only reachable by re-entering the builder.
 
-Every page-level grid uses bare `grid gap-… lg:grid-cols-N` with no `min-w-0` on children. A CSS grid item's automatic minimum size is its min-content width, so a single wide row inside one card widens the whole track past the viewport. The document then scrolls horizontally and *every* sibling card looks clipped at the right edge — which is exactly the reported pattern where the Module Status paragraph and the HQ badges appear cut rather than wrapped.
+## 3. Telegram components and data helpers that already exist
 
-Confirmed containers missing child min-width containment:
-- `src/routes/_authenticated/index.tsx:155, 176, 197, 297`
-- `src/routes/_authenticated/sticker-lab.index.tsx:111`
-- `src/components/cartel/PlaceholderPage.tsx:40`
-- `src/routes/_authenticated/brand-kit.tsx:216, 251, 286, 334, 393`
-- `src/routes/_authenticated/assets.tsx:122`
-- `src/routes/_authenticated/sticker-lab.new.tsx:1313, 1493, 1620, 2185, 2295, 2395`
+- `src/components/cartel/TelegramGroupCard.tsx` (928 lines) — owns `useTelegramGroupSetup()` (query key `["telegram-group-link", workspaceId]`), `GroupReadiness` derivation (chat type, bot admin, change-info, `can_set_sticker_set`, member count, official-sticker eligibility), group linking/polling, and the 50-group selection cap persisted in `localStorage` under `cartelhq.telegram.groupTargets.<workspaceId>`.
+- `src/components/cartel/TelegramConnectionCard.tsx` — personal account linking.
+- `src/lib/telegram-group.ts` — `fetchTelegramGroupStatus`, `assignPackToGroup`, `sendGroupTestSticker`, `distributePackToGroups` (cap `MAX_DISTRIBUTION_TARGETS = 50`), `fetchPackGroupDistribution` → `TelegramPackGroupTarget[]` (status, last_error, announced_at, assigned_at, last_attempt_at).
+- `src/lib/telegram-stickers.ts` — config/publish/refresh/send-test plus `loadPackTelegramState` (pack set name/url/publish error/published_at + per-sticker telegram state).
+- `src/lib/sticker-packs.ts` — `listWorkspacePacks` (PackSummary with total/ready/active), `loadPack`, `loadPackStickers`, `loadAssets`, `hydrateDraftFromPack`, `classifyProviderError`, `loadLatestJobs`.
+- `src/lib/media.ts` — `signedUrl` / `signedUrlMap` for private storage previews.
+- Backend tables available read-side: `sticker_packs`, `stickers`, `telegram_group_connections`, `sticker_pack_group_targets` (SELECT only; INSERT/UPDATE/DELETE denied — the webhook / Edge Functions are the authoritative writers).
 
-The widest min-content offender feeding RC-1 is the InlineRow trailing cluster (below).
+## 4. Phase 1C responsive primitives available for reuse
 
-### RC-2 — `InlineRow` trailing cluster is unbounded and non-shrinkable (defects 1, 2)
+`PageHeader`, `Section` (primary/surface/plain), `InlineRow` (min-h-11, bounded meta/trailing), `StatusBadge` (gold/green/red/muted, self-truncating), `ScrollRail` (mask fade + snap), `StickyActionBar` (fixed above `--bottom-nav-h`), `EmptyState`, `PlaceholderPage`, `MobileTabBar` + `MOBILE_PRIMARY_ITEMS`, `AppShell`. Grid containers use `[&>*]:min-w-0`.
 
-`src/components/cartel/InlineRow.tsx:45-50`: both the `meta` and `trailing` slots are `shrink-0` with no width cap and no wrapping. On HQ recent packs the trailing slot is StatusBadge + chevron; on the Sticker Lab index it is StatusBadge + a "Resume" button. That cluster sets the row's min-content width, which propagates up through RC-1. The row itself also carries `touch-target`, which applies `min-width: 44px` in addition to min-height — harmless but semantically wrong for a full-width row.
+## 5. Scope reality check — what is buildable frontend-only
 
-### RC-3 — `StatusBadge` cannot truncate its own text (defects 1, 3, 7)
+Buildable now against existing data:
 
-`src/components/cartel/StatusBadge.tsx:28` truncates only nested `<span>` children (`[&>span]:truncate`). Every real callsite passes a raw string, so the badge width is always the full label plus `tracking-[0.14em]`, and it can never give ground.
+- Connected groups roster with live readiness (reuse `useTelegramGroupSetup`).
+- Per-pack distribution state from `sticker_pack_group_targets` (`fetchPackGroupDistribution`): assigned / announced / failed, last attempt, last error.
+- Activity feed derived from `assigned_at` / `announced_at` / `last_attempt_at` / `updated_at`, sorted desc.
+- "Sends today" as a derived count of target rows whose `assigned_at`/`announced_at` falls in the current UTC day.
+- Manual re-distribute / assign / send-test using existing Edge Function actions.
+- Published/draft pack overview and sticker gallery from `listWorkspacePacks`, `loadPackStickers`, `loadAssets`, `signedUrlMap`, `loadPackTelegramState`.
 
-### RC-4 — Bottom nav label overflow (defect 8)
+Not buildable frontend-only (blockers to state before design freeze):
 
-`src/lib/nav.ts:80-85`: the Telegram tab has no `mobileLabel`. Five tabs across 390px leave ~70px per tab; "TELEGRAM" at 10px uppercase with `tracking-[0.12em]` exceeds that, so `truncate` in `MobileTabBar.tsx:33-35` produces the accidental "TELEGRA…".
+- **Drop schedules, "next drop", recurring sends, pause/kill controls** have no backing table, no scheduler, and no Edge Function action. `sticker_pack_group_targets` is a one-shot distribution ledger with no schedule, cadence, next_run_at, or enabled flag. Delivering these as UI now would be demoware.
+- **Per-group configuration** likewise has no writable store (`telegram_group_connections` is INSERT/UPDATE/DELETE denied to the client).
 
-### RC-5 — Over-truncated section headings (defects 6, 7)
+Recommendation: split Phase 1D.
 
-Single-line `truncate` is applied to headings that have vertical room to wrap:
-- `src/components/cartel/Section.tsx:59` (`h2` truncate — every Section title app-wide)
-- `src/components/cartel/TelegramGroupCard.tsx:669` ("Connected Telegram groups")
-- `src/components/cartel/PageHeader.tsx` title is already wrap-safe.
+- **1D-A (frontend-only, safe):** Distribution Center built strictly on real distribution-ledger + group-readiness data, plus the Sticker Pack Manager. No scheduling UI, no fake counters, no controls that do not map to an existing server action.
+- **1D-B (requires an authorized backend contract):** drop schedules table + scheduler Edge Function + per-group config writes + pause/kill state machine. Frontend follows only after that contract exists.
 
-### RC-6 — Workflow rail reads as accidental clipping (defect 4)
+## 6. Recommended frontend changes (1D-A)
 
-`sticker-lab.index.tsx:93-108` renders six `min-w-[8.5rem]` tiles in a `ScrollRail`. Scrolling is intentional, but there is no edge fade, no partial-peek sizing guarantee, and no affordance, so the third tile looks broken. `ScrollRail`'s `-mx-4 px-4` correctly matches `--gutter-mobile: 1rem`, so it is not itself an overflow source; the `sm:mx-0` breakpoint vs. the gutter's `md` breakpoint is a cosmetic inset mismatch between 640–767px only.
+Distribution Center (`/distribution`):
 
-### RC-7 — Top bar (defect 9)
+- Replace the placeholder with a live module page: `PageHeader` (eyebrow "Operations", status "Live Beta").
+- Summary strip (`ScrollRail` on mobile, grid at lg): connected groups, distribution-ready groups, packs distributed, sends today — every tile derived from real rows, with an explicit empty state instead of zeros-as-decoration.
+- Connected groups list: `InlineRow` per group, title/username, chat-type badge, readiness badge, last distribution outcome. Reuses `useTelegramGroupSetup` — no new Telegram logic.
+- Per-pack distribution panel: pack selector limited to Telegram-published packs, then `fetchPackGroupDistribution` rows as assigned/announced/failed with error text collapsed behind a disclosure.
+- Actions limited to existing server actions: re-run distribution for selected groups (`distributePackToGroups`, 50 cap preserved), assign as group set (`assignPackToGroup`), send test sticker (`sendGroupTestSticker`).
+- Activity feed: chronological derived events from the target rows, `InlineRow` based, capped list length.
+- Scheduling / pause / kill surfaces: represented as an explicit, honestly labelled "not yet available" note, not as disabled fake controls — or omitted entirely until 1D-B.
 
-`AppShell.tsx:12-46` is structurally sound: the search block is `lg:` only, all trailing controls are `shrink-0`, and the workspace switcher sits in a `min-w-0 flex-1` container. The remaining risk is inside `WorkspaceSwitcher`; it needs a truncation check on long workspace names.
+Sticker Pack Manager (`/sticker-lab/$packId`, new leaf under the existing `sticker-lab` layout):
 
-## Fix plan (shared-first, smallest safe change)
+- Pack header: title, theme, size, status badge (draft / ready / published), Telegram set link when present.
+- Sticker gallery: 2-col mobile / 4-col lg, signed-URL thumbnails via `signedUrlMap`, per-sticker status and telegram publish state.
+- Actions: open in builder (existing `hydrateDraftFromPack` path), open Telegram set, jump to Distribution for that pack. No new mutations.
+- Pack list on `sticker-lab.index.tsx` gains rows linking into the manager.
 
-Ordered so shared primitives absorb most defects before any page edits.
+## 7. Stale copy / status corrections
 
-1. **`StatusBadge.tsx`** — truncate own text content and cap width: apply `truncate`/`min-w-0` to the badge itself instead of only nested spans; keep tones, sizes and tone API identical.
-2. **`InlineRow.tsx`** — let the trailing cluster survive narrow screens: keep `shrink-0` but add `max-w-[55%]` + `min-w-0` behaviour on mobile with `flex-wrap`, and replace root `touch-target` with `min-h-11` so no phantom min-width is introduced. Props and callsites unchanged.
-3. **`Section.tsx`** — heading wraps instead of ellipsing (`truncate` → wrap with `break-words`); add `min-w-0` to grid/flex children of the header row and keep the existing `grid-cols-[minmax(0,1fr)_auto]` mobile structure.
-4. **`nav.ts`** — add `mobileLabel: "Telegram"`-safe short label (`"TG"` or `"Chat"`, your call; plan assumes `"TG"`) for the Telegram tab. Presentation metadata only; desktop label unchanged.
-5. **`ScrollRail.tsx`** — add an intentional-scroll treatment: right-edge mask/fade on mobile and `pr-6` peek so the next tile is obviously partially visible. Behaviour and desktop grid fallback unchanged.
-6. **Page-level `min-w-0` pass** — add `min-w-0` (or `[&>*]:min-w-0` on the container) to the grid children listed under RC-1 in `index.tsx`, `sticker-lab.index.tsx`, `sticker-lab.new.tsx`, `brand-kit.tsx`, `assets.tsx`, `PlaceholderPage.tsx`. Pure class additions, no structural change.
-7. **`TelegramGroupCard.tsx`** — un-truncate the card title (RC-5), and confirm badge/button/disclosure clusters wrap (`flex-wrap`) inside the card at 390px. No change to any handler, action name, payload, polling, launcher URL, or capability logic.
-8. **`WorkspaceSwitcher.tsx`** — verify and, if needed, add `min-w-0` + `truncate` to the workspace name only.
+- `distribution.tsx`: "Planned — not active", the two `availableNow` roadmap bullets, and the placeholder framing are all stale once the module is live.
+- `src/lib/nav.ts`: Distribution `status: "planned"` must drop once 1D-A ships. All other planned modules stay planned.
+- `sticker-lab.index.tsx`: "Multi-group Telegram distribution" capability line should point at the new Distribution Center.
+- Consider whether Distribution earns a `mobilePrimary` tab slot; the bar is already at five destinations, so this is a deliberate trade, not an automatic add.
 
-Desktop and tablet output is unchanged: every edit is either a min-width containment class (no visual effect when space is ample), a mobile-only utility, or a heading that already fits on one line at desktop widths.
+## 8. Files that would change (1D-A)
 
-## Optional verification harness (needs your authorization)
+- `src/routes/_authenticated/distribution.tsx` (rewrite)
+- `src/routes/_authenticated/sticker-lab.$packId.tsx` (new)
+- `src/routes/_authenticated/sticker-lab.index.tsx` (link rows into manager, copy)
+- `src/lib/nav.ts` (status only)
+- Possibly one new presentational component (e.g. `DistributionActivityFeed.tsx`) and one small read-only helper file for date/derivation utilities.
+- Possibly `src/lib/telegram-group.ts` — only if a read-only "all packs" distribution query is required; if it is, it is a new read helper over an existing action, and if no such action exists server-side, that is a 1D-B blocker, not an improvisation.
 
-To satisfy the hard scrollWidth requirement inside this environment, a temporary dev-only route could render each page's presentational shell with static fixture props (no Supabase calls) so a Playwright script can assert `documentElement.scrollWidth === clientWidth` at 360/390/412/430px and flag any child whose right edge exceeds its parent by >1px. This adds a file outside the current allowlist and would be removed after the run. Not included in the plan above; say the word and I will fold it in as a separate step.
+## 9. Must NOT change
 
-## Files this plan would touch
+- Sticker generation pipeline, prompts, KIE/provider calls, `sticker-ai.ts`.
+- Transparency validation and cutout logic (`sticker-export.ts`).
+- Telegram publish, connect, link, launcher, webhook contracts, install URLs, polling, capability derivation, the 50-group cap, payload shapes, or any Edge Function.
+- Auth, RLS, grants, schema, migrations, storage buckets, secrets.
+- Existing route paths for `/sticker-lab`, `/sticker-lab/new`, `/telegram`.
+- No publish/deploy.
 
-`src/components/cartel/StatusBadge.tsx`, `InlineRow.tsx`, `Section.tsx`, `ScrollRail.tsx`, `TelegramGroupCard.tsx`, `WorkspaceSwitcher.tsx`, `src/lib/nav.ts`, `src/routes/_authenticated/index.tsx`, `sticker-lab.index.tsx`, `sticker-lab.new.tsx`, `brand-kit.tsx`, `assets.tsx`, `src/components/cartel/PlaceholderPage.tsx`.
+## Stop point
 
-No changes to `src/lib/telegram-*`, Supabase clients, Edge Functions, route paths, query keys, or any `.invoke` payload. Nothing published.
+Audit complete at `ecc9096`, tree clean. Awaiting a decision on the 1D-A / 1D-B split before any implementation contract is issued.
