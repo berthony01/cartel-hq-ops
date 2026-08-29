@@ -55,6 +55,7 @@ async function editMessage(token: string, chatId: string, messageId: number, tex
     });
   } catch { }
 }
+function escapeHtml(value: string) { return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 function encodeChatId(chatId: string) { return chatId.startsWith("-") ? `n${chatId.slice(1)}` : chatId; }
 function decodeChatId(encoded: string) { return encoded.startsWith("n") ? `-${encoded.slice(1)}` : encoded; }
 function shouldSendWelcome(value: string | null | undefined) {
