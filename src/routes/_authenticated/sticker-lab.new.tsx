@@ -300,6 +300,19 @@ function StickerLabBuilder() {
   }, [urlPackId, workspaceId]);
 
 
+  /**
+   * Deep link support: `?pack=<id>&step=5` opens Review & Telegram for that pack
+   * once it has hydrated. Applied once so the user can still navigate freely.
+   */
+  const deepStepRef = useRef(false);
+  useEffect(() => {
+    if (deepStepRef.current) return;
+    if (!urlStep || !urlPackId) return;
+    if (!draft || draft.packId !== urlPackId) return;
+    deepStepRef.current = true;
+    setStep(urlStep);
+  }, [urlStep, urlPackId, draft]);
+
   useEffect(() => {
     if (draft) saveDraft(draft);
   }, [draft]);
