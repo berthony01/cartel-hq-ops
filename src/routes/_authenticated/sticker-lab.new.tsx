@@ -80,6 +80,17 @@ import {
   type TelegramDistributePackResult,
   type TelegramPackGroupTarget,
 } from "@/lib/telegram-group";
+import { StickerDropScheduleDialog } from "@/components/cartel/StickerDropScheduleDialog";
+import {
+  SCHEDULE_STATE_LABEL,
+  fetchDropStatus,
+  formatCadence,
+  formatNextRun,
+  nextRunAt,
+  scheduleState,
+  type DropGroup,
+  type DropSchedule,
+} from "@/lib/sticker-drops";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { StickyActionBar } from "@/components/cartel/StickyActionBar";
@@ -379,6 +390,9 @@ function StickerLabBuilder() {
   const [tgRefreshing, setTgRefreshing] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
   const [confirmPublish, setConfirmPublish] = useState(false);
+  const [dropDialogOpen, setDropDialogOpen] = useState(false);
+  const [dropDialogGroup, setDropDialogGroup] = useState<DropGroup | null>(null);
+  const [dropDialogSchedule, setDropDialogSchedule] = useState<DropSchedule | null>(null);
   const [publishResult, setPublishResult] = useState<TelegramPublishResult | null>(null);
   const [tgError, setTgError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
