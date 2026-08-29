@@ -616,6 +616,7 @@ export function TelegramGroupCard({
       const app = result.groupAppUrl;
 
       if (!web && !app) throw new Error("The Telegram group link is unavailable right now.");
+      setIdentityState(null);
       setExpiresAt(result.expiresAt ?? null);
       setLaunchUrls({ app, web });
       setLinkState("pending");
@@ -655,6 +656,75 @@ export function TelegramGroupCard({
       setStarting(false);
     }
   };
+
+  /**
+   * Step 1 of community connection: the existing secure personal identity link.
+   * Telegram requires a user identity to own sticker sets and to verify group
+   * admin rights — it is presented here as part of connecting a community, not
+   * as a separate account feature.
+   */
+  const startIdentity = async () => {
+    if (starting) return;
+    setStarting(true);
+    const mobile = isMobileDevice();
+    const handoff = mobile ? null : openHandoffWindow();
+    try {
+      const result = await createTelegramLink();
+      const web = result.botStartUrl;
+      const app = result.botAppUrl;
+      if (!web && !app) throw new Error("The Telegram link is unavailable right now.");
+      setIdentityUrl((mobile ? (app ?? web) : (web ?? app)) ?? null);
+      setIdentityExpiresAt(result.expiresAt ?? null);
+      setIdentityRemaining(secondsLeft(result.expiresAt));
+      setIdentityState("pending");
+      startIdentityPolling(result.requestId);
+
+      let launched = false;
+      if (handoff && !handoff.closed && web) {
+        try {
+          handoff.location.replace(web);
+          launched = true;
+        } catch {
+          launched = false;
+        }
+      } else if (mobile) {
+        launched = launchTelegram(app, web);
+      } else {
+        launched = launchTelegram(undefined, web ?? app);
+      }
+      if (!launched) {
+        try {
+          handoff?.close();
+        } catch {
+          /* noop */
+        }
+      }
+    } catch (err) {
+      try {
+        handoff?.close();
+      } catch {
+        /* noop */
+      }
+      setIdentityState(null);
+      toast.error(telegramErrorMessage(err));
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  /**
+   * One customer-facing action. Identity verification (when missing) is step 1;
+   * the group picker always opens from an explicit second click so browsers
+   * never block the handoff.
+   */
+  const handlePrimary = async () => {
+    if (!personalConnected && identityState !== "connected") {
+      await startIdentity();
+      return;
+    }
+    await connect();
+  };
+
 
   const pending = linkState === "pending";
   const manualUrl = isMobileDevice()
