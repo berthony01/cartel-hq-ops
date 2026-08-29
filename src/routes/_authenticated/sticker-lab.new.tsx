@@ -2816,7 +2816,9 @@ function StickerLabBuilder() {
                             <p className="truncate text-sm font-medium text-foreground">{g.title}</p>
                             <p className="mt-0.5 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
                               {!forThisPack && !packDeliveredHere
-                                ? "Distribute this pack to this community first."
+                                ? sched
+                                  ? `Currently automating ${otherPackTitle}. Distribute this pack to this community before switching.`
+                                  : "Distribute this pack to this community first."
                                 : !sched
                                   ? "No drop automation configured."
                                   : forThisPack
