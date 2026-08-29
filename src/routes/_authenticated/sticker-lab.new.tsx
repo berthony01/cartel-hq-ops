@@ -1073,15 +1073,18 @@ function StickerLabBuilder() {
   const unpublishedReviewedIds = reviewedStickerIds.filter(
     (id) => tgStickers[id]?.status !== "published",
   );
-  const lifecycleMode: "publish" | "update" | "add" | "retry" | "current" = !telegramSetExists
-    ? "publish"
-    : unpublishedReviewedIds.length > 0
-      ? "update"
-      : newTargetIds.length > 0
-        ? "add"
-        : failedTargetIds.length > 0
-          ? "retry"
-          : "current";
+  const lifecycleMode: "publish" | "update" | "add" | "retry" | "attention" | "current" =
+    !telegramSetExists
+      ? "publish"
+      : unpublishedReviewedIds.length > 0
+        ? "update"
+        : newTargetIds.length > 0
+          ? "add"
+          : failedTargetIds.length > 0
+            ? "retry"
+            : tgPublishedCount < totalConcepts
+              ? "attention"
+              : "current";
   const lifecycleBusy = publishing || distributing;
   const lifecycleEnabled =
     lifecycleMode === "publish" || lifecycleMode === "update"
@@ -1095,10 +1098,12 @@ function StickerLabBuilder() {
       : lifecycleMode === "update"
         ? `Publish ${unpublishedReviewedIds.length} sticker update${unpublishedReviewedIds.length === 1 ? "" : "s"}`
         : lifecycleMode === "add"
-          ? `Distribute to ${newTargetIds.length} new communit${newTargetIds.length === 1 ? "y" : "ies"}`
+          ? `Add to ${newTargetIds.length} New Communit${newTargetIds.length === 1 ? "y" : "ies"}`
           : lifecycleMode === "retry"
             ? `Retry ${failedTargetIds.length} failed distribution${failedTargetIds.length === 1 ? "" : "s"}`
-            : "Pack is up to date";
+            : lifecycleMode === "attention"
+              ? "Finish Review for Remaining Stickers"
+              : "Pack is up to date";
   const runLifecycleAction = () => {
     if (lifecycleMode === "publish") {
       setConfirmPublish(true);
@@ -2671,7 +2676,9 @@ function StickerLabBuilder() {
                       ? `The set is live in ${deliveredTargetIds.length} communit${deliveredTargetIds.length === 1 ? "y" : "ies"}. ${newTargetIds.length} newly selected communit${newTargetIds.length === 1 ? "y has" : "ies have"} not received it yet.`
                       : lifecycleMode === "retry"
                         ? `Every sticker is published. ${failedTargetIds.length} communit${failedTargetIds.length === 1 ? "y" : "ies"} failed distribution and can be retried safely.`
-                        : `Everything is current: all reviewed stickers are published and all ${deliveredTargetIds.length} selected communit${deliveredTargetIds.length === 1 ? "y has" : "ies have"} the pack.`}
+                        : lifecycleMode === "attention"
+                          ? `${totalConcepts - tgPublishedCount} sticker${totalConcepts - tgPublishedCount === 1 ? " is" : "s are"} still not published. Finish Review so they pass the transparency and cutout checks, then publish the update.`
+                          : `Everything is current: all reviewed stickers are published and all ${deliveredTargetIds.length} selected communit${deliveredTargetIds.length === 1 ? "y has" : "ies have"} the pack.`}
               </p>
 
               <div className="flex flex-wrap gap-3">
