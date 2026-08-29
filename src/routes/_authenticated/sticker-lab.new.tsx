@@ -2764,8 +2764,7 @@ function StickerLabBuilder() {
           </Card>
 
 
-          {telegramSetExists ? (
-            <Card className="cartel-panel mt-6">
+          <Card className="cartel-panel mt-6">
               <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
                 <CardTitle className="text-base">Sticker Drops for this pack</CardTitle>
                 <StatusBadge tone={packSchedules.length > 0 ? "green" : "muted"}>
@@ -2780,7 +2779,12 @@ function StickerLabBuilder() {
                   and stay disabled until you enable them.
                 </p>
 
-                {dropStatusQuery.isLoading ? (
+                {!telegramSetExists ? (
+                  <p className="rounded-md border border-border/70 bg-surface-raised/50 p-3 text-xs text-muted-foreground">
+                    Sticker Drops become available after this pack is published and distributed to a
+                    community.
+                  </p>
+                ) : dropStatusQuery.isLoading ? (
                   <p className="text-xs text-muted-foreground">Loading drop automation…</p>
                 ) : dropGroups.length === 0 ? (
                   <p className="text-xs text-muted-foreground">
@@ -2791,6 +2795,14 @@ function StickerLabBuilder() {
                     {dropGroups.map((g) => {
                       const sched = dropScheduleByGroup[g.id] ?? null;
                       const forThisPack = sched?.pack_id === packId;
+                      // Automation may only be pointed at a pack this community
+                      // has actually received.
+                      const deliveredStatus = distStatusFor(g.id);
+                      const packDeliveredHere =
+                        deliveredStatus === "assigned" || deliveredStatus === "announced";
+                      const actionEnabled = forThisPack
+                        ? dropCanManage
+                        : dropCanManage && packDeliveredHere;
                       const state = sched ? scheduleState(sched, dropKillSwitch) : "unconfigured";
                       const otherPackTitle = sched
                         ? (dropPacks.find((dp) => dp.id === sched.pack_id)?.title ?? "another pack")
@@ -2803,17 +2815,19 @@ function StickerLabBuilder() {
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium text-foreground">{g.title}</p>
                             <p className="mt-0.5 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
-                              {!sched
-                                ? "No drop automation configured."
-                                : forThisPack
-                                  ? [
-                                      SCHEDULE_STATE_LABEL[state],
-                                      formatCadence(sched.interval_minutes),
-                                      formatNextRun(sched.next_run_at),
-                                    ]
-                                      .filter(Boolean)
-                                      .join(" · ")
-                                  : `Currently dropping ${otherPackTitle}.`}
+                              {!forThisPack && !packDeliveredHere
+                                ? "Distribute this pack to this community first."
+                                : !sched
+                                  ? "No drop automation configured."
+                                  : forThisPack
+                                    ? [
+                                        SCHEDULE_STATE_LABEL[state],
+                                        formatCadence(sched.interval_minutes),
+                                        formatNextRun(sched.next_run_at),
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" · ")
+                                    : `Currently dropping ${otherPackTitle}.`}
                             </p>
                           </div>
                           <Button
@@ -2821,7 +2835,7 @@ function StickerLabBuilder() {
                             size="sm"
                             variant={forThisPack ? "outline" : "secondary"}
                             className="min-h-10 shrink-0"
-                            disabled={!dropCanManage}
+                            disabled={!actionEnabled}
                             onClick={() => {
                               setDropDialogGroup(g);
                               setDropDialogSchedule(sched);
@@ -2851,9 +2865,8 @@ function StickerLabBuilder() {
                     Open Distribution Center
                   </Link>
                 </Button>
-              </CardContent>
-            </Card>
-          ) : null}
+            </CardContent>
+          </Card>
 
           {packId ? (
             <StickerDropScheduleDialog
