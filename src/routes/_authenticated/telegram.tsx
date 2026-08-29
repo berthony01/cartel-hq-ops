@@ -18,7 +18,7 @@ export const Route = createFileRoute("/_authenticated/telegram")({
       {
         name: "description",
         content:
-          "Connect your Telegram communities to CARTEL HQ and distribute published sticker packs to them.",
+          "Connect your Telegram communities to CARTEL HQ, welcome new members automatically and distribute published sticker packs.",
       },
       { property: "og:title", content: "Telegram Communities — CARTEL HQ" },
       {
@@ -43,7 +43,7 @@ function TelegramPage() {
       <PageHeader
         eyebrow="Telegram"
         title="Telegram Communities"
-        description="Connect the Telegram groups and supergroups CARTEL HQ should work with, then distribute published sticker packs and automated sticker drops to them."
+        description="Connect the Telegram groups and supergroups CARTEL HQ should work with, then run community controls there — welcome &amp; onboarding messages, published sticker pack distribution and automated Sticker Drops."
         status={groupCount > 0 ? "Connected · Live Beta" : "Live Beta"}
       />
 
@@ -67,10 +67,13 @@ function TelegramPage() {
       <Section
         variant="surface"
         title="Capabilities"
-        actions={<StatusBadge tone="gold">Sticker publishing active</StatusBadge>}
+        actions={<StatusBadge tone="gold">Stickers &amp; community controls active</StatusBadge>}
       >
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Publish, retry, refresh set status and send a native test sticker from Sticker Lab Step 5.
+          Each connected community has its own Community controls, starting with Welcome &amp;
+          onboarding: a public welcome message for new members, optional member mention and optional
+          auto-delete of the bot's own welcome. Publish, retry, refresh set status and send a native
+          test sticker from Sticker Lab Step 5.
           Scheduled Sticker Drops are live: set them up per pack in Sticker Lab Review &amp;
           Telegram, and manage every community and schedule in the Distribution Center. Both basic
           Telegram groups and supergroups can receive pack announcements and native stickers.
