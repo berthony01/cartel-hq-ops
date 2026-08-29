@@ -259,6 +259,11 @@ export function setDropKillSwitch(
 
 export type ScheduleState = "active" | "paused" | "auto_paused" | "killed" | "unconfigured";
 
+/** The worker writes reasons beginning with "Automatically paused after ..." */
+function isAutomaticPauseReason(reason: string | null | undefined): boolean {
+  return typeof reason === "string" && /^automatically paused/i.test(reason.trim());
+}
+
 export function scheduleState(
   schedule: DropSchedule | undefined,
   killSwitch: boolean,
@@ -266,7 +271,7 @@ export function scheduleState(
   if (!schedule) return "unconfigured";
   if (killSwitch) return "killed";
   if (schedule.enabled) return "active";
-  if (schedule.paused_reason) return "auto_paused";
+  if (isAutomaticPauseReason(schedule.paused_reason)) return "auto_paused";
   return "paused";
 }
 
