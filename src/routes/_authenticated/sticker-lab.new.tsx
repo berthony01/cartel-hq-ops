@@ -1026,6 +1026,59 @@ function StickerLabBuilder() {
     selectedGroupIds.length > 0 &&
     groupsSelectedAndReady &&
     !distributing;
+  /* ---------------- Pack lifecycle: exactly one primary action ---------------- */
+  const distStatusFor = (groupId: string) =>
+    distTargets.find((t) => t.group_connection_id === groupId)?.status ?? null;
+  const newTargetIds = selectedGroupIds.filter((id) => !distStatusFor(id));
+  const failedTargetIds = selectedGroupIds.filter((id) => distStatusFor(id) === "failed");
+  const deliveredTargetIds = selectedGroupIds.filter((id) => {
+    const st = distStatusFor(id);
+    return st === "assigned" || st === "announced";
+  });
+  const unpublishedReviewedIds = reviewedStickerIds.filter(
+    (id) => tgStickers[id]?.status !== "published",
+  );
+  const lifecycleMode: "publish" | "update" | "add" | "retry" | "current" = !telegramSetExists
+    ? "publish"
+    : unpublishedReviewedIds.length > 0
+      ? "update"
+      : newTargetIds.length > 0
+        ? "add"
+        : failedTargetIds.length > 0
+          ? "retry"
+          : "current";
+  const lifecycleBusy = publishing || distributing;
+  const lifecycleEnabled =
+    lifecycleMode === "publish" || lifecycleMode === "update"
+      ? canPublish
+      : lifecycleMode === "add" || lifecycleMode === "retry"
+        ? canDistribute
+        : false;
+  const lifecycleLabel =
+    lifecycleMode === "publish"
+      ? "Publish & distribute pack"
+      : lifecycleMode === "update"
+        ? `Publish ${unpublishedReviewedIds.length} sticker update${unpublishedReviewedIds.length === 1 ? "" : "s"}`
+        : lifecycleMode === "add"
+          ? `Distribute to ${newTargetIds.length} new communit${newTargetIds.length === 1 ? "y" : "ies"}`
+          : lifecycleMode === "retry"
+            ? `Retry ${failedTargetIds.length} failed distribution${failedTargetIds.length === 1 ? "" : "s"}`
+            : "Pack is up to date";
+  const runLifecycleAction = () => {
+    if (lifecycleMode === "publish") {
+      setConfirmPublish(true);
+      return;
+    }
+    if (lifecycleMode === "update") {
+      // Adds only the not-yet-published stickers, then reaches only the
+      // communities that still need this pack.
+      void doPublish([...newTargetIds, ...failedTargetIds]);
+      return;
+    }
+    if (lifecycleMode === "add") void doDistribute(newTargetIds);
+    if (lifecycleMode === "retry") void doDistribute(failedTargetIds);
+  };
+
   const shortNamePreview = packId
     ? previewShortName(draft.packName, packId, telegram.botUsername)
     : null;
@@ -2378,7 +2431,7 @@ function StickerLabBuilder() {
 
           <Card className="cartel-panel mt-6">
             <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
-              <CardTitle className="text-base">Telegram publishing</CardTitle>
+              <CardTitle className="text-base">Publish &amp; distribute</CardTitle>
               {allPublished ? (
                 <StatusBadge tone="green">Published</StatusBadge>
               ) : partiallyPublished ? (
@@ -2574,20 +2627,16 @@ function StickerLabBuilder() {
               <div className="flex flex-wrap gap-3">
                 <Button
                   type="button"
-                  className="min-h-11"
-                  disabled={allPublished || !canPublish}
-                  onClick={() => (canRetryPublish ? void doPublish() : setConfirmPublish(true))}
+                  className="min-h-11 flex-1 sm:flex-none"
+                  disabled={!lifecycleEnabled || lifecycleBusy}
+                  onClick={runLifecycleAction}
                 >
-                  {publishing ? (
+                  {lifecycleBusy ? (
                     <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                   ) : (
                     <Send className="size-4" aria-hidden="true" />
                   )}
-                  {allPublished
-                    ? "Published"
-                    : canRetryPublish
-                      ? "Retry failed stickers"
-                      : "Publish sticker pack"}
+                  {lifecycleLabel}
                 </Button>
                 <Button
                   type="button"
@@ -2610,22 +2659,6 @@ function StickerLabBuilder() {
                     </a>
                   </Button>
                 ) : null}
-                {allPublished ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="min-h-11"
-                    disabled={!canDistribute}
-                    onClick={() => void doDistribute()}
-                  >
-                    {distributing ? (
-                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                    ) : null}
-                    {distError || distResult?.failed
-                      ? "Retry distribution to selected groups"
-                      : "Distribute to selected groups"}
-                  </Button>
-                ) : null}
                 <Button
                   type="button"
                   variant="outline"
@@ -2636,7 +2669,7 @@ function StickerLabBuilder() {
                   {sendingTest ? (
                     <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                   ) : null}
-                  Send test sticker to group
+                  Send test sticker to community
                 </Button>
               </div>
 
@@ -2712,7 +2745,7 @@ function StickerLabBuilder() {
                   disabled={selectedGroupIds.length === 0}
                   onClick={() => {
                     setConfirmPublish(false);
-                    void doPublish();
+                    void doPublish(selectedGroupIds);
                   }}
                 >
                   Publish &amp; distribute
