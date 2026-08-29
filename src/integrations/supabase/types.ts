@@ -231,6 +231,30 @@ export type Database = {
           },
         ]
       }
+      platform_user_roles: {
+        Row: {
+          created_at: string
+          granted_by: string | null
+          role: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          granted_by?: string | null
+          role: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          granted_by?: string | null
+          role?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -1051,7 +1075,13 @@ export type Database = {
         Args: { _pack_id: string; _user_id: string }
         Returns: boolean
       }
+      get_platform_owner_dashboard_metrics: { Args: never; Returns: Json }
+      has_platform_unrestricted_access: {
+        Args: { _user_id: string }
+        Returns: boolean
+      }
       invoke_sticker_drop_scheduler: { Args: never; Returns: number }
+      is_platform_owner: { Args: { _user_id: string }; Returns: boolean }
       is_workspace_member: {
         Args: { _user_id: string; _workspace_id: string }
         Returns: boolean

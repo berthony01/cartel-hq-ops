@@ -13,6 +13,8 @@ import {
   Award,
   BarChart3,
   MessageSquare,
+  ShieldHalf,
+
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -26,7 +28,13 @@ export type NavItem = {
   mobilePrimary?: boolean;
   /** Presentation only: shorter label used in the mobile tab bar. */
   mobileLabel?: string;
+  /**
+   * Presentation only: hidden unless the server confirms platform ownership.
+   * Hiding is NOT the security boundary — the route and Edge Function enforce.
+   */
+  ownerOnly?: boolean;
 };
+
 
 
 export type NavSection = {
@@ -84,6 +92,8 @@ export const NAV_SECTIONS: NavSection[] = [
         mobilePrimary: true,
       },
       { label: "Settings", to: "/settings", icon: Settings },
+      { label: "Owner Console", to: "/admin", icon: ShieldHalf, ownerOnly: true },
+
     ],
   },
 ];
