@@ -127,10 +127,15 @@ function readinessFor(
 export function useTelegramGroupSetup(enabled = true) {
   const { workspaceId } = useWorkspace();
   const queryClient = useQueryClient();
+  // Saved communities come straight from Supabase so the list never depends on
+  // Telegram API availability. Live re-checks stay secondary and may fail.
   const groupQuery = useQuery({
     queryKey: ["telegram-group-link", workspaceId],
     enabled: enabled && !!workspaceId,
-    queryFn: () => fetchTelegramGroupLinkStatus(workspaceId!),
+    staleTime: 60_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    queryFn: () => loadSavedTelegramGroupConnections(workspaceId!),
   });
 
   const [liveById, setLiveById] = useState<Record<string, TelegramGroupStatusResult>>({});
