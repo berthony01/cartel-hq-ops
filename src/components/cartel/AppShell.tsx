@@ -56,7 +56,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="px-1">
           <CartelMark />
         </div>
-        <div className="mt-6 flex-1 overflow-y-auto">
+        <div className="mt-6 flex-1 min-h-0 overflow-y-auto pr-1">
           <SidebarNav />
         </div>
         <p className="px-2 pt-4 text-[10px] leading-relaxed text-muted-foreground/70">
