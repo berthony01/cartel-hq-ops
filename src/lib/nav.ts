@@ -26,7 +26,13 @@ export type NavItem = {
   mobilePrimary?: boolean;
   /** Presentation only: shorter label used in the mobile tab bar. */
   mobileLabel?: string;
+  /**
+   * Presentation only: hidden unless the server confirms platform ownership.
+   * Hiding is NOT the security boundary — the route and Edge Function enforce.
+   */
+  ownerOnly?: boolean;
 };
+
 
 
 export type NavSection = {
