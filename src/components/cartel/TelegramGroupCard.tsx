@@ -1046,9 +1046,7 @@ export function TelegramGroupCard({
             </p>
             <p className="mt-2 leading-relaxed">
               Telegram opened. Tap <strong>Start</strong> in the CARTEL HQ bot chat, then return
-              here — we continue to the community picker automatically.
-              {identityRemaining > 0
-                ? ` This one-time link expires in ${Math.floor(identityRemaining / 60)}:${String(identityRemaining % 60).padStart(2, "0")}.`
+              here and continue to choose your community.
                 : " This one-time link is about to expire."}
             </p>
             {identityUrl ? (
