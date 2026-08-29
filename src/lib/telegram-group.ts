@@ -228,3 +228,84 @@ export function fetchPackGroupDistribution(params: {
     packId: params.packId,
   });
 }
+
+/* ------------------------------------------------------------------ */
+/* Community controls — welcome & onboarding (telegram-group v5)       */
+/* ------------------------------------------------------------------ */
+
+export const DEFAULT_WELCOME_MESSAGE =
+  "\u{1F44B} Welcome {first_name} to {community_name}!\n\nPlease check the pinned messages and official links before getting started.";
+
+export const WELCOME_MESSAGE_MAX = 3500;
+export const WELCOME_AUTO_DELETE_MIN = 10;
+export const WELCOME_AUTO_DELETE_MAX = 120;
+
+/** Persisted per-community welcome configuration (`telegram_community_settings`). */
+export type TelegramCommunitySettings = {
+  group_connection_id: string;
+  workspace_id: string;
+  welcome_enabled: boolean;
+  welcome_message: string;
+  mention_member: boolean;
+  auto_delete_enabled: boolean;
+  auto_delete_seconds: number;
+};
+
+export type TelegramCommunitySettingsResult = {
+  settings: TelegramCommunitySettings;
+  /** Only workspace owners/admins may mutate welcome settings. */
+  canManage: boolean;
+};
+
+export type TelegramWelcomeSettingsInput = {
+  welcomeEnabled: boolean;
+  welcomeMessage: string;
+  mentionMember: boolean;
+  autoDeleteEnabled: boolean;
+  autoDeleteSeconds: number;
+};
+
+export type TelegramWelcomeTestResult = {
+  sent: boolean;
+  messageId?: number | null;
+  autoDeleteSeconds?: number | null;
+  groupTitle?: string;
+};
+
+/** Reads welcome settings for one connected community. Lazy — call on open. */
+export function fetchCommunityWelcomeSettings(params: {
+  workspaceId: string;
+  groupConnectionId: string;
+}): Promise<TelegramCommunitySettingsResult> {
+  return invoke<TelegramCommunitySettingsResult>({
+    action: "welcome_settings",
+    workspaceId: params.workspaceId,
+    groupConnectionId: params.groupConnectionId,
+  });
+}
+
+/** Saves welcome settings. Owner/admin only — enforced server-side. */
+export function saveCommunityWelcomeSettings(params: {
+  workspaceId: string;
+  groupConnectionId: string;
+  settings: TelegramWelcomeSettingsInput;
+}): Promise<TelegramCommunitySettingsResult & { saved: boolean }> {
+  return invoke<TelegramCommunitySettingsResult & { saved: boolean }>({
+    action: "save_welcome_settings",
+    workspaceId: params.workspaceId,
+    groupConnectionId: params.groupConnectionId,
+    settings: params.settings,
+  });
+}
+
+/** Sends a real welcome preview into the community using the saved settings. */
+export function sendCommunityWelcomeTest(params: {
+  workspaceId: string;
+  groupConnectionId: string;
+}): Promise<TelegramWelcomeTestResult> {
+  return invoke<TelegramWelcomeTestResult>({
+    action: "send_welcome_test",
+    workspaceId: params.workspaceId,
+    groupConnectionId: params.groupConnectionId,
+  });
+}

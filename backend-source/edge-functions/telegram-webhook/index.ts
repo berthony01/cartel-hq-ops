@@ -55,6 +55,7 @@ async function editMessage(token: string, chatId: string, messageId: number, tex
     });
   } catch { }
 }
+function escapeHtml(value: string) { return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 function encodeChatId(chatId: string) { return chatId.startsWith("-") ? `n${chatId.slice(1)}` : chatId; }
 function decodeChatId(encoded: string) { return encoded.startsWith("n") ? `-${encoded.slice(1)}` : encoded; }
 function shouldSendWelcome(value: string | null | undefined) {
@@ -486,6 +487,46 @@ Deno.serve(async (req: Request) => {
 
     const message = update?.message, text = typeof message?.text === "string" ? message.text.trim() : "", from = message?.from, chat = message?.chat;
     const chatId = chat?.id != null ? String(chat.id) : "";
+    // Community welcome for real joins — handled BEFORE the text-only early return.
+    const newMembers = Array.isArray(message?.new_chat_members) ? message.new_chat_members : [];
+    if (newMembers.length > 0 && chatId && (chat?.type === "group" || chat?.type === "supergroup")) {
+      const humans = newMembers.filter((m: any) => m && m.is_bot !== true && m.id != null);
+      if (humans.length === 0) return json({ ok: true });
+      const { data: connection } = await admin.from("telegram_group_connections").select("id,title").eq("telegram_chat_id", Number(chatId)).maybeSingle();
+      if (!connection?.id) return json({ ok: true });
+      const { data: settings } = await admin.from("telegram_community_settings").select("welcome_enabled,welcome_message,mention_member,auto_delete_enabled,auto_delete_seconds").eq("group_connection_id", connection.id).maybeSingle();
+      if (!settings?.welcome_enabled || typeof settings.welcome_message !== "string" || !settings.welcome_message.trim()) return json({ ok: true });
+
+      const communityName = escapeHtml(String(chat?.title ?? connection.title ?? "this community"));
+      const single = humans.length === 1 ? humans[0] : null;
+      const displayName = (m: any) => escapeHtml(String(m?.first_name ?? m?.username ?? "New Member"));
+      const mention = (m: any) => `<a href="tg://user?id=${String(m.id)}">${displayName(m)}</a>`;
+      const firstNameToken = single ? displayName(single) : escapeHtml("everyone");
+      const usernameToken = single && typeof single.username === "string" && single.username ? `@${escapeHtml(single.username)}` : firstNameToken;
+      const memberToken = settings.mention_member
+        ? humans.slice(0, 5).map(mention).join(", ")
+        : (single ? displayName(single) : escapeHtml("everyone"));
+
+      const rendered = escapeHtml(settings.welcome_message)
+        .replaceAll("{first_name}", firstNameToken)
+        .replaceAll("{username}", usernameToken)
+        .replaceAll("{member}", memberToken)
+        .replaceAll("{community_name}", communityName);
+
+      const sent = await sendMessage(TELEGRAM_BOT_TOKEN, chatId, rendered, { parse_mode: "HTML" });
+      const sentId = (sent as any)?.message_id;
+      if (settings.auto_delete_enabled && sentId) {
+        const delayMs = Math.min(120, Math.max(10, Number(settings.auto_delete_seconds) || 45)) * 1000;
+        const cleanup = (async () => {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          try { await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", { chat_id: chatId, message_id: sentId }); }
+          catch (e) { console.error("[telegram-webhook] welcome cleanup", e instanceof Error ? e.message : "unknown"); }
+        })();
+        try { (globalThis as any).EdgeRuntime?.waitUntil?.(cleanup); } catch { }
+      }
+      return json({ ok: true });
+    }
+
     if (!text || !from?.id || !chatId) return json({ ok: true });
 
     if ((chat?.type === "group" || chat?.type === "supergroup") && /^\/(?:cartelhq|connect)(?:@\w+)?$/i.test(text)) {

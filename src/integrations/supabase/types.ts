@@ -804,6 +804,60 @@ export type Database = {
         }
         Relationships: []
       }
+      telegram_community_settings: {
+        Row: {
+          auto_delete_enabled: boolean
+          auto_delete_seconds: number
+          created_at: string
+          group_connection_id: string
+          mention_member: boolean
+          metadata: Json
+          updated_at: string
+          welcome_enabled: boolean
+          welcome_message: string
+          workspace_id: string
+        }
+        Insert: {
+          auto_delete_enabled?: boolean
+          auto_delete_seconds?: number
+          created_at?: string
+          group_connection_id: string
+          mention_member?: boolean
+          metadata?: Json
+          updated_at?: string
+          welcome_enabled?: boolean
+          welcome_message?: string
+          workspace_id: string
+        }
+        Update: {
+          auto_delete_enabled?: boolean
+          auto_delete_seconds?: number
+          created_at?: string
+          group_connection_id?: string
+          mention_member?: boolean
+          metadata?: Json
+          updated_at?: string
+          welcome_enabled?: boolean
+          welcome_message?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_community_settings_group_connection_id_fkey"
+            columns: ["group_connection_id"]
+            isOneToOne: true
+            referencedRelation: "telegram_group_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_community_settings_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       telegram_connections: {
         Row: {
           connected_at: string

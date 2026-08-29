@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Copy, Loader2, Users } from "lucide-react";
+import { Copy, Loader2, MessageSquarePlus, Users } from "lucide-react";
 
 import { useWorkspace } from "@/lib/workspace-context";
 import { useTelegramLauncher } from "@/hooks/useTelegramLauncher";
@@ -22,6 +22,7 @@ import {
   type TelegramGroupConnection,
   type TelegramGroupStatusResult,
 } from "@/lib/telegram-group";
+import { CommunityWelcomeDialog } from "@/components/cartel/CommunityWelcomeDialog";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -353,6 +354,7 @@ function GroupRow({
   onRecheck,
   checking,
   selectable,
+  workspaceId,
 }: {
   readiness: GroupReadiness;
   selected: boolean;
@@ -360,7 +362,9 @@ function GroupRow({
   onRecheck: () => void;
   checking: boolean;
   selectable: boolean;
+  workspaceId: string | null | undefined;
 }) {
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
   const g = r.group;
   const inputId = `tg-group-${g.id}`;
   return (
@@ -432,6 +436,35 @@ function GroupRow({
               Re-check group status
             </Button>
           </div>
+
+          {/* Community controls — shared per-community tooling context. */}
+          <div className="mt-2 rounded-md border border-gold/30 bg-gold/5 p-2.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold">
+              Community controls
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-11"
+                onClick={() => setWelcomeOpen(true)}
+              >
+                <MessageSquarePlus className="size-4" aria-hidden="true" />
+                Welcome &amp; onboarding
+              </Button>
+            </div>
+          </div>
+          {welcomeOpen ? (
+            <CommunityWelcomeDialog
+              open={welcomeOpen}
+              onOpenChange={setWelcomeOpen}
+              workspaceId={workspaceId}
+              group={g}
+            />
+          ) : null}
+
+
 
           <details className="mt-2 rounded-md border border-border bg-surface-raised p-2.5 text-xs">
             <summary className="flex min-h-9 cursor-pointer list-none items-center font-semibold text-muted-foreground">
@@ -898,6 +931,7 @@ export function TelegramGroupCard({
                 onToggle={() => toggleGroup(r.group.id)}
                 onRecheck={() => void recheckGroup(r.group.id, false)}
                 checking={checkingId === r.group.id}
+                workspaceId={workspaceId}
               />
             ))}
           </ul>
