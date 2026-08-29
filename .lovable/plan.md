@@ -1,53 +1,53 @@
-# Phase 1E Start-Gate Audit — Platform Owner + Admin Console Foundation
+# Sticker Drops regression: authoritative findings
 
-Read-only inspection at HEAD `d479936`, clean tree. No files changed.
+Read-only investigation. No code, schema, data, or deployment changed.
 
-## 1. Current architecture
+## Verdict
 
-- **Auth/session**: `src/routes/_authenticated/route.tsx` (`ssr: false`, `beforeLoad` uses `supabase.auth.getSession()` with a 2s timeout, redirects to `/auth`). `src/hooks/useSession.ts` is a global external-store mirror; single `onAuthStateChange` listener lives in `src/routes/__root.tsx`.
-- **Layout**: `AppShell` (sidebar + top bar + `MobileTabBar`), wrapped by `WorkspaceProvider`.
-- **Workspace scope**: `src/lib/workspace-context.tsx` — reads `workspaces` directly via the browser client (RLS-scoped), persists active workspace in localStorage. No role is fetched client-side.
-- **Nav**: `src/lib/nav.ts` — static section/item array with `status: "planned"` presentation and `mobilePrimary` metadata. No role/entitlement filtering exists.
-- **Data patterns**: two shapes in use — (a) direct RLS-scoped table reads via the browser Supabase client (`sticker-packs.ts`, `telegram-group.ts`, `media.ts`); (b) authenticated Edge Function RPC with a tolerant frontend contract type (`sticker-drops.ts` → `sticker-drop-config`, actions + `canManage`/`role` returned by the server). Pattern (b) is the correct precedent for anything privileged.
-- **Settings** (`/settings`) is still a `PlaceholderPage` and already lists "Billing and usage limits" as planned — the natural host for a platform/plan surface.
+Sticker Drops did not break. The schedule hit its **daily cap of 12 sends** at 15:15 UTC today and the scheduler has been correctly skipping ever since. The Community Welcome system is not implicated by any evidence.
 
-## 2. Is there a platform-level role/entitlement mechanism today?
+## Evidence
 
-No. What exists is **workspace-scoped only**:
+Schedule `4db4261b-fe24-474c-bccd-eaae6b7fafd7` (workspace `311dfe4c…`, PEPE CARTEL COMMUNITY):
 
-- `workspaces.owner_id`, `workspace_members.role` (free-text `string`, not an enum), DB functions `is_workspace_owner`, `is_workspace_member`, `can_access_pack`.
-- `sticker-drop-config` returns `role: "owner" | "admin" | "member"` and `canManage` — but that is per-workspace authority, not platform authority.
-- `usage_ledger` (units, provider/internal cost) exists as metering data, with no quota, plan, or entitlement table anywhere.
-- There is no `user_roles` table, no `app_role` enum (`Enums` is empty), no `platform_admins`, no plan/subscription table, and no client-side notion of a superuser.
+- `enabled = true`, `paused_reason = null`, `consecutive_failures = 0`
+- `interval_minutes = 15`, `daily_cap = 12`, `active_start/end = 07:00:00 / 23:00:00`, `timezone = America/Chicago`
+- `last_sent_at = 2026-08-29 15:15:04+00`
+- `next_run_at = 2026-08-29 20:40:04+00`, `updated_at = 2026-08-29 19:40:05+00`
 
-Conclusion: a platform owner concept must be introduced server-side; nothing today can be reused as-is.
+Events for `local_date = 2026-08-29`: **12 rows, all `status = sent`**, zero failed, zero skipped rows persisted. Newest send `telegram_message_id = 446` at 15:15:04 UTC. No `error_message` anywhere.
 
-## 3. Recommended minimal frontend surface for an owner console
+`sticker_drop_events` count = daily_cap = 12, so the worker takes this branch (`sticker-drops` snapshot, lines 179-191):
 
-Frontend only; all authority comes from the server response.
+```text
+count(sent events for group_connection_id + local_date) >= daily_cap
+  -> update next_run_at = now + 60 minutes
+  -> skipped, reason "daily_cap"   (no event row is written)
+```
 
-- `src/lib/platform.ts` — thin authenticated client mirroring `sticker-drops.ts`: one `supabase.functions.invoke("platform-admin", { action: "status" })` call returning `{ isPlatformOwner, capabilities, metrics }`, plus shared error parsing. No email checks, no table reads.
-- `src/hooks/usePlatformAccess.ts` — `useQuery` wrapper exposing `{ isPlatformOwner, loading }`, cached per session, fail-closed on error.
-- `src/routes/_authenticated/admin.tsx` — Owner Console route. Renders a plain "not available" state (not a redirect, not a 404 leak) when the server says the caller is not the platform owner.
-- `src/lib/nav.ts` — add an `ownerOnly?: boolean` presentation flag on the Admin item; `SidebarNav`/`MobileTabBar` hide it when `isPlatformOwner` is false. Hiding is cosmetic only; the route and the Edge Function enforce.
-- Reuse existing primitives (`PageHeader`, `Section`, `InlineRow`, `StatusBadge`, `EmptyState`) — no new visual architecture.
+That explains the exact observed pattern: the row keeps being touched hourly (`updated_at` 19:40, `next_run_at` 20:40) while nothing posts and no error is recorded.
 
-Backend (separately authorized, not in this phase): a `platform_admins` / `user_roles` table keyed on `auth.users.id` with a `SECURITY DEFINER` `is_platform_owner(_user_id)` check, seeded once by user id for the confirmed account, plus a `platform-admin` Edge Function that reads the caller's JWT `sub` and never trusts request-supplied identity.
+Everything else is healthy:
 
-## 4. Email-based bypass vs user-id/role
+- `cron.job` id 1 `cartel-sticker-drops-runner`, `*/5 * * * *`, `active = true`, command `select public.invoke_sticker_drop_scheduler();`
+- Last 12 `cron.job_run_details` entries (19:30 through 20:25 UTC) all `succeeded`
+- `sticker_drop_workspace_controls` is **empty**, so no kill switch
+- Group `7848baa3…` PEPE CARTEL COMMUNITY: supergroup, `bot_is_admin = true`, `verified_at = 2026-08-29 15:52 UTC` (verified *after* the last send, so the bot link is fine)
+- Pack `68865971…`: `status = published`, `telegram_set_name = pepecartel_test_pack_68865971_by_PepeCartelHQBot`
 
-- **Email in client code**: worthless as a control — bundle-visible, trivially edited in devtools, and any data it unlocks must already be RLS-open, i.e. open to everyone. Reject outright.
-- **Email compared server-side**: still weak. Emails are mutable, can be changed via Auth, and unverified sign-ups can claim a domain/address; a compare that ignores `email_confirmed_at` is a direct privilege-escalation path.
-- **Correct**: authority is a row keyed on the immutable `auth.users.id`, seeded once out-of-band, checked by a `SECURITY DEFINER` function under RLS and re-checked inside every privileged Edge Function from the verified JWT subject. The UI only ever *renders* what the server already decided.
+## Why the Welcome work is not the cause
 
-## 5. Recommended Phase 1E boundary (no Stripe, no paid plans)
+The welcome system added actions to `telegram-group` and a join handler to `telegram-webhook`. Neither writes `sticker_drop_*` tables, the cron job, `invoke_sticker_drop_scheduler`, or the vault secret, and the scheduler's own cron runs are all succeeding. The observed stop is fully explained by the cap branch, which is reached before any Telegram call is made.
 
-In scope:
-1. Server-side platform-owner identity + `is_platform_owner` check, seeded by user id (authorized migration, separate contract).
-2. `platform-admin` Edge Function with a read-only `status` action.
-3. Frontend: `platform.ts`, `usePlatformAccess.ts`, `/admin` route, owner-only nav flag.
-4. Owner Console v1 shows read-only platform metrics already derivable from existing tables (workspaces, packs, published packs, connected groups, drop events, usage_ledger totals).
+## Smallest safe fix (choose one, requires your authorization)
 
-Explicitly out of scope: Stripe, plan/price/subscription tables, entitlement enforcement, quota blocking, feature flags, per-workspace plan assignment, impersonation, member management writes, and any change to Sticker Lab generation, transparency/export, Telegram link/publish/distribution, drop scheduling, auth, or routing for existing surfaces.
+1. **Do nothing.** Sending resumes automatically at the next local calendar day (`local_date` rolls over in America/Chicago), i.e. after 05:00 UTC tomorrow, within the 07:00-23:00 window.
+2. **Raise the cap** if 12/day is simply too low. With `interval_minutes = 15` and a 16-hour window the schedule is theoretically capable of ~64 sends/day, so the cap is the real governor, not the interval. Raise `daily_cap` toward the desired volume (server bound is 24) via the existing Distribution Center schedule dialog — no SQL, no migration, no deployment.
 
-Suggested split: **1E-A** backend owner identity + status function; **1E-B** frontend console and nav gating. Pricing/entitlements begin at Phase 1F on top of the same `is_platform_owner` primitive.
+## Optional follow-up (not required to restore posting)
+
+The cap skip is invisible in the product: no event row and no UI signal, so it reads as "drops broke." A future presentation-only change could surface "daily cap reached, resumes tomorrow" in the Distribution Center by comparing today's sent count against `daily_cap`, which the status payload already returns. Out of scope for this investigation.
+
+## Checks I could not make
+
+None of the requested checks were blocked. `psql` env vars are absent in this sandbox, but the Supabase read-query tool answered items 1-5 directly; item 7 was answered from the committed `sticker-drops` snapshot rather than re-reading the deployed bundle.
