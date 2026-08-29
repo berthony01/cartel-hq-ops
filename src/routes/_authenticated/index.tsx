@@ -152,7 +152,7 @@ function HqDashboard() {
       />
 
       {/* Live metrics */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 [&>*]:min-w-0">
         <Metric label="Recent packs" value={packsQuery.isPending ? "—" : String(packs.length)} />
         <Metric
           label="Published (recent)"
@@ -173,7 +173,7 @@ function HqDashboard() {
         >
           Quick actions
         </h2>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 [&>*]:min-w-0">
           {QUICK_ACTIONS.map((action) => (
             <Link
               key={action.label}
@@ -194,7 +194,7 @@ function HqDashboard() {
         </div>
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
         {/* Recent packs as compact rows */}
         <Section
           variant="surface"
@@ -294,7 +294,7 @@ function HqDashboard() {
       </div>
 
       {/* Roadmap — low prominence, derived from nav metadata */}
-      <Section variant="plain" title="Modules" contentClassName="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <Section variant="plain" title="Modules" contentClassName="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 [&>*]:min-w-0">
         {NAV_SECTIONS.map((group) => (
           <div key={group.label} className="min-w-0">
             <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">

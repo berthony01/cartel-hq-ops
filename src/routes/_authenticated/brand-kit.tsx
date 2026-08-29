@@ -213,7 +213,7 @@ function BrandKitPage() {
             className="space-y-4 sm:space-y-6"
           >
             <Section variant="surface" title="Identity">
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
                 <div>
                   <Label htmlFor="brand_name">Brand name</Label>
                   <Input
@@ -248,7 +248,7 @@ function BrandKitPage() {
             </Section>
 
             <Section variant="surface" title="Links">
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-3 [&>*]:min-w-0">
                 <div>
                   <Label htmlFor="website_url">Website</Label>
                   <Input
@@ -283,7 +283,7 @@ function BrandKitPage() {
             </Section>
 
             <Section variant="surface" title="Visual system">
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
                 <div>
                   <Label htmlFor="colors">Colours</Label>
                   <Textarea
@@ -331,7 +331,7 @@ function BrandKitPage() {
             </Section>
 
             <Section variant="surface" title="AI style guidance">
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
                 <div className="md:col-span-2">
                   <Label htmlFor="ai_style_notes">Style notes</Label>
                   <Textarea
@@ -390,7 +390,7 @@ function BrandKitPage() {
             description="Uploads stay private to this workspace."
             contentClassName="space-y-4"
           >
-            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 [&>*]:min-w-0">
               {BRAND_ASSET_TYPES.map((type) => (
                 <AssetUploader
                   key={type}
@@ -412,7 +412,7 @@ function BrandKitPage() {
                 description="Uploaded logos, mascots and references appear here and stay private to this workspace."
               />
             ) : (
-              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 [&>*]:min-w-0">
                 {brandAssets.map((asset: MediaAsset) => (
                   <li key={asset.id} className="cartel-panel rounded-lg p-2.5 sm:p-3">
                     <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md border border-border bg-background/40">

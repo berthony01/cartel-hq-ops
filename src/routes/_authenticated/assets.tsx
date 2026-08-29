@@ -119,7 +119,7 @@ function AssetsPage() {
       ) : (
         <>
           <Section variant="surface" title="Upload" contentClassName="space-y-3">
-            <div className="grid gap-3 md:grid-cols-[220px_1fr] md:items-start">
+            <div className="grid gap-3 md:grid-cols-[220px_1fr] md:items-start [&>*]:min-w-0">
               <div>
                 <label
                   htmlFor="asset-type"
@@ -187,7 +187,7 @@ function AssetsPage() {
                 description="Uploads appear here. Files are private to this workspace and never publicly accessible."
               />
             ) : (
-              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
+              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5 [&>*]:min-w-0">
                 {assets.map((asset) => (
                   <li key={asset.id} className="cartel-panel rise-in rounded-lg p-2.5 sm:p-3">
                     <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md border border-border bg-background/40">
