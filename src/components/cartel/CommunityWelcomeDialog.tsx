@@ -10,6 +10,7 @@ import {
   fetchCommunityWelcomeSettings,
   saveCommunityWelcomeSettings,
   sendCommunityWelcomeTest,
+  type TelegramCommunitySettingsMetadata,
   type TelegramGroupConnection,
 } from "@/lib/telegram-group";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,28 @@ function renderPreview(template: string, communityName: string, mention: boolean
     .replaceAll("{community_name}", communityName);
 }
 
+/** Human wording for the webhook's last-join diagnostic codes. */
+function describeJoinResult(result: string | null | undefined) {
+  switch (result) {
+    case "sent":
+      return "Welcome sent to the community.";
+    case "send_failed":
+      return "Welcome could not be delivered by Telegram.";
+    case "skipped_disabled":
+      return "Welcome skipped because real joins were disabled.";
+    case "skipped_no_message":
+      return "Welcome skipped because no message was saved.";
+    default:
+      return result ? `Result: ${result}` : "No result recorded.";
+  }
+}
+
+function formatDiagnosticTime(value: string | null | undefined) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toLocaleString();
+}
+
 export function CommunityWelcomeDialog({
   open,
   onOpenChange,
@@ -66,6 +89,9 @@ export function CommunityWelcomeDialog({
   const [dirty, setDirty] = useState(false);
 
   const [enabled, setEnabled] = useState(false);
+  /** Last state confirmed by the server. Drives the unmistakable ON/OFF banner. */
+  const [savedEnabled, setSavedEnabled] = useState(false);
+  const [diagnostic, setDiagnostic] = useState<TelegramCommunitySettingsMetadata | null>(null);
   const [message, setMessage] = useState(DEFAULT_WELCOME_MESSAGE);
   const [mention, setMention] = useState(true);
   const [autoDelete, setAutoDelete] = useState(true);
@@ -81,6 +107,12 @@ export function CommunityWelcomeDialog({
         if (cancelled) return;
         const s = result.settings;
         setEnabled(s.welcome_enabled === true);
+        setSavedEnabled(s.welcome_enabled === true);
+        setDiagnostic(
+          s.metadata && typeof s.metadata === "object"
+            ? (s.metadata as TelegramCommunitySettingsMetadata)
+            : null,
+        );
         setMessage(s.welcome_message || DEFAULT_WELCOME_MESSAGE);
         setMention(s.mention_member !== false);
         setAutoDelete(s.auto_delete_enabled !== false);
@@ -133,7 +165,12 @@ export function CommunityWelcomeDialog({
       });
       setCanManage(result.canManage === true || result.saved === true);
       setDirty(false);
-      toast.success(`Welcome settings saved for ${group.title}.`);
+      setSavedEnabled(enabled);
+      toast.success(
+        enabled
+          ? `Saved. Real join welcomes are now ON for ${group.title}.`
+          : `Saved. Real join welcomes are now OFF for ${group.title}. New members receive nothing.`,
+      );
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Could not save community welcome settings.",
@@ -151,11 +188,14 @@ export function CommunityWelcomeDialog({
         workspaceId,
         groupConnectionId: group.id,
       });
-      toast.success(
-        result.autoDeleteSeconds
-          ? `Test welcome posted in ${group.title}. The bot removes it in ${result.autoDeleteSeconds}s.`
-          : `Test welcome posted in ${group.title}.`,
-      );
+      const base = result.autoDeleteSeconds
+        ? `Test welcome posted in ${group.title}. The bot removes it in ${result.autoDeleteSeconds}s.`
+        : `Test welcome posted in ${group.title}.`;
+      if (savedEnabled) toast.success(base);
+      else
+        toast.warning(
+          `${base} This was a preview only. Real join welcomes are OFF, so new members receive nothing.`,
+        );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not send the test welcome.");
     } finally {
@@ -187,6 +227,50 @@ export function CommunityWelcomeDialog({
           </p>
         ) : (
           <div className="space-y-4">
+            <div
+              className={
+                savedEnabled
+                  ? "rounded-md border border-pepe/50 bg-pepe/10 p-3"
+                  : "rounded-md border border-signal/50 bg-signal/10 p-3"
+              }
+            >
+              <p
+                className={
+                  savedEnabled
+                    ? "text-xs font-semibold uppercase tracking-[0.14em] text-pepe"
+                    : "text-xs font-semibold uppercase tracking-[0.14em] text-signal"
+                }
+              >
+                {savedEnabled ? "Real join welcome: ON" : "Real join welcome: OFF"}
+              </p>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                {savedEnabled
+                  ? "New members joining this community receive the saved welcome message."
+                  : "Test sends are previews only. New members joining this community receive nothing until you turn this on and save."}
+              </p>
+              {dirty ? (
+                <p className="mt-1 text-[11px] leading-relaxed text-gold">
+                  Unsaved changes. This state updates only after you press Save.
+                </p>
+              ) : null}
+            </div>
+
+            {diagnostic?.last_join_detected_at ? (
+              <div className="rounded-md border border-border/60 bg-background/40 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Last join diagnostic
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-foreground">
+                  Join detected
+                  {formatDiagnosticTime(diagnostic.last_join_detected_at)
+                    ? ` ${formatDiagnosticTime(diagnostic.last_join_detected_at)}`
+                    : ""}
+                  {" · "}
+                  {describeJoinResult(diagnostic.last_welcome_result)}
+                </p>
+              </div>
+            ) : null}
+
             {!canManage ? (
               <p className="rounded-md border border-border bg-surface-raised p-2.5 text-xs text-muted-foreground">
                 Only workspace owners and admins can change these settings.
@@ -195,7 +279,7 @@ export function CommunityWelcomeDialog({
 
             <div className="flex min-h-11 items-center justify-between gap-3">
               <Label htmlFor={`welcome-enabled-${group.id}`} className="text-xs">
-                Enable welcome message
+                Enable for real member joins
               </Label>
               <Switch
                 id={`welcome-enabled-${group.id}`}
@@ -336,9 +420,9 @@ export function CommunityWelcomeDialog({
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               {dirty
                 ? "Save your changes before sending a test. The test uses the saved settings."
-                : enabled
+                : savedEnabled
                   ? "Real joins will receive this message."
-                  : "Welcome is disabled, so real joins get nothing. A test still posts the saved message so you can check it."}
+                  : "Real join welcomes are OFF, so new members get nothing. A test still posts the saved message as a preview so you can check it."}
             </p>
           </div>
         )}

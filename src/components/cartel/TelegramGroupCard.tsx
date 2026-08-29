@@ -449,12 +449,13 @@ function GroupRow({
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold">
                 Community controls
               </p>
-              <StatusBadge tone="green" className="text-[10px]">
-                Live
+              <StatusBadge tone="muted" className="text-[10px]">
+                <span>Controls available</span>
               </StatusBadge>
             </div>
             <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              Manage the tools that operate inside this specific community.
+              Manage the tools that operate inside this specific community. Each control is off
+              until you open it and turn it on for this community.
             </p>
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
               <Button
