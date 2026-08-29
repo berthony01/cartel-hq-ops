@@ -26,6 +26,7 @@ import {
   fetchDropStatus,
   formatCadence,
   formatClock,
+  formatNextRun,
   nextRunAt,
   relativeTime,
   scheduleState,
@@ -207,7 +208,15 @@ function DistributionPage() {
         <SummaryTile label="Sent today" value={String(todayCount)} hint="Your local day" />
         <SummaryTile
           label="Next drop"
-          value={next ? formatClock(next) : killSwitch ? "Paused" : "Not scheduled"}
+          value={
+            next
+              ? next.isDue
+                ? "Due now"
+                : formatClock(next.at)
+              : killSwitch
+                ? "Paused"
+                : "Not scheduled"
+          }
         />
       </ScrollRail>
 
@@ -327,8 +336,8 @@ function DistributionPage() {
                   <InlineRow
                     title={group.title}
                     subtitle={detail}
-                    {...(state === "active" && schedule?.next_run_at
-                      ? { meta: `Next ${formatClock(new Date(schedule.next_run_at))}` }
+                    {...(state === "active" && formatNextRun(schedule?.next_run_at)
+                      ? { meta: formatNextRun(schedule?.next_run_at) as string }
                       : {})}
                     trailing={
                       <>
@@ -347,7 +356,7 @@ function DistributionPage() {
                       </>
                     }
                   />
-                  {schedule?.paused_reason && !killSwitch ? (
+                  {state === "auto_paused" && schedule?.paused_reason ? (
                     <p className="mt-1 px-3 text-[11px] leading-relaxed text-signal [overflow-wrap:anywhere]">
                       Auto-paused: {schedule.paused_reason}
                     </p>
