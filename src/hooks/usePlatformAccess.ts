@@ -3,6 +3,7 @@ import { useSession } from "@/hooks/useSession";
 import {
   fetchPlatformStatus,
   platformErrorMessage,
+  type PlatformDetails,
   type PlatformMetrics,
   type PlatformRole,
 } from "@/lib/platform";
@@ -18,6 +19,7 @@ export type PlatformAccess = {
   role: PlatformRole | null;
   capabilities: string[];
   metrics: PlatformMetrics | null;
+  details: PlatformDetails | null;
 };
 
 /**
@@ -53,6 +55,7 @@ export function usePlatformAccess(options?: { fresh?: boolean }): PlatformAccess
       role: null,
       capabilities: [],
       metrics: null,
+      details: null,
     };
   }
 
@@ -64,5 +67,6 @@ export function usePlatformAccess(options?: { fresh?: boolean }): PlatformAccess
     role: ok ? data.role : null,
     capabilities: ok ? data.capabilities : [],
     metrics: ok && data.isPlatformOwner ? data.metrics : null,
+    details: ok && data.isPlatformOwner ? data.details : null,
   };
 }
