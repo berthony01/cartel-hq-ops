@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { NetworkEmpty, ProjectCard } from "@/components/cartel-network/NetworkPieces";
 import {
   NETWORK_PAGE_SIZE,
-  NETWORK_PAGE_SIZE,
   fetchNetworkProjects,
   networkKeys,
   type NetworkProjectCard,
