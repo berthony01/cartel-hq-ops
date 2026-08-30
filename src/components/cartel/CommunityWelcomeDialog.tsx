@@ -453,9 +453,10 @@ export function CommunityWelcomeDialog({
                 <Switch
                   id={`welcome-cta-${group.id}`}
                   checked={ctaEnabled}
-                  // Owners can always turn an enabled CTA OFF, even when the saved
-                  // launch has since become ineligible. Only turning it ON is blocked.
+                  /* Owners can always turn an enabled CTA OFF, even when the saved
+                     launch has since become ineligible; only turning it ON is blocked. */
                   disabled={!canManage || (noEligibleLaunches && !ctaEnabled)}
+
                   onCheckedChange={(v) => {
                     setCtaEnabled(v === true);
                     touch();
