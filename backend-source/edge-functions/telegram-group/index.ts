@@ -380,19 +380,38 @@ Deno.serve(async (req: Request) => {
         .replaceAll("{username}", "@newmember")
         .replaceAll("{member}", memberToken)
         .replaceAll("{community_name}", communityName);
-      const ctaKeyboard = await resolveCtaKeyboard(settings);
-      const sent = await telegramJson(TELEGRAM_BOT_TOKEN, "sendMessage", { chat_id: String(group.telegram_chat_id), text: `${rendered}\n\n<i>(CARTEL HQ welcome preview)</i>`, parse_mode: "HTML", disable_web_page_preview: true, ...(ctaKeyboard ? { reply_markup: ctaKeyboard } : {}) });
+      const cta = await resolveCta(settings);
+      // Phase 5.2 — the welcome preview NEVER carries CTA reply_markup.
+      const sent = await telegramJson(TELEGRAM_BOT_TOKEN, "sendMessage", { chat_id: String(group.telegram_chat_id), text: `${rendered}\n\n<i>(CARTEL HQ welcome preview)</i>`, parse_mode: "HTML", disable_web_page_preview: true });
       const messageId = sent?.message_id ?? null;
-      if (settings.auto_delete_enabled && messageId) {
-        const delayMs = Math.min(120, Math.max(10, Number(settings.auto_delete_seconds) || 45)) * 1000;
+      const scheduleDelete = (targetId: number, delaySeconds: number, label: string) => {
         const cleanup = (async () => {
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
-          try { await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", { chat_id: String(group.telegram_chat_id), message_id: messageId }); }
-          catch (e) { console.error("[telegram-group] welcome test cleanup", e instanceof Error ? e.message : "unknown"); }
+          await new Promise((resolve) => setTimeout(resolve, delaySeconds * 1000));
+          try { await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", { chat_id: String(group.telegram_chat_id), message_id: targetId }); }
+          catch (e) { console.error(`[telegram-group] ${label} cleanup`, e instanceof Error ? e.message : "unknown"); }
         })();
         try { (globalThis as any).EdgeRuntime?.waitUntil?.(cleanup); } catch { }
+      };
+      if (settings.auto_delete_enabled && messageId) {
+        scheduleDelete(messageId, Math.min(120, Math.max(10, Number(settings.auto_delete_seconds) || 45)), "welcome test");
       }
-      return respond({ sent: true, messageId, autoDeleteSeconds: settings.auto_delete_enabled ? settings.auto_delete_seconds : null, groupTitle: group.title, launchWatchCtaIncluded: Boolean(ctaKeyboard) });
+
+      // Separate compact Launch Watch card with its own independent lifetime.
+      let ctaMessageId: number | null = null;
+      let ctaLifetime: number | null = null;
+      if (messageId && cta) {
+        const raw = Number(settings.launch_watch_cta_auto_delete_seconds);
+        ctaLifetime = LW_CTA_LIFETIMES.includes(raw) ? raw : LW_CTA_LIFETIME_DEFAULT;
+        try {
+          const ctaSent = await telegramJson(TELEGRAM_BOT_TOKEN, "sendMessage", { chat_id: String(group.telegram_chat_id), text: cta.text, parse_mode: "HTML", disable_web_page_preview: true, reply_markup: cta.keyboard });
+          ctaMessageId = ctaSent?.message_id ?? null;
+          if (ctaMessageId) scheduleDelete(ctaMessageId, ctaLifetime, "launch watch card test");
+        } catch (e) {
+          console.error("[telegram-group] launch watch card send", e instanceof Error ? e.message : "unknown");
+        }
+      }
+      return respond({ sent: true, messageId, autoDeleteSeconds: settings.auto_delete_enabled ? settings.auto_delete_seconds : null, groupTitle: group.title, launchWatchCtaIncluded: Boolean(ctaMessageId), launchWatchCtaMessageId: ctaMessageId, launchWatchCtaAutoDeleteSeconds: ctaMessageId ? ctaLifetime : null });
+
     }
 
 
