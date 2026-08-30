@@ -203,8 +203,11 @@ function LaunchControlPage() {
   const set = (patch: Partial<EditorForm>) =>
     setForm((f) => (f ? { ...f, ...patch } : f));
 
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["launches", workspaceId] });
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ["launches", workspaceId] });
+    void queryClient.invalidateQueries({ queryKey: launchReadinessQueryKey(workspaceId) });
+  };
+
 
   // ---- create -------------------------------------------------------------
   const [creating, setCreating] = useState(false);
