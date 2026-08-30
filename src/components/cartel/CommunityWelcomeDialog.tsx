@@ -235,6 +235,8 @@ export function CommunityWelcomeDialog({
       setCanManage(result.canManage === true || result.saved === true);
       setDirty(false);
       setSavedEnabled(enabled);
+      void queryClient.invalidateQueries({ queryKey: ["launch-readiness", workspaceId] });
+
 
       toast.success(
         enabled
