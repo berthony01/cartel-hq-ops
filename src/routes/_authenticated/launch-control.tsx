@@ -1082,6 +1082,73 @@ function LaunchControlPage() {
                   )}
                 </Section>
 
+                <Section
+                  variant="surface"
+                  title="Notification engine"
+                  leading={<Bell className="size-4" aria-hidden="true" />}
+                >
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge tone="green">
+                        <span>Engine: Active</span>
+                      </StatusBadge>
+                      <span className="text-xs text-muted-foreground">
+                        Telegram delivery to active watchers only.
+                      </span>
+                    </div>
+
+                    <ul className="space-y-1 text-xs leading-relaxed text-muted-foreground">
+                      <li>24h + 1h countdown reminders (watchers who allow them)</li>
+                      <li>Official-contract Verified Launch Packet</li>
+                      <li>Launch-live alert</li>
+                    </ul>
+
+                    {watchToken ? (
+                      <>
+                        <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
+                          {(
+                            [
+                              ["Events", notificationSummary?.event_count],
+                              ["In queue", notificationSummary?.pending_count],
+                              ["Sent", notificationSummary?.sent_count],
+                              ["Failed", notificationSummary?.failed_count],
+                              ["Ambiguous", notificationSummary?.ambiguous_count],
+                              ["Skipped", notificationSummary?.skipped_count],
+                              ["Reminder opt-ins", notificationSummary?.reminder_enabled_watchers],
+                            ] as const
+                          ).map(([label, value]) => (
+                            <div key={label} className="min-w-0">
+                              <dt className="truncate uppercase tracking-[0.12em] text-muted-foreground">
+                                {label}
+                              </dt>
+                              <dd className="font-mono text-sm text-foreground">
+                                {notificationSummaryQuery.isLoading ? "—" : (value ?? 0)}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          <span className="text-foreground">Ambiguous</span> means the Telegram
+                          outcome could not be confirmed. Automatic resending is deliberately
+                          suppressed for those so a watcher is never messaged twice.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        Notification delivery becomes relevant once this launch reaches Watchlist
+                        open and the Launch Watch link starts collecting watchers.
+                      </p>
+                    )}
+
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Only aggregate counts are shown. Individual deliveries, Telegram identifiers
+                      and watcher identities are never exposed in Cartel HQ.
+                    </p>
+                  </div>
+                </Section>
+
+
                 <Section variant="surface" title="Lifecycle timestamps">
                   <dl className="space-y-1.5 text-xs">
                     {(
