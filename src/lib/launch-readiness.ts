@@ -287,7 +287,7 @@ export function computeLaunchReadiness(input: ReadinessInput): LaunchReadiness {
         to: "/launch-control",
         headline: "Launch foundation ready",
         explanation:
-          "Your project, launch, Launch Watch and community welcome are all set up. Public Cartel Network pages are not live yet.",
+          "Your project, launch, Launch Watch and community welcome are all set up, and your project is discoverable on the Cartel Network.",
       };
 
   return {
