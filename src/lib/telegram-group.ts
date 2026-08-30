@@ -67,6 +67,9 @@ export type TelegramGroupStatusResult = {
 
 export type TelegramAssignPackResult = {
   assigned: boolean;
+  /** Recoverable: the bot was removed from the community. */
+  reconnectRequired?: boolean;
+  connectionState?: string;
   /** Server posted the pack link into the group instead of assigning it. */
   announced?: boolean;
   reason?:
@@ -85,6 +88,8 @@ export type TelegramAssignPackResult = {
 
 export type TelegramGroupTestResult = {
   sent: boolean;
+  reconnectRequired?: boolean;
+  connectionState?: string;
   message?: string;
   technical?: string;
 };
@@ -297,6 +302,8 @@ export type TelegramWelcomeSettingsInput = {
 
 export type TelegramWelcomeTestResult = {
   sent: boolean;
+  reconnectRequired?: boolean;
+  connectionState?: string;
   messageId?: number | null;
   autoDeleteSeconds?: number | null;
   groupTitle?: string;
