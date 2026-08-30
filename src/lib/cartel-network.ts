@@ -23,6 +23,8 @@ export type NetworkUpcomingLaunch =
 export type NetworkLaunch = Fns["get_cartel_network_launch"]["Returns"][number];
 
 export const NETWORK_PAGE_SIZE = 12;
+/** The RPCs clamp `_limit` at 50; keep client paging inside that ceiling. */
+export const NETWORK_MAX_PAGE_LIMIT = 48;
 
 // ---------------------------------------------------------------------------
 // Formatting helpers (pure)
