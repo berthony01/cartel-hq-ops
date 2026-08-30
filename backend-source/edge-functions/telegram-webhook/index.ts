@@ -323,6 +323,42 @@ Deno.serve(async (req: Request) => {
       "Return to Cartel HQ to configure this community.",
     ].join("\n");
   };
+  const botInstalledText = (groupTitle: string) => {
+    const title = escapeHtml(groupTitle && groupTitle.trim() ? groupTitle : "This community");
+    return [
+      "<b>🐸 PEPECARTEL HQ BOT INSTALLED</b>",
+      "",
+      `<b>${title}</b> has added @${BOT_USERNAME}.`,
+      "",
+      "This community is <b>not connected to a Cartel HQ workspace yet.</b>",
+      "",
+      "Cartel HQ is the command center where community owners configure tools and automations. The bot carries approved actions out here in Telegram.",
+      "",
+      "<b>Available through Cartel HQ</b>",
+      "👋 Welcome &amp; onboarding",
+      "🎨 Telegram sticker packs",
+      "🤖 Native Sticker Drops",
+      "",
+      "<b>Coming next</b>",
+      "📢 Community automations",
+      "🚀 Launch Watch &amp; official launch alerts",
+      "🛡 Project verification",
+      "",
+      "New to Cartel HQ? Join Early Access below. Already have an account? Connect your Telegram account in Cartel HQ, then connect this community from your workspace.",
+    ].join("\n");
+  };
+  const accountFoundText = (groupTitle: string) => {
+    const title = escapeHtml(groupTitle && groupTitle.trim() ? groupTitle : "This community");
+    return [
+      "<b>🐸 CARTEL HQ ACCOUNT FOUND</b>",
+      "",
+      `We recognize the Cartel HQ account linked to the Telegram user who added @${BOT_USERNAME} to <b>${title}</b>.`,
+      "",
+      "This community is <b>not connected to a Cartel HQ workspace yet.</b>",
+      "",
+      "Return to Cartel HQ and use <b>Connect Community</b> from the workspace that should control this group. Once verified, the bot will activate that workspace's approved community tools here.",
+    ].join("\n");
+  };
 
 
   const bindGroup = async (params: { chat: any; actor: any; link: any }) => {
