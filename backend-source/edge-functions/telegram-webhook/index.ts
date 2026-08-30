@@ -323,11 +323,11 @@ Deno.serve(async (req: Request) => {
       "🚀 Launch Watch &amp; official launch alerts",
       "🛡 Project verification",
       "⚡ More community &amp; launch tools",
+      "",
       "<b>Stay connected with PEPECARTEL</b>",
       "Follow the ecosystem and see what Cartel HQ is building as new tools go live.",
       "",
       "Return to Cartel HQ to configure this community.",
-
     ].join("\n");
   };
   const botInstalledText = (groupTitle: string) => {
