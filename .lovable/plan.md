@@ -1,118 +1,49 @@
-# Owner-Only Telegram System Message Editor — Start-Gate Audit
+# Production Diff Audit — telegram-group v10 / telegram-webhook v29
 
-Read-only audit. No files, schema, functions, data, or settings were changed.
+Read-only. No files, functions, schema, data, or settings were changed.
 
-Start gate: HEAD `2dfb6c7cfc9841aaf31aab6a2fc8a0bc6b267e28`, working tree clean.
+## BLOCKER — live Edge Function source cannot be read from this environment
 
-## A) System-of-record map
+Steps 2-7 of the requested audit all depend on step 1 (reading the exact live deployed source). That read is not possible here:
 
-| Layer | Authority | Notes |
-| --- | --- | --- |
-| Code | This repository (main) | Edge Function sources are snapshots under `backend-source/edge-functions/`, staged to `supabase/functions/` only at deploy time |
-| Database / auth / RLS | External Supabase `ocoinbnjgstkmnwwvnhi` | Only approved backend |
-| Owner identity | `public.platform_user_roles` + `is_platform_owner()` (SECURITY DEFINER) | No client-readable path |
-| Owner Console read path | Edge Function `platform-admin` (`POST {action:"status"}`, verify_jwt true) | Verifies caller JWT with anon client, then uses service role |
-| Telegram runtime | Edge Function `telegram-webhook` (verify_jwt false, own secret-token check) | Service role client, no user JWT |
-| Recorded live inventory | `backend-source/edge-functions/README.md` | platform-admin v2 / verify_jwt true / hash `3fb151d8…e141ce`; telegram-webhook v26 / verify_jwt false / hash `53f64f9d…706baee`. These are the last independently verified values; live version/hash readback is not exposed by the tools available here and must be re-verified out of band before and after any deploy. |
+- No tool in the available Supabase toolset returns Edge Function source. The set is: `deploy_edge_functions`, `delete_edge_functions`, `curl_edge_functions` (invoke only), `edge_function_logs`, `test_edge_functions`, `analytics_query`, `read_query`, `run_sql`, `migration`, `linter`, `slow_queries`, storage/bucket tools, `rebind_secrets`. None exposes deployed source, version, or deployment hash.
+- The Supabase Management API path is unavailable: `SUPABASE_ACCESS_TOKEN` is not present in this sandbox (`NO_MGMT_TOKEN`).
+- `curl_edge_functions` only invokes; it cannot return a source body, and invoking `telegram-webhook` would exercise production side effects. Not attempted.
 
-## B) What already exists and is reusable
+Therefore I cannot state whether live v10 / v29 are semantically equal to the repo snapshots, cannot enumerate behavioral differences, cannot confirm the per-feature checklists in items 4 and 5 against live, and cannot certify item 7 either way. I will not infer equality from the supplied hashes: the Supabase deployment hash is computed over the deployed bundle, not over this repository file, so it is not comparable to a local `sha256sum`.
 
-- `is_platform_owner(_user_id)` and `has_platform_unrestricted_access(_user_id)` — SECURITY DEFINER, already used by `platform-admin`.
-- `platform_user_roles`: RLS enabled, **zero policies**, no Data API grants → direct authenticated clients cannot read or write it. Fail-closed already proven.
-- `platform-admin/index.ts`: exact pattern to extend — Bearer check → `userClient.auth.getUser()` → `admin.rpc("is_platform_owner")` → non-owner gets a stripped payload. Currently rejects any action other than `status`.
-- `src/lib/platform.ts` (`fetchPlatformStatus`, tolerant normalizers, `platformErrorMessage`, formatters) and `usePlatformAccess` (session-keyed, fails closed).
-- `/admin` route: 16 `Section` blocks using `Section`, `InlineRow`, `StatusBadge`, `EmptyState`, `Button` — a new Section drops in with no layout work.
-- Webhook copy helpers already isolated: `communityConnectedText` (line ~300), `botInstalledText` (~326), `accountFoundText` (~350); call sites at lines ~458 and ~548-549. State selection logic is separate from copy, so copy can be swapped without touching state logic.
-- `escapeHtml` in the webhook, used by all three helpers for group titles.
-- No existing global/platform settings or message-template table. `telegram_community_settings` is per-community and member-scoped; it must NOT be reused for platform copy.
+## What was verified locally (authoritative repo facts)
 
-## C) Proposed table and RLS
+Requested ref `37579f8b59b02efd399e3aa47fd2f0c9c7a67bcd` is content-identical to current HEAD `cc9872d70dae416ec54e7a2c17d17902a746e98a` (`git diff 37579f8..HEAD` returns zero changed files), so the snapshots below are the ref's content.
 
-One narrow table, no generic automation architecture.
+| File | Lines | sha256 (raw file bytes) |
+| --- | ---: | --- |
+| `backend-source/edge-functions/telegram-group/index.ts` | — | `03c449bc02062133531942f1b271b390484eb14eae1d1287b43450c2dd57a911` |
+| `backend-source/edge-functions/telegram-webhook/index.ts` | 863 | `33b2cc3905033059ce838687a7635c65b80fe6ecf4b351f527059179d6038d3a` |
+| `supabase/functions/telegram-webhook/index.ts` (staging copy) | 785 | `f2cd308ae42e6754829eb8ddc0605b3b806f373f666cb9111b78a1e8846e0350` |
 
-```sql
-create table public.platform_message_templates (
-  key text primary key,                    -- 'bot_installed' | 'account_found' | 'community_connected'
-  draft_body text not null default '',
-  published_body text,                     -- null = use hardcoded fallback
-  draft_updated_at timestamptz,
-  published_at timestamptz,
-  updated_by uuid references auth.users(id),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
--- NO grants to anon or authenticated (owner path is service role only)
-grant all on public.platform_message_templates to service_role;
-alter table public.platform_message_templates enable row level security;
--- intentionally zero policies: direct client access fails closed
-create trigger platform_message_templates_set_updated_at
-  before update on public.platform_message_templates
-  for each row execute function public.set_updated_at();
-insert into public.platform_message_templates (key) values
-  ('bot_installed'), ('account_found'), ('community_connected');
-```
+Working tree is clean.
 
-Design notes:
-- Key set is fixed and seeded; the editor never creates keys, so state logic stays code-owned.
-- `published_body` null or blank → webhook uses the hardcoded copy.
-- Bodies are Telegram HTML with a single `{group_title}` placeholder, escaped at render time.
-- CTA control: none in v1. The existing `groupAcquisitionKeyboard` stays hardcoded in the webhook (it encodes chat-scoped deep links and is security-relevant). No button builder.
+## Material finding — the staging copy is stale by 78 lines
 
-## D) platform-admin actions (additive only)
+`supabase/functions/telegram-webhook/index.ts` is the path the Lovable deploy pipeline uses. It is NOT byte-identical to the authoritative snapshot. The staged copy predates the bot-removal lifecycle work and is missing, in the `my_chat_member` existing-connection branch:
 
-Existing `status` action unchanged. After the existing owner check, add:
+- the `left`/`kicked` removal branch entirely (row preservation, `bot_is_admin=false`, `can_set_sticker_set=false`, `verified_at`, and metadata `last_member_status` / `bot_can_change_info` / `official_group_sticker_eligible` / `bot_removed_at` / `bot_removed_reason`);
+- pausing only currently-enabled `sticker_drop_schedules` with `paused_reason='bot_removed'`;
+- the idempotent best-effort removal DM to `connected_by` (including the `Re-add bot to a community` inline button) — the staged copy does not even select `title` or `connected_by`;
+- on restore to administrator/creator: clearing `bot_removed_at` / `bot_removed_reason` and re-enabling only `paused_reason='bot_removed'` schedules with reset `consecutive_failures` and future `next_run_at`.
 
-1. `templates_list` → owner-only. Returns all three rows: `key, draft_body, published_body, draft_updated_at, published_at, updated_at`. Non-owner: 403.
-2. `templates_save_draft` → `{ key, body }`. Validates key against the fixed allowlist and body length (e.g. 1–3500 chars). Writes `draft_body`, `draft_updated_at`, `updated_by`. Never touches `published_body`.
-3. `templates_publish` → `{ key, body? }`. Copies the supplied/current draft into `published_body`, sets `published_at`, `updated_by`.
-4. `templates_restore_default` → `{ key }`. Sets `draft_body` to the server-side hardcoded default for that key; does not publish. (Defaults live in a small shared constant block inside `platform-admin`, mirroring the webhook fallbacks.)
+There is no `supabase/functions/telegram-group/` staging directory at all.
 
-All four go through the same `is_platform_owner` gate before any service-role write. verify_jwt stays `true`.
+## Answer to item 7
 
-## E) Telegram webhook read strategy
+Do not synchronize repository snapshots to live source, and do not treat this as verified-in-sync. The correct order is:
 
-- Add one cached read helper: on first need per invocation, `admin.from('platform_message_templates').select('key,published_body')`.
-- `renderTemplate(key, groupTitle)`: if `published_body` is a non-empty string, substitute `{group_title}` with `escapeHtml(title)` and return; on any error, missing row, or empty published body, return the existing hardcoded helper output verbatim.
-- The three current helpers stay in the file unchanged as the fallback source of truth.
-- Call sites (lines ~458 and ~548-549) change from direct helper calls to `await renderTemplate(...)`. State selection, keyboards, throttling, contact tracking, welcome diagnostics, and secret validation are untouched.
-- Drafts are never read by the webhook.
-- verify_jwt stays `false`.
+1. Obtain live v10 / v29 source out of band (Supabase dashboard function editor, or `supabase functions download` with a management token) and diff it against the two `backend-source` snapshots.
+2. If live matches the snapshots semantically, only bookkeeping is needed.
+3. If live is behind, deploy from the `backend-source` snapshots (they are the reviewed source of truth), preserving `telegram-group` `verify_jwt=true` and `telegram-webhook` `verify_jwt=false`.
+4. Independently, before any future deploy from this repo, reconcile `supabase/functions/telegram-webhook/index.ts` to byte-identity with the snapshot — deploying the current staging copy would silently regress the entire bot-removal lifecycle.
 
-## F) Owner Console UI plan
+## Stop
 
-- `src/lib/platform.ts`: add `PlatformMessageTemplate` type plus `listMessageTemplates`, `saveTemplateDraft`, `publishTemplate`, `restoreTemplateDefault` — all thin `supabase.functions.invoke("platform-admin", …)` wrappers, same error handling as `fetchPlatformStatus`.
-- New `src/components/cartel/PlatformMessageEditor.tsx`, rendered inside a new `Section` on `/admin` only, and only when `usePlatformAccess().isPlatformOwner === true` (the route already renders a locked state otherwise, so community owners never see it).
-- Per template: tab or accordion for the three keys; textarea for the draft; read-only preview panel rendering the HTML with a sample group title; status line showing Published / Draft ahead of published / Using built-in default; `Last published` and `Last draft saved` timestamps via `formatTimestamp`; buttons `Restore Default`, `Save Draft`, `Publish` (publish behind a confirm, since it changes live Telegram).
-- No new routes, no nav changes.
-
-## G) Files that would change
-
-- New migration: `platform_message_templates` (table, grants, RLS, trigger, seed).
-- `backend-source/edge-functions/platform-admin/index.ts` — four new actions + defaults block.
-- `backend-source/edge-functions/telegram-webhook/index.ts` — template read helper + two call sites.
-- `src/lib/platform.ts` — types + four client wrappers.
-- `src/routes/_authenticated/admin.tsx` — one new owner-gated Section.
-- `src/components/cartel/PlatformMessageEditor.tsx` — new.
-- `backend-source/edge-functions/README.md` — inventory rows after verified deploys.
-- Generated `src/integrations/supabase/types.ts` refreshes after the migration.
-
-## H) Prohibited changes
-
-Sticker Lab, Sticker Drops, community welcome automation, group-link/bind security, `telegram_community_settings`, workspace RLS, auth, existing Owner Console metrics/sections, nav, routes, secrets, verify_jwt values, other Edge Functions, dependencies, and any client-side grant on the new table.
-
-## I) Verification and rollback
-
-Verification, in order:
-1. `bunx tsgo --noEmit` and `bun run build`.
-2. Read-only SQL: confirm table exists, RLS enabled, zero policies, no anon/authenticated grants, three seeded rows.
-3. Negative test: authenticated non-owner client `select` on the table must fail; `platform-admin` non-owner call to each new action must return 403.
-4. `platform-admin` owner path: list → save draft → confirm webhook output unchanged → publish → confirm new copy.
-5. Live Telegram check on a disposable test group for `bot_installed`.
-6. Unauthenticated POST to `telegram-webhook` must still return `403 {"ok":false}`.
-7. Re-read live version/verify_jwt/hash for both functions and update README.
-
-Rollback: set `published_body = null` for a key to instantly revert that message to the hardcoded default without a deploy; revert the function snapshots and redeploy for a full rollback; the table can be dropped without affecting any existing flow.
-
-## J) Stop
-
-No changes made. Awaiting implementation authorization before any migration, code edit, or deploy.
+No edits, deploys, migrations, or data writes were performed. Awaiting either live source pasted in, or authorization for a specific corrective action.
