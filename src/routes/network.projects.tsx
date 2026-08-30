@@ -126,24 +126,32 @@ function NetworkProjectsPage() {
       ) : (
         <>
           <p className="text-xs text-muted-foreground">
-            Showing {rows.length} of {total}
+            Showing {rangeStart}–{rangeEnd} of {total}
           </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {rows.map((p) => (
               <ProjectCard key={p.public_slug} project={p} />
             ))}
           </div>
-          {rows.length < total && limit < NETWORK_MAX_PAGE_LIMIT ? (
-            <div className="flex justify-center pt-2">
-              <Button
-                variant="outline"
-                onClick={() => setPages((p) => p + 1)}
-                disabled={query.isFetching}
-              >
-                {query.isFetching ? "Loading…" : "Load more"}
-              </Button>
-            </div>
-          ) : null}
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0 || query.isFetching}
+            >
+              Previous
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              Page {page + 1} of {Math.max(1, Math.ceil(total / NETWORK_PAGE_SIZE))}
+            </span>
+            <Button
+              variant="outline"
+              onClick={() => setPage((p) => p + 1)}
+              disabled={!hasNext || query.isFetching}
+            >
+              Next
+            </Button>
+          </div>
         </>
       )}
     </div>
