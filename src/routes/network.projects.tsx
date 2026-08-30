@@ -52,7 +52,7 @@ function NetworkProjectsPage() {
 
   function applyFilters(e: React.FormEvent) {
     e.preventDefault();
-    setPages(1);
+    setPage(0);
     setSearch(searchInput);
     setChain(chainInput);
   }
