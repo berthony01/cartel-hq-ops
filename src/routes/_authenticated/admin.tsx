@@ -21,6 +21,8 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
+import { PlatformMessageEditor } from "@/components/cartel/PlatformMessageEditor";
+
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { InlineRow } from "@/components/cartel/InlineRow";
 import { EmptyState } from "@/components/cartel/EmptyState";
