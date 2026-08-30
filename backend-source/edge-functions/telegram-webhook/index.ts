@@ -103,19 +103,23 @@ function startMenuKeyboard(linked: boolean) {
     ],
   };
 }
-function groupAcquisitionKeyboard(chatId: string) {
+function groupAcquisitionKeyboard(chatId: string, includeEarlyAccess = true) {
   const encoded = encodeChatId(chatId);
   return {
     inline_keyboard: [
-      [{ text: "🚀 Join Early Access", url: `https://t.me/${BOT_USERNAME}?start=beta_join_g_${encoded}` }],
+      ...(includeEarlyAccess ? [[{ text: "🚀 Join Early Access", url: `https://t.me/${BOT_USERNAME}?start=beta_join_g_${encoded}` }]] : []),
       [
         { text: "💬 PEPECARTEL Community", url: PEPECARTEL_TELEGRAM },
-        { text: "𝕏 Follow on X", url: PEPECARTEL_X },
+        { text: "𝕏 Follow PEPECARTEL", url: PEPECARTEL_X },
       ],
-      [{ text: "🌐 Visit Website", url: PEPECARTEL_WEBSITE }],
+      [
+        { text: "🌐 PEPECARTEL Website", url: PEPECARTEL_WEBSITE },
+        { text: "🗺 Cartel HQ Roadmap", url: `https://t.me/${BOT_USERNAME}?start=beta_roadmap_g_${encoded}` },
+      ],
     ],
   };
 }
+
 function betaWelcomeText() {
   return `<b>WELCOME TO PEPECARTEL HQ 🐸</b>\n\n@${BOT_USERNAME} is the Telegram extension of the growing PEPECARTEL ecosystem.\n\n<b>Private Beta is active.</b>\n\nSticker creation, Telegram sticker-pack publishing, native sticker delivery and multi-group distribution are among the first live Cartel HQ capabilities. More tools for crypto communities, projects, creators and operators are being developed progressively.\n\nWant early access as new capabilities roll out?`;
 }
