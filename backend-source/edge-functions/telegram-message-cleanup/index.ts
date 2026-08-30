@@ -115,63 +115,91 @@ Deno.serve(async (request) => {
     const messageId = Number(job.telegram_message_id);
     const attempt = Number(job.attempt_count) || 1;
 
+    // Every state write must be confirmed. A persistence failure throws and is
+    // handled by the outer per-job catch, which leaves the row in `processing`
+    // so the claim RPC reclaims it later. Aggregate counters only advance after
+    // the database confirms the write.
     const markDeleted = async () => {
-      await admin.from("telegram_message_cleanup_jobs").update({
+      const { error } = await admin.from("telegram_message_cleanup_jobs").update({
         status: "deleted",
         deleted_at: new Date().toISOString(),
         claimed_at: null,
         error_class: null,
         last_error: null,
       }).eq("id", job.job_id);
+      if (error) throw new Error("cleanup state update failed");
       deleted += 1;
     };
 
     const markRetry = async (seconds: number, errorClass: string, message: string) => {
-      await admin.from("telegram_message_cleanup_jobs").update({
+      const { error } = await admin.from("telegram_message_cleanup_jobs").update({
         status: "retry",
         claimed_at: null,
         next_attempt_at: new Date(Date.now() + seconds * 1000).toISOString(),
         error_class: errorClass,
         last_error: message,
       }).eq("id", job.job_id);
+      if (error) throw new Error("cleanup state update failed");
       retry += 1;
     };
 
     const markFailed = async (errorClass: string, message: string) => {
-      await admin.from("telegram_message_cleanup_jobs").update({
+      const { error } = await admin.from("telegram_message_cleanup_jobs").update({
         status: "failed",
         claimed_at: null,
         error_class: errorClass,
         last_error: message,
       }).eq("id", job.job_id);
+      if (error) throw new Error("cleanup state update failed");
       failed += 1;
     };
 
     const backoff = BACKOFF_SECONDS[Math.min(attempt - 1, BACKOFF_SECONDS.length - 1)];
+
+    // Step 1: talk to Telegram and classify the desired final state. Telegram
+    // transport failures are classified here, never confused with DB failures.
+    type Desired =
+      | { kind: "deleted" }
+      | { kind: "retry"; seconds: number; errorClass: string; message: string }
+      | { kind: "failed"; errorClass: string; message: string };
+    let desired: Desired;
 
     try {
       const result = await deleteMessage(TELEGRAM_BOT_TOKEN, chatId, messageId);
 
       if (result.ok || alreadyGone(result.description)) {
         // Already gone counts as success: cleanup is idempotent by design.
-        await markDeleted();
+        desired = { kind: "deleted" };
       } else if (result.httpStatus === 429) {
         const wait = Math.min(Math.max(result.retryAfter || backoff, 1), MAX_RETRY_AFTER_SECONDS);
-        if (attempt >= MAX_ATTEMPTS) await markFailed("rate_limited", "Telegram rate limit persisted across attempts.");
-        else await markRetry(wait, "rate_limited", "Telegram rate limited this deletion.");
+        desired = attempt >= MAX_ATTEMPTS
+          ? { kind: "failed", errorClass: "rate_limited", message: "Telegram rate limit persisted across attempts." }
+          : { kind: "retry", seconds: wait, errorClass: "rate_limited", message: "Telegram rate limited this deletion." };
       } else if (result.httpStatus >= 500) {
-        if (attempt >= MAX_ATTEMPTS) await markFailed("telegram_server_error", "Telegram server error persisted across attempts.");
-        else await markRetry(backoff, "telegram_server_error", "Telegram returned a server error.");
+        desired = attempt >= MAX_ATTEMPTS
+          ? { kind: "failed", errorClass: "telegram_server_error", message: "Telegram server error persisted across attempts." }
+          : { kind: "retry", seconds: backoff, errorClass: "telegram_server_error", message: "Telegram returned a server error." };
       } else {
         // Explicit 4xx/403: no blind retry.
-        await markFailed("telegram_rejected", "Telegram rejected the deletion request.");
+        desired = { kind: "failed", errorClass: "telegram_rejected", message: "Telegram rejected the deletion request." };
       }
     } catch (_e) {
       // Network/timeout — the outcome is unknown but re-deleting is harmless.
-      if (attempt >= MAX_ATTEMPTS) await markFailed("network_error", "Telegram was unreachable across attempts.");
-      else await markRetry(backoff, "network_error", "Telegram request failed or timed out.");
+      desired = attempt >= MAX_ATTEMPTS
+        ? { kind: "failed", errorClass: "network_error", message: "Telegram was unreachable across attempts." }
+        : { kind: "retry", seconds: backoff, errorClass: "network_error", message: "Telegram request failed or timed out." };
+    }
+
+    // Step 2: persist exactly that state, once. No fallback to a different status.
+    try {
+      if (desired.kind === "deleted") await markDeleted();
+      else if (desired.kind === "retry") await markRetry(desired.seconds, desired.errorClass, desired.message);
+      else await markFailed(desired.errorClass, desired.message);
+    } catch (_e) {
+      console.error("[telegram-message-cleanup] cleanup state update failed");
     }
   }
 
   return json({ claimed: jobs.length, deleted, retry, failed });
 });
+
