@@ -1075,9 +1075,10 @@ function LaunchControlPage() {
                         reaches Watchlist open.
                       </p>
                       <p className="text-xs leading-relaxed text-muted-foreground">
-                        Phase 4 saves Launch Watch opt-ins. Automated reminders, launch-live alerts
-                        and official-contract DMs begin in Phase 5.
+                        Watchers who join through that link receive the countdown reminders,
+                        official-contract packet and launch-live alert for this launch.
                       </p>
+
                     </div>
                   )}
                 </Section>
