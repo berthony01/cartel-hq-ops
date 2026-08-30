@@ -165,15 +165,32 @@ export function CommunityWelcomeDialog({
     seconds < WELCOME_AUTO_DELETE_MIN ||
     seconds > WELCOME_AUTO_DELETE_MAX;
 
+  const selectedLaunch = useMemo(
+    () => eligibleLaunches.find((o) => o.launchId === ctaLaunchId) ?? null,
+    [eligibleLaunches, ctaLaunchId],
+  );
+  const noEligibleLaunches = eligibleLaunches.length === 0;
+  const ctaSelectionInvalid = ctaEnabled && !selectedLaunch;
+
   const preview = useMemo(
     () => renderPreview(trimmed || DEFAULT_WELCOME_MESSAGE, group.title, mention),
     [trimmed, group.title, mention],
   );
 
+  /** Conceptual button summary only — this is not a Telegram rendering. */
+  const buttonSummary = useMemo(() => {
+    if (!ctaEnabled || !selectedLaunch) return null;
+    const parts = ["🔔 Watch this launch"];
+    if (ctaShowWebsite && selectedLaunch.hasWebsite) parts.push("🌐 Website");
+    if (ctaShowTelegram && selectedLaunch.hasTelegram) parts.push("💬 Telegram");
+    if (ctaShowX && selectedLaunch.hasX) parts.push("𝕏 X");
+    return `Buttons: ${parts.join(" · ")}`;
+  }, [ctaEnabled, selectedLaunch, ctaShowWebsite, ctaShowTelegram, ctaShowX]);
+
   const touch = () => setDirty(true);
 
   const handleSave = async () => {
-    if (!workspaceId || invalidMessage || invalidSeconds) return;
+    if (!workspaceId || invalidMessage || invalidSeconds || ctaSelectionInvalid) return;
     setSaving(true);
     try {
       const result = await saveCommunityWelcomeSettings({
@@ -185,11 +202,19 @@ export function CommunityWelcomeDialog({
           mentionMember: mention,
           autoDeleteEnabled: autoDelete,
           autoDeleteSeconds: seconds,
+          launchWatchCtaEnabled: ctaEnabled,
+          launchWatchLaunchId: ctaEnabled ? (ctaLaunchId ?? null) : null,
+          launchWatchShowWebsite: ctaShowWebsite,
+          launchWatchShowTelegram: ctaShowTelegram,
+          launchWatchShowX: ctaShowX,
         },
       });
+      if (Array.isArray(result.eligibleLaunches)) setEligibleLaunches(result.eligibleLaunches);
+      if (!ctaEnabled) setCtaLaunchId(null);
       setCanManage(result.canManage === true || result.saved === true);
       setDirty(false);
       setSavedEnabled(enabled);
+
       toast.success(
         enabled
           ? `Saved. Real join welcomes are now ON for ${group.title}.`
