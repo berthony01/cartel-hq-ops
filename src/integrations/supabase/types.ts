@@ -1202,6 +1202,7 @@ export type Database = {
           auto_delete_seconds: number
           created_at: string
           group_connection_id: string
+          launch_watch_cta_auto_delete_seconds: number
           launch_watch_cta_enabled: boolean
           launch_watch_launch_id: string | null
           launch_watch_show_telegram: boolean
@@ -1219,6 +1220,7 @@ export type Database = {
           auto_delete_seconds?: number
           created_at?: string
           group_connection_id: string
+          launch_watch_cta_auto_delete_seconds?: number
           launch_watch_cta_enabled?: boolean
           launch_watch_launch_id?: string | null
           launch_watch_show_telegram?: boolean
@@ -1236,6 +1238,7 @@ export type Database = {
           auto_delete_seconds?: number
           created_at?: string
           group_connection_id?: string
+          launch_watch_cta_auto_delete_seconds?: number
           launch_watch_cta_enabled?: boolean
           launch_watch_launch_id?: string | null
           launch_watch_show_telegram?: boolean
