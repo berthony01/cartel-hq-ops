@@ -7,10 +7,13 @@ import { useWorkspace } from "@/lib/workspace-context";
 import { getProjectProfile } from "@/lib/project-profile";
 import {
   CHAIN_MAX,
+  CONTRACT_MAX,
   LAUNCH_STATUSES,
   LAUNCH_STATUS_HELP,
   LAUNCH_STATUS_LABELS,
+  NOTES_MAX,
   SLUG_MAX,
+  SLUG_RULE_HINT,
   TICKER_MAX,
   TOKEN_NAME_MAX,
   canDeleteLaunch,
@@ -18,6 +21,7 @@ import {
   deleteDraftLaunch,
   deviceTimezone,
   formatTimestamp,
+  getLaunchAccess,
   hasSchedule,
   identityLocked,
   isValidLaunchSlug,
@@ -36,6 +40,7 @@ import {
   type LaunchRow,
   type LaunchStatus,
 } from "@/lib/launch-control";
+
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { EmptyState } from "@/components/cartel/EmptyState";
@@ -148,6 +153,17 @@ function LaunchControlPage() {
   });
   const launches = useMemo(() => launchesQuery.data ?? [], [launchesQuery.data]);
 
+  // Local permission hint only. RLS and the RPCs remain authoritative.
+  const accessQuery = useQuery({
+    queryKey: ["launch-access", workspaceId, workspace?.owner_id ?? null],
+    enabled: !!workspaceId,
+    queryFn: () => getLaunchAccess(workspaceId!, workspace?.owner_id ?? null),
+  });
+  const canManage = accessQuery.data?.canManage ?? false;
+  const readOnly = !canManage;
+
+
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = launches.find((l) => l.id === selectedId) ?? null;
 
@@ -224,6 +240,47 @@ function LaunchControlPage() {
   const status: LaunchStatus = selected ? toLaunchStatus(selected.status) : "DRAFT";
   const idLocked = identityLocked(status);
   const schedLocked = scheduleLocked(status);
+
+  // UX guards only. The database remains the authoritative validator.
+  const identityError =
+    !form || idLocked
+      ? null
+      : !form.token_name.trim()
+        ? "Token name is required."
+        : !form.ticker.trim()
+          ? "Ticker is required."
+          : !form.chain.trim()
+            ? "Chain is required."
+            : !isValidLaunchSlug(form.public_slug.trim().toLowerCase())
+              ? `Public launch slug must be ${SLUG_RULE_HINT.toLowerCase()}`
+              : null;
+
+  const scheduleError = (() => {
+    if (!form || schedLocked) return null;
+    if (form.schedule_mode === "exact") {
+      return localInputToIso(form.launch_at)
+        ? null
+        : "Set a valid launch date and time, or switch the schedule mode to Not set.";
+    }
+    if (form.schedule_mode === "window") {
+      const start = localInputToIso(form.window_start);
+      const end = localInputToIso(form.window_end);
+      if (!start || !end) return "A launch window needs both a valid start and end.";
+      if (new Date(end).getTime() < new Date(start).getTime())
+        return "Window end must be the same as or after the window start.";
+      return null;
+    }
+    return null;
+  })();
+
+  const notesError =
+    form && form.internal_notes.length > NOTES_MAX
+      ? `Internal notes are limited to ${NOTES_MAX} characters.`
+      : null;
+
+  const saveError = identityError ?? scheduleError ?? notesError;
+  const canSave = !!form && !saveError && canManage;
+
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -322,21 +379,23 @@ function LaunchControlPage() {
         ? "Save the official contract address before advancing."
         : null;
 
-  const saveButton = selected ? (
-    <Button
-      type="submit"
-      form="launch-editor-form"
-      className="min-h-11"
-      disabled={saveMutation.isPending}
-    >
-      {saveMutation.isPending ? (
-        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-      ) : (
-        <Save className="size-4" aria-hidden="true" />
-      )}
-      Save launch details
-    </Button>
-  ) : null;
+  const saveButton =
+    selected && canManage ? (
+      <Button
+        type="submit"
+        form="launch-editor-form"
+        className="min-h-11"
+        disabled={saveMutation.isPending || !canSave}
+      >
+        {saveMutation.isPending ? (
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+        ) : (
+          <Save className="size-4" aria-hidden="true" />
+        )}
+        Save launch details
+      </Button>
+    ) : null;
+
 
   return (
     <div className="space-y-6 pb-24 sm:space-y-8 lg:pb-0">
@@ -388,16 +447,33 @@ function LaunchControlPage() {
       ) : (
         <div className="grid min-w-0 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
           <div className="min-w-0 space-y-4 sm:space-y-6">
+            {readOnly && !accessQuery.isLoading ? (
+              <Section variant="surface">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <StatusBadge tone="muted">
+                    <span>Read only</span>
+                  </StatusBadge>
+                  <p className="min-w-0 text-xs leading-relaxed text-muted-foreground">
+                    You can view launches for this workspace. Creating, editing, advancing or
+                    deleting a launch requires the workspace owner or admin role.
+                  </p>
+                </div>
+              </Section>
+            ) : null}
+
             <Section
               variant="surface"
               title="Launches"
               description={`Launch records for ${profile.project_name}. One project profile can hold multiple launches.`}
               actions={
-                <Button size="sm" className="min-h-11" onClick={startCreate}>
-                  <Plus className="size-4" aria-hidden="true" />
-                  New launch
-                </Button>
+                canManage ? (
+                  <Button size="sm" className="min-h-11" onClick={startCreate}>
+                    <Plus className="size-4" aria-hidden="true" />
+                    New launch
+                  </Button>
+                ) : null
               }
+
             >
               {launchesQuery.isLoading ? (
                 <p className="text-sm text-muted-foreground">Loading launches…</p>
@@ -453,7 +529,7 @@ function LaunchControlPage() {
               )}
             </Section>
 
-            {creating ? (
+            {creating && canManage ? (
               <Section
                 variant="surface"
                 title="New launch"
@@ -502,7 +578,7 @@ function LaunchControlPage() {
                     <p className="mt-1 text-xs text-muted-foreground">
                       {newSlugValid
                         ? "Reserved for a future public launch path. No public page exists yet."
-                        : "2–64 characters, lowercase letters, numbers and hyphens."}
+                        : SLUG_RULE_HINT}
                     </p>
                   </div>
                 </div>
@@ -512,7 +588,7 @@ function LaunchControlPage() {
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Button
                     className="min-h-11"
-                    disabled={!canCreate || createMutation.isPending}
+                    disabled={!canCreate || !canManage || createMutation.isPending}
                     onClick={() => createMutation.mutate()}
                   >
                     {createMutation.isPending ? (
@@ -539,8 +615,10 @@ function LaunchControlPage() {
                 className="min-w-0 space-y-4 sm:space-y-6"
                 onSubmit={(e) => {
                   e.preventDefault();
+                  if (!canSave) return;
                   saveMutation.mutate();
                 }}
+
               >
                 <Section
                   variant="surface"
@@ -557,7 +635,7 @@ function LaunchControlPage() {
                       <Input
                         id="token-name"
                         maxLength={TOKEN_NAME_MAX}
-                        disabled={idLocked}
+                        disabled={idLocked || readOnly}
                         value={form.token_name}
                         onChange={(e) => set({ token_name: e.target.value })}
                       />
@@ -567,7 +645,7 @@ function LaunchControlPage() {
                       <Input
                         id="ticker"
                         maxLength={TICKER_MAX}
-                        disabled={idLocked}
+                        disabled={idLocked || readOnly}
                         value={form.ticker}
                         onChange={(e) => set({ ticker: e.target.value })}
                       />
@@ -577,7 +655,7 @@ function LaunchControlPage() {
                       <Input
                         id="chain"
                         maxLength={CHAIN_MAX}
-                        disabled={idLocked}
+                        disabled={idLocked || readOnly}
                         value={form.chain}
                         onChange={(e) => set({ chain: e.target.value })}
                       />
@@ -587,13 +665,18 @@ function LaunchControlPage() {
                       <Input
                         id="slug"
                         maxLength={SLUG_MAX}
-                        disabled={idLocked}
+                        disabled={idLocked || readOnly}
                         value={form.public_slug}
                         onChange={(e) => set({ public_slug: e.target.value })}
                       />
+                      <p className="mt-1 text-xs text-muted-foreground">{SLUG_RULE_HINT}</p>
                     </div>
                   </div>
+                  {identityError ? (
+                    <p className="mt-3 text-xs text-destructive">{identityError}</p>
+                  ) : null}
                 </Section>
+
 
                 <Section
                   variant="surface"
@@ -609,7 +692,7 @@ function LaunchControlPage() {
                       <Label htmlFor="schedule-mode">Schedule mode</Label>
                       <Select
                         value={form.schedule_mode}
-                        disabled={schedLocked}
+                        disabled={schedLocked || readOnly}
                         onValueChange={(v) => set({ schedule_mode: v as ScheduleMode })}
                       >
                         <SelectTrigger id="schedule-mode" className="min-h-11">
@@ -628,7 +711,7 @@ function LaunchControlPage() {
                         <Input
                           id="launch-at"
                           type="datetime-local"
-                          disabled={schedLocked}
+                          disabled={schedLocked || readOnly}
                           value={form.launch_at}
                           onChange={(e) => set({ launch_at: e.target.value })}
                         />
@@ -641,7 +724,7 @@ function LaunchControlPage() {
                           <Input
                             id="window-start"
                             type="datetime-local"
-                            disabled={schedLocked}
+                            disabled={schedLocked || readOnly}
                             value={form.window_start}
                             onChange={(e) => set({ window_start: e.target.value })}
                           />
@@ -651,7 +734,7 @@ function LaunchControlPage() {
                           <Input
                             id="window-end"
                             type="datetime-local"
-                            disabled={schedLocked}
+                            disabled={schedLocked || readOnly}
                             value={form.window_end}
                             onChange={(e) => set({ window_end: e.target.value })}
                           />
@@ -662,6 +745,9 @@ function LaunchControlPage() {
                   <p className="mt-3 text-xs text-muted-foreground">
                     Recorded timezone on this launch: {selected.timezone}
                   </p>
+                  {scheduleError ? (
+                    <p className="mt-2 text-xs text-destructive">{scheduleError}</p>
+                  ) : null}
                 </Section>
 
                 <Section
@@ -672,16 +758,23 @@ function LaunchControlPage() {
                   <Textarea
                     id="internal-notes"
                     rows={4}
+                    maxLength={NOTES_MAX}
+                    disabled={readOnly}
                     value={form.internal_notes}
                     onChange={(e) => set({ internal_notes: e.target.value })}
                   />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {form.internal_notes.length} / {NOTES_MAX} characters.
+                  </p>
+                  {notesError ? <p className="mt-1 text-xs text-destructive">{notesError}</p> : null}
                 </Section>
+
 
                 <div className="hidden lg:flex lg:justify-end">{saveButton}</div>
               </form>
             ) : null}
 
-            {selected && canDeleteLaunch(status) ? (
+            {selected && canManage && canDeleteLaunch(status) ? (
               <Section
                 variant="surface"
                 title="Delete draft"
@@ -755,17 +848,24 @@ function LaunchControlPage() {
                       {blockedReason ? (
                         <p className="text-xs text-muted-foreground">{blockedReason}</p>
                       ) : null}
-                      <Button
-                        className="min-h-11 w-full"
-                        disabled={transitionMutation.isPending || !!blockedReason}
-                        onClick={() => transitionMutation.mutate(next)}
-                      >
-                        {transitionMutation.isPending ? (
-                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                        ) : null}
-                        Advance to {LAUNCH_STATUS_LABELS[next]}
-                      </Button>
+                      {canManage ? (
+                        <Button
+                          className="min-h-11 w-full"
+                          disabled={transitionMutation.isPending || !!blockedReason}
+                          onClick={() => transitionMutation.mutate(next)}
+                        >
+                          {transitionMutation.isPending ? (
+                            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                          ) : null}
+                          Advance to {LAUNCH_STATUS_LABELS[next]}
+                        </Button>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Advancing the lifecycle requires the workspace owner or admin role.
+                        </p>
+                      )}
                     </div>
+
                   ) : (
                     <p className="mt-4 text-xs text-muted-foreground">
                       This launch has reached the final lifecycle state.
@@ -791,6 +891,8 @@ function LaunchControlPage() {
                         <Label htmlFor="contract-address">Official contract address</Label>
                         <Input
                           id="contract-address"
+                          maxLength={CONTRACT_MAX}
+                          disabled={readOnly}
                           value={contractInput}
                           onChange={(e) => setContractInput(e.target.value)}
                           placeholder="Paste the official contract address"
@@ -800,18 +902,26 @@ function LaunchControlPage() {
                         Not registered yet. You can correct and re-save the address while the
                         launch is still contract pending.
                       </p>
-                      <Button
-                        className="min-h-11"
-                        disabled={contractMutation.isPending || !contractInput.trim()}
-                        onClick={() => contractMutation.mutate()}
-                      >
-                        {contractMutation.isPending ? (
-                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                        ) : (
-                          <Save className="size-4" aria-hidden="true" />
-                        )}
-                        Save official contract address
-                      </Button>
+                      {canManage ? (
+                        <Button
+                          className="min-h-11"
+                          disabled={contractMutation.isPending || !contractInput.trim()}
+                          onClick={() => contractMutation.mutate()}
+                        >
+                          {contractMutation.isPending ? (
+                            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                          ) : (
+                            <Save className="size-4" aria-hidden="true" />
+                          )}
+                          Save official contract address
+                        </Button>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Registering the official contract address requires the workspace owner
+                          or admin role.
+                        </p>
+                      )}
+
                     </div>
                   ) : contractSaved ? (
                     <div className="space-y-2">

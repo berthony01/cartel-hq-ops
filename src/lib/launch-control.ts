@@ -88,8 +88,13 @@ export const TOKEN_NAME_MAX = 120;
 export const TICKER_MAX = 20;
 export const CHAIN_MAX = 64;
 export const SLUG_MIN = 2;
-export const SLUG_MAX = 64;
+/** Mirrors the authoritative DB constraint on launches.public_slug (2-96). */
+export const SLUG_MAX = 96;
+export const NOTES_MAX = 3000;
+export const CONTRACT_MAX = 256;
+export const SLUG_RULE_HINT = "2–96 characters, lowercase letters, numbers and hyphens.";
 export const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
 
 export function isValidLaunchSlug(value: string): boolean {
   return value.length >= SLUG_MIN && value.length <= SLUG_MAX && SLUG_PATTERN.test(value);
@@ -267,4 +272,40 @@ export async function setLaunchContractAddress(
   });
   if (error) rethrow(error);
   return data as unknown as LaunchRow;
+}
+
+// ---------------------------------------------------------------------------
+// Launch management permission (UI hint only).
+//
+// Mirrors the authoritative RLS/RPC rule: workspace owner/admin may manage
+// launches, members read only. This is a presentation guard, never security.
+// ---------------------------------------------------------------------------
+
+export type LaunchAccess = {
+  role: string | null;
+  canManage: boolean;
+};
+
+export async function getLaunchAccess(
+  workspaceId: string,
+  workspaceOwnerId: string | null,
+): Promise<LaunchAccess> {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) rethrow(userError);
+  const userId = userData.user?.id ?? null;
+  if (!userId) return { role: null, canManage: false };
+
+  const isOwner = !!workspaceOwnerId && workspaceOwnerId === userId;
+
+  const { data, error } = await supabase
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) rethrow(error);
+
+  const role = (data?.role as string | null) ?? (isOwner ? "owner" : null);
+  const canManage = isOwner || role === "owner" || role === "admin";
+  return { role, canManage };
 }
