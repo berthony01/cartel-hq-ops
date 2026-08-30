@@ -285,20 +285,32 @@ Deno.serve(async (req: Request) => {
         for (let i = 0; i < links.length; i += 2) rows.push(links.slice(i, i + 2));
         return { inline_keyboard: rows };
       };
-      /** Best-effort: any failure means "send the welcome without the CTA". */
-      const resolveCtaKeyboard = async (settings: any) => {
+      /**
+       * Compact, project-specific Launch Watch card. Public group text only —
+       * mute/stop controls remain private DM controls.
+       */
+      const buildCtaText = (row: any) => {
+        const profile = Array.isArray(row?.project_profiles) ? row.project_profiles[0] : row?.project_profiles;
+        const projectName = escapeHtml(String(profile?.project_name ?? "Project")).toUpperCase();
+        const meta = [String(row?.token_name ?? ""), row?.ticker ? `$${String(row.ticker)}` : "", String(row?.chain ?? "")]
+          .filter((v) => v.trim().length > 0).map((v) => escapeHtml(v)).join(" • ");
+        return `🚀 <b>${projectName} LAUNCH WATCH</b>\n${meta}\n\nGet official launch updates privately through @PepeCartelHQBot.\nTap below to watch. Notifications are opt-in and can be muted or stopped anytime.\n\n<i>This is not a token safety audit or endorsement.</i>`;
+      };
+      /** Best-effort: any failure means "send the welcome without the CTA card". */
+      const resolveCta = async (settings: any): Promise<{ text: string; keyboard: any } | null> => {
         if (settings?.launch_watch_cta_enabled !== true) return null;
         const launchId = settings?.launch_watch_launch_id ? String(settings.launch_watch_launch_id) : "";
         if (!launchId) return null;
         try {
           const rows = await loadEligibleLaunchRows(launchId);
           if (rows.length === 0) return null;
-          return buildCtaKeyboard(rows[0], settings);
+          return { text: buildCtaText(rows[0]), keyboard: buildCtaKeyboard(rows[0], settings) };
         } catch (e) {
           console.error("[telegram-group] launch watch cta", e instanceof Error ? e.message : "unknown");
           return null;
         }
       };
+
 
       if (action === "welcome_settings") {
         let eligibleLaunches: any[] = [];
