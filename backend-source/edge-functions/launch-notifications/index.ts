@@ -319,7 +319,9 @@ Deno.serve(async (req: Request) => {
         | { kind: "ambiguous"; description: string };
 
       try {
+        telegramAttempted = true;
         const response = await fetch(`${TG_BASE}/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
