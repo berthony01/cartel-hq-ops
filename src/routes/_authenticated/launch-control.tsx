@@ -241,6 +241,47 @@ function LaunchControlPage() {
   const idLocked = identityLocked(status);
   const schedLocked = scheduleLocked(status);
 
+  // UX guards only. The database remains the authoritative validator.
+  const identityError =
+    !form || idLocked
+      ? null
+      : !form.token_name.trim()
+        ? "Token name is required."
+        : !form.ticker.trim()
+          ? "Ticker is required."
+          : !form.chain.trim()
+            ? "Chain is required."
+            : !isValidLaunchSlug(form.public_slug.trim().toLowerCase())
+              ? `Public launch slug must be ${SLUG_RULE_HINT.toLowerCase()}`
+              : null;
+
+  const scheduleError = (() => {
+    if (!form || schedLocked) return null;
+    if (form.schedule_mode === "exact") {
+      return localInputToIso(form.launch_at)
+        ? null
+        : "Set a valid launch date and time, or switch the schedule mode to Not set.";
+    }
+    if (form.schedule_mode === "window") {
+      const start = localInputToIso(form.window_start);
+      const end = localInputToIso(form.window_end);
+      if (!start || !end) return "A launch window needs both a valid start and end.";
+      if (new Date(end).getTime() < new Date(start).getTime())
+        return "Window end must be the same as or after the window start.";
+      return null;
+    }
+    return null;
+  })();
+
+  const notesError =
+    form && form.internal_notes.length > NOTES_MAX
+      ? `Internal notes are limited to ${NOTES_MAX} characters.`
+      : null;
+
+  const saveError = identityError ?? scheduleError ?? notesError;
+  const canSave = !!form && !saveError && canManage;
+
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!selected || !form) throw new Error("No launch selected.");
