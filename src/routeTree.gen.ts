@@ -23,6 +23,7 @@ import { Route as AuthenticatedDistributionRouteImport } from './routes/_authent
 import { Route as AuthenticatedMissionsRouteImport } from './routes/_authenticated/missions'
 import { Route as AuthenticatedOperationsRouteImport } from './routes/_authenticated/operations'
 import { Route as AuthenticatedOperativesRouteImport } from './routes/_authenticated/operatives'
+import { Route as AuthenticatedProjectProfileRouteImport } from './routes/_authenticated/project-profile'
 import { Route as AuthenticatedReputationRouteImport } from './routes/_authenticated/reputation'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedStickerLabRouteImport } from './routes/_authenticated/sticker-lab'
@@ -104,6 +105,12 @@ const AuthenticatedOperativesRoute = AuthenticatedOperativesRouteImport.update({
   path: '/operatives',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedProjectProfileRoute =
+  AuthenticatedProjectProfileRouteImport.update({
+    id: '/project-profile',
+    path: '/project-profile',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedReputationRoute = AuthenticatedReputationRouteImport.update({
   id: '/reputation',
   path: '/reputation',
@@ -162,6 +169,7 @@ export interface FileRoutesByFullPath {
   '/missions': typeof AuthenticatedMissionsRoute
   '/operations': typeof AuthenticatedOperationsRoute
   '/operatives': typeof AuthenticatedOperativesRoute
+  '/project-profile': typeof AuthenticatedProjectProfileRoute
   '/reputation': typeof AuthenticatedReputationRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/sticker-lab': typeof AuthenticatedStickerLabRouteWithChildren
@@ -184,6 +192,7 @@ export interface FileRoutesByTo {
   '/missions': typeof AuthenticatedMissionsRoute
   '/operations': typeof AuthenticatedOperationsRoute
   '/operatives': typeof AuthenticatedOperativesRoute
+  '/project-profile': typeof AuthenticatedProjectProfileRoute
   '/reputation': typeof AuthenticatedReputationRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/telegram': typeof AuthenticatedTelegramRoute
@@ -208,6 +217,7 @@ export interface FileRoutesById {
   '/_authenticated/missions': typeof AuthenticatedMissionsRoute
   '/_authenticated/operations': typeof AuthenticatedOperationsRoute
   '/_authenticated/operatives': typeof AuthenticatedOperativesRoute
+  '/_authenticated/project-profile': typeof AuthenticatedProjectProfileRoute
   '/_authenticated/reputation': typeof AuthenticatedReputationRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/sticker-lab': typeof AuthenticatedStickerLabRouteWithChildren
@@ -234,6 +244,7 @@ export interface FileRouteTypes {
     | '/missions'
     | '/operations'
     | '/operatives'
+    | '/project-profile'
     | '/reputation'
     | '/settings'
     | '/sticker-lab'
@@ -256,6 +267,7 @@ export interface FileRouteTypes {
     | '/missions'
     | '/operations'
     | '/operatives'
+    | '/project-profile'
     | '/reputation'
     | '/settings'
     | '/telegram'
@@ -279,6 +291,7 @@ export interface FileRouteTypes {
     | '/_authenticated/missions'
     | '/_authenticated/operations'
     | '/_authenticated/operatives'
+    | '/_authenticated/project-profile'
     | '/_authenticated/reputation'
     | '/_authenticated/settings'
     | '/_authenticated/sticker-lab'
@@ -396,6 +409,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedOperativesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/project-profile': {
+      id: '/_authenticated/project-profile'
+      path: '/project-profile'
+      fullPath: '/project-profile'
+      preLoaderRoute: typeof AuthenticatedProjectProfileRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/reputation': {
       id: '/_authenticated/reputation'
       path: '/reputation'
@@ -485,6 +505,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedMissionsRoute: typeof AuthenticatedMissionsRoute
   AuthenticatedOperationsRoute: typeof AuthenticatedOperationsRoute
   AuthenticatedOperativesRoute: typeof AuthenticatedOperativesRoute
+  AuthenticatedProjectProfileRoute: typeof AuthenticatedProjectProfileRoute
   AuthenticatedReputationRoute: typeof AuthenticatedReputationRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedStickerLabRoute: typeof AuthenticatedStickerLabRouteWithChildren
@@ -504,6 +525,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedMissionsRoute: AuthenticatedMissionsRoute,
   AuthenticatedOperationsRoute: AuthenticatedOperationsRoute,
   AuthenticatedOperativesRoute: AuthenticatedOperativesRoute,
+  AuthenticatedProjectProfileRoute: AuthenticatedProjectProfileRoute,
   AuthenticatedReputationRoute: AuthenticatedReputationRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedStickerLabRoute: AuthenticatedStickerLabRouteWithChildren,
