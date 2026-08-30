@@ -901,8 +901,9 @@ function LaunchControlPage() {
 
                   <div className="mt-4 space-y-1.5 rounded-md border border-border bg-background/40 px-3 py-2">
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                      Telegram Join Launch Watch subscriptions are not connected yet. Watchlist
-                      open is an internal lifecycle state until Phase 4.
+                      Phase 4 Launch Watch opt-ins are active: once this launch reaches watchlist
+                      open and the Project Profile is Published, the Telegram deep link accepts
+                      watchers.
                     </p>
                     <p className="text-xs leading-relaxed text-muted-foreground">
                       Launch and contract DM notification delivery is not active until Phase 5.
