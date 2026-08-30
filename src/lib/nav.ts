@@ -1,5 +1,7 @@
 import {
   LayoutDashboard,
+  IdCard,
+
   ShieldCheck,
   TerminalSquare,
   Sticker,
@@ -47,6 +49,8 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Command",
     items: [
       { label: "HQ", to: "/", icon: LayoutDashboard, mobilePrimary: true },
+      { label: "Project Profile", to: "/project-profile", icon: IdCard },
+
       { label: "Cartel Clearance", to: "/clearance", icon: ShieldCheck, status: "planned" },
       { label: "Command Terminal", to: "/command-terminal", icon: TerminalSquare, status: "planned" },
     ],
