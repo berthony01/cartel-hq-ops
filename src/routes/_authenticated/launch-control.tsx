@@ -615,8 +615,10 @@ function LaunchControlPage() {
                 className="min-w-0 space-y-4 sm:space-y-6"
                 onSubmit={(e) => {
                   e.preventDefault();
+                  if (!canSave) return;
                   saveMutation.mutate();
                 }}
+
               >
                 <Section
                   variant="surface"
