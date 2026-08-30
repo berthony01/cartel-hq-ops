@@ -71,12 +71,25 @@ Deno.serve(async (req: Request) => {
     const removedStatus = storedRemovedStatus(group);
     if (removedStatus) throw new BotRemovedError(group, removedStatus);
 
-    const me = await telegramJson(TELEGRAM_BOT_TOKEN, "getMe");
-    const [chat, botMember, memberCountRaw] = await Promise.all([
-      telegramJson(TELEGRAM_BOT_TOKEN, "getChat", { chat_id: String(group.telegram_chat_id) }),
-      telegramJson(TELEGRAM_BOT_TOKEN, "getChatMember", { chat_id: String(group.telegram_chat_id), user_id: me.id }),
-      telegramJson(TELEGRAM_BOT_TOKEN, "getChatMemberCount", { chat_id: String(group.telegram_chat_id) }).catch(() => null),
-    ]);
+    let chat: any, botMember: any, memberCountRaw: any;
+    try {
+      const me = await telegramJson(TELEGRAM_BOT_TOKEN, "getMe");
+      [chat, botMember, memberCountRaw] = await Promise.all([
+        telegramJson(TELEGRAM_BOT_TOKEN, "getChat", { chat_id: String(group.telegram_chat_id) }),
+        telegramJson(TELEGRAM_BOT_TOKEN, "getChatMember", { chat_id: String(group.telegram_chat_id), user_id: me.id }),
+        telegramJson(TELEGRAM_BOT_TOKEN, "getChatMemberCount", { chat_id: String(group.telegram_chat_id) }).catch(() => null),
+      ]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      if (!isBotRemovedMessage(message)) throw err;
+      const updated = await markGroupRemoved(group, message.toLowerCase().includes("kicked") ? "kicked" : "left");
+      throw new BotRemovedError(updated, message.toLowerCase().includes("kicked") ? "kicked" : "left");
+    }
+    if (botMember?.status === "left" || botMember?.status === "kicked") {
+      const updated = await markGroupRemoved(group, String(botMember.status));
+      throw new BotRemovedError(updated, String(botMember.status));
+    }
+
     const chatType = String(chat?.type ?? group.chat_type ?? "");
     if (chatType !== "group" && chatType !== "supergroup") throw new Error("The connected Telegram chat is not a group.");
     const memberCount = typeof memberCountRaw === "number" ? memberCountRaw : null;
