@@ -171,6 +171,120 @@ export type Database = {
           },
         ]
       }
+      launch_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          launch_id: string
+          payload: Json
+          scheduled_for: string
+          source: string
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          launch_id: string
+          payload?: Json
+          scheduled_for: string
+          source: string
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          launch_id?: string
+          payload?: Json
+          scheduled_for?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launch_events_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      launch_notification_deliveries: {
+        Row: {
+          attempt_count: number
+          claimed_at: string | null
+          created_at: string
+          error_class: string | null
+          event_id: string
+          id: string
+          last_error: string | null
+          launch_id: string
+          next_attempt_at: string
+          sent_at: string | null
+          status: string
+          subscription_id: string
+          telegram_message_id: number | null
+          telegram_user_id: number
+          updated_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          claimed_at?: string | null
+          created_at?: string
+          error_class?: string | null
+          event_id: string
+          id?: string
+          last_error?: string | null
+          launch_id: string
+          next_attempt_at?: string
+          sent_at?: string | null
+          status?: string
+          subscription_id: string
+          telegram_message_id?: number | null
+          telegram_user_id: number
+          updated_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          claimed_at?: string | null
+          created_at?: string
+          error_class?: string | null
+          event_id?: string
+          id?: string
+          last_error?: string | null
+          launch_id?: string
+          next_attempt_at?: string
+          sent_at?: string | null
+          status?: string
+          subscription_id?: string
+          telegram_message_id?: number | null
+          telegram_user_id?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launch_notification_deliveries_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "launch_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_notification_deliveries_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_notification_deliveries_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "launch_watch_subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       launch_watch_subscriptions: {
         Row: {
           created_at: string
@@ -178,6 +292,7 @@ export type Database = {
           is_active: boolean
           last_interaction_at: string
           launch_id: string
+          reminders_enabled: boolean
           source: string
           subscribed_at: string
           telegram_user_id: number
@@ -189,6 +304,7 @@ export type Database = {
           is_active?: boolean
           last_interaction_at?: string
           launch_id: string
+          reminders_enabled?: boolean
           source?: string
           subscribed_at?: string
           telegram_user_id: number
@@ -200,6 +316,7 @@ export type Database = {
           is_active?: boolean
           last_interaction_at?: string
           launch_id?: string
+          reminders_enabled?: boolean
           source?: string
           subscribed_at?: string
           telegram_user_id?: number
@@ -1404,6 +1521,36 @@ export type Database = {
         Args: { _pack_id: string; _user_id: string }
         Returns: boolean
       }
+      claim_launch_notification_deliveries: {
+        Args: { _limit?: number }
+        Returns: {
+          attempt_count: number
+          delivery_id: string
+          event_id: string
+          event_type: string
+          launch_id: string
+          payload: Json
+          scheduled_for: string
+          subscription_id: string
+          telegram_user_id: number
+        }[]
+      }
+      enqueue_due_launch_reminder_events: {
+        Args: { _now?: string }
+        Returns: number
+      }
+      get_launch_notification_summary: {
+        Args: { _launch_id: string }
+        Returns: {
+          ambiguous_count: number
+          event_count: number
+          failed_count: number
+          pending_count: number
+          reminder_enabled_watchers: number
+          sent_count: number
+          skipped_count: number
+        }[]
+      }
       get_launch_watch_summary: {
         Args: { _launch_id: string }
         Returns: {
@@ -1416,6 +1563,7 @@ export type Database = {
         Args: { _user_id: string }
         Returns: boolean
       }
+      invoke_launch_notification_scheduler: { Args: never; Returns: number }
       invoke_sticker_drop_scheduler: { Args: never; Returns: number }
       is_platform_owner: { Args: { _user_id: string }; Returns: boolean }
       is_workspace_member: {
@@ -1430,6 +1578,15 @@ export type Database = {
         Args: { _user_id: string; _workspace_id: string }
         Returns: boolean
       }
+      launch_notification_payload: {
+        Args: { _launch_id: string }
+        Returns: Json
+      }
+      launch_notification_scheduler_secret_matches: {
+        Args: { p_secret: string }
+        Returns: boolean
+      }
+      mark_stale_launch_notification_claims: { Args: never; Returns: number }
       set_launch_contract_address: {
         Args: { _contract_address: string; _launch_id: string }
         Returns: {
