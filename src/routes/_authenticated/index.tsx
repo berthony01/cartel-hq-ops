@@ -126,6 +126,10 @@ function HqDashboard() {
         status="Private Beta"
       />
 
+      <LaunchReadinessPanel workspaceId={workspaceId} workspaceName={workspace?.name ?? null} />
+
+
+
       {/* Compact workspace summary */}
       <Section
         variant="surface"
