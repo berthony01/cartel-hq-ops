@@ -396,21 +396,46 @@ Deno.serve(async (req: Request) => {
         scheduleDelete(messageId, Math.min(120, Math.max(10, Number(settings.auto_delete_seconds) || 45)), "welcome test");
       }
 
-      // Separate compact Launch Watch card with its own independent lifetime.
+      /**
+       * Separate compact Launch Watch card. Its 5–60 minute lifetime CANNOT be a
+       * setTimeout: hosted Edge Functions are killed long before that. Deletion is
+       * queued as a durable cleanup job handled by the telegram-message-cleanup worker.
+       */
       let ctaMessageId: number | null = null;
       let ctaLifetime: number | null = null;
+      let ctaCleanupScheduled = false;
       if (messageId && cta) {
         const raw = Number(settings.launch_watch_cta_auto_delete_seconds);
         ctaLifetime = LW_CTA_LIFETIMES.includes(raw) ? raw : LW_CTA_LIFETIME_DEFAULT;
         try {
           const ctaSent = await telegramJson(TELEGRAM_BOT_TOKEN, "sendMessage", { chat_id: String(group.telegram_chat_id), text: cta.text, parse_mode: "HTML", disable_web_page_preview: true, reply_markup: cta.keyboard });
           ctaMessageId = ctaSent?.message_id ?? null;
-          if (ctaMessageId) scheduleDelete(ctaMessageId, ctaLifetime, "launch watch card test");
+          if (ctaMessageId) {
+            const deleteAfter = new Date(Date.now() + ctaLifetime * 1000).toISOString();
+            const { error: cleanupError } = await admin.from("telegram_message_cleanup_jobs").insert({
+              workspace_id: workspaceId,
+              group_connection_id: group.id,
+              telegram_chat_id: group.telegram_chat_id,
+              telegram_message_id: ctaMessageId,
+              cleanup_kind: "launch_watch_cta",
+              delete_after: deleteAfter,
+              next_attempt_at: deleteAfter,
+            });
+            if (cleanupError) throw cleanupError;
+            ctaCleanupScheduled = true;
+          }
         } catch (e) {
           console.error("[telegram-group] launch watch card send", e instanceof Error ? e.message : "unknown");
         }
+        // Never leave a card behind that has no durable cleanup path.
+        if (ctaMessageId && !ctaCleanupScheduled) {
+          try { await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", { chat_id: String(group.telegram_chat_id), message_id: ctaMessageId }); }
+          catch (e) { console.error("[telegram-group] launch watch card rollback", e instanceof Error ? e.message : "unknown"); }
+          ctaMessageId = null;
+        }
       }
-      return respond({ sent: true, messageId, autoDeleteSeconds: settings.auto_delete_enabled ? settings.auto_delete_seconds : null, groupTitle: group.title, launchWatchCtaIncluded: Boolean(ctaMessageId), launchWatchCtaMessageId: ctaMessageId, launchWatchCtaAutoDeleteSeconds: ctaMessageId ? ctaLifetime : null });
+      return respond({ sent: true, messageId, autoDeleteSeconds: settings.auto_delete_enabled ? settings.auto_delete_seconds : null, groupTitle: group.title, launchWatchCtaIncluded: ctaCleanupScheduled, launchWatchCtaMessageId: ctaCleanupScheduled ? ctaMessageId : null, launchWatchCtaAutoDeleteSeconds: ctaCleanupScheduled ? ctaLifetime : null });
+
 
     }
 
