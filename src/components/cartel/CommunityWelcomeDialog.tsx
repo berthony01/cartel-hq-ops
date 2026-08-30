@@ -4,16 +4,20 @@ import { Loader2, Send } from "lucide-react";
 
 import {
   DEFAULT_WELCOME_MESSAGE,
+  LAUNCH_WATCH_CTA_LIFETIMES,
+  LAUNCH_WATCH_CTA_LIFETIME_DEFAULT,
   WELCOME_AUTO_DELETE_MAX,
   WELCOME_AUTO_DELETE_MIN,
   WELCOME_MESSAGE_MAX,
   fetchCommunityWelcomeSettings,
+  formatLaunchWatchCtaLifetime,
   saveCommunityWelcomeSettings,
   sendCommunityWelcomeTest,
   type LaunchWatchCtaOption,
   type TelegramCommunitySettingsMetadata,
   type TelegramGroupConnection,
 } from "@/lib/telegram-group";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
