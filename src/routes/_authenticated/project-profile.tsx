@@ -501,7 +501,7 @@ function ProjectProfilePage() {
             <Section
               variant="surface"
               title="Discovery status"
-              description="These records stay behind authenticated workspace access. Cartel Network public pages are not live in this phase."
+              description="Draft and hidden profiles stay behind authenticated workspace access. Published profiles appear on the public Cartel Network."
             >
               <div className="max-w-sm">
                 <Label htmlFor="discovery_status">Status</Label>
