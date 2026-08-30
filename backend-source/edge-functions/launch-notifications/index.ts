@@ -157,8 +157,11 @@ Deno.serve(async (req: Request) => {
     counts.processed += 1;
     const deliveryId = String(claim.delivery_id);
     const eventType = String(claim.event_type);
+    // Duplicate-DM safety hinges on knowing whether Telegram was contacted.
+    let telegramAttempted = false;
 
     try {
+
       // ---- Revalidate against CURRENT state ------------------------------
       const { data: subscription, error: subError } = await admin
         .from("launch_watch_subscriptions")
