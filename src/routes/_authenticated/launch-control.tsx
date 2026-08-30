@@ -399,6 +399,16 @@ function LaunchControlPage() {
     queryFn: () => getLaunchWatchSummary(selected!.id),
   });
   const watchSummary = watchSummaryQuery.data ?? null;
+
+  // Notification engine (aggregate-only). Delivery rows and Telegram
+  // identifiers are service-role state and are never fetched here.
+  const notificationSummaryQuery = useQuery({
+    queryKey: ["launch-notification-summary", selected?.id ?? null],
+    enabled: !!selected?.id,
+    queryFn: () => getLaunchNotificationSummary(selected!.id),
+  });
+  const notificationSummary = notificationSummaryQuery.data ?? null;
+
   const blockedReason =
     next === "LAUNCH_APPROACHING" && !scheduleReady
       ? "Set an exact launch time or a complete launch window before advancing."
