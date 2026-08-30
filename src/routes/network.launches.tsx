@@ -53,11 +53,10 @@ function LaunchesDirectory() {
   const rangeStart = rows.length > 0 ? offset + 1 : 0;
   const rangeEnd = offset + rows.length;
   const hasNext = rangeEnd < total;
-  const total = query.data?.totalCount ?? 0;
 
   function applyFilters(e: React.FormEvent) {
     e.preventDefault();
-    setPages(1);
+    setPage(0);
     setSearch(searchInput);
     setChain(chainInput);
   }
