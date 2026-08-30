@@ -171,6 +171,132 @@ export type Database = {
           },
         ]
       }
+      launches: {
+        Row: {
+          announced_at: string | null
+          chain: string
+          completed_at: string | null
+          contract_pending_at: string | null
+          contract_registered_at: string | null
+          contract_registered_by: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          internal_notes: string | null
+          launch_approaching_at: string | null
+          launch_at: string | null
+          launch_window_end: string | null
+          launch_window_start: string | null
+          live_at: string | null
+          official_contract_address: string | null
+          project_profile_id: string
+          public_slug: string
+          status: string
+          status_changed_at: string
+          status_changed_by: string | null
+          ticker: string
+          timezone: string
+          token_name: string
+          updated_at: string
+          watchlist_opened_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          announced_at?: string | null
+          chain: string
+          completed_at?: string | null
+          contract_pending_at?: string | null
+          contract_registered_at?: string | null
+          contract_registered_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          internal_notes?: string | null
+          launch_approaching_at?: string | null
+          launch_at?: string | null
+          launch_window_end?: string | null
+          launch_window_start?: string | null
+          live_at?: string | null
+          official_contract_address?: string | null
+          project_profile_id: string
+          public_slug: string
+          status?: string
+          status_changed_at?: string
+          status_changed_by?: string | null
+          ticker: string
+          timezone?: string
+          token_name: string
+          updated_at?: string
+          watchlist_opened_at?: string | null
+          workspace_id: string
+        }
+        Update: {
+          announced_at?: string | null
+          chain?: string
+          completed_at?: string | null
+          contract_pending_at?: string | null
+          contract_registered_at?: string | null
+          contract_registered_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          internal_notes?: string | null
+          launch_approaching_at?: string | null
+          launch_at?: string | null
+          launch_window_end?: string | null
+          launch_window_start?: string | null
+          live_at?: string | null
+          official_contract_address?: string | null
+          project_profile_id?: string
+          public_slug?: string
+          status?: string
+          status_changed_at?: string
+          status_changed_by?: string | null
+          ticker?: string
+          timezone?: string
+          token_name?: string
+          updated_at?: string
+          watchlist_opened_at?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launches_contract_registered_by_fkey"
+            columns: ["contract_registered_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launches_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launches_project_profile_id_fkey"
+            columns: ["project_profile_id"]
+            isOneToOne: false
+            referencedRelation: "project_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launches_status_changed_by_fkey"
+            columns: ["status_changed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launches_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       media_assets: {
         Row: {
           asset_type: string
@@ -1239,13 +1365,93 @@ export type Database = {
         Args: { _user_id: string; _workspace_id: string }
         Returns: boolean
       }
+      is_workspace_operator: {
+        Args: { _user_id: string; _workspace_id: string }
+        Returns: boolean
+      }
       is_workspace_owner: {
         Args: { _user_id: string; _workspace_id: string }
         Returns: boolean
       }
+      set_launch_contract_address: {
+        Args: { _contract_address: string; _launch_id: string }
+        Returns: {
+          announced_at: string | null
+          chain: string
+          completed_at: string | null
+          contract_pending_at: string | null
+          contract_registered_at: string | null
+          contract_registered_by: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          internal_notes: string | null
+          launch_approaching_at: string | null
+          launch_at: string | null
+          launch_window_end: string | null
+          launch_window_start: string | null
+          live_at: string | null
+          official_contract_address: string | null
+          project_profile_id: string
+          public_slug: string
+          status: string
+          status_changed_at: string
+          status_changed_by: string | null
+          ticker: string
+          timezone: string
+          token_name: string
+          updated_at: string
+          watchlist_opened_at: string | null
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launches"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       sticker_drop_scheduler_secret_matches: {
         Args: { p_secret: string }
         Returns: boolean
+      }
+      transition_launch_status: {
+        Args: { _launch_id: string; _target_status: string }
+        Returns: {
+          announced_at: string | null
+          chain: string
+          completed_at: string | null
+          contract_pending_at: string | null
+          contract_registered_at: string | null
+          contract_registered_by: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          internal_notes: string | null
+          launch_approaching_at: string | null
+          launch_at: string | null
+          launch_window_end: string | null
+          launch_window_start: string | null
+          live_at: string | null
+          official_contract_address: string | null
+          project_profile_id: string
+          public_slug: string
+          status: string
+          status_changed_at: string
+          status_changed_by: string | null
+          ticker: string
+          timezone: string
+          token_name: string
+          updated_at: string
+          watchlist_opened_at: string | null
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launches"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
     }
     Enums: {
