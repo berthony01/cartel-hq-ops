@@ -156,7 +156,10 @@ Deno.serve(async (req: Request) => {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Telegram group distribution failed.";
       await saveTarget(pack.id, rawGroup.id, { status: "failed", last_error: message }).catch(() => undefined);
+      // Batch runs keep a failed row; single actions surface the recoverable state.
+      if (err instanceof BotRemovedError && !batch) throw err;
       return { groupConnectionId: rawGroup.id, title: rawGroup.title ?? "Telegram group", status: "failed", assigned: false, announced: false, message };
+
     }
   };
 
