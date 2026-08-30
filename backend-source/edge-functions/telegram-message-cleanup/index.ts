@@ -59,14 +59,18 @@ async function deleteMessage(token: string, chatId: string, messageId: number) {
   }
 }
 
-/** Telegram's wording for a message that is already gone or unreachable. */
+/**
+ * Telegram wording that unambiguously means the target message no longer
+ * exists. Only these count as idempotent success; every other rejection
+ * (permissions, invalid request, "can't be deleted") follows normal 4xx
+ * failure handling and is never silently marked deleted.
+ */
 function alreadyGone(description: string) {
   const text = description.toLowerCase();
   return text.includes("message to delete not found")
-    || text.includes("message can't be deleted")
-    || text.includes("message identifier is not specified")
     || text.includes("message is not found");
 }
+
 
 Deno.serve(async (request) => {
   if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
