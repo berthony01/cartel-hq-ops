@@ -294,12 +294,15 @@ export type TelegramCommunitySettings = {
   mention_member: boolean;
   auto_delete_enabled: boolean;
   auto_delete_seconds: number;
-  /** Phase 5.1 — optional public Launch Watch CTA attached to the welcome. */
+  /** Phase 5.1/5.2 — optional Launch Watch card posted separately after the welcome. */
   launch_watch_cta_enabled?: boolean;
   launch_watch_launch_id?: string | null;
   launch_watch_show_website?: boolean;
   launch_watch_show_telegram?: boolean;
   launch_watch_show_x?: boolean;
+  /** Phase 5.2 — independent lifetime for the separate Launch Watch card. */
+  launch_watch_cta_auto_delete_seconds?: number;
+
   /** Present only when the server includes it; diagnostics are read-only here. */
   metadata?: TelegramCommunitySettingsMetadata | null;
 };
