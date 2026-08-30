@@ -221,6 +221,8 @@ export function CommunityWelcomeDialog({
           launchWatchShowWebsite: ctaShowWebsite,
           launchWatchShowTelegram: ctaShowTelegram,
           launchWatchShowX: ctaShowX,
+          launchWatchCtaAutoDeleteSeconds: ctaLifetime,
+
         },
       });
       if (Array.isArray(result.eligibleLaunches)) setEligibleLaunches(result.eligibleLaunches);
