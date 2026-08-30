@@ -1202,6 +1202,11 @@ export type Database = {
           auto_delete_seconds: number
           created_at: string
           group_connection_id: string
+          launch_watch_cta_enabled: boolean
+          launch_watch_launch_id: string | null
+          launch_watch_show_telegram: boolean
+          launch_watch_show_website: boolean
+          launch_watch_show_x: boolean
           mention_member: boolean
           metadata: Json
           updated_at: string
@@ -1214,6 +1219,11 @@ export type Database = {
           auto_delete_seconds?: number
           created_at?: string
           group_connection_id: string
+          launch_watch_cta_enabled?: boolean
+          launch_watch_launch_id?: string | null
+          launch_watch_show_telegram?: boolean
+          launch_watch_show_website?: boolean
+          launch_watch_show_x?: boolean
           mention_member?: boolean
           metadata?: Json
           updated_at?: string
@@ -1226,6 +1236,11 @@ export type Database = {
           auto_delete_seconds?: number
           created_at?: string
           group_connection_id?: string
+          launch_watch_cta_enabled?: boolean
+          launch_watch_launch_id?: string | null
+          launch_watch_show_telegram?: boolean
+          launch_watch_show_website?: boolean
+          launch_watch_show_x?: boolean
           mention_member?: boolean
           metadata?: Json
           updated_at?: string
@@ -1239,6 +1254,13 @@ export type Database = {
             columns: ["group_connection_id"]
             isOneToOne: true
             referencedRelation: "telegram_group_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_community_settings_launch_watch_launch_id_fkey"
+            columns: ["launch_watch_launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
             referencedColumns: ["id"]
           },
           {
