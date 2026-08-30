@@ -635,7 +635,7 @@ function LaunchControlPage() {
                       <Input
                         id="token-name"
                         maxLength={TOKEN_NAME_MAX}
-                        disabled={idLocked}
+                        disabled={idLocked || readOnly}
                         value={form.token_name}
                         onChange={(e) => set({ token_name: e.target.value })}
                       />
@@ -645,7 +645,7 @@ function LaunchControlPage() {
                       <Input
                         id="ticker"
                         maxLength={TICKER_MAX}
-                        disabled={idLocked}
+                        disabled={idLocked || readOnly}
                         value={form.ticker}
                         onChange={(e) => set({ ticker: e.target.value })}
                       />
@@ -655,7 +655,7 @@ function LaunchControlPage() {
                       <Input
                         id="chain"
                         maxLength={CHAIN_MAX}
-                        disabled={idLocked}
+                        disabled={idLocked || readOnly}
                         value={form.chain}
                         onChange={(e) => set({ chain: e.target.value })}
                       />
@@ -665,7 +665,7 @@ function LaunchControlPage() {
                       <Input
                         id="slug"
                         maxLength={SLUG_MAX}
-                        disabled={idLocked}
+                        disabled={idLocked || readOnly}
                         value={form.public_slug}
                         onChange={(e) => set({ public_slug: e.target.value })}
                       />
@@ -687,7 +687,7 @@ function LaunchControlPage() {
                       <Label htmlFor="schedule-mode">Schedule mode</Label>
                       <Select
                         value={form.schedule_mode}
-                        disabled={schedLocked}
+                        disabled={schedLocked || readOnly}
                         onValueChange={(v) => set({ schedule_mode: v as ScheduleMode })}
                       >
                         <SelectTrigger id="schedule-mode" className="min-h-11">
@@ -706,7 +706,7 @@ function LaunchControlPage() {
                         <Input
                           id="launch-at"
                           type="datetime-local"
-                          disabled={schedLocked}
+                          disabled={schedLocked || readOnly}
                           value={form.launch_at}
                           onChange={(e) => set({ launch_at: e.target.value })}
                         />
@@ -719,7 +719,7 @@ function LaunchControlPage() {
                           <Input
                             id="window-start"
                             type="datetime-local"
-                            disabled={schedLocked}
+                            disabled={schedLocked || readOnly}
                             value={form.window_start}
                             onChange={(e) => set({ window_start: e.target.value })}
                           />
@@ -729,7 +729,7 @@ function LaunchControlPage() {
                           <Input
                             id="window-end"
                             type="datetime-local"
-                            disabled={schedLocked}
+                            disabled={schedLocked || readOnly}
                             value={form.window_end}
                             onChange={(e) => set({ window_end: e.target.value })}
                           />
