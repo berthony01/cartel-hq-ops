@@ -333,6 +333,12 @@ Deno.serve(async (req: Request) => {
         }
         const seconds = Number(raw.autoDeleteSeconds);
         if (!Number.isInteger(seconds) || seconds < 10 || seconds > 120) return respond({ error: "INVALID_SECONDS", message: "Auto-delete must be between 10 and 120 seconds." }, 400);
+        // Phase 5.2 — Launch Watch card lifetime. Exact allowed values only.
+        const ctaSeconds = Number(raw.launchWatchCtaAutoDeleteSeconds);
+        if (!Number.isInteger(ctaSeconds) || !LW_CTA_LIFETIMES.includes(ctaSeconds)) {
+          return respond({ error: "INVALID_CTA_SECONDS", message: "Launch Watch card lifetime must be 5, 10, 15, 30 or 60 minutes." }, 400);
+        }
+
 
         let launchWatchLaunchId: string | null = null;
         if (raw.launchWatchCtaEnabled === true) {
