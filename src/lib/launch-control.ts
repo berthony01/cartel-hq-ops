@@ -326,6 +326,42 @@ export async function getLaunchWatchSummary(launchId: string): Promise<LaunchWat
 }
 
 // ---------------------------------------------------------------------------
+// Phase 5 — Notification engine (aggregate-only surface).
+//
+// Delivery rows, Telegram identifiers and subscriber identities are
+// service-role only. The browser sees nothing but these counts.
+// ---------------------------------------------------------------------------
+
+export type LaunchNotificationSummary = {
+  event_count: number;
+  pending_count: number;
+  sent_count: number;
+  failed_count: number;
+  ambiguous_count: number;
+  skipped_count: number;
+  reminder_enabled_watchers: number;
+};
+
+export async function getLaunchNotificationSummary(
+  launchId: string,
+): Promise<LaunchNotificationSummary> {
+  const { data, error } = await supabase.rpc("get_launch_notification_summary", {
+    _launch_id: launchId,
+  });
+  if (error) rethrow(error);
+  const row = Array.isArray(data) ? data[0] : null;
+  return {
+    event_count: Number(row?.event_count ?? 0),
+    pending_count: Number(row?.pending_count ?? 0),
+    sent_count: Number(row?.sent_count ?? 0),
+    failed_count: Number(row?.failed_count ?? 0),
+    ambiguous_count: Number(row?.ambiguous_count ?? 0),
+    skipped_count: Number(row?.skipped_count ?? 0),
+    reminder_enabled_watchers: Number(row?.reminder_enabled_watchers ?? 0),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Launch management permission (UI hint only).
 //
 // Mirrors the authoritative RLS/RPC rule: workspace owner/admin may manage
