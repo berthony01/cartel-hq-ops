@@ -225,6 +225,92 @@ Deno.serve(async (req: Request) => {
     const { data } = await admin.from("telegram_beta_contacts").select("*").eq("subject_type", "group").eq("telegram_chat_id", telegramChatId).maybeSingle();
     return data ?? null;
   };
+
+  // ---- Launch Watch helpers (service role; opt-in state only) -------------
+  const resolveLaunchWatch = async (token: string) => {
+    const { data: launch } = await admin
+      .from("launches")
+      .select("id,status,token_name,ticker,chain,project_profile_id,launch_watch_token")
+      .eq("launch_watch_token", token)
+      .maybeSingle();
+    if (!launch?.id) return null;
+    const { data: profile } = await admin
+      .from("project_profiles")
+      .select("project_name,discovery_status")
+      .eq("id", launch.project_profile_id)
+      .maybeSingle();
+    return { launch, profile: profile ?? null };
+  };
+
+  const launchWatchIntro = (launch: any, profile: any) =>
+    `<b>🔔 LAUNCH WATCH</b>\n\n<b>${escapeHtml(String(profile?.project_name ?? "Project"))}</b>\n${escapeHtml(String(launch.token_name ?? ""))} • ${escapeHtml(String(launch.ticker ?? ""))} • ${escapeHtml(String(launch.chain ?? ""))}\nStatus: ${escapeHtml(LAUNCH_STATUS_LABELS[String(launch.status)] ?? String(launch.status))}`;
+
+  const launchWatchDisclaimer =
+    `\n\nThis only records that you are watching this launch. It is not a safety check, audit, verification or endorsement of any token.\n\nAutomated reminders, launch-live alerts and official-contract messages are <b>not active yet</b> — they begin in a later phase.`;
+
+  /** Returns a status string describing why a join/rewatch cannot be accepted. */
+  const launchWatchGate = (launch: any, profile: any): string | null => {
+    const status = String(launch.status ?? "");
+    if (status === "DRAFT" || status === "ANNOUNCED") {
+      return "Launch Watch is not open for this launch yet. Check back soon.";
+    }
+    if (!LAUNCH_WATCH_OPEN_STATUSES.includes(status)) {
+      return "New Launch Watch sign-ups are closed for this launch.";
+    }
+    if (String(profile?.discovery_status ?? "") !== "published") {
+      return "This launch is not accepting Launch Watch sign-ups right now.";
+    }
+    return null;
+  };
+
+  /** Idempotent subscribe / reactivate. Never creates a duplicate row. */
+  const launchWatchSubscribe = async (launchId: string, telegramUserId: number) => {
+    const now = new Date().toISOString();
+    const { data: existing } = await admin
+      .from("launch_watch_subscriptions")
+      .select("id,is_active")
+      .eq("launch_id", launchId)
+      .eq("telegram_user_id", telegramUserId)
+      .maybeSingle();
+    if (existing?.id) {
+      if (existing.is_active) {
+        await admin.from("launch_watch_subscriptions").update({ last_interaction_at: now }).eq("id", existing.id);
+        return "already_active" as const;
+      }
+      await admin
+        .from("launch_watch_subscriptions")
+        .update({ is_active: true, subscribed_at: now, unsubscribed_at: null, last_interaction_at: now })
+        .eq("id", existing.id);
+      return "reactivated" as const;
+    }
+    await admin.from("launch_watch_subscriptions").insert({
+      launch_id: launchId,
+      telegram_user_id: telegramUserId,
+      is_active: true,
+      subscribed_at: now,
+      last_interaction_at: now,
+      source: "telegram_deep_link",
+    });
+    return "subscribed" as const;
+  };
+
+  /** Soft unwatch. The row and its history are always preserved. */
+  const launchWatchUnsubscribe = async (launchId: string, telegramUserId: number) => {
+    const now = new Date().toISOString();
+    const { data: existing } = await admin
+      .from("launch_watch_subscriptions")
+      .select("id,is_active")
+      .eq("launch_id", launchId)
+      .eq("telegram_user_id", telegramUserId)
+      .maybeSingle();
+    if (!existing?.id) return "not_found" as const;
+    await admin
+      .from("launch_watch_subscriptions")
+      .update({ is_active: false, unsubscribed_at: now, last_interaction_at: now })
+      .eq("id", existing.id);
+    return existing.is_active ? ("unsubscribed" as const) : ("already_inactive" as const);
+  };
+
   const getSourceGroupContext = async (telegramChatId: string) => {
     const beta = await getGroupBetaContact(telegramChatId);
     if (beta) return { title: beta.chat_title ?? null, type: beta.chat_type ?? null };
