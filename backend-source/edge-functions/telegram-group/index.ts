@@ -192,7 +192,7 @@ Deno.serve(async (req: Request) => {
       for (const id of ids) {
         const group = found.get(id);
         if (!group) { results.push({ groupConnectionId: id, title: "Unknown group", status: "failed", assigned: false, announced: false, message: "This group is not connected to the current workspace." }); continue; }
-        results.push(await distributeOne(pack, group));
+        results.push(await distributeOne(pack, group, true));
       }
       const failed = results.filter((r) => r.status === "failed").length;
       const assigned = results.filter((r) => r.status === "assigned").length;
