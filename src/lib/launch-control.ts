@@ -273,3 +273,39 @@ export async function setLaunchContractAddress(
   if (error) rethrow(error);
   return data as unknown as LaunchRow;
 }
+
+// ---------------------------------------------------------------------------
+// Launch management permission (UI hint only).
+//
+// Mirrors the authoritative RLS/RPC rule: workspace owner/admin may manage
+// launches, members read only. This is a presentation guard, never security.
+// ---------------------------------------------------------------------------
+
+export type LaunchAccess = {
+  role: string | null;
+  canManage: boolean;
+};
+
+export async function getLaunchAccess(
+  workspaceId: string,
+  workspaceOwnerId: string | null,
+): Promise<LaunchAccess> {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) rethrow(userError);
+  const userId = userData.user?.id ?? null;
+  if (!userId) return { role: null, canManage: false };
+
+  const isOwner = !!workspaceOwnerId && workspaceOwnerId === userId;
+
+  const { data, error } = await supabase
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) rethrow(error);
+
+  const role = (data?.role as string | null) ?? (isOwner ? "owner" : null);
+  const canManage = isOwner || role === "owner" || role === "admin";
+  return { role, canManage };
+}
