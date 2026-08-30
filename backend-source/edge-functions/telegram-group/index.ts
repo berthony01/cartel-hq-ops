@@ -271,5 +271,28 @@ Deno.serve(async (req: Request) => {
     }
 
     return respond({ error: "UNKNOWN_ACTION", message: "Unknown Telegram group action." }, 400);
-  } catch (err) { console.error("[telegram-group]", err instanceof Error ? err.message : "unknown error"); return respond({ error: "TELEGRAM_GROUP_ERROR", message: err instanceof Error ? err.message : "Telegram group action failed." }, 400); }
+  } catch (err) {
+    // Bot removal is a recoverable lifecycle state: always HTTP 200, never an
+    // `error` field, so the app renders a reconnect prompt instead of a crash.
+    if (err instanceof BotRemovedError) {
+      return respond({
+        connected: true,
+        ready: false,
+        reconnectRequired: true,
+        connectionState: "bot_removed",
+        botIsAdmin: false,
+        botCanChangeInfo: false,
+        canSetStickerSet: false,
+        assigned: false,
+        announced: false,
+        sent: false,
+        saved: false,
+        group: err.group ?? null,
+        memberStatus: err.memberStatus,
+        message: err.message,
+      });
+    }
+    console.error("[telegram-group]", err instanceof Error ? err.message : "unknown error"); return respond({ error: "TELEGRAM_GROUP_ERROR", message: err instanceof Error ? err.message : "Telegram group action failed." }, 400);
+  }
+
 });
