@@ -1214,13 +1214,28 @@ Deno.serve(async (req: Request) => {
       }
       const result = await launchWatchSubscribe(launch.id, Number(from.id));
       const line =
-        result === "already_active"
+        result.outcome === "already_active"
           ? "🔔 You are already watching this launch."
-          : result === "reactivated"
+          : result.outcome === "reactivated"
             ? "🔔 You are watching this launch again."
             : "🔔 You are now watching this launch.";
-      await sendMessage(TELEGRAM_BOT_TOKEN, chatId, `${launchWatchIntro(launch, profile)}\n\n${line}${launchWatchDisclaimer}`, { parse_mode: "HTML", reply_markup: launchWatchKeyboard(token, true) });
+      // Late joiners get the current packet directly. This is a confirmation
+      // message only — no launch_notification_deliveries row is created.
+      const packet =
+        String(launch.status) === "OFFICIAL_CONTRACT_REGISTERED"
+          ? verifiedLaunchPacket(launch, profile)
+          : "";
+      await sendMessage(
+        TELEGRAM_BOT_TOKEN,
+        chatId,
+        `${launchWatchIntro(launch, profile)}\n\n${line}${launchWatchDisclaimer}${packet}`,
+        {
+          parse_mode: "HTML",
+          reply_markup: launchWatchKeyboard(token, true, result.remindersEnabled, true),
+        },
+      );
       return json({ ok: true });
+
     }
 
     const betaJoinMatch = text.match(/^\/start(?:@\w+)?\s+beta_join_g_([n0-9]+)$/i);
