@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NetworkEmpty, ProjectCard } from "@/components/cartel-network/NetworkPieces";
 import {
-  NETWORK_MAX_PAGE_LIMIT,
   NETWORK_PAGE_SIZE,
   fetchNetworkProjects,
   networkKeys,
@@ -35,21 +34,25 @@ function NetworkProjectsPage() {
   const [chainInput, setChainInput] = useState("");
   const [search, setSearch] = useState("");
   const [chain, setChain] = useState("");
-  const [pages, setPages] = useState(1);
-  const limit = Math.min(NETWORK_PAGE_SIZE * pages, NETWORK_MAX_PAGE_LIMIT);
+  const [page, setPage] = useState(0);
+  const offset = page * NETWORK_PAGE_SIZE;
 
   const query = useQuery({
-    queryKey: networkKeys.projects({ search, chain, limit, offset: 0 }),
-    queryFn: () => fetchNetworkProjects({ search, chain, limit, offset: 0 }),
+    queryKey: networkKeys.projects({ search, chain, limit: NETWORK_PAGE_SIZE, offset }),
+    queryFn: () =>
+      fetchNetworkProjects({ search, chain, limit: NETWORK_PAGE_SIZE, offset }),
     placeholderData: keepPreviousData,
   });
 
   const rows: NetworkProjectCard[] = query.data?.rows ?? [];
   const total = query.data?.totalCount ?? 0;
+  const rangeStart = rows.length > 0 ? offset + 1 : 0;
+  const rangeEnd = offset + rows.length;
+  const hasNext = rangeEnd < total;
 
   function applyFilters(e: React.FormEvent) {
     e.preventDefault();
-    setPages(1);
+    setPage(0);
     setSearch(searchInput);
     setChain(chainInput);
   }
@@ -123,24 +126,32 @@ function NetworkProjectsPage() {
       ) : (
         <>
           <p className="text-xs text-muted-foreground">
-            Showing {rows.length} of {total}
+            Showing {rangeStart}–{rangeEnd} of {total}
           </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {rows.map((p) => (
               <ProjectCard key={p.public_slug} project={p} />
             ))}
           </div>
-          {rows.length < total && limit < NETWORK_MAX_PAGE_LIMIT ? (
-            <div className="flex justify-center pt-2">
-              <Button
-                variant="outline"
-                onClick={() => setPages((p) => p + 1)}
-                disabled={query.isFetching}
-              >
-                {query.isFetching ? "Loading…" : "Load more"}
-              </Button>
-            </div>
-          ) : null}
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0 || query.isFetching}
+            >
+              Previous
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              Page {page + 1} of {Math.max(1, Math.ceil(total / NETWORK_PAGE_SIZE))}
+            </span>
+            <Button
+              variant="outline"
+              onClick={() => setPage((p) => p + 1)}
+              disabled={!hasNext || query.isFetching}
+            >
+              Next
+            </Button>
+          </div>
         </>
       )}
     </div>
