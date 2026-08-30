@@ -20,6 +20,7 @@ import { Route as AuthenticatedCartelShieldRouteImport } from './routes/_authent
 import { Route as AuthenticatedClearanceRouteImport } from './routes/_authenticated/clearance'
 import { Route as AuthenticatedCommandTerminalRouteImport } from './routes/_authenticated/command-terminal'
 import { Route as AuthenticatedDistributionRouteImport } from './routes/_authenticated/distribution'
+import { Route as AuthenticatedLaunchControlRouteImport } from './routes/_authenticated/launch-control'
 import { Route as AuthenticatedMissionsRouteImport } from './routes/_authenticated/missions'
 import { Route as AuthenticatedOperationsRouteImport } from './routes/_authenticated/operations'
 import { Route as AuthenticatedOperativesRouteImport } from './routes/_authenticated/operatives'
@@ -88,6 +89,12 @@ const AuthenticatedDistributionRoute =
   AuthenticatedDistributionRouteImport.update({
     id: '/distribution',
     path: '/distribution',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedLaunchControlRoute =
+  AuthenticatedLaunchControlRouteImport.update({
+    id: '/launch-control',
+    path: '/launch-control',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedMissionsRoute = AuthenticatedMissionsRouteImport.update({
@@ -166,6 +173,7 @@ export interface FileRoutesByFullPath {
   '/clearance': typeof AuthenticatedClearanceRoute
   '/command-terminal': typeof AuthenticatedCommandTerminalRoute
   '/distribution': typeof AuthenticatedDistributionRoute
+  '/launch-control': typeof AuthenticatedLaunchControlRoute
   '/missions': typeof AuthenticatedMissionsRoute
   '/operations': typeof AuthenticatedOperationsRoute
   '/operatives': typeof AuthenticatedOperativesRoute
@@ -189,6 +197,7 @@ export interface FileRoutesByTo {
   '/clearance': typeof AuthenticatedClearanceRoute
   '/command-terminal': typeof AuthenticatedCommandTerminalRoute
   '/distribution': typeof AuthenticatedDistributionRoute
+  '/launch-control': typeof AuthenticatedLaunchControlRoute
   '/missions': typeof AuthenticatedMissionsRoute
   '/operations': typeof AuthenticatedOperationsRoute
   '/operatives': typeof AuthenticatedOperativesRoute
@@ -214,6 +223,7 @@ export interface FileRoutesById {
   '/_authenticated/clearance': typeof AuthenticatedClearanceRoute
   '/_authenticated/command-terminal': typeof AuthenticatedCommandTerminalRoute
   '/_authenticated/distribution': typeof AuthenticatedDistributionRoute
+  '/_authenticated/launch-control': typeof AuthenticatedLaunchControlRoute
   '/_authenticated/missions': typeof AuthenticatedMissionsRoute
   '/_authenticated/operations': typeof AuthenticatedOperationsRoute
   '/_authenticated/operatives': typeof AuthenticatedOperativesRoute
@@ -241,6 +251,7 @@ export interface FileRouteTypes {
     | '/clearance'
     | '/command-terminal'
     | '/distribution'
+    | '/launch-control'
     | '/missions'
     | '/operations'
     | '/operatives'
@@ -264,6 +275,7 @@ export interface FileRouteTypes {
     | '/clearance'
     | '/command-terminal'
     | '/distribution'
+    | '/launch-control'
     | '/missions'
     | '/operations'
     | '/operatives'
@@ -288,6 +300,7 @@ export interface FileRouteTypes {
     | '/_authenticated/clearance'
     | '/_authenticated/command-terminal'
     | '/_authenticated/distribution'
+    | '/_authenticated/launch-control'
     | '/_authenticated/missions'
     | '/_authenticated/operations'
     | '/_authenticated/operatives'
@@ -386,6 +399,13 @@ declare module '@tanstack/react-router' {
       path: '/distribution'
       fullPath: '/distribution'
       preLoaderRoute: typeof AuthenticatedDistributionRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/launch-control': {
+      id: '/_authenticated/launch-control'
+      path: '/launch-control'
+      fullPath: '/launch-control'
+      preLoaderRoute: typeof AuthenticatedLaunchControlRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/missions': {
@@ -502,6 +522,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedClearanceRoute: typeof AuthenticatedClearanceRoute
   AuthenticatedCommandTerminalRoute: typeof AuthenticatedCommandTerminalRoute
   AuthenticatedDistributionRoute: typeof AuthenticatedDistributionRoute
+  AuthenticatedLaunchControlRoute: typeof AuthenticatedLaunchControlRoute
   AuthenticatedMissionsRoute: typeof AuthenticatedMissionsRoute
   AuthenticatedOperationsRoute: typeof AuthenticatedOperationsRoute
   AuthenticatedOperativesRoute: typeof AuthenticatedOperativesRoute
@@ -522,6 +543,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedClearanceRoute: AuthenticatedClearanceRoute,
   AuthenticatedCommandTerminalRoute: AuthenticatedCommandTerminalRoute,
   AuthenticatedDistributionRoute: AuthenticatedDistributionRoute,
+  AuthenticatedLaunchControlRoute: AuthenticatedLaunchControlRoute,
   AuthenticatedMissionsRoute: AuthenticatedMissionsRoute,
   AuthenticatedOperationsRoute: AuthenticatedOperationsRoute,
   AuthenticatedOperativesRoute: AuthenticatedOperativesRoute,
