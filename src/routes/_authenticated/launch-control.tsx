@@ -379,21 +379,23 @@ function LaunchControlPage() {
         ? "Save the official contract address before advancing."
         : null;
 
-  const saveButton = selected ? (
-    <Button
-      type="submit"
-      form="launch-editor-form"
-      className="min-h-11"
-      disabled={saveMutation.isPending}
-    >
-      {saveMutation.isPending ? (
-        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-      ) : (
-        <Save className="size-4" aria-hidden="true" />
-      )}
-      Save launch details
-    </Button>
-  ) : null;
+  const saveButton =
+    selected && canManage ? (
+      <Button
+        type="submit"
+        form="launch-editor-form"
+        className="min-h-11"
+        disabled={saveMutation.isPending || !canSave}
+      >
+        {saveMutation.isPending ? (
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+        ) : (
+          <Save className="size-4" aria-hidden="true" />
+        )}
+        Save launch details
+      </Button>
+    ) : null;
+
 
   return (
     <div className="space-y-6 pb-24 sm:space-y-8 lg:pb-0">
