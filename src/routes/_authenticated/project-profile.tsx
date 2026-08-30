@@ -603,9 +603,26 @@ function ProjectProfilePage() {
                 </div>
               ) : null}
 
-              <p className="border-t border-border pt-3 text-[11px] leading-relaxed text-muted-foreground">
-                Private preview. Cartel Network public pages arrive in a later phase.
-              </p>
+              {profile && profile.discovery_status === "published" && profile.public_slug ? (
+                <div className="border-t border-border pt-3">
+                  <Button asChild variant="outline" size="sm" className="w-full">
+                    <Link
+                      to="/network/project/$projectSlug"
+                      params={{ projectSlug: profile.public_slug }}
+                    >
+                      View Network Profile
+                    </Link>
+                  </Button>
+                  <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                    Published profiles are discoverable on the Cartel Network.
+                  </p>
+                </div>
+              ) : (
+                <p className="border-t border-border pt-3 text-[11px] leading-relaxed text-muted-foreground">
+                  Private preview. Publish this profile to make it discoverable on the Cartel
+                  Network.
+                </p>
+              )}
             </Section>
           </aside>
         </div>
