@@ -578,7 +578,7 @@ function LaunchControlPage() {
                     <p className="mt-1 text-xs text-muted-foreground">
                       {newSlugValid
                         ? "Reserved for a future public launch path. No public page exists yet."
-                        : "2–64 characters, lowercase letters, numbers and hyphens."}
+                        : SLUG_RULE_HINT}
                     </p>
                   </div>
                 </div>
