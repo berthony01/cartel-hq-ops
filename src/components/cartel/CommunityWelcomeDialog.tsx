@@ -577,28 +577,67 @@ export function CommunityWelcomeDialog({
                     />
                   </div>
 
-                  {autoDelete ? (
-                    <p className="text-[11px] leading-relaxed text-gold">
-                      Auto-delete is on. The Launch Watch buttons disappear with the welcome message
-                      after {seconds}s.
-                    </p>
-                  ) : null}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Launch Watch card lifetime</Label>
+                    <Select
+                      value={String(ctaLifetime)}
+                      disabled={!canManage}
+                      onValueChange={(v) => {
+                        setCtaLifetime(Number(v));
+                        touch();
+                      }}
+                    >
+                      <SelectTrigger className="min-h-11 max-w-40 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LAUNCH_WATCH_CTA_LIFETIMES.map((value) => (
+                          <SelectItem key={value} value={String(value)} className="text-xs">
+                            {formatLaunchWatchCtaLifetime(value)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <p className="text-[11px] leading-relaxed text-gold">
+                    {autoDelete
+                      ? `Welcome deletes after ${seconds}s. Launch Watch card deletes after ${formatLaunchWatchCtaLifetime(ctaLifetime)}.`
+                      : `The welcome stays until it is removed manually. The Launch Watch card still expires after ${formatLaunchWatchCtaLifetime(ctaLifetime)}.`}
+                  </p>
                 </div>
               ) : null}
             </div>
 
-            <div className="rounded-md border border-border/60 bg-background/40 p-3">
-
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Preview
-              </p>
-              <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground">
-                {preview}
-              </p>
-              {buttonSummary ? (
-                <p className="mt-2 text-[11px] leading-relaxed text-gold">{buttonSummary}</p>
+            <div className="space-y-3 rounded-md border border-border/60 bg-background/40 p-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Welcome message
+                </p>
+                <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground">
+                  {preview}
+                </p>
+              </div>
+              {ctaEnabled && selectedLaunch ? (
+                <div className="rounded-md border border-gold/40 bg-gold/5 p-2.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold">
+                    Separate Launch Watch card
+                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-foreground">
+                    {`🚀 ${selectedLaunch.projectName.toUpperCase()} LAUNCH WATCH`}
+                    <br />
+                    {`${selectedLaunch.tokenName} • $${selectedLaunch.ticker} • ${selectedLaunch.chain}`}
+                  </p>
+                  {buttonSummary ? (
+                    <p className="mt-2 text-[11px] leading-relaxed text-gold">{buttonSummary}</p>
+                  ) : null}
+                  <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                    Conceptual layout only — this is not exact Telegram rendering.
+                  </p>
+                </div>
               ) : null}
             </div>
+
 
             <div className="flex flex-wrap items-center gap-2">
               <Button
