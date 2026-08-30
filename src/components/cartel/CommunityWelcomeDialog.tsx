@@ -10,6 +10,7 @@ import {
   fetchCommunityWelcomeSettings,
   saveCommunityWelcomeSettings,
   sendCommunityWelcomeTest,
+  type LaunchWatchCtaOption,
   type TelegramCommunitySettingsMetadata,
   type TelegramGroupConnection,
 } from "@/lib/telegram-group";
@@ -25,7 +26,15 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
+
 
 /**
  * Welcome & onboarding controls for ONE connected Telegram community.
