@@ -25,6 +25,9 @@ import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
+import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
+import { launchReadinessQueryKey } from "@/lib/launch-readiness";
+
 import { StickyActionBar } from "@/components/cartel/StickyActionBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
