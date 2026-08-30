@@ -1104,7 +1104,7 @@ Deno.serve(async (req: Request) => {
       if (humans.length === 0) return json({ ok: true });
       const { data: connection } = await admin.from("telegram_group_connections").select("id,title").eq("telegram_chat_id", chatId).maybeSingle();
       if (!connection?.id) return json({ ok: true });
-      const { data: settings } = await admin.from("telegram_community_settings").select("welcome_enabled,welcome_message,mention_member,auto_delete_enabled,auto_delete_seconds,launch_watch_cta_enabled,launch_watch_launch_id,launch_watch_show_website,launch_watch_show_telegram,launch_watch_show_x,workspace_id,metadata").eq("group_connection_id", connection.id).maybeSingle();
+      const { data: settings } = await admin.from("telegram_community_settings").select("welcome_enabled,welcome_message,mention_member,auto_delete_enabled,auto_delete_seconds,launch_watch_cta_enabled,launch_watch_launch_id,launch_watch_show_website,launch_watch_show_telegram,launch_watch_show_x,launch_watch_cta_auto_delete_seconds,workspace_id,metadata").eq("group_connection_id", connection.id).maybeSingle();
       if (!settings) return json({ ok: true });
 
       // Diagnostics only. No joining member identity is ever stored here.
