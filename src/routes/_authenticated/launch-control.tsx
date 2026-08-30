@@ -673,7 +673,7 @@ function LaunchControlPage() {
                     </div>
                   </div>
                   {identityError ? (
-                    <p className="mt-3 text-xs text-danger">{identityError}</p>
+                    <p className="mt-3 text-xs text-destructive">{identityError}</p>
                   ) : null}
                 </Section>
 
@@ -746,7 +746,7 @@ function LaunchControlPage() {
                     Recorded timezone on this launch: {selected.timezone}
                   </p>
                   {scheduleError ? (
-                    <p className="mt-2 text-xs text-danger">{scheduleError}</p>
+                    <p className="mt-2 text-xs text-destructive">{scheduleError}</p>
                   ) : null}
                 </Section>
 
@@ -766,7 +766,7 @@ function LaunchControlPage() {
                   <p className="mt-1 text-xs text-muted-foreground">
                     {form.internal_notes.length} / {NOTES_MAX} characters.
                   </p>
-                  {notesError ? <p className="mt-1 text-xs text-danger">{notesError}</p> : null}
+                  {notesError ? <p className="mt-1 text-xs text-destructive">{notesError}</p> : null}
                 </Section>
 
 
