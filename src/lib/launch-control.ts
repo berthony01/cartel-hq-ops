@@ -42,7 +42,8 @@ export const LAUNCH_STATUS_HELP: Record<LaunchStatus, string> = {
   DRAFT: "Being prepared. Identity fields are still editable and the launch can be deleted.",
   ANNOUNCED: "Launch identity is locked. Schedule and notes remain editable.",
   WATCHLIST_OPEN:
-    "Launch Watch opt-ins are open through the PepeCartel Telegram bot. Automated alerts begin in Phase 5.",
+    "Launch Watch opt-ins are open through the PepeCartel Telegram bot. Countdown reminders are scheduled from the launch time.",
+
   LAUNCH_APPROACHING: "Schedule is confirmed and the launch window is close.",
   CONTRACT_PENDING: "Official contract address can now be submitted.",
   OFFICIAL_CONTRACT_REGISTERED:
