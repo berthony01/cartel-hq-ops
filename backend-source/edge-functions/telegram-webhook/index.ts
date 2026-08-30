@@ -12,6 +12,7 @@ const BOT_PROFILE_DESCRIPTION = "🐸 Welcome to CARTEL HQ\n\nThe Telegram comma
 const BOT_SHORT_DESCRIPTION = "PEPECARTEL's Cartel HQ bot for stickers, community tools, group connections and Private Beta access.";
 let commandsConfiguredAt = 0;
 let profileConfiguredAt = 0;
+let webhookConfiguredAt = 0;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
