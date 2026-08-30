@@ -153,6 +153,17 @@ function LaunchControlPage() {
   });
   const launches = useMemo(() => launchesQuery.data ?? [], [launchesQuery.data]);
 
+  // Local permission hint only. RLS and the RPCs remain authoritative.
+  const accessQuery = useQuery({
+    queryKey: ["launch-access", workspaceId, workspace?.owner_id ?? null],
+    enabled: !!workspaceId,
+    queryFn: () => getLaunchAccess(workspaceId!, workspace?.owner_id ?? null),
+  });
+  const canManage = accessQuery.data?.canManage ?? false;
+  const readOnly = !canManage;
+
+
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = launches.find((l) => l.id === selectedId) ?? null;
 
