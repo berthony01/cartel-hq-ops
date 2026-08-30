@@ -97,7 +97,9 @@ export function CommunityWelcomeDialog({
   workspaceId: string | null | undefined;
   group: TelegramGroupConnection;
 }) {
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
