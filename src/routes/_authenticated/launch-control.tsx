@@ -447,7 +447,7 @@ function LaunchControlPage() {
       <PageHeader
         eyebrow="Launch Operations"
         title="Launch Control"
-        description="Manage the authenticated project's launch lifecycle: launch records, schedule, status progression and official contract registration. Launch Watch opt-ins and the Telegram notification engine are active; public Cartel Network discovery arrives in a later phase."
+        description="Manage the authenticated project's launch lifecycle: launch records, schedule, status progression and official contract registration. Launch Watch opt-ins, the Telegram notification engine and public Cartel Network launch pages are active."
         status={workspace ? workspace.name : "No workspace"}
       />
 
