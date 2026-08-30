@@ -16,6 +16,10 @@ export type TelegramGroupConnectionMetadata = {
   official_group_sticker_eligible?: boolean | null;
   official_group_sticker_reason?: OfficialStickerReason;
   checked_at?: string | null;
+  /** Community lifecycle: set when @PepeCartelHQBot was removed from the chat. */
+  last_member_status?: string | null;
+  bot_removed_at?: string | null;
+  bot_removed_reason?: string | null;
   [key: string]: unknown;
 };
 
@@ -32,11 +36,8 @@ export type TelegramGroupConnection = {
   verified_at: string | null;
   /** Stored verification details written by the webhook / group verification. */
   metadata?: TelegramGroupConnectionMetadata | null;
-  /** Set by the server when the bot was removed from the community. */
-  bot_removed_at?: string | null;
-  bot_removed_reason?: string | null;
-  last_member_status?: string | null;
 };
+
 
 
 
