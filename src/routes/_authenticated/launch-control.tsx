@@ -588,7 +588,7 @@ function LaunchControlPage() {
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Button
                     className="min-h-11"
-                    disabled={!canCreate || createMutation.isPending}
+                    disabled={!canCreate || !canManage || createMutation.isPending}
                     onClick={() => createMutation.mutate()}
                   >
                     {createMutation.isPending ? (
