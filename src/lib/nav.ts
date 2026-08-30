@@ -99,6 +99,15 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    label: "Cartel Network",
+    items: [
+      { label: "Projects", to: "/network/projects", icon: Globe },
+      { label: "Upcoming Launches", to: "/network/launches", icon: CalendarClock },
+      { label: "My Watchlist", to: "/watchlist", icon: Bookmark, status: "planned" },
+      { label: "Cartel Signals", to: "/signals", icon: Radio, status: "planned" },
+    ],
+  },
+  {
     label: "System",
     items: [
       { label: "Settings", to: "/settings", icon: Settings },
