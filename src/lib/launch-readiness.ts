@@ -178,7 +178,7 @@ const STEP_COPY: Record<
   profile_published: {
     title: "Profile published",
     description:
-      "Mark the profile Published so it can be used by Cartel HQ launch features. This does not create a public webpage.",
+      "Mark the profile Published so it appears on the Cartel Network and can be used by Cartel HQ launch features.",
     to: "/project-profile",
     actionLabel: "Publish Project Profile",
   },
