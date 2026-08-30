@@ -2,6 +2,10 @@ import {
   LayoutDashboard,
   IdCard,
   Rocket,
+  Globe,
+  CalendarClock,
+  Bookmark,
+
 
 
   ShieldCheck,
