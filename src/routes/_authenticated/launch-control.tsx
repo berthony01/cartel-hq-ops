@@ -669,9 +669,14 @@ function LaunchControlPage() {
                         value={form.public_slug}
                         onChange={(e) => set({ public_slug: e.target.value })}
                       />
+                      <p className="mt-1 text-xs text-muted-foreground">{SLUG_RULE_HINT}</p>
                     </div>
                   </div>
+                  {identityError ? (
+                    <p className="mt-3 text-xs text-danger">{identityError}</p>
+                  ) : null}
                 </Section>
+
 
                 <Section
                   variant="surface"
