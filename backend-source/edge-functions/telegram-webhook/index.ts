@@ -1155,7 +1155,7 @@ Deno.serve(async (req: Request) => {
       if (settings.launch_watch_cta_enabled === true && settings.launch_watch_launch_id) {
         try {
           const { data: launchRow, error: launchError } = await admin.from("launches")
-            .select("id,status,launch_watch_token,workspace_id,project_profiles(project_name,discovery_status,website_url,telegram_url,x_url)")
+            .select("id,status,launch_watch_token,workspace_id,project_profiles(workspace_id,project_name,discovery_status,website_url,telegram_url,x_url)")
             .eq("id", String(settings.launch_watch_launch_id))
             .eq("workspace_id", String(settings.workspace_id))
             .maybeSingle();
@@ -1164,7 +1164,10 @@ Deno.serve(async (req: Request) => {
           const eligible = Boolean(launchRow)
             && LW_OPEN_STATUSES.includes(String((launchRow as any).status))
             && LW_TOKEN_PATTERN.test(String((launchRow as any).launch_watch_token ?? ""))
+            // The Project Profile must belong to the SAME workspace as this community.
+            && String(profile?.workspace_id ?? "") === String(settings.workspace_id)
             && profile?.discovery_status === "published";
+
           if (eligible) {
             const rows: any[] = [[{ text: "🔔 Watch this launch", url: `https://t.me/${BOT_USERNAME}?start=lw_${String((launchRow as any).launch_watch_token)}` }]];
             const links: any[] = [];
