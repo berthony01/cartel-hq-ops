@@ -848,17 +848,24 @@ function LaunchControlPage() {
                       {blockedReason ? (
                         <p className="text-xs text-muted-foreground">{blockedReason}</p>
                       ) : null}
-                      <Button
-                        className="min-h-11 w-full"
-                        disabled={transitionMutation.isPending || !!blockedReason}
-                        onClick={() => transitionMutation.mutate(next)}
-                      >
-                        {transitionMutation.isPending ? (
-                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                        ) : null}
-                        Advance to {LAUNCH_STATUS_LABELS[next]}
-                      </Button>
+                      {canManage ? (
+                        <Button
+                          className="min-h-11 w-full"
+                          disabled={transitionMutation.isPending || !!blockedReason}
+                          onClick={() => transitionMutation.mutate(next)}
+                        >
+                          {transitionMutation.isPending ? (
+                            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                          ) : null}
+                          Advance to {LAUNCH_STATUS_LABELS[next]}
+                        </Button>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Advancing the lifecycle requires the workspace owner or admin role.
+                        </p>
+                      )}
                     </div>
+
                   ) : (
                     <p className="mt-4 text-xs text-muted-foreground">
                       This launch has reached the final lifecycle state.
