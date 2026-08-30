@@ -31,6 +31,7 @@ import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedStickerLabRouteImport } from './routes/_authenticated/sticker-lab'
 import { Route as AuthenticatedTelegramRouteImport } from './routes/_authenticated/telegram'
 import { Route as AuthCallbackRouteImport } from './routes/auth_.callback'
+import { Route as NetworkIndexRouteImport } from './routes/network.index'
 import { Route as AuthenticatedStickerLabIndexRouteImport } from './routes/_authenticated/sticker-lab.index'
 import { Route as AuthenticatedStickerLabPackIdRouteImport } from './routes/_authenticated/sticker-lab.$packId'
 import { Route as AuthenticatedStickerLabNewRouteImport } from './routes/_authenticated/sticker-lab.new'
@@ -149,6 +150,11 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NetworkIndexRoute = NetworkIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => NetworkRoute,
+} as any)
 const AuthenticatedStickerLabIndexRoute =
   AuthenticatedStickerLabIndexRouteImport.update({
     id: '/',
@@ -171,7 +177,7 @@ const AuthenticatedStickerLabNewRoute =
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
-  '/network': typeof NetworkRoute
+  '/network': typeof NetworkRouteWithChildren
   '/admin': typeof AuthenticatedAdminRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/assets': typeof AuthenticatedAssetsRoute
@@ -190,13 +196,13 @@ export interface FileRoutesByFullPath {
   '/sticker-lab': typeof AuthenticatedStickerLabRouteWithChildren
   '/telegram': typeof AuthenticatedTelegramRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/network/': typeof NetworkIndexRoute
   '/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
   '/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
   '/sticker-lab/': typeof AuthenticatedStickerLabIndexRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
-  '/network': typeof NetworkRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/assets': typeof AuthenticatedAssetsRoute
@@ -215,6 +221,7 @@ export interface FileRoutesByTo {
   '/telegram': typeof AuthenticatedTelegramRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/': typeof AuthenticatedIndexRoute
+  '/network': typeof NetworkIndexRoute
   '/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
   '/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
   '/sticker-lab': typeof AuthenticatedStickerLabIndexRoute
@@ -223,7 +230,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
-  '/network': typeof NetworkRoute
+  '/network': typeof NetworkRouteWithChildren
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/assets': typeof AuthenticatedAssetsRoute
@@ -243,6 +250,7 @@ export interface FileRoutesById {
   '/_authenticated/telegram': typeof AuthenticatedTelegramRoute
   '/auth_/callback': typeof AuthCallbackRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/network/': typeof NetworkIndexRoute
   '/_authenticated/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
   '/_authenticated/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
   '/_authenticated/sticker-lab/': typeof AuthenticatedStickerLabIndexRoute
@@ -271,13 +279,13 @@ export interface FileRouteTypes {
     | '/sticker-lab'
     | '/telegram'
     | '/auth/callback'
+    | '/network/'
     | '/sticker-lab/$packId'
     | '/sticker-lab/new'
     | '/sticker-lab/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
-    | '/network'
     | '/admin'
     | '/analytics'
     | '/assets'
@@ -296,6 +304,7 @@ export interface FileRouteTypes {
     | '/telegram'
     | '/auth/callback'
     | '/'
+    | '/network'
     | '/sticker-lab/$packId'
     | '/sticker-lab/new'
     | '/sticker-lab'
@@ -323,6 +332,7 @@ export interface FileRouteTypes {
     | '/_authenticated/telegram'
     | '/auth_/callback'
     | '/_authenticated/'
+    | '/network/'
     | '/_authenticated/sticker-lab/$packId'
     | '/_authenticated/sticker-lab/new'
     | '/_authenticated/sticker-lab/'
@@ -331,7 +341,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
-  NetworkRoute: typeof NetworkRoute
+  NetworkRoute: typeof NetworkRouteWithChildren
   AuthCallbackRoute: typeof AuthCallbackRoute
 }
 
@@ -491,6 +501,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/network/': {
+      id: '/network/'
+      path: '/'
+      fullPath: '/network/'
+      preLoaderRoute: typeof NetworkIndexRouteImport
+      parentRoute: typeof NetworkRoute
+    }
     '/_authenticated/sticker-lab/': {
       id: '/_authenticated/sticker-lab/'
       path: '/'
@@ -578,10 +595,21 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
 const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
+interface NetworkRouteChildren {
+  NetworkIndexRoute: typeof NetworkIndexRoute
+}
+
+const NetworkRouteChildren: NetworkRouteChildren = {
+  NetworkIndexRoute: NetworkIndexRoute,
+}
+
+const NetworkRouteWithChildren =
+  NetworkRoute._addFileChildren(NetworkRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
-  NetworkRoute: NetworkRoute,
+  NetworkRoute: NetworkRouteWithChildren,
   AuthCallbackRoute: AuthCallbackRoute,
 }
 export const routeTree = rootRouteImport
