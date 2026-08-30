@@ -1060,9 +1060,10 @@ function LaunchControlPage() {
                       ) : null}
 
                       <p className="text-xs leading-relaxed text-muted-foreground">
-                        Phase 4 saves Launch Watch opt-ins. Automated reminders, launch-live alerts
-                        and official-contract DMs begin in Phase 5.
+                        Active watchers receive the 24h and 1h countdown reminders (unless muted),
+                        the official-contract Verified Launch Packet and the launch-live alert.
                       </p>
+
                       <p className="text-xs leading-relaxed text-muted-foreground">
                         Watcher identities are never shown here. Only aggregate counts are
                         available in Cartel HQ.
