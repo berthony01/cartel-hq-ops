@@ -62,6 +62,9 @@ import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
+import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
+import { launchReadinessQueryKey } from "@/lib/launch-readiness";
+
 import { StickyActionBar } from "@/components/cartel/StickyActionBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -200,8 +203,11 @@ function LaunchControlPage() {
   const set = (patch: Partial<EditorForm>) =>
     setForm((f) => (f ? { ...f, ...patch } : f));
 
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["launches", workspaceId] });
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ["launches", workspaceId] });
+    void queryClient.invalidateQueries({ queryKey: launchReadinessQueryKey(workspaceId) });
+  };
+
 
   // ---- create -------------------------------------------------------------
   const [creating, setCreating] = useState(false);
@@ -444,6 +450,10 @@ function LaunchControlPage() {
         description="Manage the authenticated project's launch lifecycle: launch records, schedule, status progression and official contract registration. Launch Watch opt-ins and the Telegram notification engine are active; public Cartel Network discovery arrives in a later phase."
         status={workspace ? workspace.name : "No workspace"}
       />
+
+      {profile ? <LaunchReadinessCallout workspaceId={workspaceId} /> : null}
+
+
 
       {workspaceLoading ? (
         <Section variant="surface">

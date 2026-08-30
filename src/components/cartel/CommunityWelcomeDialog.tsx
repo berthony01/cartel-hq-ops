@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Send } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { ArrowRight, Loader2, Send } from "lucide-react";
+
 
 import {
   DEFAULT_WELCOME_MESSAGE,
@@ -94,7 +97,9 @@ export function CommunityWelcomeDialog({
   workspaceId: string | null | undefined;
   group: TelegramGroupConnection;
 }) {
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -230,6 +235,8 @@ export function CommunityWelcomeDialog({
       setCanManage(result.canManage === true || result.saved === true);
       setDirty(false);
       setSavedEnabled(enabled);
+      void queryClient.invalidateQueries({ queryKey: ["launch-readiness", workspaceId] });
+
 
       toast.success(
         enabled
@@ -489,14 +496,23 @@ export function CommunityWelcomeDialog({
               </div>
 
               {noEligibleLaunches ? (
-                <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  No eligible launches. A launch can be used here only once its Project Profile is
-                  Published and its watchlist is open (Watchlist Open, Launch Approaching, Contract
-                  Pending or Official Contract Registered).
-                  {ctaEnabled
-                    ? " The saved Launch Watch button is no longer eligible — turn it off to save."
-                    : ""}
-                </p>
+                <div className="space-y-2 rounded-md border border-gold/40 bg-gold/5 p-3">
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    No launch is ready for this card yet. A launch can be used here once its
+                    Project Profile is Published and its Launch Watch is open (Watchlist Open,
+                    Launch Approaching, Contract Pending or Official Contract Registered).
+                    {ctaEnabled
+                      ? " The saved Launch Watch button is no longer eligible — turn it off to save."
+                      : ""}
+                  </p>
+                  <Button asChild size="sm" variant="outline" className="min-h-11">
+                    <Link to="/launch-control">
+                      Create or open Launch Watch
+                      <ArrowRight className="size-4" aria-hidden="true" />
+                    </Link>
+                  </Button>
+                </div>
+
 
               ) : ctaEnabled ? (
                 <div className="space-y-3">

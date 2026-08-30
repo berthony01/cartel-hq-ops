@@ -3,6 +3,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
+import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
+import { useWorkspace } from "@/lib/workspace-context";
+
 
 import { useTelegramSetup } from "@/components/cartel/TelegramConnectionCard";
 import {
@@ -35,8 +38,10 @@ export const Route = createFileRoute("/_authenticated/telegram")({
 function TelegramPage() {
   const setup = useTelegramSetup();
   const groupSetup = useTelegramGroupSetup();
+  const { workspaceId } = useWorkspace();
 
   const groupCount = groupSetup.connectedGroupCount;
+
 
   return (
     <div className="flex max-w-4xl flex-col gap-4 sm:gap-6">
@@ -46,6 +51,10 @@ function TelegramPage() {
         description="The operator control center for every connected Telegram community. Manage connection health, welcome and onboarding, Sticker Drops, and sticker distribution from one place."
         status={groupCount > 0 ? "Connected · Live Beta" : "Live Beta"}
       />
+
+      <LaunchReadinessCallout workspaceId={workspaceId} />
+
+
 
       <div className="flex flex-wrap items-center gap-2">
         <StatusBadge

@@ -18,6 +18,8 @@ import { Section } from "@/components/cartel/Section";
 import { InlineRow } from "@/components/cartel/InlineRow";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { EmptyState } from "@/components/cartel/EmptyState";
+import { LaunchReadinessPanel } from "@/components/cartel/LaunchReadiness";
+
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
@@ -125,6 +127,10 @@ function HqDashboard() {
         description="The operating layer for PEPECARTEL creative tools, campaigns, creators, and distribution."
         status="Private Beta"
       />
+
+      <LaunchReadinessPanel workspaceId={workspaceId} workspaceName={workspace?.name ?? null} />
+
+
 
       {/* Compact workspace summary */}
       <Section

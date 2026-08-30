@@ -25,6 +25,9 @@ import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
+import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
+import { launchReadinessQueryKey } from "@/lib/launch-readiness";
+
 import { StickyActionBar } from "@/components/cartel/StickyActionBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -244,6 +247,8 @@ function ProjectProfilePage() {
     onSuccess: () => {
       toast.success(profile ? "Project profile saved" : "Project profile created");
       queryClient.invalidateQueries({ queryKey: ["project-profile", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: launchReadinessQueryKey(workspaceId) });
+
     },
     onError: (err: unknown) => {
       toast.error(err instanceof Error ? err.message : "Could not save the project profile.");
@@ -276,6 +281,10 @@ function ProjectProfilePage() {
         description="One project identity record per workspace. This profile is the identity that future Cartel Network discovery and Launch Control features will build on. Cartel Network public pages are not live in this phase."
         status={workspace ? workspace.name : "No workspace"}
       />
+
+      <LaunchReadinessCallout workspaceId={workspaceId} title="Setup guide" />
+
+
 
       {workspaceLoading ? (
         <Section variant="surface">
