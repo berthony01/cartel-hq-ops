@@ -985,6 +985,32 @@ Deno.serve(async (req: Request) => {
 
     if (chat?.type !== "private") return json({ ok: true });
 
+    // Launch Watch deep link: https://t.me/<bot>?start=lw_<24-hex-token>
+    const launchWatchMatch = text.match(/^\/start(?:@\w+)?\s+lw_([a-f0-9]{24})$/i);
+    if (launchWatchMatch) {
+      const token = String(launchWatchMatch[1]).toLowerCase();
+      const resolved = await resolveLaunchWatch(token);
+      if (!resolved) {
+        await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "<b>Launch Watch link not available</b>\n\nThis Launch Watch link is invalid or no longer available.", { parse_mode: "HTML" });
+        return json({ ok: true });
+      }
+      const { launch, profile } = resolved;
+      const blocked = launchWatchGate(launch, profile);
+      if (blocked) {
+        await sendMessage(TELEGRAM_BOT_TOKEN, chatId, `${launchWatchIntro(launch, profile)}\n\n${escapeHtml(blocked)}`, { parse_mode: "HTML" });
+        return json({ ok: true });
+      }
+      const result = await launchWatchSubscribe(launch.id, Number(from.id));
+      const line =
+        result === "already_active"
+          ? "🔔 You are already watching this launch."
+          : result === "reactivated"
+            ? "🔔 You are watching this launch again."
+            : "🔔 You are now watching this launch.";
+      await sendMessage(TELEGRAM_BOT_TOKEN, chatId, `${launchWatchIntro(launch, profile)}\n\n${line}${launchWatchDisclaimer}`, { parse_mode: "HTML", reply_markup: launchWatchKeyboard(token, true) });
+      return json({ ok: true });
+    }
+
     const betaJoinMatch = text.match(/^\/start(?:@\w+)?\s+beta_join_g_([n0-9]+)$/i);
     const betaRoadmapMatch = text.match(/^\/start(?:@\w+)?\s+beta_roadmap_g_([n0-9]+)$/i);
     if (betaJoinMatch || betaRoadmapMatch) {
