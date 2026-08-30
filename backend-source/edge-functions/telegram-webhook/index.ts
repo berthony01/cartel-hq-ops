@@ -1319,7 +1319,7 @@ Deno.serve(async (req: Request) => {
         `${launchWatchIntro(launch, profile)}\n\n${line}${launchWatchDisclaimer}${packet}`,
         {
           parse_mode: "HTML",
-          reply_markup: launchWatchKeyboard(token, true, result.remindersEnabled, true),
+          reply_markup: launchWatchKeyboard(token, true, result.remindersEnabled, true, profile),
         },
       );
       return json({ ok: true });
