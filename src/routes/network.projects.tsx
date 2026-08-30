@@ -34,17 +34,21 @@ function NetworkProjectsPage() {
   const [chainInput, setChainInput] = useState("");
   const [search, setSearch] = useState("");
   const [chain, setChain] = useState("");
-  const [pages, setPages] = useState(1);
-  const limit = Math.min(NETWORK_PAGE_SIZE * pages, NETWORK_MAX_PAGE_LIMIT);
+  const [page, setPage] = useState(0);
+  const offset = page * NETWORK_PAGE_SIZE;
 
   const query = useQuery({
-    queryKey: networkKeys.projects({ search, chain, limit, offset: 0 }),
-    queryFn: () => fetchNetworkProjects({ search, chain, limit, offset: 0 }),
+    queryKey: networkKeys.projects({ search, chain, limit: NETWORK_PAGE_SIZE, offset }),
+    queryFn: () =>
+      fetchNetworkProjects({ search, chain, limit: NETWORK_PAGE_SIZE, offset }),
     placeholderData: keepPreviousData,
   });
 
   const rows: NetworkProjectCard[] = query.data?.rows ?? [];
   const total = query.data?.totalCount ?? 0;
+  const rangeStart = rows.length > 0 ? offset + 1 : 0;
+  const rangeEnd = offset + rows.length;
+  const hasNext = rangeEnd < total;
 
   function applyFilters(e: React.FormEvent) {
     e.preventDefault();
