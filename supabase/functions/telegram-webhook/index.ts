@@ -587,8 +587,8 @@ Deno.serve(async (req: Request) => {
             ? [await systemMessage("account_found", title, accountFoundText), undefined]
             : [await systemMessage("bot_installed", title, botInstalledText), groupAcquisitionKeyboard(chatId)];
 
-
           const sent = await sendMessage(TELEGRAM_BOT_TOKEN, chatId, welcomeText, { parse_mode: "HTML", ...(welcomeKeyboard ? { reply_markup: welcomeKeyboard } : {}) });
+
           if (sent) await touchGroupContact(memberUpdate.chat, actor, { status, welcomeSent: true });
         }
       }
