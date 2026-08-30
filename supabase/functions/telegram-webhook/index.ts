@@ -1207,19 +1207,50 @@ Deno.serve(async (req: Request) => {
         try { (globalThis as any).EdgeRuntime?.waitUntil?.(cleanup); } catch { }
       };
 
-      // Only a delivered welcome may be followed by the separate CTA card.
+      /**
+       * Only a delivered welcome may be followed by the separate CTA card. The
+       * card's 5–60 minute lifetime is queued as a durable cleanup job — an Edge
+       * Function cannot stay alive that long, so no long timer is used here.
+       */
       let ctaMessageId: number | null = null;
       let ctaLifetime: number | null = null;
+      let ctaCleanupScheduled = false;
       if (sentId && ctaKeyboard) {
         const rawLifetime = Number(settings.launch_watch_cta_auto_delete_seconds);
         ctaLifetime = LW_CTA_LIFETIMES.includes(rawLifetime) ? rawLifetime : LW_CTA_LIFETIME_DEFAULT;
         try {
           const ctaSent = await sendMessage(TELEGRAM_BOT_TOKEN, chatId, ctaText, { parse_mode: "HTML", reply_markup: ctaKeyboard });
           ctaMessageId = (ctaSent as any)?.message_id ?? null;
-          ctaResult = ctaMessageId ? "sent" : "send_failed";
+          if (!ctaMessageId) {
+            ctaResult = "send_failed";
+          } else {
+            const deleteAfter = new Date(Date.now() + ctaLifetime * 1000).toISOString();
+            const { error: cleanupError } = await admin.from("telegram_message_cleanup_jobs").insert({
+              workspace_id: settings.workspace_id,
+              group_connection_id: connection.id,
+              telegram_chat_id: Number(chatId),
+              telegram_message_id: ctaMessageId,
+              cleanup_kind: "launch_watch_cta",
+              delete_after: deleteAfter,
+              next_attempt_at: deleteAfter,
+            });
+            if (cleanupError) throw cleanupError;
+            ctaCleanupScheduled = true;
+            ctaResult = "sent";
+          }
         } catch (e) {
-          ctaResult = "send_failed";
+          ctaResult = ctaMessageId ? "cleanup_schedule_failed" : "send_failed";
           console.error("[telegram-webhook] launch watch card send", e instanceof Error ? e.message : "unknown");
+        }
+        // A card with no durable cleanup path is removed immediately.
+        if (ctaMessageId && !ctaCleanupScheduled) {
+          try {
+            await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", { chat_id: chatId, message_id: ctaMessageId });
+            ctaResult = "cleanup_schedule_failed_deleted";
+          } catch (e) {
+            console.error("[telegram-webhook] launch watch card rollback", e instanceof Error ? e.message : "unknown");
+          }
+          ctaMessageId = null;
         }
       } else if (!sentId && ctaKeyboard) {
         // Never post an orphan CTA when the welcome itself failed.
@@ -1228,16 +1259,16 @@ Deno.serve(async (req: Request) => {
 
       const ctaDiagnostics: Record<string, unknown> = {
         last_launch_watch_cta_result: ctaResult,
-        ...(ctaMessageId ? { last_launch_watch_cta_message_id: ctaMessageId, last_launch_watch_cta_sent_at: new Date().toISOString(), last_launch_watch_cta_auto_delete_seconds: ctaLifetime } : {}),
+        ...(ctaCleanupScheduled ? { last_launch_watch_cta_message_id: ctaMessageId, last_launch_watch_cta_sent_at: new Date().toISOString(), last_launch_watch_cta_auto_delete_seconds: ctaLifetime } : {}),
       };
       if (sentId) await recordDiagnostic("sent", { last_welcome_sent_at: new Date().toISOString(), last_welcome_message_id: sentId, ...ctaDiagnostics });
       else await recordDiagnostic("send_failed", ctaDiagnostics);
 
-      // Each message expires on its own timer.
+      // The short welcome timer is safe inside one invocation and stays unchanged.
       if (settings.auto_delete_enabled && sentId) {
         scheduleDelete(sentId, Math.min(120, Math.max(10, Number(settings.auto_delete_seconds) || 45)), "welcome");
       }
-      if (ctaMessageId && ctaLifetime) scheduleDelete(ctaMessageId, ctaLifetime, "launch watch card");
+
       return json({ ok: true });
 
     }
