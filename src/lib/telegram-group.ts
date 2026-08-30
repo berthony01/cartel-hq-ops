@@ -343,6 +343,8 @@ export type TelegramWelcomeSettingsInput = {
   launchWatchShowWebsite: boolean;
   launchWatchShowTelegram: boolean;
   launchWatchShowX: boolean;
+  /** Must be exactly one of LAUNCH_WATCH_CTA_LIFETIMES. */
+  launchWatchCtaAutoDeleteSeconds: number;
 };
 
 export type TelegramWelcomeTestResult = {
@@ -352,9 +354,12 @@ export type TelegramWelcomeTestResult = {
   messageId?: number | null;
   autoDeleteSeconds?: number | null;
   groupTitle?: string;
-  /** True when the test welcome carried the Launch Watch CTA buttons. */
+  /** True when a separate Launch Watch card was posted after the welcome. */
   launchWatchCtaIncluded?: boolean;
+  launchWatchCtaMessageId?: number | null;
+  launchWatchCtaAutoDeleteSeconds?: number | null;
 };
+
 
 
 /** Reads welcome settings for one connected community. Lazy — call on open. */
