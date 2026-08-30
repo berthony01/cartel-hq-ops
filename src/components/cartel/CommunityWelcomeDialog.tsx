@@ -453,7 +453,9 @@ export function CommunityWelcomeDialog({
                 <Switch
                   id={`welcome-cta-${group.id}`}
                   checked={ctaEnabled}
-                  disabled={!canManage || noEligibleLaunches}
+                  disabled={!canManage || (noEligibleLaunches && !ctaEnabled)}
+
+
                   onCheckedChange={(v) => {
                     setCtaEnabled(v === true);
                     touch();
@@ -466,7 +468,11 @@ export function CommunityWelcomeDialog({
                   No eligible launches. A launch can be used here only once its Project Profile is
                   Published and its watchlist is open (Watchlist Open, Launch Approaching, Contract
                   Pending or Official Contract Registered).
+                  {ctaEnabled
+                    ? " The saved Launch Watch button is no longer eligible — turn it off to save."
+                    : ""}
                 </p>
+
               ) : ctaEnabled ? (
                 <div className="space-y-3">
                   <div className="space-y-1.5">

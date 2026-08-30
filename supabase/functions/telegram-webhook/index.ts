@@ -214,12 +214,25 @@ const LAUNCH_STATUS_LABELS: Record<string, string> = {
  * - Active watcher: stop watching, plus a countdown-reminder toggle.
  * - Inactive watcher: "Watch again" is offered ONLY when the launch currently
  *   accepts sign-ups, so the button is never a dead end.
+ * - External links are the WATCHED PROJECT's official links only. This is a
+ *   multi-project platform: never fall back to PEPECARTEL links here.
  */
+function isHttpUrlValue(value: unknown): value is string {
+  if (typeof value !== "string" || !value.trim()) return false;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 function launchWatchKeyboard(
   token: string,
   watching: boolean,
   remindersEnabled: boolean,
   canRewatch: boolean,
+  profile?: { website_url?: unknown; telegram_url?: unknown; x_url?: unknown } | null,
 ) {
   const rows: Array<Array<Record<string, string>>> = [];
   if (watching) {
@@ -232,12 +245,14 @@ function launchWatchKeyboard(
   } else if (canRewatch) {
     rows.push([{ text: "🔔 Watch again", callback_data: `lw_rewatch_${token}` }]);
   }
-  rows.push([
-    { text: "💬 PEPECARTEL Community", url: PEPECARTEL_TELEGRAM },
-    { text: "𝕏 Follow on X", url: PEPECARTEL_X },
-  ]);
+  const links: Array<Record<string, string>> = [];
+  if (isHttpUrlValue(profile?.website_url)) links.push({ text: "🌐 Website", url: String(profile?.website_url).trim() });
+  if (isHttpUrlValue(profile?.telegram_url)) links.push({ text: "💬 Telegram", url: String(profile?.telegram_url).trim() });
+  if (isHttpUrlValue(profile?.x_url)) links.push({ text: "𝕏 X", url: String(profile?.x_url).trim() });
+  for (let i = 0; i < links.length; i += 2) rows.push(links.slice(i, i + 2));
   return { inline_keyboard: rows };
 }
+
 
 
 Deno.serve(async (req: Request) => {
@@ -867,7 +882,7 @@ Deno.serve(async (req: Request) => {
           watching: boolean,
           remindersEnabled: boolean,
         ) => {
-          const markup = launchWatchKeyboard(token, watching, remindersEnabled, rewatchAllowed);
+          const markup = launchWatchKeyboard(token, watching, remindersEnabled, rewatchAllowed, profile);
           if (callback.message?.message_id) {
             await editMessage(TELEGRAM_BOT_TOKEN, callbackChatId, Number(callback.message.message_id), text, markup);
           } else {
@@ -1140,7 +1155,7 @@ Deno.serve(async (req: Request) => {
       if (settings.launch_watch_cta_enabled === true && settings.launch_watch_launch_id) {
         try {
           const { data: launchRow, error: launchError } = await admin.from("launches")
-            .select("id,status,launch_watch_token,workspace_id,project_profiles(project_name,discovery_status,website_url,telegram_url,x_url)")
+            .select("id,status,launch_watch_token,workspace_id,project_profiles(workspace_id,project_name,discovery_status,website_url,telegram_url,x_url)")
             .eq("id", String(settings.launch_watch_launch_id))
             .eq("workspace_id", String(settings.workspace_id))
             .maybeSingle();
@@ -1149,7 +1164,10 @@ Deno.serve(async (req: Request) => {
           const eligible = Boolean(launchRow)
             && LW_OPEN_STATUSES.includes(String((launchRow as any).status))
             && LW_TOKEN_PATTERN.test(String((launchRow as any).launch_watch_token ?? ""))
+            // The Project Profile must belong to the SAME workspace as this community.
+            && String(profile?.workspace_id ?? "") === String(settings.workspace_id)
             && profile?.discovery_status === "published";
+
           if (eligible) {
             const rows: any[] = [[{ text: "🔔 Watch this launch", url: `https://t.me/${BOT_USERNAME}?start=lw_${String((launchRow as any).launch_watch_token)}` }]];
             const links: any[] = [];
@@ -1304,7 +1322,7 @@ Deno.serve(async (req: Request) => {
         `${launchWatchIntro(launch, profile)}\n\n${line}${launchWatchDisclaimer}${packet}`,
         {
           parse_mode: "HTML",
-          reply_markup: launchWatchKeyboard(token, true, result.remindersEnabled, true),
+          reply_markup: launchWatchKeyboard(token, true, result.remindersEnabled, true, profile),
         },
       );
       return json({ ok: true });

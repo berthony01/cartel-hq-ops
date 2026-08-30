@@ -241,7 +241,7 @@ Deno.serve(async (req: Request) => {
       };
       const loadEligibleLaunchRows = async (launchId?: string) => {
         let query = admin.from("launches")
-          .select("id,token_name,ticker,chain,status,launch_watch_token,project_profile_id,project_profiles(project_name,discovery_status,website_url,telegram_url,x_url)")
+          .select("id,token_name,ticker,chain,status,launch_watch_token,project_profile_id,project_profiles(workspace_id,project_name,discovery_status,website_url,telegram_url,x_url)")
           .eq("workspace_id", workspaceId)
           .in("status", LW_OPEN_STATUSES);
         if (launchId) query = query.eq("id", launchId);
@@ -249,8 +249,12 @@ Deno.serve(async (req: Request) => {
         if (error) throw error;
         return (data ?? []).filter((row: any) => {
           const profile = Array.isArray(row?.project_profiles) ? row.project_profiles[0] : row?.project_profiles;
-          return profile?.discovery_status === "published" && LW_TOKEN_PATTERN.test(String(row?.launch_watch_token ?? ""));
+          // The Project Profile must belong to the SAME workspace as the launch.
+          return String(profile?.workspace_id ?? "") === String(workspaceId)
+            && profile?.discovery_status === "published"
+            && LW_TOKEN_PATTERN.test(String(row?.launch_watch_token ?? ""));
         });
+
       };
       const toOption = (row: any) => {
         const profile = Array.isArray(row?.project_profiles) ? row.project_profiles[0] : row?.project_profiles;
