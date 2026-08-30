@@ -492,14 +492,23 @@ export function CommunityWelcomeDialog({
               </div>
 
               {noEligibleLaunches ? (
-                <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  No eligible launches. A launch can be used here only once its Project Profile is
-                  Published and its watchlist is open (Watchlist Open, Launch Approaching, Contract
-                  Pending or Official Contract Registered).
-                  {ctaEnabled
-                    ? " The saved Launch Watch button is no longer eligible — turn it off to save."
-                    : ""}
-                </p>
+                <div className="space-y-2 rounded-md border border-gold/40 bg-gold/5 p-3">
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    No launch is ready for this card yet. A launch can be used here once its
+                    Project Profile is Published and its Launch Watch is open (Watchlist Open,
+                    Launch Approaching, Contract Pending or Official Contract Registered).
+                    {ctaEnabled
+                      ? " The saved Launch Watch button is no longer eligible — turn it off to save."
+                      : ""}
+                  </p>
+                  <Button asChild size="sm" variant="outline" className="min-h-11">
+                    <Link to="/launch-control">
+                      Create or open Launch Watch
+                      <ArrowRight className="size-4" aria-hidden="true" />
+                    </Link>
+                  </Button>
+                </div>
+
 
               ) : ctaEnabled ? (
                 <div className="space-y-3">
