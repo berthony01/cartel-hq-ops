@@ -37,6 +37,7 @@ import { Route as NetworkProjectsRouteImport } from './routes/network.projects'
 import { Route as AuthenticatedStickerLabIndexRouteImport } from './routes/_authenticated/sticker-lab.index'
 import { Route as AuthenticatedStickerLabPackIdRouteImport } from './routes/_authenticated/sticker-lab.$packId'
 import { Route as AuthenticatedStickerLabNewRouteImport } from './routes/_authenticated/sticker-lab.new'
+import { Route as NetworkProjectProjectSlugRouteImport } from './routes/network.project.$projectSlug'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -185,6 +186,12 @@ const AuthenticatedStickerLabNewRoute =
     path: '/new',
     getParentRoute: () => AuthenticatedStickerLabRoute,
   } as any)
+const NetworkProjectProjectSlugRoute =
+  NetworkProjectProjectSlugRouteImport.update({
+    id: '/project/$projectSlug',
+    path: '/project/$projectSlug',
+    getParentRoute: () => NetworkRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -213,6 +220,7 @@ export interface FileRoutesByFullPath {
   '/network/': typeof NetworkIndexRoute
   '/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
   '/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
+  '/network/project/$projectSlug': typeof NetworkProjectProjectSlugRoute
   '/sticker-lab/': typeof AuthenticatedStickerLabIndexRoute
 }
 export interface FileRoutesByTo {
@@ -240,6 +248,7 @@ export interface FileRoutesByTo {
   '/network': typeof NetworkIndexRoute
   '/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
   '/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
+  '/network/project/$projectSlug': typeof NetworkProjectProjectSlugRoute
   '/sticker-lab': typeof AuthenticatedStickerLabIndexRoute
 }
 export interface FileRoutesById {
@@ -271,6 +280,7 @@ export interface FileRoutesById {
   '/network/': typeof NetworkIndexRoute
   '/_authenticated/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
   '/_authenticated/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
+  '/network/project/$projectSlug': typeof NetworkProjectProjectSlugRoute
   '/_authenticated/sticker-lab/': typeof AuthenticatedStickerLabIndexRoute
 }
 export interface FileRouteTypes {
@@ -302,6 +312,7 @@ export interface FileRouteTypes {
     | '/network/'
     | '/sticker-lab/$packId'
     | '/sticker-lab/new'
+    | '/network/project/$projectSlug'
     | '/sticker-lab/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -329,6 +340,7 @@ export interface FileRouteTypes {
     | '/network'
     | '/sticker-lab/$packId'
     | '/sticker-lab/new'
+    | '/network/project/$projectSlug'
     | '/sticker-lab'
   id:
     | '__root__'
@@ -359,6 +371,7 @@ export interface FileRouteTypes {
     | '/network/'
     | '/_authenticated/sticker-lab/$packId'
     | '/_authenticated/sticker-lab/new'
+    | '/network/project/$projectSlug'
     | '/_authenticated/sticker-lab/'
   fileRoutesById: FileRoutesById
 }
@@ -567,6 +580,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStickerLabNewRouteImport
       parentRoute: typeof AuthenticatedStickerLabRoute
     }
+    '/network/project/$projectSlug': {
+      id: '/network/project/$projectSlug'
+      path: '/project/$projectSlug'
+      fullPath: '/network/project/$projectSlug'
+      preLoaderRoute: typeof NetworkProjectProjectSlugRouteImport
+      parentRoute: typeof NetworkRoute
+    }
   }
 }
 
@@ -637,12 +657,14 @@ interface NetworkRouteChildren {
   NetworkLaunchesRoute: typeof NetworkLaunchesRoute
   NetworkProjectsRoute: typeof NetworkProjectsRoute
   NetworkIndexRoute: typeof NetworkIndexRoute
+  NetworkProjectProjectSlugRoute: typeof NetworkProjectProjectSlugRoute
 }
 
 const NetworkRouteChildren: NetworkRouteChildren = {
   NetworkLaunchesRoute: NetworkLaunchesRoute,
   NetworkProjectsRoute: NetworkProjectsRoute,
   NetworkIndexRoute: NetworkIndexRoute,
+  NetworkProjectProjectSlugRoute: NetworkProjectProjectSlugRoute,
 }
 
 const NetworkRouteWithChildren =
