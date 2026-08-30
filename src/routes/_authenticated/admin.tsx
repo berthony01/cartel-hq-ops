@@ -232,8 +232,10 @@ function AdminPage() {
             {hasUnrestrictedAccess
               ? "Unrestricted access is granted by the platform service, not by this interface."
               : "The platform service did not report unrestricted access for this session."}{" "}
-            This console is read-only: it never edits users, roles, plans or Sticker Drop
-            schedules.
+            Operational data in this console is read-only: it never edits users, roles, plans or
+            Sticker Drop schedules. The only editable surface is the platform Telegram system
+            messages below.
+
           </p>
           {capabilities.length > 0 ? (
             <div className="flex min-w-0 flex-wrap gap-1.5">
