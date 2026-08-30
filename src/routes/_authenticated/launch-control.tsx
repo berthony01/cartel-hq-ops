@@ -28,7 +28,9 @@ import {
   TICKER_MAX,
   TOKEN_NAME_MAX,
   canDeleteLaunch,
+  getLaunchNotificationSummary,
   getLaunchWatchSummary,
+
   isLaunchWatchClosedStatus,
   isLaunchWatchOpenStatus,
   launchWatchDeepLink,
