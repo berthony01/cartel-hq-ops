@@ -160,6 +160,44 @@ async function ensureBotProfile(token: string) {
   } catch { }
 }
 
+// --------------------------------------------------------------------------
+// Phase 4 — Launch Watch (opt-in only).
+// Reuses this one bot and this one webhook. Subscriptions live exclusively in
+// public.launch_watch_subscriptions. Telegram identity is never enriched with
+// username/name here: telegram_user_id is the only stored identifier.
+// --------------------------------------------------------------------------
+const LAUNCH_WATCH_OPEN_STATUSES = [
+  "WATCHLIST_OPEN",
+  "LAUNCH_APPROACHING",
+  "CONTRACT_PENDING",
+  "OFFICIAL_CONTRACT_REGISTERED",
+];
+const LAUNCH_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Draft",
+  ANNOUNCED: "Announced",
+  WATCHLIST_OPEN: "Watchlist open",
+  LAUNCH_APPROACHING: "Launch approaching",
+  CONTRACT_PENDING: "Contract pending",
+  OFFICIAL_CONTRACT_REGISTERED: "Official contract registered",
+  LIVE: "Live",
+  COMPLETED: "Completed",
+};
+function launchWatchKeyboard(token: string, watching: boolean) {
+  return {
+    inline_keyboard: [
+      [
+        watching
+          ? { text: "🔕 Stop watching", callback_data: `lw_unwatch_${token}` }
+          : { text: "🔔 Watch again", callback_data: `lw_rewatch_${token}` },
+      ],
+      [
+        { text: "💬 PEPECARTEL Community", url: PEPECARTEL_TELEGRAM },
+        { text: "𝕏 Follow on X", url: PEPECARTEL_X },
+      ],
+    ],
+  };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ ok: true });
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
