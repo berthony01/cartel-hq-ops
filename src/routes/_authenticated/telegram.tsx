@@ -38,8 +38,10 @@ export const Route = createFileRoute("/_authenticated/telegram")({
 function TelegramPage() {
   const setup = useTelegramSetup();
   const groupSetup = useTelegramGroupSetup();
+  const { workspaceId } = useWorkspace();
 
   const groupCount = groupSetup.connectedGroupCount;
+
 
   return (
     <div className="flex max-w-4xl flex-col gap-4 sm:gap-6">
