@@ -745,6 +745,9 @@ function LaunchControlPage() {
                   <p className="mt-3 text-xs text-muted-foreground">
                     Recorded timezone on this launch: {selected.timezone}
                   </p>
+                  {scheduleError ? (
+                    <p className="mt-2 text-xs text-danger">{scheduleError}</p>
+                  ) : null}
                 </Section>
 
                 <Section
@@ -755,10 +758,17 @@ function LaunchControlPage() {
                   <Textarea
                     id="internal-notes"
                     rows={4}
+                    maxLength={NOTES_MAX}
+                    disabled={readOnly}
                     value={form.internal_notes}
                     onChange={(e) => set({ internal_notes: e.target.value })}
                   />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {form.internal_notes.length} / {NOTES_MAX} characters.
+                  </p>
+                  {notesError ? <p className="mt-1 text-xs text-danger">{notesError}</p> : null}
                 </Section>
+
 
                 <div className="hidden lg:flex lg:justify-end">{saveButton}</div>
               </form>
