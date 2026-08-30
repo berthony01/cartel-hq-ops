@@ -6,41 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NetworkEmpty, ProjectCard } from "@/components/cartel-network/NetworkPieces";
 import {
+  NETWORK_MAX_PAGE_LIMIT,
   NETWORK_PAGE_SIZE,
   fetchNetworkProjects,
   networkKeys,
   type NetworkProjectCard,
 } from "@/lib/cartel-network";
-
-export const Route = createFileRoute("/network/projects")({
-  head: () => ({
-    meta: [
-      { title: "Projects — Cartel Network" },
-      {
-        name: "description",
-        content:
-          "Browse published projects on the Cartel Network. Search by project, ticker or chain.",
-      },
-      { property: "og:title", content: "Projects — Cartel Network" },
-      {
-        property: "og:description",
-        content: "Browse published projects on the Cartel Network.",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-  }),
-  component: ProjectsDirectory,
-});
-
-function ProjectsDirectory() {
-  const [searchInput, setSearchInput] = useState("");
-  const [chainInput, setChainInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [chain, setChain] = useState("");
-  const [pages, setPages] = useState(1);
-
-  const limit = NETWORK_PAGE_SIZE * pages;
+...
+  const limit = Math.min(NETWORK_PAGE_SIZE * pages, NETWORK_MAX_PAGE_LIMIT);
 
   const query = useQuery({
     queryKey: networkKeys.projects({ search, chain, limit, offset: 0 }),
