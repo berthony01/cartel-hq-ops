@@ -219,7 +219,7 @@ const NEXT_EXPLANATION: Record<ReadinessStepKey, string> = {
   project_profile:
     "Start here. Your Project Profile is the identity every other Cartel HQ feature builds on.",
   profile_published:
-    "Publishing makes the profile ready for Cartel HQ launch features. Public Cartel Network pages are not live yet.",
+    "Publishing makes the profile discoverable on the Cartel Network and ready for Cartel HQ launch features.",
   launch_created: "Create your launch record so you can announce it and open Launch Watch.",
   launch_announced: "Announcing locks the launch identity and starts the lifecycle.",
   launch_watch_open:
