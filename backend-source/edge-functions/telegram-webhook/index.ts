@@ -254,6 +254,7 @@ Deno.serve(async (req: Request) => {
   const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
   void ensureCommands(TELEGRAM_BOT_TOKEN);
   void ensureBotProfile(TELEGRAM_BOT_TOKEN);
+  void ensureWebhookUpdates(TELEGRAM_BOT_TOKEN, SUPABASE_URL);
 
   const getLinkedUser = async (telegramUserId: string) => {
     const { data } = await admin.from("telegram_connections").select("user_id").eq("telegram_user_id", telegramUserId).maybeSingle();
