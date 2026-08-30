@@ -256,6 +256,18 @@ export const WELCOME_MESSAGE_MAX = 3500;
 export const WELCOME_AUTO_DELETE_MIN = 10;
 export const WELCOME_AUTO_DELETE_MAX = 120;
 
+/**
+ * Phase 5.2 — the Launch Watch card is a SEPARATE Telegram message with its own
+ * lifetime. Allowed values mirror the database constraint exactly.
+ */
+export const LAUNCH_WATCH_CTA_LIFETIMES = [300, 600, 900, 1800, 3600] as const;
+export const LAUNCH_WATCH_CTA_LIFETIME_DEFAULT = 900;
+
+export function formatLaunchWatchCtaLifetime(seconds: number): string {
+  return `${Math.round(seconds / 60)} minutes`;
+}
+
+
 /** Result code written by the webhook after a real member join. */
 export type WelcomeJoinResult =
   | "sent"
