@@ -472,8 +472,9 @@ export function CommunityWelcomeDialog({
 
               <div className="flex min-h-11 items-center justify-between gap-3">
                 <Label htmlFor={`welcome-cta-${group.id}`} className="text-xs">
-                  Include Launch Watch button
+                  Post a separate Launch Watch card
                 </Label>
+
                 <Switch
                   id={`welcome-cta-${group.id}`}
                   checked={ctaEnabled}
