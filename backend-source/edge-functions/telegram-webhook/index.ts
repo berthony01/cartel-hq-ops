@@ -248,14 +248,16 @@ Deno.serve(async (req: Request) => {
   const resolveLaunchWatch = async (token: string) => {
     const { data: launch, error: launchError } = await admin
       .from("launches")
-      .select("id,status,token_name,ticker,chain,project_profile_id,launch_watch_token")
+      .select(
+        "id,status,token_name,ticker,chain,project_profile_id,launch_watch_token,launch_at,launch_window_start,launch_window_end,timezone,official_contract_address",
+      )
       .eq("launch_watch_token", token)
       .maybeSingle();
     if (launchError) throw new Error("Could not load launch watch record.");
     if (!launch?.id) return null;
     const { data: profile, error: profileError } = await admin
       .from("project_profiles")
-      .select("project_name,discovery_status")
+      .select("project_name,discovery_status,website_url,telegram_url,x_url")
       .eq("id", launch.project_profile_id)
       .maybeSingle();
     if (profileError) throw new Error("Could not load project profile.");
@@ -266,7 +268,75 @@ Deno.serve(async (req: Request) => {
     `<b>🔔 LAUNCH WATCH</b>\n\n<b>${escapeHtml(String(profile?.project_name ?? "Project"))}</b>\n${escapeHtml(String(launch.token_name ?? ""))} • ${escapeHtml(String(launch.ticker ?? ""))} • ${escapeHtml(String(launch.chain ?? ""))}\nStatus: ${escapeHtml(LAUNCH_STATUS_LABELS[String(launch.status)] ?? String(launch.status))}`;
 
   const launchWatchDisclaimer =
-    `\n\nThis only records that you are watching this launch. It is not a safety check, audit, verification or endorsement of any token.\n\nAutomated reminders, launch-live alerts and official-contract messages are <b>not active yet</b> — they begin in a later phase.`;
+    `\n\nWhile you are watching, this bot can send you a controlled <b>24-hour</b> and <b>1-hour</b> countdown reminder, the <b>official-contract Verified Launch Packet</b>, and a <b>launch-live alert</b>. Nothing else is sent.\n\nYou can mute the countdowns or stop watching at any time with the buttons below.\n\nThis is not a safety check, audit, verification or endorsement of any token.`;
+
+  const isHttpUrl = (value: unknown): value is string => {
+    if (typeof value !== "string" || !value.trim()) return false;
+    try {
+      const url = new URL(value.trim());
+      return url.protocol === "https:" || url.protocol === "http:";
+    } catch {
+      return false;
+    }
+  };
+
+  const launchTimingLine = (launch: any): string => {
+    const iso = (launch.launch_at ?? launch.launch_window_start) as string | null;
+    if (!iso) return "";
+    const date = new Date(String(iso));
+    if (Number.isNaN(date.getTime())) return "";
+    const zone = typeof launch.timezone === "string" && launch.timezone ? launch.timezone : "UTC";
+    const render = (tz: string) => {
+      const parts = new Intl.DateTimeFormat("en-GB", {
+        timeZone: tz,
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+      }).formatToParts(date);
+      const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+      return `${get("day")} ${get("month")} ${get("year")} ${get("hour")}:${get("minute")} (${tz})`;
+    };
+    let label: string;
+    try {
+      label = render(zone);
+    } catch {
+      label = render("UTC");
+    }
+    const prefix = launch.launch_at ? "Announced launch time" : "Launch window starts";
+    return `\n${prefix}: <b>${escapeHtml(label)}</b>`;
+  };
+
+  /**
+   * Immediate Verified Launch Packet for someone who joins after the official
+   * contract has already been registered. This is a direct confirmation only —
+   * it never creates a launch_notification_deliveries row.
+   */
+  const verifiedLaunchPacket = (launch: any, profile: any): string => {
+    const lines: string[] = [
+      `\n\n<b>📦 VERIFIED LAUNCH PACKET</b>\n`,
+      `<b>${escapeHtml(String(profile?.project_name ?? "Project"))}</b>`,
+      `${escapeHtml(String(launch.token_name ?? ""))} • ${escapeHtml(String(launch.ticker ?? ""))} • ${escapeHtml(String(launch.chain ?? ""))}`,
+    ];
+    if (launch.official_contract_address) {
+      lines.push(
+        `\nOfficial contract registered by the authenticated project:\n<code>${escapeHtml(String(launch.official_contract_address))}</code>`,
+      );
+    }
+    const timing = launchTimingLine(launch);
+    if (timing) lines.push(timing.replace(/^\n/, ""));
+    const links: string[] = [];
+    if (isHttpUrl(profile?.website_url)) links.push(`Website: ${escapeHtml(profile.website_url.trim())}`);
+    if (isHttpUrl(profile?.telegram_url)) links.push(`Telegram: ${escapeHtml(profile.telegram_url.trim())}`);
+    if (isHttpUrl(profile?.x_url)) links.push(`X: ${escapeHtml(profile.x_url.trim())}`);
+    if (links.length) lines.push(`\n<b>Official project links</b>\n${links.join("\n")}`);
+    lines.push(
+      `\n<b>What "verified" means:</b> this information was supplied by the authenticated Cartel HQ project that controls this launch. It is <b>not</b> a safety audit, token safety verification, rug-proof guarantee or investment endorsement. Always do your own research.`,
+    );
+    return lines.join("\n");
+  };
 
   /** Returns a status string describing why a join/rewatch cannot be accepted. */
   const launchWatchGate = (launch: any, profile: any): string | null => {
@@ -283,12 +353,14 @@ Deno.serve(async (req: Request) => {
     return null;
   };
 
+  const canRewatchNow = (launch: any, profile: any) => launchWatchGate(launch, profile) === null;
+
   const isUniqueViolation = (error: any) => String(error?.code ?? "") === "23505";
 
   const readLaunchWatchRow = async (launchId: string, telegramUserId: number) => {
     const { data, error } = await admin
       .from("launch_watch_subscriptions")
-      .select("id,is_active")
+      .select("id,is_active,reminders_enabled")
       .eq("launch_id", launchId)
       .eq("telegram_user_id", telegramUserId)
       .maybeSingle();
@@ -304,6 +376,7 @@ Deno.serve(async (req: Request) => {
     if (error) throw new Error("Could not update launch watch subscription.");
   };
 
+  /** Reactivation never resets reminders_enabled: the prior choice is kept. */
   const reactivateLaunchWatchRow = async (id: string, now: string) => {
     const { error } = await admin
       .from("launch_watch_subscriptions")
@@ -312,21 +385,36 @@ Deno.serve(async (req: Request) => {
     if (error) throw new Error("Could not reactivate launch watch subscription.");
   };
 
+  /** Explicit reminder-preference toggle for an already-active watcher. */
+  const setLaunchWatchReminders = async (id: string, enabled: boolean, now: string) => {
+    const { error } = await admin
+      .from("launch_watch_subscriptions")
+      .update({ reminders_enabled: enabled, last_interaction_at: now })
+      .eq("id", id);
+    if (error) throw new Error("Could not update countdown reminder preference.");
+  };
+
+  type LaunchWatchOutcome = "subscribed" | "reactivated" | "already_active";
+
   /**
    * Idempotent subscribe / reactivate. Never creates a duplicate row: a lost
    * race against a simultaneous deep link surfaces as unique violation 23505,
-   * which is resolved by refetching and applying the normal patch.
+   * which is resolved by refetching and applying the normal patch. New rows
+   * take the database default reminders_enabled = true.
    */
-  const launchWatchSubscribe = async (launchId: string, telegramUserId: number) => {
+  const launchWatchSubscribe = async (
+    launchId: string,
+    telegramUserId: number,
+  ): Promise<{ outcome: LaunchWatchOutcome; remindersEnabled: boolean }> => {
     const now = new Date().toISOString();
     const existing = await readLaunchWatchRow(launchId, telegramUserId);
     if (existing?.id) {
       if (existing.is_active) {
         await touchLaunchWatchRow(existing.id, now);
-        return "already_active" as const;
+        return { outcome: "already_active", remindersEnabled: existing.reminders_enabled !== false };
       }
       await reactivateLaunchWatchRow(existing.id, now);
-      return "reactivated" as const;
+      return { outcome: "reactivated", remindersEnabled: existing.reminders_enabled !== false };
     }
 
     const { error: insertError } = await admin.from("launch_watch_subscriptions").insert({
@@ -345,12 +433,12 @@ Deno.serve(async (req: Request) => {
       if (!raced?.id) throw new Error("Could not save launch watch subscription.");
       if (raced.is_active) {
         await touchLaunchWatchRow(raced.id, now);
-        return "already_active" as const;
+        return { outcome: "already_active", remindersEnabled: raced.reminders_enabled !== false };
       }
       await reactivateLaunchWatchRow(raced.id, now);
-      return "reactivated" as const;
+      return { outcome: "reactivated", remindersEnabled: raced.reminders_enabled !== false };
     }
-    return "subscribed" as const;
+    return { outcome: "subscribed", remindersEnabled: true };
   };
 
   /** Soft unwatch. The row and its history are always preserved. */
@@ -370,6 +458,8 @@ Deno.serve(async (req: Request) => {
     if (error) throw new Error("Could not update launch watch subscription.");
     return "unsubscribed" as const;
   };
+
+
 
   const getSourceGroupContext = async (telegramChatId: string) => {
     const beta = await getGroupBetaContact(telegramChatId);
