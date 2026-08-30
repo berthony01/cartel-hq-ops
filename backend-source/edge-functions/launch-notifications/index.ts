@@ -157,8 +157,11 @@ Deno.serve(async (req: Request) => {
     counts.processed += 1;
     const deliveryId = String(claim.delivery_id);
     const eventType = String(claim.event_type);
+    // Duplicate-DM safety hinges on knowing whether Telegram was contacted.
+    let telegramAttempted = false;
 
     try {
+
       // ---- Revalidate against CURRENT state ------------------------------
       const { data: subscription, error: subError } = await admin
         .from("launch_watch_subscriptions")
@@ -319,7 +322,9 @@ Deno.serve(async (req: Request) => {
         | { kind: "ambiguous"; description: string };
 
       try {
+        telegramAttempted = true;
         const response = await fetch(`${TG_BASE}/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -419,17 +424,40 @@ Deno.serve(async (req: Request) => {
       });
       if (persistError) console.error("ambiguous persistence failed", deliveryId, persistError.message);
     } catch (error) {
-      // Revalidation/database failure before any send attempt: the DM was
-      // never dispatched, but we still refuse to auto-retry blindly.
-      counts.ambiguous += 1;
       const description = error instanceof Error ? error.message.slice(0, 400) : "processing_error";
-      const persistError = await finalize(deliveryId, {
-        status: "ambiguous",
-        error_class: "processing_error",
-        last_error: description,
-      });
-      if (persistError) console.error("processing-error persistence failed", deliveryId, persistError.message);
+      if (!telegramAttempted) {
+        // Telegram was definitively never called: no duplicate-DM risk, so a
+        // bounded retry is the correct category rather than `ambiguous`.
+        if (Number(claim.attempt_count ?? 0) < MAX_ATTEMPTS) {
+          counts.retry += 1;
+          const persistError = await finalize(deliveryId, {
+            status: "retry",
+            next_attempt_at: new Date(Date.now() + 60_000).toISOString(),
+            error_class: "processing_retry",
+            last_error: description,
+          });
+          if (persistError) console.error("processing-retry persistence failed", deliveryId, persistError.message);
+        } else {
+          counts.failed += 1;
+          const persistError = await finalize(deliveryId, {
+            status: "failed",
+            error_class: "processing_failed",
+            last_error: description,
+          });
+          if (persistError) console.error("processing-failed persistence failed", deliveryId, persistError.message);
+        }
+      } else {
+        // A send attempt had already begun with no reliable Telegram verdict.
+        counts.ambiguous += 1;
+        const persistError = await finalize(deliveryId, {
+          status: "ambiguous",
+          error_class: "uncertain_outcome",
+          last_error: description,
+        });
+        if (persistError) console.error("post-attempt persistence failed", deliveryId, persistError.message);
+      }
     }
+
   }
 
   // Aggregate counts only. No Telegram identifiers ever leave this worker.

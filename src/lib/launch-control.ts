@@ -42,11 +42,14 @@ export const LAUNCH_STATUS_HELP: Record<LaunchStatus, string> = {
   DRAFT: "Being prepared. Identity fields are still editable and the launch can be deleted.",
   ANNOUNCED: "Launch identity is locked. Schedule and notes remain editable.",
   WATCHLIST_OPEN:
-    "Launch Watch opt-ins are open through the PepeCartel Telegram bot. Automated alerts begin in Phase 5.",
+    "Launch Watch opt-ins are open through the PepeCartel Telegram bot. Countdown reminders are scheduled from the launch time.",
+
   LAUNCH_APPROACHING: "Schedule is confirmed and the launch window is close.",
   CONTRACT_PENDING: "Official contract address can now be submitted.",
-  OFFICIAL_CONTRACT_REGISTERED: "The project has registered its official contract address.",
-  LIVE: "Launch is live. Schedule fields are locked.",
+  OFFICIAL_CONTRACT_REGISTERED:
+    "The project has registered its official contract address. Active watchers receive the official-contract Verified Launch Packet.",
+  LIVE: "Launch is live. Schedule fields are locked and active watchers receive the launch-live alert.",
+
   COMPLETED: "Launch lifecycle is finished.",
 };
 
@@ -319,6 +322,42 @@ export async function getLaunchWatchSummary(launchId: string): Promise<LaunchWat
   return {
     active_count: Number(row?.active_count ?? 0),
     total_count: Number(row?.total_count ?? 0),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5 — Notification engine (aggregate-only surface).
+//
+// Delivery rows, Telegram identifiers and subscriber identities are
+// service-role only. The browser sees nothing but these counts.
+// ---------------------------------------------------------------------------
+
+export type LaunchNotificationSummary = {
+  event_count: number;
+  pending_count: number;
+  sent_count: number;
+  failed_count: number;
+  ambiguous_count: number;
+  skipped_count: number;
+  reminder_enabled_watchers: number;
+};
+
+export async function getLaunchNotificationSummary(
+  launchId: string,
+): Promise<LaunchNotificationSummary> {
+  const { data, error } = await supabase.rpc("get_launch_notification_summary", {
+    _launch_id: launchId,
+  });
+  if (error) rethrow(error);
+  const row = Array.isArray(data) ? data[0] : null;
+  return {
+    event_count: Number(row?.event_count ?? 0),
+    pending_count: Number(row?.pending_count ?? 0),
+    sent_count: Number(row?.sent_count ?? 0),
+    failed_count: Number(row?.failed_count ?? 0),
+    ambiguous_count: Number(row?.ambiguous_count ?? 0),
+    skipped_count: Number(row?.skipped_count ?? 0),
+    reminder_enabled_watchers: Number(row?.reminder_enabled_watchers ?? 0),
   };
 }
 

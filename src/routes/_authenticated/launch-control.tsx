@@ -28,7 +28,9 @@ import {
   TICKER_MAX,
   TOKEN_NAME_MAX,
   canDeleteLaunch,
+  getLaunchNotificationSummary,
   getLaunchWatchSummary,
+
   isLaunchWatchClosedStatus,
   isLaunchWatchOpenStatus,
   launchWatchDeepLink,
@@ -399,6 +401,16 @@ function LaunchControlPage() {
     queryFn: () => getLaunchWatchSummary(selected!.id),
   });
   const watchSummary = watchSummaryQuery.data ?? null;
+
+  // Notification engine (aggregate-only). Delivery rows and Telegram
+  // identifiers are service-role state and are never fetched here.
+  const notificationSummaryQuery = useQuery({
+    queryKey: ["launch-notification-summary", selected?.id ?? null],
+    enabled: !!selected?.id,
+    queryFn: () => getLaunchNotificationSummary(selected!.id),
+  });
+  const notificationSummary = notificationSummaryQuery.data ?? null;
+
   const blockedReason =
     next === "LAUNCH_APPROACHING" && !scheduleReady
       ? "Set an exact launch time or a complete launch window before advancing."
@@ -429,7 +441,7 @@ function LaunchControlPage() {
       <PageHeader
         eyebrow="Launch Operations"
         title="Launch Control"
-        description="Manage the authenticated project's launch lifecycle: launch records, schedule, status progression and official contract registration. Launch Watch opt-ins are live through the PepeCartel Telegram bot; automated Telegram alerts and public Cartel Network discovery arrive in later phases."
+        description="Manage the authenticated project's launch lifecycle: launch records, schedule, status progression and official contract registration. Launch Watch opt-ins and the Telegram notification engine are active; public Cartel Network discovery arrives in a later phase."
         status={workspace ? workspace.name : "No workspace"}
       />
 
@@ -901,14 +913,15 @@ function LaunchControlPage() {
 
                   <div className="mt-4 space-y-1.5 rounded-md border border-border bg-background/40 px-3 py-2">
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                      Phase 4 Launch Watch opt-ins are active: once this launch reaches watchlist
-                      open and the Project Profile is Published, the Telegram deep link accepts
-                      watchers.
+                      Launch Watch opt-ins are active: once this launch reaches watchlist open and
+                      the Project Profile is Published, the Telegram deep link accepts watchers.
                     </p>
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                      Launch and contract DM notification delivery is not active until Phase 5.
-                      Advancing status does not send anything to anyone.
+                      The notification engine is active. Advancing to Official contract registered
+                      or Live queues one Telegram message per active watcher, and countdown
+                      reminders are scheduled from the launch time for watchers who allow them.
                     </p>
+
                   </div>
                 </Section>
 
@@ -1047,9 +1060,10 @@ function LaunchControlPage() {
                       ) : null}
 
                       <p className="text-xs leading-relaxed text-muted-foreground">
-                        Phase 4 saves Launch Watch opt-ins. Automated reminders, launch-live alerts
-                        and official-contract DMs begin in Phase 5.
+                        Active watchers receive the 24h and 1h countdown reminders (unless muted),
+                        the official-contract Verified Launch Packet and the launch-live alert.
                       </p>
+
                       <p className="text-xs leading-relaxed text-muted-foreground">
                         Watcher identities are never shown here. Only aggregate counts are
                         available in Cartel HQ.
@@ -1062,12 +1076,80 @@ function LaunchControlPage() {
                         reaches Watchlist open.
                       </p>
                       <p className="text-xs leading-relaxed text-muted-foreground">
-                        Phase 4 saves Launch Watch opt-ins. Automated reminders, launch-live alerts
-                        and official-contract DMs begin in Phase 5.
+                        Watchers who join through that link receive the countdown reminders,
+                        official-contract packet and launch-live alert for this launch.
                       </p>
+
                     </div>
                   )}
                 </Section>
+
+                <Section
+                  variant="surface"
+                  title="Notification engine"
+                  leading={<Bell className="size-4" aria-hidden="true" />}
+                >
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge tone="green">
+                        <span>Engine: Active</span>
+                      </StatusBadge>
+                      <span className="text-xs text-muted-foreground">
+                        Telegram delivery to active watchers only.
+                      </span>
+                    </div>
+
+                    <ul className="space-y-1 text-xs leading-relaxed text-muted-foreground">
+                      <li>24h + 1h countdown reminders (watchers who allow them)</li>
+                      <li>Official-contract Verified Launch Packet</li>
+                      <li>Launch-live alert</li>
+                    </ul>
+
+                    {watchToken ? (
+                      <>
+                        <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
+                          {(
+                            [
+                              ["Events", notificationSummary?.event_count],
+                              ["In queue", notificationSummary?.pending_count],
+                              ["Sent", notificationSummary?.sent_count],
+                              ["Failed", notificationSummary?.failed_count],
+                              ["Ambiguous", notificationSummary?.ambiguous_count],
+                              ["Skipped", notificationSummary?.skipped_count],
+                              ["Reminder opt-ins", notificationSummary?.reminder_enabled_watchers],
+                            ] as const
+                          ).map(([label, value]) => (
+                            <div key={label} className="min-w-0">
+                              <dt className="truncate uppercase tracking-[0.12em] text-muted-foreground">
+                                {label}
+                              </dt>
+                              <dd className="font-mono text-sm text-foreground">
+                                {notificationSummaryQuery.isLoading ? "—" : (value ?? 0)}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          <span className="text-foreground">Ambiguous</span> means the Telegram
+                          outcome could not be confirmed. Automatic resending is deliberately
+                          suppressed for those so a watcher is never messaged twice.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        Notification delivery becomes relevant once this launch reaches Watchlist
+                        open and the Launch Watch link starts collecting watchers.
+                      </p>
+                    )}
+
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Only aggregate counts are shown. Individual deliveries, Telegram identifiers
+                      and watcher identities are never exposed in Cartel HQ.
+                    </p>
+                  </div>
+                </Section>
+
 
                 <Section variant="surface" title="Lifecycle timestamps">
                   <dl className="space-y-1.5 text-xs">
