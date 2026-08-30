@@ -226,10 +226,78 @@ Deno.serve(async (req: Request) => {
       if (!group) return respond({ error: "GROUP_NOT_FOUND", message: "That Telegram community is no longer connected." }, 404);
       const loadSettings = async () => {
         const { data } = await admin.from("telegram_community_settings").select("*").eq("group_connection_id", group.id).maybeSingle();
-        return data ?? { group_connection_id: group.id, workspace_id: workspaceId, welcome_enabled: false, welcome_message: DEFAULT_WELCOME_MESSAGE, mention_member: true, auto_delete_enabled: true, auto_delete_seconds: 45, metadata: {}, created_at: null, updated_at: null };
+        return data ?? { group_connection_id: group.id, workspace_id: workspaceId, welcome_enabled: false, welcome_message: DEFAULT_WELCOME_MESSAGE, mention_member: true, auto_delete_enabled: true, auto_delete_seconds: 45, launch_watch_cta_enabled: false, launch_watch_launch_id: null, launch_watch_show_website: true, launch_watch_show_telegram: false, launch_watch_show_x: true, metadata: {}, created_at: null, updated_at: null };
       };
 
-      if (action === "welcome_settings") return respond({ settings: await loadSettings(), canManage: canManageCommunity });
+      /**
+       * Phase 5.1 — Launch Watch CTA eligibility. Identical rules are applied at
+       * save time and at send time; a stale selection never fails the welcome.
+       */
+      const LW_OPEN_STATUSES = ["WATCHLIST_OPEN", "LAUNCH_APPROACHING", "CONTRACT_PENDING", "OFFICIAL_CONTRACT_REGISTERED"];
+      const LW_TOKEN_PATTERN = /^[0-9a-f]{24}$/;
+      const isHttpUrl = (value: unknown) => {
+        if (typeof value !== "string" || !value.trim()) return false;
+        try { const u = new URL(value.trim()); return u.protocol === "https:" || u.protocol === "http:"; } catch { return false; }
+      };
+      const loadEligibleLaunchRows = async (launchId?: string) => {
+        let query = admin.from("launches")
+          .select("id,token_name,ticker,chain,status,launch_watch_token,project_profile_id,project_profiles(project_name,discovery_status,website_url,telegram_url,x_url)")
+          .eq("workspace_id", workspaceId)
+          .in("status", LW_OPEN_STATUSES);
+        if (launchId) query = query.eq("id", launchId);
+        const { data, error } = await query;
+        if (error) throw error;
+        return (data ?? []).filter((row: any) => {
+          const profile = Array.isArray(row?.project_profiles) ? row.project_profiles[0] : row?.project_profiles;
+          return profile?.discovery_status === "published" && LW_TOKEN_PATTERN.test(String(row?.launch_watch_token ?? ""));
+        });
+      };
+      const toOption = (row: any) => {
+        const profile = Array.isArray(row?.project_profiles) ? row.project_profiles[0] : row?.project_profiles;
+        return {
+          launchId: String(row.id),
+          projectName: String(profile?.project_name ?? "Project"),
+          tokenName: String(row.token_name ?? ""),
+          ticker: String(row.ticker ?? ""),
+          chain: String(row.chain ?? ""),
+          status: String(row.status ?? ""),
+          hasWebsite: isHttpUrl(profile?.website_url),
+          hasTelegram: isHttpUrl(profile?.telegram_url),
+          hasX: isHttpUrl(profile?.x_url),
+        };
+      };
+      /** Inline keyboard for the public group welcome. Private controls never appear here. */
+      const buildCtaKeyboard = (row: any, settings: any) => {
+        const profile = Array.isArray(row?.project_profiles) ? row.project_profiles[0] : row?.project_profiles;
+        const rows: any[] = [[{ text: "🔔 Watch this launch", url: `https://t.me/PepeCartelHQBot?start=lw_${String(row.launch_watch_token)}` }]];
+        const links: any[] = [];
+        if (settings?.launch_watch_show_website !== false && isHttpUrl(profile?.website_url)) links.push({ text: "🌐 Website", url: String(profile.website_url).trim() });
+        if (settings?.launch_watch_show_telegram === true && isHttpUrl(profile?.telegram_url)) links.push({ text: "💬 Telegram", url: String(profile.telegram_url).trim() });
+        if (settings?.launch_watch_show_x !== false && isHttpUrl(profile?.x_url)) links.push({ text: "𝕏 X", url: String(profile.x_url).trim() });
+        for (let i = 0; i < links.length; i += 2) rows.push(links.slice(i, i + 2));
+        return { inline_keyboard: rows };
+      };
+      /** Best-effort: any failure means "send the welcome without the CTA". */
+      const resolveCtaKeyboard = async (settings: any) => {
+        if (settings?.launch_watch_cta_enabled !== true) return null;
+        const launchId = settings?.launch_watch_launch_id ? String(settings.launch_watch_launch_id) : "";
+        if (!launchId) return null;
+        try {
+          const rows = await loadEligibleLaunchRows(launchId);
+          if (rows.length === 0) return null;
+          return buildCtaKeyboard(rows[0], settings);
+        } catch (e) {
+          console.error("[telegram-group] launch watch cta", e instanceof Error ? e.message : "unknown");
+          return null;
+        }
+      };
+
+      if (action === "welcome_settings") {
+        let eligibleLaunches: any[] = [];
+        try { eligibleLaunches = (await loadEligibleLaunchRows()).map(toOption); }
+        catch (e) { console.error("[telegram-group] eligible launches", e instanceof Error ? e.message : "unknown"); }
+        return respond({ settings: await loadSettings(), canManage: canManageCommunity, eligibleLaunches });
+      }
       if (!canManageCommunity) return respond({ error: "FORBIDDEN", message: "Only workspace owners and admins can change community welcome settings." }, 403);
 
       if (action === "save_welcome_settings") {
@@ -240,15 +308,36 @@ Deno.serve(async (req: Request) => {
         if (typeof raw.welcomeEnabled !== "boolean" || typeof raw.mentionMember !== "boolean" || typeof raw.autoDeleteEnabled !== "boolean") {
           return respond({ error: "INVALID_SETTINGS", message: "Invalid welcome settings." }, 400);
         }
+        if (typeof raw.launchWatchCtaEnabled !== "boolean" || typeof raw.launchWatchShowWebsite !== "boolean" || typeof raw.launchWatchShowTelegram !== "boolean" || typeof raw.launchWatchShowX !== "boolean") {
+          return respond({ error: "INVALID_SETTINGS", message: "Invalid Launch Watch CTA settings." }, 400);
+        }
         const seconds = Number(raw.autoDeleteSeconds);
         if (!Number.isInteger(seconds) || seconds < 10 || seconds > 120) return respond({ error: "INVALID_SECONDS", message: "Auto-delete must be between 10 and 120 seconds." }, 400);
+
+        let launchWatchLaunchId: string | null = null;
+        if (raw.launchWatchCtaEnabled === true) {
+          const requested = typeof raw.launchWatchLaunchId === "string" ? raw.launchWatchLaunchId.trim() : "";
+          if (!requested) return respond({ error: "LAUNCH_REQUIRED", message: "Select an eligible launch before enabling the Launch Watch button." }, 400);
+          const rows = await loadEligibleLaunchRows(requested);
+          if (rows.length === 0) {
+            return respond({ error: "LAUNCH_NOT_ELIGIBLE", message: "That launch is not eligible. It must belong to this workspace, have a published Project Profile, and have its watchlist open." }, 400);
+          }
+          launchWatchLaunchId = String(rows[0].id);
+        }
+
         const now = new Date().toISOString();
         const { data: saved, error } = await admin.from("telegram_community_settings").upsert({
           group_connection_id: group.id, workspace_id: workspaceId, welcome_enabled: raw.welcomeEnabled, welcome_message: welcomeMessage,
-          mention_member: raw.mentionMember, auto_delete_enabled: raw.autoDeleteEnabled, auto_delete_seconds: seconds, updated_at: now,
+          mention_member: raw.mentionMember, auto_delete_enabled: raw.autoDeleteEnabled, auto_delete_seconds: seconds,
+          launch_watch_cta_enabled: raw.launchWatchCtaEnabled, launch_watch_launch_id: launchWatchLaunchId,
+          launch_watch_show_website: raw.launchWatchShowWebsite, launch_watch_show_telegram: raw.launchWatchShowTelegram, launch_watch_show_x: raw.launchWatchShowX,
+          updated_at: now,
         }, { onConflict: "group_connection_id" }).select("*").maybeSingle();
         if (error) throw error;
-        return respond({ saved: true, settings: saved ?? (await loadSettings()), canManage: true });
+        let eligibleLaunches: any[] = [];
+        try { eligibleLaunches = (await loadEligibleLaunchRows()).map(toOption); }
+        catch (e) { console.error("[telegram-group] eligible launches", e instanceof Error ? e.message : "unknown"); }
+        return respond({ saved: true, settings: saved ?? (await loadSettings()), canManage: true, eligibleLaunches });
       }
 
       const settings: any = await loadSettings();
@@ -263,7 +352,8 @@ Deno.serve(async (req: Request) => {
         .replaceAll("{username}", "@newmember")
         .replaceAll("{member}", memberToken)
         .replaceAll("{community_name}", communityName);
-      const sent = await telegramJson(TELEGRAM_BOT_TOKEN, "sendMessage", { chat_id: String(group.telegram_chat_id), text: `${rendered}\n\n<i>(CARTEL HQ welcome preview)</i>`, parse_mode: "HTML", disable_web_page_preview: true });
+      const ctaKeyboard = await resolveCtaKeyboard(settings);
+      const sent = await telegramJson(TELEGRAM_BOT_TOKEN, "sendMessage", { chat_id: String(group.telegram_chat_id), text: `${rendered}\n\n<i>(CARTEL HQ welcome preview)</i>`, parse_mode: "HTML", disable_web_page_preview: true, ...(ctaKeyboard ? { reply_markup: ctaKeyboard } : {}) });
       const messageId = sent?.message_id ?? null;
       if (settings.auto_delete_enabled && messageId) {
         const delayMs = Math.min(120, Math.max(10, Number(settings.auto_delete_seconds) || 45)) * 1000;
@@ -274,8 +364,9 @@ Deno.serve(async (req: Request) => {
         })();
         try { (globalThis as any).EdgeRuntime?.waitUntil?.(cleanup); } catch { }
       }
-      return respond({ sent: true, messageId, autoDeleteSeconds: settings.auto_delete_enabled ? settings.auto_delete_seconds : null, groupTitle: group.title });
+      return respond({ sent: true, messageId, autoDeleteSeconds: settings.auto_delete_enabled ? settings.auto_delete_seconds : null, groupTitle: group.title, launchWatchCtaIncluded: Boolean(ctaKeyboard) });
     }
+
 
     return respond({ error: "UNKNOWN_ACTION", message: "Unknown Telegram group action." }, 400);
   } catch (err) {

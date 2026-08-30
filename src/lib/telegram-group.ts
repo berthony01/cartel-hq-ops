@@ -282,14 +282,39 @@ export type TelegramCommunitySettings = {
   mention_member: boolean;
   auto_delete_enabled: boolean;
   auto_delete_seconds: number;
+  /** Phase 5.1 — optional public Launch Watch CTA attached to the welcome. */
+  launch_watch_cta_enabled?: boolean;
+  launch_watch_launch_id?: string | null;
+  launch_watch_show_website?: boolean;
+  launch_watch_show_telegram?: boolean;
+  launch_watch_show_x?: boolean;
   /** Present only when the server includes it; diagnostics are read-only here. */
   metadata?: TelegramCommunitySettingsMetadata | null;
+};
+
+/**
+ * One server-validated Launch Watch CTA option.
+ * The private `launch_watch_token` is never exposed to the browser.
+ */
+export type LaunchWatchCtaOption = {
+  launchId: string;
+  projectName: string;
+  tokenName: string;
+  ticker: string;
+  chain: string;
+  status: string;
+  /** Official links available on the Project Profile for optional buttons. */
+  hasWebsite?: boolean;
+  hasTelegram?: boolean;
+  hasX?: boolean;
 };
 
 export type TelegramCommunitySettingsResult = {
   settings: TelegramCommunitySettings;
   /** Only workspace owners/admins may mutate welcome settings. */
   canManage: boolean;
+  /** Server-validated eligible launches for the current workspace. */
+  eligibleLaunches?: LaunchWatchCtaOption[];
 };
 
 export type TelegramWelcomeSettingsInput = {
@@ -298,6 +323,11 @@ export type TelegramWelcomeSettingsInput = {
   mentionMember: boolean;
   autoDeleteEnabled: boolean;
   autoDeleteSeconds: number;
+  launchWatchCtaEnabled: boolean;
+  launchWatchLaunchId: string | null;
+  launchWatchShowWebsite: boolean;
+  launchWatchShowTelegram: boolean;
+  launchWatchShowX: boolean;
 };
 
 export type TelegramWelcomeTestResult = {
@@ -307,7 +337,10 @@ export type TelegramWelcomeTestResult = {
   messageId?: number | null;
   autoDeleteSeconds?: number | null;
   groupTitle?: string;
+  /** True when the test welcome carried the Launch Watch CTA buttons. */
+  launchWatchCtaIncluded?: boolean;
 };
+
 
 /** Reads welcome settings for one connected community. Lazy — call on open. */
 export function fetchCommunityWelcomeSettings(params: {

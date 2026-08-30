@@ -10,6 +10,7 @@ import {
   fetchCommunityWelcomeSettings,
   saveCommunityWelcomeSettings,
   sendCommunityWelcomeTest,
+  type LaunchWatchCtaOption,
   type TelegramCommunitySettingsMetadata,
   type TelegramGroupConnection,
 } from "@/lib/telegram-group";
@@ -25,7 +26,15 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
+
 
 /**
  * Welcome & onboarding controls for ONE connected Telegram community.
@@ -97,6 +106,14 @@ export function CommunityWelcomeDialog({
   const [autoDelete, setAutoDelete] = useState(true);
   const [seconds, setSeconds] = useState(45);
 
+  /** Phase 5.1 — optional public Launch Watch CTA. Off by default. */
+  const [ctaEnabled, setCtaEnabled] = useState(false);
+  const [ctaLaunchId, setCtaLaunchId] = useState<string | null>(null);
+  const [ctaShowWebsite, setCtaShowWebsite] = useState(true);
+  const [ctaShowTelegram, setCtaShowTelegram] = useState(false);
+  const [ctaShowX, setCtaShowX] = useState(true);
+  const [eligibleLaunches, setEligibleLaunches] = useState<LaunchWatchCtaOption[]>([]);
+
   useEffect(() => {
     if (!open || !workspaceId) return;
     let cancelled = false;
@@ -117,9 +134,16 @@ export function CommunityWelcomeDialog({
         setMention(s.mention_member !== false);
         setAutoDelete(s.auto_delete_enabled !== false);
         setSeconds(Number(s.auto_delete_seconds) || 45);
+        setCtaEnabled(s.launch_watch_cta_enabled === true);
+        setCtaLaunchId(s.launch_watch_launch_id ?? null);
+        setCtaShowWebsite(s.launch_watch_show_website !== false);
+        setCtaShowTelegram(s.launch_watch_show_telegram === true);
+        setCtaShowX(s.launch_watch_show_x !== false);
+        setEligibleLaunches(Array.isArray(result.eligibleLaunches) ? result.eligibleLaunches : []);
         setCanManage(result.canManage === true);
         setDirty(false);
       })
+
       .catch((error: unknown) => {
         if (cancelled) return;
         setLoadError(
@@ -141,15 +165,32 @@ export function CommunityWelcomeDialog({
     seconds < WELCOME_AUTO_DELETE_MIN ||
     seconds > WELCOME_AUTO_DELETE_MAX;
 
+  const selectedLaunch = useMemo(
+    () => eligibleLaunches.find((o) => o.launchId === ctaLaunchId) ?? null,
+    [eligibleLaunches, ctaLaunchId],
+  );
+  const noEligibleLaunches = eligibleLaunches.length === 0;
+  const ctaSelectionInvalid = ctaEnabled && !selectedLaunch;
+
   const preview = useMemo(
     () => renderPreview(trimmed || DEFAULT_WELCOME_MESSAGE, group.title, mention),
     [trimmed, group.title, mention],
   );
 
+  /** Conceptual button summary only — this is not a Telegram rendering. */
+  const buttonSummary = useMemo(() => {
+    if (!ctaEnabled || !selectedLaunch) return null;
+    const parts = ["🔔 Watch this launch"];
+    if (ctaShowWebsite && selectedLaunch.hasWebsite) parts.push("🌐 Website");
+    if (ctaShowTelegram && selectedLaunch.hasTelegram) parts.push("💬 Telegram");
+    if (ctaShowX && selectedLaunch.hasX) parts.push("𝕏 X");
+    return `Buttons: ${parts.join(" · ")}`;
+  }, [ctaEnabled, selectedLaunch, ctaShowWebsite, ctaShowTelegram, ctaShowX]);
+
   const touch = () => setDirty(true);
 
   const handleSave = async () => {
-    if (!workspaceId || invalidMessage || invalidSeconds) return;
+    if (!workspaceId || invalidMessage || invalidSeconds || ctaSelectionInvalid) return;
     setSaving(true);
     try {
       const result = await saveCommunityWelcomeSettings({
@@ -161,11 +202,19 @@ export function CommunityWelcomeDialog({
           mentionMember: mention,
           autoDeleteEnabled: autoDelete,
           autoDeleteSeconds: seconds,
+          launchWatchCtaEnabled: ctaEnabled,
+          launchWatchLaunchId: ctaEnabled ? (ctaLaunchId ?? null) : null,
+          launchWatchShowWebsite: ctaShowWebsite,
+          launchWatchShowTelegram: ctaShowTelegram,
+          launchWatchShowX: ctaShowX,
         },
       });
+      if (Array.isArray(result.eligibleLaunches)) setEligibleLaunches(result.eligibleLaunches);
+      if (!ctaEnabled) setCtaLaunchId(null);
       setCanManage(result.canManage === true || result.saved === true);
       setDirty(false);
       setSavedEnabled(enabled);
+
       toast.success(
         enabled
           ? `Saved. Real join welcomes are now ON for ${group.title}.`
@@ -383,20 +432,151 @@ export function CommunityWelcomeDialog({
               </div>
             ) : null}
 
+
+            <div className="space-y-3 rounded-md border border-gold/40 bg-gold/5 p-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold">
+                  Launch Watch CTA
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                  Optional. Adds a public button to this welcome that opens the private
+                  @PepeCartelHQBot Launch Watch opt-in. Mute and stop-watching controls stay in the
+                  private DM and never appear in the group. This is only a route to opt-in launch
+                  notifications — it is not a safety, audit or approval signal.
+                </p>
+              </div>
+
+              <div className="flex min-h-11 items-center justify-between gap-3">
+                <Label htmlFor={`welcome-cta-${group.id}`} className="text-xs">
+                  Include Launch Watch button
+                </Label>
+                <Switch
+                  id={`welcome-cta-${group.id}`}
+                  checked={ctaEnabled}
+                  disabled={!canManage || noEligibleLaunches}
+                  onCheckedChange={(v) => {
+                    setCtaEnabled(v === true);
+                    touch();
+                  }}
+                />
+              </div>
+
+              {noEligibleLaunches ? (
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  No eligible launches. A launch can be used here only once its Project Profile is
+                  Published and its watchlist is open (Watchlist Open, Launch Approaching, Contract
+                  Pending or Official Contract Registered).
+                </p>
+              ) : ctaEnabled ? (
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Launch</Label>
+                    <Select
+                      value={ctaLaunchId ?? ""}
+                      disabled={!canManage}
+                      onValueChange={(v) => {
+                        setCtaLaunchId(v || null);
+                        touch();
+                      }}
+                    >
+                      <SelectTrigger className="min-h-11 text-xs">
+                        <SelectValue placeholder="Select an eligible launch" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {eligibleLaunches.map((o) => (
+                          <SelectItem key={o.launchId} value={o.launchId} className="text-xs">
+                            {`${o.projectName} — ${o.tokenName} ($${o.ticker}) · ${o.chain} · ${o.status}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {ctaSelectionInvalid ? (
+                      <p className="text-[11px] leading-relaxed text-signal">
+                        The saved launch is no longer eligible for this community. Select an
+                        eligible launch or turn the CTA off before saving.
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    “🔔 Watch this launch” is always included while the CTA is on. Optional official
+                    link buttons appear only when the Project Profile has a valid link saved.
+                  </p>
+
+                  <div className="flex min-h-11 items-center justify-between gap-3">
+                    <Label htmlFor={`welcome-cta-web-${group.id}`} className="text-xs">
+                      Website button
+                    </Label>
+                    <Switch
+                      id={`welcome-cta-web-${group.id}`}
+                      checked={ctaShowWebsite}
+                      disabled={!canManage}
+                      onCheckedChange={(v) => {
+                        setCtaShowWebsite(v === true);
+                        touch();
+                      }}
+                    />
+                  </div>
+                  <div className="flex min-h-11 items-center justify-between gap-3">
+                    <Label htmlFor={`welcome-cta-tg-${group.id}`} className="text-xs">
+                      Official Telegram button
+                    </Label>
+                    <Switch
+                      id={`welcome-cta-tg-${group.id}`}
+                      checked={ctaShowTelegram}
+                      disabled={!canManage}
+                      onCheckedChange={(v) => {
+                        setCtaShowTelegram(v === true);
+                        touch();
+                      }}
+                    />
+                  </div>
+                  <div className="flex min-h-11 items-center justify-between gap-3">
+                    <Label htmlFor={`welcome-cta-x-${group.id}`} className="text-xs">
+                      X button
+                    </Label>
+                    <Switch
+                      id={`welcome-cta-x-${group.id}`}
+                      checked={ctaShowX}
+                      disabled={!canManage}
+                      onCheckedChange={(v) => {
+                        setCtaShowX(v === true);
+                        touch();
+                      }}
+                    />
+                  </div>
+
+                  {autoDelete ? (
+                    <p className="text-[11px] leading-relaxed text-gold">
+                      Auto-delete is on. The Launch Watch buttons disappear with the welcome message
+                      after {seconds}s.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
             <div className="rounded-md border border-border/60 bg-background/40 p-3">
+
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 Preview
               </p>
               <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground">
                 {preview}
               </p>
+              {buttonSummary ? (
+                <p className="mt-2 text-[11px] leading-relaxed text-gold">{buttonSummary}</p>
+              ) : null}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
                 className="min-h-11"
-                disabled={!canManage || saving || invalidMessage || invalidSeconds}
+                disabled={
+                  !canManage || saving || invalidMessage || invalidSeconds || ctaSelectionInvalid
+                }
+
                 onClick={() => void handleSave()}
               >
                 {saving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
