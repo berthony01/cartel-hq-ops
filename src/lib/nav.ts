@@ -1,5 +1,7 @@
 import {
   LayoutDashboard,
+  IdCard,
+
   ShieldCheck,
   TerminalSquare,
   Sticker,
