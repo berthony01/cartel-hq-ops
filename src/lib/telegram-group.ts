@@ -32,7 +32,12 @@ export type TelegramGroupConnection = {
   verified_at: string | null;
   /** Stored verification details written by the webhook / group verification. */
   metadata?: TelegramGroupConnectionMetadata | null;
+  /** Set by the server when the bot was removed from the community. */
+  bot_removed_at?: string | null;
+  bot_removed_reason?: string | null;
+  last_member_status?: string | null;
 };
+
 
 
 export type TelegramGroupStatusResult = {
