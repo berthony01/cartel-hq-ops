@@ -131,7 +131,7 @@ Deno.serve(async (req: Request) => {
   };
   const saveTarget = async (packId: string, groupId: string, patch: Record<string, unknown>) => { const now = new Date().toISOString(); const { error } = await admin.from("sticker_pack_group_targets").upsert({ workspace_id: workspaceId, pack_id: packId, group_connection_id: groupId, last_attempt_at: now, updated_at: now, ...patch }, { onConflict: "pack_id,group_connection_id" }); if (error) throw error; };
 
-  const distributeOne = async (pack: any, rawGroup: any) => {
+  const distributeOne = async (pack: any, rawGroup: any, batch = false) => {
     const now = new Date().toISOString();
     try {
       await saveTarget(pack.id, rawGroup.id, { status: "selected", last_error: null });
