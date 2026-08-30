@@ -891,6 +891,8 @@ function LaunchControlPage() {
                         <Label htmlFor="contract-address">Official contract address</Label>
                         <Input
                           id="contract-address"
+                          maxLength={CONTRACT_MAX}
+                          disabled={readOnly}
                           value={contractInput}
                           onChange={(e) => setContractInput(e.target.value)}
                           placeholder="Paste the official contract address"
@@ -900,18 +902,26 @@ function LaunchControlPage() {
                         Not registered yet. You can correct and re-save the address while the
                         launch is still contract pending.
                       </p>
-                      <Button
-                        className="min-h-11"
-                        disabled={contractMutation.isPending || !contractInput.trim()}
-                        onClick={() => contractMutation.mutate()}
-                      >
-                        {contractMutation.isPending ? (
-                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                        ) : (
-                          <Save className="size-4" aria-hidden="true" />
-                        )}
-                        Save official contract address
-                      </Button>
+                      {canManage ? (
+                        <Button
+                          className="min-h-11"
+                          disabled={contractMutation.isPending || !contractInput.trim()}
+                          onClick={() => contractMutation.mutate()}
+                        >
+                          {contractMutation.isPending ? (
+                            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                          ) : (
+                            <Save className="size-4" aria-hidden="true" />
+                          )}
+                          Save official contract address
+                        </Button>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Registering the official contract address requires the workspace owner
+                          or admin role.
+                        </p>
+                      )}
+
                     </div>
                   ) : contractSaved ? (
                     <div className="space-y-2">
