@@ -29,8 +29,48 @@ Deno.serve(async (req: Request) => {
   const canManageCommunity = membership.role === "owner" || membership.role === "admin";
 
   const getGroup = async (id = groupConnectionId) => { if (!id) return null; const { data } = await admin.from("telegram_group_connections").select("*").eq("id", id).eq("workspace_id", workspaceId).maybeSingle(); return data; };
+
+  /**
+   * Bot removal is an expected community lifecycle state, not an application
+   * failure. Only these narrow Telegram descriptions are treated as removal.
+   */
+  const BOT_REMOVED_MESSAGE = "@PepeCartelHQBot is no longer in this Telegram community. Re-add the bot as an administrator, then re-check the community.";
+  const isBotRemovedMessage = (message: string) => {
+    const m = String(message ?? "").toLowerCase();
+    return m.includes("bot was kicked") || m.includes("bot is not a member") || m.includes("bot was removed") || m.includes("bot is not a member of the");
+  };
+  class BotRemovedError extends Error {
+    group: any;
+    memberStatus: string;
+    constructor(group: any, memberStatus = "kicked") { super(BOT_REMOVED_MESSAGE); this.group = group; this.memberStatus = memberStatus; }
+  }
+  /** Persists the removed lifecycle state and pauses only enabled Sticker Drops. */
+  const markGroupRemoved = async (group: any, memberStatus: string) => {
+    const now = new Date().toISOString();
+    const prior = group?.metadata && typeof group.metadata === "object" ? group.metadata : {};
+    if (!group?.id) return group;
+    await admin.from("telegram_group_connections").update({
+      bot_is_admin: false,
+      can_set_sticker_set: false,
+      verified_at: now,
+      metadata: { ...prior, last_member_status: memberStatus, bot_can_change_info: false, official_group_sticker_eligible: false, bot_removed_at: prior?.bot_removed_at ?? now, bot_removed_reason: memberStatus },
+    }).eq("id", group.id);
+    try {
+      await admin.from("sticker_drop_schedules").update({ enabled: false, paused_reason: "bot_removed" }).eq("group_connection_id", group.id).eq("enabled", true);
+    } catch (e) { console.error("[telegram-group] pause drops", e instanceof Error ? e.message : "unknown"); }
+    return { ...group, bot_is_admin: false, can_set_sticker_set: false, verified_at: now, metadata: { ...prior, last_member_status: memberStatus, bot_can_change_info: false, official_group_sticker_eligible: false, bot_removed_at: prior?.bot_removed_at ?? now, bot_removed_reason: memberStatus } };
+  };
+  const storedRemovedStatus = (group: any) => {
+    const meta = group?.metadata && typeof group.metadata === "object" ? group.metadata : {};
+    const last = String(meta?.last_member_status ?? "");
+    return group?.bot_is_admin === false && (last === "left" || last === "kicked") ? last : null;
+  };
+
   const verifyGroup = async (group: any) => {
     if (!group) throw new Error("Connect a Telegram group before publishing.");
+    const removedStatus = storedRemovedStatus(group);
+    if (removedStatus) throw new BotRemovedError(group, removedStatus);
+
     const me = await telegramJson(TELEGRAM_BOT_TOKEN, "getMe");
     const [chat, botMember, memberCountRaw] = await Promise.all([
       telegramJson(TELEGRAM_BOT_TOKEN, "getChat", { chat_id: String(group.telegram_chat_id) }),
