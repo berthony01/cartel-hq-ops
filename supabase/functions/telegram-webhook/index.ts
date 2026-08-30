@@ -590,7 +590,6 @@ Deno.serve(async (req: Request) => {
           const sent = await sendMessage(TELEGRAM_BOT_TOKEN, chatId, welcomeText, { parse_mode: "HTML", ...(welcomeKeyboard ? { reply_markup: welcomeKeyboard } : {}) });
           if (sent) await touchGroupContact(memberUpdate.chat, actor, { status, welcomeSent: true });
         }
-
       }
       return json({ ok: true });
     }
