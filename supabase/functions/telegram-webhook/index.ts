@@ -103,19 +103,23 @@ function startMenuKeyboard(linked: boolean) {
     ],
   };
 }
-function groupAcquisitionKeyboard(chatId: string) {
+function groupAcquisitionKeyboard(chatId: string, includeEarlyAccess = true) {
   const encoded = encodeChatId(chatId);
   return {
     inline_keyboard: [
-      [{ text: "🚀 Join Early Access", url: `https://t.me/${BOT_USERNAME}?start=beta_join_g_${encoded}` }],
+      ...(includeEarlyAccess ? [[{ text: "🚀 Join Early Access", url: `https://t.me/${BOT_USERNAME}?start=beta_join_g_${encoded}` }]] : []),
       [
         { text: "💬 PEPECARTEL Community", url: PEPECARTEL_TELEGRAM },
-        { text: "𝕏 Follow on X", url: PEPECARTEL_X },
+        { text: "𝕏 Follow PEPECARTEL", url: PEPECARTEL_X },
       ],
-      [{ text: "🌐 Visit Website", url: PEPECARTEL_WEBSITE }],
+      [
+        { text: "🌐 PEPECARTEL Website", url: PEPECARTEL_WEBSITE },
+        { text: "🗺 Cartel HQ Roadmap", url: `https://t.me/${BOT_USERNAME}?start=beta_roadmap_g_${encoded}` },
+      ],
     ],
   };
 }
+
 function betaWelcomeText() {
   return `<b>WELCOME TO PEPECARTEL HQ 🐸</b>\n\n@${BOT_USERNAME} is the Telegram extension of the growing PEPECARTEL ecosystem.\n\n<b>Private Beta is active.</b>\n\nSticker creation, Telegram sticker-pack publishing, native sticker delivery and multi-group distribution are among the first live Cartel HQ capabilities. More tools for crypto communities, projects, creators and operators are being developed progressively.\n\nWant early access as new capabilities roll out?`;
 }
@@ -320,6 +324,9 @@ Deno.serve(async (req: Request) => {
       "🛡 Project verification",
       "⚡ More community &amp; launch tools",
       "",
+      "<b>Stay connected with PEPECARTEL</b>",
+      "Follow the ecosystem and see what Cartel HQ is building as new tools go live.",
+      "",
       "Return to Cartel HQ to configure this community.",
     ].join("\n");
   };
@@ -494,7 +501,7 @@ Deno.serve(async (req: Request) => {
     if (groupError || !groupRow) throw new Error(groupError?.message ?? "Could not save Telegram group connection.");
     await admin.from("telegram_link_requests").update({ status: "connected", consumed_at: now, telegram_user_id: actorId, metadata: { ...(link.metadata ?? {}), group_connection_id: groupRow.id, telegram_chat_id: chatId, group_title: groupRow.title, last_group_check: diagnostic } }).eq("id", link.id);
     await markGroupLinked(chatId, workspaceId);
-    await sendMessage(TELEGRAM_BOT_TOKEN, chatId, await systemMessage("community_connected", String(groupRow.title ?? ""), communityConnectedText), { parse_mode: "HTML" });
+    await sendMessage(TELEGRAM_BOT_TOKEN, chatId, await systemMessage("community_connected", String(groupRow.title ?? ""), communityConnectedText), { parse_mode: "HTML", reply_markup: groupAcquisitionKeyboard(chatId, false) });
 
     return { ok: true, groupRow };
   };
@@ -662,8 +669,8 @@ Deno.serve(async (req: Request) => {
         if (shouldWelcome) {
           const title = String(memberUpdate.chat?.title ?? "This community");
           const [welcomeText, welcomeKeyboard] = installerLinked?.user_id
-            ? [await systemMessage("account_found", title, accountFoundText), undefined]
-            : [await systemMessage("bot_installed", title, botInstalledText), groupAcquisitionKeyboard(chatId)];
+            ? [await systemMessage("account_found", title, accountFoundText), groupAcquisitionKeyboard(chatId, false)]
+            : [await systemMessage("bot_installed", title, botInstalledText), groupAcquisitionKeyboard(chatId, true)];
 
           const sent = await sendMessage(TELEGRAM_BOT_TOKEN, chatId, welcomeText, { parse_mode: "HTML", ...(welcomeKeyboard ? { reply_markup: welcomeKeyboard } : {}) });
           if (sent) await touchGroupContact(memberUpdate.chat, actor, { status, welcomeSent: true });
