@@ -256,6 +256,18 @@ export const WELCOME_MESSAGE_MAX = 3500;
 export const WELCOME_AUTO_DELETE_MIN = 10;
 export const WELCOME_AUTO_DELETE_MAX = 120;
 
+/**
+ * Phase 5.2 — the Launch Watch card is a SEPARATE Telegram message with its own
+ * lifetime. Allowed values mirror the database constraint exactly.
+ */
+export const LAUNCH_WATCH_CTA_LIFETIMES = [300, 600, 900, 1800, 3600] as const;
+export const LAUNCH_WATCH_CTA_LIFETIME_DEFAULT = 900;
+
+export function formatLaunchWatchCtaLifetime(seconds: number): string {
+  return `${Math.round(seconds / 60)} minutes`;
+}
+
+
 /** Result code written by the webhook after a real member join. */
 export type WelcomeJoinResult =
   | "sent"
@@ -282,12 +294,15 @@ export type TelegramCommunitySettings = {
   mention_member: boolean;
   auto_delete_enabled: boolean;
   auto_delete_seconds: number;
-  /** Phase 5.1 — optional public Launch Watch CTA attached to the welcome. */
+  /** Phase 5.1/5.2 — optional Launch Watch card posted separately after the welcome. */
   launch_watch_cta_enabled?: boolean;
   launch_watch_launch_id?: string | null;
   launch_watch_show_website?: boolean;
   launch_watch_show_telegram?: boolean;
   launch_watch_show_x?: boolean;
+  /** Phase 5.2 — independent lifetime for the separate Launch Watch card. */
+  launch_watch_cta_auto_delete_seconds?: number;
+
   /** Present only when the server includes it; diagnostics are read-only here. */
   metadata?: TelegramCommunitySettingsMetadata | null;
 };
@@ -328,6 +343,8 @@ export type TelegramWelcomeSettingsInput = {
   launchWatchShowWebsite: boolean;
   launchWatchShowTelegram: boolean;
   launchWatchShowX: boolean;
+  /** Must be exactly one of LAUNCH_WATCH_CTA_LIFETIMES. */
+  launchWatchCtaAutoDeleteSeconds: number;
 };
 
 export type TelegramWelcomeTestResult = {
@@ -337,9 +354,12 @@ export type TelegramWelcomeTestResult = {
   messageId?: number | null;
   autoDeleteSeconds?: number | null;
   groupTitle?: string;
-  /** True when the test welcome carried the Launch Watch CTA buttons. */
+  /** True when a separate Launch Watch card was posted after the welcome. */
   launchWatchCtaIncluded?: boolean;
+  launchWatchCtaMessageId?: number | null;
+  launchWatchCtaAutoDeleteSeconds?: number | null;
 };
+
 
 
 /** Reads welcome settings for one connected community. Lazy — call on open. */

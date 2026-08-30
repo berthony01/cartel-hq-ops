@@ -4,16 +4,20 @@ import { Loader2, Send } from "lucide-react";
 
 import {
   DEFAULT_WELCOME_MESSAGE,
+  LAUNCH_WATCH_CTA_LIFETIMES,
+  LAUNCH_WATCH_CTA_LIFETIME_DEFAULT,
   WELCOME_AUTO_DELETE_MAX,
   WELCOME_AUTO_DELETE_MIN,
   WELCOME_MESSAGE_MAX,
   fetchCommunityWelcomeSettings,
+  formatLaunchWatchCtaLifetime,
   saveCommunityWelcomeSettings,
   sendCommunityWelcomeTest,
   type LaunchWatchCtaOption,
   type TelegramCommunitySettingsMetadata,
   type TelegramGroupConnection,
 } from "@/lib/telegram-group";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -106,13 +110,15 @@ export function CommunityWelcomeDialog({
   const [autoDelete, setAutoDelete] = useState(true);
   const [seconds, setSeconds] = useState(45);
 
-  /** Phase 5.1 — optional public Launch Watch CTA. Off by default. */
+  /** Phase 5.1/5.2 — optional separate Launch Watch card. Off by default. */
   const [ctaEnabled, setCtaEnabled] = useState(false);
   const [ctaLaunchId, setCtaLaunchId] = useState<string | null>(null);
   const [ctaShowWebsite, setCtaShowWebsite] = useState(true);
   const [ctaShowTelegram, setCtaShowTelegram] = useState(false);
   const [ctaShowX, setCtaShowX] = useState(true);
+  const [ctaLifetime, setCtaLifetime] = useState<number>(LAUNCH_WATCH_CTA_LIFETIME_DEFAULT);
   const [eligibleLaunches, setEligibleLaunches] = useState<LaunchWatchCtaOption[]>([]);
+
 
   useEffect(() => {
     if (!open || !workspaceId) return;
@@ -139,6 +145,14 @@ export function CommunityWelcomeDialog({
         setCtaShowWebsite(s.launch_watch_show_website !== false);
         setCtaShowTelegram(s.launch_watch_show_telegram === true);
         setCtaShowX(s.launch_watch_show_x !== false);
+        setCtaLifetime(
+          LAUNCH_WATCH_CTA_LIFETIMES.includes(
+            Number(s.launch_watch_cta_auto_delete_seconds) as (typeof LAUNCH_WATCH_CTA_LIFETIMES)[number],
+          )
+            ? Number(s.launch_watch_cta_auto_delete_seconds)
+            : LAUNCH_WATCH_CTA_LIFETIME_DEFAULT,
+        );
+
         setEligibleLaunches(Array.isArray(result.eligibleLaunches) ? result.eligibleLaunches : []);
         setCanManage(result.canManage === true);
         setDirty(false);
@@ -207,6 +221,8 @@ export function CommunityWelcomeDialog({
           launchWatchShowWebsite: ctaShowWebsite,
           launchWatchShowTelegram: ctaShowTelegram,
           launchWatchShowX: ctaShowX,
+          launchWatchCtaAutoDeleteSeconds: ctaLifetime,
+
         },
       });
       if (Array.isArray(result.eligibleLaunches)) setEligibleLaunches(result.eligibleLaunches);
@@ -240,11 +256,16 @@ export function CommunityWelcomeDialog({
       const base = result.autoDeleteSeconds
         ? `Test welcome posted in ${group.title}. The bot removes it in ${result.autoDeleteSeconds}s.`
         : `Test welcome posted in ${group.title}.`;
-      if (savedEnabled) toast.success(base);
+      const withCta = result.launchWatchCtaIncluded
+        ? `${base} A separate Launch Watch card was posted and expires after ${formatLaunchWatchCtaLifetime(result.launchWatchCtaAutoDeleteSeconds ?? LAUNCH_WATCH_CTA_LIFETIME_DEFAULT)}.`
+        : base;
+      if (savedEnabled) toast.success(withCta);
+
       else
         toast.warning(
-          `${base} This was a preview only. Real join welcomes are OFF, so new members receive nothing.`,
+          `${withCta} This was a preview only. Real join welcomes are OFF, so new members receive nothing.`,
         );
+
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not send the test welcome.");
     } finally {
@@ -436,20 +457,24 @@ export function CommunityWelcomeDialog({
             <div className="space-y-3 rounded-md border border-gold/40 bg-gold/5 p-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold">
-                  Launch Watch CTA
+                  Launch Watch card
                 </p>
                 <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                  Optional. Adds a public button to this welcome that opens the private
-                  @PepeCartelHQBot Launch Watch opt-in. Mute and stop-watching controls stay in the
-                  private DM and never appear in the group. This is only a route to opt-in launch
+                  Optional. This is sent as a SEPARATE compact card posted immediately after the
+                  welcome — it is not attached to the welcome message, and it has its own lifetime.
+                  Its button opens the private @PepeCartelHQBot Launch Watch opt-in. Mute and
+                  stop-watching controls stay in the private DM and never appear in the group. Any
+                  member who taps it opts themselves in. This is only a route to opt-in launch
                   notifications — it is not a safety, audit or approval signal.
                 </p>
+
               </div>
 
               <div className="flex min-h-11 items-center justify-between gap-3">
                 <Label htmlFor={`welcome-cta-${group.id}`} className="text-xs">
-                  Include Launch Watch button
+                  Post a separate Launch Watch card
                 </Label>
+
                 <Switch
                   id={`welcome-cta-${group.id}`}
                   checked={ctaEnabled}
@@ -552,28 +577,67 @@ export function CommunityWelcomeDialog({
                     />
                   </div>
 
-                  {autoDelete ? (
-                    <p className="text-[11px] leading-relaxed text-gold">
-                      Auto-delete is on. The Launch Watch buttons disappear with the welcome message
-                      after {seconds}s.
-                    </p>
-                  ) : null}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Launch Watch card lifetime</Label>
+                    <Select
+                      value={String(ctaLifetime)}
+                      disabled={!canManage}
+                      onValueChange={(v) => {
+                        setCtaLifetime(Number(v));
+                        touch();
+                      }}
+                    >
+                      <SelectTrigger className="min-h-11 max-w-40 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LAUNCH_WATCH_CTA_LIFETIMES.map((value) => (
+                          <SelectItem key={value} value={String(value)} className="text-xs">
+                            {formatLaunchWatchCtaLifetime(value)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <p className="text-[11px] leading-relaxed text-gold">
+                    {autoDelete
+                      ? `Welcome deletes after ${seconds}s. Launch Watch card deletes after ${formatLaunchWatchCtaLifetime(ctaLifetime)}.`
+                      : `The welcome stays until it is removed manually. The Launch Watch card still expires after ${formatLaunchWatchCtaLifetime(ctaLifetime)}.`}
+                  </p>
                 </div>
               ) : null}
             </div>
 
-            <div className="rounded-md border border-border/60 bg-background/40 p-3">
-
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Preview
-              </p>
-              <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground">
-                {preview}
-              </p>
-              {buttonSummary ? (
-                <p className="mt-2 text-[11px] leading-relaxed text-gold">{buttonSummary}</p>
+            <div className="space-y-3 rounded-md border border-border/60 bg-background/40 p-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Welcome message
+                </p>
+                <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground">
+                  {preview}
+                </p>
+              </div>
+              {ctaEnabled && selectedLaunch ? (
+                <div className="rounded-md border border-gold/40 bg-gold/5 p-2.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold">
+                    Separate Launch Watch card
+                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-foreground">
+                    {`🚀 ${selectedLaunch.projectName.toUpperCase()} LAUNCH WATCH`}
+                    <br />
+                    {`${selectedLaunch.tokenName} • $${selectedLaunch.ticker} • ${selectedLaunch.chain}`}
+                  </p>
+                  {buttonSummary ? (
+                    <p className="mt-2 text-[11px] leading-relaxed text-gold">{buttonSummary}</p>
+                  ) : null}
+                  <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                    Conceptual layout only — this is not exact Telegram rendering.
+                  </p>
+                </div>
               ) : null}
             </div>
+
 
             <div className="flex flex-wrap items-center gap-2">
               <Button

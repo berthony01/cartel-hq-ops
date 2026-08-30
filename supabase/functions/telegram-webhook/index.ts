@@ -1104,7 +1104,7 @@ Deno.serve(async (req: Request) => {
       if (humans.length === 0) return json({ ok: true });
       const { data: connection } = await admin.from("telegram_group_connections").select("id,title").eq("telegram_chat_id", chatId).maybeSingle();
       if (!connection?.id) return json({ ok: true });
-      const { data: settings } = await admin.from("telegram_community_settings").select("welcome_enabled,welcome_message,mention_member,auto_delete_enabled,auto_delete_seconds,launch_watch_cta_enabled,launch_watch_launch_id,launch_watch_show_website,launch_watch_show_telegram,launch_watch_show_x,workspace_id,metadata").eq("group_connection_id", connection.id).maybeSingle();
+      const { data: settings } = await admin.from("telegram_community_settings").select("welcome_enabled,welcome_message,mention_member,auto_delete_enabled,auto_delete_seconds,launch_watch_cta_enabled,launch_watch_launch_id,launch_watch_show_website,launch_watch_show_telegram,launch_watch_show_x,launch_watch_cta_auto_delete_seconds,workspace_id,metadata").eq("group_connection_id", connection.id).maybeSingle();
       if (!settings) return json({ ok: true });
 
       // Diagnostics only. No joining member identity is ever stored here.
@@ -1140,22 +1140,26 @@ Deno.serve(async (req: Request) => {
         .replaceAll("{community_name}", communityName);
 
       /**
-       * Phase 5.1 — optional public Launch Watch CTA. Public group buttons only
-       * open the PRIVATE bot deep link; mute/stop controls stay in the DM.
-       * Any staleness or failure here degrades to the normal welcome.
+       * Phase 5.2 — the Launch Watch CTA is a SEPARATE compact card sent after
+       * the welcome, with its own lifetime. Public group buttons only open the
+       * PRIVATE bot deep link; mute/stop controls stay in the DM. Any staleness
+       * or failure here degrades to the normal welcome alone.
        */
       const LW_OPEN_STATUSES = ["WATCHLIST_OPEN", "LAUNCH_APPROACHING", "CONTRACT_PENDING", "OFFICIAL_CONTRACT_REGISTERED"];
       const LW_TOKEN_PATTERN = /^[0-9a-f]{24}$/;
+      const LW_CTA_LIFETIMES = [300, 600, 900, 1800, 3600];
+      const LW_CTA_LIFETIME_DEFAULT = 900;
       const isHttpUrl = (value: unknown) => {
         if (typeof value !== "string" || !value.trim()) return false;
         try { const u = new URL(value.trim()); return u.protocol === "https:" || u.protocol === "http:"; } catch { return false; }
       };
       let ctaKeyboard: any = null;
+      let ctaText = "";
       let ctaResult = "disabled";
       if (settings.launch_watch_cta_enabled === true && settings.launch_watch_launch_id) {
         try {
           const { data: launchRow, error: launchError } = await admin.from("launches")
-            .select("id,status,launch_watch_token,workspace_id,project_profiles(workspace_id,project_name,discovery_status,website_url,telegram_url,x_url)")
+            .select("id,status,token_name,ticker,chain,launch_watch_token,workspace_id,project_profiles(workspace_id,project_name,discovery_status,website_url,telegram_url,x_url)")
             .eq("id", String(settings.launch_watch_launch_id))
             .eq("workspace_id", String(settings.workspace_id))
             .maybeSingle();
@@ -1176,7 +1180,11 @@ Deno.serve(async (req: Request) => {
             if (settings.launch_watch_show_x === true && isHttpUrl(profile?.x_url)) links.push({ text: "𝕏 X", url: String(profile.x_url).trim() });
             for (let i = 0; i < links.length; i += 2) rows.push(links.slice(i, i + 2));
             ctaKeyboard = { inline_keyboard: rows };
-            ctaResult = "included";
+            const projectName = escapeHtml(String(profile?.project_name ?? "Project")).toUpperCase();
+            const meta = [String((launchRow as any).token_name ?? ""), (launchRow as any).ticker ? `$${String((launchRow as any).ticker)}` : "", String((launchRow as any).chain ?? "")]
+              .filter((v) => v.trim().length > 0).map((v) => escapeHtml(v)).join(" • ");
+            ctaText = `🚀 <b>${projectName} LAUNCH WATCH</b>\n${meta}\n\nGet official launch updates privately through @${BOT_USERNAME}.\nTap below to watch. Notifications are opt-in and can be muted or stopped anytime.\n\n<i>This is not a token safety audit or endorsement.</i>`;
+            ctaResult = "eligible";
           } else {
             ctaResult = "skipped_ineligible";
           }
@@ -1186,21 +1194,52 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      const sent = await sendMessage(TELEGRAM_BOT_TOKEN, chatId, rendered, { parse_mode: "HTML", ...(ctaKeyboard ? { reply_markup: ctaKeyboard } : {}) });
+      // The welcome itself never carries the CTA keyboard.
+      const sent = await sendMessage(TELEGRAM_BOT_TOKEN, chatId, rendered, { parse_mode: "HTML" });
       const sentId = (sent as any)?.message_id;
-      if (sentId) await recordDiagnostic("sent", { last_welcome_sent_at: new Date().toISOString(), last_welcome_message_id: sentId, last_launch_watch_cta_result: ctaResult });
-      else await recordDiagnostic("send_failed", { last_launch_watch_cta_result: ctaResult });
 
-      if (settings.auto_delete_enabled && sentId) {
-        const delayMs = Math.min(120, Math.max(10, Number(settings.auto_delete_seconds) || 45)) * 1000;
+      const scheduleDelete = (targetId: number, delaySeconds: number, label: string) => {
         const cleanup = (async () => {
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
-          try { await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", { chat_id: chatId, message_id: sentId }); }
-          catch (e) { console.error("[telegram-webhook] welcome cleanup", e instanceof Error ? e.message : "unknown"); }
+          await new Promise((resolve) => setTimeout(resolve, delaySeconds * 1000));
+          try { await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", { chat_id: chatId, message_id: targetId }); }
+          catch (e) { console.error(`[telegram-webhook] ${label} cleanup`, e instanceof Error ? e.message : "unknown"); }
         })();
         try { (globalThis as any).EdgeRuntime?.waitUntil?.(cleanup); } catch { }
+      };
+
+      // Only a delivered welcome may be followed by the separate CTA card.
+      let ctaMessageId: number | null = null;
+      let ctaLifetime: number | null = null;
+      if (sentId && ctaKeyboard) {
+        const rawLifetime = Number(settings.launch_watch_cta_auto_delete_seconds);
+        ctaLifetime = LW_CTA_LIFETIMES.includes(rawLifetime) ? rawLifetime : LW_CTA_LIFETIME_DEFAULT;
+        try {
+          const ctaSent = await sendMessage(TELEGRAM_BOT_TOKEN, chatId, ctaText, { parse_mode: "HTML", reply_markup: ctaKeyboard });
+          ctaMessageId = (ctaSent as any)?.message_id ?? null;
+          ctaResult = ctaMessageId ? "sent" : "send_failed";
+        } catch (e) {
+          ctaResult = "send_failed";
+          console.error("[telegram-webhook] launch watch card send", e instanceof Error ? e.message : "unknown");
+        }
+      } else if (!sentId && ctaKeyboard) {
+        // Never post an orphan CTA when the welcome itself failed.
+        ctaResult = "skipped_welcome_failed";
       }
+
+      const ctaDiagnostics: Record<string, unknown> = {
+        last_launch_watch_cta_result: ctaResult,
+        ...(ctaMessageId ? { last_launch_watch_cta_message_id: ctaMessageId, last_launch_watch_cta_sent_at: new Date().toISOString(), last_launch_watch_cta_auto_delete_seconds: ctaLifetime } : {}),
+      };
+      if (sentId) await recordDiagnostic("sent", { last_welcome_sent_at: new Date().toISOString(), last_welcome_message_id: sentId, ...ctaDiagnostics });
+      else await recordDiagnostic("send_failed", ctaDiagnostics);
+
+      // Each message expires on its own timer.
+      if (settings.auto_delete_enabled && sentId) {
+        scheduleDelete(sentId, Math.min(120, Math.max(10, Number(settings.auto_delete_seconds) || 45)), "welcome");
+      }
+      if (ctaMessageId && ctaLifetime) scheduleDelete(ctaMessageId, ctaLifetime, "launch watch card");
       return json({ ok: true });
+
     }
 
     if (!text || !from?.id || !chatId) return json({ ok: true });
