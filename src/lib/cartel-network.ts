@@ -169,12 +169,15 @@ export type DirectoryParams = {
 };
 
 function rpcArgs(params: DirectoryParams) {
-  return {
-    _search: params.search?.trim() ? params.search.trim() : undefined,
-    _chain: params.chain?.trim() ? params.chain.trim() : undefined,
+  const args: { _search?: string; _chain?: string; _limit: number; _offset: number } = {
     _limit: params.limit ?? NETWORK_PAGE_SIZE,
     _offset: params.offset ?? 0,
   };
+  const search = params.search?.trim();
+  const chain = params.chain?.trim();
+  if (search) args._search = search;
+  if (chain) args._chain = chain;
+  return args;
 }
 
 export const networkKeys = {
