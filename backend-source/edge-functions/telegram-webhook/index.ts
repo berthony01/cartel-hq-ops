@@ -882,7 +882,7 @@ Deno.serve(async (req: Request) => {
           watching: boolean,
           remindersEnabled: boolean,
         ) => {
-          const markup = launchWatchKeyboard(token, watching, remindersEnabled, rewatchAllowed);
+          const markup = launchWatchKeyboard(token, watching, remindersEnabled, rewatchAllowed, profile);
           if (callback.message?.message_id) {
             await editMessage(TELEGRAM_BOT_TOKEN, callbackChatId, Number(callback.message.message_id), text, markup);
           } else {
