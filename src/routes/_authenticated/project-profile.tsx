@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IdCard, Loader2, Save, Wand2 } from "lucide-react";
 import { toast } from "sonner";
@@ -278,7 +278,7 @@ function ProjectProfilePage() {
       <PageHeader
         eyebrow="Project Identity"
         title="Project Profile"
-        description="One project identity record per workspace. This profile is the identity that future Cartel Network discovery and Launch Control features will build on. Cartel Network public pages are not live in this phase."
+        description="One project identity record per workspace. This profile is the identity Cartel Network discovery and Launch Control build on. Publishing makes it discoverable on the Cartel Network."
         status={workspace ? workspace.name : "No workspace"}
       />
 
@@ -501,7 +501,7 @@ function ProjectProfilePage() {
             <Section
               variant="surface"
               title="Discovery status"
-              description="These records stay behind authenticated workspace access. Cartel Network public pages are not live in this phase."
+              description="Draft and hidden profiles stay behind authenticated workspace access. Published profiles appear on the public Cartel Network."
             >
               <div className="max-w-sm">
                 <Label htmlFor="discovery_status">Status</Label>
@@ -603,9 +603,26 @@ function ProjectProfilePage() {
                 </div>
               ) : null}
 
-              <p className="border-t border-border pt-3 text-[11px] leading-relaxed text-muted-foreground">
-                Private preview. Cartel Network public pages arrive in a later phase.
-              </p>
+              {profile && profile.discovery_status === "published" && profile.public_slug ? (
+                <div className="border-t border-border pt-3">
+                  <Button asChild variant="outline" size="sm" className="w-full">
+                    <Link
+                      to="/network/project/$projectSlug"
+                      params={{ projectSlug: profile.public_slug }}
+                    >
+                      View Network Profile
+                    </Link>
+                  </Button>
+                  <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                    Published profiles are discoverable on the Cartel Network.
+                  </p>
+                </div>
+              ) : (
+                <p className="border-t border-border pt-3 text-[11px] leading-relaxed text-muted-foreground">
+                  Private preview. Publish this profile to make it discoverable on the Cartel
+                  Network.
+                </p>
+              )}
             </Section>
           </aside>
         </div>

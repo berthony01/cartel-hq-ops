@@ -178,7 +178,7 @@ const STEP_COPY: Record<
   profile_published: {
     title: "Profile published",
     description:
-      "Mark the profile Published so it can be used by Cartel HQ launch features. This does not create a public webpage.",
+      "Mark the profile Published so it appears on the Cartel Network and can be used by Cartel HQ launch features.",
     to: "/project-profile",
     actionLabel: "Publish Project Profile",
   },
@@ -219,7 +219,7 @@ const NEXT_EXPLANATION: Record<ReadinessStepKey, string> = {
   project_profile:
     "Start here. Your Project Profile is the identity every other Cartel HQ feature builds on.",
   profile_published:
-    "Publishing makes the profile ready for Cartel HQ launch features. Public Cartel Network pages are not live yet.",
+    "Publishing makes the profile discoverable on the Cartel Network and ready for Cartel HQ launch features.",
   launch_created: "Create your launch record so you can announce it and open Launch Watch.",
   launch_announced: "Announcing locks the launch identity and starts the lifecycle.",
   launch_watch_open:
@@ -287,7 +287,7 @@ export function computeLaunchReadiness(input: ReadinessInput): LaunchReadiness {
         to: "/launch-control",
         headline: "Launch foundation ready",
         explanation:
-          "Your project, launch, Launch Watch and community welcome are all set up. Public Cartel Network pages are not live yet.",
+          "Your project, launch, Launch Watch and community welcome are all set up, and your project is discoverable on the Cartel Network.",
       };
 
   return {

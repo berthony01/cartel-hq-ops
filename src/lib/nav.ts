@@ -2,6 +2,10 @@ import {
   LayoutDashboard,
   IdCard,
   Rocket,
+  Globe,
+  CalendarClock,
+  Bookmark,
+
 
 
   ShieldCheck,
@@ -96,6 +100,15 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Cartel Shield", to: "/cartel-shield", icon: Radar, status: "planned" },
       { label: "Reputation", to: "/reputation", icon: Award, status: "planned" },
       { label: "Analytics", to: "/analytics", icon: BarChart3, status: "planned" },
+    ],
+  },
+  {
+    label: "Cartel Network",
+    items: [
+      { label: "Projects", to: "/network/projects", icon: Globe },
+      { label: "Upcoming Launches", to: "/network/launches", icon: CalendarClock },
+      { label: "My Watchlist", to: "/watchlist", icon: Bookmark, status: "planned" },
+      { label: "Cartel Signals", to: "/signals", icon: Radio, status: "planned" },
     ],
   },
   {

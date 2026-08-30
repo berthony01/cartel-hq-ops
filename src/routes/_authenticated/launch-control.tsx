@@ -447,7 +447,7 @@ function LaunchControlPage() {
       <PageHeader
         eyebrow="Launch Operations"
         title="Launch Control"
-        description="Manage the authenticated project's launch lifecycle: launch records, schedule, status progression and official contract registration. Launch Watch opt-ins and the Telegram notification engine are active; public Cartel Network discovery arrives in a later phase."
+        description="Manage the authenticated project's launch lifecycle: launch records, schedule, status progression and official contract registration. Launch Watch opt-ins, the Telegram notification engine and public Cartel Network launch pages are active."
         status={workspace ? workspace.name : "No workspace"}
       />
 
@@ -1191,7 +1191,7 @@ function LaunchControlPage() {
                 <Section
                   variant="surface"
                   title="Launch preview"
-                  description="Private operator preview. No public launch page exists yet."
+                  description="How this launch appears to operators, plus its public Cartel Network page once it is out of Draft."
                 >
                   <dl className="space-y-1.5 text-xs">
                     <PreviewRow label="Project" value={profile.project_name} />
@@ -1210,14 +1210,26 @@ function LaunchControlPage() {
                       }
                     />
                     <PreviewRow
-                      label="Future path"
+                      label="Network path"
                       value={`/network/launch/${selected.public_slug}`}
                     />
                   </dl>
-                  <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                    The future path is reserved only. Public Cartel Network routes are not built
-                    in this phase.
-                  </p>
+                  {status !== "DRAFT" && profile.discovery_status === "published" ? (
+                    <Button asChild variant="outline" size="sm" className="mt-3 w-full">
+                      <Link
+                        to="/network/launch/$launchSlug"
+                        params={{ launchSlug: selected.public_slug }}
+                      >
+                        View Network Launch
+                      </Link>
+                    </Button>
+                  ) : (
+                    <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                      {status === "DRAFT"
+                        ? "Draft launches are never public. Announce this launch to publish its Cartel Network page."
+                        : "Publish your Project Profile to make this launch page live on the Cartel Network."}
+                    </p>
+                  )}
                 </Section>
               </>
             ) : null}
