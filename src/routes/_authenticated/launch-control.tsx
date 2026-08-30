@@ -451,6 +451,10 @@ function LaunchControlPage() {
         status={workspace ? workspace.name : "No workspace"}
       />
 
+      {profile ? <LaunchReadinessCallout workspaceId={workspaceId} /> : null}
+
+
+
       {workspaceLoading ? (
         <Section variant="surface">
           <p className="text-sm text-muted-foreground">Loading workspace…</p>
