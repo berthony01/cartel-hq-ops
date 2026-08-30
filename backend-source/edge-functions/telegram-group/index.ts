@@ -283,10 +283,8 @@ Deno.serve(async (req: Request) => {
         ? new BotRemovedError(await markGroupRemoved(await getGroup(), "kicked"), "kicked")
         : null);
     if (removed) {
-      const err = removed;
       return respond({
         connected: true,
-
         ready: false,
         reconnectRequired: true,
         connectionState: "bot_removed",
@@ -297,11 +295,12 @@ Deno.serve(async (req: Request) => {
         announced: false,
         sent: false,
         saved: false,
-        group: err.group ?? null,
-        memberStatus: err.memberStatus,
-        message: err.message,
+        group: removed.group ?? null,
+        memberStatus: removed.memberStatus,
+        message: removed.message,
       });
     }
+
     console.error("[telegram-group]", err instanceof Error ? err.message : "unknown error"); return respond({ error: "TELEGRAM_GROUP_ERROR", message: err instanceof Error ? err.message : "Telegram group action failed." }, 400);
   }
 
