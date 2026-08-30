@@ -400,7 +400,6 @@ Deno.serve(async (req: Request) => {
 
 
 
-
   const bindGroup = async (params: { chat: any; actor: any; link: any }) => {
     const { chat, actor, link } = params;
     const chatId = String(chat?.id ?? ""), actorId = String(actor?.id ?? ""), now = new Date().toISOString();
