@@ -1,6 +1,8 @@
 import {
   LayoutDashboard,
   IdCard,
+  Rocket,
+
 
   ShieldCheck,
   TerminalSquare,
