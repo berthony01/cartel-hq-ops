@@ -52,6 +52,10 @@ function TelegramPage() {
         status={groupCount > 0 ? "Connected · Live Beta" : "Live Beta"}
       />
 
+      <LaunchReadinessCallout workspaceId={workspaceId} />
+
+
+
       <div className="flex flex-wrap items-center gap-2">
         <StatusBadge
           tone={
