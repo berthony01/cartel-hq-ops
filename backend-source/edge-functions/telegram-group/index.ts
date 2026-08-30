@@ -357,6 +357,8 @@ Deno.serve(async (req: Request) => {
           mention_member: raw.mentionMember, auto_delete_enabled: raw.autoDeleteEnabled, auto_delete_seconds: seconds,
           launch_watch_cta_enabled: raw.launchWatchCtaEnabled, launch_watch_launch_id: launchWatchLaunchId,
           launch_watch_show_website: raw.launchWatchShowWebsite, launch_watch_show_telegram: raw.launchWatchShowTelegram, launch_watch_show_x: raw.launchWatchShowX,
+          launch_watch_cta_auto_delete_seconds: ctaSeconds,
+
           updated_at: now,
         }, { onConflict: "group_connection_id" }).select("*").maybeSingle();
         if (error) throw error;
