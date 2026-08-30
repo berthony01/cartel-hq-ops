@@ -263,8 +263,9 @@ export function CommunityWelcomeDialog({
 
       else
         toast.warning(
-          `${base} This was a preview only. Real join welcomes are OFF, so new members receive nothing.`,
+          `${withCta} This was a preview only. Real join welcomes are OFF, so new members receive nothing.`,
         );
+
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not send the test welcome.");
     } finally {
