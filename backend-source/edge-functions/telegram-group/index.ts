@@ -224,10 +224,14 @@ Deno.serve(async (req: Request) => {
     if (action === "welcome_settings" || action === "save_welcome_settings" || action === "send_welcome_test") {
       const group = await getGroup();
       if (!group) return respond({ error: "GROUP_NOT_FOUND", message: "That Telegram community is no longer connected." }, 404);
+      // Phase 5.2 — the Launch Watch card is a SEPARATE message with its own lifetime.
+      const LW_CTA_LIFETIMES = [300, 600, 900, 1800, 3600];
+      const LW_CTA_LIFETIME_DEFAULT = 900;
       const loadSettings = async () => {
         const { data } = await admin.from("telegram_community_settings").select("*").eq("group_connection_id", group.id).maybeSingle();
-        return data ?? { group_connection_id: group.id, workspace_id: workspaceId, welcome_enabled: false, welcome_message: DEFAULT_WELCOME_MESSAGE, mention_member: true, auto_delete_enabled: true, auto_delete_seconds: 45, launch_watch_cta_enabled: false, launch_watch_launch_id: null, launch_watch_show_website: true, launch_watch_show_telegram: false, launch_watch_show_x: true, metadata: {}, created_at: null, updated_at: null };
+        return data ?? { group_connection_id: group.id, workspace_id: workspaceId, welcome_enabled: false, welcome_message: DEFAULT_WELCOME_MESSAGE, mention_member: true, auto_delete_enabled: true, auto_delete_seconds: 45, launch_watch_cta_enabled: false, launch_watch_launch_id: null, launch_watch_show_website: true, launch_watch_show_telegram: false, launch_watch_show_x: true, launch_watch_cta_auto_delete_seconds: LW_CTA_LIFETIME_DEFAULT, metadata: {}, created_at: null, updated_at: null };
       };
+
 
       /**
        * Phase 5.1 — Launch Watch CTA eligibility. Identical rules are applied at
