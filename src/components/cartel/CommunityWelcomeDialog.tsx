@@ -106,6 +106,14 @@ export function CommunityWelcomeDialog({
   const [autoDelete, setAutoDelete] = useState(true);
   const [seconds, setSeconds] = useState(45);
 
+  /** Phase 5.1 — optional public Launch Watch CTA. Off by default. */
+  const [ctaEnabled, setCtaEnabled] = useState(false);
+  const [ctaLaunchId, setCtaLaunchId] = useState<string | null>(null);
+  const [ctaShowWebsite, setCtaShowWebsite] = useState(true);
+  const [ctaShowTelegram, setCtaShowTelegram] = useState(false);
+  const [ctaShowX, setCtaShowX] = useState(true);
+  const [eligibleLaunches, setEligibleLaunches] = useState<LaunchWatchCtaOption[]>([]);
+
   useEffect(() => {
     if (!open || !workspaceId) return;
     let cancelled = false;
@@ -126,9 +134,16 @@ export function CommunityWelcomeDialog({
         setMention(s.mention_member !== false);
         setAutoDelete(s.auto_delete_enabled !== false);
         setSeconds(Number(s.auto_delete_seconds) || 45);
+        setCtaEnabled(s.launch_watch_cta_enabled === true);
+        setCtaLaunchId(s.launch_watch_launch_id ?? null);
+        setCtaShowWebsite(s.launch_watch_show_website !== false);
+        setCtaShowTelegram(s.launch_watch_show_telegram === true);
+        setCtaShowX(s.launch_watch_show_x !== false);
+        setEligibleLaunches(Array.isArray(result.eligibleLaunches) ? result.eligibleLaunches : []);
         setCanManage(result.canManage === true);
         setDirty(false);
       })
+
       .catch((error: unknown) => {
         if (cancelled) return;
         setLoadError(
