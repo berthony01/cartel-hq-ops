@@ -7,10 +7,13 @@ import { useWorkspace } from "@/lib/workspace-context";
 import { getProjectProfile } from "@/lib/project-profile";
 import {
   CHAIN_MAX,
+  CONTRACT_MAX,
   LAUNCH_STATUSES,
   LAUNCH_STATUS_HELP,
   LAUNCH_STATUS_LABELS,
+  NOTES_MAX,
   SLUG_MAX,
+  SLUG_RULE_HINT,
   TICKER_MAX,
   TOKEN_NAME_MAX,
   canDeleteLaunch,
@@ -18,6 +21,7 @@ import {
   deleteDraftLaunch,
   deviceTimezone,
   formatTimestamp,
+  getLaunchAccess,
   hasSchedule,
   identityLocked,
   isValidLaunchSlug,
@@ -36,6 +40,7 @@ import {
   type LaunchRow,
   type LaunchStatus,
 } from "@/lib/launch-control";
+
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { EmptyState } from "@/components/cartel/EmptyState";
