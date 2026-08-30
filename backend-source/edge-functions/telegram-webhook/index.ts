@@ -538,14 +538,16 @@ Deno.serve(async (req: Request) => {
         const existingGroupContact = await getGroupBetaContact(chatId);
         const shouldWelcome = shouldSendWelcome(existingGroupContact?.welcome_sent_at);
         await touchGroupContact(memberUpdate.chat, actor, { status, welcomeSent: false });
-        if (actor?.id) {
-          const linkedInstaller = await getLinkedUser(String(actor.id));
-          if (!linkedInstaller?.user_id) {
-            await touchUserContact(actor, { source: "group_install", sourceChatId: chatId, sourceChatTitle: String(memberUpdate.chat?.title ?? "Telegram Group"), sourceChatType: String(memberUpdate.chat?.type ?? "group") });
-          }
+        const installerLinked = actor?.id ? await getLinkedUser(String(actor.id)) : null;
+        if (actor?.id && !installerLinked?.user_id) {
+          await touchUserContact(actor, { source: "group_install", sourceChatId: chatId, sourceChatTitle: String(memberUpdate.chat?.title ?? "Telegram Group"), sourceChatType: String(memberUpdate.chat?.type ?? "group") });
         }
         if (shouldWelcome) {
-          const sent = await sendMessage(TELEGRAM_BOT_TOKEN, chatId, `<b>PEPECARTEL HQ connected 🐸</b>\n\nThanks for adding @${BOT_USERNAME}.\n\nCARTEL HQ Bot is currently in <b>Private Beta</b> and is being developed into a multi-tool Telegram system for crypto communities.\n\nSticker publishing, native Telegram sticker delivery and multi-group distribution are among the first live capabilities. More Cartel HQ community tools are in development.\n\nAdmins and community owners can join Early Access below.`, { parse_mode: "HTML", reply_markup: groupAcquisitionKeyboard(chatId) });
+          const title = String(memberUpdate.chat?.title ?? "This community");
+          const [welcomeText, welcomeKeyboard] = installerLinked?.user_id
+            ? [accountFoundText(title), undefined]
+            : [botInstalledText(title), groupAcquisitionKeyboard(chatId)];
+          const sent = await sendMessage(TELEGRAM_BOT_TOKEN, chatId, welcomeText, { parse_mode: "HTML", ...(welcomeKeyboard ? { reply_markup: welcomeKeyboard } : {}) });
           if (sent) await touchGroupContact(memberUpdate.chat, actor, { status, welcomeSent: true });
         }
       }
