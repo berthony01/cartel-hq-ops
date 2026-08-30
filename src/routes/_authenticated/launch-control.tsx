@@ -774,7 +774,7 @@ function LaunchControlPage() {
               </form>
             ) : null}
 
-            {selected && canDeleteLaunch(status) ? (
+            {selected && canManage && canDeleteLaunch(status) ? (
               <Section
                 variant="surface"
                 title="Delete draft"
