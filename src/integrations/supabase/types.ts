@@ -1646,6 +1646,138 @@ export type Database = {
         Args: { _now?: string }
         Returns: number
       }
+      get_cartel_network_launch: {
+        Args: { _slug: string }
+        Returns: {
+          announced_at: string
+          chain: string
+          completed_at: string
+          contract_pending_at: string
+          contract_registered_at: string
+          has_logo: boolean
+          join_launch_watch_url: string
+          launch_approaching_at: string
+          launch_at: string
+          launch_window_end: string
+          launch_window_start: string
+          live_at: string
+          official_contract_address: string
+          project_description: string
+          project_name: string
+          project_primary_chain: string
+          project_public_slug: string
+          project_ticker: string
+          public_slug: string
+          status: string
+          telegram_url: string
+          ticker: string
+          timezone: string
+          token_name: string
+          watchlist_opened_at: string
+          website_url: string
+          x_url: string
+        }[]
+      }
+      get_cartel_network_project: {
+        Args: { _slug: string }
+        Returns: {
+          description: string
+          has_logo: boolean
+          primary_chain: string
+          project_name: string
+          public_slug: string
+          telegram_url: string
+          ticker: string
+          website_url: string
+          x_url: string
+        }[]
+      }
+      get_cartel_network_project_launches: {
+        Args: { _project_slug: string }
+        Returns: {
+          announced_at: string
+          chain: string
+          completed_at: string
+          contract_registered_at: string
+          join_launch_watch_url: string
+          launch_at: string
+          launch_window_end: string
+          launch_window_start: string
+          live_at: string
+          official_contract_address: string
+          public_slug: string
+          status: string
+          ticker: string
+          timezone: string
+          token_name: string
+          watchlist_opened_at: string
+        }[]
+      }
+      get_cartel_network_projects: {
+        Args: {
+          _chain?: string
+          _limit?: number
+          _offset?: number
+          _search?: string
+        }
+        Returns: {
+          current_launch_at: string
+          current_launch_chain: string
+          current_launch_slug: string
+          current_launch_status: string
+          current_launch_ticker: string
+          current_launch_timezone: string
+          current_launch_token_name: string
+          current_launch_window_end: string
+          current_launch_window_start: string
+          description: string
+          has_logo: boolean
+          primary_chain: string
+          project_name: string
+          public_slug: string
+          telegram_url: string
+          ticker: string
+          total_count: number
+          website_url: string
+          x_url: string
+        }[]
+      }
+      get_cartel_network_summary: {
+        Args: never
+        Returns: {
+          live_launches: number
+          published_projects: number
+          upcoming_launches: number
+        }[]
+      }
+      get_cartel_network_upcoming_launches: {
+        Args: {
+          _chain?: string
+          _limit?: number
+          _offset?: number
+          _search?: string
+        }
+        Returns: {
+          announced_at: string
+          chain: string
+          has_logo: boolean
+          join_launch_watch_url: string
+          launch_at: string
+          launch_window_end: string
+          launch_window_start: string
+          project_name: string
+          project_primary_chain: string
+          project_public_slug: string
+          project_ticker: string
+          public_slug: string
+          status: string
+          ticker: string
+          timezone: string
+          token_name: string
+          total_count: number
+          watchlist_opened_at: string
+        }[]
+      }
       get_launch_notification_summary: {
         Args: { _launch_id: string }
         Returns: {
