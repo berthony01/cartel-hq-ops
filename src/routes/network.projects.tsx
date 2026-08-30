@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NetworkEmpty, ProjectCard } from "@/components/cartel-network/NetworkPieces";
 import {
-  NETWORK_MAX_PAGE_LIMIT,
+  NETWORK_PAGE_SIZE,
   NETWORK_PAGE_SIZE,
   fetchNetworkProjects,
   networkKeys,
