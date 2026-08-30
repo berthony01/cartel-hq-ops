@@ -30,7 +30,7 @@ async function ensureWebhook(token: string, supabaseUrl: string) {
   const secret = await webhookSecret(token); const urls = edgeFunctionUrls(supabaseUrl); const info = await telegramJson(token, "getWebhookInfo").catch(() => null) as any;
   const ordered = info?.url && urls.includes(String(info.url)) ? [String(info.url), ...urls.filter((u) => u !== String(info.url))] : urls;
   let lastError: unknown = null;
-  for (const url of ordered) { try { await telegramJson(token, "setWebhook", { url, secret_token: secret, allowed_updates: ["message", "my_chat_member"], drop_pending_updates: false }); return { url }; } catch (err) { lastError = err; } }
+  for (const url of ordered) { try { await telegramJson(token, "setWebhook", { url, secret_token: secret, allowed_updates: ["message", "my_chat_member", "callback_query"], drop_pending_updates: false }); return { url }; } catch (err) { lastError = err; } }
   throw lastError instanceof Error ? lastError : new Error("Telegram webhook could not be configured.");
 }
 
