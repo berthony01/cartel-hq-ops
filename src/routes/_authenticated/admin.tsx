@@ -206,7 +206,7 @@ function AdminPage() {
       <PageHeader
         eyebrow="Platform Owner"
         title="Owner Console"
-        description="Read-only platform command center. Owner identity is verified server-side on every load."
+        description="Platform command center. Operational data is read-only; platform Telegram system messages can be edited here. Owner identity is verified server-side on every load."
         status="Owner Access"
       />
 
