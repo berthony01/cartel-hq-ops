@@ -51,7 +51,13 @@ Deno.serve(async (req: Request) => {
   }
 
   const action = String(body.action ?? "status");
-  if (action !== "status") {
+  const TEMPLATE_ACTIONS = [
+    "templates_list",
+    "templates_save_draft",
+    "templates_publish",
+    "templates_restore_default",
+  ];
+  if (action !== "status" && !TEMPLATE_ACTIONS.includes(action)) {
     return respond({ error: "UNKNOWN_ACTION", message: "Unknown owner-console action." }, 400);
   }
 
@@ -69,6 +75,9 @@ Deno.serve(async (req: Request) => {
 
   const isPlatformOwner = ownerCheck === true;
   if (!isPlatformOwner) {
+    if (TEMPLATE_ACTIONS.includes(action)) {
+      return respond({ error: "FORBIDDEN", message: "Platform owner access is required." }, 403);
+    }
     return respond({
       isPlatformOwner: false,
       hasUnrestrictedAccess: false,
@@ -78,6 +87,96 @@ Deno.serve(async (req: Request) => {
       details: null,
     });
   }
+
+  if (TEMPLATE_ACTIONS.includes(action)) {
+    const TEMPLATE_COLUMNS =
+      "key,draft_body,published_body,draft_updated_at,published_at,updated_at";
+    const listTemplates = async () => {
+      const { data, error } = await admin
+        .from("platform_message_templates")
+        .select(TEMPLATE_COLUMNS)
+        .order("key", { ascending: true });
+      if (error) {
+        console.error("[platform-admin] template list failed", error);
+        return respond({ error: "TEMPLATES_READ_FAILED", message: "Could not load templates." }, 500);
+      }
+      return respond({ templates: data ?? [] });
+    };
+
+    if (action === "templates_list") return await listTemplates();
+
+    const key = String(body.key ?? "");
+    if (!Object.prototype.hasOwnProperty.call(TEMPLATE_DEFAULTS, key)) {
+      return respond({ error: "INVALID_KEY", message: "Unknown message template." }, 400);
+    }
+    const now = new Date().toISOString();
+
+    if (action === "templates_restore_default") {
+      const { error } = await admin
+        .from("platform_message_templates")
+        .update({ draft_body: TEMPLATE_DEFAULTS[key], draft_updated_at: now, updated_by: userId })
+        .eq("key", key);
+      if (error) {
+        console.error("[platform-admin] template restore failed", error);
+        return respond({ error: "TEMPLATE_WRITE_FAILED", message: "Could not restore the default." }, 500);
+      }
+      return await listTemplates();
+    }
+
+    const rawBody = body.body === undefined || body.body === null ? null : String(body.body);
+    if (rawBody !== null && rawBody.length > 3500) {
+      return respond({ error: "BODY_TOO_LONG", message: "Message must be 3500 characters or fewer." }, 400);
+    }
+
+    if (action === "templates_save_draft") {
+      if (rawBody === null) {
+        return respond({ error: "MISSING_BODY", message: "Draft content is required." }, 400);
+      }
+      const { error } = await admin
+        .from("platform_message_templates")
+        .update({ draft_body: rawBody, draft_updated_at: now, updated_by: userId })
+        .eq("key", key);
+      if (error) {
+        console.error("[platform-admin] template draft save failed", error);
+        return respond({ error: "TEMPLATE_WRITE_FAILED", message: "Could not save the draft." }, 500);
+      }
+      return await listTemplates();
+    }
+
+    // templates_publish
+    let publishBody = rawBody;
+    if (publishBody === null) {
+      const { data: current, error: readError } = await admin
+        .from("platform_message_templates")
+        .select("draft_body")
+        .eq("key", key)
+        .maybeSingle();
+      if (readError || !current) {
+        console.error("[platform-admin] template publish read failed", readError);
+        return respond({ error: "TEMPLATES_READ_FAILED", message: "Could not load the draft." }, 500);
+      }
+      publishBody = String(current.draft_body ?? "");
+    }
+    if (!publishBody.trim()) {
+      return respond({ error: "EMPTY_BODY", message: "Published content cannot be blank." }, 400);
+    }
+    const { error: publishError } = await admin
+      .from("platform_message_templates")
+      .update({
+        draft_body: publishBody,
+        published_body: publishBody,
+        draft_updated_at: now,
+        published_at: now,
+        updated_by: userId,
+      })
+      .eq("key", key);
+    if (publishError) {
+      console.error("[platform-admin] template publish failed", publishError);
+      return respond({ error: "TEMPLATE_WRITE_FAILED", message: "Could not publish the message." }, 500);
+    }
+    return await listTemplates();
+  }
+
 
   const [
     roleRes,
