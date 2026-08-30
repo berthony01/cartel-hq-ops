@@ -447,16 +447,33 @@ function LaunchControlPage() {
       ) : (
         <div className="grid min-w-0 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
           <div className="min-w-0 space-y-4 sm:space-y-6">
+            {readOnly && !accessQuery.isLoading ? (
+              <Section variant="surface">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <StatusBadge tone="muted">
+                    <span>Read only</span>
+                  </StatusBadge>
+                  <p className="min-w-0 text-xs leading-relaxed text-muted-foreground">
+                    You can view launches for this workspace. Creating, editing, advancing or
+                    deleting a launch requires the workspace owner or admin role.
+                  </p>
+                </div>
+              </Section>
+            ) : null}
+
             <Section
               variant="surface"
               title="Launches"
               description={`Launch records for ${profile.project_name}. One project profile can hold multiple launches.`}
               actions={
-                <Button size="sm" className="min-h-11" onClick={startCreate}>
-                  <Plus className="size-4" aria-hidden="true" />
-                  New launch
-                </Button>
+                canManage ? (
+                  <Button size="sm" className="min-h-11" onClick={startCreate}>
+                    <Plus className="size-4" aria-hidden="true" />
+                    New launch
+                  </Button>
+                ) : null
               }
+
             >
               {launchesQuery.isLoading ? (
                 <p className="text-sm text-muted-foreground">Loading launches…</p>
