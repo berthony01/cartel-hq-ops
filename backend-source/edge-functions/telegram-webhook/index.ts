@@ -160,6 +160,32 @@ async function ensureBotProfile(token: string) {
     ]);
   } catch { }
 }
+/**
+ * Conservative self-heal: Telegram only delivers `callback_query` updates when
+ * the registered webhook explicitly allows them. Older registrations allowed
+ * only message/my_chat_member, which silently broke every inline button.
+ * Re-registers the SAME url + SAME derived secret, changing only allowed_updates.
+ * Best-effort and throttled; never fails normal webhook processing.
+ */
+async function ensureWebhookUpdates(token: string, supabaseUrl: string) {
+  if (Date.now() - webhookConfiguredAt < 6 * 60 * 60 * 1000) return;
+  webhookConfiguredAt = Date.now();
+  try {
+    const secret = await webhookSecret(token);
+    const info = await telegramJson(token, "getWebhookInfo").catch(() => null) as { url?: string } | null;
+    const currentUrl = typeof info?.url === "string" && info.url ? info.url : "";
+    const url = currentUrl || `${supabaseUrl.replace(/\/$/, "")}/functions/v1/telegram-webhook`;
+    await telegramJson(token, "setWebhook", {
+      url,
+      secret_token: secret,
+      allowed_updates: ["message", "my_chat_member", "callback_query"],
+      drop_pending_updates: false,
+    });
+  } catch (err) {
+    console.error("[telegram-webhook] ensureWebhookUpdates", err instanceof Error ? err.message : "unknown error");
+  }
+}
+
 
 // --------------------------------------------------------------------------
 // Phase 4 — Launch Watch (opt-in only).
