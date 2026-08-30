@@ -312,6 +312,72 @@ export type Database = {
         }
         Relationships: []
       }
+      project_profiles: {
+        Row: {
+          created_at: string
+          description: string | null
+          discovery_status: string
+          id: string
+          logo_asset_id: string | null
+          primary_chain: string | null
+          project_name: string
+          public_slug: string
+          telegram_url: string | null
+          ticker: string | null
+          updated_at: string
+          website_url: string | null
+          workspace_id: string
+          x_url: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          discovery_status?: string
+          id?: string
+          logo_asset_id?: string | null
+          primary_chain?: string | null
+          project_name: string
+          public_slug: string
+          telegram_url?: string | null
+          ticker?: string | null
+          updated_at?: string
+          website_url?: string | null
+          workspace_id: string
+          x_url?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          discovery_status?: string
+          id?: string
+          logo_asset_id?: string | null
+          primary_chain?: string | null
+          project_name?: string
+          public_slug?: string
+          telegram_url?: string | null
+          ticker?: string | null
+          updated_at?: string
+          website_url?: string | null
+          workspace_id?: string
+          x_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_profiles_logo_asset_id_fkey"
+            columns: ["logo_asset_id"]
+            isOneToOne: false
+            referencedRelation: "media_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_profiles_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sticker_drop_events: {
         Row: {
           created_at: string
