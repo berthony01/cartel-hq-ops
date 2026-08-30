@@ -360,6 +360,45 @@ Deno.serve(async (req: Request) => {
     ].join("\n");
   };
 
+  // Platform-owner published overrides for the three system messages.
+  // Reads published content only; drafts are never read here. Any failure falls
+  // back silently to the hardcoded copy above.
+  let publishedTemplates: Record<string, string> | null = null;
+  const loadPublishedTemplates = async (): Promise<Record<string, string>> => {
+    if (publishedTemplates) return publishedTemplates;
+    const loaded: Record<string, string> = {};
+    try {
+      const { data } = await admin.from("platform_message_templates").select("key,published_body");
+      for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+        const key = typeof row?.key === "string" ? row.key : "";
+        const value = typeof row?.published_body === "string" ? row.published_body : "";
+        if (key && value.trim()) loaded[key] = value;
+      }
+    } catch (_err) {
+      // ignore: fall back to hardcoded copy
+    }
+    publishedTemplates = loaded;
+    return loaded;
+  };
+  const systemMessage = async (
+    key: string,
+    groupTitle: string,
+    fallback: (groupTitle: string) => string,
+  ): Promise<string> => {
+    try {
+      const templates = await loadPublishedTemplates();
+      const published = templates[key];
+      if (published && published.trim()) {
+        const title = escapeHtml(groupTitle && groupTitle.trim() ? groupTitle : "This community");
+        return published.split("{group_title}").join(title);
+      }
+    } catch (_err) {
+      // ignore: fall back to hardcoded copy
+    }
+    return fallback(groupTitle);
+  };
+
+
 
   const bindGroup = async (params: { chat: any; actor: any; link: any }) => {
     const { chat, actor, link } = params;
@@ -455,7 +494,7 @@ Deno.serve(async (req: Request) => {
     if (groupError || !groupRow) throw new Error(groupError?.message ?? "Could not save Telegram group connection.");
     await admin.from("telegram_link_requests").update({ status: "connected", consumed_at: now, telegram_user_id: actorId, metadata: { ...(link.metadata ?? {}), group_connection_id: groupRow.id, telegram_chat_id: chatId, group_title: groupRow.title, last_group_check: diagnostic } }).eq("id", link.id);
     await markGroupLinked(chatId, workspaceId);
-    await sendMessage(TELEGRAM_BOT_TOKEN, chatId, communityConnectedText(String(groupRow.title ?? "")), { parse_mode: "HTML" });
+    await sendMessage(TELEGRAM_BOT_TOKEN, chatId, await systemMessage("community_connected", String(groupRow.title ?? ""), communityConnectedText), { parse_mode: "HTML" });
 
     return { ok: true, groupRow };
   };
@@ -545,8 +584,9 @@ Deno.serve(async (req: Request) => {
         if (shouldWelcome) {
           const title = String(memberUpdate.chat?.title ?? "This community");
           const [welcomeText, welcomeKeyboard] = installerLinked?.user_id
-            ? [accountFoundText(title), undefined]
-            : [botInstalledText(title), groupAcquisitionKeyboard(chatId)];
+            ? [await systemMessage("account_found", title, accountFoundText), undefined]
+            : [await systemMessage("bot_installed", title, botInstalledText), groupAcquisitionKeyboard(chatId)];
+
           const sent = await sendMessage(TELEGRAM_BOT_TOKEN, chatId, welcomeText, { parse_mode: "HTML", ...(welcomeKeyboard ? { reply_markup: welcomeKeyboard } : {}) });
           if (sent) await touchGroupContact(memberUpdate.chat, actor, { status, welcomeSent: true });
         }

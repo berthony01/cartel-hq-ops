@@ -268,6 +268,89 @@ export async function fetchPlatformStatus(): Promise<PlatformStatus> {
 
 }
 
+/* --------------------------------------------------------------------------
+ * Owner-only Telegram system message templates.
+ * All access is server-verified inside the `platform-admin` Edge Function; the
+ * browser never touches `platform_message_templates` directly.
+ * ----------------------------------------------------------------------- */
+
+export type PlatformMessageTemplateKey =
+  | "bot_installed"
+  | "account_found"
+  | "community_connected";
+
+export type PlatformMessageTemplate = {
+  key: PlatformMessageTemplateKey;
+  draft_body: string;
+  published_body: string | null;
+  draft_updated_at: string | null;
+  published_at: string | null;
+  updated_at: string | null;
+};
+
+async function invokeTemplateAction(
+  body: Record<string, unknown>,
+): Promise<PlatformMessageTemplate[]> {
+  const { data, error } = await supabase.functions.invoke("platform-admin", { body });
+
+  if (error) {
+    const serverMessage = await readServerMessage(error);
+    throw new Error(
+      serverMessage || error.message || "The platform service is unavailable right now.",
+    );
+  }
+
+  const payload = data as
+    | { templates?: unknown; error?: string; message?: string }
+    | null;
+  if (!payload) throw new Error("Empty response from the platform service.");
+  if (payload.error) throw new Error(payload.message || payload.error);
+
+  const rows = Array.isArray(payload.templates) ? payload.templates : [];
+  return rows
+    .map((row) => row as Record<string, unknown>)
+    .filter((row) => typeof row?.["key"] === "string")
+    .map((row) => ({
+      key: row["key"] as PlatformMessageTemplateKey,
+      draft_body: typeof row["draft_body"] === "string" ? row["draft_body"] : "",
+      published_body:
+        typeof row["published_body"] === "string" ? row["published_body"] : null,
+      draft_updated_at:
+        typeof row["draft_updated_at"] === "string" ? row["draft_updated_at"] : null,
+      published_at: typeof row["published_at"] === "string" ? row["published_at"] : null,
+      updated_at: typeof row["updated_at"] === "string" ? row["updated_at"] : null,
+    }));
+}
+
+export async function fetchPlatformMessageTemplates(): Promise<PlatformMessageTemplate[]> {
+  return invokeTemplateAction({ action: "templates_list" });
+}
+
+export async function savePlatformMessageDraft(
+  key: PlatformMessageTemplateKey,
+  body: string,
+): Promise<PlatformMessageTemplate[]> {
+  return invokeTemplateAction({ action: "templates_save_draft", key, body });
+}
+
+export async function publishPlatformMessage(
+  key: PlatformMessageTemplateKey,
+  body?: string,
+): Promise<PlatformMessageTemplate[]> {
+  return invokeTemplateAction({
+    action: "templates_publish",
+    key,
+    ...(typeof body === "string" ? { body } : {}),
+  });
+}
+
+export async function restorePlatformMessageDefault(
+  key: PlatformMessageTemplateKey,
+): Promise<PlatformMessageTemplate[]> {
+  return invokeTemplateAction({ action: "templates_restore_default", key });
+}
+
+
 export function formatCount(value: number | null | undefined): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
   return new Intl.NumberFormat().format(value);
