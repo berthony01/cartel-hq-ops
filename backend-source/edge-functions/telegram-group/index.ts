@@ -69,7 +69,11 @@ Deno.serve(async (req: Request) => {
   const verifyGroup = async (group: any) => {
     if (!group) throw new Error("Connect a Telegram group before publishing.");
     const removedStatus = storedRemovedStatus(group);
-    if (removedStatus) throw new BotRemovedError(group, removedStatus);
+    if (removedStatus) {
+      const updated = await markGroupRemoved(group, removedStatus);
+      throw new BotRemovedError(updated, removedStatus);
+    }
+
 
     let chat: any, botMember: any, memberCountRaw: any;
     try {
