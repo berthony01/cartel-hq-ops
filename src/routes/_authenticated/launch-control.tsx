@@ -529,7 +529,7 @@ function LaunchControlPage() {
               )}
             </Section>
 
-            {creating ? (
+            {creating && canManage ? (
               <Section
                 variant="surface"
                 title="New launch"
