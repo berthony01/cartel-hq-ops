@@ -387,6 +387,18 @@ function LaunchControlPage() {
   const next = nextLaunchStatus(status);
   const scheduleReady = selected ? hasSchedule(selected) : false;
   const contractSaved = Boolean(selected?.official_contract_address);
+
+  // Launch Watch (read-only). Aggregate counts only — never subscriber identities.
+  const watchToken = selected?.launch_watch_token ?? null;
+  const watchLink = watchToken ? launchWatchDeepLink(watchToken) : null;
+  const profilePublished = profile?.discovery_status === "published";
+  const watchAcceptingNew = Boolean(watchToken) && profilePublished && isLaunchWatchOpenStatus(status);
+  const watchSummaryQuery = useQuery({
+    queryKey: ["launch-watch-summary", selected?.id ?? null],
+    enabled: !!selected?.id && !!watchToken,
+    queryFn: () => getLaunchWatchSummary(selected!.id),
+  });
+  const watchSummary = watchSummaryQuery.data ?? null;
   const blockedReason =
     next === "LAUNCH_APPROACHING" && !scheduleReady
       ? "Set an exact launch time or a complete launch window before advancing."
