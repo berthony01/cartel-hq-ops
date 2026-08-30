@@ -301,6 +301,8 @@ function AdminPage() {
         </div>
       </Section>
 
+      <PlatformMessageEditor />
+
 
       <Section
         variant="primary"
