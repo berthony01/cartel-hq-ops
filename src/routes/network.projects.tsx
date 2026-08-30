@@ -107,7 +107,7 @@ import {
               <ProjectCard key={p.public_slug} project={p} />
             ))}
           </div>
-          {rows.length < total ? (
+          {rows.length < total && limit < NETWORK_MAX_PAGE_LIMIT ? (
             <div className="flex justify-center pt-2">
               <Button
                 variant="outline"
