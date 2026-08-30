@@ -323,6 +323,42 @@ Deno.serve(async (req: Request) => {
       "Return to Cartel HQ to configure this community.",
     ].join("\n");
   };
+  const botInstalledText = (groupTitle: string) => {
+    const title = escapeHtml(groupTitle && groupTitle.trim() ? groupTitle : "This community");
+    return [
+      "<b>🐸 PEPECARTEL HQ BOT INSTALLED</b>",
+      "",
+      `<b>${title}</b> has added @${BOT_USERNAME}.`,
+      "",
+      "This community is <b>not connected to a Cartel HQ workspace yet.</b>",
+      "",
+      "Cartel HQ is the command center where community owners configure tools and automations. The bot carries approved actions out here in Telegram.",
+      "",
+      "<b>Available through Cartel HQ</b>",
+      "👋 Welcome &amp; onboarding",
+      "🎨 Telegram sticker packs",
+      "🤖 Native Sticker Drops",
+      "",
+      "<b>Coming next</b>",
+      "📢 Community automations",
+      "🚀 Launch Watch &amp; official launch alerts",
+      "🛡 Project verification",
+      "",
+      "New to Cartel HQ? Join Early Access below. Already have an account? Connect your Telegram account in Cartel HQ, then connect this community from your workspace.",
+    ].join("\n");
+  };
+  const accountFoundText = (groupTitle: string) => {
+    const title = escapeHtml(groupTitle && groupTitle.trim() ? groupTitle : "This community");
+    return [
+      "<b>🐸 CARTEL HQ ACCOUNT FOUND</b>",
+      "",
+      `We recognize the Cartel HQ account linked to the Telegram user who added @${BOT_USERNAME} to <b>${title}</b>.`,
+      "",
+      "This community is <b>not connected to a Cartel HQ workspace yet.</b>",
+      "",
+      "Return to Cartel HQ and use <b>Connect Community</b> from the workspace that should control this group. Once verified, the bot will activate that workspace's approved community tools here.",
+    ].join("\n");
+  };
 
 
   const bindGroup = async (params: { chat: any; actor: any; link: any }) => {
@@ -502,14 +538,16 @@ Deno.serve(async (req: Request) => {
         const existingGroupContact = await getGroupBetaContact(chatId);
         const shouldWelcome = shouldSendWelcome(existingGroupContact?.welcome_sent_at);
         await touchGroupContact(memberUpdate.chat, actor, { status, welcomeSent: false });
-        if (actor?.id) {
-          const linkedInstaller = await getLinkedUser(String(actor.id));
-          if (!linkedInstaller?.user_id) {
-            await touchUserContact(actor, { source: "group_install", sourceChatId: chatId, sourceChatTitle: String(memberUpdate.chat?.title ?? "Telegram Group"), sourceChatType: String(memberUpdate.chat?.type ?? "group") });
-          }
+        const installerLinked = actor?.id ? await getLinkedUser(String(actor.id)) : null;
+        if (actor?.id && !installerLinked?.user_id) {
+          await touchUserContact(actor, { source: "group_install", sourceChatId: chatId, sourceChatTitle: String(memberUpdate.chat?.title ?? "Telegram Group"), sourceChatType: String(memberUpdate.chat?.type ?? "group") });
         }
         if (shouldWelcome) {
-          const sent = await sendMessage(TELEGRAM_BOT_TOKEN, chatId, `<b>PEPECARTEL HQ connected 🐸</b>\n\nThanks for adding @${BOT_USERNAME}.\n\nCARTEL HQ Bot is currently in <b>Private Beta</b> and is being developed into a multi-tool Telegram system for crypto communities.\n\nSticker publishing, native Telegram sticker delivery and multi-group distribution are among the first live capabilities. More Cartel HQ community tools are in development.\n\nAdmins and community owners can join Early Access below.`, { parse_mode: "HTML", reply_markup: groupAcquisitionKeyboard(chatId) });
+          const title = String(memberUpdate.chat?.title ?? "This community");
+          const [welcomeText, welcomeKeyboard] = installerLinked?.user_id
+            ? [accountFoundText(title), undefined]
+            : [botInstalledText(title), groupAcquisitionKeyboard(chatId)];
+          const sent = await sendMessage(TELEGRAM_BOT_TOKEN, chatId, welcomeText, { parse_mode: "HTML", ...(welcomeKeyboard ? { reply_markup: welcomeKeyboard } : {}) });
           if (sent) await touchGroupContact(memberUpdate.chat, actor, { status, welcomeSent: true });
         }
       }
