@@ -182,21 +182,36 @@ const LAUNCH_STATUS_LABELS: Record<string, string> = {
   LIVE: "Live",
   COMPLETED: "Completed",
 };
-function launchWatchKeyboard(token: string, watching: boolean) {
-  return {
-    inline_keyboard: [
-      [
-        watching
-          ? { text: "🔕 Stop watching", callback_data: `lw_unwatch_${token}` }
-          : { text: "🔔 Watch again", callback_data: `lw_rewatch_${token}` },
-      ],
-      [
-        { text: "💬 PEPECARTEL Community", url: PEPECARTEL_TELEGRAM },
-        { text: "𝕏 Follow on X", url: PEPECARTEL_X },
-      ],
-    ],
-  };
+/**
+ * Launch Watch controls.
+ * - Active watcher: stop watching, plus a countdown-reminder toggle.
+ * - Inactive watcher: "Watch again" is offered ONLY when the launch currently
+ *   accepts sign-ups, so the button is never a dead end.
+ */
+function launchWatchKeyboard(
+  token: string,
+  watching: boolean,
+  remindersEnabled: boolean,
+  canRewatch: boolean,
+) {
+  const rows: Array<Array<Record<string, string>>> = [];
+  if (watching) {
+    rows.push([{ text: "🔕 Stop watching", callback_data: `lw_unwatch_${token}` }]);
+    rows.push([
+      remindersEnabled
+        ? { text: "🔇 Mute countdowns", callback_data: `ln_reminders_off_${token}` }
+        : { text: "⏳ Enable countdowns", callback_data: `ln_reminders_on_${token}` },
+    ]);
+  } else if (canRewatch) {
+    rows.push([{ text: "🔔 Watch again", callback_data: `lw_rewatch_${token}` }]);
+  }
+  rows.push([
+    { text: "💬 PEPECARTEL Community", url: PEPECARTEL_TELEGRAM },
+    { text: "𝕏 Follow on X", url: PEPECARTEL_X },
+  ]);
+  return { inline_keyboard: rows };
 }
+
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ ok: true });
