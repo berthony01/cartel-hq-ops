@@ -129,7 +129,7 @@ function startMenuText(linked: boolean) {
     : `<b>WELCOME TO CARTEL HQ 🐸</b>\n\nThe Telegram command bot for the growing PEPECARTEL ecosystem.\n\nSticker creation, Telegram sticker-pack publishing, native sticker delivery and multi-group distribution are live in <b>Private Beta</b>. More community tools are on the way.\n\n<b>What would you like to do?</b>`;
 }
 function roadmapText() {
-  return `<b>CARTEL HQ BOT • PRIVATE BETA ROADMAP</b>\n\n<b>LIVE NOW</b>\n✅ AI Sticker Lab\n✅ Telegram sticker-pack publishing\n✅ Native Telegram sticker delivery\n✅ Multi-group sticker distribution\n✅ Community join welcomes with optional auto-delete\n\n<b>IN DEVELOPMENT</b>\n🚧 <b>Telegram Community Tools</b>\n• Sticker Pack Manager\n• Cartel Sticker Drops — scheduled branded sticker posts\n• Scheduled announcements, polls & giveaways\n• Community analytics\n\n🚧 <b>Cartel Launch Network</b>\n• Launch watchlists & countdowns\n• Official launch alerts & Verified Launch Packets\n\n🚧 Operations & Missions\n🚧 Project Verification\n🚧 Distribution expansion\n🚧 Cartel Shield\n🚧 Reputation & analytics\n\nCartel Sticker Drops will be admin-controlled with scheduling, quiet hours and post limits. More capabilities will roll out progressively through Cartel HQ. Public Cartel HQ web access will be added here when it is ready.\n\n<b>Want early access to what's coming next?</b>`;
+  return `<b>CARTEL HQ BOT • PRIVATE BETA ROADMAP</b>\n\n<b>LIVE NOW</b>\n✅ AI Sticker Lab\n✅ Telegram sticker-pack publishing\n✅ Native Telegram sticker delivery\n✅ Multi-group sticker distribution\n✅ Community join welcomes with optional auto-delete\n✅ Launch Watch opt-ins\n\n<b>IN DEVELOPMENT</b>\n🚧 <b>Telegram Community Tools</b>\n• Sticker Pack Manager\n• Cartel Sticker Drops — scheduled branded sticker posts\n• Scheduled announcements, polls & giveaways\n• Community analytics\n\n🚧 <b>Cartel Launch Network</b>\n• Automated launch reminders & countdowns\n• Launch-live alerts, official-contract messages & Verified Launch Packets\n\n🚧 Operations & Missions\n🚧 Project Verification\n🚧 Distribution expansion\n🚧 Cartel Shield\n🚧 Reputation & analytics\n\nLaunch Watch currently records opt-ins only — automated reminders and alerts are not active yet. Cartel Sticker Drops will be admin-controlled with scheduling, quiet hours and post limits. More capabilities will roll out progressively through Cartel HQ. Public Cartel HQ web access will be added here when it is ready.\n\n<b>Want early access to what's coming next?</b>`;
 }
 function helpText(isGroup: boolean) {
   return isGroup
@@ -160,6 +160,44 @@ async function ensureBotProfile(token: string) {
   } catch { }
 }
 
+// --------------------------------------------------------------------------
+// Phase 4 — Launch Watch (opt-in only).
+// Reuses this one bot and this one webhook. Subscriptions live exclusively in
+// public.launch_watch_subscriptions. Telegram identity is never enriched with
+// username/name here: telegram_user_id is the only stored identifier.
+// --------------------------------------------------------------------------
+const LAUNCH_WATCH_OPEN_STATUSES = [
+  "WATCHLIST_OPEN",
+  "LAUNCH_APPROACHING",
+  "CONTRACT_PENDING",
+  "OFFICIAL_CONTRACT_REGISTERED",
+];
+const LAUNCH_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Draft",
+  ANNOUNCED: "Announced",
+  WATCHLIST_OPEN: "Watchlist open",
+  LAUNCH_APPROACHING: "Launch approaching",
+  CONTRACT_PENDING: "Contract pending",
+  OFFICIAL_CONTRACT_REGISTERED: "Official contract registered",
+  LIVE: "Live",
+  COMPLETED: "Completed",
+};
+function launchWatchKeyboard(token: string, watching: boolean) {
+  return {
+    inline_keyboard: [
+      [
+        watching
+          ? { text: "🔕 Stop watching", callback_data: `lw_unwatch_${token}` }
+          : { text: "🔔 Watch again", callback_data: `lw_rewatch_${token}` },
+      ],
+      [
+        { text: "💬 PEPECARTEL Community", url: PEPECARTEL_TELEGRAM },
+        { text: "𝕏 Follow on X", url: PEPECARTEL_X },
+      ],
+    ],
+  };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ ok: true });
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -187,6 +225,92 @@ Deno.serve(async (req: Request) => {
     const { data } = await admin.from("telegram_beta_contacts").select("*").eq("subject_type", "group").eq("telegram_chat_id", telegramChatId).maybeSingle();
     return data ?? null;
   };
+
+  // ---- Launch Watch helpers (service role; opt-in state only) -------------
+  const resolveLaunchWatch = async (token: string) => {
+    const { data: launch } = await admin
+      .from("launches")
+      .select("id,status,token_name,ticker,chain,project_profile_id,launch_watch_token")
+      .eq("launch_watch_token", token)
+      .maybeSingle();
+    if (!launch?.id) return null;
+    const { data: profile } = await admin
+      .from("project_profiles")
+      .select("project_name,discovery_status")
+      .eq("id", launch.project_profile_id)
+      .maybeSingle();
+    return { launch, profile: profile ?? null };
+  };
+
+  const launchWatchIntro = (launch: any, profile: any) =>
+    `<b>🔔 LAUNCH WATCH</b>\n\n<b>${escapeHtml(String(profile?.project_name ?? "Project"))}</b>\n${escapeHtml(String(launch.token_name ?? ""))} • ${escapeHtml(String(launch.ticker ?? ""))} • ${escapeHtml(String(launch.chain ?? ""))}\nStatus: ${escapeHtml(LAUNCH_STATUS_LABELS[String(launch.status)] ?? String(launch.status))}`;
+
+  const launchWatchDisclaimer =
+    `\n\nThis only records that you are watching this launch. It is not a safety check, audit, verification or endorsement of any token.\n\nAutomated reminders, launch-live alerts and official-contract messages are <b>not active yet</b> — they begin in a later phase.`;
+
+  /** Returns a status string describing why a join/rewatch cannot be accepted. */
+  const launchWatchGate = (launch: any, profile: any): string | null => {
+    const status = String(launch.status ?? "");
+    if (status === "DRAFT" || status === "ANNOUNCED") {
+      return "Launch Watch is not open for this launch yet. Check back soon.";
+    }
+    if (!LAUNCH_WATCH_OPEN_STATUSES.includes(status)) {
+      return "New Launch Watch sign-ups are closed for this launch.";
+    }
+    if (String(profile?.discovery_status ?? "") !== "published") {
+      return "This launch is not accepting Launch Watch sign-ups right now.";
+    }
+    return null;
+  };
+
+  /** Idempotent subscribe / reactivate. Never creates a duplicate row. */
+  const launchWatchSubscribe = async (launchId: string, telegramUserId: number) => {
+    const now = new Date().toISOString();
+    const { data: existing } = await admin
+      .from("launch_watch_subscriptions")
+      .select("id,is_active")
+      .eq("launch_id", launchId)
+      .eq("telegram_user_id", telegramUserId)
+      .maybeSingle();
+    if (existing?.id) {
+      if (existing.is_active) {
+        await admin.from("launch_watch_subscriptions").update({ last_interaction_at: now }).eq("id", existing.id);
+        return "already_active" as const;
+      }
+      await admin
+        .from("launch_watch_subscriptions")
+        .update({ is_active: true, subscribed_at: now, unsubscribed_at: null, last_interaction_at: now })
+        .eq("id", existing.id);
+      return "reactivated" as const;
+    }
+    await admin.from("launch_watch_subscriptions").insert({
+      launch_id: launchId,
+      telegram_user_id: telegramUserId,
+      is_active: true,
+      subscribed_at: now,
+      last_interaction_at: now,
+      source: "telegram_deep_link",
+    });
+    return "subscribed" as const;
+  };
+
+  /** Soft unwatch. The row and its history are always preserved. */
+  const launchWatchUnsubscribe = async (launchId: string, telegramUserId: number) => {
+    const now = new Date().toISOString();
+    const { data: existing } = await admin
+      .from("launch_watch_subscriptions")
+      .select("id,is_active")
+      .eq("launch_id", launchId)
+      .eq("telegram_user_id", telegramUserId)
+      .maybeSingle();
+    if (!existing?.id) return "not_found" as const;
+    await admin
+      .from("launch_watch_subscriptions")
+      .update({ is_active: false, unsubscribed_at: now, last_interaction_at: now })
+      .eq("id", existing.id);
+    return existing.is_active ? ("unsubscribed" as const) : ("already_inactive" as const);
+  };
+
   const getSourceGroupContext = async (telegramChatId: string) => {
     const beta = await getGroupBetaContact(telegramChatId);
     if (beta) return { title: beta.chat_title ?? null, type: beta.chat_type ?? null };
@@ -543,6 +667,43 @@ Deno.serve(async (req: Request) => {
         await sendMessage(TELEGRAM_BOT_TOKEN, callbackChatId, messageText, { parse_mode: "HTML", reply_markup: betaKeyboard(!linked?.user_id) });
         return json({ ok: true });
       }
+      const lwUnwatch = callbackData.match(/^lw_unwatch_([a-f0-9]{24})$/);
+      const lwRewatch = callbackData.match(/^lw_rewatch_([a-f0-9]{24})$/);
+      if (lwUnwatch || lwRewatch) {
+        const token = String(lwUnwatch?.[1] ?? lwRewatch?.[1]);
+        const resolved = await resolveLaunchWatch(token);
+        if (!resolved) {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "This Launch Watch link is no longer available.");
+          return json({ ok: true });
+        }
+        const { launch, profile } = resolved;
+        const telegramUserId = Number(from.id);
+        if (lwUnwatch) {
+          await launchWatchUnsubscribe(launch.id, telegramUserId);
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "You stopped watching this launch.");
+          const text = `${launchWatchIntro(launch, profile)}\n\n🔕 You are no longer watching this launch. You can start watching again at any time.`;
+          if (callback.message?.message_id) {
+            await editMessage(TELEGRAM_BOT_TOKEN, callbackChatId, Number(callback.message.message_id), text, launchWatchKeyboard(token, false));
+          } else {
+            await sendMessage(TELEGRAM_BOT_TOKEN, callbackChatId, text, { parse_mode: "HTML", reply_markup: launchWatchKeyboard(token, false) });
+          }
+          return json({ ok: true });
+        }
+        const blocked = launchWatchGate(launch, profile);
+        if (blocked) {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, blocked);
+          return json({ ok: true });
+        }
+        await launchWatchSubscribe(launch.id, telegramUserId);
+        await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "You're watching this launch again.");
+        const text = `${launchWatchIntro(launch, profile)}\n\n🔔 You are watching this launch again.${launchWatchDisclaimer}`;
+        if (callback.message?.message_id) {
+          await editMessage(TELEGRAM_BOT_TOKEN, callbackChatId, Number(callback.message.message_id), text, launchWatchKeyboard(token, true));
+        } else {
+          await sendMessage(TELEGRAM_BOT_TOKEN, callbackChatId, text, { parse_mode: "HTML", reply_markup: launchWatchKeyboard(token, true) });
+        }
+        return json({ ok: true });
+      }
       return json({ ok: true });
     }
 
@@ -823,6 +984,32 @@ Deno.serve(async (req: Request) => {
     }
 
     if (chat?.type !== "private") return json({ ok: true });
+
+    // Launch Watch deep link: https://t.me/<bot>?start=lw_<24-hex-token>
+    const launchWatchMatch = text.match(/^\/start(?:@\w+)?\s+lw_([a-f0-9]{24})$/i);
+    if (launchWatchMatch) {
+      const token = String(launchWatchMatch[1]).toLowerCase();
+      const resolved = await resolveLaunchWatch(token);
+      if (!resolved) {
+        await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "<b>Launch Watch link not available</b>\n\nThis Launch Watch link is invalid or no longer available.", { parse_mode: "HTML" });
+        return json({ ok: true });
+      }
+      const { launch, profile } = resolved;
+      const blocked = launchWatchGate(launch, profile);
+      if (blocked) {
+        await sendMessage(TELEGRAM_BOT_TOKEN, chatId, `${launchWatchIntro(launch, profile)}\n\n${escapeHtml(blocked)}`, { parse_mode: "HTML" });
+        return json({ ok: true });
+      }
+      const result = await launchWatchSubscribe(launch.id, Number(from.id));
+      const line =
+        result === "already_active"
+          ? "🔔 You are already watching this launch."
+          : result === "reactivated"
+            ? "🔔 You are watching this launch again."
+            : "🔔 You are now watching this launch.";
+      await sendMessage(TELEGRAM_BOT_TOKEN, chatId, `${launchWatchIntro(launch, profile)}\n\n${line}${launchWatchDisclaimer}`, { parse_mode: "HTML", reply_markup: launchWatchKeyboard(token, true) });
+      return json({ ok: true });
+    }
 
     const betaJoinMatch = text.match(/^\/start(?:@\w+)?\s+beta_join_g_([n0-9]+)$/i);
     const betaRoadmapMatch = text.match(/^\/start(?:@\w+)?\s+beta_roadmap_g_([n0-9]+)$/i);

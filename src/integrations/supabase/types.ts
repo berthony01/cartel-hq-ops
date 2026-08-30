@@ -171,6 +171,50 @@ export type Database = {
           },
         ]
       }
+      launch_watch_subscriptions: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          last_interaction_at: string
+          launch_id: string
+          source: string
+          subscribed_at: string
+          telegram_user_id: number
+          unsubscribed_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_interaction_at?: string
+          launch_id: string
+          source?: string
+          subscribed_at?: string
+          telegram_user_id: number
+          unsubscribed_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_interaction_at?: string
+          launch_id?: string
+          source?: string
+          subscribed_at?: string
+          telegram_user_id?: number
+          unsubscribed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launch_watch_subscriptions_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       launches: {
         Row: {
           announced_at: string | null
@@ -185,6 +229,8 @@ export type Database = {
           internal_notes: string | null
           launch_approaching_at: string | null
           launch_at: string | null
+          launch_watch_token: string | null
+          launch_watch_token_created_at: string | null
           launch_window_end: string | null
           launch_window_start: string | null
           live_at: string | null
@@ -214,6 +260,8 @@ export type Database = {
           internal_notes?: string | null
           launch_approaching_at?: string | null
           launch_at?: string | null
+          launch_watch_token?: string | null
+          launch_watch_token_created_at?: string | null
           launch_window_end?: string | null
           launch_window_start?: string | null
           live_at?: string | null
@@ -243,6 +291,8 @@ export type Database = {
           internal_notes?: string | null
           launch_approaching_at?: string | null
           launch_at?: string | null
+          launch_watch_token?: string | null
+          launch_watch_token_created_at?: string | null
           launch_window_end?: string | null
           launch_window_start?: string | null
           live_at?: string | null
@@ -1354,6 +1404,13 @@ export type Database = {
         Args: { _pack_id: string; _user_id: string }
         Returns: boolean
       }
+      get_launch_watch_summary: {
+        Args: { _launch_id: string }
+        Returns: {
+          active_count: number
+          total_count: number
+        }[]
+      }
       get_platform_owner_dashboard_metrics: { Args: never; Returns: Json }
       has_platform_unrestricted_access: {
         Args: { _user_id: string }
@@ -1388,6 +1445,8 @@ export type Database = {
           internal_notes: string | null
           launch_approaching_at: string | null
           launch_at: string | null
+          launch_watch_token: string | null
+          launch_watch_token_created_at: string | null
           launch_window_end: string | null
           launch_window_start: string | null
           live_at: string | null
@@ -1430,6 +1489,8 @@ export type Database = {
           internal_notes: string | null
           launch_approaching_at: string | null
           launch_at: string | null
+          launch_watch_token: string | null
+          launch_watch_token_created_at: string | null
           launch_window_end: string | null
           launch_window_start: string | null
           live_at: string | null

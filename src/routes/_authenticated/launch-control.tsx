@@ -1,7 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, IdCard, Loader2, Plus, Rocket, Save, Trash2 } from "lucide-react";
+import {
+  Bell,
+  Check,
+  Copy,
+  ExternalLink,
+  IdCard,
+  Loader2,
+  Plus,
+  Rocket,
+  Save,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspace } from "@/lib/workspace-context";
 import { getProjectProfile } from "@/lib/project-profile";
@@ -17,6 +28,10 @@ import {
   TICKER_MAX,
   TOKEN_NAME_MAX,
   canDeleteLaunch,
+  getLaunchWatchSummary,
+  isLaunchWatchClosedStatus,
+  isLaunchWatchOpenStatus,
+  launchWatchDeepLink,
   createLaunch,
   deleteDraftLaunch,
   deviceTimezone,
@@ -372,6 +387,18 @@ function LaunchControlPage() {
   const next = nextLaunchStatus(status);
   const scheduleReady = selected ? hasSchedule(selected) : false;
   const contractSaved = Boolean(selected?.official_contract_address);
+
+  // Launch Watch (read-only). Aggregate counts only — never subscriber identities.
+  const watchToken = selected?.launch_watch_token ?? null;
+  const watchLink = watchToken ? launchWatchDeepLink(watchToken) : null;
+  const profilePublished = profile?.discovery_status === "published";
+  const watchAcceptingNew = Boolean(watchToken) && profilePublished && isLaunchWatchOpenStatus(status);
+  const watchSummaryQuery = useQuery({
+    queryKey: ["launch-watch-summary", selected?.id ?? null],
+    enabled: !!selected?.id && !!watchToken,
+    queryFn: () => getLaunchWatchSummary(selected!.id),
+  });
+  const watchSummary = watchSummaryQuery.data ?? null;
   const blockedReason =
     next === "LAUNCH_APPROACHING" && !scheduleReady
       ? "Set an exact launch time or a complete launch window before advancing."
@@ -943,6 +970,94 @@ function LaunchControlPage() {
                       Contract registration becomes available later in the lifecycle, once the
                       launch reaches contract pending.
                     </p>
+                  )}
+                </Section>
+
+                <Section
+                  variant="surface"
+                  title="Launch Watch"
+                  leading={<Bell className="size-4" aria-hidden="true" />}
+                >
+                  {watchToken ? (
+                    <div className="space-y-3">
+                      <div className="min-w-0">
+                        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                          Telegram deep link
+                        </p>
+                        <p className="mt-1 break-all rounded-md border border-border bg-background/40 px-3 py-2 font-mono text-xs text-foreground">
+                          {watchLink}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          className="min-h-11"
+                          onClick={() => {
+                            void navigator.clipboard
+                              ?.writeText(watchLink!)
+                              .then(() => toast.success("Launch Watch link copied"))
+                              .catch(() => toast.error("Could not copy the link"));
+                          }}
+                        >
+                          <Copy className="size-4" aria-hidden="true" />
+                          Copy link
+                        </Button>
+                        <Button asChild size="sm" variant="outline" className="min-h-11">
+                          <a href={watchLink!} target="_blank" rel="noreferrer noopener">
+                            <ExternalLink className="size-4" aria-hidden="true" />
+                            Open Telegram
+                          </a>
+                        </Button>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <StatusBadge tone={watchAcceptingNew ? "green" : "muted"}>
+                          <span>
+                            {watchAcceptingNew ? "Accepting new watchers" : "Closed to new watchers"}
+                          </span>
+                        </StatusBadge>
+                        <span className="text-xs text-muted-foreground">
+                          {watchSummaryQuery.isLoading
+                            ? "Loading watcher count…"
+                            : `${watchSummary?.active_count ?? 0} active · ${watchSummary?.total_count ?? 0} total opt-ins`}
+                        </span>
+                      </div>
+
+                      {!profilePublished ? (
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          This Project Profile is not Published. The deep link will not accept new
+                          watchers until the Project Profile discovery status is Published.
+                        </p>
+                      ) : isLaunchWatchClosedStatus(status) ? (
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          New Launch Watch sign-ups are closed at this lifecycle stage. Existing
+                          opt-ins and the link are preserved.
+                        </p>
+                      ) : null}
+
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        Phase 4 saves Launch Watch opt-ins. Automated reminders, launch-live alerts
+                        and official-contract DMs begin in Phase 5.
+                      </p>
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        Watcher identities are never shown here. Only aggregate counts are
+                        available in Cartel HQ.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        The Launch Watch link is generated automatically the first time this launch
+                        reaches Watchlist open.
+                      </p>
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        Phase 4 saves Launch Watch opt-ins. Automated reminders, launch-live alerts
+                        and official-contract DMs begin in Phase 5.
+                      </p>
+                    </div>
                   )}
                 </Section>
 

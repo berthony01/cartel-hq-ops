@@ -275,6 +275,53 @@ export async function setLaunchContractAddress(
 }
 
 // ---------------------------------------------------------------------------
+// Phase 4 — Launch Watch (read-only surface).
+//
+// The deep link is public/shareable. Subscriber identities are service-role
+// only and are never queried from the browser: the UI shows aggregate counts
+// through `get_launch_watch_summary` and nothing else.
+// ---------------------------------------------------------------------------
+
+export const LAUNCH_WATCH_BOT_USERNAME = "PepeCartelHQBot";
+
+export function launchWatchDeepLink(token: string): string {
+  return `https://t.me/${LAUNCH_WATCH_BOT_USERNAME}?start=lw_${token}`;
+}
+
+/** Lifecycle states in which the bot accepts new Launch Watch sign-ups. */
+export const LAUNCH_WATCH_OPEN_STATUSES: readonly LaunchStatus[] = [
+  "WATCHLIST_OPEN",
+  "LAUNCH_APPROACHING",
+  "CONTRACT_PENDING",
+  "OFFICIAL_CONTRACT_REGISTERED",
+];
+
+export function isLaunchWatchOpenStatus(status: LaunchStatus): boolean {
+  return LAUNCH_WATCH_OPEN_STATUSES.includes(status);
+}
+
+export function isLaunchWatchClosedStatus(status: LaunchStatus): boolean {
+  return status === "LIVE" || status === "COMPLETED";
+}
+
+export type LaunchWatchSummary = {
+  active_count: number;
+  total_count: number;
+};
+
+export async function getLaunchWatchSummary(launchId: string): Promise<LaunchWatchSummary> {
+  const { data, error } = await supabase.rpc("get_launch_watch_summary", {
+    _launch_id: launchId,
+  });
+  if (error) rethrow(error);
+  const row = Array.isArray(data) ? data[0] : null;
+  return {
+    active_count: Number(row?.active_count ?? 0),
+    total_count: Number(row?.total_count ?? 0),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Launch management permission (UI hint only).
 //
 // Mirrors the authoritative RLS/RPC rule: workspace owner/admin may manage
