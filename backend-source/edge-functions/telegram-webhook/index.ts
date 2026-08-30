@@ -227,18 +227,23 @@ Deno.serve(async (req: Request) => {
   };
 
   // ---- Launch Watch helpers (service role; opt-in state only) -------------
+  // Every read/write checks its Supabase error. A backend failure must throw
+  // so the bot never confirms a state change that did not persist, and never
+  // reports a real outage as an invalid link.
   const resolveLaunchWatch = async (token: string) => {
-    const { data: launch } = await admin
+    const { data: launch, error: launchError } = await admin
       .from("launches")
       .select("id,status,token_name,ticker,chain,project_profile_id,launch_watch_token")
       .eq("launch_watch_token", token)
       .maybeSingle();
+    if (launchError) throw new Error("Could not load launch watch record.");
     if (!launch?.id) return null;
-    const { data: profile } = await admin
+    const { data: profile, error: profileError } = await admin
       .from("project_profiles")
       .select("project_name,discovery_status")
       .eq("id", launch.project_profile_id)
       .maybeSingle();
+    if (profileError) throw new Error("Could not load project profile.");
     return { launch, profile: profile ?? null };
   };
 
@@ -263,27 +268,53 @@ Deno.serve(async (req: Request) => {
     return null;
   };
 
-  /** Idempotent subscribe / reactivate. Never creates a duplicate row. */
-  const launchWatchSubscribe = async (launchId: string, telegramUserId: number) => {
-    const now = new Date().toISOString();
-    const { data: existing } = await admin
+  const isUniqueViolation = (error: any) => String(error?.code ?? "") === "23505";
+
+  const readLaunchWatchRow = async (launchId: string, telegramUserId: number) => {
+    const { data, error } = await admin
       .from("launch_watch_subscriptions")
       .select("id,is_active")
       .eq("launch_id", launchId)
       .eq("telegram_user_id", telegramUserId)
       .maybeSingle();
+    if (error) throw new Error("Could not load launch watch subscription.");
+    return data ?? null;
+  };
+
+  const touchLaunchWatchRow = async (id: string, now: string) => {
+    const { error } = await admin
+      .from("launch_watch_subscriptions")
+      .update({ last_interaction_at: now })
+      .eq("id", id);
+    if (error) throw new Error("Could not update launch watch subscription.");
+  };
+
+  const reactivateLaunchWatchRow = async (id: string, now: string) => {
+    const { error } = await admin
+      .from("launch_watch_subscriptions")
+      .update({ is_active: true, subscribed_at: now, unsubscribed_at: null, last_interaction_at: now })
+      .eq("id", id);
+    if (error) throw new Error("Could not reactivate launch watch subscription.");
+  };
+
+  /**
+   * Idempotent subscribe / reactivate. Never creates a duplicate row: a lost
+   * race against a simultaneous deep link surfaces as unique violation 23505,
+   * which is resolved by refetching and applying the normal patch.
+   */
+  const launchWatchSubscribe = async (launchId: string, telegramUserId: number) => {
+    const now = new Date().toISOString();
+    const existing = await readLaunchWatchRow(launchId, telegramUserId);
     if (existing?.id) {
       if (existing.is_active) {
-        await admin.from("launch_watch_subscriptions").update({ last_interaction_at: now }).eq("id", existing.id);
+        await touchLaunchWatchRow(existing.id, now);
         return "already_active" as const;
       }
-      await admin
-        .from("launch_watch_subscriptions")
-        .update({ is_active: true, subscribed_at: now, unsubscribed_at: null, last_interaction_at: now })
-        .eq("id", existing.id);
+      await reactivateLaunchWatchRow(existing.id, now);
       return "reactivated" as const;
     }
-    await admin.from("launch_watch_subscriptions").insert({
+
+    const { error: insertError } = await admin.from("launch_watch_subscriptions").insert({
       launch_id: launchId,
       telegram_user_id: telegramUserId,
       is_active: true,
@@ -291,24 +322,38 @@ Deno.serve(async (req: Request) => {
       last_interaction_at: now,
       source: "telegram_deep_link",
     });
+    if (insertError) {
+      if (!isUniqueViolation(insertError)) {
+        throw new Error("Could not save launch watch subscription.");
+      }
+      const raced = await readLaunchWatchRow(launchId, telegramUserId);
+      if (!raced?.id) throw new Error("Could not save launch watch subscription.");
+      if (raced.is_active) {
+        await touchLaunchWatchRow(raced.id, now);
+        return "already_active" as const;
+      }
+      await reactivateLaunchWatchRow(raced.id, now);
+      return "reactivated" as const;
+    }
     return "subscribed" as const;
   };
 
   /** Soft unwatch. The row and its history are always preserved. */
   const launchWatchUnsubscribe = async (launchId: string, telegramUserId: number) => {
     const now = new Date().toISOString();
-    const { data: existing } = await admin
-      .from("launch_watch_subscriptions")
-      .select("id,is_active")
-      .eq("launch_id", launchId)
-      .eq("telegram_user_id", telegramUserId)
-      .maybeSingle();
+    const existing = await readLaunchWatchRow(launchId, telegramUserId);
     if (!existing?.id) return "not_found" as const;
-    await admin
+    if (!existing.is_active) {
+      // Preserve the original unsubscribed_at; only record the interaction.
+      await touchLaunchWatchRow(existing.id, now);
+      return "already_inactive" as const;
+    }
+    const { error } = await admin
       .from("launch_watch_subscriptions")
       .update({ is_active: false, unsubscribed_at: now, last_interaction_at: now })
       .eq("id", existing.id);
-    return existing.is_active ? ("unsubscribed" as const) : ("already_inactive" as const);
+    if (error) throw new Error("Could not update launch watch subscription.");
+    return "unsubscribed" as const;
   };
 
   const getSourceGroupContext = async (telegramChatId: string) => {
@@ -679,9 +724,19 @@ Deno.serve(async (req: Request) => {
         const { launch, profile } = resolved;
         const telegramUserId = Number(from.id);
         if (lwUnwatch) {
-          await launchWatchUnsubscribe(launch.id, telegramUserId);
-          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "You stopped watching this launch.");
-          const text = `${launchWatchIntro(launch, profile)}\n\n🔕 You are no longer watching this launch. You can start watching again at any time.`;
+          const outcome = await launchWatchUnsubscribe(launch.id, telegramUserId);
+          const answer =
+            outcome === "not_found"
+              ? "You were not watching this launch."
+              : outcome === "already_inactive"
+                ? "You had already stopped watching this launch."
+                : "You stopped watching this launch.";
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, answer);
+          const body =
+            outcome === "not_found"
+              ? "🔕 You are not currently watching this launch. You can start watching at any time."
+              : "🔕 You are no longer watching this launch. You can start watching again at any time.";
+          const text = `${launchWatchIntro(launch, profile)}\n\n${body}`;
           if (callback.message?.message_id) {
             await editMessage(TELEGRAM_BOT_TOKEN, callbackChatId, Number(callback.message.message_id), text, launchWatchKeyboard(token, false));
           } else {

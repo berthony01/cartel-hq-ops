@@ -429,7 +429,7 @@ function LaunchControlPage() {
       <PageHeader
         eyebrow="Launch Operations"
         title="Launch Control"
-        description="Manage the authenticated project's launch lifecycle: launch records, schedule, status progression and official contract registration. Public Cartel Network discovery and Telegram delivery arrive in later phases."
+        description="Manage the authenticated project's launch lifecycle: launch records, schedule, status progression and official contract registration. Launch Watch opt-ins are live through the PepeCartel Telegram bot; automated Telegram alerts and public Cartel Network discovery arrive in later phases."
         status={workspace ? workspace.name : "No workspace"}
       />
 
@@ -901,8 +901,9 @@ function LaunchControlPage() {
 
                   <div className="mt-4 space-y-1.5 rounded-md border border-border bg-background/40 px-3 py-2">
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                      Telegram Join Launch Watch subscriptions are not connected yet. Watchlist
-                      open is an internal lifecycle state until Phase 4.
+                      Phase 4 Launch Watch opt-ins are active: once this launch reaches watchlist
+                      open and the Project Profile is Published, the Telegram deep link accepts
+                      watchers.
                     </p>
                     <p className="text-xs leading-relaxed text-muted-foreground">
                       Launch and contract DM notification delivery is not active until Phase 5.
@@ -995,11 +996,18 @@ function LaunchControlPage() {
                           size="sm"
                           variant="secondary"
                           className="min-h-11"
-                          onClick={() => {
-                            void navigator.clipboard
-                              ?.writeText(watchLink!)
-                              .then(() => toast.success("Launch Watch link copied"))
-                              .catch(() => toast.error("Could not copy the link"));
+                          onClick={async () => {
+                            const write = navigator.clipboard?.writeText;
+                            if (!write) {
+                              toast.error("Clipboard access is unavailable. Copy the link manually.");
+                              return;
+                            }
+                            try {
+                              await navigator.clipboard.writeText(watchLink!);
+                              toast.success("Launch Watch link copied");
+                            } catch {
+                              toast.error("Could not copy the link. Copy it manually.");
+                            }
                           }}
                         >
                           <Copy className="size-4" aria-hidden="true" />
