@@ -282,6 +282,10 @@ function ProjectProfilePage() {
         status={workspace ? workspace.name : "No workspace"}
       />
 
+      <LaunchReadinessCallout workspaceId={workspaceId} title="Setup guide" />
+
+
+
       {workspaceLoading ? (
         <Section variant="surface">
           <p className="text-sm text-muted-foreground">Loading workspace…</p>
