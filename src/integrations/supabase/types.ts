@@ -1408,6 +1408,78 @@ export type Database = {
         }
         Relationships: []
       }
+      telegram_message_cleanup_jobs: {
+        Row: {
+          attempt_count: number
+          claimed_at: string | null
+          cleanup_kind: string
+          created_at: string
+          delete_after: string
+          deleted_at: string | null
+          error_class: string | null
+          group_connection_id: string
+          id: string
+          last_error: string | null
+          next_attempt_at: string
+          status: string
+          telegram_chat_id: number
+          telegram_message_id: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          attempt_count?: number
+          claimed_at?: string | null
+          cleanup_kind?: string
+          created_at?: string
+          delete_after: string
+          deleted_at?: string | null
+          error_class?: string | null
+          group_connection_id: string
+          id?: string
+          last_error?: string | null
+          next_attempt_at?: string
+          status?: string
+          telegram_chat_id: number
+          telegram_message_id: number
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          attempt_count?: number
+          claimed_at?: string | null
+          cleanup_kind?: string
+          created_at?: string
+          delete_after?: string
+          deleted_at?: string | null
+          error_class?: string | null
+          group_connection_id?: string
+          id?: string
+          last_error?: string | null
+          next_attempt_at?: string
+          status?: string
+          telegram_chat_id?: number
+          telegram_message_id?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_message_cleanup_jobs_group_connection_id_fkey"
+            columns: ["group_connection_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_group_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_message_cleanup_jobs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       usage_ledger: {
         Row: {
           action_type: string
@@ -1560,6 +1632,16 @@ export type Database = {
           telegram_user_id: number
         }[]
       }
+      claim_telegram_message_cleanup_jobs: {
+        Args: { _limit?: number }
+        Returns: {
+          attempt_count: number
+          cleanup_kind: string
+          job_id: string
+          telegram_chat_id: number
+          telegram_message_id: number
+        }[]
+      }
       enqueue_due_launch_reminder_events: {
         Args: { _now?: string }
         Returns: number
@@ -1590,6 +1672,10 @@ export type Database = {
       }
       invoke_launch_notification_scheduler: { Args: never; Returns: number }
       invoke_sticker_drop_scheduler: { Args: never; Returns: number }
+      invoke_telegram_message_cleanup_scheduler: {
+        Args: never
+        Returns: number
+      }
       is_platform_owner: { Args: { _user_id: string }; Returns: boolean }
       is_workspace_member: {
         Args: { _user_id: string; _workspace_id: string }
@@ -1653,6 +1739,10 @@ export type Database = {
         }
       }
       sticker_drop_scheduler_secret_matches: {
+        Args: { p_secret: string }
+        Returns: boolean
+      }
+      telegram_message_cleanup_scheduler_secret_matches: {
         Args: { p_secret: string }
         Returns: boolean
       }
