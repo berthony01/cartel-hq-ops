@@ -14,6 +14,64 @@ function respond(body: unknown, status = 200) {
   });
 }
 
+// Owner-only Telegram system messages. Defaults mirror the telegram-webhook fallback copy.
+const TEMPLATE_DEFAULTS: Record<string, string> = {
+  bot_installed: [
+    "<b>🐸 PEPECARTEL HQ BOT INSTALLED</b>",
+    "",
+    "<b>{group_title}</b> has added @PepeCartelHQBot.",
+    "",
+    "This community is <b>not connected to a Cartel HQ workspace yet.</b>",
+    "",
+    "Cartel HQ is the command center where community owners configure tools and automations. The bot carries approved actions out here in Telegram.",
+    "",
+    "<b>Available through Cartel HQ</b>",
+    "👋 Welcome &amp; onboarding",
+    "🎨 Telegram sticker packs",
+    "🤖 Native Sticker Drops",
+    "",
+    "<b>Coming next</b>",
+    "📢 Community automations",
+    "🚀 Launch Watch &amp; official launch alerts",
+    "🛡 Project verification",
+    "",
+    "New to Cartel HQ? Join Early Access below. Already have an account? Connect your Telegram account in Cartel HQ, then connect this community from your workspace.",
+  ].join("\n"),
+  account_found: [
+    "<b>🐸 CARTEL HQ ACCOUNT FOUND</b>",
+    "",
+    "We recognize the Cartel HQ account linked to the Telegram user who added @PepeCartelHQBot to <b>{group_title}</b>.",
+    "",
+    "This community is <b>not connected to a Cartel HQ workspace yet.</b>",
+    "",
+    "Return to Cartel HQ and use <b>Connect Community</b> from the workspace that should control this group. Once verified, the bot will activate that workspace's approved community tools here.",
+  ].join("\n"),
+  community_connected: [
+    "<b>✅ CARTEL HQ CONNECTED</b>",
+    "",
+    "<b>{group_title}</b> is now connected to Cartel HQ.",
+    "",
+    "🐸 <b>@PepeCartelHQBot is active in this community.</b>",
+    "",
+    "Community owners configure tools and automations inside <b>Cartel HQ</b>, and the bot carries them out here in Telegram.",
+    "",
+    "<b>Available now</b>",
+    "👋 Welcome &amp; onboarding",
+    "🎨 Telegram sticker packs",
+    "🤖 Native Sticker Drops",
+    "",
+    "<b>Coming through Cartel HQ</b>",
+    "📢 Community automations",
+    "📊 Polls, milestones &amp; community intelligence",
+    "🚀 Launch Watch &amp; official launch alerts",
+    "🛡 Project verification",
+    "⚡ More community &amp; launch tools",
+    "",
+    "Return to Cartel HQ to configure this community.",
+  ].join("\n"),
+};
+
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return respond({ error: "METHOD_NOT_ALLOWED" }, 405);
