@@ -25,7 +25,7 @@ export const DISCOVERY_STATUS_LABELS: Record<DiscoveryStatus, string> = {
 
 export const DISCOVERY_STATUS_HELP: Record<DiscoveryStatus, string> = {
   draft: "Being prepared. Nothing is exposed outside this workspace.",
-  published: "Marked ready for future Cartel Network discovery.",
+  published: "Discoverable on the Cartel Network.",
   hidden: "Not intended for discovery.",
 };
 
