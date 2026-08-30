@@ -32,6 +32,7 @@ import { Route as AuthenticatedStickerLabRouteImport } from './routes/_authentic
 import { Route as AuthenticatedTelegramRouteImport } from './routes/_authenticated/telegram'
 import { Route as AuthCallbackRouteImport } from './routes/auth_.callback'
 import { Route as NetworkIndexRouteImport } from './routes/network.index'
+import { Route as NetworkProjectsRouteImport } from './routes/network.projects'
 import { Route as AuthenticatedStickerLabIndexRouteImport } from './routes/_authenticated/sticker-lab.index'
 import { Route as AuthenticatedStickerLabPackIdRouteImport } from './routes/_authenticated/sticker-lab.$packId'
 import { Route as AuthenticatedStickerLabNewRouteImport } from './routes/_authenticated/sticker-lab.new'
@@ -155,6 +156,11 @@ const NetworkIndexRoute = NetworkIndexRouteImport.update({
   path: '/',
   getParentRoute: () => NetworkRoute,
 } as any)
+const NetworkProjectsRoute = NetworkProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
+  getParentRoute: () => NetworkRoute,
+} as any)
 const AuthenticatedStickerLabIndexRoute =
   AuthenticatedStickerLabIndexRouteImport.update({
     id: '/',
@@ -196,6 +202,7 @@ export interface FileRoutesByFullPath {
   '/sticker-lab': typeof AuthenticatedStickerLabRouteWithChildren
   '/telegram': typeof AuthenticatedTelegramRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/network/projects': typeof NetworkProjectsRoute
   '/network/': typeof NetworkIndexRoute
   '/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
   '/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
@@ -220,6 +227,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthenticatedSettingsRoute
   '/telegram': typeof AuthenticatedTelegramRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/network/projects': typeof NetworkProjectsRoute
   '/': typeof AuthenticatedIndexRoute
   '/network': typeof NetworkIndexRoute
   '/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
@@ -249,6 +257,7 @@ export interface FileRoutesById {
   '/_authenticated/sticker-lab': typeof AuthenticatedStickerLabRouteWithChildren
   '/_authenticated/telegram': typeof AuthenticatedTelegramRoute
   '/auth_/callback': typeof AuthCallbackRoute
+  '/network/projects': typeof NetworkProjectsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/network/': typeof NetworkIndexRoute
   '/_authenticated/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
@@ -279,6 +288,7 @@ export interface FileRouteTypes {
     | '/sticker-lab'
     | '/telegram'
     | '/auth/callback'
+    | '/network/projects'
     | '/network/'
     | '/sticker-lab/$packId'
     | '/sticker-lab/new'
@@ -303,6 +313,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/telegram'
     | '/auth/callback'
+    | '/network/projects'
     | '/'
     | '/network'
     | '/sticker-lab/$packId'
@@ -331,6 +342,7 @@ export interface FileRouteTypes {
     | '/_authenticated/sticker-lab'
     | '/_authenticated/telegram'
     | '/auth_/callback'
+    | '/network/projects'
     | '/_authenticated/'
     | '/network/'
     | '/_authenticated/sticker-lab/$packId'
@@ -508,6 +520,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NetworkIndexRouteImport
       parentRoute: typeof NetworkRoute
     }
+    '/network/projects': {
+      id: '/network/projects'
+      path: '/projects'
+      fullPath: '/network/projects'
+      preLoaderRoute: typeof NetworkProjectsRouteImport
+      parentRoute: typeof NetworkRoute
+    }
     '/_authenticated/sticker-lab/': {
       id: '/_authenticated/sticker-lab/'
       path: '/'
@@ -596,10 +615,12 @@ const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
 interface NetworkRouteChildren {
+  NetworkProjectsRoute: typeof NetworkProjectsRoute
   NetworkIndexRoute: typeof NetworkIndexRoute
 }
 
 const NetworkRouteChildren: NetworkRouteChildren = {
+  NetworkProjectsRoute: NetworkProjectsRoute,
   NetworkIndexRoute: NetworkIndexRoute,
 }
 
