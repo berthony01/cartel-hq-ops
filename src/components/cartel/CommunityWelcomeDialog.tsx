@@ -145,6 +145,14 @@ export function CommunityWelcomeDialog({
         setCtaShowWebsite(s.launch_watch_show_website !== false);
         setCtaShowTelegram(s.launch_watch_show_telegram === true);
         setCtaShowX(s.launch_watch_show_x !== false);
+        setCtaLifetime(
+          LAUNCH_WATCH_CTA_LIFETIMES.includes(
+            Number(s.launch_watch_cta_auto_delete_seconds) as (typeof LAUNCH_WATCH_CTA_LIFETIMES)[number],
+          )
+            ? Number(s.launch_watch_cta_auto_delete_seconds)
+            : LAUNCH_WATCH_CTA_LIFETIME_DEFAULT,
+        );
+
         setEligibleLaunches(Array.isArray(result.eligibleLaunches) ? result.eligibleLaunches : []);
         setCanManage(result.canManage === true);
         setDirty(false);
