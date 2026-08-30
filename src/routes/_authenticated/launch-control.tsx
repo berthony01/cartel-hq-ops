@@ -995,11 +995,18 @@ function LaunchControlPage() {
                           size="sm"
                           variant="secondary"
                           className="min-h-11"
-                          onClick={() => {
-                            void navigator.clipboard
-                              ?.writeText(watchLink!)
-                              .then(() => toast.success("Launch Watch link copied"))
-                              .catch(() => toast.error("Could not copy the link"));
+                          onClick={async () => {
+                            const write = navigator.clipboard?.writeText;
+                            if (!write) {
+                              toast.error("Clipboard access is unavailable. Copy the link manually.");
+                              return;
+                            }
+                            try {
+                              await navigator.clipboard.writeText(watchLink!);
+                              toast.success("Launch Watch link copied");
+                            } catch {
+                              toast.error("Could not copy the link. Copy it manually.");
+                            }
                           }}
                         >
                           <Copy className="size-4" aria-hidden="true" />
