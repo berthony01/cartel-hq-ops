@@ -256,7 +256,11 @@ export function CommunityWelcomeDialog({
       const base = result.autoDeleteSeconds
         ? `Test welcome posted in ${group.title}. The bot removes it in ${result.autoDeleteSeconds}s.`
         : `Test welcome posted in ${group.title}.`;
-      if (savedEnabled) toast.success(base);
+      const withCta = result.launchWatchCtaIncluded
+        ? `${base} A separate Launch Watch card was posted and expires after ${formatLaunchWatchCtaLifetime(result.launchWatchCtaAutoDeleteSeconds ?? LAUNCH_WATCH_CTA_LIFETIME_DEFAULT)}.`
+        : base;
+      if (savedEnabled) toast.success(withCta);
+
       else
         toast.warning(
           `${base} This was a preview only. Real join welcomes are OFF, so new members receive nothing.`,
