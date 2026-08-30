@@ -38,17 +38,21 @@ function LaunchesDirectory() {
   const [chainInput, setChainInput] = useState("");
   const [search, setSearch] = useState("");
   const [chain, setChain] = useState("");
-  const [pages, setPages] = useState(1);
-
-  const limit = Math.min(NETWORK_PAGE_SIZE * pages, NETWORK_MAX_PAGE_LIMIT);
+  const [page, setPage] = useState(0);
+  const offset = page * NETWORK_PAGE_SIZE;
 
   const query = useQuery({
-    queryKey: networkKeys.upcoming({ search, chain, limit, offset: 0 }),
-    queryFn: () => fetchNetworkUpcomingLaunches({ search, chain, limit, offset: 0 }),
+    queryKey: networkKeys.upcoming({ search, chain, limit: NETWORK_PAGE_SIZE, offset }),
+    queryFn: () =>
+      fetchNetworkUpcomingLaunches({ search, chain, limit: NETWORK_PAGE_SIZE, offset }),
     placeholderData: keepPreviousData,
   });
 
   const rows: NetworkUpcomingLaunch[] = query.data?.rows ?? [];
+  const total = query.data?.totalCount ?? 0;
+  const rangeStart = rows.length > 0 ? offset + 1 : 0;
+  const rangeEnd = offset + rows.length;
+  const hasNext = rangeEnd < total;
   const total = query.data?.totalCount ?? 0;
 
   function applyFilters(e: React.FormEvent) {
