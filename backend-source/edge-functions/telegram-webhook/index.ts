@@ -542,8 +542,65 @@ Deno.serve(async (req: Request) => {
     const memberUpdate = update?.my_chat_member;
     if (memberUpdate?.chat?.id != null) {
       const chatId = String(memberUpdate.chat.id), status = String(memberUpdate.new_chat_member?.status ?? ""), actor = memberUpdate.from;
-      const { data: existing } = await admin.from("telegram_group_connections").select("id,metadata").eq("telegram_chat_id", chatId).maybeSingle();
+      const { data: existing } = await admin.from("telegram_group_connections").select("id,title,metadata,connected_by").eq("telegram_chat_id", chatId).maybeSingle();
       if (existing?.id) {
+        const prior = existing.metadata && typeof existing.metadata === "object" ? existing.metadata as Record<string, unknown> : {};
+        const nowIso = new Date().toISOString();
+        const botRemoved = status === "left" || status === "kicked";
+
+        // Bot removal is an expected community lifecycle event, never an error.
+        // The connection row, its settings and its history are always preserved.
+        if (botRemoved) {
+          const priorStatus = String(prior.last_member_status ?? "");
+          const alreadyRemoved = (priorStatus === "left" || priorStatus === "kicked") && Boolean(prior.bot_removed_at);
+          await admin.from("telegram_group_connections").update({
+            bot_is_admin: false,
+            can_set_sticker_set: false,
+            verified_at: nowIso,
+            metadata: {
+              ...prior,
+              last_member_status: status,
+              bot_can_change_info: false,
+              official_group_sticker_eligible: false,
+              bot_removed_at: alreadyRemoved ? prior.bot_removed_at : nowIso,
+              bot_removed_reason: status,
+            },
+          }).eq("id", existing.id);
+
+          // Pause ONLY currently enabled drops for this community.
+          try {
+            await admin.from("sticker_drop_schedules")
+              .update({ enabled: false, paused_reason: "bot_removed" })
+              .eq("group_connection_id", existing.id)
+              .eq("enabled", true);
+          } catch (e) {
+            console.error("[telegram-webhook] pause drops", e instanceof Error ? e.message : "unknown");
+          }
+
+          // Best-effort DM to the Cartel HQ user who connected the community.
+          if (!alreadyRemoved && existing.connected_by) {
+            try {
+              const { data: conn } = await admin.from("telegram_connections").select("telegram_user_id").eq("user_id", existing.connected_by).maybeSingle();
+              const dmChatId = conn?.telegram_user_id ? String(conn.telegram_user_id) : "";
+              if (dmChatId) {
+                const title = escapeHtml(String(existing.title ?? "your community"));
+                await sendMessage(
+                  TELEGRAM_BOT_TOKEN,
+                  dmChatId,
+                  `⚠️ <b>@${BOT_USERNAME} was removed from ${title}.</b>\n\n` +
+                  `Community automations that need bot access (Sticker Drops, welcomes, native sticker delivery) are now <b>paused</b> for that community.\n\n` +
+                  `Your CARTEL HQ account, workspace and saved settings remain active. Nothing was cancelled and no billing change occurred. You can keep using CARTEL HQ without the bot.\n\n` +
+                  `Whenever you are ready, re-add the bot as an administrator and reconnect the community. Your paused settings resume from where they left off.`,
+                  { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "🏘️ Re-add bot to a community", url: GROUP_INSTALL_URL }]] } },
+                );
+              }
+            } catch (e) {
+              console.error("[telegram-webhook] removal DM", e instanceof Error ? e.message : "unknown");
+            }
+          }
+          return json({ ok: true });
+        }
+
         let botIsAdmin = status === "administrator" || status === "creator", canSet = false, botCanChangeInfo = false, memberCount: number | null = null, resolvedChatType = String(memberUpdate.chat?.type ?? "");
         if (botIsAdmin) {
           try {
@@ -559,11 +616,32 @@ Deno.serve(async (req: Request) => {
             memberCount = typeof countRaw === "number" ? countRaw : null;
           } catch { canSet = false; }
         }
-        const prior = existing.metadata && typeof existing.metadata === "object" ? existing.metadata : {};
         const officialReason = canSet ? null : resolvedChatType !== "supergroup" ? "requires_supergroup" : "not_reported";
-        await admin.from("telegram_group_connections").update({ chat_type: resolvedChatType || "group", bot_is_admin: botIsAdmin, can_set_sticker_set: canSet, verified_at: new Date().toISOString(), metadata: { ...prior, last_member_status: status, bot_can_change_info: botCanChangeInfo, member_count: memberCount, official_group_sticker_min_members: null, official_group_sticker_eligible: canSet, official_group_sticker_reason: officialReason } }).eq("id", existing.id);
+        const restored = botIsAdmin && botCanChangeInfo;
+        const nextMeta: Record<string, unknown> = { ...prior, last_member_status: status, bot_can_change_info: botCanChangeInfo, member_count: memberCount, official_group_sticker_min_members: null, official_group_sticker_eligible: canSet, official_group_sticker_reason: officialReason };
+        if (restored) { nextMeta.bot_removed_at = null; nextMeta.bot_removed_reason = null; }
+        await admin.from("telegram_group_connections").update({ chat_type: resolvedChatType || "group", bot_is_admin: botIsAdmin, can_set_sticker_set: canSet, verified_at: nowIso, metadata: nextMeta }).eq("id", existing.id);
+
+        // Restore ONLY schedules this system paused. Manually disabled ones stay off.
+        if (restored) {
+          try {
+            const { data: paused } = await admin.from("sticker_drop_schedules").select("id,interval_minutes").eq("group_connection_id", existing.id).eq("paused_reason", "bot_removed");
+            for (const row of paused ?? []) {
+              const minutes = Number((row as any).interval_minutes) > 0 ? Number((row as any).interval_minutes) : 60;
+              await admin.from("sticker_drop_schedules").update({
+                enabled: true,
+                paused_reason: null,
+                consecutive_failures: 0,
+                next_run_at: new Date(Date.now() + minutes * 60_000).toISOString(),
+              }).eq("id", (row as any).id);
+            }
+          } catch (e) {
+            console.error("[telegram-webhook] restore drops", e instanceof Error ? e.message : "unknown");
+          }
+        }
         return json({ ok: true });
       }
+
 
       const link = actor?.id ? await findPendingGroupLink(String(actor.id)) : null;
       const becameAdmin = status === "administrator" || status === "creator";
