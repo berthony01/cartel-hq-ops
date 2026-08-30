@@ -564,13 +564,19 @@ export function CommunityWelcomeDialog({
               <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground">
                 {preview}
               </p>
+              {buttonSummary ? (
+                <p className="mt-2 text-[11px] leading-relaxed text-gold">{buttonSummary}</p>
+              ) : null}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
                 className="min-h-11"
-                disabled={!canManage || saving || invalidMessage || invalidSeconds}
+                disabled={
+                  !canManage || saving || invalidMessage || invalidSeconds || ctaSelectionInvalid
+                }
+
                 onClick={() => void handleSave()}
               >
                 {saving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
