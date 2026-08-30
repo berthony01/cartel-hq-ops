@@ -56,8 +56,13 @@ export type TelegramGroupStatusResult = {
   officialStickerEligible?: boolean;
   officialStickerReason?: OfficialStickerReason;
   currentStickerSetName?: string | null;
+  /** Recoverable lifecycle state: the bot is no longer in the community. */
+  reconnectRequired?: boolean;
+  connectionState?: "bot_removed" | (string & {});
+  memberStatus?: string;
   message?: string;
   technical?: string;
+
 };
 
 export type TelegramAssignPackResult = {
