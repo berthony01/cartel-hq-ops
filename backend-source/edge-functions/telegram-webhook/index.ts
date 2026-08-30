@@ -667,6 +667,43 @@ Deno.serve(async (req: Request) => {
         await sendMessage(TELEGRAM_BOT_TOKEN, callbackChatId, messageText, { parse_mode: "HTML", reply_markup: betaKeyboard(!linked?.user_id) });
         return json({ ok: true });
       }
+      const lwUnwatch = callbackData.match(/^lw_unwatch_([a-f0-9]{24})$/);
+      const lwRewatch = callbackData.match(/^lw_rewatch_([a-f0-9]{24})$/);
+      if (lwUnwatch || lwRewatch) {
+        const token = String(lwUnwatch?.[1] ?? lwRewatch?.[1]);
+        const resolved = await resolveLaunchWatch(token);
+        if (!resolved) {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "This Launch Watch link is no longer available.");
+          return json({ ok: true });
+        }
+        const { launch, profile } = resolved;
+        const telegramUserId = Number(from.id);
+        if (lwUnwatch) {
+          await launchWatchUnsubscribe(launch.id, telegramUserId);
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "You stopped watching this launch.");
+          const text = `${launchWatchIntro(launch, profile)}\n\n🔕 You are no longer watching this launch. You can start watching again at any time.`;
+          if (callback.message?.message_id) {
+            await editMessage(TELEGRAM_BOT_TOKEN, callbackChatId, Number(callback.message.message_id), text, launchWatchKeyboard(token, false));
+          } else {
+            await sendMessage(TELEGRAM_BOT_TOKEN, callbackChatId, text, { parse_mode: "HTML", reply_markup: launchWatchKeyboard(token, false) });
+          }
+          return json({ ok: true });
+        }
+        const blocked = launchWatchGate(launch, profile);
+        if (blocked) {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, blocked);
+          return json({ ok: true });
+        }
+        await launchWatchSubscribe(launch.id, telegramUserId);
+        await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "You're watching this launch again.");
+        const text = `${launchWatchIntro(launch, profile)}\n\n🔔 You are watching this launch again.${launchWatchDisclaimer}`;
+        if (callback.message?.message_id) {
+          await editMessage(TELEGRAM_BOT_TOKEN, callbackChatId, Number(callback.message.message_id), text, launchWatchKeyboard(token, true));
+        } else {
+          await sendMessage(TELEGRAM_BOT_TOKEN, callbackChatId, text, { parse_mode: "HTML", reply_markup: launchWatchKeyboard(token, true) });
+        }
+        return json({ ok: true });
+      }
       return json({ ok: true });
     }
 
