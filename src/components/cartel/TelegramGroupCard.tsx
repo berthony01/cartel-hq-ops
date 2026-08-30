@@ -50,6 +50,8 @@ export type GroupReadiness = {
   memberCount: number | null;
   officialStickerEligible: boolean;
   officialStickerReason: string | null;
+  /** Bot removed from the community — recoverable, account stays intact. */
+  botRemoved: boolean;
   ready: boolean;
 
 };
@@ -105,7 +107,15 @@ function readinessFor(
   const officialStickerReason = rawReason === "minimum_members" ? "not_reported" : rawReason;
 
 
-  const ready = live?.ready ?? (supportedChatType && botAdmin && botCanChangeInfo !== false);
+  const storedStatus = typeof meta?.last_member_status === "string" ? meta.last_member_status : null;
+  const botRemoved =
+    live?.connectionState === "bot_removed" ||
+    live?.reconnectRequired === true ||
+    ((storedStatus === "left" || storedStatus === "kicked") && group.bot_is_admin === false);
+
+  const ready = botRemoved
+    ? false
+    : (live?.ready ?? (supportedChatType && botAdmin && botCanChangeInfo !== false));
 
   return {
     group,
@@ -120,7 +130,7 @@ function readinessFor(
     memberCount,
     officialStickerEligible,
     officialStickerReason,
-
+    botRemoved,
     ready: !!ready,
   };
 }
@@ -407,18 +417,26 @@ function GroupRow({
                   ? "Basic group"
                   : `Unsupported (${g.chat_type})`}
             </StatusBadge>
-            <StatusBadge tone={r.botAdmin ? "green" : "red"}>
-              {r.botAdmin ? "Bot admin" : "Bot not admin"}
+            <StatusBadge tone={r.botRemoved ? "red" : r.botAdmin ? "green" : "red"}>
+              {r.botRemoved ? "Bot removed" : r.botAdmin ? "Bot admin" : "Bot not admin"}
             </StatusBadge>
             {typeof r.memberCount === "number" ? (
               <StatusBadge tone="muted">{r.memberCount} members</StatusBadge>
             ) : null}
             <StatusBadge tone={r.ready ? "green" : "red"}>
-              {r.ready ? "Ready" : "Needs setup"}
+              {r.ready ? "Ready" : r.botRemoved ? "Reconnect required" : "Needs setup"}
             </StatusBadge>
           </div>
 
-          {!r.ready ? (
+          {r.botRemoved ? (
+            <p className="mt-2 rounded-md border border-signal/40 bg-signal/5 p-2.5 text-xs leading-relaxed text-signal">
+              CARTEL HQ detected that @PepeCartelHQBot was removed from this community.
+              Community automations that need bot access (Sticker Drops, welcomes, native sticker
+              delivery) are paused. Your CARTEL HQ account, workspace and this community's saved
+              settings are preserved — nothing was cancelled. Re-add the bot as an administrator with
+              the <strong>Change Group Info</strong> right, then re-check.
+            </p>
+          ) : !r.ready ? (
             <p className="mt-2 rounded-md border border-signal/40 bg-signal/5 p-2.5 text-xs leading-relaxed text-signal">
               In Telegram, make @PepeCartelHQBot an administrator with the{" "}
               <strong>Change Group Info</strong> right, or, if the bot is already installed, send{" "}

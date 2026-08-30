@@ -16,6 +16,10 @@ export type TelegramGroupConnectionMetadata = {
   official_group_sticker_eligible?: boolean | null;
   official_group_sticker_reason?: OfficialStickerReason;
   checked_at?: string | null;
+  /** Community lifecycle: set when @PepeCartelHQBot was removed from the chat. */
+  last_member_status?: string | null;
+  bot_removed_at?: string | null;
+  bot_removed_reason?: string | null;
   [key: string]: unknown;
 };
 
@@ -35,6 +39,8 @@ export type TelegramGroupConnection = {
 };
 
 
+
+
 export type TelegramGroupStatusResult = {
   bot?: TelegramBot;
   group?: TelegramGroupConnection | null;
@@ -50,12 +56,20 @@ export type TelegramGroupStatusResult = {
   officialStickerEligible?: boolean;
   officialStickerReason?: OfficialStickerReason;
   currentStickerSetName?: string | null;
+  /** Recoverable lifecycle state: the bot is no longer in the community. */
+  reconnectRequired?: boolean;
+  connectionState?: "bot_removed" | (string & {});
+  memberStatus?: string;
   message?: string;
   technical?: string;
+
 };
 
 export type TelegramAssignPackResult = {
   assigned: boolean;
+  /** Recoverable: the bot was removed from the community. */
+  reconnectRequired?: boolean;
+  connectionState?: string;
   /** Server posted the pack link into the group instead of assigning it. */
   announced?: boolean;
   reason?:
@@ -74,6 +88,8 @@ export type TelegramAssignPackResult = {
 
 export type TelegramGroupTestResult = {
   sent: boolean;
+  reconnectRequired?: boolean;
+  connectionState?: string;
   message?: string;
   technical?: string;
 };
@@ -286,6 +302,8 @@ export type TelegramWelcomeSettingsInput = {
 
 export type TelegramWelcomeTestResult = {
   sent: boolean;
+  reconnectRequired?: boolean;
+  connectionState?: string;
   messageId?: number | null;
   autoDeleteSeconds?: number | null;
   groupTitle?: string;
