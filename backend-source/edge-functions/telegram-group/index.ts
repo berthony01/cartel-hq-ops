@@ -277,9 +277,16 @@ Deno.serve(async (req: Request) => {
   } catch (err) {
     // Bot removal is a recoverable lifecycle state: always HTTP 200, never an
     // `error` field, so the app renders a reconnect prompt instead of a crash.
-    if (err instanceof BotRemovedError) {
+    const removed = err instanceof BotRemovedError
+      ? err
+      : (err instanceof Error && isBotRemovedMessage(err.message)
+        ? new BotRemovedError(await markGroupRemoved(await getGroup(), "kicked"), "kicked")
+        : null);
+    if (removed) {
+      const err = removed;
       return respond({
         connected: true,
+
         ready: false,
         reconnectRequired: true,
         connectionState: "bot_removed",
