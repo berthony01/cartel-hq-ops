@@ -6,3 +6,6 @@ verify_jwt = false
 [functions.launch-notifications]
 verify_jwt = false
 
+
+[functions.telegram-message-cleanup]
+verify_jwt = false
