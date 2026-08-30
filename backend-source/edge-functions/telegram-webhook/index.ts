@@ -214,12 +214,25 @@ const LAUNCH_STATUS_LABELS: Record<string, string> = {
  * - Active watcher: stop watching, plus a countdown-reminder toggle.
  * - Inactive watcher: "Watch again" is offered ONLY when the launch currently
  *   accepts sign-ups, so the button is never a dead end.
+ * - External links are the WATCHED PROJECT's official links only. This is a
+ *   multi-project platform: never fall back to PEPECARTEL links here.
  */
+function isHttpUrlValue(value: unknown): value is string {
+  if (typeof value !== "string" || !value.trim()) return false;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 function launchWatchKeyboard(
   token: string,
   watching: boolean,
   remindersEnabled: boolean,
   canRewatch: boolean,
+  profile?: { website_url?: unknown; telegram_url?: unknown; x_url?: unknown } | null,
 ) {
   const rows: Array<Array<Record<string, string>>> = [];
   if (watching) {
@@ -232,12 +245,14 @@ function launchWatchKeyboard(
   } else if (canRewatch) {
     rows.push([{ text: "🔔 Watch again", callback_data: `lw_rewatch_${token}` }]);
   }
-  rows.push([
-    { text: "💬 PEPECARTEL Community", url: PEPECARTEL_TELEGRAM },
-    { text: "𝕏 Follow on X", url: PEPECARTEL_X },
-  ]);
+  const links: Array<Record<string, string>> = [];
+  if (isHttpUrlValue(profile?.website_url)) links.push({ text: "🌐 Website", url: String(profile?.website_url).trim() });
+  if (isHttpUrlValue(profile?.telegram_url)) links.push({ text: "💬 Telegram", url: String(profile?.telegram_url).trim() });
+  if (isHttpUrlValue(profile?.x_url)) links.push({ text: "𝕏 X", url: String(profile?.x_url).trim() });
+  for (let i = 0; i < links.length; i += 2) rows.push(links.slice(i, i + 2));
   return { inline_keyboard: rows };
 }
+
 
 
 Deno.serve(async (req: Request) => {
