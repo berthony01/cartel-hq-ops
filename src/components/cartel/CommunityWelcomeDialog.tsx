@@ -457,14 +457,17 @@ export function CommunityWelcomeDialog({
             <div className="space-y-3 rounded-md border border-gold/40 bg-gold/5 p-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold">
-                  Launch Watch CTA
+                  Launch Watch card
                 </p>
                 <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                  Optional. Adds a public button to this welcome that opens the private
-                  @PepeCartelHQBot Launch Watch opt-in. Mute and stop-watching controls stay in the
-                  private DM and never appear in the group. This is only a route to opt-in launch
+                  Optional. This is sent as a SEPARATE compact card posted immediately after the
+                  welcome — it is not attached to the welcome message, and it has its own lifetime.
+                  Its button opens the private @PepeCartelHQBot Launch Watch opt-in. Mute and
+                  stop-watching controls stay in the private DM and never appear in the group. Any
+                  member who taps it opts themselves in. This is only a route to opt-in launch
                   notifications — it is not a safety, audit or approval signal.
                 </p>
+
               </div>
 
               <div className="flex min-h-11 items-center justify-between gap-3">
