@@ -432,7 +432,132 @@ export function CommunityWelcomeDialog({
               </div>
             ) : null}
 
+
+            <div className="space-y-3 rounded-md border border-gold/40 bg-gold/5 p-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold">
+                  Launch Watch CTA
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                  Optional. Adds a public button to this welcome that opens the private
+                  @PepeCartelHQBot Launch Watch opt-in. Mute and stop-watching controls stay in the
+                  private DM and never appear in the group. This is only a route to opt-in launch
+                  notifications — it is not a safety, audit or approval signal.
+                </p>
+              </div>
+
+              <div className="flex min-h-11 items-center justify-between gap-3">
+                <Label htmlFor={`welcome-cta-${group.id}`} className="text-xs">
+                  Include Launch Watch button
+                </Label>
+                <Switch
+                  id={`welcome-cta-${group.id}`}
+                  checked={ctaEnabled}
+                  disabled={!canManage || noEligibleLaunches}
+                  onCheckedChange={(v) => {
+                    setCtaEnabled(v === true);
+                    touch();
+                  }}
+                />
+              </div>
+
+              {noEligibleLaunches ? (
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  No eligible launches. A launch can be used here only once its Project Profile is
+                  Published and its watchlist is open (Watchlist Open, Launch Approaching, Contract
+                  Pending or Official Contract Registered).
+                </p>
+              ) : ctaEnabled ? (
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Launch</Label>
+                    <Select
+                      value={ctaLaunchId ?? ""}
+                      disabled={!canManage}
+                      onValueChange={(v) => {
+                        setCtaLaunchId(v || null);
+                        touch();
+                      }}
+                    >
+                      <SelectTrigger className="min-h-11 text-xs">
+                        <SelectValue placeholder="Select an eligible launch" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {eligibleLaunches.map((o) => (
+                          <SelectItem key={o.launchId} value={o.launchId} className="text-xs">
+                            {`${o.projectName} — ${o.tokenName} ($${o.ticker}) · ${o.chain} · ${o.status}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {ctaSelectionInvalid ? (
+                      <p className="text-[11px] leading-relaxed text-signal">
+                        The saved launch is no longer eligible for this community. Select an
+                        eligible launch or turn the CTA off before saving.
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    “🔔 Watch this launch” is always included while the CTA is on. Optional official
+                    link buttons appear only when the Project Profile has a valid link saved.
+                  </p>
+
+                  <div className="flex min-h-11 items-center justify-between gap-3">
+                    <Label htmlFor={`welcome-cta-web-${group.id}`} className="text-xs">
+                      Website button
+                    </Label>
+                    <Switch
+                      id={`welcome-cta-web-${group.id}`}
+                      checked={ctaShowWebsite}
+                      disabled={!canManage}
+                      onCheckedChange={(v) => {
+                        setCtaShowWebsite(v === true);
+                        touch();
+                      }}
+                    />
+                  </div>
+                  <div className="flex min-h-11 items-center justify-between gap-3">
+                    <Label htmlFor={`welcome-cta-tg-${group.id}`} className="text-xs">
+                      Official Telegram button
+                    </Label>
+                    <Switch
+                      id={`welcome-cta-tg-${group.id}`}
+                      checked={ctaShowTelegram}
+                      disabled={!canManage}
+                      onCheckedChange={(v) => {
+                        setCtaShowTelegram(v === true);
+                        touch();
+                      }}
+                    />
+                  </div>
+                  <div className="flex min-h-11 items-center justify-between gap-3">
+                    <Label htmlFor={`welcome-cta-x-${group.id}`} className="text-xs">
+                      X button
+                    </Label>
+                    <Switch
+                      id={`welcome-cta-x-${group.id}`}
+                      checked={ctaShowX}
+                      disabled={!canManage}
+                      onCheckedChange={(v) => {
+                        setCtaShowX(v === true);
+                        touch();
+                      }}
+                    />
+                  </div>
+
+                  {autoDelete ? (
+                    <p className="text-[11px] leading-relaxed text-gold">
+                      Auto-delete is on. The Launch Watch buttons disappear with the welcome message
+                      after {seconds}s.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
             <div className="rounded-md border border-border/60 bg-background/40 p-3">
+
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 Preview
               </p>
