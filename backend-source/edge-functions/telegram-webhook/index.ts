@@ -501,7 +501,7 @@ Deno.serve(async (req: Request) => {
     if (groupError || !groupRow) throw new Error(groupError?.message ?? "Could not save Telegram group connection.");
     await admin.from("telegram_link_requests").update({ status: "connected", consumed_at: now, telegram_user_id: actorId, metadata: { ...(link.metadata ?? {}), group_connection_id: groupRow.id, telegram_chat_id: chatId, group_title: groupRow.title, last_group_check: diagnostic } }).eq("id", link.id);
     await markGroupLinked(chatId, workspaceId);
-    await sendMessage(TELEGRAM_BOT_TOKEN, chatId, await systemMessage("community_connected", String(groupRow.title ?? ""), communityConnectedText), { parse_mode: "HTML" });
+    await sendMessage(TELEGRAM_BOT_TOKEN, chatId, await systemMessage("community_connected", String(groupRow.title ?? ""), communityConnectedText), { parse_mode: "HTML", reply_markup: groupAcquisitionKeyboard(chatId, false) });
 
     return { ok: true, groupRow };
   };
