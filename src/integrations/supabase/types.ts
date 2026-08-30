@@ -231,6 +231,39 @@ export type Database = {
           },
         ]
       }
+      platform_message_templates: {
+        Row: {
+          created_at: string
+          draft_body: string
+          draft_updated_at: string | null
+          key: string
+          published_at: string | null
+          published_body: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          draft_body: string
+          draft_updated_at?: string | null
+          key: string
+          published_at?: string | null
+          published_body?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          draft_body?: string
+          draft_updated_at?: string | null
+          key?: string
+          published_at?: string | null
+          published_body?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       platform_user_roles: {
         Row: {
           created_at: string
