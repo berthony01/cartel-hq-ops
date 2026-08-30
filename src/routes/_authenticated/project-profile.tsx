@@ -247,6 +247,8 @@ function ProjectProfilePage() {
     onSuccess: () => {
       toast.success(profile ? "Project profile saved" : "Project profile created");
       queryClient.invalidateQueries({ queryKey: ["project-profile", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: launchReadinessQueryKey(workspaceId) });
+
     },
     onError: (err: unknown) => {
       toast.error(err instanceof Error ? err.message : "Could not save the project profile.");
