@@ -18,6 +18,8 @@ import { Section } from "@/components/cartel/Section";
 import { InlineRow } from "@/components/cartel/InlineRow";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { EmptyState } from "@/components/cartel/EmptyState";
+import { LaunchReadinessPanel } from "@/components/cartel/LaunchReadiness";
+
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
