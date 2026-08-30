@@ -724,9 +724,19 @@ Deno.serve(async (req: Request) => {
         const { launch, profile } = resolved;
         const telegramUserId = Number(from.id);
         if (lwUnwatch) {
-          await launchWatchUnsubscribe(launch.id, telegramUserId);
-          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "You stopped watching this launch.");
-          const text = `${launchWatchIntro(launch, profile)}\n\n🔕 You are no longer watching this launch. You can start watching again at any time.`;
+          const outcome = await launchWatchUnsubscribe(launch.id, telegramUserId);
+          const answer =
+            outcome === "not_found"
+              ? "You were not watching this launch."
+              : outcome === "already_inactive"
+                ? "You had already stopped watching this launch."
+                : "You stopped watching this launch.";
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, answer);
+          const body =
+            outcome === "not_found"
+              ? "🔕 You are not currently watching this launch. You can start watching at any time."
+              : "🔕 You are no longer watching this launch. You can start watching again at any time.";
+          const text = `${launchWatchIntro(launch, profile)}\n\n${body}`;
           if (callback.message?.message_id) {
             await editMessage(TELEGRAM_BOT_TOKEN, callbackChatId, Number(callback.message.message_id), text, launchWatchKeyboard(token, false));
           } else {
