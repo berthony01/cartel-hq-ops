@@ -819,8 +819,12 @@ Deno.serve(async (req: Request) => {
       }
       const lwUnwatch = callbackData.match(/^lw_unwatch_([a-f0-9]{24})$/);
       const lwRewatch = callbackData.match(/^lw_rewatch_([a-f0-9]{24})$/);
-      if (lwUnwatch || lwRewatch) {
-        const token = String(lwUnwatch?.[1] ?? lwRewatch?.[1]);
+      const lnRemindersOff = callbackData.match(/^ln_reminders_off_([a-f0-9]{24})$/);
+      const lnRemindersOn = callbackData.match(/^ln_reminders_on_([a-f0-9]{24})$/);
+      if (lwUnwatch || lwRewatch || lnRemindersOff || lnRemindersOn) {
+        const token = String(
+          lwUnwatch?.[1] ?? lwRewatch?.[1] ?? lnRemindersOff?.[1] ?? lnRemindersOn?.[1],
+        );
         const resolved = await resolveLaunchWatch(token);
         if (!resolved) {
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "This Launch Watch link is no longer available.");
@@ -828,6 +832,57 @@ Deno.serve(async (req: Request) => {
         }
         const { launch, profile } = resolved;
         const telegramUserId = Number(from.id);
+        const rewatchAllowed = canRewatchNow(launch, profile);
+
+        const renderLaunchWatch = async (
+          text: string,
+          watching: boolean,
+          remindersEnabled: boolean,
+        ) => {
+          const markup = launchWatchKeyboard(token, watching, remindersEnabled, rewatchAllowed);
+          if (callback.message?.message_id) {
+            await editMessage(TELEGRAM_BOT_TOKEN, callbackChatId, Number(callback.message.message_id), text, markup);
+          } else {
+            await sendMessage(TELEGRAM_BOT_TOKEN, callbackChatId, text, { parse_mode: "HTML", reply_markup: markup });
+          }
+        };
+
+        if (lnRemindersOff || lnRemindersOn) {
+          const enable = Boolean(lnRemindersOn);
+          const existing = await readLaunchWatchRow(launch.id, telegramUserId);
+          if (!existing?.id || existing.is_active !== true) {
+            await answerCallback(
+              TELEGRAM_BOT_TOKEN,
+              callback.id,
+              "You are not currently watching this launch.",
+            );
+            return json({ ok: true });
+          }
+          // Enabling countdowns only makes sense while the launch can still
+          // produce them. Never claim success after that window has closed.
+          if (enable && !rewatchAllowed) {
+            await answerCallback(
+              TELEGRAM_BOT_TOKEN,
+              callback.id,
+              "Countdown reminders have ended for this launch.",
+            );
+            const endedText = `${launchWatchIntro(launch, profile)}\n\n⏳ Countdown reminders can no longer be enabled for this launch. You are still watching it.`;
+            await renderLaunchWatch(endedText, true, existing.reminders_enabled !== false);
+            return json({ ok: true });
+          }
+          await setLaunchWatchReminders(existing.id, enable, new Date().toISOString());
+          await answerCallback(
+            TELEGRAM_BOT_TOKEN,
+            callback.id,
+            enable ? "Countdown reminders enabled." : "Countdown reminders muted.",
+          );
+          const body = enable
+            ? "⏳ Countdown reminders are on. You will get the 24-hour and 1-hour reminders, plus the official-contract packet and the launch-live alert."
+            : "🔇 Countdown reminders are muted. You will still get the official-contract Verified Launch Packet and the launch-live alert while you are watching.";
+          await renderLaunchWatch(`${launchWatchIntro(launch, profile)}\n\n${body}`, true, enable);
+          return json({ ok: true });
+        }
+
         if (lwUnwatch) {
           const outcome = await launchWatchUnsubscribe(launch.id, telegramUserId);
           const answer =
@@ -839,31 +894,28 @@ Deno.serve(async (req: Request) => {
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, answer);
           const body =
             outcome === "not_found"
-              ? "🔕 You are not currently watching this launch. You can start watching at any time."
-              : "🔕 You are no longer watching this launch. You can start watching again at any time.";
-          const text = `${launchWatchIntro(launch, profile)}\n\n${body}`;
-          if (callback.message?.message_id) {
-            await editMessage(TELEGRAM_BOT_TOKEN, callbackChatId, Number(callback.message.message_id), text, launchWatchKeyboard(token, false));
-          } else {
-            await sendMessage(TELEGRAM_BOT_TOKEN, callbackChatId, text, { parse_mode: "HTML", reply_markup: launchWatchKeyboard(token, false) });
-          }
+              ? "🔕 You are not currently watching this launch. No Launch Watch messages will be sent to you."
+              : "🔕 You are no longer watching this launch. No further Launch Watch messages will be sent to you.";
+          await renderLaunchWatch(`${launchWatchIntro(launch, profile)}\n\n${body}`, false, true);
           return json({ ok: true });
         }
+
         const blocked = launchWatchGate(launch, profile);
         if (blocked) {
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, blocked);
           return json({ ok: true });
         }
-        await launchWatchSubscribe(launch.id, telegramUserId);
+        const rewatched = await launchWatchSubscribe(launch.id, telegramUserId);
         await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "You're watching this launch again.");
-        const text = `${launchWatchIntro(launch, profile)}\n\n🔔 You are watching this launch again.${launchWatchDisclaimer}`;
-        if (callback.message?.message_id) {
-          await editMessage(TELEGRAM_BOT_TOKEN, callbackChatId, Number(callback.message.message_id), text, launchWatchKeyboard(token, true));
-        } else {
-          await sendMessage(TELEGRAM_BOT_TOKEN, callbackChatId, text, { parse_mode: "HTML", reply_markup: launchWatchKeyboard(token, true) });
-        }
+        const packet =
+          String(launch.status) === "OFFICIAL_CONTRACT_REGISTERED"
+            ? verifiedLaunchPacket(launch, profile)
+            : "";
+        const text = `${launchWatchIntro(launch, profile)}\n\n🔔 You are watching this launch again.${launchWatchDisclaimer}${packet}`;
+        await renderLaunchWatch(text, true, rewatched.remindersEnabled);
         return json({ ok: true });
       }
+
       return json({ ok: true });
     }
 
