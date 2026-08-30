@@ -110,13 +110,15 @@ export function CommunityWelcomeDialog({
   const [autoDelete, setAutoDelete] = useState(true);
   const [seconds, setSeconds] = useState(45);
 
-  /** Phase 5.1 — optional public Launch Watch CTA. Off by default. */
+  /** Phase 5.1/5.2 — optional separate Launch Watch card. Off by default. */
   const [ctaEnabled, setCtaEnabled] = useState(false);
   const [ctaLaunchId, setCtaLaunchId] = useState<string | null>(null);
   const [ctaShowWebsite, setCtaShowWebsite] = useState(true);
   const [ctaShowTelegram, setCtaShowTelegram] = useState(false);
   const [ctaShowX, setCtaShowX] = useState(true);
+  const [ctaLifetime, setCtaLifetime] = useState<number>(LAUNCH_WATCH_CTA_LIFETIME_DEFAULT);
   const [eligibleLaunches, setEligibleLaunches] = useState<LaunchWatchCtaOption[]>([]);
+
 
   useEffect(() => {
     if (!open || !workspaceId) return;
