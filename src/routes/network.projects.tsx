@@ -12,7 +12,30 @@ import {
   networkKeys,
   type NetworkProjectCard,
 } from "@/lib/cartel-network";
-...
+
+const DESCRIPTION =
+  "Browse published projects on the Cartel Network, with their official links and current launch status.";
+
+export const Route = createFileRoute("/network/projects")({
+  head: () => ({
+    meta: [
+      { title: "Projects — Cartel Network" },
+      { name: "description", content: DESCRIPTION },
+      { property: "og:title", content: "Projects — Cartel Network" },
+      { property: "og:description", content: DESCRIPTION },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
+  component: NetworkProjectsPage,
+});
+
+function NetworkProjectsPage() {
+  const [searchInput, setSearchInput] = useState("");
+  const [chainInput, setChainInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [chain, setChain] = useState("");
+  const [pages, setPages] = useState(1);
   const limit = Math.min(NETWORK_PAGE_SIZE * pages, NETWORK_MAX_PAGE_LIMIT);
 
   const query = useQuery({
