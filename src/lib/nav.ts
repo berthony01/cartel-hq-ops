@@ -72,7 +72,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Missions", to: "/missions", icon: Target, status: "planned" },
       { label: "Operatives", to: "/operatives", icon: Users, status: "planned" },
       {
-        label: "Community Hub",
+        label: "Community Command",
         to: "/telegram",
         icon: MessageSquare,
         mobilePrimary: true,

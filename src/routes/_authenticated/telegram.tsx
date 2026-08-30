@@ -14,16 +14,16 @@ import {
 export const Route = createFileRoute("/_authenticated/telegram")({
   head: () => ({
     meta: [
-      { title: "Community Hub — CARTEL HQ" },
+      { title: "Community Command — CARTEL HQ" },
       {
         name: "description",
         content:
-          "Manage connected Telegram communities, welcome new members automatically, distribute sticker packs, and run Sticker Drops from one place.",
+          "Operator control center for connected Telegram communities. Manage onboarding, Sticker Drops, sticker distribution, and connection health from one place.",
       },
-      { property: "og:title", content: "Community Hub — CARTEL HQ" },
+      { property: "og:title", content: "Community Command — CARTEL HQ" },
       {
         property: "og:description",
-        content: "Manage connected Telegram communities, welcomes, sticker distribution, and Sticker Drops.",
+        content: "Operator control center for Telegram communities, onboarding, Sticker Drops, sticker distribution, and connection health.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -39,11 +39,11 @@ function TelegramPage() {
   const groupCount = groupSetup.connectedGroupCount;
 
   return (
-    <div className="flex max-w-3xl flex-col gap-4 sm:gap-6">
+    <div className="flex max-w-4xl flex-col gap-4 sm:gap-6">
       <PageHeader
-        eyebrow="Telegram"
-        title="Community Hub"
-        description="Every connected Telegram community lives here. Choose a community below, then open its Community controls to manage Welcome and onboarding, Sticker Drops, sticker distribution, and future community tools."
+        eyebrow="Community Operations"
+        title="Community Command"
+        description="The operator control center for every connected Telegram community. Manage connection health, welcome and onboarding, Sticker Drops, and sticker distribution from one place."
         status={groupCount > 0 ? "Connected · Live Beta" : "Live Beta"}
       />
 
@@ -74,15 +74,92 @@ function TelegramPage() {
 
       {groupCount > 0 ? (
         <div className="rounded-md border border-gold/30 bg-gold/5 p-3 text-xs leading-relaxed text-foreground">
-          <p className="font-semibold text-gold">Welcome and onboarding controls are available.</p>
+          <p className="font-semibold text-gold">Welcome & onboarding controls are available.</p>
           <p className="mt-1 text-muted-foreground">
-            Select a connected community, open Community controls, then choose Welcome and onboarding
-            to set the join message, member mention, and auto-delete timer. Each community must
-            explicitly enable its real join welcome. Until that switch is on for a community, new
-            members there receive nothing.
+            Select a connected community and open Community controls to set the join message,
+            member mention, and auto-delete timer. Each community must explicitly enable its real
+            join welcome before new members receive it.
           </p>
         </div>
       ) : null}
+
+      <Section
+        variant="surface"
+        title="Command overview"
+        actions={<StatusBadge tone="gold">Live Beta</StatusBadge>}
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge tone="green">Active</StatusBadge>
+              <span className="text-sm font-medium text-foreground">Connection health</span>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              Monitor connected communities and reconnect when the bot is removed or permissions change.
+            </p>
+          </div>
+
+          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge tone="green">Active</StatusBadge>
+              <span className="text-sm font-medium text-foreground">Welcome & onboarding</span>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              Set per-community join messages, optional member mention, and auto-delete timers.
+            </p>
+          </div>
+
+          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge tone="green">Active</StatusBadge>
+              <span className="text-sm font-medium text-foreground">Sticker Drops</span>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              Schedule and send native sticker announcements to connected communities.
+            </p>
+          </div>
+
+          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge tone="green">Active</StatusBadge>
+              <span className="text-sm font-medium text-foreground">Sticker distribution</span>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              Push published packs and test stickers to selected communities from Sticker Lab.
+            </p>
+          </div>
+
+          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3 opacity-80">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge tone="muted">Planned</StatusBadge>
+              <span className="text-sm font-medium text-foreground">Announcements</span>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              Broadcast text updates to connected communities.
+            </p>
+          </div>
+
+          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3 opacity-80">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge tone="muted">Planned</StatusBadge>
+              <span className="text-sm font-medium text-foreground">Launch Distribution</span>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              Distribute launch alerts and verified signals through connected communities.
+            </p>
+          </div>
+
+          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3 opacity-80 sm:col-span-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge tone="muted">Planned</StatusBadge>
+              <span className="text-sm font-medium text-foreground">Community Analytics</span>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              Track growth, engagement, and Sticker Drop outcomes across communities.
+            </p>
+          </div>
+        </div>
+      </Section>
 
       <TelegramGroupCard
         setup={groupSetup}
@@ -92,21 +169,88 @@ function TelegramPage() {
 
       <Section
         variant="surface"
-        title="Capabilities"
+        title="Community Command modules"
         actions={<StatusBadge tone="gold">Stickers &amp; community controls active</StatusBadge>}
       >
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          Each connected community has its own Community controls, starting with Welcome &amp;
-          onboarding: a public welcome message for new members, optional member mention and optional
-          auto-delete of the bot's own welcome. Publish, retry, refresh set status and send a native
-          test sticker from Sticker Lab Step 5.
-          Scheduled Sticker Drops are live: set them up per pack in Sticker Lab Review &amp;
-          Telegram, and manage every community and schedule in the Distribution Center. Both basic
-          Telegram groups and supergroups can receive pack announcements and native stickers.
-        </p>
-        <details className="mt-3 rounded-md border border-border/60 bg-background/40 p-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge tone="green">Live now</StatusBadge>
+              <span className="text-sm font-medium text-foreground">Welcome &amp; onboarding</span>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              Each community has its own Community controls for join messages, member mention, and
+              optional auto-delete of the bot's own welcome.
+            </p>
+          </div>
+
+          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge tone="green">Live now</StatusBadge>
+              <span className="text-sm font-medium text-foreground">Sticker Drops</span>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              Set up schedules per pack in Sticker Lab Review &amp; Telegram, then manage every
+              community and schedule in the Distribution Center.
+            </p>
+          </div>
+
+          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge tone="green">Live now</StatusBadge>
+              <span className="text-sm font-medium text-foreground">Sticker distribution</span>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              Publish, retry, refresh set status, and send native test stickers from Sticker Lab Step 5.
+              Both basic Telegram groups and supergroups can receive pack announcements and native stickers.
+            </p>
+          </div>
+
+          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge tone="green">Live now</StatusBadge>
+              <span className="text-sm font-medium text-foreground">Connection &amp; reconnect health</span>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              Detect bot removal, pause active schedules, and restore service when an administrator
+              re-adds the bot.
+            </p>
+          </div>
+
+          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3 opacity-80">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge tone="muted">Planned</StatusBadge>
+              <span className="text-sm font-medium text-foreground">Announcements</span>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              General community broadcasts beyond Sticker Drops.
+            </p>
+          </div>
+
+          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3 opacity-80">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge tone="muted">Planned</StatusBadge>
+              <span className="text-sm font-medium text-foreground">Launch Distribution</span>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              Launch alerts and verified project signals through connected communities.
+            </p>
+          </div>
+
+          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3 opacity-80 sm:col-span-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge tone="muted">Planned</StatusBadge>
+              <span className="text-sm font-medium text-foreground">Community Analytics</span>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              Growth, engagement, and Sticker Drop outcome reporting across communities.
+            </p>
+          </div>
+        </div>
+
+        <details className="mt-4 rounded-md border border-border/60 bg-background/40 p-3">
           <summary className="flex min-h-11 cursor-pointer list-none items-center text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Scope & limitations
+            Scope &amp; limitations
           </summary>
           <div className="mt-2 space-y-2 text-xs leading-relaxed text-muted-foreground">
             <p>
@@ -129,5 +273,3 @@ function TelegramPage() {
     </div>
   );
 }
-
-
