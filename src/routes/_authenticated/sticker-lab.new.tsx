@@ -2376,7 +2376,7 @@ function StickerLabBuilder() {
                     </p>
                     <p>
                       {confirmSuggest === "alternatives"
-                        ? `This asks for ${selectedConcepts.length} alternative${selectedConcepts.length === 1 ? "" : "s"} for the concepts you selected.`
+                        ? `This asks for ${(refreshTargetIds ?? selectedConcepts.map((c) => c.id)).length} alternative${(refreshTargetIds ?? selectedConcepts.map((c) => c.id)).length === 1 ? "" : "s"} for the concepts you selected.`
                         : `This asks for ${unlockedConcepts.length} idea${unlockedConcepts.length === 1 ? "" : "s"} for your unlocked concepts only.`}{" "}
                       Locked concepts are never sent for replacement.
                     </p>
