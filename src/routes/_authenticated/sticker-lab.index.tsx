@@ -428,11 +428,19 @@ function StickerLabHome() {
           <EmptyState
             compact
             icon={PackageOpen}
-            title={archived.length > 0 ? "No active sticker packs" : "No sticker packs yet"}
+            title={
+              archivedQuery.isSuccess && archived.length === 0
+                ? "No sticker packs yet"
+                : "No active sticker packs"
+            }
             description={
-              archived.length > 0
-                ? "Every pack in this project is archived. Archived packs are preserved below and can be restored at any time."
-                : "Packs you save in the builder are stored in this project and appear here."
+              archivedQuery.isLoading
+                ? "There are no active packs. Checking archived packs…"
+                : archivedQuery.isError
+                  ? "There are no active packs. Archived packs could not be checked right now."
+                  : archived.length > 0
+                    ? "Every pack in this project is archived. Archived packs are preserved below and can be restored at any time."
+                    : "Packs you save in the builder are stored in this project and appear here."
             }
             action={
               <Button asChild variant="outline" size="sm" className="mt-1 min-h-10">
