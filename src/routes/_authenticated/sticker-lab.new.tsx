@@ -1697,9 +1697,9 @@ function StickerLabBuilder() {
                       id="cd-rules"
                       className="mt-2 min-h-24"
                       placeholder="One per line — things this pack must always or never do"
-                      value={formatDirectionList(direction.packRules)}
-                      onChange={(e) =>
-                        updateDirection({ packRules: parseDirectionList(e.target.value) })
+                      defaultValue={direction.packRules.join("\n")}
+                      onBlur={(e) =>
+                        updateDirection({ packRules: parseDirectionList(e.currentTarget.value) })
                       }
                     />
                   </div>
