@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Cpu,
   CreditCard,
+  EyeOff,
   Layers,
   Loader2,
   Lock,
@@ -738,6 +739,8 @@ function AdminPage() {
       </Section>
 
       <ProjectVerificationSection />
+
+      <NetworkModerationSection />
 
       <Section
         leading={<Zap className="size-4" aria-hidden="true" />}
