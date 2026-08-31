@@ -421,7 +421,157 @@ function BrandKitPage() {
               </div>
             </Section>
 
+            <Section
+              variant="surface"
+              leading={<ShieldCheck className="size-4" aria-hidden="true" />}
+              title="Character Lock"
+              description="Defines the canonical character identity that Sticker Lab V2 reuses across packs — who the subject is, what must stay the same, and what must never appear. Saved here; current generation behaviour is unchanged."
+              actions={
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Switch
+                    checked={lockForm.enabled}
+                    onCheckedChange={(enabled) => setLockForm((l) => ({ ...l, enabled }))}
+                    aria-label="Enable Character Lock"
+                  />
+                  {lockForm.enabled ? "Active" : "Off"}
+                </label>
+              }
+            >
+              <div className="grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
+                <div>
+                  <Label htmlFor="lock_subject">Subject name</Label>
+                  <Input
+                    id="lock_subject"
+                    className="mt-2 min-h-11"
+                    placeholder="e.g. Pepe Capo"
+                    value={lockForm.subjectName}
+                    onChange={(e) => setLockForm((l) => ({ ...l, subjectName: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="lock_traits">Protected traits</Label>
+                  <Input
+                    id="lock_traits"
+                    className="mt-2 min-h-11"
+                    placeholder="green skin, gold chain, half-lidded eyes"
+                    aria-describedby="lock_traits_help"
+                    value={lockForm.protectedTraits}
+                    onChange={(e) =>
+                      setLockForm((l) => ({ ...l, protectedTraits: e.target.value }))
+                    }
+                  />
+                  <p id="lock_traits_help" className="mt-2 text-xs text-muted-foreground">
+                    Comma or newline separated.
+                  </p>
+                </div>
+                <div className="md:col-span-2">
+                  <Label htmlFor="lock_notes">Identity notes</Label>
+                  <Textarea
+                    id="lock_notes"
+                    rows={3}
+                    className="mt-2"
+                    placeholder="Short description of the character's build, face and attitude."
+                    value={lockForm.identityNotes}
+                    onChange={(e) => setLockForm((l) => ({ ...l, identityNotes: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="lock_wardrobe">Wardrobe &amp; accessories</Label>
+                  <Textarea
+                    id="lock_wardrobe"
+                    rows={3}
+                    className="mt-2"
+                    placeholder="pinstripe suit, fedora, cigar"
+                    value={lockForm.wardrobeAccessories}
+                    onChange={(e) =>
+                      setLockForm((l) => ({ ...l, wardrobeAccessories: e.target.value }))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="lock_never">Never change</Label>
+                  <Textarea
+                    id="lock_never"
+                    rows={3}
+                    className="mt-2"
+                    placeholder="no humans, no text, no alternate skin colour"
+                    value={lockForm.negativeConstraints}
+                    onChange={(e) =>
+                      setLockForm((l) => ({ ...l, negativeConstraints: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-medium text-foreground">Canonical references</h3>
+                  <span className="text-xs text-muted-foreground">
+                    {selectedCanonicalCount} of {MAX_CANONICAL_REFERENCES} selected
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Pick up to {MAX_CANONICAL_REFERENCES} files already in Asset Vault. Selecting
+                  here only records the reference — no file is uploaded or copied.
+                </p>
+                {assetsQuery.isLoading ? (
+                  <p className="mt-4 text-xs text-muted-foreground">Loading project references…</p>
+                ) : assetsQuery.isError ? (
+                  <p role="alert" className="mt-4 text-xs text-signal">
+                    Project references could not be loaded, so canonical selection is unavailable
+                    right now.
+                  </p>
+                ) : brandAssets.length === 0 ? (
+                  <p className="mt-4 text-xs text-muted-foreground">
+                    No logos, mascots or reference images in Asset Vault yet.
+                  </p>
+                ) : (
+                  <ul className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6 [&>*]:min-w-0">
+                    {brandAssets.map((asset: MediaAsset) => {
+                      const selected = lockForm.canonicalReferenceAssetIds.includes(asset.id);
+                      return (
+                        <li key={asset.id}>
+                          <button
+                            type="button"
+                            aria-pressed={selected}
+                            onClick={() => toggleCanonical(asset.id)}
+                            className={`w-full overflow-hidden rounded-md border p-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                              selected
+                                ? "border-gold bg-gold/10"
+                                : "border-border/70 hover:border-gold/40"
+                            }`}
+                          >
+                            <span className="flex aspect-square items-center justify-center overflow-hidden rounded-sm bg-background/40">
+                              {urls[asset.storage_path] ? (
+                                <img
+                                  src={urls[asset.storage_path]}
+                                  alt={`${asset.asset_type.replace("_", " ")} reference`}
+                                  className="max-h-full max-w-full object-contain"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground">Loading…</span>
+                              )}
+                            </span>
+                            <span className="mt-1 flex items-center justify-between gap-1">
+                              <span className="min-w-0 truncate text-[10px] uppercase tracking-wider text-muted-foreground">
+                                {asset.asset_type.replace("_", " ")}
+                              </span>
+                              {selected ? (
+                                <Check className="size-3 shrink-0 text-gold" aria-hidden="true" />
+                              ) : null}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </Section>
+
             <div className="hidden items-center gap-3 lg:flex">
+
               <Button
                 type="submit"
                 className="min-h-11"
