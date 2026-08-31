@@ -2867,6 +2867,53 @@ function StickerLabBuilder() {
                       onEditConcept={() => editConceptFromFailure(c.id)}
                     />
                   ) : null}
+                  {stickerId && (versionsBySticker[stickerId]?.length ?? 0) > 0 ? (
+                    <details className="mt-3 rounded-md border border-border bg-background/40 p-2">
+                      <summary className="flex min-h-9 cursor-pointer list-none items-center text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        Version history ({versionsBySticker[stickerId]!.length})
+                      </summary>
+                      <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+                        Previous successful images are kept for this sticker. Choosing an earlier
+                        version is coming in a later update.
+                      </p>
+                      <ul className="mt-2 space-y-2">
+                        {versionsBySticker[stickerId]!.map((v) => {
+                          const isCurrent =
+                            !!v.storagePath && v.storagePath === preview?.storagePath;
+                          return (
+                            <li key={v.id} className="flex min-w-0 items-center gap-2">
+                              <span
+                                className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded border border-border"
+                                style={CHECKERBOARD}
+                              >
+                                {v.previewUrl ? (
+                                  <img
+                                    src={v.previewUrl}
+                                    alt={`${c.label} version ${v.versionNumber}`}
+                                    className="max-h-full max-w-full object-contain"
+                                  />
+                                ) : null}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-[11px] text-foreground">
+                                  Version {v.versionNumber}
+                                </span>
+                                {v.unavailable ? (
+                                  <span className="block truncate text-[10px] text-muted-foreground">
+                                    Image unavailable
+                                  </span>
+                                ) : null}
+                              </span>
+                              {isCurrent ? (
+                                <StatusBadge tone="green">Current</StatusBadge>
+                              ) : null}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </details>
+                  ) : null}
+
                   {/* Batch selection: never offered for a sticker that already
                       has a usable image — those use Regenerate explicitly. */}
                   <label
