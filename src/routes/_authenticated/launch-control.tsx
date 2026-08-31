@@ -443,6 +443,15 @@ function LaunchControlPage() {
   });
   const watchSummary = watchSummaryQuery.data ?? null;
 
+  // Private confirmation diagnostics (aggregate-only, active watchers).
+  const confirmationSummaryQuery = useQuery({
+    queryKey: ["launch-watch-confirmation-summary", selected?.id ?? null],
+    enabled: !!selected?.id && !!watchToken,
+    queryFn: () => getLaunchWatchConfirmationSummary(selected!.id),
+  });
+  const confirmationSummary = confirmationSummaryQuery.data ?? null;
+  const confirmationStatsReady = confirmationSummaryQuery.isSuccess && !!confirmationSummary;
+
   // Notification engine (aggregate-only). Delivery rows and Telegram
   // identifiers are service-role state and are never fetched here.
   const notificationSummaryQuery = useQuery({
