@@ -106,14 +106,19 @@ function AssetsPage() {
   };
 
   const remove = async (asset: MediaAsset) => {
+    setDeleting(true);
     try {
       await deleteWorkspaceAsset(asset);
       toast.success("Asset deleted");
+      setPendingDelete(null);
       refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not delete the asset.");
+    } finally {
+      setDeleting(false);
     }
   };
+
 
   return (
     <div className="space-y-6 sm:space-y-8">
