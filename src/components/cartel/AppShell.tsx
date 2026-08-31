@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Menu, Search, Bell } from "lucide-react";
+import { Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { CartelMark, SidebarNav } from "@/components/cartel/SidebarNav";
@@ -29,23 +29,12 @@ function TopBar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
       </div>
 
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-        <div className="hidden items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm text-muted-foreground lg:flex">
-          <Search className="size-4" aria-hidden="true" />
-          <input
-            disabled
-            aria-label="Search (not available yet)"
-            placeholder="Search HQ…"
-            className="w-32 bg-transparent text-sm outline-none placeholder:text-muted-foreground/70 xl:w-56"
-          />
-        </div>
-        <Button variant="ghost" size="icon" disabled aria-label="Notifications (not available yet)">
-          <Bell className="size-5" />
-        </Button>
         <UserMenu />
       </div>
     </header>
   );
 }
+
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
