@@ -2859,9 +2859,10 @@ function StickerLabBuilder() {
               {!canPublish && !publishing && !allPublished ? (
                 <p className="text-xs text-muted-foreground">
                   Publishing needs: an available Telegram service, a connected Telegram community
-                  (use Connect Community above), at least one selected and verified group or supergroup (bot admin + Change Group Info), at
+                  (connect it in Community Command), at least one selected and verified group or supergroup (bot admin + Change Group Info), at
                   least one export-ready sticker, and all browser/cutout checks finished.
                 </p>
+
               ) : null}
 
             </CardContent>
