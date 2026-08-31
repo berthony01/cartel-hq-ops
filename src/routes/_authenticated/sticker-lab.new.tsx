@@ -1632,9 +1632,9 @@ function StickerLabBuilder() {
                     id="cd-tone"
                     className="mt-2 min-h-20"
                     placeholder="Comma or line separated — e.g. bold, playful, deadpan"
-                    value={formatDirectionList(direction.toneKeywords)}
-                    onChange={(e) =>
-                      updateDirection({ toneKeywords: parseDirectionList(e.target.value) })
+                    defaultValue={direction.toneKeywords.join("\n")}
+                    onBlur={(e) =>
+                      updateDirection({ toneKeywords: parseDirectionList(e.currentTarget.value) })
                     }
                   />
                 </div>
