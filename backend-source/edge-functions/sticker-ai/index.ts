@@ -452,7 +452,7 @@ Deno.serve(async (req: Request) => {
 
       const blueprint = parseBlueprint((pack as Record<string, unknown>).creative_blueprint);
       const characterLockApplied =
-        blueprint.useBrandCharacterLock === true && hasCharacterLockContent(blueprint.characterLock);
+        blueprint.useBrandCharacterLock === true && blueprint.characterLock !== null;
       const creativeDirectionApplied = hasCreativeDirectionContent(blueprint.creativeDirection);
 
       let refs: Array<{ id: string; storage_path: string; asset_type: string }> = [];
