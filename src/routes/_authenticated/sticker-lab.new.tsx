@@ -163,34 +163,6 @@ export const Route = createFileRoute("/_authenticated/sticker-lab/new")({
 
 const ACCEPTED = "image/png,image/jpeg,image/webp,image/gif";
 const REFERENCE_TYPES = ["mascot", "reference_image", "logo"] as const;
-const POLL_TIMEOUT_MS = 15 * 60 * 1000;
-
-type Stage =
-  | "idle"
-  | "saving"
-  | "starting"
-  | "generating"
-  | "background"
-  | "verifying"
-  | "ready"
-  | "failed"
-  | "replacement_failed"
-  | "timeout";
-
-const STAGE_LABEL: Record<Stage, string> = {
-  idle: "Not generated",
-  saving: "Saving pack…",
-  starting: "Starting…",
-  generating: "Generating",
-  background: "Background removal",
-  verifying: "Transparency check",
-  ready: "Ready",
-  failed: "Failed",
-  replacement_failed: "Replacement failed",
-  timeout: "Timed out",
-};
-
-type Preview = { url: string; transparencyValid: boolean; storagePath?: string };
 
 /** Action-scoped signed URL lifetime (seconds) for verify/download only. */
 const ACTION_URL_TTL = 300;
@@ -202,7 +174,6 @@ const CHECKERBOARD: React.CSSProperties = {
   backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
 };
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function StickerLabBuilder() {
   const { workspaceId, workspace } = useWorkspace();
