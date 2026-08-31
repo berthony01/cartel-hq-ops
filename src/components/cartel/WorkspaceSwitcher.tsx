@@ -118,22 +118,22 @@ export function WorkspaceSwitcher() {
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            aria-label="Workspace selector"
+            aria-label="Project selector"
             className="hidden min-h-10 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm text-muted-foreground transition-colors hover:border-gold/40 lg:flex"
           >
             <Building2 className="size-4 text-gold" aria-hidden="true" />
             <span className="max-w-40 truncate font-medium text-foreground">
-              {loading ? "Loading…" : (workspace?.name ?? "No workspace")}
+              {loading ? "Loading…" : (workspace?.name ?? "No project")}
             </span>
             <ChevronDown className="size-4" aria-hidden="true" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-60">
           <DropdownMenuLabel className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-            Workspaces
+            Projects
           </DropdownMenuLabel>
           {workspaces.length === 0 ? (
-            <DropdownMenuItem disabled>No workspaces yet</DropdownMenuItem>
+            <DropdownMenuItem disabled>No projects yet</DropdownMenuItem>
           ) : (
             workspaces.map((w) => (
               <DropdownMenuItem key={w.id} onSelect={() => selectWorkspace(w.id)}>
@@ -147,7 +147,7 @@ export function WorkspaceSwitcher() {
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setDialogOpen(true)}>
             <Plus className="size-4" aria-hidden="true" />
-            Create workspace
+            Add project
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
