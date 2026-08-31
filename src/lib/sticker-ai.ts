@@ -33,8 +33,40 @@ export type StickerAiSyncResult = {
 async function invoke<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke("sticker-ai", { body });
   if (error) {
+    // Supabase may surface a non-2xx Edge Function response as a FunctionsHttpError
+    // whose `.context` is the underlying Response. Inspect only safe JSON fields
+    // (error, code, message) and never echo headers, auth data, or provider payloads.
+    const context = (error as { context?: Response }).context;
+    let safeCode: string | undefined;
+    let safeMessage = error.message;
+    if (context) {
+      try {
+        const body = await context.clone().json();
+        if (body && typeof body === "object") {
+          const maybeCode =
+            typeof (body as { code?: unknown }).code === "string"
+              ? (body as { code: string }).code
+              : undefined;
+          const maybeError =
+            typeof (body as { error?: unknown }).error === "string"
+              ? (body as { error: string }).error
+              : undefined;
+          const maybeMessage =
+            typeof (body as { message?: unknown }).message === "string"
+              ? (body as { message: string }).message
+              : undefined;
+          safeCode = maybeCode || maybeError;
+          if (maybeMessage) safeMessage = maybeMessage;
+        }
+      } catch {
+        // Parsing failure must not mask the original error; fall through to safe fallback.
+      }
+    }
+    if (safeCode) {
+      throw new Error(`${safeCode}: ${safeMessage || "The sticker generation service is unavailable."}`);
+    }
     // Surface a user-safe message; never echo headers or provider payloads.
-    throw new Error(error.message || "The sticker generation service is unavailable.");
+    throw new Error(safeMessage || "The sticker generation service is unavailable.");
   }
   const payload = data as (T & { error?: string; code?: string }) | null;
   if (!payload) throw new Error("Empty response from the sticker generation service.");
