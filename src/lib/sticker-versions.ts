@@ -99,3 +99,77 @@ export async function loadStickerVersions(
 
   return grouped;
 }
+
+/* ------------------------------------------------------------------ */
+/* Set current version — server-authoritative RPC only                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Narrow status union for `public.set_sticker_current_version`.
+ *
+ * The browser NEVER updates `stickers.image_asset_id` directly. The RPC owns
+ * membership, version ownership, asset readiness, active-job and
+ * Telegram-state validation, and this wrapper only normalises its JSON.
+ */
+export type SetCurrentVersionStatus =
+  | "switched"
+  | "unchanged"
+  | "telegram_required"
+  | "active_generation"
+  | "version_unavailable"
+  | "asset_not_ready"
+  | "forbidden"
+  | "sticker_not_found"
+  | "unauthenticated"
+  | "unknown";
+
+export type SetCurrentVersionResult = {
+  status: SetCurrentVersionStatus;
+  /** Server-supplied detail, when present. Never rendered raw as a headline. */
+  message: string | null;
+  /** Raw payload, kept for diagnostics only. */
+  raw: unknown;
+};
+
+const KNOWN_STATUSES = new Set<SetCurrentVersionStatus>([
+  "switched",
+  "unchanged",
+  "telegram_required",
+  "active_generation",
+  "version_unavailable",
+  "asset_not_ready",
+  "forbidden",
+  "sticker_not_found",
+  "unauthenticated",
+]);
+
+function normalizeStatus(value: unknown): SetCurrentVersionStatus {
+  const s = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return KNOWN_STATUSES.has(s as SetCurrentVersionStatus)
+    ? (s as SetCurrentVersionStatus)
+    : "unknown";
+}
+
+/**
+ * Asks the server to make an existing history row the current sticker image.
+ * Read-only history loading above is unaffected. This performs no write of its
+ * own — the RPC is the single authority.
+ */
+export async function setCurrentStickerVersion(params: {
+  stickerId: string;
+  versionId: string;
+}): Promise<SetCurrentVersionResult> {
+  const { data, error } = await supabase.rpc("set_sticker_current_version", {
+    _sticker_id: params.stickerId,
+    _version_id: params.versionId,
+  });
+  if (error) throw error;
+
+  const payload = (data ?? null) as { status?: unknown; message?: unknown } | null;
+  const message =
+    payload && typeof payload.message === "string" && payload.message.trim()
+      ? payload.message.trim()
+      : null;
+  return { status: normalizeStatus(payload?.status), message, raw: data };
+}
+
