@@ -127,7 +127,7 @@ export function TrustNote({ className }: { className?: string }) {
 /** Small, restrained Platform Reviewed pill. Never a generic "verified" badge. */
 export function PlatformReviewedPill({ className }: { className?: string }) {
   return (
-    <StatusPill tone="gold" className={className}>
+    <StatusPill tone="gold" {...(className ? { className } : {})}>
       Platform Reviewed
     </StatusPill>
   );
