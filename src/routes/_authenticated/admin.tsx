@@ -1,4 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   Activity,
   AlertTriangle,
@@ -34,11 +36,125 @@ import {
 } from "@/components/cartel/TelegramConnectionCard";
 
 import {
+  fetchPlatformProjectVerifications,
+  projectVerificationKeys,
+  setPlatformProjectReview,
+  type PlatformProjectVerificationRow,
+} from "@/lib/project-verification";
+import {
   formatCost,
   formatCount,
   formatTimestamp,
   type PlatformDropScheduleDetail,
 } from "@/lib/platform";
+
+
+function ProjectVerificationSection() {
+  const queryClient = useQueryClient();
+  const directory = useQuery({
+    queryKey: projectVerificationKeys.platformDirectory(),
+    queryFn: fetchPlatformProjectVerifications,
+  });
+
+  const review = useMutation({
+    mutationFn: ({ id, reviewed }: { id: string; reviewed: boolean }) =>
+      setPlatformProjectReview(id, reviewed),
+    onSuccess: (_res, vars) => {
+      toast.success(vars.reviewed ? "Platform review recorded" : "Platform review revoked");
+      queryClient.invalidateQueries({ queryKey: ["project-verification"] });
+      queryClient.invalidateQueries({ queryKey: ["cartel-network"] });
+    },
+    onError: (err: unknown) => {
+      toast.error(
+        err instanceof Error ? err.message : "Could not update the platform review state.",
+      );
+    },
+  });
+
+  const rows: PlatformProjectVerificationRow[] = directory.data ?? [];
+
+  return (
+    <Section
+      leading={<BadgeCheck className="size-4" aria-hidden="true" />}
+      title="Project Verification"
+      description="Platform Reviewed is a review of the CURRENT project profile and its listed official links only. It automatically clears after material profile edits, and it never certifies token safety, contract code, liquidity, team identity or investment quality."
+    >
+      {directory.isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading project profiles…</p>
+      ) : directory.isError ? (
+        <div className="flex min-w-0 flex-col items-start gap-3">
+          <p className="text-sm text-muted-foreground">
+            {(directory.error as Error)?.message ??
+              "Project verification directory could not be loaded right now."}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="min-h-11"
+            onClick={() => void directory.refetch()}
+          >
+            Retry
+          </Button>
+        </div>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No project profiles exist yet.</p>
+      ) : (
+        <div className="flex min-w-0 flex-col gap-2">
+          {rows.map((row) => {
+            const pending = review.isPending && review.variables?.id === row.project_profile_id;
+            const meta = [
+              row.public_slug ? `/${row.public_slug}` : null,
+              row.ticker,
+              row.primary_chain,
+              row.workspace_name,
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            return (
+              <InlineRow
+                key={row.project_profile_id}
+                leading={<Layers className="size-4" aria-hidden="true" />}
+                title={row.project_name}
+                subtitle={meta}
+                trailing={
+                  <>
+                    <StatusBadge tone="muted">
+                      <span>{row.discovery_status}</span>
+                    </StatusBadge>
+                    <StatusBadge tone={row.platform_reviewed ? "gold" : "muted"}>
+                      <span>
+                        {row.platform_reviewed
+                          ? `Reviewed ${formatTimestamp(row.platform_reviewed_at)}`
+                          : "Not reviewed"}
+                      </span>
+                    </StatusBadge>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-h-11"
+                      disabled={pending}
+                      onClick={() =>
+                        review.mutate({
+                          id: row.project_profile_id,
+                          reviewed: !row.platform_reviewed,
+                        })
+                      }
+                    >
+                      {pending ? (
+                        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                      ) : null}
+                      {row.platform_reviewed ? "Revoke Platform Review" : "Mark Platform Reviewed"}
+                    </Button>
+                  </>
+                }
+              />
+            );
+          })}
+        </div>
+      )}
+    </Section>
+  );
+}
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
@@ -248,6 +364,8 @@ function AdminPage() {
           ) : null}
         </div>
       </Section>
+
+      <ProjectVerificationSection />
 
       <Section
         leading={<Zap className="size-4" aria-hidden="true" />}
