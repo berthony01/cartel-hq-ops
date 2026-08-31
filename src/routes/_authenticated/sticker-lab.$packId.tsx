@@ -125,15 +125,29 @@ function PackManagerPage() {
 
       <Section
         variant="hero"
-        title={published ? "Published to Telegram" : readyCount > 0 ? "Ready to publish" : "In progress"}
+        title={
+          published
+            ? "Published to Telegram"
+            : allReady
+              ? "Ready to publish"
+              : readyCount > 0
+                ? "Review in progress"
+                : "In progress"
+        }
         description={
           published
             ? "One Telegram sticker set exists for this pack. Publishing again only adds missing reviewed stickers; adding a community sends the same set."
-            : readyCount > 0
-              ? `${readyCount} of ${stickers.length} stickers are ready. Finish Review & Publish to create the Telegram sticker set.`
-              : "Keep generating and reviewing stickers in the builder before publishing."
+            : allReady
+              ? `${readyCount} of ${stickers.length} stickers are ready. Open Review & Publish to create the Telegram sticker set.`
+              : readyCount > 0
+                ? `${readyCount} of ${stickers.length} stickers are ready. Open Review & Publish to review what can be published and what still needs work.`
+                : "Keep generating and reviewing stickers in the builder before publishing."
         }
-        actions={<StatusBadge tone={published ? "green" : readyCount > 0 ? "gold" : "muted"}>{statusLabel}</StatusBadge>}
+        actions={
+          <StatusBadge tone={published ? "green" : allReady ? "gold" : "muted"}>
+            {statusLabel}
+          </StatusBadge>
+        }
       >
         <div className="flex flex-wrap gap-2 [&>*]:min-w-0">
           {readyCount > 0 ? (
