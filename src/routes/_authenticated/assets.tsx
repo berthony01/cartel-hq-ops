@@ -65,6 +65,9 @@ function AssetsPage() {
   const [uploadType, setUploadType] = useState<AssetType>("reference_image");
   const [filter, setFilter] = useState<AssetType | "all">("all");
   const [urls, setUrls] = useState<Record<string, string>>({});
+  const [pendingDelete, setPendingDelete] = useState<MediaAsset | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
 
   const assetsQuery = useQuery({
     queryKey: ["assets", workspaceId],
