@@ -2142,7 +2142,7 @@ function StickerLabBuilder() {
                         onChange={(e) => editConcept(c.id, { action: e.target.value })}
                       />
                     </div>
-                    <div className="flex items-end justify-between gap-3">
+                    <div className="flex flex-wrap items-end justify-between gap-3">
                       <div>
                         <Label htmlFor={`${c.id}-emoji`} className="text-xs">
                           Emoji
@@ -2166,6 +2166,81 @@ function StickerLabBuilder() {
                         Remove
                       </Button>
                     </div>
+
+                    <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="min-h-10"
+                        onClick={() => toggleConceptLock(c.id)}
+                        aria-pressed={c.locked ? "true" : "false"}
+                        aria-label={
+                          c.locked ? `Unlock concept ${i + 1}` : `Lock concept ${i + 1}`
+                        }
+                      >
+                        {c.locked ? (
+                          <LockOpen className="size-4" aria-hidden="true" />
+                        ) : (
+                          <Lock className="size-4" aria-hidden="true" />
+                        )}
+                        {c.locked ? "Unlock" : "Lock"}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="min-h-10"
+                        disabled={i === 0}
+                        onClick={() => moveConcept(i, -1)}
+                        aria-label={`Move concept ${i + 1} up`}
+                      >
+                        <ArrowUp className="size-4" aria-hidden="true" />
+                        Up
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="min-h-10"
+                        disabled={i === draft.concepts.length - 1}
+                        onClick={() => moveConcept(i, 1)}
+                        aria-label={`Move concept ${i + 1} down`}
+                      >
+                        <ArrowDown className="size-4" aria-hidden="true" />
+                        Down
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="min-h-10"
+                        disabled={draft.concepts.length >= draft.size}
+                        onClick={() => duplicateConcept(c.id)}
+                        aria-label={`Duplicate concept ${i + 1}`}
+                      >
+                        <Copy className="size-4" aria-hidden="true" />
+                        Duplicate
+                      </Button>
+                      <label className="ml-auto flex min-h-10 items-center gap-2 text-xs text-muted-foreground">
+                        <Checkbox
+                          checked={selectedForAlternatives.includes(c.id)}
+                          disabled={c.locked}
+                          onCheckedChange={(checked) =>
+                            setSelectedForAlternatives((s) =>
+                              checked === true
+                                ? s.includes(c.id)
+                                  ? s
+                                  : [...s, c.id]
+                                : s.filter((x) => x !== c.id),
+                            )
+                          }
+                          aria-label={`Select concept ${i + 1} for AI alternatives`}
+                        />
+                        Select for AI alternative
+                      </label>
+                    </div>
+
                   </div>
                 </details>
               </li>
