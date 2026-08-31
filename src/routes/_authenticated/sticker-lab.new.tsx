@@ -45,16 +45,13 @@ import {
   Download,
   FileArchive,
   ImagePlus,
-  Info,
   Loader2,
-  Pencil,
   Plus,
   RefreshCw,
   RotateCcw,
   Send,
   Sparkles,
   Trash2,
-  TriangleAlert,
   X,
 } from "lucide-react";
 
