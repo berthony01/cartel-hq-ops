@@ -389,7 +389,9 @@ function HqDashboard() {
                 <div className="min-w-0 space-y-3">
                   <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
                     <div className="min-w-0">
-                      <p className="type-meta text-gold">Active launch</p>
+                      <p className="type-meta text-gold">
+                        {status === "COMPLETED" ? "Latest launch" : "Active launch"}
+                      </p>
                       <h2 className="mt-1 min-w-0 font-display text-2xl uppercase leading-tight text-foreground [overflow-wrap:anywhere] sm:text-3xl">
                         {primaryLaunch.token_name}
                       </h2>
@@ -553,7 +555,9 @@ function HqDashboard() {
                     : "Connect a Telegram community to publish packs and welcome new members."
               }
               to="/telegram"
-              linkLabel={groupCount > 0 ? "Community Command" : "Connect a community"}
+              linkLabel={
+                telegramQuery.isError || groupCount > 0 ? "Community Command" : "Connect a community"
+              }
             />
             <SnapshotCard
               title="Sticker Lab"
