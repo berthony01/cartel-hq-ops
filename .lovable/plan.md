@@ -1,103 +1,119 @@
-# Phase 7A — My Watchlist (foundation) + Cartel Signals (read-only feed)
+# Phase 6.5K-B — Pack Lifecycle (Archive + Safe Delete)
 
-Planning only. Gate verified: HEAD `0776c808c694f3b468401efb95f3f2e4dfacbdf7`, clean tree. No files edited, no Supabase change made.
+Start gate assumed: `0aabfb064237b3a42dd67d37dea1297ccf54cab2`. Plan only — no edits, migrations, deploys, or data writes performed.
 
-## Current-state findings (verified this turn)
+## A. Schema change (single additive migration)
 
-- `launch_events` is a **notification delivery queue, not a project-event log**. Its CHECK constraint allows only `REMINDER_24H`, `REMINDER_1H`, `OFFICIAL_CONTRACT_REGISTERED`, `LAUNCH_LIVE`, `source` only `reminder_runner` / `lifecycle`. Rows are written by the lifecycle trigger and reminder runner, consumed by delivery, and the table is currently **empty** (0 rows) after prior QA cleanup. It cannot back a trustworthy Signals feed: no `ANNOUNCED`, no `WATCHLIST_OPEN`, no project-published event, and rows are operational/prunable.
-- `public.launches` already carries authoritative lifecycle timestamps: `announced_at`, `watchlist_opened_at`, `launch_approaching_at`, `contract_pending_at`, `contract_registered_at`, `live_at`, `completed_at`. These are durable, project-authenticated, and enough to derive Signals **without any new table**.
-- `project_profiles` has **no `published_at` column** — only `created_at` / `updated_at`. A truthful "Project published" signal is therefore not derivable today.
-- Public read model is already established: six `get_cartel_network_*` SECURITY DEFINER RPCs + `src/lib/cartel-network.ts` + shared cards in `src/components/cartel-network/NetworkPieces.tsx`. Signals should extend this pattern exactly, not create a parallel one.
-- `telegram_connections` maps `user_id → telegram_user_id` (1 row live). `launch_watch_subscriptions` has 2 rows, both active, and is fully locked to service-role (0 policies, all operations denied) — so browser access must go through a new SECURITY DEFINER RPC.
-- Hosting surfaces exist already: authenticated sidebar sections in `src/lib/nav.ts` (`Network` section) and the public `NetworkShell` nav.
+On `public.sticker_packs`:
 
-## Recommendation: build BOTH, but as two independent read-only surfaces
+- `archived_at timestamptz null`
+- `archived_by uuid null references public.profiles(id)`
+- partial index `on sticker_packs (workspace_id, updated_at desc) where archived_at is null`
 
-They share no state and no risk surface: My Watchlist is authenticated + user-scoped; Signals is public + derived from already-public data. Coupling them into one dashboard would mix privacy tiers. Ship them as two routes in one phase.
+Deliberately NOT adding `archived` to the existing `status` CHECK (`draft, generating, review, ready, publishing, published, failed`). Archive is orthogonal to lifecycle status: a pack must keep `published` so Telegram set identity and history stay truthful. Archive is a visibility/retirement flag only.
 
-## Authoritative data flow
+RLS change (server enforcement, requirement 10): drop the member-level DELETE policy on `sticker_packs` so no client can hard-delete directly. Deletion happens only through the SECURITY DEFINER path below. Archive/restore is also gated in the function, not by a broad UPDATE policy — the existing member UPDATE policy stays, but the migration adds a BEFORE UPDATE trigger that rejects direct changes to `archived_at`/`archived_by` unless performed by the definer function (guard via a session-local flag set inside the function).
 
-```text
-My Watchlist (authenticated)
-  browser (session) -> rpc get_my_launch_watchlist()
-      auth.uid() -> telegram_connections.telegram_user_id
-                 -> launch_watch_subscriptions (is_active)
-                 -> launches + project_profiles (published only)
-      returns launch cards + this user's own reminders_enabled flag
-      NEVER returns telegram_user_id, subscription id, other watchers, delivery rows
+No renames. No changes to any other table.
 
-Cartel Signals (public)
-  browser (anon or session) -> rpc get_cartel_network_signals(_limit,_offset,_chain)
-      launches join project_profiles where discovery_status='published'
-      unpivot lifecycle timestamps -> signal rows ordered by occurred_at desc
-      returns same public fields the Phase 6 RPCs already return
-```
+## B. Server operation design
 
-## Proposed DB changes (two new functions, no new tables, no RLS edits)
+Two SECURITY DEFINER RPCs plus one Edge Function, split by capability:
 
-1. `public.get_my_launch_watchlist()` — SECURITY DEFINER, `SET search_path = public`, `STABLE`, `GRANT EXECUTE TO authenticated` only.
-   Returns per active subscription: `launch_public_slug, token_name, ticker, chain, status, launch_at, launch_window_start, launch_window_end, timezone, official_contract_address, contract_registered_at, live_at, project_public_slug, project_name, project_primary_chain, has_logo, reminders_enabled, subscribed_at`.
-   Filtered to `is_active = true` and published project profiles. No `_user_id` parameter — identity comes from `auth.uid()` inside the function (no actor override).
-2. `public.get_cartel_network_signals(_limit int, _offset int, _chain text DEFAULT NULL)` — SECURITY DEFINER, `STABLE`, `GRANT EXECUTE TO anon, authenticated`, mirroring the existing network RPCs.
-   Signal types in 7A: `LAUNCH_ANNOUNCED`, `WATCHLIST_OPENED`, `OFFICIAL_CONTRACT_REGISTERED`, `LAUNCH_LIVE`, `LAUNCH_COMPLETED`, each with `occurred_at` from the corresponding launches timestamp, plus launch/project public identity fields and `total_count`.
-   **Excluded from 7A:** "Project published" (no truthful timestamp exists). Adding `project_profiles.published_at` is a separate, later change.
+1. `public.archive_sticker_pack(_pack_id uuid)` — RPC. Pure SQL work: verify `is_workspace_operator(workspace_id, auth.uid())`, set `archived_at/archived_by`, disable every `sticker_drop_schedules` row for the pack (`enabled=false`, `next_run_at=null`, `paused_reason='pack_archived'`). Atomic in one transaction. No storage involved, so an RPC is correct and cheapest.
+2. `public.restore_sticker_pack(_pack_id uuid)` — RPC. Operator check, clear `archived_at/archived_by`. Schedules stay disabled with `paused_reason='pack_archived'` retained until a human re-enables them (no silent resumption of recurring posting).
+3. `sticker-pack-delete` — Edge Function (`verify_jwt=true`). Hard delete needs storage-object removal, which SQL cannot do. Flow: authenticate caller → call a definer RPC `delete_sticker_pack_prepare(_pack_id)` that re-validates eligibility and returns the pack's owned `media_assets` rows (ids + storage paths) → remove those storage objects with the service-role client → call `delete_sticker_pack_commit(_pack_id, _asset_ids)` which deletes the `media_assets` rows and the pack row inside one transaction. Eligibility is re-checked in both RPCs so the UI can never bypass it.
 
-No changes to `launch_events`, `launch_notification_deliveries`, `launch_watch_subscriptions`, any RLS policy, any grant on an existing object, any Edge Function, cron, or secret.
+Canonical source under `backend-source/edge-functions/sticker-pack-delete/`, deployment mirror under `supabase/functions/sticker-pack-delete/`. Not deployed in the implementation run unless separately authorized.
 
-## Files likely to change
+## C. Eligibility rules
 
-- `supabase/migrations/<new>.sql` (via migration tool, one migration, two functions)
-- `src/integrations/supabase/types.ts` (regenerated after migration)
-- `src/lib/cartel-network.ts` — add signals types/keys/fetcher, reuse existing formatters
-- new `src/lib/watchlist.ts` — watchlist types/key/fetcher
-- new `src/routes/network.signals.tsx` — public Signals feed
-- new `src/routes/_authenticated/watchlist.tsx` — My Watchlist
-- `src/components/cartel-network/NetworkShell.tsx` — add `Signals` nav item
-- `src/lib/nav.ts` — add `My Watchlist` under the Network section (not mobile-primary)
-- `src/components/cartel-network/NetworkPieces.tsx` — add a `SignalRow` presentational piece (reuse `StatusPill`, `ProjectLogo`, `formatSchedule`)
+Permanent delete allowed only when ALL are true:
+- caller is workspace owner/admin (`is_workspace_operator`)
+- `sticker_packs.telegram_set_name is null` and `telegram_published_at is null`
+- `status not in ('published','publishing','generating')`
+- no `stickers` row with `telegram_file_id is not null`
+- zero rows in `sticker_pack_group_targets` for the pack
+- zero rows in `sticker_drop_schedules` for the pack
+- zero rows in `sticker_drop_events` for the pack
+- `archived_at is null` (archived packs are restored first, then deleted, if still eligible)
 
-## Navigation
+Anything failing the above is archive-only. Archive requires operator role and `archived_at is null`. Restore requires operator role and `archived_at is not null`.
 
-- Public: `/network/signals`, added to `NetworkShell` nav after `Upcoming Launches`.
-- Authenticated: `/watchlist`, sidebar `Network` section, label `My Watchlist`.
-- Both are leaf routes with their own `head()` metadata; Signals is a public SSR route calling a public RPC (no bearer needed).
+## D. Media/storage cleanup boundary
 
-## Privacy and security rules
+Only assets exclusively owned by the pack are removed:
+- `media_assets` rows referenced by `stickers.image_asset_id` for stickers of this pack, restricted to `asset_type = 'generated_sticker'` and same `workspace_id`.
 
-- No Telegram user IDs, subscription IDs, chat IDs, workspace IDs, user IDs, delivery/confirmation rows, or storage paths in any browser response.
-- My Watchlist shows only the caller's own subscriptions; there is no parameter that can name another user.
-- No cross-user watcher counts on the watchlist cards (aggregates stay in Launch Control).
-- Signals reads only published project profiles, same visibility rule as Phase 6.
-- Copy rules: Signals is described as "official project and launch events published by authenticated projects." No buy/sell/pump/price/market language, no safety or endorsement claim; reuse `NETWORK_TRUST_COPY`.
-- Telegram Launch Watch opt-in stays canonical — 7A adds **no** web watch/favorite/follow mechanism. Empty watchlist directs the user to the Cartel Network to watch via the bot.
+Explicitly excluded: `sticker_packs.reference_asset_id`, any Brand Kit logo/mascot/reference asset, `project_profiles.logo_asset_id`, and any asset referenced by a sticker outside this pack (checked with a NOT EXISTS guard). Storage objects are removed by exact `storage_path` returned from the DB — never by prefix listing.
 
-## Loading / error / empty states (truthfulness rules from 6.5Q)
+## E. Sticker Drops on archive/restore
 
-- Distinct `isLoading`, `isError` (message + Retry calling `refetch()`), and genuine-zero branches on every query. Never render "nothing here" while a query is loading or failed.
-- My Watchlist has a distinct **"No Telegram account connected"** state (linking to Community Command / connection flow) separate from **"Connected, but not watching any launch yet."**
-- Signals paginates with the existing `NETWORK_PAGE_SIZE`/`total_count` pattern; filtered-zero says "No signals match this filter," not "No signals yet."
+Archive: all schedules for the pack are set `enabled=false`, `next_run_at=null`, `paused_reason='pack_archived'` in the same transaction as the archive flag. The existing `validate_sticker_drop_schedule` trigger already nulls `next_run_at` when disabled, so the runner cannot pick them up. `sticker_drop_events` history is untouched.
 
-## Verification
+Restore: schedules stay disabled with the reason preserved; the UI shows "Sticker Drops for this pack were paused when it was archived — re-enable them in Sticker Drops." No automatic resumption.
 
-- `bunx tsgo --noEmit` and `bun run build`.
-- Read-only SQL: confirm both functions are `SECURITY DEFINER` with pinned `search_path`, and that EXECUTE grants are exactly `authenticated` (watchlist) and `anon, authenticated` (signals).
-- Live data check against the one real connected user: `get_my_launch_watchlist()` returns their active subscriptions and no identity columns; confirm the returned column list contains no `telegram_user_id`.
-- Negative check: calling `get_my_launch_watchlist()` with no session returns zero rows (fail-closed, not an error leak).
-- Browser check of `/network/signals` and `/watchlist` including loading, error (forced), and empty states.
-- CARTEL HQ stays unpublished; no Edge Function deploy.
+Optional guard (recommended, additive): extend `validate_sticker_drop_schedule` to raise when enabling a schedule whose pack is archived.
 
-## Prohibited scope
+## F. UI changes
 
-No new tables; no changes to Launch Watch subscribe/unsubscribe, notifications, deliveries, Telegram webhook, cron, or secrets; no RLS/grant changes to existing objects; no web-based watch button; no verification badges; no Owner Console work; no publish/deploy.
+`sticker-lab.index.tsx`
+- "Your packs" list filters `archived_at is null`.
+- New compact collapsed "Archived packs" section (count + list, restore action, view link), only rendered when archived packs exist.
+- Per-pack overflow action: "Archive pack" or "Delete pack permanently" depending on eligibility; hidden entirely for non-operators.
 
-## Stop point
+`sticker-lab.$packId.tsx`
+- Archived packs render a quiet banner: archived state, who/when, that Sticker Drops were paused, and that the Telegram sticker set still exists on Telegram and is unchanged.
+- Lifecycle actions (publish, send to communities) disabled while archived; primary action becomes "Restore pack".
+- Delete path uses a typed-confirmation dialog (type the pack title) and states exactly what is destroyed: sticker rows, generated sticker images, the draft itself; and that AI job/usage history is retained without pack attribution.
+- Ineligible packs show the archive dialog instead, with the reason ("published to Telegram", "delivered to communities", "used by Sticker Drops").
 
-Stop after the migration is applied, the two routes build clean, and verification output is reported. Phase 7B (project-published signals, watchlist reminder controls from the web, signal detail pages) is a separate contract.
+`src/lib/sticker-packs.ts`
+- `listWorkspacePacks` gains an archived filter; add `listArchivedPacks`, `archivePack`, `restorePack`, `deletePackPermanently` (invokes the Edge Function), plus a pure `packDeleteEligibility()` helper for the UI hint (server remains authoritative).
 
-## Risks / unknowns to verify before implementation
+Copy rule enforced everywhere: archiving in CARTEL HQ never deletes the Telegram sticker set.
 
-1. **Empty `launch_events`** confirms it is prunable operational state — please confirm you agree Signals must be derived from `launches` timestamps rather than that queue.
-2. **No `published_at` on `project_profiles`** — confirm omitting "Project published" from 7A is acceptable versus adding the column now.
-3. **Anonymous `auth.uid()`** inside a SECURITY DEFINER function returns NULL; the function must be written to return zero rows rather than error. To be asserted in tests.
-4. Only one Telegram connection and two subscriptions exist live, so real-data coverage of the multi-launch watchlist case is thin; may need a controlled QA subscription to exercise it.
-5. Signals ordering across many launches has no index on the individual lifecycle timestamp columns; at current volume this is a non-issue, but a sort/limit index may be needed later.
+## G. Expected files / objects
+
+- migration: `sticker_packs.archived_at/archived_by`, index, DELETE-policy removal, archive-column guard trigger, 5 functions (`archive_sticker_pack`, `restore_sticker_pack`, `delete_sticker_pack_prepare`, `delete_sticker_pack_commit`, schedule-enable guard), grants to `authenticated`
+- `backend-source/edge-functions/sticker-pack-delete/index.ts` (+ deployment mirror)
+- `src/lib/sticker-packs.ts`
+- `src/routes/_authenticated/sticker-lab.index.tsx`
+- `src/routes/_authenticated/sticker-lab.$packId.tsx`
+- regenerated Supabase types (platform-generated)
+
+Nothing else. Distribution/Telegram/Community routes untouched.
+
+## H. Rollback and partial-failure behavior
+
+- Archive/restore are single transactions — all-or-nothing, no partial state.
+- Delete is ordered prepare → storage → commit. If storage removal fails, commit is never called and the pack remains fully intact (safe failure, zero orphaned DB state).
+- If commit fails after storage removal, the pack row survives with dangling image references; the UI surfaces "Cleanup incomplete — retry delete", and a retry is idempotent because prepare re-derives current assets and missing storage objects are ignored.
+- Every failure returns a generic user-facing error plus a precise server-side reason; no partial success is ever reported as success.
+- Rollback of the feature itself: drop the two columns and functions; nothing existing depends on them.
+
+## I. Test matrix
+
+| Case | Expected |
+|---|---|
+| Draft pack, no stickers, member role | actions hidden; RPC/function rejects |
+| Draft pack, no dependencies, operator | permanent delete succeeds; sticker rows + generated assets + storage objects gone |
+| Draft pack whose reference asset is a Brand Kit logo | logo asset and storage object survive |
+| Pack with `telegram_set_name` set | delete rejected server-side even if forced; archive offered |
+| Pack with group targets only | delete rejected; archive succeeds; targets preserved |
+| Pack with enabled Sticker Drop schedule | archive disables it, `next_run_at` null, `paused_reason='pack_archived'`; runner skips |
+| Archived pack | absent from Your packs, present in Archived, publish/send disabled |
+| Restore | reappears in Your packs; schedules remain disabled |
+| Re-enable schedule for archived pack | rejected by trigger guard |
+| Direct client `delete from sticker_packs` | denied by RLS |
+| Direct client update of `archived_at` | denied by trigger |
+| Storage failure mid-delete | pack intact, truthful error |
+| `ai_jobs` / `usage_ledger` after delete | rows retained, pack attribution nulled |
+
+## J. Ambiguity / risk
+
+- The archive-column trigger guard relies on a session-local setting set inside the definer functions; if that pattern is rejected by the platform linter, the fallback is a narrower column-level revoke on `archived_at/archived_by` for `authenticated`. Decide at implementation time.
+- Exact current RLS policy text on `sticker_packs` and `sticker_drop_schedules` should be read (read-only) immediately before writing the migration; the audit confirmed member delete is possible but the policy names must be quoted exactly.
+- Whether operator-only is desired for archive as well as delete — this plan applies operator-only to both, per requirement 8.
+- Edge Function deployment is out of scope here; without deployment, permanent delete is inert in preview. Confirm whether the implementation run may deploy `sticker-pack-delete`.
+- Whether a stale `sticker_pack_group_targets` row with status `failed`/never-announced should still block deletion — this plan blocks it (conservative). Say if you want failed-only targets to be deletable.
