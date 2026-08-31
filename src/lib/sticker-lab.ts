@@ -345,6 +345,12 @@ export type BuilderDraft = {
   stickerIds: Record<string, string>;
   /** Versioned creative blueprint. Not wired into generation in this phase. */
   creativeBlueprint: CreativeBlueprint;
+  /**
+   * Editor/session-only flag: the user explicitly marked the concept board
+   * ready. Never persisted to the database; any material concept change
+   * resets it to false.
+   */
+  conceptBoardApproved: boolean;
 };
 
 
