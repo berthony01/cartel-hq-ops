@@ -370,8 +370,9 @@ function ProjectProfilePage() {
             className="min-w-0 space-y-4 sm:space-y-6"
           >
             <Section
-              variant="surface"
+              variant="primary"
               title="Identity"
+              description="The public-facing name, ticker, chain, address and description of this project."
               actions={
                 brandKitQuery.data ? (
                   <Button
@@ -387,7 +388,15 @@ function ProjectProfilePage() {
                 ) : null
               }
             >
+              {brandKitQuery.data ? (
+                <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
+                  Filling from Brand Kit is a one-way convenience: it copies current Brand Kit
+                  values into empty fields here. It does not link the two, and later Brand Kit
+                  edits will not update this profile.
+                </p>
+              ) : null}
               <div className="grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
+
                 <div>
                   <Label htmlFor="project_name">Project name</Label>
                   <Input
