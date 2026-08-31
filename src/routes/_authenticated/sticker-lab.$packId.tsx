@@ -19,12 +19,12 @@ export const Route = createFileRoute("/_authenticated/sticker-lab/$packId")({
       {
         name: "description",
         content:
-          "Review a saved CARTEL HQ sticker pack: stickers, publish state, Telegram set link and distribution.",
+          "Review a saved CARTEL HQ sticker pack: stickers, publish state, Telegram sticker set and community delivery.",
       },
       { property: "og:title", content: "Sticker Pack — CARTEL HQ" },
       {
         property: "og:description",
-        content: "Manage a saved PEPECARTEL sticker pack and its Telegram distribution.",
+        content: "Manage a saved PEPECARTEL sticker pack, its Telegram set and community delivery.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -32,6 +32,7 @@ export const Route = createFileRoute("/_authenticated/sticker-lab/$packId")({
   }),
   component: PackManagerPage,
 });
+
 
 function PackManagerPage() {
   const { packId } = Route.useParams();
