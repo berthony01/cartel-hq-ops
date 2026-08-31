@@ -1077,13 +1077,13 @@ function StickerLabBuilder() {
         : false;
   const lifecycleLabel =
     lifecycleMode === "publish"
-      ? "Publish & distribute pack"
+      ? "Publish pack & send"
       : lifecycleMode === "update"
         ? `Publish ${unpublishedReviewedIds.length} sticker update${unpublishedReviewedIds.length === 1 ? "" : "s"}`
         : lifecycleMode === "add"
           ? `Add to ${newTargetIds.length} New Communit${newTargetIds.length === 1 ? "y" : "ies"}`
           : lifecycleMode === "retry"
-            ? `Retry ${failedTargetIds.length} failed distribution${failedTargetIds.length === 1 ? "" : "s"}`
+            ? `Retry ${failedTargetIds.length} failed community send${failedTargetIds.length === 1 ? "" : "s"}`
             : lifecycleMode === "attention"
               ? "Finish Review for Remaining Stickers"
               : "Pack is up to date";
