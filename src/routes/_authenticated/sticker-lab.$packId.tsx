@@ -212,6 +212,7 @@ function PackManagerPage() {
           ) : null}
         </div>
       </Section>
+      )}
 
 
       <Section
