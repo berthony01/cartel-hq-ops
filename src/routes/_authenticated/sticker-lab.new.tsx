@@ -390,9 +390,6 @@ function StickerLabBuilder() {
   const [tgRefreshing, setTgRefreshing] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
   const [confirmPublish, setConfirmPublish] = useState(false);
-  const [dropDialogOpen, setDropDialogOpen] = useState(false);
-  const [dropDialogGroup, setDropDialogGroup] = useState<DropGroup | null>(null);
-  const [dropDialogSchedule, setDropDialogSchedule] = useState<DropSchedule | null>(null);
   const [publishResult, setPublishResult] = useState<TelegramPublishResult | null>(null);
   const [tgError, setTgError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
