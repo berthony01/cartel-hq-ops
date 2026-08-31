@@ -411,7 +411,11 @@ Deno.serve(async (req: Request) => {
         return respond({ status: "unchanged", telegramReplaced: false, stickerId, versionId, setName: pack.telegram_set_name ?? undefined, setUrl: pack.telegram_set_url ?? undefined, message: "That version is already the current sticker image." });
       }
 
+      // Expected old state. Every later write is guarded against exactly these
+      // two pointers so a concurrent change can never be silently overwritten.
+      const expectedOldAssetId = sticker.image_asset_id ? String(sticker.image_asset_id) : null;
       const oldFileId = sticker.telegram_file_id ? String(sticker.telegram_file_id) : "";
+      const expectedOldFileId = sticker.telegram_file_id ? String(sticker.telegram_file_id) : null;
       const setName = pack.telegram_set_name ? String(pack.telegram_set_name) : "";
       const dbClaimsPublished = sticker.status === "published" || !!sticker.telegram_published_at;
 
@@ -446,6 +450,29 @@ Deno.serve(async (req: Request) => {
         if (downloadError || !blob) throw new Error("Could not read that version's image from private storage.");
         const prepared = prepareForTelegram(new Uint8Array(await blob.arrayBuffer()));
         newFileId = await uploadStickerFile(TELEGRAM_BOT_TOKEN, ownerId, prepared.bytes);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Telegram could not accept this version's image.";
+        const technical = err instanceof TelegramError ? err.technical : undefined;
+        return respond({ error: "TELEGRAM_REPLACE_FAILED", message, ...(technical ? { technical } : {}) }, 502);
+      }
+
+      // Last check before the only destructive Telegram call. Preparation and
+      // upload take time, so re-confirm nothing changed underneath us. An unused
+      // uploaded file is strictly safer than mutating the live set on stale state.
+      const { data: recheckSticker } = await admin.from("stickers").select("image_asset_id,telegram_file_id").eq("id", stickerId).maybeSingle();
+      const { data: recheckJobs } = await admin.from("ai_jobs").select("id").eq("sticker_id", stickerId).in("status", ["queued", "running"]).limit(1);
+      const recheckAssetId = recheckSticker?.image_asset_id ? String(recheckSticker.image_asset_id) : null;
+      const recheckFileId = recheckSticker?.telegram_file_id ? String(recheckSticker.telegram_file_id) : null;
+      if (
+        !recheckSticker ||
+        (recheckJobs ?? []).length ||
+        recheckAssetId !== expectedOldAssetId ||
+        recheckFileId !== expectedOldFileId
+      ) {
+        return respond({ error: "RESTORE_STATE_CHANGED", message: "This sticker changed while the restore was being prepared. Nothing was changed on Telegram. Refresh this pack and try the restore again." }, 409);
+      }
+
+      try {
         await telegramJson(TELEGRAM_BOT_TOKEN, "replaceStickerInSet", { user_id: ownerId, name: setName, old_sticker: oldFileId, sticker: inputFor(newFileId) });
       } catch (err) {
         const message = err instanceof Error ? err.message : "Telegram could not replace this sticker.";
@@ -454,17 +481,24 @@ Deno.serve(async (req: Request) => {
       }
 
       const now = new Date().toISOString();
-      const { error: updateError } = await admin.from("stickers").update({ image_asset_id: targetAsset.id, telegram_file_id: newFileId, status: "published", telegram_publish_error: null, telegram_published_at: now, updated_at: now }).eq("id", stickerId);
-      if (updateError) {
+      // Guarded write: only the exact pre-restore row may be advanced. Zero
+      // matched rows means someone else moved the sticker, which is a failure.
+      let guardedUpdate = admin.from("stickers").update({ image_asset_id: targetAsset.id, telegram_file_id: newFileId, status: "published", telegram_publish_error: null, telegram_published_at: now, updated_at: now }).eq("id", stickerId);
+      guardedUpdate = expectedOldAssetId === null ? guardedUpdate.is("image_asset_id", null) : guardedUpdate.eq("image_asset_id", expectedOldAssetId);
+      guardedUpdate = expectedOldFileId === null ? guardedUpdate.is("telegram_file_id", null) : guardedUpdate.eq("telegram_file_id", expectedOldFileId);
+      const { data: updatedRow, error: updateError } = await guardedUpdate.select("id").maybeSingle();
+      if (updateError || !updatedRow) {
         // Cross-system guard: Telegram already changed, CARTEL HQ did not.
+        const dbReason = updateError ? updateError.message : "guarded update matched zero rows";
         try {
           await telegramJson(TELEGRAM_BOT_TOKEN, "replaceStickerInSet", { user_id: ownerId, name: setName, old_sticker: newFileId, sticker: inputFor(oldFileId) });
           return respond({ error: "RESTORE_ROLLED_BACK", message: "CARTEL HQ could not save the change, so the Telegram sticker was restored to its previous image. Nothing was changed." }, 500);
         } catch (compensationError) {
-          console.error("[telegram-stickers] replace_version reconciliation required", { stickerId, setName, oldFileId, newFileId, dbError: updateError.message, compensationError: compensationError instanceof Error ? compensationError.message : "unknown error" });
+          console.error("[telegram-stickers] replace_version reconciliation required", { stickerId, setName, oldFileId, newFileId, dbError: dbReason, compensationError: compensationError instanceof Error ? compensationError.message : "unknown error" });
           return respond({ error: "RECONCILIATION_REQUIRED", message: "The Telegram sticker was replaced but CARTEL HQ could not save the change and could not undo it. Refresh the Telegram status and review this sticker before publishing again." }, 500);
         }
       }
+
       return respond({ status: "switched", telegramReplaced: true, stickerId, versionId, setName, setUrl: pack.telegram_set_url ?? undefined, bot });
     }
 
