@@ -235,17 +235,8 @@ function StickerLabBuilder() {
   const [checkProgress, setCheckProgress] = useState<{ done: number; total: number } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const aliveRef = useRef(true);
   const verifyRunRef = useRef(false);
-  /** Sticker ids currently polled in this tab — their live stage wins. */
-  const pollingRef = useRef<Set<string>>(new Set());
 
-  useEffect(() => {
-    aliveRef.current = true;
-    return () => {
-      aliveRef.current = false;
-    };
-  }, []);
 
   /**
    * Durable identity: when the URL carries a pack id it wins over the session
