@@ -289,7 +289,11 @@ function StickerLabBuilder() {
   const [conceptError, setConceptError] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState(false);
   const [confirmSuggest, setConfirmSuggest] = useState<"board" | "alternatives" | null>(null);
+  /** Concept ids a confirmed "Suggest another set" must re-target (alternatives only). */
+  const [refreshTargetIds, setRefreshTargetIds] = useState<string[] | null>(null);
   const [confirmApplySuggestions, setConfirmApplySuggestions] = useState(false);
+  /** Preview target ids awaiting saved-pack confirmation (one item or all). */
+  const [pendingApplyTargetIds, setPendingApplyTargetIds] = useState<string[] | null>(null);
 
   /**
    * Existing generation runtime (stages, structured failures, notes, previews,
@@ -787,12 +791,23 @@ function StickerLabBuilder() {
    * never touches persisted sticker rows. On any failure the current concepts
    * stay exactly as they are.
    */
-  const runConceptSuggestion = async (mode: "board" | "alternatives") => {
+  const runConceptSuggestion = async (
+    mode: "board" | "alternatives",
+    targetIds?: string[] | null,
+  ) => {
     if (!workspaceId) {
       toast.error("Select a project first.");
       return;
     }
-    const targets = mode === "alternatives" ? selectedConcepts : unlockedConcepts;
+    const scoped = targetIds
+      ? draft.concepts.filter((c) => !c.locked && targetIds.includes(c.id))
+      : null;
+    const targets =
+      scoped && scoped.length
+        ? scoped
+        : mode === "alternatives"
+          ? selectedConcepts
+          : unlockedConcepts;
     if (!targets.length) return;
     setSuggesting(true);
     setConceptError(null);
@@ -825,7 +840,7 @@ function StickerLabBuilder() {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Could not get concept suggestions.";
-      setPreview(null);
+      // Keep any existing preview intact so a failed refresh never loses ideas.
       setConceptError(message);
       toast.error(message);
     } finally {
@@ -862,6 +877,7 @@ function StickerLabBuilder() {
     );
     setPreview(remaining.every((item) => item.applied) ? null : { ...current, items: remaining });
     setConfirmApplySuggestions(false);
+    setPendingApplyTargetIds(null);
     if (current.mode === "alternatives") {
       setSelectedForAlternatives((s) => s.filter((id) => !changed.includes(id)));
     }
@@ -2045,7 +2061,14 @@ function StickerLabBuilder() {
                         size="sm"
                         className="mt-2 min-h-10"
                         disabled={!target || target.locked}
-                        onClick={() => applyPreviewItems([item.targetId])}
+                        onClick={() => {
+                          if (draft.packId) {
+                            setPendingApplyTargetIds([item.targetId]);
+                            setConfirmApplySuggestions(true);
+                          } else {
+                            applyPreviewItems([item.targetId]);
+                          }
+                        }}
                       >
                         <Check className="size-4" aria-hidden="true" />
                         Use this one
@@ -2060,12 +2083,34 @@ function StickerLabBuilder() {
                   size="sm"
                   className="min-h-10"
                   onClick={() => {
-                    if (draft.packId) setConfirmApplySuggestions(true);
-                    else applyPreviewItems(pendingPreviewItems.map((item) => item.targetId));
+                    const ids = pendingPreviewItems.map((item) => item.targetId);
+                    if (draft.packId) {
+                      setPendingApplyTargetIds(ids);
+                      setConfirmApplySuggestions(true);
+                    } else applyPreviewItems(ids);
                   }}
                 >
                   <Check className="size-4" aria-hidden="true" />
                   Use all suggestions
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-10"
+                  disabled={suggesting}
+                  onClick={() => {
+                    const mode = preview?.mode ?? "board";
+                    setRefreshTargetIds(
+                      mode === "alternatives"
+                        ? pendingPreviewItems.map((item) => item.targetId)
+                        : null,
+                    );
+                    setConfirmSuggest(mode);
+                  }}
+                >
+                  <Sparkles className="size-4" aria-hidden="true" />
+                  Suggest another set
                 </Button>
                 <Button
                   type="button"
@@ -2310,7 +2355,10 @@ function StickerLabBuilder() {
           <AlertDialog
             open={confirmSuggest !== null}
             onOpenChange={(open) => {
-              if (!open) setConfirmSuggest(null);
+              if (!open) {
+                setConfirmSuggest(null);
+                setRefreshTargetIds(null);
+              }
             }}
           >
             <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
@@ -2329,7 +2377,7 @@ function StickerLabBuilder() {
                     </p>
                     <p>
                       {confirmSuggest === "alternatives"
-                        ? `This asks for ${selectedConcepts.length} alternative${selectedConcepts.length === 1 ? "" : "s"} for the concepts you selected.`
+                        ? `This asks for ${(refreshTargetIds ?? selectedConcepts.map((c) => c.id)).length} alternative${(refreshTargetIds ?? selectedConcepts.map((c) => c.id)).length === 1 ? "" : "s"} for the concepts you selected.`
                         : `This asks for ${unlockedConcepts.length} idea${unlockedConcepts.length === 1 ? "" : "s"} for your unlocked concepts only.`}{" "}
                       Locked concepts are never sent for replacement.
                     </p>
@@ -2345,8 +2393,10 @@ function StickerLabBuilder() {
                 <AlertDialogAction
                   onClick={() => {
                     const mode = confirmSuggest ?? "board";
+                    const ids = refreshTargetIds;
                     setConfirmSuggest(null);
-                    void runConceptSuggestion(mode);
+                    setRefreshTargetIds(null);
+                    void runConceptSuggestion(mode, ids);
                   }}
                 >
                   Suggest concepts
@@ -2357,11 +2407,18 @@ function StickerLabBuilder() {
 
           <AlertDialog
             open={confirmApplySuggestions}
-            onOpenChange={setConfirmApplySuggestions}
+            onOpenChange={(open) => {
+              setConfirmApplySuggestions(open);
+              if (!open) setPendingApplyTargetIds(null);
+            }}
           >
             <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
               <AlertDialogHeader>
-                <AlertDialogTitle>Replace these concepts in this saved pack?</AlertDialogTitle>
+                <AlertDialogTitle>
+                  {(pendingApplyTargetIds?.length ?? 0) === 1
+                    ? "Replace this concept in this saved pack?"
+                    : "Replace these concepts in this saved pack?"}
+                </AlertDialogTitle>
                 <AlertDialogDescription asChild>
                   <div className="space-y-2 text-left">
                     <p>
@@ -2373,8 +2430,9 @@ function StickerLabBuilder() {
                       the stored concept rows to match.
                     </p>
                     <p>
-                      Only unlocked, targeted concepts change. Keyword metadata is cleared for those
-                      concepts only.
+                      {(pendingApplyTargetIds?.length ?? 0) === 1
+                        ? "Only this one unlocked concept changes. Keyword metadata is cleared for that concept only."
+                        : "Only unlocked, targeted concepts change. Keyword metadata is cleared for those concepts only."}
                     </p>
                   </div>
                 </AlertDialogDescription>
@@ -2382,15 +2440,20 @@ function StickerLabBuilder() {
               <AlertDialogFooter>
                 <AlertDialogCancel>Keep current concepts</AlertDialogCancel>
                 <AlertDialogAction
-                  onClick={() =>
-                    applyPreviewItems(pendingPreviewItems.map((item) => item.targetId))
-                  }
+                  onClick={() => {
+                    const ids =
+                      pendingApplyTargetIds ?? pendingPreviewItems.map((item) => item.targetId);
+                    applyPreviewItems(ids);
+                  }}
                 >
-                  Use these concepts
+                  {(pendingApplyTargetIds?.length ?? 0) === 1
+                    ? "Use this concept"
+                    : "Use these concepts"}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
         </StepCard>
       ) : null}
 
