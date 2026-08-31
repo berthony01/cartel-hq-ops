@@ -2109,92 +2109,145 @@ function StickerLabBuilder() {
           title="Review"
           hint="Verified static stickers from private storage, ready for export and Telegram publishing."
         >
-          <div className="mb-6 grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-3 [&>*]:min-w-0">
-            <SummaryStat
-              label="Backend ready"
-              value={`${generatedCount}/${draft.concepts.length}`}
-              tone={allReady ? "green" : "muted"}
-            />
-            <SummaryStat
-              label="Backend transparency verified"
-              value={`${transparentCount}/${draft.concepts.length}`}
-              tone={
-                transparentCount === draft.concepts.length && draft.concepts.length > 0
-                  ? "green"
-                  : "muted"
-              }
-            />
-            <SummaryStat
-              label="Browser alpha verified"
-              value={`${browserVerifiedCount}/${draft.concepts.length}`}
-              tone={
-                browserVerifiedCount === draft.concepts.length && draft.concepts.length > 0
-                  ? "green"
-                  : "muted"
-              }
-            />
-            <SummaryStat
-              label="Telegram cutout verified"
-              value={`${cutoutVerifiedCount}/${draft.concepts.length}`}
-              tone={
-                cutoutVerifiedCount === draft.concepts.length && draft.concepts.length > 0
-                  ? "green"
-                  : "muted"
-              }
-            />
-            <SummaryStat label="In progress" value={String(activeCount)} tone="muted" />
-            <SummaryStat
-              label="Failed / needs attention"
-              value={String(attentionCount)}
-              tone={attentionCount > 0 ? "red" : "muted"}
-            />
-          </div>
-
-          <div
-            className="mb-6 flex flex-wrap items-center gap-3 rounded-md border border-border bg-background/40 p-3"
-            aria-live="polite"
-          >
-            {checksRunning ? (
-              <>
-                <Loader2 className="size-4 animate-spin text-gold" aria-hidden="true" />
-                <p className="text-xs text-foreground">
-                  Checking transparency &amp; Telegram cutout {checkProgress?.done ?? 0}/
-                  {checkProgress?.total ?? 0}…
+          <section className="cartel-panel mb-6 rounded-lg p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Pack readiness
                 </p>
-                <span
-                  className="h-1.5 w-40 overflow-hidden rounded-full bg-border"
-                  aria-hidden="true"
-                >
-                  <span
-                    className="block h-full bg-gold transition-all duration-300"
-                    style={{
-                      width: `${Math.round(
-                        ((checkProgress?.done ?? 0) / Math.max(1, checkProgress?.total ?? 1)) * 100,
-                      )}%`,
-                    }}
-                  />
-                </span>
-              </>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Review re-checks every finished sticker in your browser for a real alpha channel and
-                analyses it for an edge-connected light halo. {browserVerifiedCount} alpha verified,{" "}
-                {cutoutVerifiedCount} Telegram cutout verified
-                {browserFailedCount > 0 ? `, ${browserFailedCount} need attention` : ""}.
-              </p>
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="ml-auto min-h-10"
-              disabled={checksRunning}
-              onClick={() => void runClientVerification(true)}
+                <p className="mt-1 text-lg font-semibold text-foreground">
+                  {exportableCount} of {draft.concepts.length} stickers ready
+                </p>
+                <p className="mt-1 max-w-prose text-xs text-muted-foreground">
+                  This pack belongs to {projectName} and was built from that project&apos;s Brand
+                  Kit and reference assets. Ready stickers can be published as one Telegram sticker
+                  set.
+                </p>
+              </div>
+              <StatusBadge
+                tone={attentionCount > 0 ? "red" : exportReady ? "green" : "gold"}
+              >
+                {attentionCount > 0
+                  ? `${attentionCount} need attention`
+                  : exportReady
+                    ? "Ready to publish"
+                    : "Checks in progress"}
+              </StatusBadge>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 [&>*]:min-w-0">
+              <SummaryStat
+                label="Ready to publish"
+                value={`${exportableCount}/${draft.concepts.length}`}
+                tone={exportReady && exportableCount > 0 ? "green" : "muted"}
+              />
+              <SummaryStat label="In progress" value={String(activeCount)} tone="muted" />
+              <SummaryStat
+                label="Failed / needs attention"
+                value={String(attentionCount)}
+                tone={attentionCount > 0 ? "red" : "muted"}
+              />
+            </div>
+
+            <div
+              className="mt-4 flex flex-wrap items-center gap-3 rounded-md border border-border bg-background/40 p-3"
+              aria-live="polite"
             >
-              <RefreshCw className="size-4" aria-hidden="true" />
-              Re-check transparency &amp; cutout
-            </Button>
-          </div>
+              {checksRunning ? (
+                <>
+                  <Loader2 className="size-4 animate-spin text-gold" aria-hidden="true" />
+                  <p className="text-xs text-foreground">
+                    Checking transparency &amp; Telegram cutout {checkProgress?.done ?? 0}/
+                    {checkProgress?.total ?? 0}…
+                  </p>
+                  <span
+                    className="h-1.5 w-40 max-w-full overflow-hidden rounded-full bg-border"
+                    aria-hidden="true"
+                  >
+                    <span
+                      className="block h-full bg-gold transition-all duration-300"
+                      style={{
+                        width: `${Math.round(
+                          ((checkProgress?.done ?? 0) / Math.max(1, checkProgress?.total ?? 1)) *
+                            100,
+                        )}%`,
+                      }}
+                    />
+                  </span>
+                </>
+              ) : (
+                <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+                  Review re-checks every finished sticker in your browser for a real alpha channel
+                  and analyses it for an edge-connected light halo.
+                  {browserFailedCount > 0 ? ` ${browserFailedCount} need attention.` : ""}
+                </p>
+              )}
+              <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-10"
+                  disabled={checksRunning}
+                  onClick={() => void runClientVerification(true)}
+                >
+                  <RefreshCw className="size-4" aria-hidden="true" />
+                  Re-check transparency &amp; cutout
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="min-h-10"
+                  onClick={refreshStatus}
+                >
+                  <RefreshCw className="size-4" aria-hidden="true" />
+                  Refresh status
+                </Button>
+              </div>
+            </div>
+
+            <details className="mt-3 rounded-md border border-border/70 bg-background/30 p-3">
+              <summary className="min-h-9 cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                Verification detail
+              </summary>
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4 [&>*]:min-w-0">
+                <SummaryStat
+                  label="Backend ready"
+                  value={`${generatedCount}/${draft.concepts.length}`}
+                  tone={allReady ? "green" : "muted"}
+                />
+                <SummaryStat
+                  label="Backend transparency verified"
+                  value={`${transparentCount}/${draft.concepts.length}`}
+                  tone={
+                    transparentCount === draft.concepts.length && draft.concepts.length > 0
+                      ? "green"
+                      : "muted"
+                  }
+                />
+                <SummaryStat
+                  label="Browser alpha verified"
+                  value={`${browserVerifiedCount}/${draft.concepts.length}`}
+                  tone={
+                    browserVerifiedCount === draft.concepts.length && draft.concepts.length > 0
+                      ? "green"
+                      : "muted"
+                  }
+                />
+                <SummaryStat
+                  label="Telegram cutout verified"
+                  value={`${cutoutVerifiedCount}/${draft.concepts.length}`}
+                  tone={
+                    cutoutVerifiedCount === draft.concepts.length && draft.concepts.length > 0
+                      ? "green"
+                      : "muted"
+                  }
+                />
+              </div>
+            </details>
+          </section>
+
 
           {!exportReady ? (
             <div className="mb-6">
