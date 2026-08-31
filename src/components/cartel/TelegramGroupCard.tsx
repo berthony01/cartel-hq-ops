@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { Copy, Loader2, MessageSquarePlus, Users } from "lucide-react";
+import { Copy, Loader2, MessageSquarePlus, Radio, Users } from "lucide-react";
 
 import { useWorkspace } from "@/lib/workspace-context";
 import { useTelegramLauncher } from "@/hooks/useTelegramLauncher";
@@ -859,7 +860,7 @@ export function TelegramGroupCard({
     <Card className="cartel-panel">
       <CardHeader className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 space-y-0 p-4 sm:p-6">
         <CardTitle className="min-w-0 text-base [overflow-wrap:anywhere]">
-          Telegram communities
+          Your communities
         </CardTitle>
         {groupQuery.isPending && groups.length === 0 ? (
           <StatusBadge tone="muted">Checking groups…</StatusBadge>
@@ -904,8 +905,8 @@ export function TelegramGroupCard({
             Connect every Telegram group or supergroup CARTEL HQ should work with. Telegram only
             lets you pick <strong>one group per add-bot flow</strong>, so use{" "}
             <strong>Connect another community</strong> once for each community — connecting a new group
-            never removes the ones already connected. Once connected, CARTEL HQ can distribute one
-            published pack to many groups together. If @PepeCartelHQBot is already installed in a
+            never removes the ones already connected. The bot needs administrator rights, including{" "}
+            <strong>Change Group Info</strong>. If @PepeCartelHQBot is already installed in a
             group, open it and send{" "}
             <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">
               /cartelhq
