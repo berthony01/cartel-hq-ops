@@ -70,11 +70,13 @@ import {
   previewShortName,
   publishPack,
   refreshPackStatus,
+  replacePublishedStickerVersion,
   telegramErrorMessage,
   type PackTelegramState,
   type StickerTelegramState,
   type TelegramPublishResult,
 } from "@/lib/telegram-stickers";
+
 import { useTelegramSetup } from "@/components/cartel/TelegramConnectionCard";
 import { useTelegramGroupSetup } from "@/components/cartel/TelegramGroupCard";
 import {
