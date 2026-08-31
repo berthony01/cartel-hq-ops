@@ -23,6 +23,10 @@ export type StickerRow = {
   status: string;
   image_asset_id: string | null;
   updated_at: string;
+  /** Telegram publish footprint — read-only here; never written from the browser. */
+  telegram_file_id: string | null;
+  telegram_published_at: string | null;
+  telegram_publish_error: string | null;
 };
 
 export type PackRow = {
@@ -45,7 +49,7 @@ export type PackRow = {
 const PACK_COLUMNS =
   "id,workspace_id,title,theme,pack_size,status,updated_at,character_name,brief,style_notes,reference_asset_id,archived_at,archived_by,creative_blueprint";
 const STICKER_COLUMNS =
-  "id,pack_id,sort_order,label,action_description,emoji_list,keyword_list,status,image_asset_id,updated_at";
+  "id,pack_id,sort_order,label,action_description,emoji_list,keyword_list,status,image_asset_id,updated_at,telegram_file_id,telegram_published_at,telegram_publish_error";
 
 export type PackSummary = PackRow & { total: number; ready: number; active: number };
 

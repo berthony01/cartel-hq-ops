@@ -40,3 +40,11 @@ No secrets belong in this directory. Runtime credentials and API keys must remai
 ## Important
 
 The files in this directory are source snapshots, not a second backend and not a deployment target by themselves. Do not create parallel functions, duplicate infrastructure, alternate webhooks, or new secrets just to match this directory.
+
+## Pending deployment
+
+Phase 4C (Published Mutation Safety) adds a fail-closed `STICKER_PUBLISHED` (HTTP 409) guard to
+`sticker-ai` action `start`, before any reference resolution, signed URL, `ai_jobs` lookup/insert or
+provider request. The repository snapshot is source-of-truth for this change; the live `sticker-ai`
+function has NOT been redeployed from Lovable. Deploy externally after independent diff review, then
+update the inventory row above with the verified version and hash.

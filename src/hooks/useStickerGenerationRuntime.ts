@@ -58,6 +58,13 @@ export function useStickerGenerationRuntime(params: {
   const [previews, setPreviews] = useState<Record<string, Preview>>({});
   /** Latest ai_jobs rows per sticker id — attempt history only, read-only. */
   const [jobHistory, setJobHistory] = useState<Record<string, AiJobRow[]>>({});
+  /**
+   * Phase 4C: durable per-sticker Telegram publish footprint, derived from the
+   * same `stickers` read `loadExisting` already performs. A sticker is locked
+   * when it has ANY Telegram footprint — status is deliberately NOT used
+   * because generation overwrites it.
+   */
+  const [telegramLocked, setTelegramLocked] = useState<Record<string, boolean>>({});
 
   const aliveRef = useRef(true);
   /** Sticker ids currently polled in this tab — their live stage wins. */
@@ -101,8 +108,11 @@ export function useStickerGenerationRuntime(params: {
     const nextStages: Record<string, Stage> = {};
     const nextFailures: Record<string, ProviderFailure | undefined> = {};
     const nextNotes: Record<string, string> = {};
+    const nextLocked: Record<string, boolean> = {};
 
     for (const row of rows) {
+      nextLocked[row.id] =
+        row.telegram_file_id !== null || row.telegram_published_at !== null;
       const asset = row.image_asset_id ? assets[row.image_asset_id] : undefined;
       const url = asset ? urls[asset.storage_path] : undefined;
       const hasAsset = !!(asset && url);
@@ -149,6 +159,8 @@ export function useStickerGenerationRuntime(params: {
     setFailures((e) => ({ ...e, ...nextFailures }));
     setNotes((n) => ({ ...n, ...nextNotes }));
     setJobHistory((h) => ({ ...h, ...jobs }));
+    // Authoritative replacement (not merge): durable rows are the only truth.
+    setTelegramLocked(nextLocked);
   }, []);
 
   const attachAsset = async (stickerId: string, assetId: string) => {
@@ -257,8 +269,22 @@ export function useStickerGenerationRuntime(params: {
       }));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Generation could not start.";
-      const failure = classifyProviderError(message);
-      toast.error(failure.title, { description: failure.body });
+      // Phase 4C: a server-side published block is NOT a provider failure and
+      // never means Kie ran or charged.
+      const published = message.includes("STICKER_PUBLISHED");
+      const failure: ProviderFailure = published
+        ? {
+            kind: "service",
+            title: "Regeneration is locked for this sticker",
+            body: "This sticker is already connected to Telegram. CARTEL HQ blocked regeneration to keep the live set and current image synchronized. No provider task was started and nothing was charged.",
+            raw: null,
+          }
+        : classifyProviderError(message);
+      if (published) {
+        toast.message(failure.title, { description: failure.body });
+      } else {
+        toast.error(failure.title, { description: failure.body });
+      }
       setFailures((e) => ({ ...e, [stickerId]: failure }));
       // Fall back to durable, backend-derived state.
       pollingRef.current.delete(stickerId);
@@ -281,5 +307,9 @@ export function useStickerGenerationRuntime(params: {
     loadExisting,
     attachAsset,
     runGeneration,
+    telegramLocked,
+    /** True when the durable row has ANY Telegram publish footprint. */
+    isTelegramLocked: (stickerId: string | null | undefined) =>
+      !!(stickerId && telegramLocked[stickerId]),
   };
 }
