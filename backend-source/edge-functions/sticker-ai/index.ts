@@ -145,8 +145,8 @@ type CharacterLock = {
   canonicalReferenceAssetIds: string[];
 };
 
-const HUMOR = ["unspecified", "none", "light", "medium", "high"] as const;
-const INTENSITY = ["unspecified", "calm", "balanced", "bold", "extreme"] as const;
+const HUMOR = ["unspecified", "none", "light", "balanced", "heavy"] as const;
+const INTENSITY = ["unspecified", "calm", "balanced", "high", "maximum"] as const;
 const TEXT_PREF = ["unspecified", "no_text", "minimal", "balanced", "text_forward"] as const;
 
 type CreativeDirection = {
@@ -241,15 +241,15 @@ function hasCharacterLockContent(lock: CharacterLock | null): boolean {
 const HUMOR_TEXT: Record<string, string> = {
   none: "Keep humor out of it; play the concept straight.",
   light: "Keep humor light and subtle.",
-  medium: "Use a clearly comedic but not absurd tone.",
-  high: "Lean into strong, exaggerated comedic energy.",
+  balanced: "Use a clearly playful, comedic tone that stays controlled.",
+  heavy: "Lean into strong, exaggerated comedic energy.",
 };
 
 const INTENSITY_TEXT: Record<string, string> = {
   calm: "Keep the energy calm and understated.",
   balanced: "Keep the energy balanced and natural.",
-  bold: "Make the pose and expression bold and high-contrast.",
-  extreme: "Push the pose and expression to an extreme, maximal reaction.",
+  high: "Make the pose and expression bold and high-energy.",
+  maximum: "Push the pose and expression to a maximal, extreme reaction.",
 };
 
 /**
@@ -273,9 +273,15 @@ function buildPrompt(
   const action = String(sticker.action_description ?? "").trim();
   const characterName = String(pack.character_name ?? "").trim();
 
+  // Applied == opted in AND a snapshot object exists (canonical-reference-only
+  // locks are valid). The textual block below is emitted only when there is
+  // actual identity text to compile.
   const lockApplied =
-    blueprint.useBrandCharacterLock === true && hasCharacterLockContent(blueprint.characterLock);
-  const lock = lockApplied ? blueprint.characterLock! : null;
+    blueprint.useBrandCharacterLock === true && blueprint.characterLock !== null;
+  const lock =
+    lockApplied && hasCharacterLockContent(blueprint.characterLock)
+      ? blueprint.characterLock!
+      : null;
   const cd = blueprint.creativeDirection;
   const textPreference = cd?.textPreference ?? "unspecified";
   const noText = textPreference === "no_text";
@@ -446,7 +452,7 @@ Deno.serve(async (req: Request) => {
 
       const blueprint = parseBlueprint((pack as Record<string, unknown>).creative_blueprint);
       const characterLockApplied =
-        blueprint.useBrandCharacterLock === true && hasCharacterLockContent(blueprint.characterLock);
+        blueprint.useBrandCharacterLock === true && blueprint.characterLock !== null;
       const creativeDirectionApplied = hasCreativeDirectionContent(blueprint.creativeDirection);
 
       let refs: Array<{ id: string; storage_path: string; asset_type: string }> = [];
