@@ -803,20 +803,21 @@ function StickerLabBuilder() {
     if (mode === "alternatives") {
       if (targetIds && targetIds.length > 0) {
         // Explicit "Suggest another set" refresh: the supplied ids are the
-        // authoritative scope. Resolve each one against the current board in
-        // board order; if any are missing or locked, abort before contacting
-        // the provider and without touching the existing preview.
-        const byId = new Map(draft.concepts.map((c, i) => [c.id, { concept: c, index: i }]));
-        const ordered: Concept[] = [];
-        for (const id of targetIds) {
-          const found = byId.get(id);
-          if (!found || found.concept.locked) {
-            toast.message(
-              "The preview targets changed. Unlock/restore them or request new alternatives.",
-            );
-            return;
-          }
-          ordered.push(found.concept);
+        // authoritative target SET. Resolve them by filtering the current board
+        // so the result follows the CURRENT board order. Abort if any id is
+        // missing, duplicated, or locked — without contacting the provider or
+        // touching the existing preview.
+        const requestedIds = new Set(targetIds);
+        const ordered = draft.concepts.filter((c) => requestedIds.has(c.id));
+        if (
+          requestedIds.size !== targetIds.length ||
+          ordered.length !== targetIds.length ||
+          ordered.some((c) => c.locked)
+        ) {
+          toast.message(
+            "The preview targets changed. Unlock/restore them or request new alternatives.",
+          );
+          return;
         }
         targets = ordered;
       } else {
