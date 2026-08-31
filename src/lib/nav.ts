@@ -77,8 +77,12 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     label: "Network",
-    items: [{ label: "Cartel Network", to: "/network", icon: Globe }],
+    items: [
+      { label: "Cartel Network", to: "/network", icon: Globe },
+      { label: "My Watchlist", to: "/watchlist", icon: Eye },
+    ],
   },
+
   {
     label: "System",
     items: [
