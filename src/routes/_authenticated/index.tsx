@@ -619,7 +619,12 @@ function HqDashboard() {
           >
             {packsQuery.isPending ? (
               <p className="text-xs text-muted-foreground">Loading packs…</p>
+            ) : packsUnavailable ? (
+              <p className="text-xs text-muted-foreground">
+                Recent packs are unavailable right now.
+              </p>
             ) : recentPacks.length === 0 ? (
+
               <EmptyState
                 icon={PackageOpen}
                 title="No packs yet"
