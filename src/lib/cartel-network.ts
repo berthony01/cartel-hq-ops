@@ -297,5 +297,12 @@ export const NETWORK_TRUST_COPY = {
     "All information on this page is supplied by the project account in CARTEL HQ. CARTEL HQ does not guarantee token safety.",
   signals:
     "Cartel Signals are official project and launch lifecycle events supplied by authenticated projects. They are not trading signals, price calls or investment recommendations.",
+  projectAuthenticated:
+    "Published through an authenticated CARTEL HQ project workspace.",
+  platformReviewed:
+    "CARTEL HQ manually reviewed the current project profile and listed official links. Material profile changes clear this status until reviewed again.",
+  verificationClarifier:
+    "These signals do not verify token safety, smart-contract code, liquidity, team identity or KYC, rug resistance, price behaviour or investment quality.",
 } as const;
+
 
