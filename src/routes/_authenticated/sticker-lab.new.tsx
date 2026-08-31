@@ -274,6 +274,14 @@ function StickerLabBuilder() {
   const [fileError, setFileError] = useState<string | null>(null);
   const [packNameError, setPackNameError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  /* ------- Step 3 AI Concept Studio (text only, never image generation) ------ */
+  const [conceptSuggestions, setConceptSuggestions] = useState<SuggestedConcept[] | null>(null);
+  const [conceptError, setConceptError] = useState<string | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+  const [confirmSuggest, setConfirmSuggest] = useState(false);
+  const [confirmApplySuggestions, setConfirmApplySuggestions] = useState(false);
+
   /**
    * Existing generation runtime (stages, structured failures, notes, previews,
    * durable ai_jobs history, polling ownership, reconciliation and the
