@@ -150,8 +150,8 @@ function PublicProjectPage() {
       ) : null}
 
       <VerificationSignals
-        platformReviewed={project.platform_reviewed === true}
-        platformReviewedAt={project.platform_reviewed_at}
+        verificationStatus={project.verification_status}
+        verifiedAt={project.verified_at}
       />
 
       <section className="space-y-4">
