@@ -2046,8 +2046,73 @@ function StickerLabBuilder() {
               <span className="text-xs text-pepe">Pack saved. Retries reuse the same rows.</span>
             ) : null}
           </div>
+
+          <AlertDialog open={confirmSuggest} onOpenChange={setConfirmSuggest}>
+            <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Ask AI for concept ideas?</AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2 text-left">
+                    <p>This uses Kie language-model credits (tokens) on your account.</p>
+                    <p>
+                      It generates <strong>concept ideas only</strong> — text labels, actions and
+                      emoji.
+                    </p>
+                    <p>
+                      It does <strong>not</strong> generate sticker images and does not start the
+                      two-task image pipeline.
+                    </p>
+                    <p>
+                      Your current concepts stay untouched unless you explicitly apply the
+                      suggestions.
+                    </p>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    setConfirmSuggest(false);
+                    void runConceptSuggestion();
+                  }}
+                >
+                  Suggest concepts
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <AlertDialog
+            open={confirmApplySuggestions}
+            onOpenChange={setConfirmApplySuggestions}
+          >
+            <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Replace the concepts in this saved pack?</AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2 text-left">
+                    <p>
+                      Applying changes only your local draft right now. Nothing is saved and no
+                      generated or published sticker is touched.
+                    </p>
+                    <p>
+                      However, this pack is already saved: a later <strong>Save</strong> will update
+                      or remove the stored concept rows to match the new list.
+                    </p>
+                    <p>Emoji and keyword metadata for the current concepts will be cleared.</p>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Keep current concepts</AlertDialogCancel>
+                <AlertDialogAction onClick={applySuggestions}>Use these concepts</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </StepCard>
       ) : null}
+
 
       {step === 4 ? (
         <StepCard
