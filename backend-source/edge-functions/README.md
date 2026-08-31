@@ -10,9 +10,6 @@ The Cartel HQ Lovable project uses the TanStack project structure. Lovable curre
 
 No secrets belong in this directory. Runtime credentials and API keys must remain in Supabase Edge Function secrets or another approved secret store.
 
-## Pending deployment
-
-`telegram-stickers`: the snapshot in this directory now contains the Phase 4B `replace_version` action (in-place `replaceStickerInSet` restore of an earlier image version). This source has NOT been deployed from Lovable. The deployed runtime is still the previously verified live version, which is ahead of the inventory row below. Deploy externally after independent diff review, preserving `verify_jwt = true`, then refresh the inventory with the real post-deploy version and hash.
 
 ## Production inventory captured 2026-08-31
 
@@ -21,7 +18,7 @@ No secrets belong in this directory. Runtime credentials and API keys must remai
 | Function | Live version | verify_jwt | Supabase deployment hash |
 | --- | ---: | :---: | --- |
 | sticker-ai | 2 | true | `2b85d39c2d7a85f529257a7f8b989fb2cde6caf06a95043cc43be437661bceb9` |
-| telegram-stickers | 3 | true | `2c6566aca397831376257b72fb86c876bbf4818498c893d1885c91f595680824` |
+| telegram-stickers | 6 | true | `d7d60a12cf98ca9d9313fff32102de6cc10319526e80d1cff100f21523224208` |
 | telegram-link | 3 | true | `9996641ed725ff32335ca24f576396856191fdf390bbaf622ae6ef688508e486` |
 | telegram-webhook | 45 | false | `214c3f87cfc2a1b3601e3c4b24f47314e30980ab7a817a95bcc84e4c016fbac7` |
 | telegram-group | 11 | true | `425de4aeaf69833ff1c89d9aa25431073dfdd0de94df68661a0875714932fd23` |
