@@ -2106,7 +2106,7 @@ function StickerLabBuilder() {
 
       {step === 5 ? (
         <StepCard
-          title="Review &amp; publish"
+          title="Review & publish"
           hint="Check readiness, publish one Telegram sticker set for this pack, then send it to this project's communities."
         >
 
