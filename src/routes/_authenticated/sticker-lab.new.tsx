@@ -289,7 +289,11 @@ function StickerLabBuilder() {
   const [conceptError, setConceptError] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState(false);
   const [confirmSuggest, setConfirmSuggest] = useState<"board" | "alternatives" | null>(null);
+  /** Concept ids a confirmed "Suggest another set" must re-target (alternatives only). */
+  const [refreshTargetIds, setRefreshTargetIds] = useState<string[] | null>(null);
   const [confirmApplySuggestions, setConfirmApplySuggestions] = useState(false);
+  /** Preview target ids awaiting saved-pack confirmation (one item or all). */
+  const [pendingApplyTargetIds, setPendingApplyTargetIds] = useState<string[] | null>(null);
 
   /**
    * Existing generation runtime (stages, structured failures, notes, previews,
