@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-export type SectionVariant = "primary" | "surface" | "plain";
+export type SectionVariant = "hero" | "primary" | "surface" | "quiet" | "plain";
 
 const VARIANTS: Record<SectionVariant, string> = {
+  hero: "cartel-hero rounded-xl p-4 sm:p-6",
   primary: "cartel-panel rounded-xl p-4 sm:p-6",
   surface: "rounded-lg border border-border/70 bg-surface-raised/60 p-3 sm:p-5",
+  quiet: "rounded-md bg-surface-raised/25 p-2.5 sm:p-3.5",
   plain: "p-0",
 };
 
