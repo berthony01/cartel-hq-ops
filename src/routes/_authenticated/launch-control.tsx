@@ -1475,6 +1475,15 @@ function LaunchControlPage() {
                           deliberately not resent automatically, so a watcher is never messaged
                           twice.
                         </p>
+
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          <span className="text-foreground">Alerts created</span> can stay at 0 even
+                          with a saved schedule and active watchers. Reminder events are created
+                          when the 24h or 1h reminder actually becomes due, not when the launch date
+                          is saved, and countdown delivery must be in an armed lifecycle state at
+                          that moment.
+                        </p>
+
                       </>
                     ) : (
 
