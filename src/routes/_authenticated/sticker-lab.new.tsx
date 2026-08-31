@@ -11,23 +11,17 @@ import {
   validateImageFile,
   type MediaAsset,
 } from "@/lib/media";
+import { fetchStickerAiConfig } from "@/lib/sticker-ai";
 import {
-  fetchStickerAiConfig,
-  startStickerGeneration,
-  syncStickerJob,
-} from "@/lib/sticker-ai";
+  STAGE_LABEL,
+  useStickerGenerationRuntime,
+  type Stage,
+} from "@/hooks/useStickerGenerationRuntime";
 import {
-  classifyProviderError,
   hydrateDraftFromPack,
-  loadAssets,
-  loadLatestJobs,
-  loadPackStickers,
   persistDraft,
   summarizeAttempts,
-  type AiJobRow,
   type PersistResult,
-  type ProviderFailure,
-  type StickerRow,
 } from "@/lib/sticker-packs";
 import {
   downloadStickerPng,
