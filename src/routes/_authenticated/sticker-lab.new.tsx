@@ -17,7 +17,12 @@ import {
   suggestStickerConcepts,
   type SuggestedConcept,
 } from "@/lib/sticker-concepts";
-import { loadStickerVersions } from "@/lib/sticker-versions";
+import {
+  loadStickerVersions,
+  setCurrentStickerVersion,
+  type SetCurrentVersionStatus,
+} from "@/lib/sticker-versions";
+
 
 
 import {
