@@ -1038,6 +1038,90 @@ function StickerLabBuilder() {
     if (id) void loadExisting(id);
   };
 
+  /* ---------------- Phase 4B: set current / restore version ---------------- */
+
+  /** Re-reads durable sticker state and history. Never assumes local success. */
+  const reconcileAfterRestore = async () => {
+    const id = draft.packId;
+    if (id) await loadExisting(id);
+    await versionsQuery.refetch();
+  };
+
+  const RESTORE_MESSAGE: Record<Exclude<SetCurrentVersionStatus, "switched" | "telegram_required">, string> = {
+    unchanged: "That version is already the current sticker image.",
+    active_generation:
+      "This sticker is still generating. Wait for it to finish before restoring a version.",
+    version_unavailable: "That version is no longer available for this sticker.",
+    asset_not_ready: "That version's image is not transparency-verified and cannot be used.",
+    forbidden: "You do not have access to change this sticker.",
+    sticker_not_found: "This sticker could not be found.",
+    unauthenticated: "Your session expired. Sign in again.",
+    unknown: "That version could not be restored. Refresh the status and try again.",
+  };
+
+  /** First confirmation accepted. Server decides whether Telegram is involved. */
+  const confirmRestore = async (target: RestoreTarget) => {
+    setRestoreTarget(null);
+    setRestoringStickerId(target.stickerId);
+    try {
+      const result = await setCurrentStickerVersion({
+        stickerId: target.stickerId,
+        versionId: target.versionId,
+      });
+      if (result.status === "telegram_required") {
+        setRestoreTelegramTarget(target);
+        return;
+      }
+      if (result.status === "switched") {
+        await reconcileAfterRestore();
+        toast.success(`Version ${target.versionNumber} is now the current image.`);
+        return;
+      }
+      if (result.status === "unchanged") {
+        await reconcileAfterRestore();
+      }
+      toast.error(result.message || RESTORE_MESSAGE[result.status]);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "That version could not be restored right now.",
+      );
+    } finally {
+      if (aliveRef.current) setRestoringStickerId(null);
+    }
+  };
+
+  /** Second confirmation accepted. Replaces the sticker in place on Telegram. */
+  const confirmTelegramRestore = async (target: RestoreTarget) => {
+    setRestoreTelegramTarget(null);
+    if (!workspaceId || !draft.packId) {
+      toast.error("Select a project first.");
+      return;
+    }
+    setRestoringStickerId(target.stickerId);
+    try {
+      const result = await replacePublishedStickerVersion({
+        workspaceId,
+        packId: draft.packId,
+        stickerId: target.stickerId,
+        versionId: target.versionId,
+      });
+      await reconcileAfterRestore();
+      if (result.status === "switched") {
+        toast.success(
+          result.telegramReplaced
+            ? `Version ${target.versionNumber} replaced the live sticker in the existing Telegram set.`
+            : `Version ${target.versionNumber} is now the current image.`,
+        );
+      } else {
+        toast.message(result.message || "That version is already the current sticker image.");
+      }
+    } catch (err) {
+      toast.error(telegramErrorMessage(err));
+    } finally {
+      if (aliveRef.current) setRestoringStickerId(null);
+    }
+  };
+
 
   const stickerIdFor = (conceptId: string) => draft.stickerIds[conceptId] ?? null;
   const stageFor = (conceptId: string): Stage => {
