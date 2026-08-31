@@ -1077,13 +1077,13 @@ function StickerLabBuilder() {
         : false;
   const lifecycleLabel =
     lifecycleMode === "publish"
-      ? "Publish & distribute pack"
+      ? "Publish pack & send"
       : lifecycleMode === "update"
         ? `Publish ${unpublishedReviewedIds.length} sticker update${unpublishedReviewedIds.length === 1 ? "" : "s"}`
         : lifecycleMode === "add"
           ? `Add to ${newTargetIds.length} New Communit${newTargetIds.length === 1 ? "y" : "ies"}`
           : lifecycleMode === "retry"
-            ? `Retry ${failedTargetIds.length} failed distribution${failedTargetIds.length === 1 ? "" : "s"}`
+            ? `Retry ${failedTargetIds.length} failed community send${failedTargetIds.length === 1 ? "" : "s"}`
             : lifecycleMode === "attention"
               ? "Finish Review for Remaining Stickers"
               : "Pack is up to date";
@@ -1133,7 +1133,7 @@ function StickerLabBuilder() {
         );
       } else {
         toast.error(
-          "Distribution to the selected communities failed. The sticker set stays published.",
+          "Sending the pack to the selected communities failed. The sticker set stays published.",
         );
       }
     } catch (err) {
@@ -2575,7 +2575,7 @@ function StickerLabBuilder() {
 
           <Card className="cartel-panel mt-6">
             <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
-              <CardTitle className="text-base">Publish &amp; distribute</CardTitle>
+              <CardTitle className="text-base">Publish &amp; send to communities</CardTitle>
               {allPublished ? (
                 <StatusBadge tone="green">Published</StatusBadge>
               ) : partiallyPublished ? (
@@ -2720,7 +2720,7 @@ function StickerLabBuilder() {
 
               {distError ? (
                 <p className="rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
-                  Sticker set stays published — group distribution needs attention. {distError}
+                  Sticker set stays published — community delivery needs attention. {distError}
                 </p>
               ) : null}
 
@@ -2773,13 +2773,13 @@ function StickerLabBuilder() {
 
               <p className="min-w-0 rounded-md border border-border/70 bg-surface-raised/50 p-3 text-xs text-muted-foreground [overflow-wrap:anywhere]">
                 {lifecycleMode === "publish"
-                  ? "This pack has not been published to Telegram yet. Publishing creates one sticker set and distributes it to the communities you selected."
+                  ? "This pack has not been published to Telegram yet. Publishing creates one sticker set and sends it to the communities you selected."
                   : lifecycleMode === "update"
                     ? `${unpublishedReviewedIds.length} reviewed sticker${unpublishedReviewedIds.length === 1 ? "" : "s"} are not on the existing Telegram set yet. Publishing adds them — the set is never recreated.`
                     : lifecycleMode === "add"
                       ? `The set is live in ${deliveredTargetIds.length} communit${deliveredTargetIds.length === 1 ? "y" : "ies"}. ${newTargetIds.length} newly selected communit${newTargetIds.length === 1 ? "y has" : "ies have"} not received it yet.`
                       : lifecycleMode === "retry"
-                        ? `Every sticker is published. ${failedTargetIds.length} communit${failedTargetIds.length === 1 ? "y" : "ies"} failed distribution and can be retried safely.`
+                        ? `Every sticker is published. ${failedTargetIds.length} communit${failedTargetIds.length === 1 ? "y" : "ies"} failed community send and can be retried safely.`
                         : lifecycleMode === "attention"
                           ? `${totalConcepts - tgPublishedCount} sticker${totalConcepts - tgPublishedCount === 1 ? " is" : "s are"} still not published. Finish Review so they pass the transparency and cutout checks, then publish the update.`
                           : `Everything is current: all reviewed stickers are published and all ${deliveredTargetIds.length} selected communit${deliveredTargetIds.length === 1 ? "y has" : "ies have"} the pack.`}
@@ -2847,8 +2847,8 @@ function StickerLabBuilder() {
               ) : null}
               {testResult ? <p className="text-xs text-muted-foreground">{testResult}</p> : null}
               <p className="text-xs text-muted-foreground">
-                One Telegram sticker set is created for this pack and then distributed to the groups
-                you selected — connecting more groups later lets you distribute the same set again
+                One Telegram sticker set is created for this pack and then sent to the groups
+                you selected — connecting more groups later lets you send the same set again
                 without recreating it. The test sends a <strong>native Telegram sticker</strong> into
                 a single selected group, not an image file, and works for any verified connected
                 group — basic group or supergroup. Telegram’s{" "}
@@ -2910,11 +2910,11 @@ function StickerLabBuilder() {
                   {selectedGroupIds.length === 0 ? (
                     <>
                       No connected group is selected. Select at least one group above before
-                      publishing and distributing.
+                      publishing and sending to communities.
                     </>
                   ) : (
                     <>
-                      After the set is created it will be distributed once to the{" "}
+                      After the set is created it will be sent once to the{" "}
                       <strong>
                         {selectedGroupIds.length} selected group
                         {selectedGroupIds.length === 1 ? "" : "s"}
@@ -2937,7 +2937,7 @@ function StickerLabBuilder() {
                     void doPublish(selectedGroupIds);
                   }}
                 >
-                  Publish &amp; distribute
+                  Publish &amp; send
                 </AlertDialogAction>
 
               </AlertDialogFooter>
