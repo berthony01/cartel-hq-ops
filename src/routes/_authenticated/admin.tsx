@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Cpu,
   CreditCard,
+  EyeOff,
   Layers,
   Loader2,
   Lock,
@@ -31,7 +32,19 @@ import { InlineRow } from "@/components/cartel/InlineRow";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { usePlatformAccess } from "@/hooks/usePlatformAccess";
+
 import {
   TelegramConnectionCard,
   useTelegramSetup,
@@ -48,11 +61,19 @@ import {
   type ReviewAction,
 } from "@/lib/project-verification";
 import {
+  fetchPlatformNetworkModeration,
+  MODERATION_REASON_MAX,
+  platformModerationKeys,
+  setProjectNetworkModeration,
+  type PlatformNetworkModerationRow,
+} from "@/lib/platform-moderation";
+import {
   formatCost,
   formatCount,
   formatTimestamp,
   type PlatformDropScheduleDetail,
 } from "@/lib/platform";
+
 
 function ProjectVerificationSection() {
   const queryClient = useQueryClient();
@@ -230,6 +251,280 @@ function ProjectVerificationSection() {
         </div>
       )}
     </Section>
+  );
+}
+
+type ModerationIntent = { row: PlatformNetworkModerationRow; hide: boolean };
+
+function NetworkModerationSection() {
+  const queryClient = useQueryClient();
+  const [intent, setIntent] = useState<ModerationIntent | null>(null);
+  const [reason, setReason] = useState("");
+
+  const directory = useQuery({
+    queryKey: platformModerationKeys.directory(),
+    queryFn: fetchPlatformNetworkModeration,
+  });
+
+  const mutation = useMutation({
+    mutationFn: ({ id, hide, note }: { id: string; hide: boolean; note: string }) =>
+      setProjectNetworkModeration(id, hide, note),
+    onSuccess: (_res, vars) => {
+      toast.success(
+        vars.hide
+          ? "Project hidden from Cartel Network"
+          : "Cartel Network visibility restored",
+      );
+      setIntent(null);
+      setReason("");
+      void queryClient.invalidateQueries({ queryKey: platformModerationKeys.all() });
+      void queryClient.invalidateQueries({ queryKey: ["cartel-network"] });
+    },
+    onError: (err: unknown) => {
+      // Dialog intentionally stays open so the action can be retried.
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Could not update Cartel Network visibility right now.",
+      );
+    },
+  });
+
+  const rows: PlatformNetworkModerationRow[] = directory.data ?? [];
+  const hasCached = rows.length > 0;
+  const staleWarning = directory.isError && hasCached;
+
+  const openFor = (row: PlatformNetworkModerationRow, hide: boolean) => {
+    setReason("");
+    setIntent({ row, hide });
+  };
+
+  return (
+    <>
+      <Section
+        leading={<EyeOff className="size-4" aria-hidden="true" />}
+        title="Network Moderation"
+        description="Temporarily remove a project and its launches from public Cartel Network surfaces without deleting project data. This does not change the project's own publication setting, verification status, launch lifecycle, Launch Watch subscriptions, or history."
+      >
+        {directory.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading network moderation state…</p>
+        ) : directory.isError && !hasCached ? (
+          <div className="flex min-w-0 flex-col items-start gap-3">
+            <p className="text-sm text-muted-foreground">
+              Network moderation data could not be loaded right now.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-h-11"
+              onClick={() => void directory.refetch()}
+            >
+              Retry
+            </Button>
+          </div>
+        ) : !directory.isError && rows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No project profiles exist yet.</p>
+        ) : (
+          <div className="flex min-w-0 flex-col gap-3">
+            {staleWarning ? (
+              <div className="flex min-w-0 flex-col items-start gap-2 rounded-lg border border-border bg-surface p-3">
+                <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                  Showing previously loaded data. The latest refresh failed, so this may be stale.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="min-h-11"
+                  onClick={() => void directory.refetch()}
+                >
+                  Retry
+                </Button>
+              </div>
+            ) : null}
+
+            {rows.map((row) => {
+              const hidden = row.is_hidden === true;
+              const pending =
+                mutation.isPending && mutation.variables?.id === row.project_profile_id;
+              const meta = [
+                row.public_slug ? `/${row.public_slug}` : null,
+                row.ticker,
+                row.primary_chain,
+                `${formatCount(row.launch_count)} launches`,
+              ]
+                .filter(Boolean)
+                .join(" · ");
+
+              return (
+                <div
+                  key={row.project_profile_id}
+                  className="flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-surface p-3"
+                >
+                  <InlineRow
+                    leading={<Layers className="size-4" aria-hidden="true" />}
+                    title={row.project_name}
+                    subtitle={meta}
+                    trailing={
+                      <>
+                        <StatusBadge tone="muted">
+                          <span>{`Operator: ${text(row.discovery_status, "unknown")}`}</span>
+                        </StatusBadge>
+                        <StatusBadge tone={hidden ? "red" : "green"}>
+                          <span>{hidden ? "Hidden by platform" : "Visible"}</span>
+                        </StatusBadge>
+                        {row.verification_status ? (
+                          <StatusBadge tone="muted">
+                            <span>
+                              {
+                                VERIFICATION_STATUS_LABEL[
+                                  verificationStatusOf(row.verification_status)
+                                ]
+                              }
+                            </span>
+                          </StatusBadge>
+                        ) : null}
+                      </>
+                    }
+                  />
+
+                  {hidden ? (
+                    <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                      {`Hidden ${formatTimestamp(row.hidden_at)}`}
+                      {row.internal_reason
+                        ? ` · Internal reason: ${row.internal_reason}`
+                        : " · No internal reason recorded"}
+                    </p>
+                  ) : row.restored_at ? (
+                    <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                      {`Visibility restored ${formatTimestamp(row.restored_at)}`}
+                    </p>
+                  ) : null}
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {pending ? (
+                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                    ) : null}
+                    {hidden ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="min-h-11"
+                        disabled={pending}
+                        onClick={() => openFor(row, false)}
+                      >
+                        Restore to Cartel Network
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="min-h-11"
+                        disabled={pending}
+                        onClick={() => openFor(row, true)}
+                      >
+                        Hide from Cartel Network
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Section>
+
+      <AlertDialog
+        open={!!intent}
+        onOpenChange={(open) => {
+          if (!open && !mutation.isPending) {
+            setIntent(null);
+            setReason("");
+          }
+        }}
+      >
+        <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {intent?.hide ? "Hide from Cartel Network?" : "Restore Cartel Network visibility?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                {intent?.hide ? (
+                  <>
+                    <p className="[overflow-wrap:anywhere]">
+                      {`“${intent.row.project_name}” will be suppressed by a platform visibility override on every public Cartel Network surface: its public project page, its project launches, upcoming launches, launch detail pages and Cartel Signals.`}
+                    </p>
+                    <p>
+                      No underlying data is deleted. The project profile, launches, Launch Watch
+                      subscriptions, notifications and history remain stored exactly as they are,
+                      and this hold is reversible at any time.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="[overflow-wrap:anywhere]">
+                      {`This removes ONLY the platform moderation hold on “${intent?.row.project_name ?? ""}”. It does not publish the project or change anything the operator controls.`}
+                    </p>
+                    {intent && intent.row.discovery_status !== "published" ? (
+                      <p>
+                        {`This project's own discovery status is “${text(intent.row.discovery_status, "unknown")}”, so it will still remain absent from public Cartel Network surfaces until its operator publishes it.`}
+                      </p>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {intent?.hide ? (
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <label
+                htmlFor="moderation-reason"
+                className="text-xs uppercase tracking-[0.14em] text-muted-foreground"
+              >
+                Internal reason (owner-only)
+              </label>
+              <Textarea
+                id="moderation-reason"
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                maxLength={MODERATION_REASON_MAX}
+                rows={3}
+                placeholder="Optional internal note"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Never shown publicly. {`Max ${MODERATION_REASON_MAX} characters.`}
+              </p>
+            </div>
+          ) : null}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-11" disabled={mutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="min-h-11"
+              disabled={mutation.isPending}
+              onClick={(event) => {
+                event.preventDefault();
+                if (!intent) return;
+                mutation.mutate({
+                  id: intent.row.project_profile_id,
+                  hide: intent.hide,
+                  note: reason,
+                });
+              }}
+            >
+              {mutation.isPending
+                ? "Working…"
+                : intent?.hide
+                  ? "Hide from Cartel Network"
+                  : "Restore visibility"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
@@ -444,6 +739,8 @@ function AdminPage() {
       </Section>
 
       <ProjectVerificationSection />
+
+      <NetworkModerationSection />
 
       <Section
         leading={<Zap className="size-4" aria-hidden="true" />}
