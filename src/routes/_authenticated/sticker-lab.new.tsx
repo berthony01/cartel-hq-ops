@@ -1338,8 +1338,10 @@ function StickerLabBuilder() {
               </span>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Mascots, reference images and logos already in your Asset Vault. If none are
-              selected, the server picks the best available reference automatically.
+              Mascots, reference images and logos already in your Asset Vault. Explicitly selected
+              references always win. If none are selected, an enabled Character Lock’s canonical
+              references are tried next, then the server picks the best available reference
+              automatically.
             </p>
             {referencesQuery.isLoading ? (
               <p className="mt-4 text-xs text-muted-foreground">Loading references…</p>
