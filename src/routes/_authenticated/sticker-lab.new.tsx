@@ -1524,7 +1524,119 @@ function StickerLabBuilder() {
                 onChange={(e) => update({ styleNotes: e.target.value })}
               />
             </div>
+
+            <section className="md:col-span-2 rounded-lg border border-border bg-background/40 p-4">
+              <h3 className="text-sm font-semibold text-foreground">Creative Direction</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                The pack-level creative source of truth for Sticker Lab V2. Saved with this pack.
+                Current generation behaviour is unchanged until the V2 prompt upgrade ships.
+              </p>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
+                <div>
+                  <Label htmlFor="cd-purpose">Purpose</Label>
+                  <Input
+                    id="cd-purpose"
+                    className="mt-2 min-h-11"
+                    placeholder="Community reactions, launch hype, trading reactions, moderation…"
+                    value={direction.purpose}
+                    onChange={(e) => updateDirection({ purpose: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="cd-audience">Audience</Label>
+                  <Input
+                    id="cd-audience"
+                    className="mt-2 min-h-11"
+                    placeholder="Who is this pack for?"
+                    value={direction.audience}
+                    onChange={(e) => updateDirection({ audience: e.target.value })}
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <Label htmlFor="cd-tone">Tone keywords</Label>
+                  <Textarea
+                    id="cd-tone"
+                    className="mt-2 min-h-20"
+                    placeholder="Comma or line separated — e.g. bold, playful, deadpan"
+                    value={formatDirectionList(direction.toneKeywords)}
+                    onChange={(e) =>
+                      updateDirection({ toneKeywords: parseDirectionList(e.target.value) })
+                    }
+                  />
+                </div>
+
+                <SegmentedChoice
+                  legend="Humor level"
+                  options={HUMOR_LEVELS}
+                  label={humorLabel}
+                  value={direction.humorLevel}
+                  onSelect={(v) => updateDirection({ humorLevel: v })}
+                />
+
+                <SegmentedChoice
+                  legend="Intensity"
+                  options={INTENSITY_LEVELS}
+                  label={intensityLabel}
+                  value={direction.intensity}
+                  onSelect={(v) => updateDirection({ intensity: v })}
+                />
+
+                <div className="md:col-span-2">
+                  <Label htmlFor="cd-visual">Visual direction</Label>
+                  <Textarea
+                    id="cd-visual"
+                    className="mt-2 min-h-24"
+                    placeholder="Composition, framing, colour language, finish…"
+                    value={direction.visualDirection}
+                    onChange={(e) => updateDirection({ visualDirection: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <details className="mt-4 rounded-md border border-border bg-surface-raised p-3">
+                <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Text treatment & pack rules
+                </summary>
+                <div className="mt-4 grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
+                  <SegmentedChoice
+                    legend="Text preference"
+                    options={TEXT_PREFERENCES}
+                    label={textPreferenceLabel}
+                    value={direction.textPreference}
+                    onSelect={(v) => updateDirection({ textPreference: v })}
+                  />
+
+                  <div>
+                    <Label htmlFor="cd-text-notes">Text notes</Label>
+                    <Textarea
+                      id="cd-text-notes"
+                      className="mt-2 min-h-24"
+                      placeholder="Casing, recurring phrases, placement, text treatment…"
+                      value={direction.textNotes}
+                      onChange={(e) => updateDirection({ textNotes: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <Label htmlFor="cd-rules">Pack-specific rules</Label>
+                    <Textarea
+                      id="cd-rules"
+                      className="mt-2 min-h-24"
+                      placeholder="One per line — things this pack must always or never do"
+                      value={formatDirectionList(direction.packRules)}
+                      onChange={(e) =>
+                        updateDirection({ packRules: parseDirectionList(e.target.value) })
+                      }
+                    />
+                  </div>
+                </div>
+              </details>
+            </section>
           </div>
+
         </StepCard>
       ) : null}
 
