@@ -198,7 +198,7 @@ export function PackLifecycleMenu({
       </DropdownMenu>
 
       <Dialog open={dialog !== null} onOpenChange={(v) => (v ? null : close())}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-h-[90dvh] max-w-md overflow-y-auto">
           {dialog === "delete" ? (
             <>
               <DialogHeader>
