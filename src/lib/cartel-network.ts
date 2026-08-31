@@ -229,7 +229,10 @@ export type Paged<T> = { rows: T[]; totalCount: number };
 export async function fetchNetworkProjects(
   params: DirectoryParams = {},
 ): Promise<Paged<NetworkProjectCard>> {
-  const { data, error } = await supabase.rpc("get_cartel_network_projects", rpcArgs(params));
+  const { data, error } = await supabase.rpc("get_cartel_network_projects", {
+    ...rpcArgs(params),
+    _verified_only: params.verifiedOnly === true,
+  });
   if (error) throw error;
   const rows = data ?? [];
   return { rows, totalCount: Number(rows[0]?.total_count ?? 0) };
