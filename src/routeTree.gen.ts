@@ -34,6 +34,7 @@ import { Route as AuthCallbackRouteImport } from './routes/auth_.callback'
 import { Route as NetworkIndexRouteImport } from './routes/network.index'
 import { Route as NetworkLaunchesRouteImport } from './routes/network.launches'
 import { Route as NetworkProjectsRouteImport } from './routes/network.projects'
+import { Route as NetworkSignalsRouteImport } from './routes/network.signals'
 import { Route as AuthenticatedStickerLabIndexRouteImport } from './routes/_authenticated/sticker-lab.index'
 import { Route as AuthenticatedStickerLabPackIdRouteImport } from './routes/_authenticated/sticker-lab.$packId'
 import { Route as AuthenticatedStickerLabNewRouteImport } from './routes/_authenticated/sticker-lab.new'
@@ -169,6 +170,11 @@ const NetworkProjectsRoute = NetworkProjectsRouteImport.update({
   path: '/projects',
   getParentRoute: () => NetworkRoute,
 } as any)
+const NetworkSignalsRoute = NetworkSignalsRouteImport.update({
+  id: '/signals',
+  path: '/signals',
+  getParentRoute: () => NetworkRoute,
+} as any)
 const AuthenticatedStickerLabIndexRoute =
   AuthenticatedStickerLabIndexRouteImport.update({
     id: '/',
@@ -223,6 +229,7 @@ export interface FileRoutesByFullPath {
   '/auth/callback': typeof AuthCallbackRoute
   '/network/launches': typeof NetworkLaunchesRoute
   '/network/projects': typeof NetworkProjectsRoute
+  '/network/signals': typeof NetworkSignalsRoute
   '/network/': typeof NetworkIndexRoute
   '/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
   '/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
@@ -251,6 +258,7 @@ export interface FileRoutesByTo {
   '/auth/callback': typeof AuthCallbackRoute
   '/network/launches': typeof NetworkLaunchesRoute
   '/network/projects': typeof NetworkProjectsRoute
+  '/network/signals': typeof NetworkSignalsRoute
   '/': typeof AuthenticatedIndexRoute
   '/network': typeof NetworkIndexRoute
   '/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
@@ -284,6 +292,7 @@ export interface FileRoutesById {
   '/auth_/callback': typeof AuthCallbackRoute
   '/network/launches': typeof NetworkLaunchesRoute
   '/network/projects': typeof NetworkProjectsRoute
+  '/network/signals': typeof NetworkSignalsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/network/': typeof NetworkIndexRoute
   '/_authenticated/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
@@ -318,6 +327,7 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/network/launches'
     | '/network/projects'
+    | '/network/signals'
     | '/network/'
     | '/sticker-lab/$packId'
     | '/sticker-lab/new'
@@ -346,6 +356,7 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/network/launches'
     | '/network/projects'
+    | '/network/signals'
     | '/'
     | '/network'
     | '/sticker-lab/$packId'
@@ -378,6 +389,7 @@ export interface FileRouteTypes {
     | '/auth_/callback'
     | '/network/launches'
     | '/network/projects'
+    | '/network/signals'
     | '/_authenticated/'
     | '/network/'
     | '/_authenticated/sticker-lab/$packId'
@@ -571,6 +583,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NetworkProjectsRouteImport
       parentRoute: typeof NetworkRoute
     }
+    '/network/signals': {
+      id: '/network/signals'
+      path: '/signals'
+      fullPath: '/network/signals'
+      preLoaderRoute: typeof NetworkSignalsRouteImport
+      parentRoute: typeof NetworkRoute
+    }
     '/_authenticated/sticker-lab/': {
       id: '/_authenticated/sticker-lab/'
       path: '/'
@@ -675,6 +694,7 @@ const AuthenticatedRouteRouteWithChildren =
 interface NetworkRouteChildren {
   NetworkLaunchesRoute: typeof NetworkLaunchesRoute
   NetworkProjectsRoute: typeof NetworkProjectsRoute
+  NetworkSignalsRoute: typeof NetworkSignalsRoute
   NetworkIndexRoute: typeof NetworkIndexRoute
   NetworkLaunchLaunchSlugRoute: typeof NetworkLaunchLaunchSlugRoute
   NetworkProjectProjectSlugRoute: typeof NetworkProjectProjectSlugRoute
@@ -683,6 +703,7 @@ interface NetworkRouteChildren {
 const NetworkRouteChildren: NetworkRouteChildren = {
   NetworkLaunchesRoute: NetworkLaunchesRoute,
   NetworkProjectsRoute: NetworkProjectsRoute,
+  NetworkSignalsRoute: NetworkSignalsRoute,
   NetworkIndexRoute: NetworkIndexRoute,
   NetworkLaunchLaunchSlugRoute: NetworkLaunchLaunchSlugRoute,
   NetworkProjectProjectSlugRoute: NetworkProjectProjectSlugRoute,
