@@ -1,119 +1,108 @@
-# Phase 6.5K-B — Pack Lifecycle (Archive + Safe Delete)
+# Phase 9 — Owner Console Moderation + Launch Analytics (implementation contract)
 
-Start gate assumed: `0aabfb064237b3a42dd67d37dea1297ccf54cab2`. Plan only — no edits, migrations, deploys, or data writes performed.
+Start gate verified: HEAD `f25bc8b207992b65b44dd08fddf443f4c5ebccee`, clean tree. Zero edits made in this planning turn (only this plan file is written).
 
-## A. Schema change (single additive migration)
+## Audit findings (verified this turn)
 
-On `public.sticker_packs`:
+- `/admin` (`src/routes/_authenticated/admin.tsx`, 924 lines) is owner-gated by `usePlatformAccess()` and already contains: Unrestricted Platform Access, Project Verification (Phase 8A), Operational Controls, Telegram Bot Integration, Sticker Automation, Recent Drop Activity, Platform overview, Workspaces, Users, and message templates. Section pattern = `<Section>` + `InlineRow` + explicit loading/empty states.
+- Owner authorization exists twice: server-side `public.is_platform_owner(uuid)` (SECURITY DEFINER over `platform_user_roles`) used by Phase 8A RPCs, and the `platform-admin` Edge Function used by `src/lib/platform.ts`. Phase 8A RPCs are the newer, cheaper pattern and are the one to reuse.
+- Every public network RPC (`get_cartel_network_projects`, `..._project`, `..._project_launches`, `..._upcoming_launches`, `..._launch`, `..._signals`, `..._summary`) filters on `p.discovery_status = 'published'`. So suppressing a project at profile level already suppresses its project page, launch pages, upcoming list, signals rows and summary counts. No launch-level public surface bypasses it.
+- `project_profiles.discovery_status` is **operator-writable** from `/project-profile` via `saveProjectProfile()` — the workspace owner can set it back to `published` at will.
+- `project_platform_reviews` is the existing service-private, owner-only review table with a state machine (`pending|verified|rejected|revoked`) and a trigger that clears stale reviews on material identity change.
+- Analytics-capable tables already exist: `project_profiles`, `launches` (lifecycle timestamps), `launch_watch_subscriptions` (`is_active`, `reminders_enabled`, `subscribed_at`, `confirmation_status`), `launch_events`, `launch_notification_deliveries` (`status`, `attempt_count`), `telegram_group_connections`, `telegram_community_settings`. Existing `get_platform_owner_dashboard_metrics()` covers stickers/AI/usage but has **no** launch, watch, delivery or network-visibility metrics.
 
-- `archived_at timestamptz null`
-- `archived_by uuid null references public.profiles(id)`
-- partial index `on sticker_packs (workspace_id, updated_at desc) where archived_at is null`
+## 1. Recommended moderation model — Option B (service-private record)
 
-Deliberately NOT adding `archived` to the existing `status` CHECK (`draft, generating, review, ready, publishing, published, failed`). Archive is orthogonal to lifecycle status: a pack must keep `published` so Telegram set identity and history stay truthful. Archive is a visibility/retirement flag only.
+Do **not** overload `discovery_status = 'hidden'`. It is operator-owned state; a moderated project could immediately re-publish itself, and the owner could not distinguish "operator chose hidden" from "platform hid this". Instead add a separate service-private table:
 
-RLS change (server enforcement, requirement 10): drop the member-level DELETE policy on `sticker_packs` so no client can hard-delete directly. Deletion happens only through the SECURITY DEFINER path below. Archive/restore is also gated in the function, not by a broad UPDATE policy — the existing member UPDATE policy stays, but the migration adds a BEFORE UPDATE trigger that rejects direct changes to `archived_at`/`archived_by` unless performed by the definer function (guard via a session-local flag set inside the function).
+`public.project_network_moderation`
+- `project_profile_id uuid pk references project_profiles(id) on delete cascade`
+- `is_hidden boolean not null default false`
+- `internal_reason text` (never public)
+- `hidden_at timestamptz`, `hidden_by uuid`, `restored_at timestamptz`, `restored_by uuid`
+- `created_at`, `updated_at`
 
-No renames. No changes to any other table.
+RLS enabled, **no grants to `anon` or `authenticated`** (same shape as `project_platform_reviews`); only SECURITY DEFINER RPCs and `service_role` touch it. Hiding writes a row; restoring flips `is_hidden=false` and keeps history. Nothing is deleted, so launches, watch subscriptions, notification history, verification, sticker and Telegram data are untouched.
 
-## B. Server operation design
+**Launch-level moderation: not needed.** Project-level hiding already suppresses every public surface (verified above). No extra state.
 
-Two SECURITY DEFINER RPCs plus one Edge Function, split by capability:
+## 2. Exact new/changed database functions
 
-1. `public.archive_sticker_pack(_pack_id uuid)` — RPC. Pure SQL work: verify `is_workspace_operator(workspace_id, auth.uid())`, set `archived_at/archived_by`, disable every `sticker_drop_schedules` row for the pack (`enabled=false`, `next_run_at=null`, `paused_reason='pack_archived'`). Atomic in one transaction. No storage involved, so an RPC is correct and cheapest.
-2. `public.restore_sticker_pack(_pack_id uuid)` — RPC. Operator check, clear `archived_at/archived_by`. Schedules stay disabled with `paused_reason='pack_archived'` retained until a human re-enables them (no silent resumption of recurring posting).
-3. `sticker-pack-delete` — Edge Function (`verify_jwt=true`). Hard delete needs storage-object removal, which SQL cannot do. Flow: authenticate caller → call a definer RPC `delete_sticker_pack_prepare(_pack_id)` that re-validates eligibility and returns the pack's owned `media_assets` rows (ids + storage paths) → remove those storage objects with the service-role client → call `delete_sticker_pack_commit(_pack_id, _asset_ids)` which deletes the `media_assets` rows and the pack row inside one transaction. Eligibility is re-checked in both RPCs so the UI can never bypass it.
+New (all `SECURITY DEFINER`, `SET search_path = public`, owner derived from `auth.uid()` via `is_platform_owner`, `EXECUTE` granted to `authenticated` only):
+- `public.set_project_network_moderation(_project_profile_id uuid, _hidden boolean, _internal_reason text default null)` → returns the resulting moderation row fields. Fails closed with `42501` for non-owners; `P0002` if the profile does not exist.
+- `public.get_platform_network_moderation()` → owner-only directory: project slug, name, ticker, chain, `discovery_status`, `is_hidden`, `internal_reason`, `hidden_at`, `restored_at`, verification status, launch count. No user ids, no workspace ids.
+- `public.get_platform_launch_analytics()` → single owner-only aggregate payload (section 5).
 
-Canonical source under `backend-source/edge-functions/sticker-pack-delete/`, deployment mirror under `supabase/functions/sticker-pack-delete/`. Not deployed in the implementation run unless separately authorized.
+Changed (add one predicate each — public visibility must respect hiding immediately):
+`get_cartel_network_projects`, `get_cartel_network_project`, `get_cartel_network_project_launches`, `get_cartel_network_upcoming_launches`, `get_cartel_network_launch`, `get_cartel_network_signals`, `get_cartel_network_summary` — each gains
+`and not exists (select 1 from public.project_network_moderation m where m.project_profile_id = p.id and m.is_hidden)`.
+Signatures, return columns and all other logic stay byte-identical otherwise.
 
-## C. Eligibility rules
+## 3. Frontend files likely to change
 
-Permanent delete allowed only when ALL are true:
-- caller is workspace owner/admin (`is_workspace_operator`)
-- `sticker_packs.telegram_set_name is null` and `telegram_published_at is null`
-- `status not in ('published','publishing','generating')`
-- no `stickers` row with `telegram_file_id is not null`
-- zero rows in `sticker_pack_group_targets` for the pack
-- zero rows in `sticker_drop_schedules` for the pack
-- zero rows in `sticker_drop_events` for the pack
-- `archived_at is null` (archived packs are restored first, then deleted, if still eligible)
+- `src/lib/platform-moderation.ts` (new) — typed fetch/mutate wrappers over the two moderation RPCs.
+- `src/lib/platform-analytics.ts` (new) — typed wrapper over the analytics RPC.
+- `src/routes/_authenticated/admin.tsx` — two new `<Section>`s: **Network Moderation** (list, Hide/Restore with confirmation dialog + optional internal reason, loading/error+Retry/empty states) and **Launch Analytics** (aggregate metric tiles + per-launch table, same state discipline). Placed after Project Verification. No redesign of existing sections.
+- `src/integrations/supabase/types.ts` — regenerated after the migration (generated file, not hand-edited).
 
-Anything failing the above is archive-only. Archive requires operator role and `archived_at is null`. Restore requires operator role and `archived_at is not null`.
+## 4. Migration required
 
-## D. Media/storage cleanup boundary
+Yes — one migration: create the table + grants (`service_role` only) + RLS, create the three new RPCs, and `CREATE OR REPLACE` the seven public network RPCs with the added predicate.
 
-Only assets exclusively owned by the pack are removed:
-- `media_assets` rows referenced by `stickers.image_asset_id` for stickers of this pack, restricted to `asset_type = 'generated_sticker'` and same `workspace_id`.
+## 5. Launch analytics metrics and backing conditions
 
-Explicitly excluded: `sticker_packs.reference_asset_id`, any Brand Kit logo/mascot/reference asset, `project_profiles.logo_asset_id`, and any asset referenced by a sticker outside this pack (checked with a NOT EXISTS guard). Storage objects are removed by exact `storage_path` returned from the DB — never by prefix listing.
+Network / projects
+- projects total; published (`discovery_status='published'`); hidden by operator (`='hidden'`); hidden by platform (`project_network_moderation.is_hidden`); verified (`project_platform_reviews.status='verified'`); pending review.
 
-## E. Sticker Drops on archive/restore
+Launches
+- total launches; count grouped by each lifecycle `status`; launches with a scheduled `launch_at`; launches with `official_contract_address` registered.
 
-Archive: all schedules for the pack are set `enabled=false`, `next_run_at=null`, `paused_reason='pack_archived'` in the same transaction as the archive flag. The existing `validate_sticker_drop_schedule` trigger already nulls `next_run_at` when disabled, so the runner cannot pick them up. `sticker_drop_events` history is untouched.
+Launch Watch (aggregates only)
+- active subscriptions (`is_active`), inactive/stopped, reminders enabled vs muted, distinct launches with at least one active watcher, opt-ins in last 7/30 days (`subscribed_at`).
 
-Restore: schedules stay disabled with the reason preserved; the UI shows "Sticker Drops for this pack were paused when it was archived — re-enable them in Sticker Drops." No automatic resumption.
+Notifications
+- `launch_events` count total and per launch; `launch_notification_deliveries` grouped by `status` (sent / pending / failed) and count with `attempt_count > 1`.
 
-Optional guard (recommended, additive): extend `validate_sticker_drop_schedule` to raise when enabling a schedule whose pack is archived.
+Per-launch table (top N by active watchers)
+- launch slug, token name, chain, status, `launch_at`, active watchers, muted watchers, events emitted, deliveries sent/failed.
 
-## F. UI changes
+Community readiness (already available, cheap)
+- connected groups total; groups with `welcome_enabled`; groups with `launch_watch_cta_enabled`.
 
-`sticker-lab.index.tsx`
-- "Your packs" list filters `archived_at is null`.
-- New compact collapsed "Archived packs" section (count + list, restore action, view link), only rendered when archived packs exist.
-- Per-pack overflow action: "Archive pack" or "Delete pack permanently" depending on eligibility; hidden entirely for non-operators.
+Explicitly excluded: price, volume, market cap, PnL, engagement scores, social metrics, risk/safety scores.
 
-`sticker-lab.$packId.tsx`
-- Archived packs render a quiet banner: archived state, who/when, that Sticker Drops were paused, and that the Telegram sticker set still exists on Telegram and is unchanged.
-- Lifecycle actions (publish, send to communities) disabled while archived; primary action becomes "Restore pack".
-- Delete path uses a typed-confirmation dialog (type the pack title) and states exactly what is destroyed: sticker rows, generated sticker images, the draft itself; and that AI job/usage history is retained without pack attribution.
-- Ineligible packs show the archive dialog instead, with the reason ("published to Telegram", "delivered to communities", "used by Sticker Drops").
+## 6. Privacy / security rules
 
-`src/lib/sticker-packs.ts`
-- `listWorkspacePacks` gains an archived filter; add `listArchivedPacks`, `archivePack`, `restorePack`, `deletePackPermanently` (invokes the Edge Function), plus a pure `packDeleteEligibility()` helper for the UI hint (server remains authoritative).
+- No `telegram_user_id`, subscription id, user id or workspace id ever leaves the RPCs — counts and public slugs only.
+- `internal_reason` is returned only by the owner-only moderation RPC, never by any public RPC.
+- Owner enforcement is inside every RPC body (`is_platform_owner(auth.uid())`), not by hiding buttons.
+- Hide/restore is reversible and non-destructive; restoring changes visibility only — it never sets verification status or touches launch lifecycle.
+- All new functions pin `search_path`, are `STABLE`/`VOLATILE` as appropriate, and fail closed.
 
-Copy rule enforced everywhere: archiving in CARTEL HQ never deletes the Telegram sticker set.
+## 7. Test / acceptance checklist
 
-## G. Expected files / objects
+- `bunx tsgo --noEmit` and `bun run build` pass.
+- Live DB: confirm the three new functions exist with `SECURITY DEFINER` + pinned `search_path`; confirm `project_network_moderation` has RLS on and zero `anon`/`authenticated` grants.
+- Authorization: non-owner call to each new RPC raises `42501`.
+- Visibility: hide a published project → `get_cartel_network_projects`, `..._project`, `..._launch`, `..._signals`, `..._summary` all stop returning it; restore → all return it again with unchanged verification status and lifecycle.
+- Data preservation: row counts for `launches`, `launch_watch_subscriptions`, `launch_notification_deliveries`, `project_platform_reviews` unchanged across hide/restore.
+- Analytics payload contains no id-like or Telegram fields (explicit key inspection).
+- UI: loading, error+Retry, and genuine empty states render in both new sections; responsive at 375px.
+- CARTEL HQ remains unpublished; no Edge Function deploy.
 
-- migration: `sticker_packs.archived_at/archived_by`, index, DELETE-policy removal, archive-column guard trigger, 5 functions (`archive_sticker_pack`, `restore_sticker_pack`, `delete_sticker_pack_prepare`, `delete_sticker_pack_commit`, schedule-enable guard), grants to `authenticated`
-- `backend-source/edge-functions/sticker-pack-delete/index.ts` (+ deployment mirror)
-- `src/lib/sticker-packs.ts`
-- `src/routes/_authenticated/sticker-lab.index.tsx`
-- `src/routes/_authenticated/sticker-lab.$packId.tsx`
-- regenerated Supabase types (platform-generated)
+## 8. Prohibited scope
 
-Nothing else. Distribution/Telegram/Community routes untouched.
+No parallel admin role or second backend; no Lovable Cloud. No delete/suspend/ban, no risk or safety scores, no KYC/KYB, no blacklists, no automated enforcement. No edits to project-authored profile or launch content. No changes to Launch Watch subscription behavior, launch lifecycle semantics, Telegram flows/webhook, Sticker Lab, Sticker Drops, auth, billing, or the public marketing site. No publish, no deploy, no package/lockfile changes, no changes to existing sections of `/admin` beyond adding the two new ones.
 
-## H. Rollback and partial-failure behavior
+## 9. Recommended atomic subphases
 
-- Archive/restore are single transactions — all-or-nothing, no partial state.
-- Delete is ordered prepare → storage → commit. If storage removal fails, commit is never called and the pack remains fully intact (safe failure, zero orphaned DB state).
-- If commit fails after storage removal, the pack row survives with dangling image references; the UI surfaces "Cleanup incomplete — retry delete", and a retry is idempotent because prepare re-derives current assets and missing storage objects are ignored.
-- Every failure returns a generic user-facing error plus a precise server-side reason; no partial success is ever reported as success.
-- Rollback of the feature itself: drop the two columns and functions; nothing existing depends on them.
+- **9A — Moderation backend**: migration (table + grants + RLS + `set_project_network_moderation` + `get_platform_network_moderation` + the seven public RPC predicate updates), types regen, live visibility verification. No UI.
+- **9B — Moderation UI**: `src/lib/platform-moderation.ts` + the Network Moderation section in `/admin` with confirmation dialog.
+- **9C — Launch analytics backend**: migration adding `get_platform_launch_analytics`, types regen, payload privacy inspection.
+- **9D — Launch analytics UI**: `src/lib/platform-analytics.ts` + the Launch Analytics section in `/admin`.
 
-## I. Test matrix
+Each subphase ends at its own checkpoint; 9A must pass live visibility checks before 9B.
 
-| Case | Expected |
-|---|---|
-| Draft pack, no stickers, member role | actions hidden; RPC/function rejects |
-| Draft pack, no dependencies, operator | permanent delete succeeds; sticker rows + generated assets + storage objects gone |
-| Draft pack whose reference asset is a Brand Kit logo | logo asset and storage object survive |
-| Pack with `telegram_set_name` set | delete rejected server-side even if forced; archive offered |
-| Pack with group targets only | delete rejected; archive succeeds; targets preserved |
-| Pack with enabled Sticker Drop schedule | archive disables it, `next_run_at` null, `paused_reason='pack_archived'`; runner skips |
-| Archived pack | absent from Your packs, present in Archived, publish/send disabled |
-| Restore | reappears in Your packs; schedules remain disabled |
-| Re-enable schedule for archived pack | rejected by trigger guard |
-| Direct client `delete from sticker_packs` | denied by RLS |
-| Direct client update of `archived_at` | denied by trigger |
-| Storage failure mid-delete | pack intact, truthful error |
-| `ai_jobs` / `usage_ledger` after delete | rows retained, pack attribution nulled |
+## 10. Zero edits confirmation
 
-## J. Ambiguity / risk
-
-- The archive-column trigger guard relies on a session-local setting set inside the definer functions; if that pattern is rejected by the platform linter, the fallback is a narrower column-level revoke on `archived_at/archived_by` for `authenticated`. Decide at implementation time.
-- Exact current RLS policy text on `sticker_packs` and `sticker_drop_schedules` should be read (read-only) immediately before writing the migration; the audit confirmed member delete is possible but the policy names must be quoted exactly.
-- Whether operator-only is desired for archive as well as delete — this plan applies operator-only to both, per requirement 8.
-- Edge Function deployment is out of scope here; without deployment, permanent delete is inert in preview. Confirm whether the implementation run may deploy `sticker-pack-delete`.
-- Whether a stale `sticker_pack_group_targets` row with status `failed`/never-announced should still block deletion — this plan blocks it (conservative). Say if you want failed-only targets to be deletable.
+No code, database, migration, Edge Function, config, data or deployment change was made in this turn. The only file written is `.lovable/plan.md`.
