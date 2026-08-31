@@ -922,13 +922,13 @@ export function TelegramGroupCard({
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-surface-raised p-2.5 sm:p-3">
             <div className="min-w-0">
               <p className="text-xs font-semibold text-foreground">
-                {selectedGroupIds.length} of {groups.length} group
-                {groups.length === 1 ? "" : "s"} selected for distribution
+                {selectedGroupIds.length} of {groups.length} communit
+                {groups.length === 1 ? "y" : "ies"} selected to receive this pack
               </p>
               {groups.length > MAX_DISTRIBUTION_TARGETS ? (
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  One distribution run covers up to {MAX_DISTRIBUTION_TARGETS} groups. Run it again
-                  for the rest — the sticker set is never recreated.
+                  One send covers up to {MAX_DISTRIBUTION_TARGETS} communities. Run it again for the
+                  rest — the sticker set is never recreated.
                 </p>
               ) : null}
             </div>
