@@ -21,6 +21,27 @@ export type NetworkProjectLaunch =
 export type NetworkUpcomingLaunch =
   Fns["get_cartel_network_upcoming_launches"]["Returns"][number];
 export type NetworkLaunch = Fns["get_cartel_network_launch"]["Returns"][number];
+export type NetworkSignal = Fns["get_cartel_network_signals"]["Returns"][number];
+
+const SIGNAL_LABELS: Record<string, string> = {
+  LAUNCH_ANNOUNCED: "Launch announced",
+  WATCHLIST_OPENED: "Launch Watch opened",
+  OFFICIAL_CONTRACT_REGISTERED: "Official contract registered",
+  LAUNCH_LIVE: "Launch is live",
+  LAUNCH_COMPLETED: "Launch completed",
+};
+
+export function signalLabel(type: string | null | undefined): string {
+  return SIGNAL_LABELS[(type ?? "").toUpperCase()] ?? "Launch update";
+}
+
+export function signalTone(type: string | null | undefined): LaunchTone {
+  const key = (type ?? "").toUpperCase();
+  if (key === "OFFICIAL_CONTRACT_REGISTERED" || key === "LAUNCH_LIVE") return "green";
+  if (key === "LAUNCH_COMPLETED") return "muted";
+  return "gold";
+}
+
 
 export const NETWORK_PAGE_SIZE = 12;
 
