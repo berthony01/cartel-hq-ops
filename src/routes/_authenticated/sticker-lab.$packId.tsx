@@ -108,13 +108,16 @@ function PackManagerPage() {
     (s) => s.status === "ready" || s.status === "published",
   ).length;
   const allReady = stickers.length > 0 && readyCount === stickers.length;
-  const statusLabel = published
-    ? "Published"
-    : allReady
-      ? "Ready to publish"
-      : readyCount > 0
-        ? "Review in progress"
-        : "In progress";
+  const isArchived = !!pack.archived_at;
+  const statusLabel = isArchived
+    ? "Archived"
+    : published
+      ? "Published"
+      : allReady
+        ? "Ready to publish"
+        : readyCount > 0
+          ? "Review in progress"
+          : "In progress";
 
   return (
     <div className="flex min-w-0 flex-col gap-6 sm:gap-8">
@@ -123,7 +126,30 @@ function PackManagerPage() {
         title={pack.title}
         status={statusLabel}
         description={`${pack.theme} · ${pack.pack_size} stickers · ${readyCount}/${stickers.length} ready`}
+        actions={
+          <PackLifecycleMenu
+            packId={pack.id}
+            packTitle={pack.title}
+            workspaceId={workspaceId}
+            onDeleted={() => void navigate({ to: "/sticker-lab" })}
+          />
+        }
       />
+
+      {isArchived ? (
+        <Section
+          variant="quiet"
+          title="This pack is archived"
+          description="Archived packs stay out of your active packs and their Sticker Drops are paused. Publishing, delivery and generation history are preserved, and the existing Telegram sticker set is not deleted from Telegram. Restore it from the pack options menu to make it active again — Sticker Drops stay paused until you re-enable them."
+          actions={<StatusBadge tone="muted">archived</StatusBadge>}
+        >
+          <p className="flex items-start gap-2 text-sm text-muted-foreground">
+            <Archive className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>Editing, publishing and community delivery actions are hidden while archived.</span>
+          </p>
+        </Section>
+      ) : null}
+
 
       <Section
         variant="hero"
