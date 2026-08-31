@@ -123,6 +123,70 @@ export function TrustNote({ className }: { className?: string }) {
   );
 }
 
+/** Small, restrained Platform Reviewed pill. Never a generic "verified" badge. */
+export function PlatformReviewedPill({ className }: { className?: string }) {
+  return (
+    <StatusPill tone="gold" className={className}>
+      Platform Reviewed
+    </StatusPill>
+  );
+}
+
+/**
+ * Layered, factual trust signals for public detail pages. `Project
+ * Authenticated` and `Platform Reviewed` are distinct signals and neither
+ * validates a contract, a token or a team.
+ */
+export function VerificationSignals({
+  platformReviewed,
+  platformReviewedAt,
+  className,
+}: {
+  platformReviewed: boolean;
+  platformReviewedAt?: string | null;
+  className?: string;
+}) {
+  const reviewedOn = platformReviewed ? formatDateTime(platformReviewedAt) : null;
+  return (
+    <section className={cn("rounded-lg border border-border bg-surface px-4 py-4", className)}>
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">
+        Verification &amp; trust signals
+      </h2>
+
+      <div className="mt-3 space-y-3">
+        <div>
+          <StatusPill tone="gold">Project Authenticated</StatusPill>
+          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+            {NETWORK_TRUST_COPY.projectAuthenticated}
+          </p>
+        </div>
+
+        {platformReviewed ? (
+          <div>
+            <PlatformReviewedPill />
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              {NETWORK_TRUST_COPY.platformReviewed}
+              {reviewedOn ? ` Reviewed ${reviewedOn}.` : ""}
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Platform review: Not reviewed.
+          </p>
+        )}
+      </div>
+
+      <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+        {NETWORK_TRUST_COPY.verificationClarifier}
+      </p>
+      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+        {NETWORK_TRUST_COPY.projectSupplied} {NETWORK_TRUST_COPY.notAnAudit}
+      </p>
+    </section>
+  );
+}
+
+
 export function NetworkEmpty({ title, description }: { title: string; description: string }) {
   return (
     <div className="rounded-lg border border-dashed border-border bg-surface/40 px-6 py-10 text-center">
