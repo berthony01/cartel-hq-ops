@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FolderLock, Loader2, Palette, Save } from "lucide-react";
+import { Check, FolderLock, Loader2, Palette, Save, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/lib/workspace-context";
@@ -19,6 +19,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import {
+  MAX_CANONICAL_REFERENCES,
+  emptyCharacterLock,
+  formatLockList,
+  parseLockList,
+  readCharacterLock,
+  writeCharacterLock,
+  type CharacterLock,
+} from "@/lib/brand-kit";
 
 export const Route = createFileRoute("/_authenticated/brand-kit")({
   head: () => ({
@@ -54,6 +64,47 @@ type BrandKitForm = {
   prohibited_styles: string;
 };
 
+/** Character Lock form mirror — lists live as editable text here. */
+type LockForm = {
+  enabled: boolean;
+  subjectName: string;
+  identityNotes: string;
+  protectedTraits: string;
+  wardrobeAccessories: string;
+  negativeConstraints: string;
+  canonicalReferenceAssetIds: string[];
+};
+
+const EMPTY_LOCK_FORM: LockForm = {
+  enabled: false,
+  subjectName: "",
+  identityNotes: "",
+  protectedTraits: "",
+  wardrobeAccessories: "",
+  negativeConstraints: "",
+  canonicalReferenceAssetIds: [],
+};
+
+const toLockForm = (lock: CharacterLock): LockForm => ({
+  enabled: lock.enabled,
+  subjectName: lock.subjectName,
+  identityNotes: lock.identityNotes,
+  protectedTraits: formatLockList(lock.protectedTraits),
+  wardrobeAccessories: formatLockList(lock.wardrobeAccessories),
+  negativeConstraints: formatLockList(lock.negativeConstraints),
+  canonicalReferenceAssetIds: lock.canonicalReferenceAssetIds,
+});
+
+const fromLockForm = (form: LockForm): CharacterLock => ({
+  enabled: form.enabled,
+  subjectName: form.subjectName.trim(),
+  identityNotes: form.identityNotes,
+  protectedTraits: parseLockList(form.protectedTraits),
+  wardrobeAccessories: parseLockList(form.wardrobeAccessories),
+  negativeConstraints: parseLockList(form.negativeConstraints),
+  canonicalReferenceAssetIds: form.canonicalReferenceAssetIds.slice(0, MAX_CANONICAL_REFERENCES),
+});
+
 const EMPTY_FORM: BrandKitForm = {
   brand_name: "",
   ticker: "",
@@ -85,6 +136,7 @@ function BrandKitPage() {
   const { workspaceId, workspace, loading: workspaceLoading } = useWorkspace();
   const queryClient = useQueryClient();
   const [form, setForm] = useState<BrandKitForm>(EMPTY_FORM);
+  const [lockForm, setLockForm] = useState<LockForm>(EMPTY_LOCK_FORM);
 
   const brandKitQuery = useQuery({
     queryKey: ["brand-kit", workspaceId],
@@ -130,8 +182,10 @@ function BrandKitPage() {
   useEffect(() => {
     if (!loaded) {
       setForm(EMPTY_FORM);
+      setLockForm(EMPTY_LOCK_FORM);
       return;
     }
+    setLockForm(toLockForm(readCharacterLock(loaded.metadata)));
     setForm({
       brand_name: loaded.brand_name ?? "",
       ticker: loaded.ticker ?? "",
@@ -163,6 +217,11 @@ function BrandKitPage() {
         ai_style_notes: nullable(form.ai_style_notes),
         approved_phrases: toList(form.approved_phrases),
         prohibited_styles: toList(form.prohibited_styles),
+        // Merge only our key; every other metadata key on the row is preserved.
+        metadata: writeCharacterLock(
+          loaded?.metadata ?? {},
+          fromLockForm(lockForm),
+        ) as never,
       };
 
       if (loaded?.id) {
