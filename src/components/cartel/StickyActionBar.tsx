@@ -47,18 +47,19 @@ export function StickyActionBar({
           className,
         )}
       >
-
-      {hint ? (
-        <p className="mb-2 truncate text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-          {hint}
-        </p>
-      ) : null}
-      {children ?? (
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">{start}</div>
-          <div className="flex shrink-0 items-center gap-2">{end}</div>
-        </div>
-      )}
-    </div>
+        {hint ? (
+          <p className="mb-2 truncate text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            {hint}
+          </p>
+        ) : null}
+        {children ?? (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">{start}</div>
+            <div className="flex min-w-0 shrink-0 items-center gap-2">{end}</div>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
+
