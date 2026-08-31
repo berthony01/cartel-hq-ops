@@ -799,15 +799,33 @@ function StickerLabBuilder() {
       toast.error("Select a project first.");
       return;
     }
-    const scoped = targetIds
-      ? draft.concepts.filter((c) => !c.locked && targetIds.includes(c.id))
-      : null;
-    const targets =
-      scoped && scoped.length
-        ? scoped
-        : mode === "alternatives"
-          ? selectedConcepts
-          : unlockedConcepts;
+    let targets: Concept[];
+    if (mode === "alternatives") {
+      if (targetIds && targetIds.length > 0) {
+        // Explicit "Suggest another set" refresh: the supplied ids are the
+        // authoritative scope. Resolve each one against the current board in
+        // board order; if any are missing or locked, abort before contacting
+        // the provider and without touching the existing preview.
+        const byId = new Map(draft.concepts.map((c, i) => [c.id, { concept: c, index: i }]));
+        const ordered: Concept[] = [];
+        for (const id of targetIds) {
+          const found = byId.get(id);
+          if (!found || found.concept.locked) {
+            toast.message(
+              "The preview targets changed. Unlock/restore them or request new alternatives.",
+            );
+            return;
+          }
+          ordered.push(found.concept);
+        }
+        targets = ordered;
+      } else {
+        // First-time alternatives request: use the user's current selection.
+        targets = selectedConcepts;
+      }
+    } else {
+      targets = unlockedConcepts;
+    }
     if (!targets.length) return;
     setSuggesting(true);
     setConceptError(null);
