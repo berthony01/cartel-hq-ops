@@ -25,8 +25,13 @@ import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { formatDateTime } from "@/lib/cartel-network";
 import {
+  canRequestVerification,
   fetchProjectVerificationState,
   projectVerificationKeys,
+  requestProjectVerification,
+  VERIFICATION_STATUS_DESCRIPTION,
+  VERIFICATION_STATUS_LABEL,
+  verificationStatusOf,
 } from "@/lib/project-verification";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
