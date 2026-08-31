@@ -375,6 +375,7 @@ export function emptyDraft(): BuilderDraft {
     packId: null,
     stickerIds: {},
     creativeBlueprint: emptyBlueprint(),
+    conceptBoardApproved: false,
   };
 }
 
