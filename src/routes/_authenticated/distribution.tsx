@@ -53,7 +53,7 @@ export const Route = createFileRoute("/_authenticated/distribution")({
       {
         property: "og:description",
         content:
-          "Community automation console for recurring Telegram sticker drops: schedules, delivery health and emergency control.",
+          "Sticker Drops console for recurring Telegram sticker posting: schedules, delivery health and emergency control.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
