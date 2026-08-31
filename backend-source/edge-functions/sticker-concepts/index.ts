@@ -432,7 +432,8 @@ Deno.serve(async (req: Request) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: CHAT_MODEL,
+        stream: false,
+        include_thoughts: false,
         messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
         response_format: {
           type: "json_schema",
