@@ -266,7 +266,7 @@ export function useTelegramGroupSetup(enabled = true) {
     setSelectedGroupIds(groups.slice(0, MAX_DISTRIBUTION_TARGETS).map((g) => g.id));
     if (groups.length > MAX_DISTRIBUTION_TARGETS) {
       toast.message(
-        `Selected the first ${MAX_DISTRIBUTION_TARGETS} groups — one distribution run is capped at ${MAX_DISTRIBUTION_TARGETS}.`,
+        `Selected the first ${MAX_DISTRIBUTION_TARGETS} communities — one send is capped at ${MAX_DISTRIBUTION_TARGETS}.`,
       );
     }
   }, [groups]);
