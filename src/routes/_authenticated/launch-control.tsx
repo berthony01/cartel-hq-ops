@@ -810,7 +810,7 @@ function LaunchControlPage() {
                     }}
                   >
                     <Section
-                      variant="surface"
+                      variant="primary"
                       title="Launch identity"
                       description={
                         idLocked
@@ -939,7 +939,7 @@ function LaunchControlPage() {
                     </Section>
 
                     <Section
-                      variant="surface"
+                      variant="quiet"
                       title="Internal notes"
                       description="Operator-only. Never shown outside this project."
                     >
@@ -965,7 +965,7 @@ function LaunchControlPage() {
 
                 {canManage && canDeleteLaunch(status) ? (
                   <Section
-                    variant="surface"
+                    variant="quiet"
                     title="Delete draft"
                     description="Only draft launches can be deleted. Once announced, a launch record is permanent."
                   >
