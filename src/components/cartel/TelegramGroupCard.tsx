@@ -393,7 +393,7 @@ function GroupRow({
             checked={selected}
             onCheckedChange={onToggle}
             className="mt-1 size-5"
-            aria-label={`Select ${g.title} as a distribution target`}
+            aria-label={`Select ${g.title} as a community target`}
           />
         ) : null}
         <div className="min-w-0 flex-1">
