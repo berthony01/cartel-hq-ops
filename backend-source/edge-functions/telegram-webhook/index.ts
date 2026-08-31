@@ -489,26 +489,26 @@ Deno.serve(async (req: Request) => {
   const launchWatchSubscribe = async (
     launchId: string,
     telegramUserId: number,
-  ): Promise<{ outcome: LaunchWatchOutcome; remindersEnabled: boolean }> => {
+  ): Promise<{ outcome: LaunchWatchOutcome; remindersEnabled: boolean; subscriptionId: string | null }> => {
     const now = new Date().toISOString();
     const existing = await readLaunchWatchRow(launchId, telegramUserId);
     if (existing?.id) {
       if (existing.is_active) {
         await touchLaunchWatchRow(existing.id, now);
-        return { outcome: "already_active", remindersEnabled: existing.reminders_enabled !== false };
+        return { outcome: "already_active", remindersEnabled: existing.reminders_enabled !== false, subscriptionId: String(existing.id) };
       }
       await reactivateLaunchWatchRow(existing.id, now);
-      return { outcome: "reactivated", remindersEnabled: existing.reminders_enabled !== false };
+      return { outcome: "reactivated", remindersEnabled: existing.reminders_enabled !== false, subscriptionId: String(existing.id) };
     }
 
-    const { error: insertError } = await admin.from("launch_watch_subscriptions").insert({
+    const { data: inserted, error: insertError } = await admin.from("launch_watch_subscriptions").insert({
       launch_id: launchId,
       telegram_user_id: telegramUserId,
       is_active: true,
       subscribed_at: now,
       last_interaction_at: now,
       source: "telegram_deep_link",
-    });
+    }).select("id").maybeSingle();
     if (insertError) {
       if (!isUniqueViolation(insertError)) {
         throw new Error("Could not save launch watch subscription.");
@@ -517,11 +517,12 @@ Deno.serve(async (req: Request) => {
       if (!raced?.id) throw new Error("Could not save launch watch subscription.");
       if (raced.is_active) {
         await touchLaunchWatchRow(raced.id, now);
-        return { outcome: "already_active", remindersEnabled: raced.reminders_enabled !== false };
+        return { outcome: "already_active", remindersEnabled: raced.reminders_enabled !== false, subscriptionId: String(raced.id) };
       }
       await reactivateLaunchWatchRow(raced.id, now);
-      return { outcome: "reactivated", remindersEnabled: raced.reminders_enabled !== false };
+      return { outcome: "reactivated", remindersEnabled: raced.reminders_enabled !== false, subscriptionId: String(raced.id) };
     }
+
     return { outcome: "subscribed", remindersEnabled: true };
   };
 
