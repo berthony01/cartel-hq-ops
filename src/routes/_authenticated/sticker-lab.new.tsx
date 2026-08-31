@@ -2886,9 +2886,10 @@ function StickerLabBuilder() {
                     }
                     onClick={() => {
                       clearSelection();
-                      // First-test path fails closed on a Telegram-locked sticker.
-                      const first = draft.concepts.find((c) => !conceptTelegramLocked(c.id));
-                      if (!first) {
+                      // Preserve original meaning: the first concept is the test sticker.
+                      const first = draft.concepts[0];
+                      if (!first) return;
+                      if (conceptTelegramLocked(first.id)) {
                         toast.message("Live on Telegram", {
                           description: TELEGRAM_LOCK_MESSAGE,
                         });
