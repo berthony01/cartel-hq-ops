@@ -1399,7 +1399,7 @@ function StickerLabBuilder() {
       <PageHeader
         eyebrow="Sticker Lab"
         title="New Sticker Pack"
-        description={`Creating for ${projectName}. This pack belongs to this project — the Brand Kit and project references guide generation, and you choose which of this project's Telegram communities receive it after review. AI generation runs server-side and only when you start it.`}
+        description={`Creating for ${projectName}. This pack belongs to this project — sticker generation uses this project's Brand Kit when one is saved, plus the selected or available project reference assets, and you choose which of this project's Telegram communities receive it after review. AI generation runs server-side and only when you start it.`}
         status={draft.packId ? `Saved to ${projectName}` : "Draft"}
         actions={
           <Button asChild variant="outline" className="min-h-11">
@@ -1416,7 +1416,7 @@ function StickerLabBuilder() {
       {step === 1 ? (
         <StepCard
           title="Character Reference"
-          hint="Stored privately in this project's Asset Vault. The project Brand Kit and the references you select here guide generation."
+          hint="Stored privately in this project's Asset Vault. Sticker generation uses this project's Brand Kit when one is saved, plus the selected or available project reference assets."
         >
           <div className="grid gap-6 md:grid-cols-2 [&>*]:min-w-0">
             <div>
@@ -2120,9 +2120,9 @@ function StickerLabBuilder() {
                   {exportableCount} of {draft.concepts.length} stickers ready
                 </p>
                 <p className="mt-1 max-w-prose text-xs text-muted-foreground">
-                  This pack belongs to {projectName} and was built from that project&apos;s Brand
-                  Kit and reference assets. Ready stickers can be published as one Telegram sticker
-                  set.
+                  This pack belongs to {projectName}. Sticker generation uses this project&apos;s
+                  Brand Kit when one is saved, plus the selected or available project reference
+                  assets. Ready stickers can be published as one Telegram sticker set.
                 </p>
               </div>
               <StatusBadge
@@ -2132,7 +2132,9 @@ function StickerLabBuilder() {
                   ? `${attentionCount} need attention`
                   : exportReady
                     ? "Ready to publish"
-                    : "Checks in progress"}
+                    : checksRunning || activeCount > 0
+                      ? "Checks in progress"
+                      : "Not ready yet"}
               </StatusBadge>
             </div>
 
@@ -2962,7 +2964,7 @@ function StickerLabBuilder() {
             </div>
           </details>
 
-          {tgPublishedCount > 0 || packSchedules.length > 0 ? (
+          {allPublished || packSchedules.length > 0 ? (
             <Card className="cartel-panel mt-6">
               <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
                 <CardTitle className="text-base">Next step — Sticker Drops</CardTitle>
