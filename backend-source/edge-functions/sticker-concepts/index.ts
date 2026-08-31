@@ -458,8 +458,8 @@ Deno.serve(async (req: Request) => {
     properties: {
       concepts: {
         type: "array",
-        minItems: size,
-        maxItems: size,
+        minItems: targetCount,
+        maxItems: targetCount,
         items: {
           type: "object",
           additionalProperties: false,
