@@ -211,7 +211,7 @@ function DistributionPage() {
         <>
           <Section
             variant="hero"
-            title="Automation state"
+            title="Sticker Drops state"
             actions={
               <StatusBadge tone={killSwitch ? "red" : "green"}>
                 {killSwitch ? "Emergency pause ON" : "Normal operation"}
