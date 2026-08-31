@@ -538,32 +538,17 @@ Deno.serve(async (req: Request) => {
   ) => {
     if (!subscriptionId) return;
     try {
-      const { data: current } = await admin
-        .from("launch_watch_subscriptions")
-        .select("confirmation_attempt_count")
-        .eq("id", subscriptionId)
-        .maybeSingle();
-      const attempts = Number((current as any)?.confirmation_attempt_count ?? 0) + 1;
-      const patch: Record<string, unknown> = {
-        confirmation_attempt_count: attempts,
-        confirmation_attempted_at: attemptedAt,
-        confirmation_status: outcome.status,
-      };
-      if (outcome.status === "sent") {
-        patch.confirmation_sent_at = attemptedAt;
-        patch.confirmation_telegram_message_id = outcome.messageId;
-        patch.confirmation_error_class = null;
-        patch.confirmation_last_error = null;
-      } else {
-        patch.confirmation_sent_at = null;
-        patch.confirmation_telegram_message_id = null;
-        patch.confirmation_error_class = outcome.errorClass;
-        patch.confirmation_last_error = outcome.detail;
-      }
-      const { error } = await admin
-        .from("launch_watch_subscriptions")
-        .update(patch)
-        .eq("id", subscriptionId);
+      // Single atomic statement server-side: the attempt counter and the latest
+      // diagnostic state are updated together, so concurrent deep-link opens
+      // cannot lose an increment.
+      const { error } = await admin.rpc("record_launch_watch_confirmation", {
+        _subscription_id: subscriptionId,
+        _attempted_at: attemptedAt,
+        _status: outcome.status,
+        _message_id: outcome.status === "sent" ? outcome.messageId : null,
+        _error_class: outcome.status === "sent" ? null : outcome.errorClass,
+        _last_error: outcome.status === "sent" ? null : outcome.detail,
+      } as any);
       if (error) {
         console.error("launch_watch_confirmation_persist_failed", outcome.status, error.message);
       }
@@ -572,6 +557,7 @@ Deno.serve(async (req: Request) => {
       console.error("launch_watch_confirmation_persist_exception", outcome.status, (error as Error)?.message);
     }
   };
+
 
 
   /** Soft unwatch. The row and its history are always preserved. */
