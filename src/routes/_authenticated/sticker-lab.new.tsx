@@ -840,7 +840,7 @@ function StickerLabBuilder() {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Could not get concept suggestions.";
-      setPreview(null);
+      // Keep any existing preview intact so a failed refresh never loses ideas.
       setConceptError(message);
       toast.error(message);
     } finally {
