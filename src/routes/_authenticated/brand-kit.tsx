@@ -385,56 +385,72 @@ function BrandKitPage() {
           </form>
 
           <Section
-            variant="plain"
-            title="Logos, mascots & references"
-            description="Project assets. Uploads stay private to this project and can be reused as references in Sticker Lab."
-            contentClassName="space-y-4"
+            variant="quiet"
+            title="Project references"
+            description="Read-only view of files stored in this project's Asset Vault. Brand Kit does not keep a separate copy — files are managed once in Asset Vault and reused by Brand Kit, Project Profile and Sticker Lab where applicable."
+            actions={
+              <Button asChild variant="outline" size="sm" className="min-h-10">
+                <Link to="/assets">
+                  <FolderLock className="size-4" aria-hidden="true" />
+                  Open Asset Vault
+                </Link>
+              </Button>
+            }
+            contentClassName="space-y-3"
           >
-            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 [&>*]:min-w-0">
-              {BRAND_ASSET_TYPES.map((type) => (
-                <AssetUploader
-                  key={type}
-                  workspaceId={workspaceId}
-                  userId={user?.id ?? null}
-                  assetType={type}
-                  onUploaded={() =>
-                    queryClient.invalidateQueries({ queryKey: ["brand-assets", workspaceId] })
-                  }
-                />
-              ))}
-            </div>
-
-            {brandAssets.length === 0 ? (
-              <EmptyState
-                compact
-                icon={Palette}
-                title="No brand assets yet"
-                description="Uploaded logos, mascots and references appear here, stay private to this project, and can be reused by Sticker Lab."
-              />
+            {assetsQuery.isLoading ? (
+              <p className="text-xs text-muted-foreground">Loading project references…</p>
+            ) : assetsQuery.isError ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <p role="alert" className="text-xs text-signal">
+                  Project references could not be loaded, so this list is unavailable right now.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-10"
+                  onClick={() => void assetsQuery.refetch()}
+                >
+                  Retry
+                </Button>
+              </div>
+            ) : brandAssets.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No logos, mascots or reference images in Asset Vault yet.
+              </p>
             ) : (
-              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 [&>*]:min-w-0">
-                {brandAssets.map((asset: MediaAsset) => (
-                  <li key={asset.id} className="cartel-panel rounded-lg p-2.5 sm:p-3">
-                    <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md border border-border bg-background/40">
-                      {urls[asset.storage_path] ? (
-                        <img
-                          src={urls[asset.storage_path]}
-                          alt={`${asset.asset_type} asset`}
-                          className="max-h-full max-w-full object-contain"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground">Loading…</span>
-                      )}
-                    </div>
-                    <p className="mt-2 truncate text-[11px] uppercase tracking-wider text-muted-foreground">
-                      {asset.asset_type.replace("_", " ")}
-                    </p>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <ul className="grid grid-cols-3 gap-2 sm:grid-cols-6 [&>*]:min-w-0">
+                  {brandAssets.slice(0, 6).map((asset: MediaAsset) => (
+                    <li key={asset.id} className="rounded-md border border-border/70 p-1.5">
+                      <div className="flex aspect-square items-center justify-center overflow-hidden rounded-sm bg-background/40">
+                        {urls[asset.storage_path] ? (
+                          <img
+                            src={urls[asset.storage_path]}
+                            alt={`${asset.asset_type.replace("_", " ")} reference`}
+                            className="max-h-full max-w-full object-contain"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">Loading…</span>
+                        )}
+                      </div>
+                      <p className="mt-1 truncate text-[10px] uppercase tracking-wider text-muted-foreground">
+                        {asset.asset_type.replace("_", " ")}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-muted-foreground">
+                  {brandAssets.length} logo, mascot and reference file
+                  {brandAssets.length === 1 ? "" : "s"} in Asset Vault
+                  {brandAssets.length > 6 ? " · showing the 6 most recent" : ""}.
+                </p>
+              </>
             )}
           </Section>
+
 
           <StickyActionBar
             desktop="hidden"
