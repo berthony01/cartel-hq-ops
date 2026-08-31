@@ -8,6 +8,8 @@ import {
   MessageSquare,
   Send,
   Globe,
+  Eye,
+
   ShieldHalf,
   type LucideIcon,
 } from "lucide-react";
