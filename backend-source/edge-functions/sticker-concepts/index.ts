@@ -388,6 +388,33 @@ Deno.serve(async (req: Request) => {
   const size = Number(body["size"]);
   if (!workspaceId || !ALLOWED_SIZES.includes(size)) return respond({ error: "INVALID_INPUT" }, 400);
 
+  // Backwards compatible: absent targetCount means "the whole board".
+  const rawTarget = body["targetCount"];
+  const targetCount = rawTarget === undefined || rawTarget === null ? size : Number(rawTarget);
+  if (!Number.isInteger(targetCount) || targetCount < 1 || targetCount > size) {
+    return respond({ error: "INVALID_TARGET_COUNT" }, 400);
+  }
+
+  const modeRaw = safeStr(body["mode"], 20);
+  const mode: "board" | "alternatives" = modeRaw === "alternatives" ? "alternatives" : "board";
+
+  const toConcept = (c: Record<string, unknown>) => ({
+    label: safeStr(c["label"], 48),
+    action: safeStr(c["action"], 200),
+  });
+
+  const focus = Array.isArray(body["focusConcepts"])
+    ? (body["focusConcepts"] as unknown[])
+        .filter(isRecord)
+        .map(toConcept)
+        .filter((c) => c.label || c.action)
+        .slice(0, Math.min(targetCount, 24))
+    : [];
+
+  if (mode === "alternatives" && focus.length !== targetCount) {
+    return respond({ error: "INVALID_FOCUS_CONCEPTS" }, 400);
+  }
+
   const { data: membership } = await admin
     .from("workspace_members")
     .select("user_id")
@@ -400,7 +427,7 @@ Deno.serve(async (req: Request) => {
     ? (body["concepts"] as unknown[])
         .filter(isRecord)
         .slice(0, 24)
-        .map((c) => ({ label: safeStr(c["label"], 48), action: safeStr(c["action"], 200) }))
+        .map(toConcept)
         .filter((c) => c.label || c.action)
     : [];
 
@@ -412,6 +439,9 @@ Deno.serve(async (req: Request) => {
 
   const prompt = buildPrompt({
     size,
+    targetCount,
+    mode,
+    focus,
     characterName: safeStr(body["characterName"], 120),
     theme: safeStr(body["theme"], 60),
     brief: safeStr(body["brief"]),
