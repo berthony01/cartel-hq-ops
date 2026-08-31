@@ -290,6 +290,13 @@ function HqDashboard() {
           ? "No community connected"
           : `${groupCount} connected · ${healthyGroups} healthy`;
 
+  const packsUnavailable = packsQuery.isError;
+  const launchesUnavailable = launchesQuery.isError;
+  const aiJobsClause = usageQuery.isError
+    ? "AI usage unavailable"
+    : `${usageQuery.isPending ? "—" : (usageQuery.data ?? 0)} AI jobs run`;
+
+
   const dropsBadge = dropsQuery.isError ? (
     <StatusBadge tone="muted">Unavailable</StatusBadge>
   ) : killSwitch ? (
