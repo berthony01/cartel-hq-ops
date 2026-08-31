@@ -181,6 +181,57 @@
   box-shadow: var(--shadow-cartel);
 }
 
+/* Dominant operational/status surface. One per page, later phases only. */
+@utility cartel-hero {
+  background:
+    var(--gradient-hq),
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--surface-raised) 88%, transparent),
+      var(--surface)
+    );
+  border: 1px solid color-mix(in oklab, var(--gold) 28%, var(--border));
+  box-shadow: var(--shadow-cartel), var(--glow-gold);
+}
+
+/* --- Semantic typography scale (opt-in, Phase 6.5E) --- */
+
+@utility type-display {
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 1.75rem;
+  line-height: 1.1;
+  @media (min-width: 640px) {
+    font-size: 2.25rem;
+  }
+}
+
+@utility type-section {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+@utility type-body {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+@utility type-meta {
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+
 @utility hover-lift {
   transition:
     transform var(--transition-cartel),
