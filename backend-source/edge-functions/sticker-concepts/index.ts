@@ -523,13 +523,13 @@ Deno.serve(async (req: Request) => {
   const choices = payload["choices"];
   const first = Array.isArray(choices) && isRecord(choices[0]) ? (choices[0] as Record<string, unknown>) : null;
   const message = first && isRecord(first["message"]) ? (first["message"] as Record<string, unknown>) : null;
-  const concepts = parseConcepts(message?.["content"], size);
+  const concepts = parseConcepts(message?.["content"], targetCount);
 
   if (!concepts) {
     return respond(
       {
         error: "PROVIDER_MALFORMED",
-        message: `The concept service did not return ${size} usable concepts. Nothing was changed — try again or keep the starter concepts.`,
+        message: `The concept service did not return ${targetCount} usable concepts. Nothing was changed — try again or keep your current concepts.`,
       },
       502,
     );
