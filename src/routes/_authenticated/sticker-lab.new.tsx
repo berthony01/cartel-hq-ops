@@ -1009,6 +1009,21 @@ function StickerLabBuilder() {
   const isFailure = (stage: Stage) =>
     stage === "failed" || stage === "replacement_failed" || stage === "timeout";
 
+  /**
+   * Sticker Studio bulk eligibility. Deliberately conservative: a sticker that
+   * is busy, already ready, or still holds a valid preview can NEVER be part of
+   * a batch, so a good sticker cannot be replaced by accident. Those keep their
+   * explicit per-card Regenerate / Retry action instead.
+   */
+  const bulkSelectable = (conceptId: string) => {
+    const stage = stageFor(conceptId);
+    if (busy(stage)) return false;
+    if (stage === "ready") return false;
+    const id = stickerIdFor(conceptId);
+    if (id && previews[id]) return false;
+    return true;
+  };
+
   const anyBusy = draft.concepts.some((c) => busy(stageFor(c.id)));
   const readyConcepts = draft.concepts.filter((c) => stageFor(c.id) === "ready");
   const generatedCount = readyConcepts.length;
