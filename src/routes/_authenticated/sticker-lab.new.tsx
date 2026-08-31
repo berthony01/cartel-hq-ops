@@ -2873,30 +2873,124 @@ function StickerLabBuilder() {
           </Card>
 
 
-          <Card className="cartel-panel mt-6">
-            <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
-              <CardTitle className="text-base">Sticker Drops</CardTitle>
-              <StatusBadge tone={packSchedules.length > 0 ? "green" : "muted"}>
-                {packSchedules.length > 0 ? `${packSchedules.length} scheduled` : "Not automated"}
-              </StatusBadge>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
+          <details className="mt-6 rounded-md border border-border bg-background/40 p-3">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              <Download className="mr-2 inline size-3.5" aria-hidden="true" />
+              Export / backup ({exportableCount})
+            </summary>
+            <div className="mt-3 space-y-3">
               <p className="text-xs text-muted-foreground">
-                Recurring, capped automatic posting of this pack into your communities is managed on
-                the Sticker Drops page. Sending a pack here is a one-time delivery.
+                {checksRunning
+                  ? "Export is paused until the browser transparency and cutout checks finish."
+                  : "Exports are transparent PNGs downloaded straight to this device. Nothing is uploaded or published."}
               </p>
-              {dropKillSwitch ? (
-                <p className="rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
-                  Project emergency pause is on — no automated drops are running.
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                disabled={exporting || checksRunning || exportableCount === 0}
+                onClick={() => void downloadZip()}
+              >
+                {exporting ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Download className="size-4" aria-hidden="true" />
+                )}
+                Download all as ZIP ({exportableCount})
+              </Button>
+              {omittedLabels.length > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  The ZIP will contain {exportableCount} sticker
+                  {exportableCount === 1 ? "" : "s"}. Not included ({omittedLabels.length}):{" "}
+                  {omittedLabels.join(", ")}.
                 </p>
               ) : null}
-              <Button asChild variant="outline" size="sm" className="min-h-10">
-                <Link to="/distribution" search={packId ? { pack: packId } : {}}>
-                  Manage Sticker Drops
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </details>
+
+          <details className="mt-3 rounded-md border border-border bg-background/40 p-3">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Advanced details
+            </summary>
+            <div className="mt-3 space-y-4">
+              <div>
+                <p className="text-xs font-semibold text-pepe">
+                  How Telegram cutout verification works
+                </p>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  The checkerboard behind each preview marks the pixels that are actually
+                  transparent. Some image viewers display transparent areas as white or black — that
+                  is the viewer compositing the image, not a background baked into the file.
+                  Telegram places the transparent sticker directly over the chat background, so no
+                  rectangular background appears. A transparent canvas alone is not enough, though:
+                  some generations bake a thick white or cream contour around the artwork. Before
+                  export, CARTEL HQ removes only the light halo that is connected to the transparent
+                  outside edge — internal whites such as shirts, teeth, eyes, highlights and
+                  lettering interiors are always preserved, and if the halo looks unexpectedly large
+                  the sticker is flagged for manual review instead of being cleaned. Cleanup happens
+                  in your browser on the exported copy only; the stored original is never modified.
+                </p>
+              </div>
+              {historyRows.length > 0 ? (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    <FileArchive className="mr-2 inline size-3.5" aria-hidden="true" />
+                    Generation history ({historyRows.length})
+                  </p>
+                  <ul className="mt-2 space-y-2">
+                    {historyRows.map((row) => (
+                      <li
+                        key={row.conceptId}
+                        className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-t border-border/60 pt-2 text-[11px] first:border-t-0 first:pt-0"
+                      >
+                        <span className="font-semibold text-foreground">{row.label}</span>
+                        <span className="text-muted-foreground">
+                          {row.attempts} attempt{row.attempts === 1 ? "" : "s"}
+                        </span>
+                        <span className={row.failed > 0 ? "text-signal" : "text-muted-foreground"}>
+                          {row.failed} failed
+                        </span>
+                        {row.lastFailure ? (
+                          <span className="text-muted-foreground">
+                            · last failure: {row.lastFailure}
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          </details>
+
+          {tgPublishedCount > 0 || packSchedules.length > 0 ? (
+            <Card className="cartel-panel mt-6">
+              <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+                <CardTitle className="text-base">Next step — Sticker Drops</CardTitle>
+                <StatusBadge tone={packSchedules.length > 0 ? "green" : "muted"}>
+                  {packSchedules.length > 0 ? `${packSchedules.length} scheduled` : "Not automated"}
+                </StatusBadge>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <p className="text-xs text-muted-foreground">
+                  Sending a pack here is a one-time delivery. Sticker Drops schedules recurring,
+                  capped posting of this pack into the Telegram communities connected to{" "}
+                  {projectName}.
+                </p>
+                {dropKillSwitch ? (
+                  <p className="rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
+                    Project emergency pause is on — no automated drops are running.
+                  </p>
+                ) : null}
+                <Button asChild variant="outline" size="sm" className="min-h-10">
+                  <Link to="/distribution" search={packId ? { pack: packId } : {}}>
+                    Manage Sticker Drops
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
+
 
 
           <AlertDialog open={confirmPublish} onOpenChange={setConfirmPublish}>
