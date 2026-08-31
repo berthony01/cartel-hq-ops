@@ -29,11 +29,8 @@ export type ClientCheck = {
 export function useStickerReviewRuntime(params: {
   previews: Record<string, Preview>;
   aliveRef: RefObject<boolean>;
-  concepts: Concept[];
-  stickerIdFor: (conceptId: string) => string | null;
-  backendExportable: (conceptId: string) => boolean;
 }) {
-  const { previews, aliveRef, concepts, stickerIdFor, backendExportable } = params;
+  const { previews, aliveRef } = params;
 
   /**
    * Local-only, second transparency verification performed in the browser on the
@@ -72,7 +69,8 @@ export function useStickerReviewRuntime(params: {
       setCheckProgress({ done: 0, total: pending.length });
       setClientChecks((prev) => {
         const next = { ...prev };
-        for (const { stickerId, source } of pending) next[stickerId] = { source, status: "checking" };
+        for (const { stickerId, source } of pending)
+          next[stickerId] = { source, status: "checking" };
         return next;
       });
 
@@ -137,6 +135,27 @@ export function useStickerReviewRuntime(params: {
     [previews, clientChecks, aliveRef],
   );
 
+  return {
+    clientChecks,
+    checkProgress,
+    checksRunning: checkProgress !== null,
+    runClientVerification,
+  };
+}
+
+/**
+ * Pure review/readiness selectors. Same predicates and counts as before —
+ * they simply no longer live inline in the route. `backendExportable` stays
+ * owned by the route because it depends on generation stage state.
+ */
+export function deriveReviewState(params: {
+  concepts: Concept[];
+  clientChecks: Record<string, ClientCheck>;
+  stickerIdFor: (conceptId: string) => string | null;
+  backendExportable: (conceptId: string) => boolean;
+}) {
+  const { concepts, clientChecks, stickerIdFor, backendExportable } = params;
+
   const clientCheckFor = (conceptId: string) => {
     const id = stickerIdFor(conceptId);
     return id ? clientChecks[id] : undefined;
@@ -152,7 +171,6 @@ export function useStickerReviewRuntime(params: {
     clientCheckFor(conceptId)?.status === "verified" &&
     cutoutOk(conceptId);
 
-  const checksRunning = checkProgress !== null;
   const browserVerifiedCount = concepts.filter(
     (c) => clientCheckFor(c.id)?.status === "verified",
   ).length;
@@ -168,13 +186,9 @@ export function useStickerReviewRuntime(params: {
   const omittedLabels = concepts.filter((c) => !isExportable(c.id)).map((c) => c.label);
 
   return {
-    clientChecks,
-    checkProgress,
-    runClientVerification,
     clientCheckFor,
     cutoutOk,
     isExportable,
-    checksRunning,
     browserVerifiedCount,
     cutoutVerifiedCount,
     browserFailedCount,
