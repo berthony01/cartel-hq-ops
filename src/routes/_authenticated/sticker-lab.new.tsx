@@ -1133,7 +1133,7 @@ function StickerLabBuilder() {
         );
       } else {
         toast.error(
-          "Distribution to the selected communities failed. The sticker set stays published.",
+          "Sending the pack to the selected communities failed. The sticker set stays published.",
         );
       }
     } catch (err) {
