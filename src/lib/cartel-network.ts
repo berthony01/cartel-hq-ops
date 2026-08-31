@@ -185,6 +185,8 @@ export type DirectoryParams = {
   chain?: string | null;
   limit?: number;
   offset?: number;
+  /** Server-side filter: only projects currently in the `verified` state. */
+  verifiedOnly?: boolean;
 };
 
 function rpcArgs(params: DirectoryParams) {
@@ -202,7 +204,8 @@ function rpcArgs(params: DirectoryParams) {
 export const networkKeys = {
   summary: () => ["cartel-network", "summary"] as const,
   projects: (p: DirectoryParams) =>
-    ["cartel-network", "projects", p.search ?? "", p.chain ?? "", p.limit ?? NETWORK_PAGE_SIZE, p.offset ?? 0] as const,
+    ["cartel-network", "projects", p.search ?? "", p.chain ?? "", p.verifiedOnly === true, p.limit ?? NETWORK_PAGE_SIZE, p.offset ?? 0] as const,
+
   project: (slug: string) => ["cartel-network", "project", slug] as const,
   projectLaunches: (slug: string) => ["cartel-network", "project-launches", slug] as const,
   upcoming: (p: DirectoryParams) =>
