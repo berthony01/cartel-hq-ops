@@ -987,12 +987,31 @@ function StickerLabBuilder() {
     }
   };
 
+  /**
+   * Read-only image history for saved stickers (Step 4 only). The key carries
+   * the current preview storage paths, so once a successful generation swaps
+   * the current image the trigger-captured version is picked up automatically.
+   * No provider calls are involved.
+   */
+  const savedStickerIds = Object.values(draft.stickerIds).filter(Boolean);
+  const previewFingerprint = savedStickerIds
+    .map((id) => `${id}:${previews[id]?.storagePath ?? ""}`)
+    .join("|");
+  const versionsQuery = useQuery({
+    queryKey: ["sticker-versions", draft.packId ?? "", previewFingerprint],
+    enabled: step === 4 && savedStickerIds.length > 0,
+    queryFn: () => loadStickerVersions(savedStickerIds),
+  });
+  const versionsBySticker = versionsQuery.data ?? {};
+
   /** Reconciles provider config AND durable sticker/job state. Never generates. */
   const refreshStatus = () => {
     void configQuery.refetch();
+    if (step === 4 && savedStickerIds.length > 0) void versionsQuery.refetch();
     const id = draft.packId;
     if (id) void loadExisting(id);
   };
+
 
   const stickerIdFor = (conceptId: string) => draft.stickerIds[conceptId] ?? null;
   const stageFor = (conceptId: string): Stage => {
