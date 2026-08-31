@@ -1985,6 +1985,38 @@ export type Database = {
           telegram_connected: boolean
         }[]
       }
+      get_platform_launch_analytics: {
+        Args: never
+        Returns: {
+          connected_groups: number
+          contracts_registered: number
+          deliveries_by_status: Json
+          deliveries_failed: number
+          deliveries_pending: number
+          deliveries_retried: number
+          deliveries_sent: number
+          launch_events_total: number
+          launch_watch_cta_enabled: number
+          launches_by_status: Json
+          launches_scheduled: number
+          launches_total: number
+          launches_with_active_watchers: number
+          opt_ins_30d: number
+          opt_ins_7d: number
+          per_launch: Json
+          projects_operator_hidden: number
+          projects_platform_hidden: number
+          projects_published: number
+          projects_total: number
+          projects_verified: number
+          reminders_enabled: number
+          reminders_muted: number
+          verification_pending: number
+          watch_active: number
+          watch_stopped: number
+          welcomes_enabled: number
+        }[]
+      }
       get_platform_network_moderation: {
         Args: never
         Returns: {
