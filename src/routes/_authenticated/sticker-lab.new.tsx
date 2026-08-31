@@ -1332,11 +1332,15 @@ function StickerLabBuilder() {
     }
   };
 
+  /** Max sticker pipelines running at once for a confirmed selected batch. */
+  const SELECTED_BATCH_CONCURRENCY = 2;
+
   /**
-   * Sticker Studio selective generation. Sequential by design in this phase:
-   * one confirmed batch, one save, then the existing proven per-sticker
-   * runtime is re-used one sticker at a time. Eligibility is re-checked for
-   * the batch and again immediately before every single provider call.
+   * Sticker Studio selective generation. One confirmed batch, one save, then the
+   * existing proven per-sticker runtime is re-used by at most
+   * SELECTED_BATCH_CONCURRENCY async workers pulling from a shared cursor in
+   * board order. Admission is guarded by the live pollingRef, never only by a
+   * stale render snapshot. No automatic retries.
    */
   const generateSelected = async () => {
     setConfirmSelectedBatch(false);
@@ -1350,25 +1354,41 @@ function StickerLabBuilder() {
     }
     const result = await persist();
     if (!result) return;
-    for (const concept of batch) {
-      if (!aliveRef.current) return;
-      const stickerId = result.stickerIds[concept.id];
-      if (!stickerId) {
+
+    let cursor = 0;
+    const worker = async () => {
+      for (;;) {
+        if (!aliveRef.current) return;
+        const index = cursor;
+        cursor += 1;
+        const concept = batch[index];
+        if (!concept) return;
+        const stickerId = result.stickerIds[concept.id];
+        if (!stickerId) {
+          setSelectedForGeneration((prev) => prev.filter((id) => id !== concept.id));
+          continue;
+        }
+        // Live re-check: skip anything ready, previewed, or already in flight.
+        if (
+          pollingRef.current.has(stickerId) ||
+          stages[stickerId] === "ready" ||
+          previews[stickerId] ||
+          busy(stageFor(concept.id))
+        ) {
+          setSelectedForGeneration((prev) => prev.filter((id) => id !== concept.id));
+          continue;
+        }
+        // eslint-disable-next-line no-await-in-loop
+        await runGeneration(concept.id, stickerId, result.packId);
         setSelectedForGeneration((prev) => prev.filter((id) => id !== concept.id));
-        continue;
       }
-      // Live re-check: skip anything that became ready, busy or previewed.
-      if (stages[stickerId] === "ready" || previews[stickerId] || busy(stageFor(concept.id))) {
-        setSelectedForGeneration((prev) => prev.filter((id) => id !== concept.id));
-        continue;
-      }
-      // eslint-disable-next-line no-await-in-loop
-      await runGeneration(concept.id, stickerId, result.packId);
-      setSelectedForGeneration((prev) => prev.filter((id) => id !== concept.id));
-      if (!aliveRef.current) return;
-    }
+    };
+
+    const workerCount = Math.min(SELECTED_BATCH_CONCURRENCY, batch.length);
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
     clearSelection();
   };
+
 
 
   /** Sends the user back to Step 3 with the offending concept focused. */
