@@ -199,7 +199,8 @@ const CHECKERBOARD: React.CSSProperties = {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function StickerLabBuilder() {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, workspace } = useWorkspace();
+  const projectName = workspace?.name ?? "this project";
   const { user } = useSession();
   const { pack: urlPackId, step: urlStep } = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
@@ -1398,8 +1399,8 @@ function StickerLabBuilder() {
       <PageHeader
         eyebrow="Sticker Lab"
         title="New Sticker Pack"
-        description="References, packs and stickers are stored in your private CARTEL HQ workspace. AI generation runs server-side and only when you start it."
-        status={draft.packId ? "Saved to workspace" : "Draft"}
+        description={`Creating for ${projectName}. This pack belongs to this project — the Brand Kit and project references guide generation, and you choose which of this project's Telegram communities receive it after review. AI generation runs server-side and only when you start it.`}
+        status={draft.packId ? `Saved to ${projectName}` : "Draft"}
         actions={
           <Button asChild variant="outline" className="min-h-11">
             <Link to="/sticker-lab">
@@ -1415,7 +1416,7 @@ function StickerLabBuilder() {
       {step === 1 ? (
         <StepCard
           title="Character Reference"
-          hint="Stored privately in this workspace's Asset Vault and reused for generation."
+          hint="Stored privately in this project's Asset Vault. The project Brand Kit and the references you select here guide generation."
         >
           <div className="grid gap-6 md:grid-cols-2 [&>*]:min-w-0">
             <div>
@@ -2461,8 +2462,11 @@ function StickerLabBuilder() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <p className="text-xs text-muted-foreground">
-                Choose which connected communities receive this pack. Connecting, reconnecting and
-                onboarding communities happens in Community Command.
+                Choose which Telegram communities connected to {projectName} receive this pack.
+                Selecting several communities does not create several packs or several Telegram
+                sticker sets — one sticker set is created for this pack and shared with each
+                selected community. Connecting, reconnecting and onboarding communities happens in
+                Community Command.
               </p>
 
               {!telegram.botConfigured || !telegram.ownerConnected ? (
