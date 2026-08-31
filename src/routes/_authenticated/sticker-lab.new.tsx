@@ -2828,6 +2828,30 @@ function StickerLabBuilder() {
                       onEditConcept={() => editConceptFromFailure(c.id)}
                     />
                   ) : null}
+                  {/* Batch selection: never offered for a sticker that already
+                      has a usable image — those use Regenerate explicitly. */}
+                  <label
+                    className={`mt-3 flex min-h-10 items-center gap-2 text-[11px] ${
+                      bulkSelectable(c.id)
+                        ? "cursor-pointer text-muted-foreground"
+                        : "cursor-not-allowed text-muted-foreground/60"
+                    }`}
+                    title={
+                      bulkSelectable(c.id)
+                        ? undefined
+                        : busy(stage)
+                          ? "This sticker is currently running."
+                          : "Use Regenerate for an existing sticker."
+                    }
+                  >
+                    <Checkbox
+                      checked={selectedForGeneration.includes(c.id) && bulkSelectable(c.id)}
+                      disabled={!configured || !bulkSelectable(c.id) || saving}
+                      onCheckedChange={(v) => toggleSelected(c.id, v === true)}
+                      aria-label={`Select ${c.label} for batch generation`}
+                    />
+                    <span className="truncate">Select for batch</span>
+                  </label>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button
                       type="button"
