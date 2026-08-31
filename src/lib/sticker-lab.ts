@@ -183,17 +183,121 @@ export const BUILDER_STEPS = [
 
 
 /**
+ * Pack-level creative direction. Persisted only in this phase — the provider
+ * prompt compiler does not read it yet.
+ */
+export const HUMOR_LEVELS = ["unspecified", "none", "light", "balanced", "heavy"] as const;
+export type HumorLevel = (typeof HUMOR_LEVELS)[number];
+
+export const INTENSITY_LEVELS = ["unspecified", "calm", "balanced", "high", "maximum"] as const;
+export type IntensityLevel = (typeof INTENSITY_LEVELS)[number];
+
+export const TEXT_PREFERENCES = [
+  "unspecified",
+  "no_text",
+  "minimal",
+  "balanced",
+  "text_forward",
+] as const;
+export type TextPreference = (typeof TEXT_PREFERENCES)[number];
+
+export type CreativeDirection = {
+  purpose: string;
+  audience: string;
+  toneKeywords: string[];
+  humorLevel: HumorLevel;
+  intensity: IntensityLevel;
+  visualDirection: string;
+  textPreference: TextPreference;
+  textNotes: string;
+  packRules: string[];
+};
+
+export function emptyCreativeDirection(): CreativeDirection {
+  return {
+    purpose: "",
+    audience: "",
+    toneKeywords: [],
+    humorLevel: "unspecified",
+    intensity: "unspecified",
+    visualDirection: "",
+    textPreference: "unspecified",
+    textNotes: "",
+    packRules: [],
+  };
+}
+
+/** Splits a comma / newline separated textarea value into a clean list. */
+export function parseDirectionList(value: string): string[] {
+  const out: string[] = [];
+  for (const raw of value.split(/[\n,]/)) {
+    const trimmed = raw.trim();
+    if (trimmed && !out.includes(trimmed)) out.push(trimmed);
+  }
+  return out;
+}
+
+export const formatDirectionList = (list: string[]): string => list.join(", ");
+
+function directionString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function directionList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string") continue;
+    const trimmed = entry.trim();
+    if (!trimmed || out.includes(trimmed)) continue;
+    out.push(trimmed);
+  }
+  return out;
+}
+
+function directionEnum<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return typeof value === "string" && (allowed as readonly string[]).includes(value)
+    ? (value as T)
+    : fallback;
+}
+
+/** Parses an unknown creative direction value. Never throws. */
+export function normalizeCreativeDirection(value: unknown): CreativeDirection {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return emptyCreativeDirection();
+  }
+  const raw = value as Record<string, unknown>;
+  return {
+    purpose: directionString(raw['purpose']),
+    audience: directionString(raw['audience']),
+    toneKeywords: directionList(raw['toneKeywords']),
+    humorLevel: directionEnum(raw['humorLevel'], HUMOR_LEVELS, "unspecified"),
+    intensity: directionEnum(raw['intensity'], INTENSITY_LEVELS, "unspecified"),
+    visualDirection: directionString(raw['visualDirection']),
+    textPreference: directionEnum(raw['textPreference'], TEXT_PREFERENCES, "unspecified"),
+    textNotes: directionString(raw['textNotes']),
+    packRules: directionList(raw['packRules']),
+  };
+}
+
+/**
  * Versioned, additive creative blueprint persisted on `sticker_packs.creative_blueprint`.
- * Phase 1A stores and hydrates it only — generation ignores it entirely.
+ * Stored and hydrated only — generation ignores it entirely.
  */
 export type CreativeBlueprint = {
   version: 1;
   useBrandCharacterLock: boolean;
   characterLock: CharacterLock | null;
+  creativeDirection: CreativeDirection;
 };
 
 export function emptyBlueprint(): CreativeBlueprint {
-  return { version: 1, useBrandCharacterLock: false, characterLock: null };
+  return {
+    version: 1,
+    useBrandCharacterLock: false,
+    characterLock: null,
+    creativeDirection: emptyCreativeDirection(),
+  };
 }
 
 /** Parses an unknown `creative_blueprint` value. `{}` and junk degrade to defaults. */
@@ -210,8 +314,10 @@ export function normalizeBlueprint(value: unknown): CreativeBlueprint {
       typeof lock === "object" && lock !== null && !Array.isArray(lock)
         ? normalizeCharacterLock(lock)
         : null,
+    creativeDirection: normalizeCreativeDirection(raw['creativeDirection']),
   };
 }
+
 
 export type BuilderDraft = {
   characterName: string;
