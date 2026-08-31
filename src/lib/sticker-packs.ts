@@ -5,6 +5,7 @@ import {
   PACK_SIZES,
   PACK_THEMES,
   emptyDraft,
+  normalizeBlueprint,
   type BuilderDraft,
   type Concept,
   type PackSize,
@@ -37,10 +38,11 @@ export type PackRow = {
   reference_asset_id: string | null;
   archived_at: string | null;
   archived_by: string | null;
+  creative_blueprint: unknown;
 };
 
 const PACK_COLUMNS =
-  "id,workspace_id,title,theme,pack_size,status,updated_at,character_name,brief,style_notes,reference_asset_id,archived_at,archived_by";
+  "id,workspace_id,title,theme,pack_size,status,updated_at,character_name,brief,style_notes,reference_asset_id,archived_at,archived_by,creative_blueprint";
 const STICKER_COLUMNS =
   "id,pack_id,sort_order,label,action_description,emoji_list,keyword_list,status,image_asset_id,updated_at";
 
@@ -409,6 +411,8 @@ export async function persistDraft(params: {
     brief: draft.brief.trim() || null,
     style_notes: draft.styleNotes.trim() || null,
     reference_asset_id: draft.referenceAssetIds[0] ?? draft.referenceAssetId ?? null,
+    // Additive, versioned creative blueprint. Not read by generation in this phase.
+    creative_blueprint: normalizeBlueprint(draft.creativeBlueprint) as unknown as never,
   };
 
   let packId = draft.packId;
@@ -560,5 +564,6 @@ export async function hydrateDraftFromPack(params: {
     keywords,
     packId: pack.id,
     stickerIds,
+    creativeBlueprint: normalizeBlueprint(pack.creative_blueprint),
   };
 }
