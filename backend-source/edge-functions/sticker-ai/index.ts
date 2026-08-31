@@ -450,6 +450,22 @@ Deno.serve(async (req: Request) => {
       const { data: sticker } = await admin.from("stickers").select("*").eq("id", stickerId).eq("pack_id", packId).maybeSingle();
       if (!sticker) return respond({ error: "STICKER_NOT_FOUND" }, 404);
 
+      // Phase 4C — published mutation safety. A sticker with ANY Telegram
+      // footprint must never start a billable regeneration. This runs BEFORE
+      // any reference resolution, signed URL, job lookup/insert or Kie call,
+      // so nothing is written and nothing is charged on this path. Status is
+      // deliberately not used: generation overwrites it.
+      if (
+        (sticker as Record<string, unknown>).telegram_file_id != null ||
+        (sticker as Record<string, unknown>).telegram_published_at != null
+      ) {
+        return respond({
+          error: "STICKER_PUBLISHED",
+          message: "This sticker is already connected to Telegram. Regeneration is blocked to keep the live Telegram set synchronized with CARTEL HQ.",
+        }, 409);
+      }
+
+
       const blueprint = parseBlueprint((pack as Record<string, unknown>).creative_blueprint);
       const characterLockApplied =
         blueprint.useBrandCharacterLock === true && blueprint.characterLock !== null;
