@@ -2115,6 +2115,12 @@ function StickerLabBuilder() {
                         </span>
                       ) : null}
                     </span>
+                    {c.locked ? (
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-gold/40 px-2 py-0.5 text-[11px] uppercase tracking-[0.12em] text-gold">
+                        <Lock className="size-3" aria-hidden="true" />
+                        Locked
+                      </span>
+                    ) : null}
                     <span className="shrink-0 text-[11px] uppercase tracking-[0.12em] text-muted-foreground group-open:hidden">
                       Edit
                     </span>
