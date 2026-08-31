@@ -2,24 +2,43 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   Sticker,
-  Palette,
-  FolderLock,
   MessageSquare,
   PackageOpen,
-  Sparkles,
+  Rocket,
+  Send,
+  AlertTriangle,
   ChevronRight,
-  type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/lib/workspace-context";
+import {
+  listLaunches,
+  toLaunchStatus,
+  hasSchedule,
+  nextLaunchStatus,
+  getLaunchWatchSummary,
+  formatTimestamp,
+  LAUNCH_STATUS_LABELS,
+  LAUNCH_STATUS_HELP,
+  type LaunchStatus,
+  type LaunchRow,
+} from "@/lib/launch-control";
+import {
+  fetchDropStatus,
+  sentToday,
+  nextRunAt,
+  formatClock,
+  scheduleState,
+  dropErrorMessage,
+} from "@/lib/sticker-drops";
+import { groupIsOperational } from "@/lib/launch-readiness";
 
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { InlineRow } from "@/components/cartel/InlineRow";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { EmptyState } from "@/components/cartel/EmptyState";
-import { LaunchReadinessPanel } from "@/components/cartel/LaunchReadiness";
-
+import { LaunchReadinessPanel, useLaunchReadiness } from "@/components/cartel/LaunchReadiness";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
@@ -41,40 +60,99 @@ export const Route = createFileRoute("/_authenticated/")({
   component: HqDashboard,
 });
 
-const QUICK_ACTIONS: { label: string; icon: LucideIcon; note: string; to: string }[] = [
-  { label: "Sticker Lab", icon: Sticker, note: "Create a pack", to: "/sticker-lab" },
-  { label: "Brand Kit", icon: Palette, note: "Colours & marks", to: "/brand-kit" },
-  { label: "Assets", icon: FolderLock, note: "Private vault", to: "/assets" },
-  { label: "Telegram", icon: MessageSquare, note: "Communities & publishing", to: "/telegram" },
-];
+const STATUS_TONE: Record<LaunchStatus, "gold" | "green" | "muted"> = {
+  DRAFT: "muted",
+  ANNOUNCED: "gold",
+  WATCHLIST_OPEN: "gold",
+  LAUNCH_APPROACHING: "gold",
+  CONTRACT_PENDING: "gold",
+  OFFICIAL_CONTRACT_REGISTERED: "green",
+  LIVE: "green",
+  COMPLETED: "muted",
+};
 
+/** Newest non-COMPLETED launch, otherwise newest. `listLaunches` is newest-first. */
+function selectPrimary(launches: LaunchRow[]): LaunchRow | null {
+  if (launches.length === 0) return null;
+  return launches.find((l) => toLaunchStatus(l.status) !== "COMPLETED") ?? launches[0]!;
+}
 
-function Metric({ label, value }: { label: string; value: string }) {
+function scheduleSummary(row: LaunchRow): string {
+  if (row.launch_at) return formatTimestamp(row.launch_at);
+  if (row.launch_window_start && row.launch_window_end) {
+    return `${formatTimestamp(row.launch_window_start)} → ${formatTimestamp(row.launch_window_end)}`;
+  }
+  return "Not set";
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-border/60 bg-surface-raised/40 px-3 py-2.5">
-      <p className="truncate text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-1 truncate font-display text-lg uppercase text-gold sm:text-xl">{value}</p>
+    <div className="min-w-0">
+      <dt className="type-meta text-muted-foreground">{label}</dt>
+      <dd className="mt-1 text-xs leading-relaxed text-foreground [overflow-wrap:anywhere]">
+        {value}
+      </dd>
     </div>
+  );
+}
+
+function SnapshotCard({
+  title,
+  badge,
+  primary,
+  secondary,
+  to,
+  linkLabel,
+}: {
+  title: string;
+  badge: React.ReactNode;
+  primary: string;
+  secondary: string;
+  to: string;
+  linkLabel: string;
+}) {
+  return (
+    <Section
+      variant="surface"
+      className="rise-in flex min-w-0 flex-col"
+      title={title}
+      actions={badge}
+      contentClassName="flex flex-1 flex-col gap-2"
+    >
+      <p className="min-w-0 text-sm font-medium text-foreground [overflow-wrap:anywhere]">
+        {primary}
+      </p>
+      <p className="min-w-0 text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+        {secondary}
+      </p>
+      <Link
+        to={to}
+        className="mt-auto inline-flex w-fit text-xs uppercase tracking-[0.14em] text-gold hover:underline"
+      >
+        {linkLabel}
+      </Link>
+    </Section>
   );
 }
 
 function HqDashboard() {
   const { workspace, workspaceId, loading: workspaceLoading } = useWorkspace();
 
+  const readinessQuery = useLaunchReadiness(workspaceId);
+  const readinessComplete = readinessQuery.data?.allComplete === true;
+
   const packsQuery = useQuery({
     queryKey: ["recent-packs", workspaceId],
     enabled: !!workspaceId,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error, count } = await supabase
         .from("sticker_packs")
-        .select("id,title,theme,pack_size,status,created_at")
+        .select("id,title,theme,pack_size,status,created_at", { count: "exact" })
         .eq("workspace_id", workspaceId!)
         .order("created_at", { ascending: false })
         .limit(5);
       if (error) throw error;
-      return data ?? [];
+      return { rows: data ?? [], total: count ?? 0 };
     },
   });
 
@@ -97,7 +175,7 @@ function HqDashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("telegram_group_connections")
-        .select("id,title,connected_at")
+        .select("id,title,connected_at,bot_is_admin,metadata")
         .eq("workspace_id", workspaceId!)
         .order("connected_at", { ascending: false });
       if (error) throw error;
@@ -105,13 +183,132 @@ function HqDashboard() {
     },
   });
 
-  const packs = packsQuery.data ?? [];
+  const launchesQuery = useQuery({
+    queryKey: ["hq-launches", workspaceId],
+    enabled: !!workspaceId,
+    queryFn: () => listLaunches(workspaceId!),
+  });
+
+  const primaryLaunch = selectPrimary(launchesQuery.data ?? []);
+  const watchToken = primaryLaunch?.launch_watch_token ?? null;
+
+  const watchQuery = useQuery({
+    queryKey: ["hq-launch-watch", primaryLaunch?.id],
+    enabled: !!primaryLaunch?.id && !!watchToken,
+    queryFn: () => getLaunchWatchSummary(primaryLaunch!.id),
+  });
+
+  const dropsQuery = useQuery({
+    queryKey: ["hq-drop-status", workspaceId],
+    enabled: !!workspaceId,
+    queryFn: () => fetchDropStatus(workspaceId!),
+  });
+
+  const packs = packsQuery.data?.rows ?? [];
+  const recentPacks = packs.slice(0, 4);
+  const packTotal = packsQuery.data?.total ?? 0;
+  const latestPack = packs[0] ?? null;
+
   const groups = telegramQuery.data ?? [];
   const groupCount = groups.length;
-  const newestGroupTitle = groups[0]?.title ?? null;
-  const publishedRecent = packs.filter((pack) =>
-    String(pack.status ?? "").toLowerCase().includes("publish"),
+  const healthyGroups = groups.filter((g) =>
+    groupIsOperational({ id: g.id, bot_is_admin: g.bot_is_admin, metadata: g.metadata }),
   ).length;
+
+  const drops = dropsQuery.data ?? null;
+  const killSwitch = drops?.control?.kill_switch === true;
+  const schedules = drops?.schedules ?? [];
+  const events = drops?.events ?? [];
+  const activeSchedules = schedules.filter((s) => s.enabled).length;
+  const autoPaused = schedules.filter((s) => scheduleState(s, killSwitch) === "auto_paused").length;
+  const failedEvents = events.filter((e) => e.status !== "sent").length;
+  const dropsSentToday = drops ? sentToday(events) : 0;
+  const nextRun = drops ? nextRunAt(schedules, killSwitch) : null;
+
+  const status = primaryLaunch ? toLaunchStatus(primaryLaunch.status) : null;
+  const next = status ? nextLaunchStatus(status) : null;
+  const contractRegistered = Boolean(primaryLaunch?.official_contract_address);
+  const scheduleSet = primaryLaunch ? hasSchedule(primaryLaunch) : false;
+
+  let nextLine = "Lifecycle complete";
+  if (next === "LAUNCH_APPROACHING" && !scheduleSet) {
+    nextLine = "Next: Set launch schedule";
+  } else if (next === "OFFICIAL_CONTRACT_REGISTERED" && !contractRegistered) {
+    nextLine = "Next: Register official contract";
+  } else if (next) {
+    nextLine = `Next: Advance to ${LAUNCH_STATUS_LABELS[next]}`;
+  }
+
+  const attention: { id: string; text: string; to: string; action: string }[] = [];
+  if (killSwitch) {
+    attention.push({
+      id: "kill",
+      text: "Sticker Drops emergency pause is ON. No drops are being sent.",
+      to: "/distribution",
+      action: "Open Sticker Drops",
+    });
+  }
+  if (autoPaused > 0) {
+    attention.push({
+      id: "auto-paused",
+      text: `${autoPaused} drop schedule${autoPaused === 1 ? " was" : "s were"} auto-paused after repeated failures.`,
+      to: "/distribution",
+      action: "Review schedules",
+    });
+  }
+  if (failedEvents > 0) {
+    attention.push({
+      id: "failed",
+      text: `${failedEvents} recent drop event${failedEvents === 1 ? "" : "s"} did not send successfully.`,
+      to: "/distribution",
+      action: "Review activity",
+    });
+  }
+  if (primaryLaunch && next === "LAUNCH_APPROACHING" && !scheduleSet) {
+    attention.push({
+      id: "schedule",
+      text: "The launch cannot advance to Launch Approaching until a schedule is set.",
+      to: "/launch-control",
+      action: "Set schedule",
+    });
+  }
+  if (primaryLaunch && status === "CONTRACT_PENDING" && !contractRegistered) {
+    attention.push({
+      id: "contract",
+      text: "The launch is at Contract Pending and no official contract address is registered.",
+      to: "/launch-control",
+      action: "Register contract",
+    });
+  }
+
+  const communitiesPrimary =
+    telegramQuery.isPending
+      ? "Loading…"
+      : telegramQuery.isError
+        ? "Unavailable"
+        : groupCount === 0
+          ? "No community connected"
+          : `${groupCount} connected · ${healthyGroups} healthy`;
+
+  const dropsBadge = dropsQuery.isError ? (
+    <StatusBadge tone="muted">Unavailable</StatusBadge>
+  ) : killSwitch ? (
+    <StatusBadge tone="red">Emergency pause</StatusBadge>
+  ) : activeSchedules > 0 ? (
+    <StatusBadge tone="green">{activeSchedules} active</StatusBadge>
+  ) : (
+    <StatusBadge tone="muted">Not scheduled</StatusBadge>
+  );
+
+  const dropsSecondary = dropsQuery.isError
+    ? dropErrorMessage(dropsQuery.error)
+    : killSwitch
+      ? "Emergency pause is on. Nothing will send until it is cleared."
+      : nextRun
+        ? `Next drop ${nextRun.isDue ? "due now" : formatClock(nextRun.at)}${failedEvents > 0 ? ` · ${failedEvents} recent failure${failedEvents === 1 ? "" : "s"}` : ""}`
+        : activeSchedules > 0
+          ? "Active schedules have no upcoming run time yet."
+          : "No active drop schedule for this workspace.";
 
   return (
     <div className="space-y-5 sm:space-y-8">
@@ -122,180 +319,287 @@ function HqDashboard() {
         status="Private Beta"
       />
 
-      <LaunchReadinessPanel workspaceId={workspaceId} workspaceName={workspace?.name ?? null} />
+      {readinessComplete ? null : (
+        <LaunchReadinessPanel workspaceId={workspaceId} workspaceName={workspace?.name ?? null} />
+      )}
 
-
-
-      {/* Compact workspace summary */}
-      <Section
-        variant="surface"
-        className="rise-in"
-        title={workspaceLoading ? "Loading…" : (workspace?.name ?? "No workspace")}
-        description={
-          workspace
-            ? "Brand Kit, Asset Vault, and Sticker Lab all read and write against this workspace."
-            : "Create a workspace from the switcher in the header to start using CARTEL HQ."
-        }
-        actions={
-          workspace ? (
-            <StatusBadge tone="green">Connected</StatusBadge>
-          ) : (
-            <StatusBadge tone="gold">Setup required</StatusBadge>
-          )
-        }
-        headerClassName="mb-0"
-      />
-
-      {/* Live metrics */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 [&>*]:min-w-0">
-        <Metric label="Recent packs" value={packsQuery.isPending ? "—" : String(packs.length)} />
-        <Metric
-          label="Published (recent)"
-          value={packsQuery.isPending ? "—" : String(publishedRecent)}
-        />
-        <Metric label="AI jobs" value={usageQuery.isPending ? "—" : String(usageQuery.data ?? 0)} />
-        <Metric
-          label="Telegram"
-          value={telegramQuery.isPending ? "—" : String(groupCount)}
-        />
-      </div>
-
-      {/* Quick actions — 2 columns on mobile */}
-      <section aria-labelledby="quick-actions-heading" className="space-y-3">
-        <h2
-          id="quick-actions-heading"
-          className="font-display text-base uppercase tracking-widest text-foreground sm:text-lg"
-        >
-          Quick actions
-        </h2>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 [&>*]:min-w-0">
-          {QUICK_ACTIONS.map((action) => (
-            <Link
-              key={action.label}
-              to={action.to}
-              className="touch-target hover-lift flex flex-col gap-2 rounded-lg border border-border/70 bg-surface-raised/50 p-3 transition-colors hover:border-gold/40 hover:bg-gold/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50"
-            >
-              <span className="flex size-9 items-center justify-center rounded-md border border-border bg-surface-raised text-gold">
-                <action.icon className="size-4.5" aria-hidden="true" />
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold text-foreground">
-                  {action.label}
-                </span>
-                <span className="block truncate text-xs text-muted-foreground">{action.note}</span>
-              </span>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      <div className="grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
-        {/* Recent packs as compact rows */}
+      {!workspaceId ? (
         <Section
           variant="surface"
-          className="rise-in self-start lg:col-span-2"
-          title="Recent packs"
-          actions={
-            <Link
-              to="/sticker-lab"
-              className="text-xs uppercase tracking-[0.14em] text-gold hover:underline"
-            >
-              Open Lab
-            </Link>
+          className="rise-in"
+          title={workspaceLoading ? "Loading…" : "No workspace"}
+          description={
+            workspaceLoading
+              ? "Reading your workspace context."
+              : "Create a workspace from the switcher in the header to start using CARTEL HQ."
           }
-          contentClassName="space-y-2"
-        >
-          {packs.length === 0 ? (
-            <EmptyState
-              icon={PackageOpen}
-              title="No packs yet"
-              description="Sticker packs saved from Sticker Lab appear here for this workspace."
-            />
-          ) : (
-            packs.map((pack) => (
-              <InlineRow
-                key={pack.id}
-                leading={<Sticker className="size-4" aria-hidden="true" />}
-                title={pack.title}
-                subtitle={`${pack.pack_size} stickers · ${pack.theme}`}
-                trailing={
-                  <span className="flex items-center gap-2">
-                    <StatusBadge
-                      tone={
-                        String(pack.status ?? "").toLowerCase().includes("publish")
-                          ? "green"
-                          : "muted"
-                      }
-                    >
-                      {pack.status}
+          actions={<StatusBadge tone="gold">Setup required</StatusBadge>}
+          headerClassName="mb-0"
+        />
+      ) : (
+        <>
+          {/* One operational hero */}
+          <Section variant="hero" className="min-w-0">
+            {launchesQuery.isPending ? (
+              <p className="text-sm text-muted-foreground">Loading launch state…</p>
+            ) : !primaryLaunch ? (
+              <div className="min-w-0 space-y-3">
+                <p className="type-meta text-gold">Launch status</p>
+                <h2 className="font-display text-2xl uppercase leading-tight text-foreground sm:text-3xl">
+                  No launch created yet
+                </h2>
+                <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
+                  Launch Control is where you create the launch, open Launch Watch, register the
+                  official contract and drive the lifecycle.
+                </p>
+                <Link
+                  to="/launch-control"
+                  className="touch-target inline-flex w-fit items-center gap-1.5 rounded-md border border-gold/50 bg-gold/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-gold transition-colors hover:bg-gold/20"
+                >
+                  Create launch <ChevronRight className="size-4" aria-hidden="true" />
+                </Link>
+              </div>
+            ) : (
+              <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+                <div className="min-w-0 space-y-3">
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                    <div className="min-w-0">
+                      <p className="type-meta text-gold">Active launch</p>
+                      <h2 className="mt-1 min-w-0 font-display text-2xl uppercase leading-tight text-foreground [overflow-wrap:anywhere] sm:text-3xl">
+                        {primaryLaunch.token_name}
+                      </h2>
+                      <p className="mt-1 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                        {primaryLaunch.ticker} · {primaryLaunch.chain}
+                      </p>
+                    </div>
+                    <StatusBadge tone={STATUS_TONE[status!]}>
+                      <span>{LAUNCH_STATUS_LABELS[status!]}</span>
                     </StatusBadge>
-                    <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
-                  </span>
-                }
-              />
-            ))
-          )}
-        </Section>
+                  </div>
+                  <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
+                    {LAUNCH_STATUS_HELP[status!]}
+                  </p>
+                  <dl className="grid gap-3 sm:grid-cols-3">
+                    <Fact label="Schedule" value={scheduleSummary(primaryLaunch)} />
+                    <Fact
+                      label="Launch Watch"
+                      value={
+                        !watchToken
+                          ? "Not opened yet"
+                          : watchQuery.isPending
+                            ? "Loading…"
+                            : watchQuery.isError
+                              ? "Unavailable"
+                              : `${watchQuery.data?.active_count ?? 0} active watchers`
+                      }
+                    />
+                    <Fact
+                      label="Official contract"
+                      value={
+                        contractRegistered
+                          ? "Registered"
+                          : status === "CONTRACT_PENDING"
+                            ? "Pending registration"
+                            : "Not yet available"
+                      }
+                    />
+                  </dl>
+                </div>
 
-        <div className="space-y-4">
-          <Section
-            variant="surface"
-            className="rise-in"
-            title="AI usage"
-            actions={
-              <StatusBadge tone="muted">
-                {usageQuery.data ? `${usageQuery.data} jobs` : "No jobs"}
-              </StatusBadge>
-            }
-          >
-            <EmptyState
-              compact
-              icon={Sparkles}
-              title="Generation activity"
-              description="Sticker Lab generation jobs for this workspace are counted here."
-            />
+                <div className="min-w-0 space-y-3">
+                  <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                    <Fact
+                      label="Communities"
+                      value={
+                        telegramQuery.isPending
+                          ? "Loading…"
+                          : telegramQuery.isError
+                            ? "Unavailable"
+                            : groupCount === 0
+                              ? "None connected"
+                              : `${groupCount} connected · ${healthyGroups} healthy`
+                      }
+                    />
+                    <Fact
+                      label="Sticker Drops"
+                      value={
+                        dropsQuery.isPending
+                          ? "Loading…"
+                          : dropsQuery.isError
+                            ? "Unavailable"
+                            : killSwitch
+                              ? "Emergency pause on"
+                              : `${activeSchedules} active · ${dropsSentToday} sent today`
+                      }
+                    />
+                  </dl>
+                  <p className="min-w-0 rounded-md border border-gold/30 bg-gold/5 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-gold [overflow-wrap:anywhere]">
+                    {nextLine}
+                  </p>
+                  <Link
+                    to="/launch-control"
+                    className="touch-target inline-flex w-fit items-center gap-1.5 rounded-md border border-gold/50 bg-gold/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-gold transition-colors hover:bg-gold/20"
+                  >
+                    Open Launch Control <ChevronRight className="size-4" aria-hidden="true" />
+                  </Link>
+                </div>
+              </div>
+            )}
           </Section>
 
+          {/* Attention required — only when real issues exist */}
+          {attention.length > 0 ? (
+            <Section
+              variant="surface"
+              className="rise-in border-signal/40"
+              title="Attention required"
+              actions={<StatusBadge tone="red">{attention.length}</StatusBadge>}
+              contentClassName="space-y-2"
+            >
+              {attention.map((item) => (
+                <InlineRow
+                  key={item.id}
+                  leading={<AlertTriangle className="size-4" aria-hidden="true" />}
+                  title={item.text}
+                  trailing={
+                    <Link
+                      to={item.to}
+                      className="whitespace-nowrap text-xs uppercase tracking-[0.14em] text-gold hover:underline"
+                    >
+                      {item.action}
+                    </Link>
+                  }
+                />
+              ))}
+            </Section>
+          ) : null}
+
+          {/* Operational snapshot */}
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 [&>*]:min-w-0">
+            <SnapshotCard
+              title="Launch"
+              badge={
+                status ? (
+                  <StatusBadge tone={STATUS_TONE[status]}>
+                    <span>{LAUNCH_STATUS_LABELS[status]}</span>
+                  </StatusBadge>
+                ) : (
+                  <StatusBadge tone="muted">No launch</StatusBadge>
+                )
+              }
+              primary={primaryLaunch ? primaryLaunch.token_name : "No launch created"}
+              secondary={primaryLaunch ? nextLine : "Create a launch to start the lifecycle."}
+              to="/launch-control"
+              linkLabel="Launch Control"
+            />
+            <SnapshotCard
+              title="Communities"
+              badge={
+                groupCount > 0 ? (
+                  <StatusBadge tone={healthyGroups === groupCount ? "green" : "gold"}>
+                    {healthyGroups}/{groupCount} healthy
+                  </StatusBadge>
+                ) : (
+                  <StatusBadge tone="gold">None</StatusBadge>
+                )
+              }
+              primary={communitiesPrimary}
+              secondary={
+                groupCount > 0
+                  ? "Welcome, onboarding and publishing run against these communities."
+                  : "Connect a Telegram community to publish packs and welcome new members."
+              }
+              to="/telegram"
+              linkLabel={groupCount > 0 ? "Community Command" : "Connect a community"}
+            />
+            <SnapshotCard
+              title="Sticker Lab"
+              badge={
+                <StatusBadge tone={packTotal > 0 ? "green" : "muted"}>
+                  {packsQuery.isPending ? "—" : `${packTotal} packs`}
+                </StatusBadge>
+              }
+              primary={
+                packsQuery.isPending
+                  ? "Loading…"
+                  : latestPack
+                    ? `Latest: ${latestPack.title}`
+                    : "No packs yet"
+              }
+              secondary={
+                latestPack
+                  ? `${latestPack.status} · ${usageQuery.isPending ? "—" : usageQuery.data ?? 0} AI jobs run`
+                  : "Create your first sticker pack in Sticker Lab."
+              }
+              to="/sticker-lab"
+              linkLabel="Open Lab"
+            />
+            <SnapshotCard
+              title="Sticker Drops"
+              badge={dropsBadge}
+              primary={
+                dropsQuery.isPending
+                  ? "Loading…"
+                  : dropsQuery.isError
+                    ? "Unavailable"
+                    : `${activeSchedules} active · ${dropsSentToday} sent today`
+              }
+              secondary={dropsSecondary}
+              to="/distribution"
+              linkLabel="Sticker Drops"
+            />
+          </div>
+
+          {/* Recent content */}
           <Section
             variant="surface"
             className="rise-in"
-            title="Telegram"
+            title="Recent packs"
             actions={
-              groupCount > 0 ? (
-                <StatusBadge tone="green">
-                  {groupCount} connected
-                </StatusBadge>
-              ) : (
-                <StatusBadge tone="gold">No community connected</StatusBadge>
-              )
+              <Link
+                to="/sticker-lab"
+                className="text-xs uppercase tracking-[0.14em] text-gold hover:underline"
+              >
+                Open Lab
+              </Link>
             }
             contentClassName="space-y-2"
           >
-            <InlineRow
-              leading={<MessageSquare className="size-4" aria-hidden="true" />}
-              title={
-                groupCount > 0
-                  ? `${groupCount} communit${groupCount === 1 ? "y" : "ies"} connected`
-                  : "No community connected"
-              }
-              subtitle={
-                groupCount > 0
-                  ? newestGroupTitle
-                    ? `Newest: ${newestGroupTitle}. Publish sticker packs and send them to your communities.`
-                    : "Publish sticker packs and send them to your communities."
-                  : "Connect a Telegram community to publish packs from Sticker Lab."
-              }
-            />
-            <Link
-              to="/telegram"
-              className="inline-flex text-xs uppercase tracking-[0.14em] text-gold hover:underline"
-            >
-              {groupCount > 0 ? "Manage communities" : "Connect a community"}
-            </Link>
+            {packsQuery.isPending ? (
+              <p className="text-xs text-muted-foreground">Loading packs…</p>
+            ) : recentPacks.length === 0 ? (
+              <EmptyState
+                icon={PackageOpen}
+                title="No packs yet"
+                description="Sticker packs saved from Sticker Lab appear here for this workspace."
+              />
+            ) : (
+              recentPacks.map((pack) => (
+                <InlineRow
+                  key={pack.id}
+                  leading={<Sticker className="size-4" aria-hidden="true" />}
+                  title={pack.title}
+                  subtitle={`${pack.pack_size} stickers · ${pack.theme}`}
+                  trailing={
+                    <span className="flex items-center gap-2">
+                      <StatusBadge
+                        tone={
+                          String(pack.status ?? "").toLowerCase().includes("publish")
+                            ? "green"
+                            : "muted"
+                        }
+                      >
+                        {pack.status}
+                      </StatusBadge>
+                      <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
+                    </span>
+                  }
+                />
+              ))
+            )}
           </Section>
-        </div>
-      </div>
-
+        </>
+      )}
     </div>
   );
 }
