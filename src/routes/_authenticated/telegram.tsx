@@ -56,8 +56,9 @@ function TelegramPage() {
         : "Unavailable";
 
   const groupsPending = groupSetup.groupQuery.isPending;
+  const groupsError = groupSetup.groupQuery.isError;
   const checking = serviceChecking || groupsPending;
-  const hasProblem = !checking && (!serviceAvailable || attentionCount > 0);
+  const hasProblem = !checking && (!serviceAvailable || groupsError || attentionCount > 0);
 
   const overallTone = checking
     ? "muted"
@@ -76,11 +77,15 @@ function TelegramPage() {
 
   const primaryLine = checking
     ? "Checking Telegram service and connected communities…"
-    : groupCount === 0
-      ? "Connect your first Telegram community below to start onboarding members."
-      : hasProblem
-        ? "Review the community rows below and follow the listed fix for each one."
-        : `All ${groupCount} connected communit${groupCount === 1 ? "y is" : "ies are"} operational.`;
+    : groupsError && groupCount === 0
+      ? "Connected community state could not be loaded right now."
+      : groupsError
+        ? "The last loaded communities are shown below, but refreshing the list failed."
+        : groupCount === 0
+          ? "Connect your first Telegram community below to start onboarding members."
+          : hasProblem
+            ? "Review the community rows below and follow the listed fix for each one."
+            : `All ${groupCount} connected communit${groupCount === 1 ? "y is" : "ies are"} operational.`;
 
   return (
     <div className="flex max-w-5xl flex-col gap-4 sm:gap-6">
@@ -111,7 +116,11 @@ function TelegramPage() {
               Connected
             </dt>
             <dd className="mt-1 text-sm font-semibold text-foreground">
-              {groupsPending && groupCount === 0 ? "—" : groupCount}
+              {groupsPending && groupCount === 0
+                ? "—"
+                : groupsError && groupCount === 0
+                  ? "Unavailable"
+                  : groupCount}
             </dd>
           </div>
           <div className="min-w-0">
@@ -119,7 +128,11 @@ function TelegramPage() {
               Ready
             </dt>
             <dd className="mt-1 text-sm font-semibold text-foreground">
-              {groupsPending && groupCount === 0 ? "—" : readyCount}
+              {groupsPending && groupCount === 0
+                ? "—"
+                : groupsError && groupCount === 0
+                  ? "Unavailable"
+                  : readyCount}
             </dd>
           </div>
           <div className="min-w-0">
@@ -127,7 +140,11 @@ function TelegramPage() {
               Needs attention
             </dt>
             <dd className="mt-1 text-sm font-semibold text-foreground">
-              {groupsPending && groupCount === 0 ? "—" : attentionCount}
+              {groupsPending && groupCount === 0
+                ? "—"
+                : groupsError && groupCount === 0
+                  ? "Unavailable"
+                  : attentionCount}
             </dd>
           </div>
         </dl>
@@ -140,6 +157,11 @@ function TelegramPage() {
               <li>Telegram service status could not be loaded right now.</li>
             ) : !setup.botConfigured ? (
               <li>The Telegram service is unavailable, so community actions may not work.</li>
+            ) : null}
+            {groupsError && groupCount === 0 ? (
+              <li>Connected communities could not be loaded right now.</li>
+            ) : groupsError ? (
+              <li>Showing the last loaded communities; refreshing the list failed.</li>
             ) : null}
             {attentionCount > 0 ? (
               <li>
