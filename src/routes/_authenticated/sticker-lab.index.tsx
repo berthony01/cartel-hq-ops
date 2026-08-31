@@ -308,6 +308,14 @@ function StickerLabHome() {
   const failed = packsQuery.isError;
   const staleWhileFailed = failed && packs.length > 0;
 
+  const archivedQuery = useQuery({
+    queryKey: ["sticker-packs-archived", workspaceId],
+    enabled: !!workspaceId,
+    queryFn: () => listArchivedPacks(workspaceId!),
+  });
+  const archived = archivedQuery.data ?? [];
+
+
   const newPackLink = (
     <Button asChild className="min-h-11 w-full sm:w-auto">
       <Link to="/sticker-lab/new" search={{}} onClick={() => clearDraft()}>
