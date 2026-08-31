@@ -19,6 +19,11 @@ export type Concept = {
   label: string;
   action: string;
   emoji: string;
+  /**
+   * Editor/session-only flag. Locked concepts are protected from AI
+   * replacement; they are never persisted to the database.
+   */
+  locked?: boolean;
 };
 
 type Seed = [label: string, action: string, emoji: string];
