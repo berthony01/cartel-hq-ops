@@ -257,6 +257,7 @@ export function emptyDraft(): BuilderDraft {
     keywords: {},
     packId: null,
     stickerIds: {},
+    creativeBlueprint: emptyBlueprint(),
   };
 }
 
@@ -266,7 +267,14 @@ export function loadDraft(): BuilderDraft {
   try {
     const raw = window.sessionStorage.getItem(DRAFT_KEY);
     if (!raw) return emptyDraft();
-    return { ...emptyDraft(), ...(JSON.parse(raw) as Partial<BuilderDraft>) };
+    const parsed = JSON.parse(raw) as Partial<BuilderDraft>;
+    // Older session drafts predate the blueprint — hydrate them safely.
+    return {
+      ...emptyDraft(),
+      ...parsed,
+      creativeBlueprint: normalizeBlueprint(parsed.creativeBlueprint),
+    };
+
   } catch {
     return emptyDraft();
   }
