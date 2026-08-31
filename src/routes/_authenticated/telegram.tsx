@@ -116,7 +116,11 @@ function TelegramPage() {
               Connected
             </dt>
             <dd className="mt-1 text-sm font-semibold text-foreground">
-              {groupsPending && groupCount === 0 ? "—" : groupCount}
+              {groupsPending && groupCount === 0
+                ? "—"
+                : groupsError && groupCount === 0
+                  ? "Unavailable"
+                  : groupCount}
             </dd>
           </div>
           <div className="min-w-0">
@@ -124,7 +128,11 @@ function TelegramPage() {
               Ready
             </dt>
             <dd className="mt-1 text-sm font-semibold text-foreground">
-              {groupsPending && groupCount === 0 ? "—" : readyCount}
+              {groupsPending && groupCount === 0
+                ? "—"
+                : groupsError && groupCount === 0
+                  ? "Unavailable"
+                  : readyCount}
             </dd>
           </div>
           <div className="min-w-0">
@@ -132,7 +140,11 @@ function TelegramPage() {
               Needs attention
             </dt>
             <dd className="mt-1 text-sm font-semibold text-foreground">
-              {groupsPending && groupCount === 0 ? "—" : attentionCount}
+              {groupsPending && groupCount === 0
+                ? "—"
+                : groupsError && groupCount === 0
+                  ? "Unavailable"
+                  : attentionCount}
             </dd>
           </div>
         </dl>
