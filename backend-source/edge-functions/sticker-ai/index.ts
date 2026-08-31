@@ -514,6 +514,24 @@ Deno.serve(async (req: Request) => {
       const prompt = buildPrompt(brand, pack, sticker, blueprint);
       const priorAssetId = sticker.image_asset_id ?? null;
 
+      // Duplicate-generation protection: an already queued/running generation for
+      // this sticker is authoritative. Return it instead of billing a second task.
+      const findActiveGeneration = async () => {
+        const { data } = await admin.from("ai_jobs")
+          .select("id,status")
+          .eq("sticker_id", stickerId)
+          .eq("job_type", "sticker_generate")
+          .in("status", ["queued", "running"])
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        return data ?? null;
+      };
+      const activeExisting = await findActiveGeneration();
+      if (activeExisting) {
+        return respond({ aiJobId: activeExisting.id, status: activeExisting.status === "queued" ? "queued" : "running", model: MODEL });
+      }
+
       const { data: job, error: jobError } = await admin.from("ai_jobs").insert({
         workspace_id: workspaceId, user_id: user.id, pack_id: packId, sticker_id: stickerId,
         job_type: "sticker_generate", provider: "kie", provider_model: MODEL, status: "queued",
@@ -525,7 +543,17 @@ Deno.serve(async (req: Request) => {
           creative_direction_applied: creativeDirectionApplied,
         },
       }).select("*").single();
-      if (jobError || !job) return respond({ error: "JOB_CREATE_FAILED" }, 500);
+      if (jobError || !job) {
+        // Race: another request won the unique active-generation guard.
+        if ((jobError as { code?: string } | null)?.code === "23505") {
+          const raced = await findActiveGeneration();
+          if (raced) {
+            return respond({ aiJobId: raced.id, status: raced.status === "queued" ? "queued" : "running", model: MODEL });
+          }
+        }
+        return respond({ error: "JOB_CREATE_FAILED" }, 500);
+      }
+
 
       const create = await kieRequest("/api/v1/jobs/createTask", KIE_API_KEY, {
         method: "POST",
@@ -586,8 +614,21 @@ Deno.serve(async (req: Request) => {
             job_type: "remove_background", provider: "kie", provider_model: BG_MODEL, status: "queued",
             input_json: { parent_job_id: job.id, prior_image_asset_id: priorAssetId, model: BG_MODEL },
           }).select("*").single();
-          if (childError || !child) return await failSticker(job, "Could not create the background-removal job.");
+          if (childError || !child) {
+            // Race: a concurrent poller already created the child. Reuse it and
+            // never start a second background provider task.
+            if ((childError as { code?: string } | null)?.code === "23505") {
+              const { data: racedChild } = await admin.from("ai_jobs").select("id").eq("job_type", "remove_background").eq("sticker_id", job.sticker_id).contains("input_json", { parent_job_id: job.id }).maybeSingle();
+              if (racedChild) {
+                await admin.from("ai_jobs").update({ status: "succeeded", completed_at: new Date().toISOString(), output_json: { generation_result_received: true, child_job_id: racedChild.id } }).eq("id", job.id);
+                await logCredits(job, credits);
+                return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", childJobId: racedChild.id, stage: "background_removal" });
+              }
+            }
+            return await failSticker(job, "Could not create the background-removal job.");
+          }
           childJobId = child.id;
+
 
           const bgCreate = await kieRequest("/api/v1/jobs/createTask", KIE_API_KEY, {
             method: "POST",
