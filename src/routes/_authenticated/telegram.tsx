@@ -158,6 +158,11 @@ function TelegramPage() {
             ) : !setup.botConfigured ? (
               <li>The Telegram service is unavailable, so community actions may not work.</li>
             ) : null}
+            {groupsError && groupCount === 0 ? (
+              <li>Connected communities could not be loaded right now.</li>
+            ) : groupsError ? (
+              <li>Showing the last loaded communities; refreshing the list failed.</li>
+            ) : null}
             {attentionCount > 0 ? (
               <li>
                 {attentionCount} connected communit{attentionCount === 1 ? "y" : "ies"} not ready.
