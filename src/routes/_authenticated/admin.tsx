@@ -528,6 +528,260 @@ function NetworkModerationSection() {
   );
 }
 
+function AnalyticsMetric({ label, value, hint }: { label: string; value: number; hint?: string }) {
+  return (
+    <div className="min-w-0 rounded-lg border border-border/70 bg-surface-raised/60 px-3 py-2.5">
+      <p
+        className={`text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground ${WRAP}`}
+      >
+        {label}
+      </p>
+      <p className={`mt-1 font-display text-xl leading-none text-gold ${WRAP}`}>
+        {formatCount(value)}
+      </p>
+      {hint ? <p className={`mt-1 text-[11px] text-muted-foreground ${WRAP}`}>{hint}</p> : null}
+    </div>
+  );
+}
+
+function launchStatusLabel(status: string | null): string {
+  if (!status) return "—";
+  return (
+    (LAUNCH_STATUS_LABELS as Record<string, string>)[status] ??
+    status.replaceAll("_", " ").toLowerCase()
+  );
+}
+
+function LaunchAnalyticsSection() {
+  const analytics = useQuery({
+    queryKey: platformAnalyticsKeys.all(),
+    queryFn: fetchPlatformLaunchAnalytics,
+  });
+
+  const data = analytics.data ?? null;
+  const staleWarning = analytics.isError && data !== null;
+
+  const otherDeliveryStates = data
+    ? Object.entries(data.deliveries_by_status).filter(
+        ([state]) => !CANONICAL_DELIVERY_STATES.has(state),
+      )
+    : [];
+
+  const lifecycle = data
+    ? LAUNCH_STATUSES.map((status) => ({
+        status: status as string,
+        count: data.launches_by_status[status] ?? 0,
+      })).concat(
+        Object.entries(data.launches_by_status)
+          .filter(([status]) => !(LAUNCH_STATUSES as readonly string[]).includes(status))
+          .map(([status, count]) => ({ status, count })),
+      )
+    : [];
+
+  return (
+    <Section
+      leading={<BarChart3 className="size-4" aria-hidden="true" />}
+      title="Launch Analytics"
+      description="Operational analytics for Cartel Launch Network activity. Counts are aggregated from CARTEL HQ launch, Launch Watch, notification, and connected-community records. No subscriber identities, price data, market data, or investment metrics are included."
+    >
+      {analytics.isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading launch analytics…</p>
+      ) : analytics.isError && !data ? (
+        <div className="flex min-w-0 flex-col items-start gap-3">
+          <p className="text-sm text-muted-foreground">
+            Launch analytics could not be loaded right now.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="min-h-11"
+            onClick={() => void analytics.refetch()}
+          >
+            Retry
+          </Button>
+        </div>
+      ) : !data ? (
+        <p className="text-sm text-muted-foreground">No analytics were returned.</p>
+      ) : (
+        <div className="flex min-w-0 flex-col gap-5">
+          {staleWarning ? (
+            <div className="flex min-w-0 flex-col items-start gap-2 rounded-lg border border-border bg-surface p-3">
+              <p className={`text-xs text-muted-foreground ${WRAP}`}>
+                Showing previously loaded analytics; latest refresh failed.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-11"
+                onClick={() => void analytics.refetch()}
+              >
+                Retry
+              </Button>
+            </div>
+          ) : null}
+
+          <div className={GRID}>
+            <AnalyticsMetric label="Published projects" value={data.projects_published} />
+            <AnalyticsMetric label="Total launches" value={data.launches_total} />
+            <AnalyticsMetric label="Active watchers" value={data.watch_active} />
+            <AnalyticsMetric label="Opt-ins · 30d" value={data.opt_ins_30d} />
+            <AnalyticsMetric label="Alerts sent" value={data.deliveries_sent} />
+            <AnalyticsMetric label="Connected communities" value={data.connected_groups} />
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-2">
+            <h3 className={`text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground ${WRAP}`}>
+              Network &amp; trust
+            </h3>
+            <div className={GRID}>
+              <AnalyticsMetric label="Projects total" value={data.projects_total} />
+              <AnalyticsMetric label="Published" value={data.projects_published} />
+              <AnalyticsMetric label="Operator-hidden" value={data.projects_operator_hidden} />
+              <AnalyticsMetric label="Platform-hidden" value={data.projects_platform_hidden} />
+              <AnalyticsMetric label="Verified projects" value={data.projects_verified} />
+              <AnalyticsMetric label="Verification pending" value={data.verification_pending} />
+            </div>
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-2">
+            <h3 className={`text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground ${WRAP}`}>
+              Launch lifecycle
+            </h3>
+            <div className={GRID}>
+              {lifecycle.map((entry) => (
+                <AnalyticsMetric
+                  key={entry.status}
+                  label={launchStatusLabel(entry.status)}
+                  value={entry.count}
+                />
+              ))}
+            </div>
+            <div className={GRID}>
+              <AnalyticsMetric label="Scheduled launches" value={data.launches_scheduled} />
+              <AnalyticsMetric label="Contracts registered" value={data.contracts_registered} />
+            </div>
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-2">
+            <h3 className={`text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground ${WRAP}`}>
+              Launch Watch
+            </h3>
+            <div className={GRID}>
+              <AnalyticsMetric label="Active watchers" value={data.watch_active} />
+              <AnalyticsMetric label="Stopped watchers" value={data.watch_stopped} />
+              <AnalyticsMetric label="Reminders enabled" value={data.reminders_enabled} />
+              <AnalyticsMetric label="Reminders muted" value={data.reminders_muted} />
+              <AnalyticsMetric
+                label="Launches with watchers"
+                value={data.launches_with_active_watchers}
+              />
+              <AnalyticsMetric label="Opt-ins · 7d" value={data.opt_ins_7d} />
+              <AnalyticsMetric label="Opt-ins · 30d" value={data.opt_ins_30d} />
+            </div>
+            <p className={`text-[11px] text-muted-foreground ${WRAP}`}>
+              Counts reflect Launch Watch subscription records.
+            </p>
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-2">
+            <h3 className={`text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground ${WRAP}`}>
+              Notification health
+            </h3>
+            <div className={GRID}>
+              <AnalyticsMetric label="Launch events" value={data.launch_events_total} />
+              <AnalyticsMetric label="Sent" value={data.deliveries_sent} />
+              <AnalyticsMetric label="Waiting" value={data.deliveries_pending} />
+              <AnalyticsMetric label="Failed" value={data.deliveries_failed} />
+              <AnalyticsMetric label="Retried" value={data.deliveries_retried} />
+            </div>
+            {otherDeliveryStates.length > 0 ? (
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <p className={`text-[11px] text-muted-foreground ${WRAP}`}>
+                  Other delivery states
+                </p>
+                <div className="flex min-w-0 flex-wrap gap-1.5">
+                  {otherDeliveryStates.map(([state, count]) => (
+                    <StatusBadge key={state} tone="muted">
+                      <span className={WRAP}>
+                        {state}: {formatCount(count)}
+                      </span>
+                    </StatusBadge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-2">
+            <h3 className={`text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground ${WRAP}`}>
+              Community readiness
+            </h3>
+            <div className={GRID}>
+              <AnalyticsMetric label="Connected groups" value={data.connected_groups} />
+              <AnalyticsMetric label="Welcome messages enabled" value={data.welcomes_enabled} />
+              <AnalyticsMetric
+                label="Launch Watch CTA enabled"
+                value={data.launch_watch_cta_enabled}
+              />
+            </div>
+            <p className={`text-[11px] text-muted-foreground ${WRAP}`}>
+              Stored connection and configuration counts. These are not live Telegram API checks.
+            </p>
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-2">
+            <h3 className={`text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground ${WRAP}`}>
+              Per-launch operations
+            </h3>
+            {data.per_launch.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No launches yet.</p>
+            ) : (
+              <div className="flex min-w-0 flex-col gap-2">
+                {data.per_launch.map((row, index) => (
+                  <div
+                    key={`${row.launch_public_slug ?? "launch"}-${index}`}
+                    className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/70 bg-surface-raised/60 p-3"
+                  >
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <p className={`text-sm font-medium text-foreground ${WRAP}`}>
+                        {text(row.token_name)}
+                        {row.ticker ? ` · ${row.ticker}` : ""}
+                      </p>
+                      <p className={`text-[11px] text-muted-foreground ${WRAP}`}>
+                        {text(row.project_name)}
+                        {row.chain ? ` · ${row.chain}` : ""}
+                        {row.launch_public_slug ? ` · /${row.launch_public_slug}` : ""}
+                      </p>
+                      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                        <StatusBadge tone="muted">
+                          <span className={WRAP}>{launchStatusLabel(row.status)}</span>
+                        </StatusBadge>
+                        <span className={`text-[11px] text-muted-foreground ${WRAP}`}>
+                          {row.launch_at ? formatTimestamp(row.launch_at) : "No scheduled time"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-3 lg:grid-cols-6">
+                      <InlineRow label="Active" value={formatCount(row.active_watchers)} />
+                      <InlineRow label="Muted" value={formatCount(row.muted_watchers)} />
+                      <InlineRow label="Events" value={formatCount(row.events_total)} />
+                      <InlineRow label="Sent" value={formatCount(row.deliveries_sent)} />
+                      <InlineRow label="Waiting" value={formatCount(row.deliveries_pending)} />
+                      <InlineRow label="Failed" value={formatCount(row.deliveries_failed)} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </Section>
+  );
+}
+
+
+
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
