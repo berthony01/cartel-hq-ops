@@ -135,9 +135,10 @@ function DistributionPage() {
 
   const failedEvents = useMemo(() => events.filter((e) => e.status !== "sent"), [events]);
   const successEvents = useMemo(() => events.filter((e) => e.status === "sent"), [events]);
+  /** Underlying auto-pauses are counted independently of the global kill switch. */
   const autoPausedCount = useMemo(
-    () => schedules.filter((s) => scheduleState(s, killSwitch) === "auto_paused").length,
-    [schedules, killSwitch],
+    () => schedules.filter((s) => scheduleState(s, false) === "auto_paused").length,
+    [schedules],
   );
   const hasIssues = killSwitch || autoPausedCount > 0 || failedEvents.length > 0;
 
@@ -425,8 +426,8 @@ function DistributionPage() {
           >
             <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
               Emergency pause immediately stops all automated Sticker Drops in this workspace. Your
-              schedules and settings are preserved — nothing is deleted, and resuming restores
-              normal operation.
+              schedules and settings are preserved — nothing is deleted. Turning this off lifts the
+              workspace-wide stop; each schedule keeps its own enabled, paused and configured state.
             </p>
             {killSwitch ? (
               <div className="flex min-w-0 items-start gap-2 rounded-lg border border-signal/40 bg-signal/10 px-3 py-2.5">
