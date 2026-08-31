@@ -2253,6 +2253,44 @@ function StickerLabBuilder() {
             ))}
           </ul>
 
+          <section className="cartel-panel mt-6 rounded-lg p-3 sm:p-4">
+            <h3 className="text-sm font-semibold text-foreground">Concept board status</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {draft.conceptBoardApproved
+                ? "You marked this concept board ready. Any concept edit clears this again."
+                : "Marking the board ready is an editor-side checkpoint only. It is not saved and it does not generate or publish anything."}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              {draft.conceptBoardApproved ? (
+                <span className="inline-flex min-h-10 items-center gap-2 text-xs font-semibold text-pepe">
+                  <CircleCheck className="size-4" aria-hidden="true" />
+                  Concept board marked ready
+                </span>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11"
+                  disabled={!boardReadyEligible || pendingPreviewItems.length > 0}
+                  onClick={() => update({ conceptBoardApproved: true })}
+                >
+                  <Check className="size-4" aria-hidden="true" />
+                  Mark concept board ready
+                </Button>
+              )}
+              {!draft.conceptBoardApproved && !boardReadyEligible ? (
+                <span className="text-xs text-muted-foreground">
+                  Fill every label and action, and use all {draft.size} concept slots first.
+                </span>
+              ) : null}
+              {!draft.conceptBoardApproved && boardReadyEligible && pendingPreviewItems.length ? (
+                <span className="text-xs text-muted-foreground">
+                  Apply or discard the pending AI suggestions first.
+                </span>
+              ) : null}
+            </div>
+          </section>
+
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <Button
               type="button"
@@ -2269,7 +2307,12 @@ function StickerLabBuilder() {
             ) : null}
           </div>
 
-          <AlertDialog open={confirmSuggest} onOpenChange={setConfirmSuggest}>
+          <AlertDialog
+            open={confirmSuggest !== null}
+            onOpenChange={(open) => {
+              if (!open) setConfirmSuggest(null);
+            }}
+          >
             <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
               <AlertDialogHeader>
                 <AlertDialogTitle>Ask AI for concept ideas?</AlertDialogTitle>
@@ -2285,6 +2328,12 @@ function StickerLabBuilder() {
                       two-task image pipeline.
                     </p>
                     <p>
+                      {confirmSuggest === "alternatives"
+                        ? `This asks for ${selectedConcepts.length} alternative${selectedConcepts.length === 1 ? "" : "s"} for the concepts you selected.`
+                        : `This asks for ${unlockedConcepts.length} idea${unlockedConcepts.length === 1 ? "" : "s"} for your unlocked concepts only.`}{" "}
+                      Locked concepts are never sent for replacement.
+                    </p>
+                    <p>
                       Your current concepts stay untouched unless you explicitly apply the
                       suggestions.
                     </p>
@@ -2295,8 +2344,9 @@ function StickerLabBuilder() {
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction
                   onClick={() => {
-                    setConfirmSuggest(false);
-                    void runConceptSuggestion();
+                    const mode = confirmSuggest ?? "board";
+                    setConfirmSuggest(null);
+                    void runConceptSuggestion(mode);
                   }}
                 >
                   Suggest concepts
@@ -2310,8 +2360,8 @@ function StickerLabBuilder() {
             onOpenChange={setConfirmApplySuggestions}
           >
             <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
-              <AlertDialogHeader>
-                <AlertDialogTitle>Replace the concepts in this saved pack?</AlertDialogTitle>
+              <AlertDialogTitle>Replace these concepts in this saved pack?</AlertDialogTitle>
+                <AlertDialogHeader>
                 <AlertDialogDescription asChild>
                   <div className="space-y-2 text-left">
                     <p>
@@ -2320,15 +2370,24 @@ function StickerLabBuilder() {
                     </p>
                     <p>
                       However, this pack is already saved: a later <strong>Save</strong> will update
-                      or remove the stored concept rows to match the new list.
+                      the stored concept rows to match.
                     </p>
-                    <p>Emoji and keyword metadata for the current concepts will be cleared.</p>
+                    <p>
+                      Only unlocked, targeted concepts change. Keyword metadata is cleared for those
+                      concepts only.
+                    </p>
                   </div>
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Keep current concepts</AlertDialogCancel>
-                <AlertDialogAction onClick={applySuggestions}>Use these concepts</AlertDialogAction>
+                <AlertDialogAction
+                  onClick={() =>
+                    applyPreviewItems(pendingPreviewItems.map((item) => item.targetId))
+                  }
+                >
+                  Use these concepts
+                </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
