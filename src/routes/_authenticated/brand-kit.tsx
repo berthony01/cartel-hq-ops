@@ -243,6 +243,34 @@ function BrandKitPage() {
 
   const set = (patch: Partial<BrandKitForm>) => setForm((f) => ({ ...f, ...patch }));
 
+  /**
+   * Stale canonical ids (assets removed, or from another workspace) are simply
+   * not shown as selected. They are never treated as an error.
+   */
+  const selectedCanonicalCount = lockForm.canonicalReferenceAssetIds.filter((id) =>
+    brandAssets.some((a) => a.id === id),
+  ).length;
+
+  const toggleCanonical = (assetId: string) => {
+    setLockForm((l) => {
+      if (l.canonicalReferenceAssetIds.includes(assetId)) {
+        return {
+          ...l,
+          canonicalReferenceAssetIds: l.canonicalReferenceAssetIds.filter((id) => id !== assetId),
+        };
+      }
+      if (l.canonicalReferenceAssetIds.length >= MAX_CANONICAL_REFERENCES) {
+        toast.error(`Select at most ${MAX_CANONICAL_REFERENCES} canonical references.`);
+        return l;
+      }
+      return {
+        ...l,
+        canonicalReferenceAssetIds: [...l.canonicalReferenceAssetIds, assetId],
+      };
+    });
+  };
+
+
   return (
     <div className="space-y-6 pb-24 sm:space-y-8 lg:pb-0">
       <PageHeader
