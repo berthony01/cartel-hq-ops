@@ -956,6 +956,8 @@ function StickerLabBuilder() {
   };
 
   const generateOne = async (conceptId: string) => {
+    // A per-card action supersedes any pending batch entry for that sticker.
+    setSelectedForGeneration((prev) => prev.filter((id) => id !== conceptId));
     setStages((s) => ({ ...s, [`concept:${conceptId}`]: "saving" }));
     const result = await persist();
     if (!result) {
@@ -973,6 +975,7 @@ function StickerLabBuilder() {
 
   const generateRemaining = async () => {
     setConfirmRemaining(false);
+    setSelectedForGeneration([]);
     const result = await persist();
     if (!result) return;
     for (const concept of draft.concepts) {
