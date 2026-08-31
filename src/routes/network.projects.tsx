@@ -4,6 +4,7 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { NetworkEmpty, ProjectCard } from "@/components/cartel-network/NetworkPieces";
 import {
   NETWORK_PAGE_SIZE,
@@ -143,7 +144,7 @@ function NetworkProjectsPage() {
       ) : rows.length === 0 ? (
         <NetworkEmpty
           title="No projects match"
-          description="Try a different search term or clear the chain filter."
+          description="Try a different search term, clear the chain filter, or turn off Platform Reviewed only."
         />
       ) : (
         <>
