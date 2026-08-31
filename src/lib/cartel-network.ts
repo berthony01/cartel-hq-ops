@@ -273,10 +273,29 @@ export async function fetchNetworkLaunch(slug: string): Promise<NetworkLaunch | 
   return data?.[0] ?? null;
 }
 
+
+export async function fetchNetworkSignals(
+  params: DirectoryParams = {},
+): Promise<Paged<NetworkSignal>> {
+  const args: { _chain?: string; _limit: number; _offset: number } = {
+    _limit: params.limit ?? NETWORK_PAGE_SIZE,
+    _offset: params.offset ?? 0,
+  };
+  const chain = params.chain?.trim();
+  if (chain) args._chain = chain;
+  const { data, error } = await supabase.rpc("get_cartel_network_signals", args);
+  if (error) throw error;
+  const rows = data ?? [];
+  return { rows, totalCount: Number(rows[0]?.total_count ?? 0) };
+}
+
 export const NETWORK_TRUST_COPY = {
   contractRegistered: "Official contract registered by the authenticated project.",
   notAnAudit:
     "This is not a safety audit, token-safety verification, rug-proof guarantee or investment endorsement. Always do your own research.",
   projectSupplied:
     "All information on this page is supplied by the project account in CARTEL HQ. CARTEL HQ does not guarantee token safety.",
+  signals:
+    "Cartel Signals are official project and launch lifecycle events supplied by authenticated projects. They are not trading signals, price calls or investment recommendations.",
 } as const;
+
