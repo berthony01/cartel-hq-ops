@@ -23,12 +23,23 @@ import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { Button } from "@/components/ui/button";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
 
 export const Route = createFileRoute("/_authenticated/assets")({
   head: () => ({
