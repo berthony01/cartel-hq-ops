@@ -1879,6 +1879,17 @@ export type Database = {
         Returns: boolean
       }
       mark_stale_launch_notification_claims: { Args: never; Returns: number }
+      record_launch_watch_confirmation: {
+        Args: {
+          _attempted_at: string
+          _error_class?: string
+          _last_error?: string
+          _message_id?: number
+          _status: string
+          _subscription_id: string
+        }
+        Returns: undefined
+      }
       restore_sticker_pack: { Args: { _pack_id: string }; Returns: Json }
       set_launch_contract_address: {
         Args: { _contract_address: string; _launch_id: string }
