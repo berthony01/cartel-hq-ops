@@ -3038,11 +3038,8 @@ function StickerLabBuilder() {
                             </li>
                           );
                         })}
-
-                            </li>
-                          );
-                        })}
                       </ul>
+
                     </details>
                   ) : null}
 
