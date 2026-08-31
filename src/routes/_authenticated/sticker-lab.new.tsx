@@ -2061,7 +2061,14 @@ function StickerLabBuilder() {
                         size="sm"
                         className="mt-2 min-h-10"
                         disabled={!target || target.locked}
-                        onClick={() => applyPreviewItems([item.targetId])}
+                        onClick={() => {
+                          if (draft.packId) {
+                            setPendingApplyTargetIds([item.targetId]);
+                            setConfirmApplySuggestions(true);
+                          } else {
+                            applyPreviewItems([item.targetId]);
+                          }
+                        }}
                       >
                         <Check className="size-4" aria-hidden="true" />
                         Use this one
@@ -2076,12 +2083,33 @@ function StickerLabBuilder() {
                   size="sm"
                   className="min-h-10"
                   onClick={() => {
-                    if (draft.packId) setConfirmApplySuggestions(true);
-                    else applyPreviewItems(pendingPreviewItems.map((item) => item.targetId));
+                    const ids = pendingPreviewItems.map((item) => item.targetId);
+                    if (draft.packId) {
+                      setPendingApplyTargetIds(ids);
+                      setConfirmApplySuggestions(true);
+                    } else applyPreviewItems(ids);
                   }}
                 >
                   <Check className="size-4" aria-hidden="true" />
                   Use all suggestions
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-10"
+                  disabled={suggesting}
+                  onClick={() => {
+                    setRefreshTargetIds(
+                      preview.mode === "alternatives"
+                        ? pendingPreviewItems.map((item) => item.targetId)
+                        : null,
+                    );
+                    setConfirmSuggest(preview.mode);
+                  }}
+                >
+                  <Sparkles className="size-4" aria-hidden="true" />
+                  Suggest another set
                 </Button>
                 <Button
                   type="button"
