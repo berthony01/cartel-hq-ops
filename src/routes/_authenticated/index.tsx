@@ -349,6 +349,23 @@ function HqDashboard() {
           <Section variant="hero" className="min-w-0">
             {launchesQuery.isPending ? (
               <p className="text-sm text-muted-foreground">Loading launch state…</p>
+            ) : launchesUnavailable ? (
+              <div className="min-w-0 space-y-3">
+                <p className="type-meta text-muted-foreground">Launch status</p>
+                <h2 className="font-display text-2xl uppercase leading-tight text-muted-foreground sm:text-3xl">
+                  Launch state unavailable
+                </h2>
+                <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
+                  Launch data could not be loaded right now. This does not change your launch —
+                  open Launch Control to view the authoritative state.
+                </p>
+                <Link
+                  to="/launch-control"
+                  className="touch-target inline-flex w-fit items-center gap-1.5 rounded-md border border-gold/50 bg-gold/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-gold transition-colors hover:bg-gold/20"
+                >
+                  Open Launch Control <ChevronRight className="size-4" aria-hidden="true" />
+                </Link>
+              </div>
             ) : !primaryLaunch ? (
               <div className="min-w-0 space-y-3">
                 <p className="type-meta text-gold">Launch status</p>
@@ -366,6 +383,8 @@ function HqDashboard() {
                   Create launch <ChevronRight className="size-4" aria-hidden="true" />
                 </Link>
               </div>
+            ) : (
+
             ) : (
               <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
                 <div className="min-w-0 space-y-3">
