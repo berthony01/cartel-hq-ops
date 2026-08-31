@@ -2636,14 +2636,22 @@ function StickerLabBuilder() {
                 />
               </dl>
 
-              <p className="text-xs text-muted-foreground">
-                Short name preview:{" "}
-                <span className="font-mono text-foreground">
-                  {tgPack?.telegram_set_name ?? shortNamePreview ?? "available once the bot is configured"}
-                </span>
-                . The authoritative set name is decided by the server at publish time. Stickers
-                without an emoji fall back to 🐸.
-              </p>
+              <details className="rounded-md border border-border/70 bg-background/40 p-3">
+                <summary className="min-h-9 cursor-pointer text-xs font-semibold text-muted-foreground">
+                  Telegram set naming
+                </summary>
+                <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                  Short name preview:{" "}
+                  <span className="font-mono text-foreground">
+                    {tgPack?.telegram_set_name ??
+                      shortNamePreview ??
+                      "available once the bot is configured"}
+                  </span>
+                  . The authoritative set name is decided by the server at publish time. Stickers
+                  without an emoji fall back to 🐸.
+                </p>
+              </details>
+
 
               {publishResult ? (
                 <p className="text-xs text-muted-foreground">
