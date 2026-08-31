@@ -10,7 +10,13 @@ The Cartel HQ Lovable project uses the TanStack project structure. Lovable curre
 
 No secrets belong in this directory. Runtime credentials and API keys must remain in Supabase Edge Function secrets or another approved secret store.
 
+## Pending deployment
+
+`telegram-stickers`: the snapshot in this directory now contains the Phase 4B `replace_version` action (in-place `replaceStickerInSet` restore of an earlier image version). This source has NOT been deployed from Lovable. The deployed runtime is still the previously verified live version, which is ahead of the inventory row below. Deploy externally after independent diff review, preserving `verify_jwt = true`, then refresh the inventory with the real post-deploy version and hash.
+
 ## Production inventory captured 2026-08-31
+
+
 
 | Function | Live version | verify_jwt | Supabase deployment hash |
 | --- | ---: | :---: | --- |
