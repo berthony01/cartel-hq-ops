@@ -276,10 +276,14 @@ function StickerLabBuilder() {
   const [saving, setSaving] = useState(false);
 
   /* ------- Step 3 AI Concept Studio (text only, never image generation) ------ */
-  const [conceptSuggestions, setConceptSuggestions] = useState<SuggestedConcept[] | null>(null);
+  const [preview, setPreview] = useState<{
+    mode: "board" | "alternatives";
+    items: Array<{ targetId: string; suggestion: SuggestedConcept; applied: boolean }>;
+  } | null>(null);
+  const [selectedForAlternatives, setSelectedForAlternatives] = useState<string[]>([]);
   const [conceptError, setConceptError] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState(false);
-  const [confirmSuggest, setConfirmSuggest] = useState(false);
+  const [confirmSuggest, setConfirmSuggest] = useState<"board" | "alternatives" | null>(null);
   const [confirmApplySuggestions, setConfirmApplySuggestions] = useState(false);
 
   /**
