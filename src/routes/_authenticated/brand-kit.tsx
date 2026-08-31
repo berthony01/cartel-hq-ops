@@ -22,7 +22,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import {
   MAX_CANONICAL_REFERENCES,
-  emptyCharacterLock,
   formatLockList,
   parseLockList,
   readCharacterLock,
