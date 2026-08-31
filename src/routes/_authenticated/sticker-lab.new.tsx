@@ -791,12 +791,23 @@ function StickerLabBuilder() {
    * never touches persisted sticker rows. On any failure the current concepts
    * stay exactly as they are.
    */
-  const runConceptSuggestion = async (mode: "board" | "alternatives") => {
+  const runConceptSuggestion = async (
+    mode: "board" | "alternatives",
+    targetIds?: string[] | null,
+  ) => {
     if (!workspaceId) {
       toast.error("Select a project first.");
       return;
     }
-    const targets = mode === "alternatives" ? selectedConcepts : unlockedConcepts;
+    const scoped = targetIds
+      ? draft.concepts.filter((c) => !c.locked && targetIds.includes(c.id))
+      : null;
+    const targets =
+      scoped && scoped.length
+        ? scoped
+        : mode === "alternatives"
+          ? selectedConcepts
+          : unlockedConcepts;
     if (!targets.length) return;
     setSuggesting(true);
     setConceptError(null);
