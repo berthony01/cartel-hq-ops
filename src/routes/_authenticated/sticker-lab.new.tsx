@@ -111,7 +111,6 @@ import {
   PACK_SIZES,
   PACK_THEMES,
   TEXT_PREFERENCES,
-  formatDirectionList,
   loadDraft,
   parseDirectionList,
   saveDraft,
