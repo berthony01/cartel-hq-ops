@@ -17,7 +17,7 @@ No secrets belong in this directory. Runtime credentials and API keys must remai
 
 | Function | Live version | verify_jwt | Supabase deployment hash |
 | --- | ---: | :---: | --- |
-| sticker-ai | 6 | true | `7051faaccbaa8fb80b167fa6992313e848b4d74f7d2885f8ed43a18c934f83fe` |
+| sticker-ai | 7 | true | `3d6b111e81b36f13d09cc259b392cec77fa46acd8598d354e6309bd15139408e` |
 | telegram-stickers | 6 | true | `d7d60a12cf98ca9d9313fff32102de6cc10319526e80d1cff100f21523224208` |
 | telegram-link | 3 | true | `9996641ed725ff32335ca24f576396856191fdf390bbaf622ae6ef688508e486` |
 | telegram-webhook | 45 | false | `214c3f87cfc2a1b3601e3c4b24f47314e30980ab7a817a95bcc84e4c016fbac7` |
