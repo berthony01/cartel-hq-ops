@@ -119,14 +119,15 @@ export function WorkspaceSwitcher() {
           <button
             type="button"
             aria-label="Project selector"
-            className="hidden min-h-10 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm text-muted-foreground transition-colors hover:border-gold/40 lg:flex"
+            className="flex w-full min-w-0 min-h-11 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm text-muted-foreground transition-colors hover:border-gold/40 lg:min-h-10 lg:w-auto"
           >
-            <Building2 className="size-4 text-gold" aria-hidden="true" />
-            <span className="max-w-40 truncate font-medium text-foreground">
+            <Building2 className="size-4 shrink-0 text-gold" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate text-left font-medium text-foreground lg:max-w-40 lg:flex-none">
               {loading ? "Loading…" : (workspace?.name ?? "No project")}
             </span>
-            <ChevronDown className="size-4" aria-hidden="true" />
+            <ChevronDown className="size-4 shrink-0" aria-hidden="true" />
           </button>
+
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-60">
           <DropdownMenuLabel className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
