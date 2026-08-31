@@ -278,7 +278,7 @@ function ProjectProfilePage() {
       <PageHeader
         eyebrow="Project Identity"
         title="Project Profile"
-        description="One identity record for the active project. This profile is the identity Cartel Network discovery and Launch Control build on. Publishing makes it discoverable on the Cartel Network."
+        description="Manage the selected project's identity and its public Cartel Network profile. Publishing makes this profile discoverable on the Cartel Network."
         status={workspace ? workspace.name : "No project"}
       />
 
