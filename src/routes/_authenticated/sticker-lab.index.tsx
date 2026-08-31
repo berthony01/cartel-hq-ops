@@ -460,6 +460,11 @@ function StickerLabHome() {
                             Open pack
                           </Link>
                         </Button>
+                        <PackLifecycleMenu
+                          packId={pack.id}
+                          packTitle={pack.title}
+                          workspaceId={workspaceId}
+                        />
                       </div>
                     }
                   />
@@ -469,6 +474,42 @@ function StickerLabHome() {
           </ul>
         )}
       </Section>
+
+      {archived.length > 0 ? (
+        <Section
+          variant="quiet"
+          title="Archived packs"
+          description="Archived packs keep their Telegram sticker set, delivery history and Sticker Drop history. Their Sticker Drops are paused."
+          actions={<StatusBadge tone="muted">{`${archived.length} archived`}</StatusBadge>}
+        >
+          <ul className="space-y-2">
+            {archived.map((pack) => (
+              <li key={pack.id}>
+                <InlineRow
+                  title={pack.title}
+                  subtitle={`${pack.pack_size} stickers · archived ${pack.archived_at ? relativeTime(pack.archived_at) : "recently"}`}
+                  trailing={
+                    <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                      <StatusBadge tone="muted">archived</StatusBadge>
+                      <Button asChild size="sm" variant="outline" className="min-h-9">
+                        <Link to="/sticker-lab/$packId" params={{ packId: pack.id }}>
+                          View pack
+                        </Link>
+                      </Button>
+                      <PackLifecycleMenu
+                        packId={pack.id}
+                        packTitle={pack.title}
+                        workspaceId={workspaceId}
+                      />
+                    </div>
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+
     </div>
   );
 }
