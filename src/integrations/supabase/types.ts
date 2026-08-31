@@ -1071,6 +1071,7 @@ export type Database = {
           character_name: string | null
           created_at: string
           created_by: string | null
+          creative_blueprint: Json
           id: string
           pack_size: number
           reference_asset_id: string | null
@@ -1093,6 +1094,7 @@ export type Database = {
           character_name?: string | null
           created_at?: string
           created_by?: string | null
+          creative_blueprint?: Json
           id?: string
           pack_size: number
           reference_asset_id?: string | null
@@ -1115,6 +1117,7 @@ export type Database = {
           character_name?: string | null
           created_at?: string
           created_by?: string | null
+          creative_blueprint?: Json
           id?: string
           pack_size?: number
           reference_asset_id?: string | null
