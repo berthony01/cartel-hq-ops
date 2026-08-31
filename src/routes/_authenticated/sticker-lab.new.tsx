@@ -2100,12 +2100,13 @@ function StickerLabBuilder() {
                   className="min-h-10"
                   disabled={suggesting}
                   onClick={() => {
+                    const mode = preview?.mode ?? "board";
                     setRefreshTargetIds(
-                      preview.mode === "alternatives"
+                      mode === "alternatives"
                         ? pendingPreviewItems.map((item) => item.targetId)
                         : null,
                     );
-                    setConfirmSuggest(preview.mode);
+                    setConfirmSuggest(mode);
                   }}
                 >
                   <Sparkles className="size-4" aria-hidden="true" />
