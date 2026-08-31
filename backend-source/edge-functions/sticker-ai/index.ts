@@ -514,6 +514,24 @@ Deno.serve(async (req: Request) => {
       const prompt = buildPrompt(brand, pack, sticker, blueprint);
       const priorAssetId = sticker.image_asset_id ?? null;
 
+      // Duplicate-generation protection: an already queued/running generation for
+      // this sticker is authoritative. Return it instead of billing a second task.
+      const findActiveGeneration = async () => {
+        const { data } = await admin.from("ai_jobs")
+          .select("id,status")
+          .eq("sticker_id", stickerId)
+          .eq("job_type", "sticker_generate")
+          .in("status", ["queued", "running"])
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        return data ?? null;
+      };
+      const activeExisting = await findActiveGeneration();
+      if (activeExisting) {
+        return respond({ aiJobId: activeExisting.id, status: activeExisting.status === "queued" ? "queued" : "running", model: MODEL });
+      }
+
       const { data: job, error: jobError } = await admin.from("ai_jobs").insert({
         workspace_id: workspaceId, user_id: user.id, pack_id: packId, sticker_id: stickerId,
         job_type: "sticker_generate", provider: "kie", provider_model: MODEL, status: "queued",
@@ -525,7 +543,17 @@ Deno.serve(async (req: Request) => {
           creative_direction_applied: creativeDirectionApplied,
         },
       }).select("*").single();
-      if (jobError || !job) return respond({ error: "JOB_CREATE_FAILED" }, 500);
+      if (jobError || !job) {
+        // Race: another request won the unique active-generation guard.
+        if ((jobError as { code?: string } | null)?.code === "23505") {
+          const raced = await findActiveGeneration();
+          if (raced) {
+            return respond({ aiJobId: raced.id, status: raced.status === "queued" ? "queued" : "running", model: MODEL });
+          }
+        }
+        return respond({ error: "JOB_CREATE_FAILED" }, 500);
+      }
+
 
       const create = await kieRequest("/api/v1/jobs/createTask", KIE_API_KEY, {
         method: "POST",
