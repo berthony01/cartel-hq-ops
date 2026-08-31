@@ -643,37 +643,27 @@ function StickerLabBuilder() {
     const preview = id ? previews[id] : undefined;
     return !!preview && preview.transparencyValid === true;
   };
-  const clientCheckFor = (conceptId: string) => {
-    const id = stickerIdFor(conceptId);
-    return id ? clientChecks[id] : undefined;
-  };
-  /** Telegram cutout preparation succeeded (nothing to remove, or a safe edge halo). */
-  const cutoutOk = (conceptId: string) => {
-    const c = clientCheckFor(conceptId)?.cutout;
-    return c === "verified" || c === "will_clean";
-  };
-  // Export invariant: backend conditions AND browser alpha AND a safe Telegram cutout.
-  const isExportable = (conceptId: string) =>
-    backendExportable(conceptId) &&
-    clientCheckFor(conceptId)?.status === "verified" &&
-    cutoutOk(conceptId);
-  const checksRunning = checkProgress !== null;
+  /** Review/readiness predicates and counts — same semantics, extracted. */
+  const {
+    clientCheckFor,
+    cutoutOk,
+    isExportable,
+    browserVerifiedCount,
+    cutoutVerifiedCount,
+    browserFailedCount,
+    exportableCount,
+    exportReady,
+    omittedLabels,
+  } = deriveReviewState({
+    concepts: draft.concepts,
+    clientChecks,
+    stickerIdFor,
+    backendExportable,
+  });
   const transparentCount = readyConcepts.filter((c) => backendExportable(c.id)).length;
-  const browserVerifiedCount = draft.concepts.filter(
-    (c) => clientCheckFor(c.id)?.status === "verified",
-  ).length;
-  const cutoutVerifiedCount = draft.concepts.filter((c) => cutoutOk(c.id)).length;
-  const browserFailedCount = draft.concepts.filter(
-    (c) => clientCheckFor(c.id)?.status === "failed" || clientCheckFor(c.id)?.cutout === "failed",
-  ).length;
   const attentionCount = failedCount + browserFailedCount;
-
-  const exportableConcepts = draft.concepts.filter((c) => isExportable(c.id));
-  const exportableCount = exportableConcepts.length;
   const allReady = draft.concepts.length > 0 && generatedCount === draft.concepts.length && !anyBusy;
-  // Export/publish readiness is stricter than "ready": transparency must be verified.
-  const exportReady = draft.concepts.length > 0 && exportableCount === draft.concepts.length;
-  const omittedLabels = draft.concepts.filter((c) => !isExportable(c.id)).map((c) => c.label);
+
 
   /* ---------------- Telegram publish handlers (user-initiated only) ---------------- */
   const tgPublishedCount = draft.concepts.filter((c) => {
