@@ -2773,13 +2773,13 @@ function StickerLabBuilder() {
 
               <p className="min-w-0 rounded-md border border-border/70 bg-surface-raised/50 p-3 text-xs text-muted-foreground [overflow-wrap:anywhere]">
                 {lifecycleMode === "publish"
-                  ? "This pack has not been published to Telegram yet. Publishing creates one sticker set and distributes it to the communities you selected."
+                  ? "This pack has not been published to Telegram yet. Publishing creates one sticker set and sends it to the communities you selected."
                   : lifecycleMode === "update"
                     ? `${unpublishedReviewedIds.length} reviewed sticker${unpublishedReviewedIds.length === 1 ? "" : "s"} are not on the existing Telegram set yet. Publishing adds them — the set is never recreated.`
                     : lifecycleMode === "add"
                       ? `The set is live in ${deliveredTargetIds.length} communit${deliveredTargetIds.length === 1 ? "y" : "ies"}. ${newTargetIds.length} newly selected communit${newTargetIds.length === 1 ? "y has" : "ies have"} not received it yet.`
                       : lifecycleMode === "retry"
-                        ? `Every sticker is published. ${failedTargetIds.length} communit${failedTargetIds.length === 1 ? "y" : "ies"} failed distribution and can be retried safely.`
+                        ? `Every sticker is published. ${failedTargetIds.length} communit${failedTargetIds.length === 1 ? "y" : "ies"} failed community send and can be retried safely.`
                         : lifecycleMode === "attention"
                           ? `${totalConcepts - tgPublishedCount} sticker${totalConcepts - tgPublishedCount === 1 ? " is" : "s are"} still not published. Finish Review so they pass the transparency and cutout checks, then publish the update.`
                           : `Everything is current: all reviewed stickers are published and all ${deliveredTargetIds.length} selected communit${deliveredTargetIds.length === 1 ? "y has" : "ies have"} the pack.`}
