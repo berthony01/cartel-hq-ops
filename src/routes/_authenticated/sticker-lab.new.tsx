@@ -2106,9 +2106,10 @@ function StickerLabBuilder() {
 
       {step === 5 ? (
         <StepCard
-          title="Review"
-          hint="Verified static stickers from private storage, ready for export and Telegram publishing."
+          title="Review &amp; publish"
+          hint="Check readiness, publish one Telegram sticker set for this pack, then send it to this project's communities."
         >
+
           <section className="cartel-panel mb-6 rounded-lg p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
