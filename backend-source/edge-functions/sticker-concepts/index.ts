@@ -188,6 +188,9 @@ type BrandKit = {
 
 function buildPrompt(input: {
   size: number;
+  targetCount: number;
+  mode: "board" | "alternatives";
+  focus: Array<{ label: string; action: string }>;
   characterName: string;
   theme: string;
   brief: string;
@@ -202,7 +205,7 @@ function buildPrompt(input: {
   const lines: string[] = [];
 
   lines.push(
-    `You are a creative director for a messaging sticker pack. Produce exactly ${input.size} distinct sticker CONCEPT IDEAS.`,
+    `You are a creative director for a messaging sticker pack of ${input.size} stickers. Produce exactly ${input.targetCount} distinct sticker CONCEPT IDEAS.`,
   );
   lines.push(
     "These are concept ideas, not image prompts. Each concept describes ONE single character sticker: a concrete, visible pose, expression or action that an illustrator could draw without further explanation.",
