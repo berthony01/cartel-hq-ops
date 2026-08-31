@@ -1025,6 +1025,23 @@ function StickerLabBuilder() {
   };
 
   const anyBusy = draft.concepts.some((c) => busy(stageFor(c.id)));
+  // Selection is pruned on every render: anything that became ready, got a
+  // preview or started running silently drops out of the batch.
+  const selectableConcepts = draft.concepts.filter((c) => bulkSelectable(c.id));
+  const selectableIds = selectableConcepts.map((c) => c.id);
+  const effectiveSelected = selectableConcepts.filter((c) =>
+    selectedForGeneration.includes(c.id),
+  );
+  const selectedCount = effectiveSelected.length;
+  const clearSelection = () => setSelectedForGeneration([]);
+  const toggleSelected = (conceptId: string, next: boolean) =>
+    setSelectedForGeneration((prev) =>
+      next
+        ? prev.includes(conceptId)
+          ? prev
+          : [...prev, conceptId]
+        : prev.filter((id) => id !== conceptId),
+    );
   const readyConcepts = draft.concepts.filter((c) => stageFor(c.id) === "ready");
   const generatedCount = readyConcepts.length;
   const remainingCount = draft.concepts.length - generatedCount;
