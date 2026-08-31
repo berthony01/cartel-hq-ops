@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, FolderLock, Trash2 } from "lucide-react";
+import { Download, FolderLock, Palette, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "@/hooks/useSession";
 import { useWorkspace } from "@/lib/workspace-context";
@@ -125,7 +125,7 @@ function AssetsPage() {
       <PageHeader
         eyebrow="Module"
         title="Asset Vault"
-        description="Private storage for this project’s artwork, references, and generated stickers. Previews and downloads use short-lived signed links."
+        description="Asset Vault is this project’s source of truth for actual image files. Brand Kit stores creative rules, not separate copies, and Sticker Lab reuses applicable files from here. Files stay private; previews and downloads use short-lived signed links."
         status={workspace ? workspace.name : "No project"}
       />
 
@@ -137,7 +137,19 @@ function AssetsPage() {
         />
       ) : (
         <>
-          <Section variant="surface" title="Upload" contentClassName="space-y-3">
+          <Section
+            variant="surface"
+            title="Upload"
+            actions={
+              <Button asChild variant="outline" size="sm" className="min-h-10">
+                <Link to="/brand-kit">
+                  <Palette className="size-4" aria-hidden="true" />
+                  Edit Brand Kit
+                </Link>
+              </Button>
+            }
+            contentClassName="space-y-3"
+          >
             <div className="grid gap-3 md:grid-cols-[220px_1fr] md:items-start [&>*]:min-w-0">
               <div>
                 <label
@@ -167,11 +179,38 @@ function AssetsPage() {
                 onUploaded={refresh}
               />
             </div>
+            <details className="rounded-md bg-surface-raised/25 p-3">
+              <summary className="cursor-pointer text-xs font-medium text-foreground">
+                What each asset type means
+              </summary>
+              <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                <li>
+                  <span className="text-foreground">Logo</span> — project mark / profile identity
+                  candidate.
+                </li>
+                <li>
+                  <span className="text-foreground">Mascot</span> — recurring project character or
+                  subject.
+                </li>
+                <li>
+                  <span className="text-foreground">Reference image</span> — visual reference for
+                  Sticker Lab generation.
+                </li>
+                <li>
+                  <span className="text-foreground">Generated sticker</span> — output created by
+                  Sticker Lab.
+                </li>
+                <li>
+                  <span className="text-foreground">Other</span> — uncategorised project imagery.
+                </li>
+              </ul>
+            </details>
           </Section>
 
           <Section
             variant="plain"
             title="Library"
+            description="These are the project's files. Brand Kit and Sticker Lab reuse these same files — there are no separate Brand Kit copies."
             actions={
               <div className="flex items-center gap-2">
                 <StatusBadge tone={assets.length > 0 ? "gold" : "muted"}>
@@ -198,6 +237,21 @@ function AssetsPage() {
           >
             {assetsQuery.isLoading ? (
               <p className="text-sm text-muted-foreground">Loading assets…</p>
+            ) : assetsQuery.isError ? (
+              <div className="flex flex-wrap items-center gap-3 rounded-md border border-border/70 p-3">
+                <p role="alert" className="text-sm text-signal">
+                  Assets could not be loaded, so the library is unavailable right now.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-10"
+                  onClick={() => void assetsQuery.refetch()}
+                >
+                  Retry
+                </Button>
+              </div>
             ) : assets.length === 0 ? (
               <EmptyState
                 compact
