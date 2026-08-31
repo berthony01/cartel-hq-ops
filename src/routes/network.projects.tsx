@@ -114,7 +114,19 @@ function NetworkProjectsPage() {
             Apply
           </Button>
         </div>
+        <div className="flex items-center gap-2 sm:col-span-full">
+          <Checkbox
+            id="project-verified-only"
+            checked={verifiedOnlyInput}
+            onCheckedChange={(value) => setVerifiedOnlyInput(value === true)}
+          />
+          <Label htmlFor="project-verified-only" className="text-xs font-normal">
+            Platform Reviewed only — CARTEL HQ reviewed the current profile and official links. Not
+            a safety, contract or investment check.
+          </Label>
+        </div>
       </form>
+
 
       {query.isLoading ? (
         <p className="text-sm text-muted-foreground">Loading projects…</p>
