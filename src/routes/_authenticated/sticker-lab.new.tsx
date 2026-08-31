@@ -2720,7 +2720,7 @@ function StickerLabBuilder() {
 
               {distError ? (
                 <p className="rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
-                  Sticker set stays published — group distribution needs attention. {distError}
+                  Sticker set stays published — community delivery needs attention. {distError}
                 </p>
               ) : null}
 
