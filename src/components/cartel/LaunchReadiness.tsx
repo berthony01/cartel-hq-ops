@@ -226,15 +226,44 @@ export function LaunchReadinessPanel({ workspaceId, workspaceName }: SharedProps
       ? `Get ${workspaceName} launch-ready`
       : "Get launch-ready";
 
+  if (readiness.allComplete) {
+    return (
+      <Section
+        variant="surface"
+        className="rise-in min-w-0"
+        title="Launch foundation ready"
+        leading={<Check className="size-5 text-pepe" aria-hidden="true" />}
+        actions={
+          <StatusBadge tone="green">
+            <span>
+              {readiness.completedCount} of {readiness.totalCount} complete
+            </span>
+          </StatusBadge>
+        }
+        contentClassName="space-y-3"
+      >
+        <p className="text-sm text-muted-foreground">
+          Project, launch, Launch Watch and community welcome are ready.
+        </p>
+        <Button asChild size="sm" className="min-h-11">
+          <Link to={readiness.nextAction.to}>
+            {readiness.nextAction.label}
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </Link>
+        </Button>
+      </Section>
+    );
+  }
+
   return (
     <Section
       variant="primary"
       className="rise-in min-w-0"
-      title={readiness.allComplete ? "Launch foundation ready" : heading}
+      title={heading}
       description="A recommended path, not a locked wizard. You can use any part of CARTEL HQ at any time."
       leading={<ShieldCheck className="size-5" aria-hidden="true" />}
       actions={
-        <StatusBadge tone={readiness.allComplete ? "green" : "gold"}>
+        <StatusBadge tone="gold">
           <span>
             {readiness.completedCount} of {readiness.totalCount} complete
           </span>
@@ -275,13 +304,17 @@ export function LaunchReadinessCallout({
 
   const readiness = query.data!;
 
+  if (readiness.allComplete) {
+    return null;
+  }
+
   return (
     <Section
       variant="surface"
       className="rise-in min-w-0"
-      title={readiness.allComplete ? "Launch foundation ready" : title}
+      title={title}
       actions={
-        <StatusBadge tone={readiness.allComplete ? "green" : "gold"}>
+        <StatusBadge tone="gold">
           <span>
             {readiness.completedCount} of {readiness.totalCount} complete
           </span>
