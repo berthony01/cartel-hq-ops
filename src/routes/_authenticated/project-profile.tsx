@@ -310,7 +310,57 @@ function ProjectProfilePage() {
           </Button>
         </Section>
       ) : (
+        <div className="min-w-0 space-y-4 sm:space-y-6">
+        <Section variant="primary" className="min-w-0">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+            <div className="min-w-0">
+              <p className="type-meta text-gold">Profile state</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <h2 className="min-w-0 font-display text-xl uppercase leading-tight text-foreground [overflow-wrap:anywhere] sm:text-2xl">
+                  {profileQuery.isLoading
+                    ? "Loading…"
+                    : profile
+                      ? profile.project_name
+                      : "Project profile not created yet"}
+                </h2>
+                {profile ? (
+                  <StatusBadge tone={STATUS_TONE[profile.discovery_status]}>
+                    <span>{DISCOVERY_STATUS_LABELS[profile.discovery_status]}</span>
+                  </StatusBadge>
+                ) : null}
+              </div>
+              <p className="mt-2 max-w-prose text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+                {!profile
+                  ? "Fill in the identity below and create the profile. Nothing is public until you create it and set the status to Published."
+                  : profile.discovery_status === "published"
+                    ? "This profile is published, so it is discoverable on the public Cartel Network."
+                    : "This profile is saved but not discoverable on the public Cartel Network. Set the status to Published when you are ready."}
+              </p>
+              {form.public_slug ? (
+                <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                  Network address:{" "}
+                  <span className="text-foreground">/network/project/{form.public_slug}</span>
+                </p>
+              ) : null}
+            </div>
+            <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
+              {saveButton}
+              {profile && profile.discovery_status === "published" && profile.public_slug ? (
+                <Button asChild variant="outline" className="min-h-11">
+                  <Link
+                    to="/network/project/$projectSlug"
+                    params={{ projectSlug: profile.public_slug }}
+                  >
+                    View public page
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </Section>
+
         <div className="grid gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+
           <form
             id="project-profile-form"
             onSubmit={(e) => {
