@@ -494,376 +494,239 @@ function LaunchControlPage() {
           }
         />
       ) : (
-        <div className="grid min-w-0 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-          <div className="min-w-0 space-y-4 sm:space-y-6">
-            {readOnly && !accessQuery.isLoading ? (
-              <Section variant="surface">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <StatusBadge tone="muted">
-                    <span>Read only</span>
-                  </StatusBadge>
-                  <p className="min-w-0 text-xs leading-relaxed text-muted-foreground">
-                    You can view launches for this workspace. Creating, editing, advancing or
-                    deleting a launch requires the workspace owner or admin role.
-                  </p>
-                </div>
-              </Section>
-            ) : null}
+        <div className="min-w-0 space-y-4 sm:space-y-6">
+          {readOnly && !accessQuery.isLoading ? (
+            <Section variant="surface">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <StatusBadge tone="muted">
+                  <span>Read only</span>
+                </StatusBadge>
+                <p className="min-w-0 text-xs leading-relaxed text-muted-foreground">
+                  You can view launches for this workspace. Creating, editing, advancing or
+                  deleting a launch requires the workspace owner or admin role.
+                </p>
+              </div>
+            </Section>
+          ) : null}
 
+          <Section
+            variant="surface"
+            title="Launches"
+            description={`Launch records for ${profile.project_name}. One project profile can hold multiple launches.`}
+            actions={
+              canManage ? (
+                <Button size="sm" className="min-h-11" onClick={startCreate}>
+                  <Plus className="size-4" aria-hidden="true" />
+                  New launch
+                </Button>
+              ) : null
+            }
+          >
+            {launchesQuery.isLoading ? (
+              <p className="text-sm text-muted-foreground">Loading launches…</p>
+            ) : launchesQuery.isError ? (
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  {(launchesQuery.error as Error)?.message ?? "Could not load launches."}
+                </p>
+                <Button
+                  variant="outline"
+                  className="mt-3 min-h-11"
+                  onClick={() => void launchesQuery.refetch()}
+                >
+                  Retry
+                </Button>
+              </div>
+            ) : launches.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No launches yet. Create a draft launch to begin the lifecycle.
+              </p>
+            ) : (
+              <ul className="grid gap-2 sm:grid-cols-2 [&>*]:min-w-0">
+                {launches.map((launch) => {
+                  const s = toLaunchStatus(launch.status);
+                  const active = launch.id === selectedId;
+                  return (
+                    <li key={launch.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedId(launch.id)}
+                        className={`flex w-full min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-3 text-left transition-colors ${
+                          active
+                            ? "border-gold/50 bg-gold/5"
+                            : "border-border bg-background/40 hover:bg-surface-raised/60"
+                        }`}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-foreground">
+                            {launch.token_name}
+                          </span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {launch.ticker} · {launch.chain} · /{launch.public_slug}
+                          </span>
+                        </span>
+                        <StatusBadge tone={STATUS_TONE[s]}>
+                          <span>{LAUNCH_STATUS_LABELS[s]}</span>
+                        </StatusBadge>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Section>
+
+          {creating && canManage ? (
             <Section
               variant="surface"
-              title="Launches"
-              description={`Launch records for ${profile.project_name}. One project profile can hold multiple launches.`}
-              actions={
-                canManage ? (
-                  <Button size="sm" className="min-h-11" onClick={startCreate}>
-                    <Plus className="size-4" aria-hidden="true" />
-                    New launch
-                  </Button>
-                ) : null
-              }
-
+              title="New launch"
+              description="Prefilled from the Project Profile. Nothing is saved until you press Create. The Project Profile is not modified."
             >
-              {launchesQuery.isLoading ? (
-                <p className="text-sm text-muted-foreground">Loading launches…</p>
-              ) : launchesQuery.isError ? (
-                <div>
-                  <p className="text-sm text-muted-foreground">
-                    {(launchesQuery.error as Error)?.message ?? "Could not load launches."}
-                  </p>
-                  <Button
-                    variant="outline"
-                    className="mt-3 min-h-11"
-                    onClick={() => void launchesQuery.refetch()}
-                  >
-                    Retry
-                  </Button>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <Label htmlFor="new-token-name">Token name</Label>
+                  <Input
+                    id="new-token-name"
+                    maxLength={TOKEN_NAME_MAX}
+                    value={newLaunch.token_name}
+                    onChange={(e) =>
+                      setNewLaunch((n) => ({ ...n, token_name: e.target.value }))
+                    }
+                  />
                 </div>
-              ) : launches.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No launches yet. Create a draft launch to begin the lifecycle.
-                </p>
-              ) : (
-                <ul className="space-y-2">
-                  {launches.map((launch) => {
-                    const s = toLaunchStatus(launch.status);
-                    const active = launch.id === selectedId;
-                    return (
-                      <li key={launch.id}>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedId(launch.id)}
-                          className={`flex w-full min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-3 text-left transition-colors ${
-                            active
-                              ? "border-gold/50 bg-gold/5"
-                              : "border-border bg-background/40 hover:bg-surface-raised/60"
-                          }`}
-                        >
-                          <span className="min-w-0">
-                            <span className="block truncate text-sm font-semibold text-foreground">
-                              {launch.token_name}
-                            </span>
-                            <span className="block truncate text-xs text-muted-foreground">
-                              {launch.ticker} · {launch.chain} · /{launch.public_slug}
-                            </span>
-                          </span>
-                          <StatusBadge tone={STATUS_TONE[s]}>
-                            <span>{LAUNCH_STATUS_LABELS[s]}</span>
-                          </StatusBadge>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </Section>
-
-            {creating && canManage ? (
-              <Section
-                variant="surface"
-                title="New launch"
-                description="Prefilled from the Project Profile. Nothing is saved until you press Create. The Project Profile is not modified."
-              >
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="min-w-0">
-                    <Label htmlFor="new-token-name">Token name</Label>
-                    <Input
-                      id="new-token-name"
-                      maxLength={TOKEN_NAME_MAX}
-                      value={newLaunch.token_name}
-                      onChange={(e) =>
-                        setNewLaunch((n) => ({ ...n, token_name: e.target.value }))
-                      }
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <Label htmlFor="new-ticker">Ticker</Label>
-                    <Input
-                      id="new-ticker"
-                      maxLength={TICKER_MAX}
-                      value={newLaunch.ticker}
-                      onChange={(e) => setNewLaunch((n) => ({ ...n, ticker: e.target.value }))}
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <Label htmlFor="new-chain">Chain</Label>
-                    <Input
-                      id="new-chain"
-                      maxLength={CHAIN_MAX}
-                      value={newLaunch.chain}
-                      onChange={(e) => setNewLaunch((n) => ({ ...n, chain: e.target.value }))}
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <Label htmlFor="new-slug">Public launch slug</Label>
-                    <Input
-                      id="new-slug"
-                      maxLength={SLUG_MAX}
-                      value={newLaunch.public_slug}
-                      onChange={(e) =>
-                        setNewLaunch((n) => ({ ...n, public_slug: e.target.value }))
-                      }
-                    />
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {newSlugValid
-                        ? "Reserved for a future public launch path. No public page exists yet."
-                        : SLUG_RULE_HINT}
-                    </p>
-                  </div>
+                <div className="min-w-0">
+                  <Label htmlFor="new-ticker">Ticker</Label>
+                  <Input
+                    id="new-ticker"
+                    maxLength={TICKER_MAX}
+                    value={newLaunch.ticker}
+                    onChange={(e) => setNewLaunch((n) => ({ ...n, ticker: e.target.value }))}
+                  />
                 </div>
-                <p className="mt-3 text-xs text-muted-foreground">
-                  Timezone recorded from this device: {tz}. New launches always start in Draft.
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Button
-                    className="min-h-11"
-                    disabled={!canCreate || !canManage || createMutation.isPending}
-                    onClick={() => createMutation.mutate()}
-                  >
-                    {createMutation.isPending ? (
-                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                    ) : (
-                      <Plus className="size-4" aria-hidden="true" />
-                    )}
-                    Create draft launch
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="min-h-11"
-                    onClick={() => setCreating(false)}
-                  >
-                    Cancel
-                  </Button>
+                <div className="min-w-0">
+                  <Label htmlFor="new-chain">Chain</Label>
+                  <Input
+                    id="new-chain"
+                    maxLength={CHAIN_MAX}
+                    value={newLaunch.chain}
+                    onChange={(e) => setNewLaunch((n) => ({ ...n, chain: e.target.value }))}
+                  />
                 </div>
-              </Section>
-            ) : null}
-
-            {selected && form ? (
-              <form
-                id="launch-editor-form"
-                className="min-w-0 space-y-4 sm:space-y-6"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!canSave) return;
-                  saveMutation.mutate();
-                }}
-
-              >
-                <Section
-                  variant="surface"
-                  title="Launch identity"
-                  description={
-                    idLocked
-                      ? "Identity fields are locked once the launch is announced."
-                      : "Identity fields can only be edited while the launch is a draft."
-                  }
-                >
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="min-w-0">
-                      <Label htmlFor="token-name">Token name</Label>
-                      <Input
-                        id="token-name"
-                        maxLength={TOKEN_NAME_MAX}
-                        disabled={idLocked || readOnly}
-                        value={form.token_name}
-                        onChange={(e) => set({ token_name: e.target.value })}
-                      />
-                    </div>
-                    <div className="min-w-0">
-                      <Label htmlFor="ticker">Ticker</Label>
-                      <Input
-                        id="ticker"
-                        maxLength={TICKER_MAX}
-                        disabled={idLocked || readOnly}
-                        value={form.ticker}
-                        onChange={(e) => set({ ticker: e.target.value })}
-                      />
-                    </div>
-                    <div className="min-w-0">
-                      <Label htmlFor="chain">Chain</Label>
-                      <Input
-                        id="chain"
-                        maxLength={CHAIN_MAX}
-                        disabled={idLocked || readOnly}
-                        value={form.chain}
-                        onChange={(e) => set({ chain: e.target.value })}
-                      />
-                    </div>
-                    <div className="min-w-0">
-                      <Label htmlFor="slug">Public launch slug</Label>
-                      <Input
-                        id="slug"
-                        maxLength={SLUG_MAX}
-                        disabled={idLocked || readOnly}
-                        value={form.public_slug}
-                        onChange={(e) => set({ public_slug: e.target.value })}
-                      />
-                      <p className="mt-1 text-xs text-muted-foreground">{SLUG_RULE_HINT}</p>
-                    </div>
-                  </div>
-                  {identityError ? (
-                    <p className="mt-3 text-xs text-destructive">{identityError}</p>
-                  ) : null}
-                </Section>
-
-
-                <Section
-                  variant="surface"
-                  title="Schedule"
-                  description={
-                    schedLocked
-                      ? "Schedule fields are locked once the launch is live."
-                      : `Times are entered and displayed in this device's timezone (${tz}) and stored as absolute timestamps. There is no arbitrary timezone conversion in this phase.`
-                  }
-                >
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="min-w-0">
-                      <Label htmlFor="schedule-mode">Schedule mode</Label>
-                      <Select
-                        value={form.schedule_mode}
-                        disabled={schedLocked || readOnly}
-                        onValueChange={(v) => set({ schedule_mode: v as ScheduleMode })}
-                      >
-                        <SelectTrigger id="schedule-mode" className="min-h-11">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Not set</SelectItem>
-                          <SelectItem value="exact">Exact time</SelectItem>
-                          <SelectItem value="window">Launch window</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    {form.schedule_mode === "exact" ? (
-                      <div className="min-w-0">
-                        <Label htmlFor="launch-at">Launch time</Label>
-                        <Input
-                          id="launch-at"
-                          type="datetime-local"
-                          disabled={schedLocked || readOnly}
-                          value={form.launch_at}
-                          onChange={(e) => set({ launch_at: e.target.value })}
-                        />
-                      </div>
-                    ) : null}
-                    {form.schedule_mode === "window" ? (
-                      <>
-                        <div className="min-w-0">
-                          <Label htmlFor="window-start">Window start</Label>
-                          <Input
-                            id="window-start"
-                            type="datetime-local"
-                            disabled={schedLocked || readOnly}
-                            value={form.window_start}
-                            onChange={(e) => set({ window_start: e.target.value })}
-                          />
-                        </div>
-                        <div className="min-w-0">
-                          <Label htmlFor="window-end">Window end</Label>
-                          <Input
-                            id="window-end"
-                            type="datetime-local"
-                            disabled={schedLocked || readOnly}
-                            value={form.window_end}
-                            onChange={(e) => set({ window_end: e.target.value })}
-                          />
-                        </div>
-                      </>
-                    ) : null}
-                  </div>
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    Recorded timezone on this launch: {selected.timezone}
-                  </p>
-                  {scheduleError ? (
-                    <p className="mt-2 text-xs text-destructive">{scheduleError}</p>
-                  ) : null}
-                </Section>
-
-                <Section
-                  variant="surface"
-                  title="Internal notes"
-                  description="Operator-only. Never shown outside this workspace."
-                >
-                  <Textarea
-                    id="internal-notes"
-                    rows={4}
-                    maxLength={NOTES_MAX}
-                    disabled={readOnly}
-                    value={form.internal_notes}
-                    onChange={(e) => set({ internal_notes: e.target.value })}
+                <div className="min-w-0">
+                  <Label htmlFor="new-slug">Public launch slug</Label>
+                  <Input
+                    id="new-slug"
+                    maxLength={SLUG_MAX}
+                    value={newLaunch.public_slug}
+                    onChange={(e) =>
+                      setNewLaunch((n) => ({ ...n, public_slug: e.target.value }))
+                    }
                   />
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {form.internal_notes.length} / {NOTES_MAX} characters.
+                    {newSlugValid
+                      ? "Reserved for a future public launch path. No public page exists yet."
+                      : SLUG_RULE_HINT}
                   </p>
-                  {notesError ? <p className="mt-1 text-xs text-destructive">{notesError}</p> : null}
-                </Section>
-
-
-                <div className="hidden lg:flex lg:justify-end">{saveButton}</div>
-              </form>
-            ) : null}
-
-            {selected && canManage && canDeleteLaunch(status) ? (
-              <Section
-                variant="surface"
-                title="Delete draft"
-                description="Only draft launches can be deleted. Once announced, a launch record is permanent."
-              >
+                </div>
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Timezone recorded from this device: {tz}. New launches always start in Draft.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
                 <Button
-                  variant="destructive"
                   className="min-h-11"
-                  onClick={() => setConfirmDelete(true)}
+                  disabled={!canCreate || !canManage || createMutation.isPending}
+                  onClick={() => createMutation.mutate()}
                 >
-                  <Trash2 className="size-4" aria-hidden="true" />
-                  Delete draft launch
+                  {createMutation.isPending ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Plus className="size-4" aria-hidden="true" />
+                  )}
+                  Create draft launch
                 </Button>
-              </Section>
-            ) : null}
-          </div>
-
-          <div className="min-w-0 space-y-4 sm:space-y-6">
-            {selected ? (
-              <>
-                <Section
-                  variant="surface"
-                  title="Lifecycle"
-                  description="Only the single next step is available. The database enforces every transition rule."
+                <Button
+                  variant="outline"
+                  className="min-h-11"
+                  onClick={() => setCreating(false)}
                 >
-                  <ol className="space-y-1.5">
+                  Cancel
+                </Button>
+              </div>
+            </Section>
+          ) : null}
+
+          {selected ? (
+            <Section variant="hero" className="min-w-0">
+              <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+                <div className="min-w-0 space-y-3">
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 sm:flex sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="type-meta text-gold">Selected launch</p>
+                      <h2 className="mt-1 min-w-0 font-display text-2xl uppercase leading-tight text-foreground [overflow-wrap:anywhere] sm:text-3xl">
+                        {selected.token_name}
+                      </h2>
+                      <p className="mt-1 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                        {selected.ticker} · {selected.chain} · /{selected.public_slug}
+                      </p>
+                    </div>
+                    <StatusBadge tone={STATUS_TONE[status]}>
+                      <span>{LAUNCH_STATUS_LABELS[status]}</span>
+                    </StatusBadge>
+                  </div>
+
+                  <dl className="grid gap-3 sm:grid-cols-3">
+                    <div className="min-w-0">
+                      <dt className="type-meta text-muted-foreground">Schedule</dt>
+                      <dd className="mt-1 text-xs leading-relaxed text-foreground [overflow-wrap:anywhere]">
+                        {selected.launch_at
+                          ? formatTimestamp(selected.launch_at)
+                          : selected.launch_window_start && selected.launch_window_end
+                            ? `${formatTimestamp(selected.launch_window_start)} → ${formatTimestamp(selected.launch_window_end)}`
+                            : "Not set"}
+                      </dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="type-meta text-muted-foreground">Launch Watch</dt>
+                      <dd className="mt-1 text-xs leading-relaxed text-foreground">
+                        {!watchToken
+                          ? "Not opened yet"
+                          : watchSummaryQuery.isLoading
+                            ? "Loading watcher count…"
+                            : `${watchSummary?.active_count ?? 0} active · ${watchSummary?.total_count ?? 0} total opt-ins`}
+                      </dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="type-meta text-muted-foreground">Official contract</dt>
+                      <dd className="mt-1 text-xs leading-relaxed text-foreground">
+                        {contractSaved
+                          ? "Registered"
+                          : status === "CONTRACT_PENDING"
+                            ? "Pending registration"
+                            : "Not yet available"}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+
+                <div className="min-w-0 space-y-3">
+                  <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 lg:grid-cols-2">
                     {LAUNCH_STATUSES.map((s) => {
                       const current = s === status;
                       const done = launchStatusIndex(s) < launchStatusIndex(status);
                       return (
-                        <li
+                        <span
                           key={s}
-                          className={`flex min-w-0 items-start gap-2 rounded-md border px-3 py-2 ${
+                          className={`flex min-w-0 items-center gap-1.5 rounded-md border px-2 py-1.5 ${
                             current
                               ? "border-gold/50 bg-gold/5"
-                              : "border-transparent bg-background/30"
+                              : done
+                                ? "border-pepe/30 bg-pepe/5"
+                                : "border-border/60 bg-background/30"
                           }`}
                         >
                           <span
-                            className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border text-[10px] ${
+                            className={`flex size-3.5 shrink-0 items-center justify-center rounded-full border ${
                               done
                                 ? "border-pepe/50 text-pepe"
                                 : current
@@ -871,29 +734,30 @@ function LaunchControlPage() {
                                   : "border-border text-muted-foreground"
                             }`}
                           >
-                            {done ? <Check className="size-3" aria-hidden="true" /> : null}
+                            {done ? <Check className="size-2.5" aria-hidden="true" /> : null}
                           </span>
-                          <span className="min-w-0">
-                            <span
-                              className={`block text-xs font-semibold uppercase tracking-[0.12em] ${
-                                current ? "text-gold" : "text-foreground"
-                              }`}
-                            >
-                              {LAUNCH_STATUS_LABELS[s]}
-                            </span>
-                            {current ? (
-                              <span className="block text-xs leading-relaxed text-muted-foreground">
-                                {LAUNCH_STATUS_HELP[s]}
-                              </span>
-                            ) : null}
+                          <span
+                            className={`min-w-0 truncate text-[10px] font-semibold uppercase tracking-[0.12em] ${
+                              current
+                                ? "text-gold"
+                                : done
+                                  ? "text-foreground"
+                                  : "text-muted-foreground"
+                            }`}
+                          >
+                            {LAUNCH_STATUS_LABELS[s]}
                           </span>
-                        </li>
+                        </span>
                       );
                     })}
-                  </ol>
+                  </div>
+
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {LAUNCH_STATUS_HELP[status]}
+                  </p>
 
                   {next ? (
-                    <div className="mt-4 space-y-2">
+                    <div className="space-y-2">
                       {blockedReason ? (
                         <p className="text-xs text-muted-foreground">{blockedReason}</p>
                       ) : null}
@@ -913,90 +777,207 @@ function LaunchControlPage() {
                           Advancing the lifecycle requires the workspace owner or admin role.
                         </p>
                       )}
+                      <p className="text-xs text-muted-foreground">
+                        Only the single next step is available. The database enforces every
+                        transition rule.
+                      </p>
                     </div>
-
                   ) : (
-                    <p className="mt-4 text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       This launch has reached the final lifecycle state.
                     </p>
                   )}
+                </div>
+              </div>
+            </Section>
+          ) : null}
 
-                  <div className="mt-4 space-y-1.5 rounded-md border border-border bg-background/40 px-3 py-2">
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      Launch Watch opt-ins are active: once this launch reaches watchlist open and
-                      the Project Profile is Published, the Telegram deep link accepts watchers.
-                    </p>
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      The notification engine is active. Advancing to Official contract registered
-                      or Live queues one Telegram message per active watcher, and countdown
-                      reminders are scheduled from the launch time for watchers who allow them.
-                    </p>
-
-                  </div>
-                </Section>
-
-                <Section variant="surface" title="Official contract">
-                  {status === "CONTRACT_PENDING" ? (
-                    <div className="space-y-3">
-                      <div className="min-w-0">
-                        <Label htmlFor="contract-address">Official contract address</Label>
-                        <Input
-                          id="contract-address"
-                          maxLength={CONTRACT_MAX}
-                          disabled={readOnly}
-                          value={contractInput}
-                          onChange={(e) => setContractInput(e.target.value)}
-                          placeholder="Paste the official contract address"
-                        />
+          {selected ? (
+            <div className="grid min-w-0 gap-4 sm:gap-6 xl:grid-cols-2">
+              <div className="min-w-0 space-y-4 sm:space-y-6">
+                {form ? (
+                  <form
+                    id="launch-editor-form"
+                    className="min-w-0 space-y-4 sm:space-y-6"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!canSave) return;
+                      saveMutation.mutate();
+                    }}
+                  >
+                    <Section
+                      variant="surface"
+                      title="Launch identity"
+                      description={
+                        idLocked
+                          ? "Identity fields are locked once the launch is announced."
+                          : "Identity fields can only be edited while the launch is a draft."
+                      }
+                    >
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="min-w-0">
+                          <Label htmlFor="token-name">Token name</Label>
+                          <Input
+                            id="token-name"
+                            maxLength={TOKEN_NAME_MAX}
+                            disabled={idLocked || readOnly}
+                            value={form.token_name}
+                            onChange={(e) => set({ token_name: e.target.value })}
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <Label htmlFor="ticker">Ticker</Label>
+                          <Input
+                            id="ticker"
+                            maxLength={TICKER_MAX}
+                            disabled={idLocked || readOnly}
+                            value={form.ticker}
+                            onChange={(e) => set({ ticker: e.target.value })}
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <Label htmlFor="chain">Chain</Label>
+                          <Input
+                            id="chain"
+                            maxLength={CHAIN_MAX}
+                            disabled={idLocked || readOnly}
+                            value={form.chain}
+                            onChange={(e) => set({ chain: e.target.value })}
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <Label htmlFor="slug">Public launch slug</Label>
+                          <Input
+                            id="slug"
+                            maxLength={SLUG_MAX}
+                            disabled={idLocked || readOnly}
+                            value={form.public_slug}
+                            onChange={(e) => set({ public_slug: e.target.value })}
+                          />
+                          <p className="mt-1 text-xs text-muted-foreground">{SLUG_RULE_HINT}</p>
+                        </div>
                       </div>
-                      <p className="text-xs leading-relaxed text-muted-foreground">
-                        Not registered yet. You can correct and re-save the address while the
-                        launch is still contract pending.
-                      </p>
-                      {canManage ? (
-                        <Button
-                          className="min-h-11"
-                          disabled={contractMutation.isPending || !contractInput.trim()}
-                          onClick={() => contractMutation.mutate()}
-                        >
-                          {contractMutation.isPending ? (
-                            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                          ) : (
-                            <Save className="size-4" aria-hidden="true" />
-                          )}
-                          Save official contract address
-                        </Button>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">
-                          Registering the official contract address requires the workspace owner
-                          or admin role.
-                        </p>
-                      )}
+                      {identityError ? (
+                        <p className="mt-3 text-xs text-destructive">{identityError}</p>
+                      ) : null}
+                    </Section>
 
-                    </div>
-                  ) : contractSaved ? (
-                    <div className="space-y-2">
-                      <p className="break-all rounded-md border border-border bg-background/40 px-3 py-2 font-mono text-xs text-foreground">
-                        {selected.official_contract_address}
+                    <Section
+                      variant="surface"
+                      title="Schedule"
+                      description={
+                        schedLocked
+                          ? "Schedule fields are locked once the launch is live."
+                          : `Times are entered and displayed in this device's timezone (${tz}) and stored as absolute timestamps. There is no arbitrary timezone conversion in this phase.`
+                      }
+                    >
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="min-w-0">
+                          <Label htmlFor="schedule-mode">Schedule mode</Label>
+                          <Select
+                            value={form.schedule_mode}
+                            disabled={schedLocked || readOnly}
+                            onValueChange={(v) => set({ schedule_mode: v as ScheduleMode })}
+                          >
+                            <SelectTrigger id="schedule-mode" className="min-h-11">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Not set</SelectItem>
+                              <SelectItem value="exact">Exact time</SelectItem>
+                              <SelectItem value="window">Launch window</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {form.schedule_mode === "exact" ? (
+                          <div className="min-w-0">
+                            <Label htmlFor="launch-at">Launch time</Label>
+                            <Input
+                              id="launch-at"
+                              type="datetime-local"
+                              disabled={schedLocked || readOnly}
+                              value={form.launch_at}
+                              onChange={(e) => set({ launch_at: e.target.value })}
+                            />
+                          </div>
+                        ) : null}
+                        {form.schedule_mode === "window" ? (
+                          <>
+                            <div className="min-w-0">
+                              <Label htmlFor="window-start">Window start</Label>
+                              <Input
+                                id="window-start"
+                                type="datetime-local"
+                                disabled={schedLocked || readOnly}
+                                value={form.window_start}
+                                onChange={(e) => set({ window_start: e.target.value })}
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <Label htmlFor="window-end">Window end</Label>
+                              <Input
+                                id="window-end"
+                                type="datetime-local"
+                                disabled={schedLocked || readOnly}
+                                value={form.window_end}
+                                onChange={(e) => set({ window_end: e.target.value })}
+                              />
+                            </div>
+                          </>
+                        ) : null}
+                      </div>
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        Recorded timezone on this launch: {selected.timezone}
                       </p>
-                      <p className="text-xs leading-relaxed text-muted-foreground">
-                        Official contract registered by the authenticated project. This confirms
-                        the address submitted by the project that controls this workspace. It is
-                        not a safety check, an audit, or an investment guarantee.
-                      </p>
-                      <p className="text-xs leading-relaxed text-muted-foreground">
-                        Replacing a registered address is not available. It requires a future
-                        controlled authorization and history flow.
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      Contract registration becomes available later in the lifecycle, once the
-                      launch reaches contract pending.
-                    </p>
-                  )}
-                </Section>
+                      {scheduleError ? (
+                        <p className="mt-2 text-xs text-destructive">{scheduleError}</p>
+                      ) : null}
+                    </Section>
 
+                    <Section
+                      variant="surface"
+                      title="Internal notes"
+                      description="Operator-only. Never shown outside this workspace."
+                    >
+                      <Textarea
+                        id="internal-notes"
+                        rows={4}
+                        maxLength={NOTES_MAX}
+                        disabled={readOnly}
+                        value={form.internal_notes}
+                        onChange={(e) => set({ internal_notes: e.target.value })}
+                      />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {form.internal_notes.length} / {NOTES_MAX} characters.
+                      </p>
+                      {notesError ? (
+                        <p className="mt-1 text-xs text-destructive">{notesError}</p>
+                      ) : null}
+                    </Section>
+
+                    <div className="hidden lg:flex lg:justify-end">{saveButton}</div>
+                  </form>
+                ) : null}
+
+                {canManage && canDeleteLaunch(status) ? (
+                  <Section
+                    variant="surface"
+                    title="Delete draft"
+                    description="Only draft launches can be deleted. Once announced, a launch record is permanent."
+                  >
+                    <Button
+                      variant="destructive"
+                      className="min-h-11"
+                      onClick={() => setConfirmDelete(true)}
+                    >
+                      <Trash2 className="size-4" aria-hidden="true" />
+                      Delete draft launch
+                    </Button>
+                  </Section>
+                ) : null}
+              </div>
+
+              <div className="min-w-0 space-y-4 sm:space-y-6">
                 <Section
                   variant="surface"
                   title="Launch Watch"
@@ -1089,13 +1070,126 @@ function LaunchControlPage() {
                         Watchers who join through that link receive the countdown reminders,
                         official-contract packet and launch-live alert for this launch.
                       </p>
-
                     </div>
+                  )}
+                </Section>
+
+                <Section variant="surface" title="Official contract">
+                  {status === "CONTRACT_PENDING" ? (
+                    <div className="space-y-3">
+                      <div className="min-w-0">
+                        <Label htmlFor="contract-address">Official contract address</Label>
+                        <Input
+                          id="contract-address"
+                          maxLength={CONTRACT_MAX}
+                          disabled={readOnly}
+                          value={contractInput}
+                          onChange={(e) => setContractInput(e.target.value)}
+                          placeholder="Paste the official contract address"
+                        />
+                      </div>
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        Not registered yet. You can correct and re-save the address while the
+                        launch is still contract pending.
+                      </p>
+                      {canManage ? (
+                        <Button
+                          className="min-h-11"
+                          disabled={contractMutation.isPending || !contractInput.trim()}
+                          onClick={() => contractMutation.mutate()}
+                        >
+                          {contractMutation.isPending ? (
+                            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                          ) : (
+                            <Save className="size-4" aria-hidden="true" />
+                          )}
+                          Save official contract address
+                        </Button>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Registering the official contract address requires the workspace owner
+                          or admin role.
+                        </p>
+                      )}
+                    </div>
+                  ) : contractSaved ? (
+                    <div className="space-y-2">
+                      <p className="break-all rounded-md border border-border bg-background/40 px-3 py-2 font-mono text-xs text-foreground">
+                        {selected.official_contract_address}
+                      </p>
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        Official contract registered by the authenticated project. This confirms
+                        the address submitted by the project that controls this workspace. It is
+                        not a safety check, an audit, or an investment guarantee.
+                      </p>
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        Replacing a registered address is not available. It requires a future
+                        controlled authorization and history flow.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Contract registration becomes available later in the lifecycle, once the
+                      launch reaches contract pending.
+                    </p>
                   )}
                 </Section>
 
                 <Section
                   variant="surface"
+                  title="Launch preview"
+                  description="How this launch appears to operators, plus its public Cartel Network page once it is out of Draft."
+                >
+                  <dl className="space-y-1.5 text-xs">
+                    <PreviewRow label="Project" value={profile.project_name} />
+                    <PreviewRow label="Token" value={selected.token_name} />
+                    <PreviewRow label="Ticker" value={selected.ticker} />
+                    <PreviewRow label="Chain" value={selected.chain} />
+                    <PreviewRow label="Status" value={LAUNCH_STATUS_LABELS[status]} />
+                    <PreviewRow
+                      label="Schedule"
+                      value={
+                        selected.launch_at
+                          ? formatTimestamp(selected.launch_at)
+                          : selected.launch_window_start && selected.launch_window_end
+                            ? `${formatTimestamp(selected.launch_window_start)} → ${formatTimestamp(selected.launch_window_end)}`
+                            : "Not set"
+                      }
+                    />
+                    <PreviewRow
+                      label="Network path"
+                      value={`/network/launch/${selected.public_slug}`}
+                    />
+                  </dl>
+                  {status !== "DRAFT" && profile.discovery_status === "published" ? (
+                    <Button asChild variant="outline" size="sm" className="mt-3 w-full">
+                      <Link
+                        to="/network/launch/$launchSlug"
+                        params={{ launchSlug: selected.public_slug }}
+                      >
+                        View Network Launch
+                      </Link>
+                    </Button>
+                  ) : (
+                    <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                      {status === "DRAFT"
+                        ? "Draft launches are never public. Announce this launch to publish its Cartel Network page."
+                        : "Publish your Project Profile to make this launch page live on the Cartel Network."}
+                    </p>
+                  )}
+                </Section>
+              </div>
+            </div>
+          ) : null}
+
+          {selected ? (
+            <details className="min-w-0 rounded-lg border border-border/60 bg-background/20">
+              <summary className="cursor-pointer list-none px-3 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Advanced &amp; technical
+              </summary>
+              <div className="min-w-0 space-y-3 px-3 pb-3">
+                <Section
+                  variant="quiet"
                   title="Notification engine"
                   leading={<Bell className="size-4" aria-hidden="true" />}
                 >
@@ -1154,14 +1248,19 @@ function LaunchControlPage() {
                     )}
 
                     <p className="text-xs leading-relaxed text-muted-foreground">
+                      Advancing to Official contract registered or Live queues one Telegram message
+                      per active watcher, and countdown reminders are scheduled from the launch
+                      time for watchers who allow them.
+                    </p>
+
+                    <p className="text-xs leading-relaxed text-muted-foreground">
                       Only aggregate counts are shown. Individual deliveries, Telegram identifiers
                       and watcher identities are never exposed in Cartel HQ.
                     </p>
                   </div>
                 </Section>
 
-
-                <Section variant="surface" title="Lifecycle timestamps">
+                <Section variant="quiet" title="Lifecycle timestamps">
                   <dl className="space-y-1.5 text-xs">
                     {(
                       [
@@ -1187,55 +1286,12 @@ function LaunchControlPage() {
                       ))}
                   </dl>
                 </Section>
-
-                <Section
-                  variant="surface"
-                  title="Launch preview"
-                  description="How this launch appears to operators, plus its public Cartel Network page once it is out of Draft."
-                >
-                  <dl className="space-y-1.5 text-xs">
-                    <PreviewRow label="Project" value={profile.project_name} />
-                    <PreviewRow label="Token" value={selected.token_name} />
-                    <PreviewRow label="Ticker" value={selected.ticker} />
-                    <PreviewRow label="Chain" value={selected.chain} />
-                    <PreviewRow label="Status" value={LAUNCH_STATUS_LABELS[status]} />
-                    <PreviewRow
-                      label="Schedule"
-                      value={
-                        selected.launch_at
-                          ? formatTimestamp(selected.launch_at)
-                          : selected.launch_window_start && selected.launch_window_end
-                            ? `${formatTimestamp(selected.launch_window_start)} → ${formatTimestamp(selected.launch_window_end)}`
-                            : "Not set"
-                      }
-                    />
-                    <PreviewRow
-                      label="Network path"
-                      value={`/network/launch/${selected.public_slug}`}
-                    />
-                  </dl>
-                  {status !== "DRAFT" && profile.discovery_status === "published" ? (
-                    <Button asChild variant="outline" size="sm" className="mt-3 w-full">
-                      <Link
-                        to="/network/launch/$launchSlug"
-                        params={{ launchSlug: selected.public_slug }}
-                      >
-                        View Network Launch
-                      </Link>
-                    </Button>
-                  ) : (
-                    <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                      {status === "DRAFT"
-                        ? "Draft launches are never public. Announce this launch to publish its Cartel Network page."
-                        : "Publish your Project Profile to make this launch page live on the Cartel Network."}
-                    </p>
-                  )}
-                </Section>
-              </>
-            ) : null}
-          </div>
+              </div>
+            </details>
+          ) : null}
         </div>
       )}
+
 
       {selected && saveButton ? (
         <StickyActionBar desktop="hidden" end={saveButton} />
