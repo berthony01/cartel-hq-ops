@@ -17,6 +17,8 @@ import {
   suggestStickerConcepts,
   type SuggestedConcept,
 } from "@/lib/sticker-concepts";
+import { loadStickerVersions } from "@/lib/sticker-versions";
+
 
 import {
   STAGE_LABEL,
