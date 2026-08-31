@@ -523,8 +523,56 @@ Deno.serve(async (req: Request) => {
       return { outcome: "reactivated", remindersEnabled: raced.reminders_enabled !== false, subscriptionId: String(raced.id) };
     }
 
-    return { outcome: "subscribed", remindersEnabled: true };
+    return { outcome: "subscribed", remindersEnabled: true, subscriptionId: inserted?.id ? String(inserted.id) : null };
   };
+
+  /**
+   * Persists the latest private-confirmation diagnostic for one explicit
+   * deep-link attempt. Diagnostics are best-effort: a failure here must never
+   * erase an already-persisted subscription and must never trigger a resend.
+   */
+  const recordLaunchWatchConfirmation = async (
+    subscriptionId: string | null,
+    attemptedAt: string,
+    outcome: SendOutcome,
+  ) => {
+    if (!subscriptionId) return;
+    try {
+      const { data: current } = await admin
+        .from("launch_watch_subscriptions")
+        .select("confirmation_attempt_count")
+        .eq("id", subscriptionId)
+        .maybeSingle();
+      const attempts = Number((current as any)?.confirmation_attempt_count ?? 0) + 1;
+      const patch: Record<string, unknown> = {
+        confirmation_attempt_count: attempts,
+        confirmation_attempted_at: attemptedAt,
+        confirmation_status: outcome.status,
+      };
+      if (outcome.status === "sent") {
+        patch.confirmation_sent_at = attemptedAt;
+        patch.confirmation_telegram_message_id = outcome.messageId;
+        patch.confirmation_error_class = null;
+        patch.confirmation_last_error = null;
+      } else {
+        patch.confirmation_sent_at = null;
+        patch.confirmation_telegram_message_id = null;
+        patch.confirmation_error_class = outcome.errorClass;
+        patch.confirmation_last_error = outcome.detail;
+      }
+      const { error } = await admin
+        .from("launch_watch_subscriptions")
+        .update(patch)
+        .eq("id", subscriptionId);
+      if (error) {
+        console.error("launch_watch_confirmation_persist_failed", outcome.status, error.message);
+      }
+    } catch (error) {
+      // Telegram may already have delivered. Never resend on a persistence fault.
+      console.error("launch_watch_confirmation_persist_exception", outcome.status, (error as Error)?.message);
+    }
+  };
+
 
   /** Soft unwatch. The row and its history are always preserved. */
   const launchWatchUnsubscribe = async (launchId: string, telegramUserId: number) => {
