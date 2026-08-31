@@ -208,6 +208,9 @@ export const networkKeys = {
   upcoming: (p: DirectoryParams) =>
     ["cartel-network", "upcoming", p.search ?? "", p.chain ?? "", p.limit ?? NETWORK_PAGE_SIZE, p.offset ?? 0] as const,
   launch: (slug: string) => ["cartel-network", "launch", slug] as const,
+  signals: (p: DirectoryParams) =>
+    ["cartel-network", "signals", p.chain ?? "", p.limit ?? NETWORK_PAGE_SIZE, p.offset ?? 0] as const,
+
 };
 
 export async function fetchNetworkSummary(): Promise<NetworkSummary> {
