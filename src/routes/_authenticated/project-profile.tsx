@@ -677,7 +677,9 @@ function ProjectProfilePage() {
             </Section>
           </aside>
         </div>
+        </div>
       )}
+
 
       {workspaceId ? (
         <StickyActionBar
