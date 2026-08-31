@@ -452,6 +452,70 @@ function LaunchControlPage() {
   });
   const notificationSummary = notificationSummaryQuery.data ?? null;
 
+  // ---- countdown + reminder readiness (saved launch fields only) -----------
+  const nowMs = useClientNow(30_000);
+  const anchorIso = selected?.launch_at ?? selected?.launch_window_start ?? null;
+  const anchorIsWindowStart = !selected?.launch_at && !!selected?.launch_window_start;
+  const anchorMs = anchorIso ? new Date(anchorIso).getTime() : null;
+  const anchorValid = anchorMs !== null && !Number.isNaN(anchorMs);
+  const countdownLabel = anchorIsWindowStart ? "Window opens in" : "Launch in";
+  const anchorPassed = anchorValid && nowMs !== null && nowMs >= anchorMs!;
+  const countdownText =
+    anchorValid && nowMs !== null
+      ? anchorPassed
+        ? anchorIsWindowStart
+          ? "Window opened"
+          : "Launch time reached"
+        : formatCountdown(anchorMs! - nowMs)
+      : null;
+
+  const remindersArmed = REMINDER_ARMED_STATUSES.includes(status);
+  const countdownPhaseEnded = status === "LIVE" || status === "COMPLETED";
+  const reminder24Iso =
+    anchorValid ? new Date(anchorMs! - 24 * 3600_000).toISOString() : null;
+  const reminder1Iso = anchorValid ? new Date(anchorMs! - 3600_000).toISOString() : null;
+
+  const armingState: {
+    tone: "gold" | "green" | "muted";
+    badge: string;
+    detail: string;
+  } = !anchorValid
+    ? {
+        tone: "muted",
+        badge: "Schedule needed",
+        detail:
+          "Countdown reminders cannot be timed until this launch has an exact launch time or a launch window.",
+      }
+    : countdownPhaseEnded
+      ? {
+          tone: "muted",
+          badge: "Countdown phase ended",
+          detail:
+            "The countdown phase for this launch is over. Reminder delivery no longer applies.",
+        }
+      : remindersArmed
+        ? {
+            tone: "green",
+            badge: "Countdowns armed",
+            detail:
+              "Countdown delivery is armed. Each reminder is created when it becomes due and sent privately to active watchers who allow countdowns.",
+          }
+        : {
+            tone: "gold",
+            badge: "Not armed yet",
+            detail:
+              "Watchers can opt in now, but countdown delivery only becomes armed once this launch advances to Launch approaching. Advance before a reminder's due time if you want that reminder delivered.",
+          };
+
+  const watchStatsReady = watchSummaryQuery.isSuccess && !!watchSummary;
+  const notificationStatsReady = notificationSummaryQuery.isSuccess && !!notificationSummary;
+  const mutedCount =
+    watchStatsReady && notificationStatsReady
+      ? Math.max(watchSummary!.active_count - notificationSummary!.reminder_enabled_watchers, 0)
+      : null;
+
+
+
   const blockedReason =
     next === "LAUNCH_APPROACHING" && !scheduleReady
       ? "Set an exact launch time or a complete launch window before advancing."
