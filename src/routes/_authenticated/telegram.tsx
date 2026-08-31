@@ -56,8 +56,9 @@ function TelegramPage() {
         : "Unavailable";
 
   const groupsPending = groupSetup.groupQuery.isPending;
+  const groupsError = groupSetup.groupQuery.isError;
   const checking = serviceChecking || groupsPending;
-  const hasProblem = !checking && (!serviceAvailable || attentionCount > 0);
+  const hasProblem = !checking && (!serviceAvailable || groupsError || attentionCount > 0);
 
   const overallTone = checking
     ? "muted"
@@ -76,11 +77,15 @@ function TelegramPage() {
 
   const primaryLine = checking
     ? "Checking Telegram service and connected communities…"
-    : groupCount === 0
-      ? "Connect your first Telegram community below to start onboarding members."
-      : hasProblem
-        ? "Review the community rows below and follow the listed fix for each one."
-        : `All ${groupCount} connected communit${groupCount === 1 ? "y is" : "ies are"} operational.`;
+    : groupsError && groupCount === 0
+      ? "Connected community state could not be loaded right now."
+      : groupsError
+        ? "The last loaded communities are shown below, but refreshing the list failed."
+        : groupCount === 0
+          ? "Connect your first Telegram community below to start onboarding members."
+          : hasProblem
+            ? "Review the community rows below and follow the listed fix for each one."
+            : `All ${groupCount} connected communit${groupCount === 1 ? "y is" : "ies are"} operational.`;
 
   return (
     <div className="flex max-w-5xl flex-col gap-4 sm:gap-6">
