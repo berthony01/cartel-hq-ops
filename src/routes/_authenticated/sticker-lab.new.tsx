@@ -2981,13 +2981,15 @@ function StickerLabBuilder() {
                         Version history ({versionsBySticker[stickerId]!.length})
                       </summary>
                       <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
-                        Previous successful images are kept for this sticker. Choosing an earlier
-                        version is coming in a later update.
+                        Previous successful images are kept for this sticker. You can make an
+                        earlier version current again without losing history.
                       </p>
                       <ul className="mt-2 space-y-2">
                         {versionsBySticker[stickerId]!.map((v) => {
                           const isCurrent =
                             !!v.storagePath && v.storagePath === preview?.storagePath;
+                          const restoreDisabled =
+                            busy(stage) || restoringStickerId !== null || v.unavailable;
                           return (
                             <li key={v.id} className="flex min-w-0 items-center gap-2">
                               <span
@@ -3014,7 +3016,29 @@ function StickerLabBuilder() {
                               </span>
                               {isCurrent ? (
                                 <StatusBadge tone="green">Current</StatusBadge>
-                              ) : null}
+                              ) : (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 shrink-0 text-[11px]"
+                                  disabled={restoreDisabled}
+                                  onClick={() =>
+                                    setRestoreTarget({
+                                      stickerId,
+                                      versionId: v.id,
+                                      versionNumber: v.versionNumber,
+                                      label: c.label,
+                                    })
+                                  }
+                                >
+                                  {restoringStickerId === stickerId ? "Working…" : "Set current"}
+                                </Button>
+                              )}
+                            </li>
+                          );
+                        })}
+
                             </li>
                           );
                         })}
