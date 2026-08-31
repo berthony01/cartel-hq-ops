@@ -1078,9 +1078,13 @@ function StickerLabBuilder() {
         return;
       }
       if (result.status === "unchanged") {
+        // Not a failure: durable state already matches the requested version.
         await reconcileAfterRestore();
+        toast.message(result.message || RESTORE_MESSAGE.unchanged);
+        return;
       }
       toast.error(result.message || RESTORE_MESSAGE[result.status]);
+
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "That version could not be restored right now.",
