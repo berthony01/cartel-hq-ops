@@ -2693,6 +2693,7 @@ function StickerLabBuilder() {
                       anyBusy || saving || generatedCount > 0 || draft.concepts.length === 0
                     }
                     onClick={() => {
+                      clearSelection();
                       const first = draft.concepts[0];
                       if (first) void generateOne(first.id);
                     }}
