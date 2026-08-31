@@ -624,9 +624,10 @@ function LaunchControlPage() {
                   />
                   <p className="mt-1 text-xs text-muted-foreground">
                     {newSlugValid
-                      ? "Reserved for a future public launch path. No public page exists yet."
+                      ? "Sets the public launch page address on Cartel Network. The page goes live once the project profile is published and the launch leaves Draft."
                       : SLUG_RULE_HINT}
                   </p>
+
                 </div>
               </div>
               <p className="mt-3 text-xs text-muted-foreground">

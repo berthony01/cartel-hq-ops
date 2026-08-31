@@ -152,7 +152,7 @@ function BrandKitPage() {
 
   const save = useMutation({
     mutationFn: async () => {
-      if (!workspaceId) throw new Error("No active workspace.");
+      if (!workspaceId) throw new Error("No active project.");
       const payload = {
         workspace_id: workspaceId,
         brand_name: form.brand_name.trim(),

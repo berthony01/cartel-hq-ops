@@ -231,7 +231,7 @@ function DistributionPage() {
             </div>
             {!canManage ? (
               <p className="text-xs text-muted-foreground">
-                Read-only access — a workspace owner or admin manages schedules and the emergency
+                Read-only access — a project owner or admin manages schedules and the emergency
                 control.
               </p>
             ) : null}
@@ -340,7 +340,7 @@ function DistributionPage() {
             )}
             {!canManage && groups.length > 0 ? (
               <p className="mt-3 text-xs text-muted-foreground">
-                You have read-only access to Sticker Drops. Ask a workspace owner or admin to
+                You have read-only access to Sticker Drops. Ask a project owner or admin to
                 change schedules.
               </p>
             ) : null}
@@ -425,10 +425,11 @@ function DistributionPage() {
             contentClassName="space-y-3"
           >
             <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
-              Emergency pause immediately stops all automated Sticker Drops in this workspace. Your
+              Emergency pause immediately stops all automated Sticker Drops in this project. Your
               schedules and settings are preserved — nothing is deleted. Turning this off lifts the
-              workspace-wide stop; each schedule keeps its own enabled, paused and configured state.
+              project-wide stop; each schedule keeps its own enabled, paused and configured state.
             </p>
+
             {killSwitch ? (
               <div className="flex min-w-0 items-start gap-2 rounded-lg border border-signal/40 bg-signal/10 px-3 py-2.5">
                 <TriangleAlert className="mt-0.5 size-4 shrink-0 text-signal" aria-hidden="true" />
@@ -443,7 +444,7 @@ function DistributionPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="min-w-0 flex-1 text-xs text-muted-foreground">
                     {killSwitch
-                      ? "Resume automated Sticker Drops for this workspace?"
+                      ? "Resume automated Sticker Drops for this project?"
                       : "Stop all automated Sticker Drops now?"}
                   </span>
                   <Button
@@ -479,7 +480,7 @@ function DistributionPage() {
               )
             ) : (
               <p className="text-xs text-muted-foreground">
-                Only a workspace owner or admin can change this control.
+                Only a project owner or admin can change this control.
               </p>
             )}
           </Section>

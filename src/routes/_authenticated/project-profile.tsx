@@ -230,7 +230,7 @@ function ProjectProfilePage() {
 
   const save = useMutation({
     mutationFn: async () => {
-      if (!workspaceId) throw new Error("No active workspace.");
+      if (!workspaceId) throw new Error("No active project.");
       return saveProjectProfile(workspaceId, profile?.id ?? null, {
         project_name: form.project_name,
         public_slug: form.public_slug,
@@ -392,13 +392,14 @@ function ProjectProfilePage() {
                     }}
                   />
                   <p id="public_slug-help" className="mt-2 text-xs text-muted-foreground">
-                    2–64 lowercase letters, numbers and hyphens. Reserved for a future Cartel
-                    Network address such as{" "}
+                    2–64 lowercase letters, numbers and hyphens. This sets your Cartel
+                    Network address:{" "}
                     <span className="text-foreground">
                       /network/project/{form.public_slug || "your-slug"}
                     </span>
-                    . No public page exists yet.
+                    . The page is live once this profile is published.
                   </p>
+
                   {form.public_slug && !slugValid ? (
                     <p className="mt-1 text-xs text-signal">
                       Use 2–64 lowercase letters, numbers and single hyphens.

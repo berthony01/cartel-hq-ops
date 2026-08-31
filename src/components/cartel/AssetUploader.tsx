@@ -96,7 +96,7 @@ export function AssetUploader({
           {busy ? "Uploading…" : "Choose file"}
         </Button>
         {!workspaceId ? (
-          <p className="text-xs text-muted-foreground">Create a workspace first.</p>
+          <p className="text-xs text-muted-foreground">Add a project first.</p>
         ) : null}
       </div>
       <input

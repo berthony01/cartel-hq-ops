@@ -23,12 +23,23 @@ import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { Button } from "@/components/ui/button";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
 
 export const Route = createFileRoute("/_authenticated/assets")({
   head: () => ({
@@ -54,6 +65,9 @@ function AssetsPage() {
   const [uploadType, setUploadType] = useState<AssetType>("reference_image");
   const [filter, setFilter] = useState<AssetType | "all">("all");
   const [urls, setUrls] = useState<Record<string, string>>({});
+  const [pendingDelete, setPendingDelete] = useState<MediaAsset | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
 
   const assetsQuery = useQuery({
     queryKey: ["assets", workspaceId],
@@ -92,14 +106,19 @@ function AssetsPage() {
   };
 
   const remove = async (asset: MediaAsset) => {
+    setDeleting(true);
     try {
       await deleteWorkspaceAsset(asset);
       toast.success("Asset deleted");
+      setPendingDelete(null);
       refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not delete the asset.");
+    } finally {
+      setDeleting(false);
     }
   };
+
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -224,7 +243,7 @@ function AssetsPage() {
                         variant="ghost"
                         className="min-h-10 min-w-10 text-signal hover:text-signal"
                         aria-label="Delete asset"
-                        onClick={() => void remove(asset)}
+                        onClick={() => setPendingDelete(asset)}
                       >
                         <Trash2 className="size-4" aria-hidden="true" />
                       </Button>
@@ -236,6 +255,52 @@ function AssetsPage() {
           </Section>
         </>
       )}
+
+      <AlertDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete this{" "}
+              {pendingDelete
+                ? (
+                    ASSET_TYPE_LABELS[pendingDelete.asset_type as AssetType] ??
+                    pendingDelete.asset_type
+                  ).toLowerCase()
+                : "asset"}
+              ?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  This removes the file from this project&apos;s Asset Vault. It cannot be undone.
+                </p>
+                <p>
+                  Anywhere still using this file — Brand Kit, Sticker Lab references or earlier
+                  work — may no longer show it.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              onClick={(e) => {
+                e.preventDefault();
+                if (pendingDelete) void remove(pendingDelete);
+              }}
+            >
+              {deleting ? "Deleting…" : "Delete asset"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
+
 }

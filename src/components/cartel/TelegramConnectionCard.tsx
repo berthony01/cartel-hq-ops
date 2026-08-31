@@ -73,7 +73,7 @@ export function TelegramConnectionCard({
 }) {
   const queryClient = useQueryClient();
   const { launchTelegram, isMobileDevice } = useTelegramLauncher();
-  const { userId, configQuery, connection, botConfigured, botUsername, botStartUrl, config } = setup;
+  const { userId, configQuery, connection, botConfigured, botUsername, botStartUrl } = setup;
 
   const [starting, setStarting] = useState(false);
   const [requestId, setRequestId] = useState<string | null>(null);
@@ -203,15 +203,14 @@ export function TelegramConnectionCard({
 
         {!configQuery.isLoading && !botConfigured ? (
           <div className="rounded-md border border-signal/40 bg-signal/5 p-3 text-xs leading-relaxed text-signal">
-            <p className="font-semibold">Telegram bot not configured</p>
+            <p className="font-semibold">Telegram service not configured yet</p>
             <p className="mt-1 text-muted-foreground">
-              {config?.reason ?? "The CARTEL HQ bot token is not present on the server."}{" "}
-              Add <code className="font-mono">TELEGRAM_BOT_TOKEN</code> to the Supabase Edge
-              Function secrets for this project, then re-check. The token is only ever read
-              server-side and is never entered or stored in this browser.
+              Telegram connection is unavailable right now. Contact the CARTEL HQ administrator,
+              then re-check. Nothing is entered or stored in this browser.
             </p>
           </div>
         ) : null}
+
 
         {connection ? (
           <div className="rounded-md border border-border/60 bg-background/40 p-3">
