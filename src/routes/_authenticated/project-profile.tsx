@@ -23,6 +23,7 @@ import {
 } from "@/lib/project-profile";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
+import { formatDateTime } from "@/lib/cartel-network";
 import {
   fetchProjectVerificationState,
   projectVerificationKeys,
@@ -160,6 +161,7 @@ function ProjectProfilePage() {
     queryFn: () => fetchProjectVerificationState(profile!.id),
     enabled: !!profile?.id,
   });
+  const verification = verificationQuery.data ?? null;
 
   // Saved profile is authoritative once it exists. Brand Kit never syncs over it.
   useEffect(() => {
