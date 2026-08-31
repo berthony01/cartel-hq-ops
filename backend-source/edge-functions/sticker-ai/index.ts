@@ -241,15 +241,15 @@ function hasCharacterLockContent(lock: CharacterLock | null): boolean {
 const HUMOR_TEXT: Record<string, string> = {
   none: "Keep humor out of it; play the concept straight.",
   light: "Keep humor light and subtle.",
-  medium: "Use a clearly comedic but not absurd tone.",
-  high: "Lean into strong, exaggerated comedic energy.",
+  balanced: "Use a clearly playful, comedic tone that stays controlled.",
+  heavy: "Lean into strong, exaggerated comedic energy.",
 };
 
 const INTENSITY_TEXT: Record<string, string> = {
   calm: "Keep the energy calm and understated.",
   balanced: "Keep the energy balanced and natural.",
-  bold: "Make the pose and expression bold and high-contrast.",
-  extreme: "Push the pose and expression to an extreme, maximal reaction.",
+  high: "Make the pose and expression bold and high-energy.",
+  maximum: "Push the pose and expression to a maximal, extreme reaction.",
 };
 
 /**
