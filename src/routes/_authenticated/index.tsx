@@ -217,7 +217,9 @@ function HqDashboard() {
   const killSwitch = drops?.control?.kill_switch === true;
   const schedules = drops?.schedules ?? [];
   const events = drops?.events ?? [];
-  const activeSchedules = schedules.filter((s) => s.enabled).length;
+  /** Presentation-only: nothing is effectively active while the kill switch is on. */
+  const activeSchedules = killSwitch ? 0 : schedules.filter((s) => s.enabled).length;
+
   const autoPaused = schedules.filter((s) => scheduleState(s, killSwitch) === "auto_paused").length;
   const failedEvents = events.filter((e) => e.status !== "sent").length;
   const dropsSentToday = drops ? sentToday(events) : 0;
