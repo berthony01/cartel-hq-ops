@@ -31,7 +31,19 @@ import { InlineRow } from "@/components/cartel/InlineRow";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { usePlatformAccess } from "@/hooks/usePlatformAccess";
+
 import {
   TelegramConnectionCard,
   useTelegramSetup,
