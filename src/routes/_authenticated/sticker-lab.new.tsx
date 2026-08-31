@@ -318,6 +318,13 @@ function StickerLabBuilder() {
   });
 
   const [confirmRemaining, setConfirmRemaining] = useState(false);
+  /**
+   * Sticker Studio selective generation. Editor-only local state: never
+   * persisted, never sent to the server, and always re-validated against live
+   * sticker state immediately before any provider work starts.
+   */
+  const [selectedForGeneration, setSelectedForGeneration] = useState<string[]>([]);
+  const [confirmSelectedBatch, setConfirmSelectedBatch] = useState(false);
   const [exporting, setExporting] = useState(false);
   /**
    * Existing browser-side review/quality runtime (local transparency checks,
@@ -948,6 +955,8 @@ function StickerLabBuilder() {
   };
 
   const generateOne = async (conceptId: string) => {
+    // A per-card action supersedes any pending batch entry for that sticker.
+    setSelectedForGeneration((prev) => prev.filter((id) => id !== conceptId));
     setStages((s) => ({ ...s, [`concept:${conceptId}`]: "saving" }));
     const result = await persist();
     if (!result) {
@@ -965,6 +974,7 @@ function StickerLabBuilder() {
 
   const generateRemaining = async () => {
     setConfirmRemaining(false);
+    setSelectedForGeneration([]);
     const result = await persist();
     if (!result) return;
     for (const concept of draft.concepts) {
@@ -1001,7 +1011,39 @@ function StickerLabBuilder() {
   const isFailure = (stage: Stage) =>
     stage === "failed" || stage === "replacement_failed" || stage === "timeout";
 
+  /**
+   * Sticker Studio bulk eligibility. Deliberately conservative: a sticker that
+   * is busy, already ready, or still holds a valid preview can NEVER be part of
+   * a batch, so a good sticker cannot be replaced by accident. Those keep their
+   * explicit per-card Regenerate / Retry action instead.
+   */
+  const bulkSelectable = (conceptId: string) => {
+    const stage = stageFor(conceptId);
+    if (busy(stage)) return false;
+    if (stage === "ready") return false;
+    const id = stickerIdFor(conceptId);
+    if (id && previews[id]) return false;
+    return true;
+  };
+
   const anyBusy = draft.concepts.some((c) => busy(stageFor(c.id)));
+  // Selection is pruned on every render: anything that became ready, got a
+  // preview or started running silently drops out of the batch.
+  const selectableConcepts = draft.concepts.filter((c) => bulkSelectable(c.id));
+  const selectableIds = selectableConcepts.map((c) => c.id);
+  const effectiveSelected = selectableConcepts.filter((c) =>
+    selectedForGeneration.includes(c.id),
+  );
+  const selectedCount = effectiveSelected.length;
+  const clearSelection = () => setSelectedForGeneration([]);
+  const toggleSelected = (conceptId: string, next: boolean) =>
+    setSelectedForGeneration((prev) =>
+      next
+        ? prev.includes(conceptId)
+          ? prev
+          : [...prev, conceptId]
+        : prev.filter((id) => id !== conceptId),
+    );
   const readyConcepts = draft.concepts.filter((c) => stageFor(c.id) === "ready");
   const generatedCount = readyConcepts.length;
   const remainingCount = draft.concepts.length - generatedCount;
@@ -1278,6 +1320,7 @@ function StickerLabBuilder() {
 
   /** Retries only the failed stickers. Finished stickers are never touched. */
   const retryFailed = async () => {
+    clearSelection();
     const result = await persist();
     if (!result) return;
     for (const concept of failedConcepts) {
@@ -1288,6 +1331,45 @@ function StickerLabBuilder() {
       if (!aliveRef.current) return;
     }
   };
+
+  /**
+   * Sticker Studio selective generation. Sequential by design in this phase:
+   * one confirmed batch, one save, then the existing proven per-sticker
+   * runtime is re-used one sticker at a time. Eligibility is re-checked for
+   * the batch and again immediately before every single provider call.
+   */
+  const generateSelected = async () => {
+    setConfirmSelectedBatch(false);
+    const batch = draft.concepts.filter(
+      (c) => selectedForGeneration.includes(c.id) && bulkSelectable(c.id),
+    );
+    if (batch.length === 0) {
+      clearSelection();
+      toast.info("Those stickers are no longer eligible — nothing was generated.");
+      return;
+    }
+    const result = await persist();
+    if (!result) return;
+    for (const concept of batch) {
+      if (!aliveRef.current) return;
+      const stickerId = result.stickerIds[concept.id];
+      if (!stickerId) {
+        setSelectedForGeneration((prev) => prev.filter((id) => id !== concept.id));
+        continue;
+      }
+      // Live re-check: skip anything that became ready, busy or previewed.
+      if (stages[stickerId] === "ready" || previews[stickerId] || busy(stageFor(concept.id))) {
+        setSelectedForGeneration((prev) => prev.filter((id) => id !== concept.id));
+        continue;
+      }
+      // eslint-disable-next-line no-await-in-loop
+      await runGeneration(concept.id, stickerId, result.packId);
+      setSelectedForGeneration((prev) => prev.filter((id) => id !== concept.id));
+      if (!aliveRef.current) return;
+    }
+    clearSelection();
+  };
+
 
   /** Sends the user back to Step 3 with the offending concept focused. */
   const editConceptFromFailure = (conceptId: string) => {
@@ -2479,8 +2561,8 @@ function StickerLabBuilder() {
 
       {step === 4 ? (
         <StepCard
-          title="Generation"
-          hint="Each sticker runs generation, background removal and a server-side transparency check."
+          title="Sticker Studio"
+          hint="Generate one test sticker, pick specific stickers, or generate all remaining. Each generated sticker runs image generation, background removal and a server-side transparency check."
           action={
             <Button
               type="button"
@@ -2632,6 +2714,54 @@ function StickerLabBuilder() {
             </div>
           ) : null}
 
+          {/* Sticker Studio selection toolbar — editor-only, no provider calls. */}
+          {configured && selectableIds.length > 0 ? (
+            <div className="cartel-panel mt-6 rounded-lg p-3 sm:p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                    Sticker Studio selection
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {selectedCount} selected · {selectableIds.length} can be selected
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="min-h-10"
+                    disabled={anyBusy || saving || selectedCount === selectableIds.length}
+                    onClick={() => setSelectedForGeneration(selectableIds)}
+                  >
+                    Select all ungenerated
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="min-h-10"
+                    disabled={selectedCount === 0}
+                    onClick={clearSelection}
+                  >
+                    Clear selection
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="min-h-10"
+                    disabled={selectedCount === 0 || !configured || anyBusy || saving}
+                    onClick={() => setConfirmSelectedBatch(true)}
+                  >
+                    <Sparkles className="size-4" aria-hidden="true" />
+                    Generate selected ({selectedCount})
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
 
           <ul className="mt-6 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-4 [&>*]:min-w-0">
             {draft.concepts.map((c, index) => {
@@ -2697,6 +2827,30 @@ function StickerLabBuilder() {
                       onEditConcept={() => editConceptFromFailure(c.id)}
                     />
                   ) : null}
+                  {/* Batch selection: never offered for a sticker that already
+                      has a usable image — those use Regenerate explicitly. */}
+                  <label
+                    className={`mt-3 flex min-h-10 items-center gap-2 text-[11px] ${
+                      bulkSelectable(c.id)
+                        ? "cursor-pointer text-muted-foreground"
+                        : "cursor-not-allowed text-muted-foreground/60"
+                    }`}
+                    title={
+                      bulkSelectable(c.id)
+                        ? undefined
+                        : busy(stage)
+                          ? "This sticker is currently running."
+                          : "Use Regenerate for an existing sticker."
+                    }
+                  >
+                    <Checkbox
+                      checked={selectedForGeneration.includes(c.id) && bulkSelectable(c.id)}
+                      disabled={!configured || !bulkSelectable(c.id) || saving}
+                      onCheckedChange={(v) => toggleSelected(c.id, v === true)}
+                      aria-label={`Select ${c.label} for batch generation`}
+                    />
+                    <span className="truncate">Select for batch</span>
+                  </label>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button
                       type="button"
@@ -2748,6 +2902,43 @@ function StickerLabBuilder() {
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction onClick={() => void generateRemaining()}>
                   Generate {remainingCount}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <AlertDialog open={confirmSelectedBatch} onOpenChange={setConfirmSelectedBatch}>
+            <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  Generate {selectedCount} selected{" "}
+                  {selectedCount === 1 ? "sticker" : "stickers"}?
+                </AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p>
+                      {selectedCount === 1
+                        ? "1 sticker is selected."
+                        : `${selectedCount} stickers are selected.`}{" "}
+                      Each sticker uses TWO Kie provider tasks — image generation plus background
+                      removal — so this run is{" "}
+                      <strong>
+                        {selectedCount * 2} provider {selectedCount * 2 === 1 ? "task" : "tasks"}
+                      </strong>{" "}
+                      in total and consumes Kie credits on your account.
+                    </p>
+                    <p>
+                      The selection runs one sticker at a time, in board order. Ready stickers and
+                      any sticker that still has a valid existing image are excluded from this
+                      batch. There are no automatic retries, and nothing happens until you confirm.
+                    </p>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => void generateSelected()}>
+                  Generate {selectedCount * 2} tasks
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
