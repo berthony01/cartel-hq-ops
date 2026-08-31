@@ -447,7 +447,7 @@ function LaunchControlPage() {
       <PageHeader
         eyebrow="Launch Operations"
         title="Launch Control"
-        description="Manage the authenticated project's launch lifecycle: launch records, schedule, status progression and official contract registration. Launch Watch opt-ins, the Telegram notification engine and public Cartel Network launch pages are active."
+        description="Create launches, set the launch schedule, advance the launch through its lifecycle and register the official contract address for this project."
         status={workspace ? workspace.name : "No project"}
       />
 
@@ -510,9 +510,10 @@ function LaunchControlPage() {
           ) : null}
 
           <Section
-            variant="surface"
+            variant="quiet"
             title="Launches"
-            description={`Launch records for ${profile.project_name}. One project profile can hold multiple launches.`}
+            description={`Select a launch to work on. One project profile can hold multiple launches.`}
+
             actions={
               canManage ? (
                 <Button size="sm" className="min-h-11" onClick={startCreate}>
@@ -711,7 +712,9 @@ function LaunchControlPage() {
                 </div>
 
                 <div className="min-w-0 space-y-3">
+                  <p className="type-meta text-muted-foreground">Lifecycle progress</p>
                   <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 lg:grid-cols-2">
+
                     {LAUNCH_STATUSES.map((s) => {
                       const current = s === status;
                       const done = launchStatusIndex(s) < launchStatusIndex(status);
@@ -807,7 +810,7 @@ function LaunchControlPage() {
                     }}
                   >
                     <Section
-                      variant="surface"
+                      variant="primary"
                       title="Launch identity"
                       description={
                         idLocked
@@ -936,7 +939,7 @@ function LaunchControlPage() {
                     </Section>
 
                     <Section
-                      variant="surface"
+                      variant="quiet"
                       title="Internal notes"
                       description="Operator-only. Never shown outside this project."
                     >
@@ -962,7 +965,7 @@ function LaunchControlPage() {
 
                 {canManage && canDeleteLaunch(status) ? (
                   <Section
-                    variant="surface"
+                    variant="quiet"
                     title="Delete draft"
                     description="Only draft launches can be deleted. Once announced, a launch record is permanent."
                   >
@@ -1146,7 +1149,7 @@ function LaunchControlPage() {
                     <PreviewRow label="Token" value={selected.token_name} />
                     <PreviewRow label="Ticker" value={selected.ticker} />
                     <PreviewRow label="Chain" value={selected.chain} />
-                    <PreviewRow label="Status" value={LAUNCH_STATUS_LABELS[status]} />
+                    
                     <PreviewRow
                       label="Schedule"
                       value={
@@ -1191,16 +1194,16 @@ function LaunchControlPage() {
               <div className="min-w-0 space-y-3 px-3 pb-3">
                 <Section
                   variant="quiet"
-                  title="Notification engine"
+                  title="Telegram alerts for watchers"
                   leading={<Bell className="size-4" aria-hidden="true" />}
                 >
                   <div className="space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <StatusBadge tone="green">
-                        <span>Engine: Active</span>
+                        <span>Telegram alerts active</span>
                       </StatusBadge>
                       <span className="text-xs text-muted-foreground">
-                        Telegram delivery to active watchers only.
+                        Messages are only sent to active watchers of this launch.
                       </span>
                     </div>
 
@@ -1215,12 +1218,12 @@ function LaunchControlPage() {
                         <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
                           {(
                             [
-                              ["Events", notificationSummary?.event_count],
-                              ["In queue", notificationSummary?.pending_count],
-                              ["Sent", notificationSummary?.sent_count],
+                              ["Alerts created", notificationSummary?.event_count],
+                              ["Waiting to send", notificationSummary?.pending_count],
+                              ["Delivered", notificationSummary?.sent_count],
                               ["Failed", notificationSummary?.failed_count],
-                              ["Ambiguous", notificationSummary?.ambiguous_count],
-                              ["Skipped", notificationSummary?.skipped_count],
+                              ["Outcome unconfirmed", notificationSummary?.ambiguous_count],
+                              ["Not sent (muted or stopped)", notificationSummary?.skipped_count],
                               ["Reminder opt-ins", notificationSummary?.reminder_enabled_watchers],
                             ] as const
                           ).map(([label, value]) => (
@@ -1236,12 +1239,14 @@ function LaunchControlPage() {
                         </dl>
 
                         <p className="text-xs leading-relaxed text-muted-foreground">
-                          <span className="text-foreground">Ambiguous</span> means the Telegram
-                          outcome could not be confirmed. Automatic resending is deliberately
-                          suppressed for those so a watcher is never messaged twice.
+                          <span className="text-foreground">Outcome unconfirmed</span> means
+                          Telegram never confirmed whether the message arrived. Those are
+                          deliberately not resent automatically, so a watcher is never messaged
+                          twice.
                         </p>
                       </>
                     ) : (
+
                       <p className="text-xs leading-relaxed text-muted-foreground">
                         Notification delivery becomes relevant once this launch reaches Watchlist
                         open and the Launch Watch link starts collecting watchers.

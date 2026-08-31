@@ -278,7 +278,7 @@ function ProjectProfilePage() {
       <PageHeader
         eyebrow="Project Identity"
         title="Project Profile"
-        description="One identity record for the active project. This profile is the identity Cartel Network discovery and Launch Control build on. Publishing makes it discoverable on the Cartel Network."
+        description="Manage the selected project's identity and its public Cartel Network profile. Publishing makes this profile discoverable on the Cartel Network."
         status={workspace ? workspace.name : "No project"}
       />
 
@@ -310,7 +310,57 @@ function ProjectProfilePage() {
           </Button>
         </Section>
       ) : (
+        <div className="min-w-0 space-y-4 sm:space-y-6">
+        <Section variant="primary" className="min-w-0">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+            <div className="min-w-0">
+              <p className="type-meta text-gold">Profile state</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <h2 className="min-w-0 font-display text-xl uppercase leading-tight text-foreground [overflow-wrap:anywhere] sm:text-2xl">
+                  {profileQuery.isLoading
+                    ? "Loading…"
+                    : profile
+                      ? profile.project_name
+                      : "Project profile not created yet"}
+                </h2>
+                {profile ? (
+                  <StatusBadge tone={STATUS_TONE[profile.discovery_status]}>
+                    <span>{DISCOVERY_STATUS_LABELS[profile.discovery_status]}</span>
+                  </StatusBadge>
+                ) : null}
+              </div>
+              <p className="mt-2 max-w-prose text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+                {!profile
+                  ? "Fill in the identity below and create the profile. Nothing is public until you create it and set the status to Published."
+                  : profile.discovery_status === "published"
+                    ? "This profile is published, so it is discoverable on the public Cartel Network."
+                    : "This profile is saved but not discoverable on the public Cartel Network. Set the status to Published when you are ready."}
+              </p>
+              {form.public_slug ? (
+                <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                  Network address:{" "}
+                  <span className="text-foreground">/network/project/{form.public_slug}</span>
+                </p>
+              ) : null}
+            </div>
+            <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
+              {saveButton}
+              {profile && profile.discovery_status === "published" && profile.public_slug ? (
+                <Button asChild variant="outline" className="min-h-11">
+                  <Link
+                    to="/network/project/$projectSlug"
+                    params={{ projectSlug: profile.public_slug }}
+                  >
+                    View public page
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </Section>
+
         <div className="grid gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+
           <form
             id="project-profile-form"
             onSubmit={(e) => {
@@ -320,8 +370,9 @@ function ProjectProfilePage() {
             className="min-w-0 space-y-4 sm:space-y-6"
           >
             <Section
-              variant="surface"
+              variant="primary"
               title="Identity"
+              description="The public-facing name, ticker, chain, address and description of this project."
               actions={
                 brandKitQuery.data ? (
                   <Button
@@ -337,7 +388,15 @@ function ProjectProfilePage() {
                 ) : null
               }
             >
+              {brandKitQuery.data ? (
+                <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
+                  Filling from Brand Kit is a one-way convenience: it copies current Brand Kit
+                  values into empty fields here. It does not link the two, and later Brand Kit
+                  edits will not update this profile.
+                </p>
+              ) : null}
               <div className="grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
+
                 <div>
                   <Label htmlFor="project_name">Project name</Label>
                   <Input
@@ -500,7 +559,7 @@ function ProjectProfilePage() {
             </Section>
 
             <Section
-              variant="surface"
+              variant="quiet"
               title="Discovery status"
               description="Draft and hidden profiles stay behind authenticated project access. Published profiles appear on the public Cartel Network."
             >
@@ -526,23 +585,17 @@ function ProjectProfilePage() {
                 </p>
               </div>
             </Section>
-
-            <div className="hidden items-center gap-3 lg:flex">
-              {saveButton}
-              {profileQuery.isLoading ? (
-                <span className="text-xs text-muted-foreground">Loading…</span>
-              ) : null}
-            </div>
           </form>
 
           <aside className="min-w-0">
             <Section
-              variant="primary"
+              variant="surface"
               title="Network profile preview"
               description="How this identity reads today, from the current unsaved form state."
               className="xl:sticky xl:top-6"
               contentClassName="space-y-4"
             >
+
               <div className="flex items-start gap-3">
                 <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-background/40">
                   {selectedLogo && urls[selectedLogo.storage_path] ? (
@@ -627,7 +680,9 @@ function ProjectProfilePage() {
             </Section>
           </aside>
         </div>
+        </div>
       )}
+
 
       {workspaceId ? (
         <StickyActionBar
