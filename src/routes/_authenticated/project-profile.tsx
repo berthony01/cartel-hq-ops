@@ -336,9 +336,14 @@ function ProjectProfilePage() {
                     ? "This profile is published, so it is discoverable on the public Cartel Network."
                     : "This profile is saved but not discoverable on the public Cartel Network. Set the status to Published when you are ready."}
               </p>
-              {form.public_slug ? (
+              {profile?.public_slug ? (
                 <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">
                   Network address:{" "}
+                  <span className="text-foreground">/network/project/{profile.public_slug}</span>
+                </p>
+              ) : form.public_slug ? (
+                <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                  Planned network address:{" "}
                   <span className="text-foreground">/network/project/{form.public_slug}</span>
                 </p>
               ) : null}
@@ -370,7 +375,7 @@ function ProjectProfilePage() {
             className="min-w-0 space-y-4 sm:space-y-6"
           >
             <Section
-              variant="primary"
+              variant="surface"
               title="Identity"
               description="The public-facing name, ticker, chain, address and description of this project."
               actions={
