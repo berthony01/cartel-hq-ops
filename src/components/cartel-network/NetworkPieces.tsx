@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import {
   NETWORK_TRUST_COPY,
   excerpt,
+  formatDateTime,
   formatSchedule,
   formatTicker,
   launchStatusLabel,
@@ -243,6 +244,7 @@ export function ProjectCard({ project }: { project: NetworkProjectCard }) {
             {project.primary_chain ? (
               <StatusPill tone="muted">{project.primary_chain}</StatusPill>
             ) : null}
+            {project.platform_reviewed === true ? <PlatformReviewedPill /> : null}
           </div>
         </div>
       </div>
@@ -307,6 +309,7 @@ export function LaunchCard({ launch }: { launch: NetworkUpcomingLaunch }) {
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {ticker ? <StatusPill tone="gold">{ticker}</StatusPill> : null}
             <StatusPill tone="muted">{launch.chain}</StatusPill>
+            {launch.platform_reviewed === true ? <PlatformReviewedPill /> : null}
           </div>
         </div>
       </div>
