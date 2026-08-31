@@ -409,7 +409,7 @@ function BrandKitPage() {
                 compact
                 icon={Palette}
                 title="No brand assets yet"
-                description="Uploaded logos, mascots and references appear here and stay private to this workspace."
+                description="Uploaded logos, mascots and references appear here, stay private to this project, and can be reused by Sticker Lab."
               />
             ) : (
               <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 [&>*]:min-w-0">
