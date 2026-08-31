@@ -162,6 +162,21 @@ function ProjectProfilePage() {
     enabled: !!profile?.id,
   });
   const verification = verificationQuery.data ?? null;
+  const verificationStatus = verificationStatusOf(verification?.verification_status);
+
+  const requestVerification = useMutation({
+    mutationFn: () => requestProjectVerification(profile!.id),
+    onSuccess: () => {
+      toast.success("Platform review requested");
+      queryClient.invalidateQueries({ queryKey: ["project-verification"] });
+    },
+    onError: (err: unknown) => {
+      toast.error(
+        err instanceof Error ? err.message : "Could not request a platform review right now.",
+      );
+    },
+  });
+
 
   // Saved profile is authoritative once it exists. Brand Kit never syncs over it.
   useEffect(() => {
