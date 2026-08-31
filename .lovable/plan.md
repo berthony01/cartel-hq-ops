@@ -1,119 +1,100 @@
-# Phase 6.5K-B — Pack Lifecycle (Archive + Safe Delete)
+# Phase 2 Read-Only Inspection Report
 
-Start gate assumed: `0aabfb064237b3a42dd67d37dea1297ccf54cab2`. Plan only — no edits, migrations, deploys, or data writes performed.
+Start gate verified: HEAD = `40818c1b8b2859497cc9b4d777539960695ecdca`. No files edited, no commands with side effects, no DB or provider calls.
 
-## A. Schema change (single additive migration)
+## 1. Existing AI provider integrations
 
-On `public.sticker_packs`:
+Repo-wide search for OpenAI, Anthropic/Claude, Gemini/Google AI, Groq, Mistral, DeepSeek, OpenRouter, Lovable AI Gateway / `LOVABLE_API_KEY`, `chat/completions`, and generic LLM wrappers.
 
-- `archived_at timestamptz null`
-- `archived_by uuid null references public.profiles(id)`
-- partial index `on sticker_packs (workspace_id, updated_at desc) where archived_at is null`
+Result: **no text/chat AI provider exists anywhere — runtime, config, secrets, or wrapper.** Zero matches for every listed vendor except Kie.
 
-Deliberately NOT adding `archived` to the existing `status` CHECK (`draft, generating, review, ready, publishing, published, failed`). Archive is orthogonal to lifecycle status: a pack must keep `published` so Telegram set identity and history stay truthful. Archive is a visibility/retirement flag only.
+The only AI runtime integration is image-only:
 
-RLS change (server enforcement, requirement 10): drop the member-level DELETE policy on `sticker_packs` so no client can hard-delete directly. Deletion happens only through the SECURITY DEFINER path below. Archive/restore is also gated in the function, not by a broad UPDATE policy — the existing member UPDATE policy stays, but the migration adds a BEFORE UPDATE trigger that rejects direct changes to `archived_at`/`archived_by` unless performed by the definer function (guard via a session-local flag set inside the function).
+- `backend-source/edge-functions/sticker-ai/index.ts` — Kie.ai image runtime. `KIE_BASE = https://api.kie.ai`, secrets `KIE_API_KEY`, `KIE_STICKER_MODEL`, background model. Endpoints used: `/api/v1/jobs/createTask` and `/api/v1/jobs/recordInfo`. No text/chat endpoint is called.
+- `src/lib/sticker-ai.ts` — thin client, actions `config` / `start` / `sync` only.
+- `src/lib/sticker-packs.ts`, `src/routes/_authenticated/sticker-lab.new.tsx` — Kie mentions are user-facing copy/error strings, not integrations.
+- `src/components/ui/sidebar.tsx` matched only on the substring "cookie"; irrelevant.
 
-No renames. No changes to any other table.
+Documentation-only / comment references: `src/lib/sticker-ai.ts` header comment, `backend-source/edge-functions/README.md` inventory. No `.env` or `VITE_*` variable references any text model provider.
 
-## B. Server operation design
+**Conclusion: there is no configured text AI provider. Phase 2A cannot call one without a new, explicitly authorized secret and provider decision.**
 
-Two SECURITY DEFINER RPCs plus one Edge Function, split by capability:
+## 2. Step 3 Sticker Concepts — current data contract
 
-1. `public.archive_sticker_pack(_pack_id uuid)` — RPC. Pure SQL work: verify `is_workspace_operator(workspace_id, auth.uid())`, set `archived_at/archived_by`, disable every `sticker_drop_schedules` row for the pack (`enabled=false`, `next_run_at=null`, `paused_reason='pack_archived'`). Atomic in one transaction. No storage involved, so an RPC is correct and cheapest.
-2. `public.restore_sticker_pack(_pack_id uuid)` — RPC. Operator check, clear `archived_at/archived_by`. Schedules stay disabled with `paused_reason='pack_archived'` retained until a human re-enables them (no silent resumption of recurring posting).
-3. `sticker-pack-delete` — Edge Function (`verify_jwt=true`). Hard delete needs storage-object removal, which SQL cannot do. Flow: authenticate caller → call a definer RPC `delete_sticker_pack_prepare(_pack_id)` that re-validates eligibility and returns the pack's owned `media_assets` rows (ids + storage paths) → remove those storage objects with the service-role client → call `delete_sticker_pack_commit(_pack_id, _asset_ids)` which deletes the `media_assets` rows and the pack row inside one transaction. Eligibility is re-checked in both RPCs so the UI can never bypass it.
+Local draft model (`src/lib/sticker-lab.ts`):
 
-Canonical source under `backend-source/edge-functions/sticker-pack-delete/`, deployment mirror under `supabase/functions/sticker-pack-delete/`. Not deployed in the implementation run unless separately authorized.
+```text
+Concept = { id: string; label: string; action: string; emoji: string }
+BuilderDraft.concepts  : Concept[]        // length capped by draft.size (6 | 12 | 24)
+BuilderDraft.keywords  : Record<conceptId, string>   // comma-joined free text
+BuilderDraft.stickerIds: Record<conceptId, stickerRowId>
+```
 
-## C. Eligibility rules
+- `starterConcepts(theme, size)` is deterministic, local, offline; seeded per theme, cycles seeds modulo length. `Custom` theme is placeholder text.
+- Draft persists to `sessionStorage` key `cartel-hq:sticker-lab:draft` via `saveDraft` / `loadDraft` / `clearDraft`.
 
-Permanent delete allowed only when ALL are true:
-- caller is workspace owner/admin (`is_workspace_operator`)
-- `sticker_packs.telegram_set_name is null` and `telegram_published_at is null`
-- `status not in ('published','publishing','generating')`
-- no `stickers` row with `telegram_file_id is not null`
-- zero rows in `sticker_pack_group_targets` for the pack
-- zero rows in `sticker_drop_schedules` for the pack
-- zero rows in `sticker_drop_events` for the pack
-- `archived_at is null` (archived packs are restored first, then deleted, if still eligible)
+Step 3 UI (`src/routes/_authenticated/sticker-lab.new.tsx`, ~lines 1720–1830):
 
-Anything failing the above is archive-only. Archive requires operator role and `archived_at is null`. Restore requires operator role and `archived_at is not null`.
+- "Reset to starter concepts" → `update({ concepts: starterConcepts(draft.theme, draft.size) })`.
+- `addConcept` (blocked at `draft.size`), `removeConcept`, `editConcept(id, patch)` for label / action / emoji.
+- Theme change regenerates all concepts; size change truncates or top-ups from starters.
 
-## D. Media/storage cleanup boundary
+Persistence (`src/lib/sticker-packs.ts`, `savePackDraft` ~lines 391–493):
 
-Only assets exclusively owned by the pack are removed:
-- `media_assets` rows referenced by `stickers.image_asset_id` for stickers of this pack, restricted to `asset_type = 'generated_sticker'` and same `workspace_id`.
+- Upserts `sticker_packs` row (blueprint included) then per-concept `stickers` rows in `sort_order` index order.
+- Column mapping: `label` ← `concept.label` (fallback `Concept N`), `action_description` ← `concept.action` or null, `emoji_list` ← single-element array or `[]`, `keyword_list` ← split of `draft.keywords[id]`.
+- Deleted concepts' sticker rows are removed (orphan delete).
+- Hydration (~lines 520–565): sticker rows map back to `Concept[]` with fresh local ids, `keyword_list` re-joined into `keywords`; falls back to draft/starter concepts when no rows exist.
 
-Explicitly excluded: `sticker_packs.reference_asset_id`, any Brand Kit logo/mascot/reference asset, `project_profiles.logo_asset_id`, and any asset referenced by a sticker outside this pack (checked with a NOT EXISTS guard). Storage objects are removed by exact `storage_path` returned from the DB — never by prefix listing.
+So concepts are pure local state until an explicit save, and no generation is triggered by any Step 3 action.
 
-## E. Sticker Drops on archive/restore
+## 3. `ai_jobs` — can a concept job be logged without schema change?
 
-Archive: all schedules for the pack are set `enabled=false`, `next_run_at=null`, `paused_reason='pack_archived'` in the same transaction as the archive flag. The existing `validate_sticker_drop_schedule` trigger already nulls `next_run_at` when disabled, so the runner cannot pick them up. `sticker_drop_events` history is untouched.
+Schema (from `src/integrations/supabase/types.ts`): `id, workspace_id, user_id, pack_id, sticker_id, job_type (text, required), provider, provider_model, provider_task_id, status, input_json, output_json, provider_cost, error_code, error_message, created_at, updated_at, completed_at`.
 
-Restore: schedules stay disabled with the reason preserved; the UI shows "Sticker Drops for this pack were paused when it was archived — re-enable them in Sticker Drops." No automatic resumption.
+- `job_type`, `provider`, `provider_model`, `status` are free-form text in the generated types; existing values are `sticker_generate` and `remove_background`. `sticker_id` is nullable, so a pack-level concept job fits.
+- Therefore **a concept-generation job can be logged with no schema change**, provided no CHECK constraint on `job_type`/`status` exists in the live DB (not verified — this run is read-only and no DB query was made; verify before relying on it).
+- Consumers to respect: `latestJobsForStickers` and attempt counting filter by sticker id and exclude `job_type` containing "background"; a `sticker_id = null` concept job is invisible to them (good). But `inspectPackLifecycle` reports an `active_ai_jobs` delete blocker computed server-side — a concept job left in `queued`/`running` could block pack deletion. Any concept job must terminate to `succeeded`/`failed`, or be excluded from that predicate.
 
-Optional guard (recommended, additive): extend `validate_sticker_drop_schedule` to raise when enabling a schedule whose pack is archived.
+## 4. Smallest safe Phase 2A architecture (recommendation)
 
-## F. UI changes
+Because no text provider is configured, Phase 2A splits into a gated decision:
 
-`sticker-lab.index.tsx`
-- "Your packs" list filters `archived_at is null`.
-- New compact collapsed "Archived packs" section (count + list, restore action, view link), only rendered when archived packs exist.
-- Per-pack overflow action: "Archive pack" or "Delete pack permanently" depending on eligibility; hidden entirely for non-operators.
+Prerequisite (owner decision, not implementable now): choose one text provider and add exactly one secret to the existing Supabase project's Edge Function secrets (for example `OPENAI_API_KEY` or Lovable AI Gateway `LOVABLE_API_KEY`). No provider may be invented or defaulted.
 
-`sticker-lab.$packId.tsx`
-- Archived packs render a quiet banner: archived state, who/when, that Sticker Drops were paused, and that the Telegram sticker set still exists on Telegram and is unchanged.
-- Lifecycle actions (publish, send to communities) disabled while archived; primary action becomes "Restore pack".
-- Delete path uses a typed-confirmation dialog (type the pack title) and states exactly what is destroyed: sticker rows, generated sticker images, the draft itself; and that AI job/usage history is retained without pack attribution.
-- Ineligible packs show the archive dialog instead, with the reason ("published to Telegram", "delivered to communities", "used by Sticker Drops").
+Recommended shape once authorized:
 
-`src/lib/sticker-packs.ts`
-- `listWorkspacePacks` gains an archived filter; add `listArchivedPacks`, `archivePack`, `restorePack`, `deletePackPermanently` (invokes the Edge Function), plus a pure `packDeleteEligibility()` helper for the UI hint (server remains authoritative).
+1. New Edge Function `sticker-concepts` (separate from `sticker-ai`, so image credits and concept text can never share a code path), `verify_jwt = true`, workspace-authorized like existing functions.
+   - Single action `suggest`: input `{ workspaceId, packId?, theme, size, brief, styleNotes, creativeBlueprint }`, output strictly `{ concepts: [{label, action, emoji}] }`, hard-capped at `size` (max 24).
+   - Free `config` action mirroring `sticker-ai`'s `configured` probe so the UI can disclose "not configured" instead of failing.
+   - Returns `{ error: "CONCEPTS_NOT_CONFIGURED" }` (503) when the secret is absent.
+   - Optional audit row in `ai_jobs` with `job_type = 'concept_suggest'`, `sticker_id = null`, terminal status always written.
+2. Client wrapper `src/lib/sticker-concepts.ts`, mirroring `src/lib/sticker-ai.ts` (no secret client-side).
+3. Step 3 UI: one explicit button ("Suggest concepts with AI"), disabled while unconfigured or pending, with a confirm/preview step. Suggestions replace only `label`/`action`/`emoji` in the local draft — never auto-save, never call `startStickerGeneration`, never touch `stickerIds`.
+4. `starterConcepts` stays the default and the fallback on any error, empty response, or unconfigured provider. Reset-to-starters button remains.
 
-Copy rule enforced everywhere: archiving in CARTEL HQ never deletes the Telegram sticker set.
+If the owner declines to add a provider secret, Phase 2A reduces to no-op and the local starter system stands unchanged.
 
-## G. Expected files / objects
+## 5. Phase 2A execution contract (for a future authorized run)
 
-- migration: `sticker_packs.archived_at/archived_by`, index, DELETE-policy removal, archive-column guard trigger, 5 functions (`archive_sticker_pack`, `restore_sticker_pack`, `delete_sticker_pack_prepare`, `delete_sticker_pack_commit`, schedule-enable guard), grants to `authenticated`
-- `backend-source/edge-functions/sticker-pack-delete/index.ts` (+ deployment mirror)
-- `src/lib/sticker-packs.ts`
-- `src/routes/_authenticated/sticker-lab.index.tsx`
-- `src/routes/_authenticated/sticker-lab.$packId.tsx`
-- regenerated Supabase types (platform-generated)
+Allowlist (create/edit only):
+- `backend-source/edge-functions/sticker-concepts/index.ts` (new)
+- `backend-source/edge-functions/sticker-concepts/deno.json` (new)
+- `src/lib/sticker-concepts.ts` (new)
+- `src/routes/_authenticated/sticker-lab.new.tsx` — Step 3 block only
+- `backend-source/edge-functions/README.md` — inventory row, only after a deploy phase
 
-Nothing else. Distribution/Telegram/Community routes untouched.
+Prohibited:
+- Any edit to `backend-source/edge-functions/sticker-ai/index.ts`, `src/lib/sticker-ai.ts`, `src/hooks/useStickerGenerationRuntime.ts`, `src/hooks/useStickerReviewRuntime.ts`
+- Any schema change, migration, RPC, RLS/grant change, cron, or new table
+- Any change to `savePackDraft` persistence contract, `Concept` shape, `BuilderDraft` fields, or `starterConcepts` seeds
+- Any auto-save, auto-generate, or provider image call from the concept path
+- Any client-side provider key, package install, lockfile change, publish, or deploy in the same phase as code authoring
 
-## H. Rollback and partial-failure behavior
+Verification:
+- `bunx tsgo --noEmit` and `bun run build`
+- Unconfigured path renders a clear disabled state and the starter concepts still work
+- Confirm no code path from the concepts button reaches `startStickerGeneration` / `sticker-ai`
+- If an `ai_jobs` audit row is written, confirm terminal status and that pack deletion is not blocked
 
-- Archive/restore are single transactions — all-or-nothing, no partial state.
-- Delete is ordered prepare → storage → commit. If storage removal fails, commit is never called and the pack remains fully intact (safe failure, zero orphaned DB state).
-- If commit fails after storage removal, the pack row survives with dangling image references; the UI surfaces "Cleanup incomplete — retry delete", and a retry is idempotent because prepare re-derives current assets and missing storage objects are ignored.
-- Every failure returns a generic user-facing error plus a precise server-side reason; no partial success is ever reported as success.
-- Rollback of the feature itself: drop the two columns and functions; nothing existing depends on them.
-
-## I. Test matrix
-
-| Case | Expected |
-|---|---|
-| Draft pack, no stickers, member role | actions hidden; RPC/function rejects |
-| Draft pack, no dependencies, operator | permanent delete succeeds; sticker rows + generated assets + storage objects gone |
-| Draft pack whose reference asset is a Brand Kit logo | logo asset and storage object survive |
-| Pack with `telegram_set_name` set | delete rejected server-side even if forced; archive offered |
-| Pack with group targets only | delete rejected; archive succeeds; targets preserved |
-| Pack with enabled Sticker Drop schedule | archive disables it, `next_run_at` null, `paused_reason='pack_archived'`; runner skips |
-| Archived pack | absent from Your packs, present in Archived, publish/send disabled |
-| Restore | reappears in Your packs; schedules remain disabled |
-| Re-enable schedule for archived pack | rejected by trigger guard |
-| Direct client `delete from sticker_packs` | denied by RLS |
-| Direct client update of `archived_at` | denied by trigger |
-| Storage failure mid-delete | pack intact, truthful error |
-| `ai_jobs` / `usage_ledger` after delete | rows retained, pack attribution nulled |
-
-## J. Ambiguity / risk
-
-- The archive-column trigger guard relies on a session-local setting set inside the definer functions; if that pattern is rejected by the platform linter, the fallback is a narrower column-level revoke on `archived_at/archived_by` for `authenticated`. Decide at implementation time.
-- Exact current RLS policy text on `sticker_packs` and `sticker_drop_schedules` should be read (read-only) immediately before writing the migration; the audit confirmed member delete is possible but the policy names must be quoted exactly.
-- Whether operator-only is desired for archive as well as delete — this plan applies operator-only to both, per requirement 8.
-- Edge Function deployment is out of scope here; without deployment, permanent delete is inert in preview. Confirm whether the implementation run may deploy `sticker-pack-delete`.
-- Whether a stale `sticker_pack_group_targets` row with status `failed`/never-announced should still block deletion — this plan blocks it (conservative). Say if you want failed-only targets to be deletable.
+Stop point: report after code authoring and static verification. Deployment of `sticker-concepts`, secret creation, and any live provider call are separate, explicitly authorized phases.
