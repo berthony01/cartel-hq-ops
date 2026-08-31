@@ -2575,7 +2575,7 @@ function StickerLabBuilder() {
 
           <Card className="cartel-panel mt-6">
             <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
-              <CardTitle className="text-base">Publish &amp; distribute</CardTitle>
+              <CardTitle className="text-base">Publish &amp; send to communities</CardTitle>
               {allPublished ? (
                 <StatusBadge tone="green">Published</StatusBadge>
               ) : partiallyPublished ? (
