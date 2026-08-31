@@ -313,6 +313,27 @@ function StickerLabBuilder() {
     },
   });
 
+  /**
+   * Read-only Brand Kit Character Lock. Free metadata read — never a
+   * generation call, and it never touches `referenceAssetIds`.
+   */
+  const characterLockQuery = useQuery({
+    queryKey: ["brand-kit-character-lock", workspaceId],
+    enabled: !!workspaceId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("brand_kits")
+        .select("metadata")
+        .eq("workspace_id", workspaceId!)
+        .maybeSingle();
+      if (error) throw error;
+      return readCharacterLock(data?.metadata);
+    },
+  });
+  const brandLock = characterLockQuery.data ?? null;
+  const brandLockActive = !!brandLock?.enabled;
+
+
   // Provider status. Free probe, never a generation call.
   const configQuery = useQuery({
     queryKey: ["sticker-ai-config"],
