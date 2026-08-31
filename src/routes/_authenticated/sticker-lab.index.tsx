@@ -46,7 +46,8 @@ function relativeTime(iso: string): string {
 }
 
 function StickerLabHome() {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, workspace } = useWorkspace();
+  const projectName = workspace?.name ?? "this project";
   const packsQuery = useQuery({
     queryKey: ["sticker-packs", workspaceId],
     enabled: !!workspaceId,
