@@ -626,6 +626,50 @@ export type Database = {
         }
         Relationships: []
       }
+      project_network_moderation: {
+        Row: {
+          created_at: string
+          hidden_at: string | null
+          hidden_by: string | null
+          internal_reason: string | null
+          is_hidden: boolean
+          project_profile_id: string
+          restored_at: string | null
+          restored_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          hidden_at?: string | null
+          hidden_by?: string | null
+          internal_reason?: string | null
+          is_hidden?: boolean
+          project_profile_id: string
+          restored_at?: string | null
+          restored_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          hidden_at?: string | null
+          hidden_by?: string | null
+          internal_reason?: string | null
+          is_hidden?: boolean
+          project_profile_id?: string
+          restored_at?: string | null
+          restored_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_network_moderation_project_profile_id_fkey"
+            columns: ["project_profile_id"]
+            isOneToOne: true
+            referencedRelation: "project_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_platform_reviews: {
         Row: {
           internal_note: string | null
@@ -1941,6 +1985,23 @@ export type Database = {
           telegram_connected: boolean
         }[]
       }
+      get_platform_network_moderation: {
+        Args: never
+        Returns: {
+          discovery_status: string
+          hidden_at: string
+          internal_reason: string
+          is_hidden: boolean
+          launch_count: number
+          primary_chain: string
+          project_name: string
+          project_profile_id: string
+          public_slug: string
+          restored_at: string
+          ticker: string
+          verification_status: string
+        }[]
+      }
       get_platform_owner_dashboard_metrics: { Args: never; Returns: Json }
       get_platform_project_verifications: {
         Args: never
@@ -2074,6 +2135,20 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      set_project_network_moderation: {
+        Args: {
+          _hidden: boolean
+          _internal_reason?: string
+          _project_profile_id: string
+        }
+        Returns: {
+          hidden_at: string
+          internal_reason: string
+          is_hidden: boolean
+          project_profile_id: string
+          restored_at: string
+        }[]
       }
       sticker_drop_scheduler_secret_matches: {
         Args: { p_secret: string }
