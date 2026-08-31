@@ -145,8 +145,8 @@ type CharacterLock = {
   canonicalReferenceAssetIds: string[];
 };
 
-const HUMOR = ["unspecified", "none", "light", "medium", "high"] as const;
-const INTENSITY = ["unspecified", "calm", "balanced", "bold", "extreme"] as const;
+const HUMOR = ["unspecified", "none", "light", "balanced", "heavy"] as const;
+const INTENSITY = ["unspecified", "calm", "balanced", "high", "maximum"] as const;
 const TEXT_PREF = ["unspecified", "no_text", "minimal", "balanced", "text_forward"] as const;
 
 type CreativeDirection = {
