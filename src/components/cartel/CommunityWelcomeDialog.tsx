@@ -350,7 +350,7 @@ export function CommunityWelcomeDialog({
 
             {!canManage ? (
               <p className="rounded-md border border-border bg-surface-raised p-2.5 text-xs text-muted-foreground">
-                Only workspace owners and admins can change these settings.
+                Only project owners and admins can change these settings.
               </p>
             ) : null}
 

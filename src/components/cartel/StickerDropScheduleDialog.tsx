@@ -233,7 +233,7 @@ export function StickerDropScheduleDialog({
         <div className="min-w-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
           {!canManage ? (
             <p className="rounded-md border border-border bg-surface-raised/60 p-3 text-xs text-muted-foreground">
-              You have read-only access. Only a workspace owner or admin can change drop settings.
+              You have read-only access. Only a project owner or admin can change drop settings.
             </p>
           ) : null}
 
