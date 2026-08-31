@@ -17,6 +17,8 @@ import {
   useStickerGenerationRuntime,
   type Stage,
 } from "@/hooks/useStickerGenerationRuntime";
+import { deriveReviewState, useStickerReviewRuntime } from "@/hooks/useStickerReviewRuntime";
+
 import {
   hydrateDraftFromPack,
   persistDraft,
@@ -28,7 +30,7 @@ import {
   downloadStickersZip,
   packZipName,
   stickerFileName,
-  prepareTelegramCutoutAtUrl,
+  
 } from "@/lib/sticker-export";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
@@ -209,27 +211,15 @@ function StickerLabBuilder() {
   const [confirmRemaining, setConfirmRemaining] = useState(false);
   const [exporting, setExporting] = useState(false);
   /**
-   * Local-only, second transparency verification performed in the browser on the
-   * already-signed PNG bytes. Never written back to Supabase.
+   * Existing browser-side review/quality runtime (local transparency checks,
+   * Telegram-cutout analysis, progress and the forced/non-forced verification
+   * pass). Behaviour is unchanged — it simply no longer lives inline here.
    */
-  const [clientChecks, setClientChecks] = useState<
-    Record<
-      string,
-      {
-        source: string;
-        status: "checking" | "verified" | "failed";
-        reason?: string;
-        /** Telegram-cutout analysis of the same fresh bytes. */
-        cutout?: "verified" | "will_clean" | "failed";
-        removedPixels?: number;
-      }
-    >
-  >({});
-
-  const [checkProgress, setCheckProgress] = useState<{ done: number; total: number } | null>(null);
+  const { clientChecks, checkProgress, checksRunning, runClientVerification } =
+    useStickerReviewRuntime({ previews, aliveRef });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const verifyRunRef = useRef(false);
+
 
 
   /**
@@ -416,99 +406,8 @@ function StickerLabBuilder() {
 
 
 
-  /**
-   * Second, browser-side transparency verification. Read-only: it mints a fresh,
-   * short-lived signed URL from the immutable storage path immediately before
-   * fetching the original PNG bytes, then inspects them with the same verifyAlpha()
-   * helper used at export time. Nothing is uploaded, re-encoded or written back to
-   * Supabase, and no provider call is made.
-   */
-  const runClientVerification = useCallback(
-    async (force = false) => {
-      if (verifyRunRef.current) return;
-      const candidates = Object.entries(previews)
-        .filter(([, p]) => p.transparencyValid === true && !!(p.storagePath ?? p.url))
-        .map(([stickerId, p]) => ({
-          stickerId,
-          // Staleness keys off the immutable asset source, never the temporary URL.
-          source: p.storagePath ?? p.url,
-          storagePath: p.storagePath,
-          fallbackUrl: p.url,
-        }));
-      const pending = candidates.filter(({ stickerId, source }) => {
-        const existing = clientChecks[stickerId];
-        return force || !existing || existing.source !== source;
-      });
-      if (pending.length === 0) return;
 
-      verifyRunRef.current = true;
-      setCheckProgress({ done: 0, total: pending.length });
-      setClientChecks((prev) => {
-        const next = { ...prev };
-        for (const { stickerId, source } of pending) next[stickerId] = { source, status: "checking" };
-        return next;
-      });
 
-      let done = 0;
-      const queue = [...pending];
-      const worker = async () => {
-        for (;;) {
-          const item = queue.shift();
-          if (!item) return;
-          // Fresh action-scoped URL so a stale 60s preview link can never fail the check.
-          // eslint-disable-next-line no-await-in-loop
-          const freshUrl = item.storagePath
-            ? await signedUrl(item.storagePath, ACTION_URL_TTL)
-            : item.fallbackUrl;
-          if (!aliveRef.current) return;
-          if (!freshUrl) {
-            setClientChecks((prev) => ({
-              ...prev,
-              [item.stickerId]: {
-                source: item.source,
-                status: "failed",
-                reason: "a secure download link could not be created for this private file",
-              },
-            }));
-            done += 1;
-            setCheckProgress({ done, total: pending.length });
-            continue;
-          }
-          // Single fetch: real-alpha verification plus Telegram-cutout analysis.
-          // eslint-disable-next-line no-await-in-loop
-          const check = await prepareTelegramCutoutAtUrl(freshUrl);
-          if (!aliveRef.current) return;
-          setClientChecks((prev) => ({
-            ...prev,
-            [item.stickerId]: !check.alphaOk
-              ? {
-                  source: item.source,
-                  status: "failed",
-                  reason: check.reason ?? "transparency check failed",
-                  cutout: "failed",
-                }
-              : {
-                  source: item.source,
-                  status: "verified",
-                  ...(check.ok || !check.reason ? {} : { reason: check.reason }),
-                  cutout: check.ok ? (check.cleaned ? "will_clean" : "verified") : "failed",
-                  removedPixels: check.removedPixels,
-                },
-          }));
-
-          done += 1;
-          setCheckProgress({ done, total: pending.length });
-        }
-      };
-      try {
-        await Promise.all([worker(), worker(), worker()]);
-      } finally {
-        verifyRunRef.current = false;
-        if (aliveRef.current) setCheckProgress(null);
-      }
-    },
-    [previews, clientChecks],
-  );
 
   useEffect(() => {
     if (step !== 5) return;
@@ -746,37 +645,27 @@ function StickerLabBuilder() {
     const preview = id ? previews[id] : undefined;
     return !!preview && preview.transparencyValid === true;
   };
-  const clientCheckFor = (conceptId: string) => {
-    const id = stickerIdFor(conceptId);
-    return id ? clientChecks[id] : undefined;
-  };
-  /** Telegram cutout preparation succeeded (nothing to remove, or a safe edge halo). */
-  const cutoutOk = (conceptId: string) => {
-    const c = clientCheckFor(conceptId)?.cutout;
-    return c === "verified" || c === "will_clean";
-  };
-  // Export invariant: backend conditions AND browser alpha AND a safe Telegram cutout.
-  const isExportable = (conceptId: string) =>
-    backendExportable(conceptId) &&
-    clientCheckFor(conceptId)?.status === "verified" &&
-    cutoutOk(conceptId);
-  const checksRunning = checkProgress !== null;
+  /** Review/readiness predicates and counts — same semantics, extracted. */
+  const {
+    clientCheckFor,
+    cutoutOk,
+    isExportable,
+    browserVerifiedCount,
+    cutoutVerifiedCount,
+    browserFailedCount,
+    exportableCount,
+    exportReady,
+    omittedLabels,
+  } = deriveReviewState({
+    concepts: draft.concepts,
+    clientChecks,
+    stickerIdFor,
+    backendExportable,
+  });
   const transparentCount = readyConcepts.filter((c) => backendExportable(c.id)).length;
-  const browserVerifiedCount = draft.concepts.filter(
-    (c) => clientCheckFor(c.id)?.status === "verified",
-  ).length;
-  const cutoutVerifiedCount = draft.concepts.filter((c) => cutoutOk(c.id)).length;
-  const browserFailedCount = draft.concepts.filter(
-    (c) => clientCheckFor(c.id)?.status === "failed" || clientCheckFor(c.id)?.cutout === "failed",
-  ).length;
   const attentionCount = failedCount + browserFailedCount;
-
-  const exportableConcepts = draft.concepts.filter((c) => isExportable(c.id));
-  const exportableCount = exportableConcepts.length;
   const allReady = draft.concepts.length > 0 && generatedCount === draft.concepts.length && !anyBusy;
-  // Export/publish readiness is stricter than "ready": transparency must be verified.
-  const exportReady = draft.concepts.length > 0 && exportableCount === draft.concepts.length;
-  const omittedLabels = draft.concepts.filter((c) => !isExportable(c.id)).map((c) => c.label);
+
 
   /* ---------------- Telegram publish handlers (user-initiated only) ---------------- */
   const tgPublishedCount = draft.concepts.filter((c) => {
