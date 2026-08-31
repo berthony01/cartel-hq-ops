@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { Copy, Loader2, MessageSquarePlus, Users } from "lucide-react";
+import { Copy, Loader2, MessageSquarePlus, Radio, Users } from "lucide-react";
 
 import { useWorkspace } from "@/lib/workspace-context";
 import { useTelegramLauncher } from "@/hooks/useTelegramLauncher";
@@ -396,37 +397,28 @@ function GroupRow({
           />
         ) : null}
         <div className="min-w-0 flex-1">
-          <label
-            htmlFor={selectable ? inputId : undefined}
-            className="flex min-h-6 min-w-0 cursor-pointer flex-wrap items-baseline gap-x-2 text-sm font-semibold text-foreground"
-          >
-            <span className="min-w-0 max-w-full truncate">{g.title}</span>
-            {g.username ? (
-              <span className="min-w-0 max-w-full truncate text-xs font-normal text-muted-foreground">
-                @{g.username}
-              </span>
-            ) : null}
-          </label>
-
-          {/* Essential readiness only — capability nuance lives in the disclosure. */}
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            <StatusBadge tone={r.supportedChatType ? "green" : "red"}>
-              {r.isSupergroup
-                ? "Supergroup"
-                : r.isBasicGroup
-                  ? "Basic group"
-                  : `Unsupported (${g.chat_type})`}
-            </StatusBadge>
-            <StatusBadge tone={r.botRemoved ? "red" : r.botAdmin ? "green" : "red"}>
-              {r.botRemoved ? "Bot removed" : r.botAdmin ? "Bot admin" : "Bot not admin"}
-            </StatusBadge>
-            {typeof r.memberCount === "number" ? (
-              <StatusBadge tone="muted">{r.memberCount} members</StatusBadge>
-            ) : null}
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <label
+              htmlFor={selectable ? inputId : undefined}
+              className={`flex min-h-6 min-w-0 flex-wrap items-baseline gap-x-2 text-sm font-semibold text-foreground ${
+                selectable ? "cursor-pointer" : "cursor-default"
+              }`}
+            >
+              <span className="min-w-0 max-w-full truncate">{g.title}</span>
+              {g.username ? (
+                <span className="min-w-0 max-w-full truncate text-xs font-normal text-muted-foreground">
+                  @{g.username}
+                </span>
+              ) : null}
+            </label>
             <StatusBadge tone={r.ready ? "green" : "red"}>
               {r.ready ? "Ready" : r.botRemoved ? "Reconnect required" : "Needs setup"}
             </StatusBadge>
           </div>
+
+          {typeof r.memberCount === "number" ? (
+            <p className="mt-1 text-[11px] text-muted-foreground">{r.memberCount} members</p>
+          ) : null}
 
           {r.botRemoved ? (
             <p className="mt-2 rounded-md border border-signal/40 bg-signal/5 p-2.5 text-xs leading-relaxed text-signal">
@@ -447,47 +439,36 @@ function GroupRow({
             </p>
           ) : null}
 
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
               className="min-h-11"
+              onClick={() => setWelcomeOpen(true)}
+            >
+              <MessageSquarePlus className="size-4" aria-hidden="true" />
+              Welcome &amp; onboarding
+            </Button>
+            <Button asChild type="button" variant="outline" size="sm" className="min-h-11">
+              <Link to="/distribution">
+                <Radio className="size-4" aria-hidden="true" />
+                Sticker Drops
+              </Link>
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="min-h-11 text-muted-foreground"
               disabled={checking}
               onClick={onRecheck}
             >
               {checking ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
-              Re-check group status
+              Re-check status
             </Button>
           </div>
 
-          {/* Community controls — shared per-community tooling context. */}
-          <div className="mt-3 rounded-md border border-gold/30 bg-gold/5 p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold">
-                Community controls
-              </p>
-              <StatusBadge tone="muted" className="text-[10px]">
-                <span>Controls available</span>
-              </StatusBadge>
-            </div>
-            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              Manage the tools that operate inside this specific community. Each control is off
-              until you open it and turn it on for this community.
-            </p>
-            <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="min-h-11"
-                onClick={() => setWelcomeOpen(true)}
-              >
-                <MessageSquarePlus className="size-4" aria-hidden="true" />
-                Welcome &amp; onboarding
-              </Button>
-            </div>
-          </div>
           {welcomeOpen ? (
             <CommunityWelcomeDialog
               open={welcomeOpen}
@@ -497,14 +478,22 @@ function GroupRow({
             />
           ) : null}
 
-
-
           <details className="mt-2 rounded-md border border-border bg-surface-raised p-2.5 text-xs">
             <summary className="flex min-h-9 cursor-pointer list-none items-center font-semibold text-muted-foreground">
               Capability & technical detail
             </summary>
             <div className="mt-2 space-y-2">
               <div className="flex flex-wrap gap-1.5">
+                <StatusBadge tone={r.supportedChatType ? "green" : "red"}>
+                  {r.isSupergroup
+                    ? "Supergroup"
+                    : r.isBasicGroup
+                      ? "Basic group"
+                      : `Unsupported (${g.chat_type})`}
+                </StatusBadge>
+                <StatusBadge tone={r.botRemoved ? "red" : r.botAdmin ? "green" : "red"}>
+                  {r.botRemoved ? "Bot removed" : r.botAdmin ? "Bot admin" : "Bot not admin"}
+                </StatusBadge>
                 {r.botCanChangeInfo !== undefined ? (
                   <StatusBadge tone={r.botCanChangeInfo ? "green" : "red"}>
                     {r.botCanChangeInfo ? "Change Group Info enabled" : "Change Group Info missing"}
@@ -536,6 +525,7 @@ function GroupRow({
               ) : null}
             </div>
           </details>
+
         </div>
       </div>
     </li>
@@ -870,7 +860,7 @@ export function TelegramGroupCard({
     <Card className="cartel-panel">
       <CardHeader className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 space-y-0 p-4 sm:p-6">
         <CardTitle className="min-w-0 text-base [overflow-wrap:anywhere]">
-          Telegram communities
+          Your communities
         </CardTitle>
         {groupQuery.isPending && groups.length === 0 ? (
           <StatusBadge tone="muted">Checking groups…</StatusBadge>
@@ -915,8 +905,8 @@ export function TelegramGroupCard({
             Connect every Telegram group or supergroup CARTEL HQ should work with. Telegram only
             lets you pick <strong>one group per add-bot flow</strong>, so use{" "}
             <strong>Connect another community</strong> once for each community — connecting a new group
-            never removes the ones already connected. Once connected, CARTEL HQ can distribute one
-            published pack to many groups together. If @PepeCartelHQBot is already installed in a
+            never removes the ones already connected. The bot needs administrator rights, including{" "}
+            <strong>Change Group Info</strong>. If @PepeCartelHQBot is already installed in a
             group, open it and send{" "}
             <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[11px]">
               /cartelhq
