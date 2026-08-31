@@ -387,7 +387,7 @@ function BrandKitPage() {
           <Section
             variant="plain"
             title="Logos, mascots & references"
-            description="Uploads stay private to this workspace."
+            description="Project assets. Uploads stay private to this project and can be reused as references in Sticker Lab."
             contentClassName="space-y-4"
           >
             <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 [&>*]:min-w-0">
