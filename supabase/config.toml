@@ -12,3 +12,10 @@ verify_jwt = false
 
 [functions.cartel-network-logo]
 verify_jwt = false
+
+[functions.sticker-ai]
+enabled = true
+verify_jwt = true
+entrypoint = "../backend-source/edge-functions/sticker-ai/index.ts"
+import_map = "../backend-source/edge-functions/sticker-ai/deno.json"
+
