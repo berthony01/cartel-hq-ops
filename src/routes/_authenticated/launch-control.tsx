@@ -1149,7 +1149,7 @@ function LaunchControlPage() {
                     <PreviewRow label="Token" value={selected.token_name} />
                     <PreviewRow label="Ticker" value={selected.ticker} />
                     <PreviewRow label="Chain" value={selected.chain} />
-                    <PreviewRow label="Status" value={LAUNCH_STATUS_LABELS[status]} />
+                    
                     <PreviewRow
                       label="Schedule"
                       value={
