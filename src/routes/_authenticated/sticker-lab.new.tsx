@@ -69,30 +69,21 @@ import {
   type TelegramPublishResult,
 } from "@/lib/telegram-stickers";
 import { useTelegramSetup } from "@/components/cartel/TelegramConnectionCard";
+import { useTelegramGroupSetup } from "@/components/cartel/TelegramGroupCard";
 import {
-  TelegramGroupCard,
-  useTelegramGroupSetup,
-} from "@/components/cartel/TelegramGroupCard";
-import {
+  MAX_DISTRIBUTION_TARGETS,
   distributePackToGroups,
   fetchPackGroupDistribution,
   sendGroupTestSticker,
   type TelegramDistributePackResult,
   type TelegramPackGroupTarget,
 } from "@/lib/telegram-group";
-import { StickerDropScheduleDialog } from "@/components/cartel/StickerDropScheduleDialog";
-import {
-  SCHEDULE_STATE_LABEL,
-  fetchDropStatus,
-  formatCadence,
-  formatNextRun,
-  scheduleState,
-  type DropGroup,
-  type DropSchedule,
-} from "@/lib/sticker-drops";
+import { fetchDropStatus } from "@/lib/sticker-drops";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { StickyActionBar } from "@/components/cartel/StickyActionBar";
+import { Checkbox } from "@/components/ui/checkbox";
+
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
