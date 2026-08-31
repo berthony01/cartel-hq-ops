@@ -175,9 +175,9 @@ function DistributionPage() {
   return (
     <div className="flex min-w-0 flex-col gap-6 sm:gap-8">
       <PageHeader
-        eyebrow="Community Automation"
+        eyebrow="Recurring Sticker Drops"
         title="Sticker Drops"
-        description="Schedule and monitor recurring automated sticker posts across your connected Telegram communities. Pack publishing and one-time sends stay in Sticker Lab."
+        description="Schedule and monitor recurring sticker posts across your connected Telegram communities. Pack publishing and one-time sends stay in Sticker Lab."
         status="Live Beta"
       />
 
