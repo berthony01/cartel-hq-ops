@@ -2360,8 +2360,8 @@ function StickerLabBuilder() {
             onOpenChange={setConfirmApplySuggestions}
           >
             <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
-              <AlertDialogTitle>Replace these concepts in this saved pack?</AlertDialogTitle>
-                <AlertDialogHeader>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Replace these concepts in this saved pack?</AlertDialogTitle>
                 <AlertDialogDescription asChild>
                   <div className="space-y-2 text-left">
                     <p>
