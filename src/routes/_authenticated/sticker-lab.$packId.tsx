@@ -105,7 +105,14 @@ function PackManagerPage() {
   const readyCount = stickers.filter(
     (s) => s.status === "ready" || s.status === "published",
   ).length;
-  const statusLabel = published ? "Published" : readyCount > 0 ? "Ready" : "Draft";
+  const allReady = stickers.length > 0 && readyCount === stickers.length;
+  const statusLabel = published
+    ? "Published"
+    : allReady
+      ? "Ready to publish"
+      : readyCount > 0
+        ? "Review in progress"
+        : "In progress";
 
   return (
     <div className="flex min-w-0 flex-col gap-6 sm:gap-8">
