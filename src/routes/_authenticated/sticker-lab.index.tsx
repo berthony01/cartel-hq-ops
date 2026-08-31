@@ -483,7 +483,24 @@ function StickerLabHome() {
         )}
       </Section>
 
+      {archivedQuery.isError ? (
+        <p className="flex items-start gap-2 rounded-md border border-gold/40 bg-gold/5 p-3 text-xs text-muted-foreground">
+          <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-gold" aria-hidden="true" />
+          <span>
+            Archived packs could not be loaded, so this page may not show every pack in the project.{" "}
+            <button
+              type="button"
+              className="underline underline-offset-2"
+              onClick={() => void archivedQuery.refetch()}
+            >
+              Retry
+            </button>
+          </span>
+        </p>
+      ) : null}
+
       {archived.length > 0 ? (
+
         <Section
           variant="quiet"
           title="Archived packs"
