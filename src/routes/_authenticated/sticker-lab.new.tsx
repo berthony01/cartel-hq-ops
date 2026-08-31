@@ -1389,8 +1389,6 @@ function StickerLabBuilder() {
     clearSelection();
   };
 
-
-
   /** Sends the user back to Step 3 with the offending concept focused. */
   const editConceptFromFailure = (conceptId: string) => {
     setStep(3);
@@ -2954,7 +2952,6 @@ function StickerLabBuilder() {
                       from this batch. There are no automatic retries, and nothing happens until you
                       confirm.
                     </p>
-
                   </div>
                 </AlertDialogDescription>
               </AlertDialogHeader>
