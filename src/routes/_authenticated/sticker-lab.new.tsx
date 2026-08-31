@@ -2715,6 +2715,54 @@ function StickerLabBuilder() {
             </div>
           ) : null}
 
+          {/* Sticker Studio selection toolbar — editor-only, no provider calls. */}
+          {configured && selectableIds.length > 0 ? (
+            <div className="cartel-panel mt-6 rounded-lg p-3 sm:p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                    Sticker Studio selection
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {selectedCount} selected · {selectableIds.length} can be selected
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="min-h-10"
+                    disabled={anyBusy || saving || selectedCount === selectableIds.length}
+                    onClick={() => setSelectedForGeneration(selectableIds)}
+                  >
+                    Select all ungenerated
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="min-h-10"
+                    disabled={selectedCount === 0}
+                    onClick={clearSelection}
+                  >
+                    Clear selection
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="min-h-10"
+                    disabled={selectedCount === 0 || !configured || anyBusy || saving}
+                    onClick={() => setConfirmSelectedBatch(true)}
+                  >
+                    <Sparkles className="size-4" aria-hidden="true" />
+                    Generate selected ({selectedCount})
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
 
           <ul className="mt-6 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-4 [&>*]:min-w-0">
             {draft.concepts.map((c, index) => {
