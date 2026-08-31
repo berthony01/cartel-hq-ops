@@ -129,6 +129,78 @@ import { readCharacterLock, hasCharacterLockContent } from "@/lib/brand-kit";
 
 type BuilderSearch = { pack?: string; step?: number };
 
+const humorLabel = (v: CreativeDirection["humorLevel"]) =>
+  v === "unspecified"
+    ? "Not specified"
+    : v === "none"
+      ? "None"
+      : v === "light"
+        ? "Light"
+        : v === "balanced"
+          ? "Balanced"
+          : "Heavy";
+
+const intensityLabel = (v: CreativeDirection["intensity"]) =>
+  v === "unspecified"
+    ? "Not specified"
+    : v === "calm"
+      ? "Calm"
+      : v === "balanced"
+        ? "Balanced"
+        : v === "high"
+          ? "High"
+          : "Maximum";
+
+const textPreferenceLabel = (v: CreativeDirection["textPreference"]) =>
+  v === "unspecified"
+    ? "Not specified"
+    : v === "no_text"
+      ? "No text"
+      : v === "minimal"
+        ? "Minimal text"
+        : v === "balanced"
+          ? "Balanced"
+          : "Text-forward";
+
+/** Accessible segmented choice used by the V2 Creative Direction panel. */
+function SegmentedChoice<T extends string>({
+  legend,
+  options,
+  label,
+  value,
+  onSelect,
+}: {
+  legend: string;
+  options: readonly T[];
+  label: (v: T) => string;
+  value: T;
+  onSelect: (v: T) => void;
+}) {
+  return (
+    <fieldset>
+      <legend className="text-sm font-medium text-foreground">{legend}</legend>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {options.map((option) => (
+          <button
+            key={option}
+            type="button"
+            aria-pressed={value === option}
+            onClick={() => onSelect(option)}
+            className={`min-h-10 rounded-md border px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+              value === option
+                ? "border-gold bg-gold/10 text-gold"
+                : "border-border bg-surface-raised text-muted-foreground hover:border-gold/40"
+            }`}
+          >
+            {label(option)}
+          </button>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+
 export const Route = createFileRoute("/_authenticated/sticker-lab/new")({
   validateSearch: (search: Record<string, unknown>): BuilderSearch => {
     const raw = search["pack"];
