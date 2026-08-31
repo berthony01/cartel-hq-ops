@@ -186,7 +186,7 @@ function TelegramPage() {
         </summary>
         <div className="mt-2 space-y-2 text-xs leading-relaxed text-muted-foreground">
           <p>
-            Community Command owns connection health and onboarding. Recurring automation lives in{" "}
+            Community Command owns connection health and onboarding. Recurring posting lives in{" "}
             <strong>Sticker Drops</strong>, and pack publishing and one-time sends live in{" "}
             <strong>Sticker Lab</strong>.
           </p>
