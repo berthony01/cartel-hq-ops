@@ -712,7 +712,9 @@ function LaunchControlPage() {
                 </div>
 
                 <div className="min-w-0 space-y-3">
+                  <p className="type-meta text-muted-foreground">Lifecycle progress</p>
                   <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 lg:grid-cols-2">
+
                     {LAUNCH_STATUSES.map((s) => {
                       const current = s === status;
                       const done = launchStatusIndex(s) < launchStatusIndex(status);
