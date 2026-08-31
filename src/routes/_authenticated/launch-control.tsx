@@ -1159,15 +1159,141 @@ function LaunchControlPage() {
                         </p>
                       ) : null}
 
-                      <p className="text-xs leading-relaxed text-muted-foreground">
-                        Active watchers receive the 24h and 1h countdown reminders (unless muted),
-                        the official-contract Verified Launch Packet and the launch-live alert.
-                      </p>
+                      <div className="rounded-md border border-border/60 bg-background/30 p-3">
+                        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                          Watcher activity
+                        </p>
+                        {watchSummaryQuery.isError ? (
+                          <div className="mt-2">
+                            <p className="text-xs leading-relaxed text-muted-foreground">
+                              Watcher counts could not be loaded right now.
+                            </p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-2 min-h-11"
+                              onClick={() => void watchSummaryQuery.refetch()}
+                            >
+                              Retry
+                            </Button>
+                          </div>
+                        ) : (
+                          <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                            <div className="min-w-0">
+                              <dt className="text-muted-foreground">Active watchers</dt>
+                              <dd className="font-mono text-sm text-foreground">
+                                {watchStatsReady ? watchSummary!.active_count : "—"}
+                              </dd>
+                            </div>
+                            <div className="min-w-0">
+                              <dt className="text-muted-foreground">Total opt-ins</dt>
+                              <dd className="font-mono text-sm text-foreground">
+                                {watchStatsReady ? watchSummary!.total_count : "—"}
+                              </dd>
+                            </div>
+                            <div className="min-w-0">
+                              <dt className="text-muted-foreground">Countdown reminders on</dt>
+                              <dd className="font-mono text-sm text-foreground">
+                                {notificationStatsReady
+                                  ? notificationSummary!.reminder_enabled_watchers
+                                  : "—"}
+                              </dd>
+                            </div>
+                            <div className="min-w-0">
+                              <dt className="text-muted-foreground">Countdown reminders muted</dt>
+                              <dd className="font-mono text-sm text-foreground">
+                                {mutedCount ?? "—"}
+                              </dd>
+                            </div>
+                          </dl>
+                        )}
+                        {!watchSummaryQuery.isError &&
+                        (!watchStatsReady || !notificationStatsReady) ? (
+                          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                            {notificationSummaryQuery.isError
+                              ? "Reminder opt-in counts are unavailable right now."
+                              : "Loading watcher activity…"}
+                          </p>
+                        ) : null}
+                      </div>
+
+                      <div className="rounded-md border border-border/60 bg-background/30 p-3">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <StatusBadge tone={armingState.tone}>
+                            <span>{armingState.badge}</span>
+                          </StatusBadge>
+                          <span className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                            Countdown delivery
+                          </span>
+                        </div>
+                        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                          {armingState.detail}
+                        </p>
+                        {anchorValid && !countdownPhaseEnded ? (
+                          <dl className="mt-2 space-y-1.5 text-xs">
+                            <div className="min-w-0">
+                              <dt className="text-muted-foreground">24h reminder</dt>
+                              <dd className="text-foreground [overflow-wrap:anywhere]">
+                                {formatTimestamp(reminder24Iso)}
+                                {nowMs !== null &&
+                                !remindersArmed &&
+                                new Date(reminder24Iso!).getTime() < nowMs
+                                  ? " · missed (countdowns were not armed)"
+                                  : ""}
+                              </dd>
+                            </div>
+                            <div className="min-w-0">
+                              <dt className="text-muted-foreground">1h reminder</dt>
+                              <dd className="text-foreground [overflow-wrap:anywhere]">
+                                {formatTimestamp(reminder1Iso)}
+                                {nowMs !== null &&
+                                !remindersArmed &&
+                                new Date(reminder1Iso!).getTime() < nowMs
+                                  ? " · missed (countdowns were not armed)"
+                                  : ""}
+                              </dd>
+                            </div>
+                          </dl>
+                        ) : null}
+                        {anchorValid && !countdownPhaseEnded ? (
+                          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                            Times shown in this device’s timezone ({tz}).
+                            {anchorIsWindowStart
+                              ? " A launch window counts down to the window start."
+                              : ""}
+                          </p>
+                        ) : null}
+                      </div>
+
+                      <details className="rounded-md border border-border/60 bg-background/30">
+                        <summary className="cursor-pointer list-none px-3 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          How Launch Watch works
+                        </summary>
+                        <div className="space-y-2 px-3 pb-3">
+                          <ol className="list-decimal space-y-1 pl-4 text-xs leading-relaxed text-muted-foreground">
+                            <li>A user taps “Watch this launch” from a community post or public link.</li>
+                            <li>Telegram opens the private @PepeCartelHQBot chat and they press Start.</li>
+                            <li>
+                              The bot privately confirms the watch and gives Mute Countdowns and Stop
+                              Watching controls.
+                            </li>
+                            <li>
+                              Eligible 24h and 1h reminders, the official-contract packet and the
+                              launch-live alert arrive in that private bot chat.
+                            </li>
+                          </ol>
+                          <p className="text-xs leading-relaxed text-muted-foreground">
+                            Joining your Telegram community does not subscribe anyone. Each watcher
+                            must opt in through Launch Watch.
+                          </p>
+                        </div>
+                      </details>
 
                       <p className="text-xs leading-relaxed text-muted-foreground">
-                        Watcher identities are never shown here. Only aggregate counts are
-                        available in Cartel HQ.
+                        Launch Watch is privacy-first: project operators see aggregate watcher
+                        activity, not individual Telegram identities.
                       </p>
+
                     </div>
                   ) : (
                     <div className="space-y-2">
