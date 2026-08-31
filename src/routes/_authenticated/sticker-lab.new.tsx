@@ -40,14 +40,19 @@ import {
 } from "@/lib/sticker-export";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
+  ArrowDown,
   ArrowLeft,
   ArrowRight,
+  ArrowUp,
   Check,
   CircleCheck,
+  Copy,
   Download,
   FileArchive,
   ImagePlus,
   Loader2,
+  Lock,
+  LockOpen,
   Plus,
   RefreshCw,
   RotateCcw,
