@@ -192,16 +192,16 @@ function BrandKitPage() {
       <PageHeader
         eyebrow="Module"
         title="Brand Kit"
-        description="A single source of truth for PEPECARTEL colour, type, marks, links, and AI style rules. One Brand Kit per workspace."
-        status={workspace ? workspace.name : "No workspace"}
+        description="One Brand Kit per project — colour, type, marks, links and AI style rules. Sticker Lab generation automatically uses this project's Brand Kit when one is saved."
+        status={workspace ? workspace.name : "No project"}
       />
 
       {!workspaceLoading && !workspaceId ? (
         <EmptyState
           icon={Palette}
-          title="No workspace yet"
-          description="Create a workspace from the switcher in the header before setting up a Brand Kit."
-        />
+          title="No project yet"
+          description="Add a project from the selector in the header before setting up a Brand Kit."
+        />న
       ) : (
         <>
           <form
