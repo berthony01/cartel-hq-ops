@@ -396,10 +396,11 @@ Deno.serve(async (req: Request) => {
       const { data: version } = await admin.from("sticker_versions").select("id,sticker_id,pack_id,asset_id,version_number").eq("id", versionId).eq("sticker_id", stickerId).eq("pack_id", packId).maybeSingle();
       if (!version?.asset_id) return respond({ error: "VERSION_UNAVAILABLE", message: "That version is no longer available for this sticker." }, 404);
 
-      const { data: targetAsset } = await admin.from("media_assets").select("id,workspace_id,kind,storage_path,transparency_valid").eq("id", version.asset_id).maybeSingle();
-      if (!targetAsset || targetAsset.workspace_id !== workspaceId || targetAsset.kind !== "generated_sticker" || targetAsset.transparency_valid !== true || !targetAsset.storage_path) {
+      const { data: targetAsset } = await admin.from("media_assets").select("id,workspace_id,asset_type,storage_path,transparency_valid").eq("id", version.asset_id).maybeSingle();
+      if (!targetAsset || targetAsset.workspace_id !== workspaceId || targetAsset.asset_type !== "generated_sticker" || targetAsset.transparency_valid !== true || !targetAsset.storage_path) {
         return respond({ error: "ASSET_NOT_READY", message: "That version's image is not a transparency-verified sticker image." }, 409);
       }
+
 
       const { data: activeJobs } = await admin.from("ai_jobs").select("id").eq("sticker_id", stickerId).in("status", ["queued", "running"]).limit(1);
       if ((activeJobs ?? []).length) {
