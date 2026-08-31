@@ -2847,8 +2847,8 @@ function StickerLabBuilder() {
               ) : null}
               {testResult ? <p className="text-xs text-muted-foreground">{testResult}</p> : null}
               <p className="text-xs text-muted-foreground">
-                One Telegram sticker set is created for this pack and then distributed to the groups
-                you selected — connecting more groups later lets you distribute the same set again
+                One Telegram sticker set is created for this pack and then sent to the groups
+                you selected — connecting more groups later lets you send the same set again
                 without recreating it. The test sends a <strong>native Telegram sticker</strong> into
                 a single selected group, not an image file, and works for any verified connected
                 group — basic group or supergroup. Telegram’s{" "}
