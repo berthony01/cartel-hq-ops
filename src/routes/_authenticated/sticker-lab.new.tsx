@@ -2562,8 +2562,8 @@ function StickerLabBuilder() {
 
       {step === 4 ? (
         <StepCard
-          title="Generation"
-          hint="Each sticker runs generation, background removal and a server-side transparency check."
+          title="Sticker Studio"
+          hint="Generate one test sticker, pick specific stickers, or generate all remaining. Each generated sticker runs image generation, background removal and a server-side transparency check."
           action={
             <Button
               type="button"
