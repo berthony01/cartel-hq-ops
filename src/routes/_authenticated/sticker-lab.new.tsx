@@ -105,22 +105,101 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   BUILDER_STEPS,
+  HUMOR_LEVELS,
+  INTENSITY_LEVELS,
   MAX_REFERENCES,
   PACK_SIZES,
   PACK_THEMES,
+  TEXT_PREFERENCES,
+  formatDirectionList,
   loadDraft,
+  parseDirectionList,
   saveDraft,
   starterConcepts,
   type BuilderDraft,
   type Concept,
+  type CreativeDirection,
   type PackSize,
   type PackTheme,
   type CreativeBlueprint,
 } from "@/lib/sticker-lab";
+
 import { supabase } from "@/integrations/supabase/client";
 import { readCharacterLock, hasCharacterLockContent } from "@/lib/brand-kit";
 
 type BuilderSearch = { pack?: string; step?: number };
+
+const humorLabel = (v: CreativeDirection["humorLevel"]) =>
+  v === "unspecified"
+    ? "Not specified"
+    : v === "none"
+      ? "None"
+      : v === "light"
+        ? "Light"
+        : v === "balanced"
+          ? "Balanced"
+          : "Heavy";
+
+const intensityLabel = (v: CreativeDirection["intensity"]) =>
+  v === "unspecified"
+    ? "Not specified"
+    : v === "calm"
+      ? "Calm"
+      : v === "balanced"
+        ? "Balanced"
+        : v === "high"
+          ? "High"
+          : "Maximum";
+
+const textPreferenceLabel = (v: CreativeDirection["textPreference"]) =>
+  v === "unspecified"
+    ? "Not specified"
+    : v === "no_text"
+      ? "No text"
+      : v === "minimal"
+        ? "Minimal text"
+        : v === "balanced"
+          ? "Balanced"
+          : "Text-forward";
+
+/** Accessible segmented choice used by the V2 Creative Direction panel. */
+function SegmentedChoice<T extends string>({
+  legend,
+  options,
+  label,
+  value,
+  onSelect,
+}: {
+  legend: string;
+  options: readonly T[];
+  label: (v: T) => string;
+  value: T;
+  onSelect: (v: T) => void;
+}) {
+  return (
+    <fieldset>
+      <legend className="text-sm font-medium text-foreground">{legend}</legend>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {options.map((option) => (
+          <button
+            key={option}
+            type="button"
+            aria-pressed={value === option}
+            onClick={() => onSelect(option)}
+            className={`min-h-10 rounded-md border px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+              value === option
+                ? "border-gold bg-gold/10 text-gold"
+                : "border-border bg-surface-raised text-muted-foreground hover:border-gold/40"
+            }`}
+          >
+            {label(option)}
+          </button>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 
 export const Route = createFileRoute("/_authenticated/sticker-lab/new")({
   validateSearch: (search: Record<string, unknown>): BuilderSearch => {
@@ -543,6 +622,7 @@ function StickerLabBuilder() {
    */
   const toggleUseCharacterLock = (next: boolean) => {
     const blueprintNext: CreativeBlueprint = {
+      ...blueprint,
       version: 1,
       useBrandCharacterLock: next,
       characterLock:
@@ -550,6 +630,16 @@ function StickerLabBuilder() {
     };
     update({ creativeBlueprint: blueprintNext });
   };
+
+  const direction = blueprint.creativeDirection;
+  const updateDirection = (patch: Partial<CreativeDirection>) =>
+    update({
+      creativeBlueprint: {
+        ...blueprint,
+        creativeDirection: { ...direction, ...patch },
+      },
+    });
+
 
   const setTheme = (theme: PackTheme) =>
 
@@ -1506,7 +1596,119 @@ function StickerLabBuilder() {
                 onChange={(e) => update({ styleNotes: e.target.value })}
               />
             </div>
+
+            <section className="md:col-span-2 rounded-lg border border-border bg-background/40 p-4">
+              <h3 className="text-sm font-semibold text-foreground">Creative Direction</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                The pack-level creative source of truth for Sticker Lab V2. Saved with this pack.
+                Current generation behaviour is unchanged until the V2 prompt upgrade ships.
+              </p>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
+                <div>
+                  <Label htmlFor="cd-purpose">Purpose</Label>
+                  <Input
+                    id="cd-purpose"
+                    className="mt-2 min-h-11"
+                    placeholder="Community reactions, launch hype, trading reactions, moderation…"
+                    value={direction.purpose}
+                    onChange={(e) => updateDirection({ purpose: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="cd-audience">Audience</Label>
+                  <Input
+                    id="cd-audience"
+                    className="mt-2 min-h-11"
+                    placeholder="Who is this pack for?"
+                    value={direction.audience}
+                    onChange={(e) => updateDirection({ audience: e.target.value })}
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <Label htmlFor="cd-tone">Tone keywords</Label>
+                  <Textarea
+                    id="cd-tone"
+                    className="mt-2 min-h-20"
+                    placeholder="Comma or line separated — e.g. bold, playful, deadpan"
+                    value={formatDirectionList(direction.toneKeywords)}
+                    onChange={(e) =>
+                      updateDirection({ toneKeywords: parseDirectionList(e.target.value) })
+                    }
+                  />
+                </div>
+
+                <SegmentedChoice
+                  legend="Humor level"
+                  options={HUMOR_LEVELS}
+                  label={humorLabel}
+                  value={direction.humorLevel}
+                  onSelect={(v) => updateDirection({ humorLevel: v })}
+                />
+
+                <SegmentedChoice
+                  legend="Intensity"
+                  options={INTENSITY_LEVELS}
+                  label={intensityLabel}
+                  value={direction.intensity}
+                  onSelect={(v) => updateDirection({ intensity: v })}
+                />
+
+                <div className="md:col-span-2">
+                  <Label htmlFor="cd-visual">Visual direction</Label>
+                  <Textarea
+                    id="cd-visual"
+                    className="mt-2 min-h-24"
+                    placeholder="Composition, framing, colour language, finish…"
+                    value={direction.visualDirection}
+                    onChange={(e) => updateDirection({ visualDirection: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <details className="mt-4 rounded-md border border-border bg-surface-raised p-3">
+                <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Text treatment & pack rules
+                </summary>
+                <div className="mt-4 grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
+                  <SegmentedChoice
+                    legend="Text preference"
+                    options={TEXT_PREFERENCES}
+                    label={textPreferenceLabel}
+                    value={direction.textPreference}
+                    onSelect={(v) => updateDirection({ textPreference: v })}
+                  />
+
+                  <div>
+                    <Label htmlFor="cd-text-notes">Text notes</Label>
+                    <Textarea
+                      id="cd-text-notes"
+                      className="mt-2 min-h-24"
+                      placeholder="Casing, recurring phrases, placement, text treatment…"
+                      value={direction.textNotes}
+                      onChange={(e) => updateDirection({ textNotes: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <Label htmlFor="cd-rules">Pack-specific rules</Label>
+                    <Textarea
+                      id="cd-rules"
+                      className="mt-2 min-h-24"
+                      placeholder="One per line — things this pack must always or never do"
+                      value={formatDirectionList(direction.packRules)}
+                      onChange={(e) =>
+                        updateDirection({ packRules: parseDirectionList(e.target.value) })
+                      }
+                    />
+                  </div>
+                </div>
+              </details>
+            </section>
           </div>
+
         </StepCard>
       ) : null}
 
