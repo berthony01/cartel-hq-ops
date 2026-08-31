@@ -3163,7 +3163,87 @@ function StickerLabBuilder() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          {/* Phase 4B — first confirmation. No Telegram call happens here. */}
+          <AlertDialog
+            open={!!restoreTarget}
+            onOpenChange={(open) => {
+              if (!open) setRestoreTarget(null);
+            }}
+          >
+            <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  Make version {restoreTarget?.versionNumber} the current image?
+                </AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p>
+                      This changes the current image for{" "}
+                      <strong>{restoreTarget?.label}</strong> to the selected historical version.
+                      No image is generated and no Kie credits are used. The version you are
+                      replacing stays in history.
+                    </p>
+                    <p>
+                      If CARTEL HQ detects that this sticker is already live on Telegram, nothing
+                      will be changed until you confirm a second time.
+                    </p>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    const target = restoreTarget;
+                    if (target) void confirmRestore(target);
+                  }}
+                >
+                  Set as current
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Phase 4B — second confirmation, required before any Telegram edit. */}
+          <AlertDialog
+            open={!!restoreTelegramTarget}
+            onOpenChange={(open) => {
+              if (!open) setRestoreTelegramTarget(null);
+            }}
+          >
+            <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Replace the live Telegram sticker?</AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p>
+                      <strong>{restoreTelegramTarget?.label}</strong> is already live on Telegram.
+                      Confirming replaces the live sticker in the existing Telegram set in place.
+                    </p>
+                    <p>
+                      The pack and set link stay the same, no new sticker is added, no new set is
+                      created, and no Kie credits are used. The previous version remains in
+                      history.
+                    </p>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    const target = restoreTelegramTarget;
+                    if (target) void confirmTelegramRestore(target);
+                  }}
+                >
+                  Replace on Telegram
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </StepCard>
+
       ) : null}
 
       {step === 5 ? (
