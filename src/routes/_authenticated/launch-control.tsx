@@ -154,6 +154,41 @@ function formFromRow(row: LaunchRow): EditorForm {
   };
 }
 
+/**
+ * Client-only clock. Starts null on the server and on the first client render
+ * so hydration output is stable, then ticks at a slow interval (no per-second
+ * animation, no layout thrash).
+ */
+function useClientNow(intervalMs = 30_000): number | null {
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    setNow(Date.now());
+    const id = window.setInterval(() => setNow(Date.now()), intervalMs);
+    return () => window.clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
+/** Compact human countdown, e.g. `4d 2h 18m`, `3h 12m`, `42m`, `under a minute`. */
+function formatCountdown(ms: number): string {
+  const totalMinutes = Math.floor(ms / 60_000);
+  if (totalMinutes < 1) return "under a minute";
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+/** Lifecycle states in which the worker actually enqueues countdown reminders. */
+const REMINDER_ARMED_STATUSES: readonly LaunchStatus[] = [
+  "LAUNCH_APPROACHING",
+  "CONTRACT_PENDING",
+  "OFFICIAL_CONTRACT_REGISTERED",
+];
+
+
 function LaunchControlPage() {
   const { workspaceId, workspace, loading: workspaceLoading } = useWorkspace();
   const queryClient = useQueryClient();
@@ -416,6 +451,70 @@ function LaunchControlPage() {
     queryFn: () => getLaunchNotificationSummary(selected!.id),
   });
   const notificationSummary = notificationSummaryQuery.data ?? null;
+
+  // ---- countdown + reminder readiness (saved launch fields only) -----------
+  const nowMs = useClientNow(30_000);
+  const anchorIso = selected?.launch_at ?? selected?.launch_window_start ?? null;
+  const anchorIsWindowStart = !selected?.launch_at && !!selected?.launch_window_start;
+  const anchorMs = anchorIso ? new Date(anchorIso).getTime() : null;
+  const anchorValid = anchorMs !== null && !Number.isNaN(anchorMs);
+  const countdownLabel = anchorIsWindowStart ? "Window opens in" : "Launch in";
+  const anchorPassed = anchorValid && nowMs !== null && nowMs >= anchorMs!;
+  const countdownText =
+    anchorValid && nowMs !== null
+      ? anchorPassed
+        ? anchorIsWindowStart
+          ? "Window opened"
+          : "Launch time reached"
+        : formatCountdown(anchorMs! - nowMs)
+      : null;
+
+  const remindersArmed = REMINDER_ARMED_STATUSES.includes(status);
+  const countdownPhaseEnded = status === "LIVE" || status === "COMPLETED";
+  const reminder24Iso =
+    anchorValid ? new Date(anchorMs! - 24 * 3600_000).toISOString() : null;
+  const reminder1Iso = anchorValid ? new Date(anchorMs! - 3600_000).toISOString() : null;
+
+  const armingState: {
+    tone: "gold" | "green" | "muted";
+    badge: string;
+    detail: string;
+  } = !anchorValid
+    ? {
+        tone: "muted",
+        badge: "Schedule needed",
+        detail:
+          "Countdown reminders cannot be timed until this launch has an exact launch time or a launch window.",
+      }
+    : countdownPhaseEnded
+      ? {
+          tone: "muted",
+          badge: "Countdown phase ended",
+          detail:
+            "The countdown phase for this launch is over. Reminder delivery no longer applies.",
+        }
+      : remindersArmed
+        ? {
+            tone: "green",
+            badge: "Countdowns armed",
+            detail:
+              "Countdown delivery is armed. Each reminder is created when it becomes due and sent privately to active watchers who allow countdowns.",
+          }
+        : {
+            tone: "gold",
+            badge: "Not armed yet",
+            detail:
+              "Watchers can opt in now, but countdown delivery only becomes armed once this launch advances to Launch approaching. Advance before a reminder's due time if you want that reminder delivered.",
+          };
+
+  const watchStatsReady = watchSummaryQuery.isSuccess && !!watchSummary;
+  const notificationStatsReady = notificationSummaryQuery.isSuccess && !!notificationSummary;
+  const mutedCount =
+    watchStatsReady && notificationStatsReady
+      ? Math.max(watchSummary!.active_count - notificationSummary!.reminder_enabled_watchers, 0)
+      : null;
+
+
 
   const blockedReason =
     next === "LAUNCH_APPROACHING" && !scheduleReady
@@ -687,6 +786,12 @@ function LaunchControlPage() {
                             ? `${formatTimestamp(selected.launch_window_start)} → ${formatTimestamp(selected.launch_window_end)}`
                             : "Not set"}
                       </dd>
+                      {countdownText ? (
+                        <dd className="mt-1 text-xs leading-relaxed text-gold [overflow-wrap:anywhere]">
+                          {anchorPassed ? countdownText : `${countdownLabel} ${countdownText}`}
+                        </dd>
+                      ) : null}
+
                     </div>
                     <div className="min-w-0">
                       <dt className="type-meta text-muted-foreground">Launch Watch</dt>
@@ -1054,15 +1159,141 @@ function LaunchControlPage() {
                         </p>
                       ) : null}
 
-                      <p className="text-xs leading-relaxed text-muted-foreground">
-                        Active watchers receive the 24h and 1h countdown reminders (unless muted),
-                        the official-contract Verified Launch Packet and the launch-live alert.
-                      </p>
+                      <div className="rounded-md border border-border/60 bg-background/30 p-3">
+                        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                          Watcher activity
+                        </p>
+                        {watchSummaryQuery.isError ? (
+                          <div className="mt-2">
+                            <p className="text-xs leading-relaxed text-muted-foreground">
+                              Watcher counts could not be loaded right now.
+                            </p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-2 min-h-11"
+                              onClick={() => void watchSummaryQuery.refetch()}
+                            >
+                              Retry
+                            </Button>
+                          </div>
+                        ) : (
+                          <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                            <div className="min-w-0">
+                              <dt className="text-muted-foreground">Active watchers</dt>
+                              <dd className="font-mono text-sm text-foreground">
+                                {watchStatsReady ? watchSummary!.active_count : "—"}
+                              </dd>
+                            </div>
+                            <div className="min-w-0">
+                              <dt className="text-muted-foreground">Total opt-ins</dt>
+                              <dd className="font-mono text-sm text-foreground">
+                                {watchStatsReady ? watchSummary!.total_count : "—"}
+                              </dd>
+                            </div>
+                            <div className="min-w-0">
+                              <dt className="text-muted-foreground">Countdown reminders on</dt>
+                              <dd className="font-mono text-sm text-foreground">
+                                {notificationStatsReady
+                                  ? notificationSummary!.reminder_enabled_watchers
+                                  : "—"}
+                              </dd>
+                            </div>
+                            <div className="min-w-0">
+                              <dt className="text-muted-foreground">Countdown reminders muted</dt>
+                              <dd className="font-mono text-sm text-foreground">
+                                {mutedCount ?? "—"}
+                              </dd>
+                            </div>
+                          </dl>
+                        )}
+                        {!watchSummaryQuery.isError &&
+                        (!watchStatsReady || !notificationStatsReady) ? (
+                          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                            {notificationSummaryQuery.isError
+                              ? "Reminder opt-in counts are unavailable right now."
+                              : "Loading watcher activity…"}
+                          </p>
+                        ) : null}
+                      </div>
+
+                      <div className="rounded-md border border-border/60 bg-background/30 p-3">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <StatusBadge tone={armingState.tone}>
+                            <span>{armingState.badge}</span>
+                          </StatusBadge>
+                          <span className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                            Countdown delivery
+                          </span>
+                        </div>
+                        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                          {armingState.detail}
+                        </p>
+                        {anchorValid && !countdownPhaseEnded ? (
+                          <dl className="mt-2 space-y-1.5 text-xs">
+                            <div className="min-w-0">
+                              <dt className="text-muted-foreground">24h reminder</dt>
+                              <dd className="text-foreground [overflow-wrap:anywhere]">
+                                {formatTimestamp(reminder24Iso)}
+                                {nowMs !== null &&
+                                !remindersArmed &&
+                                new Date(reminder24Iso!).getTime() < nowMs
+                                  ? " · missed (countdowns were not armed)"
+                                  : ""}
+                              </dd>
+                            </div>
+                            <div className="min-w-0">
+                              <dt className="text-muted-foreground">1h reminder</dt>
+                              <dd className="text-foreground [overflow-wrap:anywhere]">
+                                {formatTimestamp(reminder1Iso)}
+                                {nowMs !== null &&
+                                !remindersArmed &&
+                                new Date(reminder1Iso!).getTime() < nowMs
+                                  ? " · missed (countdowns were not armed)"
+                                  : ""}
+                              </dd>
+                            </div>
+                          </dl>
+                        ) : null}
+                        {anchorValid && !countdownPhaseEnded ? (
+                          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                            Times shown in this device’s timezone ({tz}).
+                            {anchorIsWindowStart
+                              ? " A launch window counts down to the window start."
+                              : ""}
+                          </p>
+                        ) : null}
+                      </div>
+
+                      <details className="rounded-md border border-border/60 bg-background/30">
+                        <summary className="cursor-pointer list-none px-3 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          How Launch Watch works
+                        </summary>
+                        <div className="space-y-2 px-3 pb-3">
+                          <ol className="list-decimal space-y-1 pl-4 text-xs leading-relaxed text-muted-foreground">
+                            <li>A user taps “Watch this launch” from a community post or public link.</li>
+                            <li>Telegram opens the private @PepeCartelHQBot chat and they press Start.</li>
+                            <li>
+                              The bot privately confirms the watch and gives Mute Countdowns and Stop
+                              Watching controls.
+                            </li>
+                            <li>
+                              Eligible 24h and 1h reminders, the official-contract packet and the
+                              launch-live alert arrive in that private bot chat.
+                            </li>
+                          </ol>
+                          <p className="text-xs leading-relaxed text-muted-foreground">
+                            Joining your Telegram community does not subscribe anyone. Each watcher
+                            must opt in through Launch Watch.
+                          </p>
+                        </div>
+                      </details>
 
                       <p className="text-xs leading-relaxed text-muted-foreground">
-                        Watcher identities are never shown here. Only aggregate counts are
-                        available in Cartel HQ.
+                        Launch Watch is privacy-first: project operators see aggregate watcher
+                        activity, not individual Telegram identities.
                       </p>
+
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -1244,6 +1475,15 @@ function LaunchControlPage() {
                           deliberately not resent automatically, so a watcher is never messaged
                           twice.
                         </p>
+
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          <span className="text-foreground">Alerts created</span> can stay at 0 even
+                          with a saved schedule and active watchers. Reminder events are created
+                          when the 24h or 1h reminder actually becomes due, not when the launch date
+                          is saved, and countdown delivery must be in an armed lifecycle state at
+                          that moment.
+                        </p>
+
                       </>
                     ) : (
 
