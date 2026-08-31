@@ -253,12 +253,21 @@ function AssetsPage() {
                 </Button>
               </div>
             ) : assets.length === 0 ? (
-              <EmptyState
-                compact
-                icon={FolderLock}
-                title="No assets yet"
-                description="Uploads appear here. Files are private to this project and never publicly accessible."
-              />
+              (assetsQuery.data ?? []).length > 0 ? (
+                <EmptyState
+                  compact
+                  icon={FolderLock}
+                  title="No matching assets"
+                  description={`This project has files, but none of type "${filter === "all" ? "All types" : ASSET_TYPE_LABELS[filter]}". Change the filter to see other assets.`}
+                />
+              ) : (
+                <EmptyState
+                  compact
+                  icon={FolderLock}
+                  title="No assets yet"
+                  description="Uploads appear here. Files are private to this project and never publicly accessible."
+                />
+              )
             ) : (
               <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5 [&>*]:min-w-0">
                 {assets.map((asset) => (
