@@ -1171,6 +1171,68 @@ export type Database = {
           },
         ]
       }
+      sticker_versions: {
+        Row: {
+          asset_id: string | null
+          created_at: string
+          id: string
+          origin: string
+          pack_id: string
+          sticker_id: string
+          version_number: number
+          workspace_id: string
+        }
+        Insert: {
+          asset_id?: string | null
+          created_at?: string
+          id?: string
+          origin?: string
+          pack_id: string
+          sticker_id: string
+          version_number: number
+          workspace_id: string
+        }
+        Update: {
+          asset_id?: string | null
+          created_at?: string
+          id?: string
+          origin?: string
+          pack_id?: string
+          sticker_id?: string
+          version_number?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sticker_versions_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "media_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_versions_pack_id_fkey"
+            columns: ["pack_id"]
+            isOneToOne: false
+            referencedRelation: "sticker_packs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_versions_sticker_id_fkey"
+            columns: ["sticker_id"]
+            isOneToOne: false
+            referencedRelation: "stickers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_versions_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stickers: {
         Row: {
           action_description: string | null
