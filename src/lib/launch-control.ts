@@ -325,6 +325,38 @@ export async function getLaunchWatchSummary(launchId: string): Promise<LaunchWat
   };
 }
 
+/**
+ * Private-confirmation diagnostics for ACTIVE watchers (counts only).
+ *
+ * `untracked_count` covers opt-ins that predate confirmation tracking — their
+ * historical delivery cannot be reconstructed and must never be reported as
+ * failed. Telegram identities are never exposed to the browser.
+ */
+export type LaunchWatchConfirmationSummary = {
+  delivered_count: number;
+  failed_count: number;
+  ambiguous_count: number;
+  untracked_count: number;
+  attempted_count: number;
+};
+
+export async function getLaunchWatchConfirmationSummary(
+  launchId: string,
+): Promise<LaunchWatchConfirmationSummary> {
+  const { data, error } = await supabase.rpc("get_launch_watch_confirmation_summary", {
+    _launch_id: launchId,
+  });
+  if (error) rethrow(error);
+  const row = Array.isArray(data) ? data[0] : null;
+  return {
+    delivered_count: Number(row?.delivered_count ?? 0),
+    failed_count: Number(row?.failed_count ?? 0),
+    ambiguous_count: Number(row?.ambiguous_count ?? 0),
+    untracked_count: Number(row?.untracked_count ?? 0),
+    attempted_count: Number(row?.attempted_count ?? 0),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Phase 5 — Notification engine (aggregate-only surface).
 //

@@ -49,6 +49,47 @@ async function sendMessage(token: string, chatId: string, text: string, extra: R
     return null;
   }
 }
+/**
+ * Result-aware send used only by the private Launch Watch deep-link confirmation.
+ *
+ * Classification is deliberately conservative: anything that is not a parsed
+ * Telegram rejection or a parsed ok:true is `ambiguous`, because the message may
+ * still have been delivered. Ambiguous outcomes are never auto-resent.
+ */
+type SendOutcome =
+  | { status: "sent"; messageId: number | null }
+  | { status: "failed"; errorClass: string; detail: string }
+  | { status: "ambiguous"; errorClass: string; detail: string };
+
+async function sendMessageWithOutcome(
+  token: string,
+  chatId: string,
+  text: string,
+  extra: Record<string, unknown> = {},
+): Promise<SendOutcome> {
+  const bound = (value: unknown) => String(value ?? "").slice(0, 300);
+  let res: Response;
+  try {
+    res = await fetch(`${TG_BASE}/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true, ...extra }),
+      signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
+    });
+  } catch (error) {
+    return { status: "ambiguous", errorClass: "uncertain_outcome", detail: bound((error as Error)?.message ?? "Telegram request did not complete.") };
+  }
+  const payload = await res.json().catch(() => null) as any;
+  if (payload && payload.ok === true) {
+    const messageId = Number(payload?.result?.message_id);
+    return { status: "sent", messageId: Number.isFinite(messageId) ? messageId : null };
+  }
+  if (payload && payload.ok === false) {
+    return { status: "failed", errorClass: "telegram_rejected", detail: bound(payload?.description ?? `Telegram rejected the message (${res.status}).`) };
+  }
+  return { status: "ambiguous", errorClass: "uncertain_outcome", detail: bound(`Unparseable Telegram response (${res.status}).`) };
+}
+
 async function answerCallback(token: string, callbackId: string, text: string) {
   try { await telegramJson(token, "answerCallbackQuery", { callback_query_id: callbackId, text, show_alert: false }); } catch { }
 }
@@ -448,26 +489,26 @@ Deno.serve(async (req: Request) => {
   const launchWatchSubscribe = async (
     launchId: string,
     telegramUserId: number,
-  ): Promise<{ outcome: LaunchWatchOutcome; remindersEnabled: boolean }> => {
+  ): Promise<{ outcome: LaunchWatchOutcome; remindersEnabled: boolean; subscriptionId: string | null }> => {
     const now = new Date().toISOString();
     const existing = await readLaunchWatchRow(launchId, telegramUserId);
     if (existing?.id) {
       if (existing.is_active) {
         await touchLaunchWatchRow(existing.id, now);
-        return { outcome: "already_active", remindersEnabled: existing.reminders_enabled !== false };
+        return { outcome: "already_active", remindersEnabled: existing.reminders_enabled !== false, subscriptionId: String(existing.id) };
       }
       await reactivateLaunchWatchRow(existing.id, now);
-      return { outcome: "reactivated", remindersEnabled: existing.reminders_enabled !== false };
+      return { outcome: "reactivated", remindersEnabled: existing.reminders_enabled !== false, subscriptionId: String(existing.id) };
     }
 
-    const { error: insertError } = await admin.from("launch_watch_subscriptions").insert({
+    const { data: inserted, error: insertError } = await admin.from("launch_watch_subscriptions").insert({
       launch_id: launchId,
       telegram_user_id: telegramUserId,
       is_active: true,
       subscribed_at: now,
       last_interaction_at: now,
       source: "telegram_deep_link",
-    });
+    }).select("id").maybeSingle();
     if (insertError) {
       if (!isUniqueViolation(insertError)) {
         throw new Error("Could not save launch watch subscription.");
@@ -476,13 +517,62 @@ Deno.serve(async (req: Request) => {
       if (!raced?.id) throw new Error("Could not save launch watch subscription.");
       if (raced.is_active) {
         await touchLaunchWatchRow(raced.id, now);
-        return { outcome: "already_active", remindersEnabled: raced.reminders_enabled !== false };
+        return { outcome: "already_active", remindersEnabled: raced.reminders_enabled !== false, subscriptionId: String(raced.id) };
       }
       await reactivateLaunchWatchRow(raced.id, now);
-      return { outcome: "reactivated", remindersEnabled: raced.reminders_enabled !== false };
+      return { outcome: "reactivated", remindersEnabled: raced.reminders_enabled !== false, subscriptionId: String(raced.id) };
     }
-    return { outcome: "subscribed", remindersEnabled: true };
+
+    return { outcome: "subscribed", remindersEnabled: true, subscriptionId: inserted?.id ? String(inserted.id) : null };
   };
+
+  /**
+   * Persists the latest private-confirmation diagnostic for one explicit
+   * deep-link attempt. Diagnostics are best-effort: a failure here must never
+   * erase an already-persisted subscription and must never trigger a resend.
+   */
+  const recordLaunchWatchConfirmation = async (
+    subscriptionId: string | null,
+    attemptedAt: string,
+    outcome: SendOutcome,
+  ) => {
+    if (!subscriptionId) return;
+    try {
+      const { data: current } = await admin
+        .from("launch_watch_subscriptions")
+        .select("confirmation_attempt_count")
+        .eq("id", subscriptionId)
+        .maybeSingle();
+      const attempts = Number((current as any)?.confirmation_attempt_count ?? 0) + 1;
+      const patch: Record<string, unknown> = {
+        confirmation_attempt_count: attempts,
+        confirmation_attempted_at: attemptedAt,
+        confirmation_status: outcome.status,
+      };
+      if (outcome.status === "sent") {
+        patch.confirmation_sent_at = attemptedAt;
+        patch.confirmation_telegram_message_id = outcome.messageId;
+        patch.confirmation_error_class = null;
+        patch.confirmation_last_error = null;
+      } else {
+        patch.confirmation_sent_at = null;
+        patch.confirmation_telegram_message_id = null;
+        patch.confirmation_error_class = outcome.errorClass;
+        patch.confirmation_last_error = outcome.detail;
+      }
+      const { error } = await admin
+        .from("launch_watch_subscriptions")
+        .update(patch)
+        .eq("id", subscriptionId);
+      if (error) {
+        console.error("launch_watch_confirmation_persist_failed", outcome.status, error.message);
+      }
+    } catch (error) {
+      // Telegram may already have delivered. Never resend on a persistence fault.
+      console.error("launch_watch_confirmation_persist_exception", outcome.status, (error as Error)?.message);
+    }
+  };
+
 
   /** Soft unwatch. The row and its history are always preserved. */
   const launchWatchUnsubscribe = async (launchId: string, telegramUserId: number) => {
@@ -1386,7 +1476,8 @@ Deno.serve(async (req: Request) => {
         String(launch.status) === "OFFICIAL_CONTRACT_REGISTERED"
           ? verifiedLaunchPacket(launch, profile)
           : "";
-      await sendMessage(
+      const confirmationAttemptedAt = new Date().toISOString();
+      const confirmation = await sendMessageWithOutcome(
         TELEGRAM_BOT_TOKEN,
         chatId,
         `${launchWatchIntro(launch, profile)}\n\n${line}${launchWatchDisclaimer}${packet}`,
@@ -1395,7 +1486,9 @@ Deno.serve(async (req: Request) => {
           reply_markup: launchWatchKeyboard(token, true, result.remindersEnabled, true, profile),
         },
       );
+      await recordLaunchWatchConfirmation(result.subscriptionId, confirmationAttemptedAt, confirmation);
       return json({ ok: true });
+
 
     }
 
