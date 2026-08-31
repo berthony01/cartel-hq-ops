@@ -614,8 +614,21 @@ Deno.serve(async (req: Request) => {
             job_type: "remove_background", provider: "kie", provider_model: BG_MODEL, status: "queued",
             input_json: { parent_job_id: job.id, prior_image_asset_id: priorAssetId, model: BG_MODEL },
           }).select("*").single();
-          if (childError || !child) return await failSticker(job, "Could not create the background-removal job.");
+          if (childError || !child) {
+            // Race: a concurrent poller already created the child. Reuse it and
+            // never start a second background provider task.
+            if ((childError as { code?: string } | null)?.code === "23505") {
+              const { data: racedChild } = await admin.from("ai_jobs").select("id").eq("job_type", "remove_background").eq("sticker_id", job.sticker_id).contains("input_json", { parent_job_id: job.id }).maybeSingle();
+              if (racedChild) {
+                await admin.from("ai_jobs").update({ status: "succeeded", completed_at: new Date().toISOString(), output_json: { generation_result_received: true, child_job_id: racedChild.id } }).eq("id", job.id);
+                await logCredits(job, credits);
+                return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", childJobId: racedChild.id, stage: "background_removal" });
+              }
+            }
+            return await failSticker(job, "Could not create the background-removal job.");
+          }
           childJobId = child.id;
+
 
           const bgCreate = await kieRequest("/api/v1/jobs/createTask", KIE_API_KEY, {
             method: "POST",
