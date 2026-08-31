@@ -1194,16 +1194,16 @@ function LaunchControlPage() {
               <div className="min-w-0 space-y-3 px-3 pb-3">
                 <Section
                   variant="quiet"
-                  title="Notification engine"
+                  title="Telegram alerts for watchers"
                   leading={<Bell className="size-4" aria-hidden="true" />}
                 >
                   <div className="space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <StatusBadge tone="green">
-                        <span>Engine: Active</span>
+                        <span>Telegram alerts active</span>
                       </StatusBadge>
                       <span className="text-xs text-muted-foreground">
-                        Telegram delivery to active watchers only.
+                        Messages are only sent to active watchers of this launch.
                       </span>
                     </div>
 
@@ -1218,12 +1218,12 @@ function LaunchControlPage() {
                         <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
                           {(
                             [
-                              ["Events", notificationSummary?.event_count],
-                              ["In queue", notificationSummary?.pending_count],
-                              ["Sent", notificationSummary?.sent_count],
+                              ["Alerts created", notificationSummary?.event_count],
+                              ["Waiting to send", notificationSummary?.pending_count],
+                              ["Delivered", notificationSummary?.sent_count],
                               ["Failed", notificationSummary?.failed_count],
-                              ["Ambiguous", notificationSummary?.ambiguous_count],
-                              ["Skipped", notificationSummary?.skipped_count],
+                              ["Outcome unconfirmed", notificationSummary?.ambiguous_count],
+                              ["Not sent (muted or stopped)", notificationSummary?.skipped_count],
                               ["Reminder opt-ins", notificationSummary?.reminder_enabled_watchers],
                             ] as const
                           ).map(([label, value]) => (
@@ -1239,12 +1239,14 @@ function LaunchControlPage() {
                         </dl>
 
                         <p className="text-xs leading-relaxed text-muted-foreground">
-                          <span className="text-foreground">Ambiguous</span> means the Telegram
-                          outcome could not be confirmed. Automatic resending is deliberately
-                          suppressed for those so a watcher is never messaged twice.
+                          <span className="text-foreground">Outcome unconfirmed</span> means
+                          Telegram never confirmed whether the message arrived. Those are
+                          deliberately not resent automatically, so a watcher is never messaged
+                          twice.
                         </p>
                       </>
                     ) : (
+
                       <p className="text-xs leading-relaxed text-muted-foreground">
                         Notification delivery becomes relevant once this launch reaches Watchlist
                         open and the Launch Watch link starts collecting watchers.
