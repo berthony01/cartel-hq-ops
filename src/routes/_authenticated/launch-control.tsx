@@ -30,6 +30,7 @@ import {
   canDeleteLaunch,
   getLaunchNotificationSummary,
   getLaunchWatchSummary,
+  getLaunchWatchConfirmationSummary,
 
   isLaunchWatchClosedStatus,
   isLaunchWatchOpenStatus,
