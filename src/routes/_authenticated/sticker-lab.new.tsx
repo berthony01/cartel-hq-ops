@@ -190,13 +190,28 @@ function StickerLabBuilder() {
   const [fileError, setFileError] = useState<string | null>(null);
   const [packNameError, setPackNameError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [stages, setStages] = useState<Record<string, Stage>>({});
-  /** Structured, user-facing failure per sticker id. */
-  const [failures, setFailures] = useState<Record<string, ProviderFailure | undefined>>({});
-  const [notes, setNotes] = useState<Record<string, string>>({});
-  const [previews, setPreviews] = useState<Record<string, Preview>>({});
-  /** Latest ai_jobs rows per sticker id — attempt history only, read-only. */
-  const [jobHistory, setJobHistory] = useState<Record<string, AiJobRow[]>>({});
+  /**
+   * Existing generation runtime (stages, structured failures, notes, previews,
+   * durable ai_jobs history, polling ownership, reconciliation and the
+   * single-sticker pipeline). Behaviour is unchanged — it simply no longer
+   * lives inline in this route.
+   */
+  const {
+    stages,
+    setStages,
+    failures,
+    notes,
+    previews,
+    jobHistory,
+    aliveRef,
+    pollingRef,
+    loadExisting,
+    runGeneration,
+  } = useStickerGenerationRuntime({
+    workspaceId,
+    referenceAssetIds: draft?.referenceAssetIds ?? [],
+  });
+
   const [confirmRemaining, setConfirmRemaining] = useState(false);
   const [exporting, setExporting] = useState(false);
   /**
