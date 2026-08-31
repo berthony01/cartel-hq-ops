@@ -2755,25 +2755,31 @@ function StickerLabBuilder() {
               ) : null}
 
               {tgPublishedCount > 0 || Object.keys(tgStickers).length > 0 ? (
-                <ul className="space-y-1 text-xs">
-                  {draft.concepts.map((c) => {
-                    const id = stickerIdFor(c.id);
-                    const row = id ? tgStickers[id] : undefined;
-                    return (
-                      <li key={c.id} className="flex flex-wrap items-center gap-2">
-                        <span className="text-foreground">{c.label}</span>
-                        <span className="text-muted-foreground">
-                          {row?.status === "published"
-                            ? "Published to Telegram"
-                            : row?.telegram_publish_error
-                              ? `Failed — ${row.telegram_publish_error}`
-                              : "Not published"}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
+                <details className="rounded-md border border-border/70 bg-background/40 p-3">
+                  <summary className="min-h-9 cursor-pointer text-xs font-semibold text-muted-foreground">
+                    Per-sticker Telegram status
+                  </summary>
+                  <ul className="mt-2 space-y-1 text-xs">
+                    {draft.concepts.map((c) => {
+                      const id = stickerIdFor(c.id);
+                      const row = id ? tgStickers[id] : undefined;
+                      return (
+                        <li key={c.id} className="flex flex-wrap items-center gap-2">
+                          <span className="text-foreground">{c.label}</span>
+                          <span className="text-muted-foreground">
+                            {row?.status === "published"
+                              ? "Published to Telegram"
+                              : row?.telegram_publish_error
+                                ? `Failed — ${row.telegram_publish_error}`
+                                : "Not published"}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </details>
               ) : null}
+
 
               <p className="min-w-0 rounded-md border border-border/70 bg-surface-raised/50 p-3 text-xs text-muted-foreground [overflow-wrap:anywhere]">
                 {lifecycleMode === "publish"
