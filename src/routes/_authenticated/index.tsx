@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/lib/workspace-context";
-import { NAV_SECTIONS } from "@/lib/nav";
+
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { InlineRow } from "@/components/cartel/InlineRow";
@@ -48,12 +48,6 @@ const QUICK_ACTIONS: { label: string; icon: LucideIcon; note: string; to: string
   { label: "Telegram", icon: MessageSquare, note: "Communities & publishing", to: "/telegram" },
 ];
 
-/** Presentational roadmap vocabulary derived from live nav metadata. */
-function moduleState(status?: "next" | "planned") {
-  if (status === "planned") return { label: "Planned", tone: "muted" as const };
-  if (status === "next") return { label: "Active build", tone: "gold" as const };
-  return { label: "Live beta", tone: "green" as const };
-}
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
@@ -302,33 +296,6 @@ function HqDashboard() {
         </div>
       </div>
 
-      {/* Roadmap — low prominence, derived from nav metadata */}
-      <Section variant="plain" title="Modules" contentClassName="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 [&>*]:min-w-0">
-        {NAV_SECTIONS.map((group) => (
-          <div key={group.label} className="min-w-0">
-            <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
-              {group.label}
-            </p>
-            <ul className="mt-2 space-y-1.5">
-              {group.items.map((item) => {
-                const state = moduleState(item.status);
-                return (
-                  <li key={item.to} className="flex items-center gap-2.5 text-sm">
-                    <item.icon
-                      className={`size-4 shrink-0 ${
-                        item.status === "planned" ? "text-muted-foreground" : "text-gold"
-                      }`}
-                      aria-hidden="true"
-                    />
-                    <span className="min-w-0 flex-1 truncate text-foreground">{item.label}</span>
-                    <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
-      </Section>
     </div>
   );
 }
