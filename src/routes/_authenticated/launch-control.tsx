@@ -154,6 +154,41 @@ function formFromRow(row: LaunchRow): EditorForm {
   };
 }
 
+/**
+ * Client-only clock. Starts null on the server and on the first client render
+ * so hydration output is stable, then ticks at a slow interval (no per-second
+ * animation, no layout thrash).
+ */
+function useClientNow(intervalMs = 30_000): number | null {
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    setNow(Date.now());
+    const id = window.setInterval(() => setNow(Date.now()), intervalMs);
+    return () => window.clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
+/** Compact human countdown, e.g. `4d 2h 18m`, `3h 12m`, `42m`, `under a minute`. */
+function formatCountdown(ms: number): string {
+  const totalMinutes = Math.floor(ms / 60_000);
+  if (totalMinutes < 1) return "under a minute";
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+/** Lifecycle states in which the worker actually enqueues countdown reminders. */
+const REMINDER_ARMED_STATUSES: readonly LaunchStatus[] = [
+  "LAUNCH_APPROACHING",
+  "CONTRACT_PENDING",
+  "OFFICIAL_CONTRACT_REGISTERED",
+];
+
+
 function LaunchControlPage() {
   const { workspaceId, workspace, loading: workspaceLoading } = useWorkspace();
   const queryClient = useQueryClient();
