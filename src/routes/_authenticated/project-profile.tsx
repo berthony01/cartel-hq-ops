@@ -278,8 +278,8 @@ function ProjectProfilePage() {
       <PageHeader
         eyebrow="Project Identity"
         title="Project Profile"
-        description="One project identity record per workspace. This profile is the identity Cartel Network discovery and Launch Control build on. Publishing makes it discoverable on the Cartel Network."
-        status={workspace ? workspace.name : "No workspace"}
+        description="One identity record for the active project. This profile is the identity Cartel Network discovery and Launch Control build on. Publishing makes it discoverable on the Cartel Network."
+        status={workspace ? workspace.name : "No project"}
       />
 
       <LaunchReadinessCallout workspaceId={workspaceId} title="Setup guide" />
@@ -288,13 +288,13 @@ function ProjectProfilePage() {
 
       {workspaceLoading ? (
         <Section variant="surface">
-          <p className="text-sm text-muted-foreground">Loading workspace…</p>
+          <p className="text-sm text-muted-foreground">Loading project…</p>
         </Section>
       ) : !workspaceId ? (
         <EmptyState
           icon={IdCard}
-          title="No workspace yet"
-          description="Create a workspace from the switcher in the header before setting up a project profile."
+          title="No project yet"
+          description="Add a project from the selector in the header before setting up a project profile."
         />
       ) : profileQuery.isError ? (
         <Section variant="surface" title="Could not load project profile">
