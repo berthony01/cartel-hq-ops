@@ -93,7 +93,7 @@ function PackManagerPage() {
         <EmptyState
           icon={ImageOff}
           title="This pack is not available"
-          description="It may have been removed, or it belongs to a different workspace."
+          description="It may have been removed, or it belongs to a different project."
           action={
             <Button asChild variant="outline" size="sm" className="mt-1 min-h-10">
               <Link to="/sticker-lab">Back to Sticker Lab</Link>

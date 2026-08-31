@@ -106,15 +106,15 @@ function AssetsPage() {
       <PageHeader
         eyebrow="Module"
         title="Asset Vault"
-        description="Private, workspace-scoped storage for artwork, references, and generated stickers. Previews and downloads use short-lived signed links."
-        status={workspace ? workspace.name : "No workspace"}
+        description="Private storage for this project’s artwork, references, and generated stickers. Previews and downloads use short-lived signed links."
+        status={workspace ? workspace.name : "No project"}
       />
 
       {!workspaceLoading && !workspaceId ? (
         <EmptyState
           icon={FolderLock}
-          title="No workspace yet"
-          description="Create a workspace from the switcher in the header to start storing assets."
+          title="No project yet"
+          description="Add a project from the switcher in the header to start storing assets."
         />
       ) : (
         <>
@@ -184,7 +184,7 @@ function AssetsPage() {
                 compact
                 icon={FolderLock}
                 title="No assets yet"
-                description="Uploads appear here. Files are private to this workspace and never publicly accessible."
+                description="Uploads appear here. Files are private to this project and never publicly accessible."
               />
             ) : (
               <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5 [&>*]:min-w-0">

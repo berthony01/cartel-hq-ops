@@ -429,7 +429,7 @@ function StickerLabHome() {
             compact
             icon={PackageOpen}
             title="No sticker packs yet"
-            description="Packs you save in the builder are stored in this workspace and appear here."
+            description="Packs you save in the builder are stored in this project and appear here."
             action={
               <Button asChild variant="outline" size="sm" className="mt-1 min-h-10">
                 <Link to="/sticker-lab/new" search={{}} onClick={() => clearDraft()}>
