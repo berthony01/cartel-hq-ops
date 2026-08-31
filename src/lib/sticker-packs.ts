@@ -33,25 +33,18 @@ export type PackRow = {
   brief: string | null;
   style_notes: string | null;
   reference_asset_id: string | null;
+  archived_at: string | null;
+  archived_by: string | null;
 };
 
 const PACK_COLUMNS =
-  "id,workspace_id,title,theme,pack_size,status,updated_at,character_name,brief,style_notes,reference_asset_id";
+  "id,workspace_id,title,theme,pack_size,status,updated_at,character_name,brief,style_notes,reference_asset_id,archived_at,archived_by";
 const STICKER_COLUMNS =
   "id,pack_id,sort_order,label,action_description,emoji_list,keyword_list,status,image_asset_id,updated_at";
 
 export type PackSummary = PackRow & { total: number; ready: number; active: number };
 
-/** Real workspace packs for the Sticker Lab home list. */
-export async function listWorkspacePacks(workspaceId: string): Promise<PackSummary[]> {
-  const { data, error } = await supabase
-    .from("sticker_packs")
-    .select(PACK_COLUMNS)
-    .eq("workspace_id", workspaceId)
-    .order("updated_at", { ascending: false })
-    .limit(20);
-  if (error) throw error;
-  const packs = (data ?? []) as PackRow[];
+async function summarizePacks(packs: PackRow[]): Promise<PackSummary[]> {
   if (packs.length === 0) return [];
 
   const { data: stickerRows, error: stickerError } = await supabase
@@ -74,6 +67,148 @@ export async function listWorkspacePacks(workspaceId: string): Promise<PackSumma
     };
   });
 }
+
+/** Active (non-archived) workspace packs for the Sticker Lab home list. */
+export async function listWorkspacePacks(workspaceId: string): Promise<PackSummary[]> {
+  const { data, error } = await supabase
+    .from("sticker_packs")
+    .select(PACK_COLUMNS)
+    .eq("workspace_id", workspaceId)
+    .is("archived_at", null)
+    .order("updated_at", { ascending: false })
+    .limit(20);
+  if (error) throw error;
+  return summarizePacks((data ?? []) as PackRow[]);
+}
+
+/** Archived packs, newest archive first. Kept out of the active list. */
+export async function listArchivedPacks(workspaceId: string): Promise<PackSummary[]> {
+  const { data, error } = await supabase
+    .from("sticker_packs")
+    .select(PACK_COLUMNS)
+    .eq("workspace_id", workspaceId)
+    .not("archived_at", "is", null)
+    .order("archived_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return summarizePacks((data ?? []) as PackRow[]);
+}
+
+/* ---------------------------------------------------------------------------
+ * Pack lifecycle (archive / restore / permanent delete)
+ *
+ * Every rule is enforced by SECURITY DEFINER RPCs in the database: operator
+ * role, eligibility, atomic Sticker Drop pausing, and which media rows may be
+ * removed. The client only relays the outcome, so nothing here can be bypassed
+ * by editing the UI.
+ * ------------------------------------------------------------------------ */
+
+export type PackLifecycleBlockingReason =
+  | "telegram_published"
+  | "telegram_stickers_exist"
+  | "community_delivery_history"
+  | "sticker_drop_schedules"
+  | "sticker_drop_history"
+  | "active_ai_jobs"
+  | (string & {});
+
+export type PackLifecycleState = {
+  pack_id: string;
+  title: string;
+  status: string;
+  archived: boolean;
+  archived_at: string | null;
+  can_manage: boolean;
+  can_delete: boolean;
+  can_archive: boolean;
+  can_restore: boolean;
+  blocking_reasons: PackLifecycleBlockingReason[];
+};
+
+export const PACK_BLOCKING_REASON_LABELS: Record<string, string> = {
+  telegram_published: "Published as a Telegram sticker set",
+  telegram_stickers_exist: "Stickers already live on Telegram",
+  community_delivery_history: "Already sent to communities",
+  sticker_drop_schedules: "Used by Sticker Drops",
+  sticker_drop_history: "Has Sticker Drop history",
+  active_ai_jobs: "Generation is still running",
+  pack_status_published: "Pack is published",
+  pack_status_publishing: "Pack is publishing right now",
+  pack_status_generating: "Pack is generating right now",
+};
+
+export function describeBlockingReasons(reasons: PackLifecycleBlockingReason[]): string[] {
+  return reasons.map((r) => PACK_BLOCKING_REASON_LABELS[r] ?? "Has durable history");
+}
+
+export async function inspectPackLifecycle(packId: string): Promise<PackLifecycleState> {
+  const { data, error } = await supabase.rpc("sticker_pack_lifecycle_state", { _pack_id: packId });
+  if (error) throw error;
+  return data as unknown as PackLifecycleState;
+}
+
+export async function archivePack(packId: string): Promise<void> {
+  const { error } = await supabase.rpc("archive_sticker_pack", { _pack_id: packId });
+  if (error) throw error;
+}
+
+export async function restorePack(packId: string): Promise<void> {
+  const { error } = await supabase.rpc("restore_sticker_pack", { _pack_id: packId });
+  if (error) throw error;
+}
+
+export type PackDeleteResult = {
+  deleted: boolean;
+  archiveRequired: boolean;
+  blockingReasons: PackLifecycleBlockingReason[];
+  removedImages: number;
+  storageCleanupPending: boolean;
+};
+
+/**
+ * Permanent delete. The RPC validates eligibility and commits the database
+ * removal atomically, then returns the storage paths of generated sticker
+ * images that belonged only to this pack. Shared Brand Kit / reference /
+ * project-profile assets are never included. Storage cleanup runs after the
+ * commit: a leftover private object is safer than a half-deleted pack.
+ */
+export async function deletePackPermanently(packId: string): Promise<PackDeleteResult> {
+  const { data, error } = await supabase.rpc("delete_sticker_pack_if_eligible", { _pack_id: packId });
+  if (error) throw error;
+
+  const result = (data ?? {}) as {
+    deleted?: boolean;
+    archive_required?: boolean;
+    blocking_reasons?: string[];
+    storage_paths?: string[];
+  };
+
+  if (!result.deleted) {
+    return {
+      deleted: false,
+      archiveRequired: true,
+      blockingReasons: result.blocking_reasons ?? [],
+      removedImages: 0,
+      storageCleanupPending: false,
+    };
+  }
+
+  const paths = (result.storage_paths ?? []).filter((p) => typeof p === "string" && p.length > 0);
+  let storageCleanupPending = false;
+  if (paths.length > 0) {
+    const { error: storageError } = await supabase.storage.from(ASSETS_BUCKET).remove(paths);
+    if (storageError) storageCleanupPending = true;
+  }
+
+  return {
+    deleted: true,
+    archiveRequired: false,
+    blockingReasons: [],
+    removedImages: paths.length,
+    storageCleanupPending,
+  };
+}
+
 
 export type AiJobRow = {
   id: string;
