@@ -197,8 +197,8 @@ function AssetsPage() {
                   Sticker Lab generation.
                 </li>
                 <li>
-                  <span className="text-foreground">Generated sticker</span> — output created by
-                  Sticker Lab.
+                  <span className="text-foreground">Generated sticker</span> — sticker output or
+                  sticker file associated with Sticker Lab.
                 </li>
                 <li>
                   <span className="text-foreground">Other</span> — uncategorised project imagery.
@@ -210,7 +210,7 @@ function AssetsPage() {
           <Section
             variant="plain"
             title="Library"
-            description="These are the project's files. Brand Kit and Sticker Lab reuse these same files — there are no separate Brand Kit copies."
+            description="These are the project's files. Project Profile and Sticker Lab can reuse applicable project files. Brand Kit stores creative rules and only shows related references for context — there are no separate Brand Kit file copies."
             actions={
               <div className="flex items-center gap-2">
                 <StatusBadge tone={assets.length > 0 ? "gold" : "muted"}>

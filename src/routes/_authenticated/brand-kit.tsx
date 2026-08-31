@@ -384,7 +384,7 @@ function BrandKitPage() {
           <Section
             variant="quiet"
             title="Project references"
-            description="Read-only view of files stored in this project's Asset Vault. Brand Kit does not keep a separate copy — files are managed once in Asset Vault and reused by Brand Kit, Project Profile and Sticker Lab where applicable."
+            description="Read-only view of files stored in this project's Asset Vault. Files are managed once in Asset Vault. Brand Kit only shows related references here for context; Project Profile and Sticker Lab can reuse applicable files. There is no separate Brand Kit file copy."
             actions={
               <Button asChild variant="outline" size="sm" className="min-h-10">
                 <Link to="/assets">
