@@ -2,13 +2,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   Sticker,
-  MessageSquare,
   PackageOpen,
-  Rocket,
-  Send,
   AlertTriangle,
   ChevronRight,
 } from "lucide-react";
+
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/lib/workspace-context";
 import {
