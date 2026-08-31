@@ -2106,95 +2106,149 @@ function StickerLabBuilder() {
 
       {step === 5 ? (
         <StepCard
-          title="Review"
-          hint="Verified static stickers from private storage, ready for export and Telegram publishing."
+          title="Review & publish"
+          hint="Check readiness, publish one Telegram sticker set for this pack, then send it to this project's communities."
         >
-          <div className="mb-6 grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-3 [&>*]:min-w-0">
-            <SummaryStat
-              label="Backend ready"
-              value={`${generatedCount}/${draft.concepts.length}`}
-              tone={allReady ? "green" : "muted"}
-            />
-            <SummaryStat
-              label="Backend transparency verified"
-              value={`${transparentCount}/${draft.concepts.length}`}
-              tone={
-                transparentCount === draft.concepts.length && draft.concepts.length > 0
-                  ? "green"
-                  : "muted"
-              }
-            />
-            <SummaryStat
-              label="Browser alpha verified"
-              value={`${browserVerifiedCount}/${draft.concepts.length}`}
-              tone={
-                browserVerifiedCount === draft.concepts.length && draft.concepts.length > 0
-                  ? "green"
-                  : "muted"
-              }
-            />
-            <SummaryStat
-              label="Telegram cutout verified"
-              value={`${cutoutVerifiedCount}/${draft.concepts.length}`}
-              tone={
-                cutoutVerifiedCount === draft.concepts.length && draft.concepts.length > 0
-                  ? "green"
-                  : "muted"
-              }
-            />
-            <SummaryStat label="In progress" value={String(activeCount)} tone="muted" />
-            <SummaryStat
-              label="Failed / needs attention"
-              value={String(attentionCount)}
-              tone={attentionCount > 0 ? "red" : "muted"}
-            />
-          </div>
 
-          <div
-            className="mb-6 flex flex-wrap items-center gap-3 rounded-md border border-border bg-background/40 p-3"
-            aria-live="polite"
-          >
-            {checksRunning ? (
-              <>
-                <Loader2 className="size-4 animate-spin text-gold" aria-hidden="true" />
-                <p className="text-xs text-foreground">
-                  Checking transparency &amp; Telegram cutout {checkProgress?.done ?? 0}/
-                  {checkProgress?.total ?? 0}…
+          <section className="cartel-panel mb-6 rounded-lg p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Pack readiness
                 </p>
-                <span
-                  className="h-1.5 w-40 overflow-hidden rounded-full bg-border"
-                  aria-hidden="true"
-                >
-                  <span
-                    className="block h-full bg-gold transition-all duration-300"
-                    style={{
-                      width: `${Math.round(
-                        ((checkProgress?.done ?? 0) / Math.max(1, checkProgress?.total ?? 1)) * 100,
-                      )}%`,
-                    }}
-                  />
-                </span>
-              </>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Review re-checks every finished sticker in your browser for a real alpha channel and
-                analyses it for an edge-connected light halo. {browserVerifiedCount} alpha verified,{" "}
-                {cutoutVerifiedCount} Telegram cutout verified
-                {browserFailedCount > 0 ? `, ${browserFailedCount} need attention` : ""}.
-              </p>
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="ml-auto min-h-10"
-              disabled={checksRunning}
-              onClick={() => void runClientVerification(true)}
+                <p className="mt-1 text-lg font-semibold text-foreground">
+                  {exportableCount} of {draft.concepts.length} stickers ready
+                </p>
+                <p className="mt-1 max-w-prose text-xs text-muted-foreground">
+                  This pack belongs to {projectName} and was built from that project&apos;s Brand
+                  Kit and reference assets. Ready stickers can be published as one Telegram sticker
+                  set.
+                </p>
+              </div>
+              <StatusBadge
+                tone={attentionCount > 0 ? "red" : exportReady ? "green" : "gold"}
+              >
+                {attentionCount > 0
+                  ? `${attentionCount} need attention`
+                  : exportReady
+                    ? "Ready to publish"
+                    : "Checks in progress"}
+              </StatusBadge>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 [&>*]:min-w-0">
+              <SummaryStat
+                label="Ready to publish"
+                value={`${exportableCount}/${draft.concepts.length}`}
+                tone={exportReady && exportableCount > 0 ? "green" : "muted"}
+              />
+              <SummaryStat label="In progress" value={String(activeCount)} tone="muted" />
+              <SummaryStat
+                label="Failed / needs attention"
+                value={String(attentionCount)}
+                tone={attentionCount > 0 ? "red" : "muted"}
+              />
+            </div>
+
+            <div
+              className="mt-4 flex flex-wrap items-center gap-3 rounded-md border border-border bg-background/40 p-3"
+              aria-live="polite"
             >
-              <RefreshCw className="size-4" aria-hidden="true" />
-              Re-check transparency &amp; cutout
-            </Button>
-          </div>
+              {checksRunning ? (
+                <>
+                  <Loader2 className="size-4 animate-spin text-gold" aria-hidden="true" />
+                  <p className="text-xs text-foreground">
+                    Checking transparency &amp; Telegram cutout {checkProgress?.done ?? 0}/
+                    {checkProgress?.total ?? 0}…
+                  </p>
+                  <span
+                    className="h-1.5 w-40 max-w-full overflow-hidden rounded-full bg-border"
+                    aria-hidden="true"
+                  >
+                    <span
+                      className="block h-full bg-gold transition-all duration-300"
+                      style={{
+                        width: `${Math.round(
+                          ((checkProgress?.done ?? 0) / Math.max(1, checkProgress?.total ?? 1)) *
+                            100,
+                        )}%`,
+                      }}
+                    />
+                  </span>
+                </>
+              ) : (
+                <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+                  Review re-checks every finished sticker in your browser for a real alpha channel
+                  and analyses it for an edge-connected light halo.
+                  {browserFailedCount > 0 ? ` ${browserFailedCount} need attention.` : ""}
+                </p>
+              )}
+              <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-10"
+                  disabled={checksRunning}
+                  onClick={() => void runClientVerification(true)}
+                >
+                  <RefreshCw className="size-4" aria-hidden="true" />
+                  Re-check transparency &amp; cutout
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="min-h-10"
+                  onClick={refreshStatus}
+                >
+                  <RefreshCw className="size-4" aria-hidden="true" />
+                  Refresh status
+                </Button>
+              </div>
+            </div>
+
+            <details className="mt-3 rounded-md border border-border/70 bg-background/30 p-3">
+              <summary className="min-h-9 cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                Verification detail
+              </summary>
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4 [&>*]:min-w-0">
+                <SummaryStat
+                  label="Backend ready"
+                  value={`${generatedCount}/${draft.concepts.length}`}
+                  tone={allReady ? "green" : "muted"}
+                />
+                <SummaryStat
+                  label="Backend transparency verified"
+                  value={`${transparentCount}/${draft.concepts.length}`}
+                  tone={
+                    transparentCount === draft.concepts.length && draft.concepts.length > 0
+                      ? "green"
+                      : "muted"
+                  }
+                />
+                <SummaryStat
+                  label="Browser alpha verified"
+                  value={`${browserVerifiedCount}/${draft.concepts.length}`}
+                  tone={
+                    browserVerifiedCount === draft.concepts.length && draft.concepts.length > 0
+                      ? "green"
+                      : "muted"
+                  }
+                />
+                <SummaryStat
+                  label="Telegram cutout verified"
+                  value={`${cutoutVerifiedCount}/${draft.concepts.length}`}
+                  tone={
+                    cutoutVerifiedCount === draft.concepts.length && draft.concepts.length > 0
+                      ? "green"
+                      : "muted"
+                  }
+                />
+              </div>
+            </details>
+          </section>
+
 
           {!exportReady ? (
             <div className="mb-6">
@@ -2207,87 +2261,7 @@ function StickerLabBuilder() {
             </div>
           ) : null}
 
-          <div className="mb-6 flex flex-wrap items-center gap-3">
-            <Button
-              type="button"
-              className="min-h-11"
-              disabled={exporting || checksRunning || exportableCount === 0}
-              onClick={() => void downloadZip()}
-            >
-              {exporting ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Download className="size-4" aria-hidden="true" />
-              )}
-              Download all as ZIP ({exportableCount})
-            </Button>
-            <Button type="button" variant="outline" className="min-h-11" onClick={refreshStatus}>
-              <RefreshCw className="size-4" aria-hidden="true" />
-              Refresh status
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              {checksRunning
-                ? "Export is paused until the browser transparency and cutout checks finish."
-                : "Exports are transparent PNGs downloaded straight to this device. Nothing is uploaded or published."}
-            </p>
-          </div>
 
-          <details className="mb-6 rounded-md border border-border bg-background/40 p-3">
-            <summary className="flex min-h-11 cursor-pointer list-none items-center text-xs font-semibold uppercase tracking-[0.14em] text-pepe">
-              How Telegram cutout verification works
-            </summary>
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              The checkerboard behind each preview marks the pixels that are actually transparent.
-              Some image viewers display transparent areas as white or black — that is the viewer
-              compositing the image, not a background baked into the file. Telegram places the
-              transparent sticker directly over the chat background, so no rectangular background
-              appears. A transparent canvas alone is not enough, though: some generations bake a
-              thick white or cream contour around the artwork. Before export, CARTEL HQ removes only
-              the light halo that is connected to the transparent outside edge — internal whites such
-              as shirts, teeth, eyes, highlights and lettering interiors are always preserved, and if
-              the halo looks unexpectedly large the sticker is flagged for manual review instead of
-              being cleaned. Cleanup happens in your browser on the exported copy only; the stored
-              original is never modified.
-            </p>
-          </details>
-
-
-
-          {omittedLabels.length > 0 ? (
-            <p className="mb-6 text-xs text-muted-foreground">
-              The ZIP will contain {exportableCount} sticker
-              {exportableCount === 1 ? "" : "s"}. Not included ({omittedLabels.length}):{" "}
-              {omittedLabels.join(", ")}.
-            </p>
-          ) : null}
-
-          {historyRows.length > 0 ? (
-            <details className="mb-6 rounded-md border border-border bg-background/40 p-3">
-              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                <FileArchive className="mr-2 inline size-3.5" aria-hidden="true" />
-                Generation history ({historyRows.length})
-              </summary>
-              <ul className="mt-3 space-y-2">
-                {historyRows.map((row) => (
-                  <li
-                    key={row.conceptId}
-                    className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-t border-border/60 pt-2 text-[11px] first:border-t-0 first:pt-0"
-                  >
-                    <span className="font-semibold text-foreground">{row.label}</span>
-                    <span className="text-muted-foreground">
-                      {row.attempts} attempt{row.attempts === 1 ? "" : "s"}
-                    </span>
-                    <span className={row.failed > 0 ? "text-signal" : "text-muted-foreground"}>
-                      {row.failed} failed
-                    </span>
-                    {row.lastFailure ? (
-                      <span className="text-muted-foreground">· last failure: {row.lastFailure}</span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          ) : null}
 
 
           <ul className="grid gap-2 sm:gap-3 sm:grid-cols-2 xl:grid-cols-3 [&>*]:min-w-0">
@@ -2400,50 +2374,61 @@ function StickerLabBuilder() {
                     ) : null}
                   </div>
 
-                  <div className="mt-3 grid grid-cols-[5rem_1fr] gap-2 [&>*]:min-w-0">
-                    <div>
-                      <Label htmlFor={`${c.id}-review-emoji`} className="text-xs">
-                        Emoji
-                      </Label>
-                      <Input
-                        id={`${c.id}-review-emoji`}
-                        className="mt-1.5 min-h-10"
-                        value={c.emoji}
-                        onChange={(e) => editConcept(c.id, { emoji: e.target.value })}
-                      />
+                  <details className="mt-3 rounded-md border border-border/60 bg-background/30 p-2">
+                    <summary className="min-h-9 cursor-pointer text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      Emoji &amp; search keywords
+                    </summary>
+                    <div className="mt-2 grid grid-cols-[5rem_1fr] gap-2 [&>*]:min-w-0">
+                      <div>
+                        <Label htmlFor={`${c.id}-review-emoji`} className="text-xs">
+                          Emoji
+                        </Label>
+                        <Input
+                          id={`${c.id}-review-emoji`}
+                          className="mt-1.5 min-h-10"
+                          value={c.emoji}
+                          onChange={(e) => editConcept(c.id, { emoji: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor={`${c.id}-keywords`} className="text-xs">
+                          Keywords
+                        </Label>
+                        <Input
+                          id={`${c.id}-keywords`}
+                          className="mt-1.5 min-h-10"
+                          placeholder="comma, separated"
+                          value={draft.keywords[c.id] ?? ""}
+                          onChange={(e) =>
+                            update({ keywords: { ...draft.keywords, [c.id]: e.target.value } })
+                          }
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <Label htmlFor={`${c.id}-keywords`} className="text-xs">
-                        Keywords
-                      </Label>
-                      <Input
-                        id={`${c.id}-keywords`}
-                        className="mt-1.5 min-h-10"
-                        placeholder="comma, separated"
-                        value={draft.keywords[c.id] ?? ""}
-                        onChange={(e) =>
-                          update({ keywords: { ...draft.keywords, [c.id]: e.target.value } })
-                        }
-                      />
-                    </div>
-                  </div>
+                  </details>
                 </li>
               );
             })}
           </ul>
 
-          <div className="mt-6 flex flex-wrap items-center gap-3">
+          <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button
               type="button"
               variant="outline"
-              className="min-h-11"
+              size="sm"
+              className="min-h-10"
               disabled={saving}
               onClick={() => void persist()}
             >
               {saving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
               Save emoji &amp; keywords
             </Button>
+            <p className="text-xs text-muted-foreground">
+              Emoji and search keywords are Telegram metadata for this pack — optional to adjust
+              before publishing.
+            </p>
           </div>
+
 
           <Card className="cartel-panel mt-6">
             <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
@@ -2636,14 +2621,22 @@ function StickerLabBuilder() {
                 />
               </dl>
 
-              <p className="text-xs text-muted-foreground">
-                Short name preview:{" "}
-                <span className="font-mono text-foreground">
-                  {tgPack?.telegram_set_name ?? shortNamePreview ?? "available once the bot is configured"}
-                </span>
-                . The authoritative set name is decided by the server at publish time. Stickers
-                without an emoji fall back to 🐸.
-              </p>
+              <details className="rounded-md border border-border/70 bg-background/40 p-3">
+                <summary className="min-h-9 cursor-pointer text-xs font-semibold text-muted-foreground">
+                  Telegram set naming
+                </summary>
+                <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                  Short name preview:{" "}
+                  <span className="font-mono text-foreground">
+                    {tgPack?.telegram_set_name ??
+                      shortNamePreview ??
+                      "available once the bot is configured"}
+                  </span>
+                  . The authoritative set name is decided by the server at publish time. Stickers
+                  without an emoji fall back to 🐸.
+                </p>
+              </details>
+
 
               {publishResult ? (
                 <p className="text-xs text-muted-foreground">
@@ -2755,25 +2748,31 @@ function StickerLabBuilder() {
               ) : null}
 
               {tgPublishedCount > 0 || Object.keys(tgStickers).length > 0 ? (
-                <ul className="space-y-1 text-xs">
-                  {draft.concepts.map((c) => {
-                    const id = stickerIdFor(c.id);
-                    const row = id ? tgStickers[id] : undefined;
-                    return (
-                      <li key={c.id} className="flex flex-wrap items-center gap-2">
-                        <span className="text-foreground">{c.label}</span>
-                        <span className="text-muted-foreground">
-                          {row?.status === "published"
-                            ? "Published to Telegram"
-                            : row?.telegram_publish_error
-                              ? `Failed — ${row.telegram_publish_error}`
-                              : "Not published"}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
+                <details className="rounded-md border border-border/70 bg-background/40 p-3">
+                  <summary className="min-h-9 cursor-pointer text-xs font-semibold text-muted-foreground">
+                    Per-sticker Telegram status
+                  </summary>
+                  <ul className="mt-2 space-y-1 text-xs">
+                    {draft.concepts.map((c) => {
+                      const id = stickerIdFor(c.id);
+                      const row = id ? tgStickers[id] : undefined;
+                      return (
+                        <li key={c.id} className="flex flex-wrap items-center gap-2">
+                          <span className="text-foreground">{c.label}</span>
+                          <span className="text-muted-foreground">
+                            {row?.status === "published"
+                              ? "Published to Telegram"
+                              : row?.telegram_publish_error
+                                ? `Failed — ${row.telegram_publish_error}`
+                                : "Not published"}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </details>
               ) : null}
+
 
               <p className="min-w-0 rounded-md border border-border/70 bg-surface-raised/50 p-3 text-xs text-muted-foreground [overflow-wrap:anywhere]">
                 {lifecycleMode === "publish"
@@ -2873,30 +2872,124 @@ function StickerLabBuilder() {
           </Card>
 
 
-          <Card className="cartel-panel mt-6">
-            <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
-              <CardTitle className="text-base">Sticker Drops</CardTitle>
-              <StatusBadge tone={packSchedules.length > 0 ? "green" : "muted"}>
-                {packSchedules.length > 0 ? `${packSchedules.length} scheduled` : "Not automated"}
-              </StatusBadge>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
+          <details className="mt-6 rounded-md border border-border bg-background/40 p-3">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              <Download className="mr-2 inline size-3.5" aria-hidden="true" />
+              Export / backup ({exportableCount})
+            </summary>
+            <div className="mt-3 space-y-3">
               <p className="text-xs text-muted-foreground">
-                Recurring, capped automatic posting of this pack into your communities is managed on
-                the Sticker Drops page. Sending a pack here is a one-time delivery.
+                {checksRunning
+                  ? "Export is paused until the browser transparency and cutout checks finish."
+                  : "Exports are transparent PNGs downloaded straight to this device. Nothing is uploaded or published."}
               </p>
-              {dropKillSwitch ? (
-                <p className="rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
-                  Project emergency pause is on — no automated drops are running.
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                disabled={exporting || checksRunning || exportableCount === 0}
+                onClick={() => void downloadZip()}
+              >
+                {exporting ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Download className="size-4" aria-hidden="true" />
+                )}
+                Download all as ZIP ({exportableCount})
+              </Button>
+              {omittedLabels.length > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  The ZIP will contain {exportableCount} sticker
+                  {exportableCount === 1 ? "" : "s"}. Not included ({omittedLabels.length}):{" "}
+                  {omittedLabels.join(", ")}.
                 </p>
               ) : null}
-              <Button asChild variant="outline" size="sm" className="min-h-10">
-                <Link to="/distribution" search={packId ? { pack: packId } : {}}>
-                  Manage Sticker Drops
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </details>
+
+          <details className="mt-3 rounded-md border border-border bg-background/40 p-3">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Advanced details
+            </summary>
+            <div className="mt-3 space-y-4">
+              <div>
+                <p className="text-xs font-semibold text-pepe">
+                  How Telegram cutout verification works
+                </p>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  The checkerboard behind each preview marks the pixels that are actually
+                  transparent. Some image viewers display transparent areas as white or black — that
+                  is the viewer compositing the image, not a background baked into the file.
+                  Telegram places the transparent sticker directly over the chat background, so no
+                  rectangular background appears. A transparent canvas alone is not enough, though:
+                  some generations bake a thick white or cream contour around the artwork. Before
+                  export, CARTEL HQ removes only the light halo that is connected to the transparent
+                  outside edge — internal whites such as shirts, teeth, eyes, highlights and
+                  lettering interiors are always preserved, and if the halo looks unexpectedly large
+                  the sticker is flagged for manual review instead of being cleaned. Cleanup happens
+                  in your browser on the exported copy only; the stored original is never modified.
+                </p>
+              </div>
+              {historyRows.length > 0 ? (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    <FileArchive className="mr-2 inline size-3.5" aria-hidden="true" />
+                    Generation history ({historyRows.length})
+                  </p>
+                  <ul className="mt-2 space-y-2">
+                    {historyRows.map((row) => (
+                      <li
+                        key={row.conceptId}
+                        className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-t border-border/60 pt-2 text-[11px] first:border-t-0 first:pt-0"
+                      >
+                        <span className="font-semibold text-foreground">{row.label}</span>
+                        <span className="text-muted-foreground">
+                          {row.attempts} attempt{row.attempts === 1 ? "" : "s"}
+                        </span>
+                        <span className={row.failed > 0 ? "text-signal" : "text-muted-foreground"}>
+                          {row.failed} failed
+                        </span>
+                        {row.lastFailure ? (
+                          <span className="text-muted-foreground">
+                            · last failure: {row.lastFailure}
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          </details>
+
+          {tgPublishedCount > 0 || packSchedules.length > 0 ? (
+            <Card className="cartel-panel mt-6">
+              <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+                <CardTitle className="text-base">Next step — Sticker Drops</CardTitle>
+                <StatusBadge tone={packSchedules.length > 0 ? "green" : "muted"}>
+                  {packSchedules.length > 0 ? `${packSchedules.length} scheduled` : "Not automated"}
+                </StatusBadge>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <p className="text-xs text-muted-foreground">
+                  Sending a pack here is a one-time delivery. Sticker Drops schedules recurring,
+                  capped posting of this pack into the Telegram communities connected to{" "}
+                  {projectName}.
+                </p>
+                {dropKillSwitch ? (
+                  <p className="rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
+                    Project emergency pause is on — no automated drops are running.
+                  </p>
+                ) : null}
+                <Button asChild variant="outline" size="sm" className="min-h-10">
+                  <Link to="/distribution" search={packId ? { pack: packId } : {}}>
+                    Manage Sticker Drops
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
+
 
 
           <AlertDialog open={confirmPublish} onOpenChange={setConfirmPublish}>
