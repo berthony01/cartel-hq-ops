@@ -1,4 +1,7 @@
+import { normalizeCharacterLock, type CharacterLock } from "@/lib/brand-kit";
+
 export type PackTheme = "Reactions" | "Crypto" | "Community" | "Meme" | "Custom";
+
 
 export const PACK_THEMES: PackTheme[] = [
   "Reactions",
