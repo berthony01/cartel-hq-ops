@@ -38,6 +38,7 @@ export const Route = createFileRoute("/_authenticated/sticker-lab/$packId")({
 function PackManagerPage() {
   const { packId } = Route.useParams();
   const { workspaceId } = useWorkspace();
+  const navigate = useNavigate();
   const [urls, setUrls] = useState<Record<string, string>>({});
 
   const packQuery = useQuery({
