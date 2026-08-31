@@ -626,6 +626,32 @@ export type Database = {
         }
         Relationships: []
       }
+      project_platform_reviews: {
+        Row: {
+          project_profile_id: string
+          reviewed_at: string
+          reviewed_by: string
+        }
+        Insert: {
+          project_profile_id: string
+          reviewed_at?: string
+          reviewed_by: string
+        }
+        Update: {
+          project_profile_id?: string
+          reviewed_at?: string
+          reviewed_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_platform_reviews_project_profile_id_fkey"
+            columns: ["project_profile_id"]
+            isOneToOne: true
+            referencedRelation: "project_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_profiles: {
         Row: {
           created_at: string
@@ -1701,6 +1727,8 @@ export type Database = {
           launch_window_start: string
           live_at: string
           official_contract_address: string
+          platform_reviewed: boolean
+          platform_reviewed_at: string
           project_description: string
           project_name: string
           project_primary_chain: string
@@ -1722,6 +1750,8 @@ export type Database = {
         Returns: {
           description: string
           has_logo: boolean
+          platform_reviewed: boolean
+          platform_reviewed_at: string
           primary_chain: string
           project_name: string
           public_slug: string
@@ -1771,6 +1801,8 @@ export type Database = {
           current_launch_window_start: string
           description: string
           has_logo: boolean
+          platform_reviewed: boolean
+          platform_reviewed_at: string
           primary_chain: string
           project_name: string
           public_slug: string
@@ -1822,6 +1854,8 @@ export type Database = {
           launch_at: string
           launch_window_end: string
           launch_window_start: string
+          platform_reviewed: boolean
+          platform_reviewed_at: string
           project_name: string
           project_primary_chain: string
           project_public_slug: string
@@ -1895,6 +1929,29 @@ export type Database = {
         }[]
       }
       get_platform_owner_dashboard_metrics: { Args: never; Returns: Json }
+      get_platform_project_verifications: {
+        Args: never
+        Returns: {
+          discovery_status: string
+          platform_reviewed: boolean
+          platform_reviewed_at: string
+          primary_chain: string
+          profile_updated_at: string
+          project_name: string
+          project_profile_id: string
+          public_slug: string
+          ticker: string
+          workspace_name: string
+        }[]
+      }
+      get_project_verification_state: {
+        Args: { _project_profile_id: string }
+        Returns: {
+          platform_reviewed: boolean
+          platform_reviewed_at: string
+          project_authenticated: boolean
+        }[]
+      }
       has_platform_unrestricted_access: {
         Args: { _user_id: string }
         Returns: boolean
@@ -1978,6 +2035,13 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      set_project_platform_review: {
+        Args: { _project_profile_id: string; _reviewed: boolean }
+        Returns: {
+          platform_reviewed: boolean
+          platform_reviewed_at: string
+        }[]
       }
       sticker_drop_scheduler_secret_matches: {
         Args: { p_secret: string }
