@@ -192,15 +192,15 @@ function BrandKitPage() {
       <PageHeader
         eyebrow="Module"
         title="Brand Kit"
-        description="A single source of truth for PEPECARTEL colour, type, marks, links, and AI style rules. One Brand Kit per workspace."
-        status={workspace ? workspace.name : "No workspace"}
+        description="One Brand Kit per project — colour, type, marks, links and AI style rules. Sticker Lab generation automatically uses this project's Brand Kit when one is saved."
+        status={workspace ? workspace.name : "No project"}
       />
 
       {!workspaceLoading && !workspaceId ? (
         <EmptyState
           icon={Palette}
-          title="No workspace yet"
-          description="Create a workspace from the switcher in the header before setting up a Brand Kit."
+          title="No project yet"
+          description="Add a project from the selector in the header before setting up a Brand Kit."
         />
       ) : (
         <>
@@ -387,7 +387,7 @@ function BrandKitPage() {
           <Section
             variant="plain"
             title="Logos, mascots & references"
-            description="Uploads stay private to this workspace."
+            description="Project assets. Uploads stay private to this project and can be reused as references in Sticker Lab."
             contentClassName="space-y-4"
           >
             <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 [&>*]:min-w-0">
@@ -409,7 +409,7 @@ function BrandKitPage() {
                 compact
                 icon={Palette}
                 title="No brand assets yet"
-                description="Uploaded logos, mascots and references appear here and stay private to this workspace."
+                description="Uploaded logos, mascots and references appear here, stay private to this project, and can be reused by Sticker Lab."
               />
             ) : (
               <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 [&>*]:min-w-0">

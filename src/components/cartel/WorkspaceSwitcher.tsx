@@ -64,11 +64,11 @@ export function CreateWorkspaceDialog({
       await queryClient.invalidateQueries({ queryKey: workspacesQueryKey });
       await queryClient.refetchQueries({ queryKey: workspacesQueryKey });
       if (data?.id) selectWorkspace(data.id);
-      toast.success(`Workspace “${trimmed}” created`);
+      toast.success(`Project “${trimmed}” added`);
       setName("");
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not create the workspace.");
+      toast.error(err instanceof Error ? err.message : "Could not add the project.");
     } finally {
       setBusy(false);
     }
@@ -78,14 +78,15 @@ export function CreateWorkspaceDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Create workspace</DialogTitle>
+          <DialogTitle>Add project</DialogTitle>
           <DialogDescription>
-            Workspaces separate brand kits, assets, and packs. You become the owner.
+            Each project keeps its own Project Profile, Brand Kit, assets, sticker packs, launches
+            and connected Telegram communities separated. You become the owner.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
           <div>
-            <Label htmlFor="workspace-name">Workspace name</Label>
+            <Label htmlFor="workspace-name">Project name</Label>
             <Input
               id="workspace-name"
               className="mt-2 min-h-11"
@@ -98,7 +99,7 @@ export function CreateWorkspaceDialog({
           <DialogFooter>
             <Button type="submit" disabled={busy || !name.trim()} className="min-h-11">
               {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
-              Create workspace
+              Add project
             </Button>
           </DialogFooter>
         </form>
@@ -117,22 +118,22 @@ export function WorkspaceSwitcher() {
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            aria-label="Workspace selector"
+            aria-label="Project selector"
             className="hidden min-h-10 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm text-muted-foreground transition-colors hover:border-gold/40 lg:flex"
           >
             <Building2 className="size-4 text-gold" aria-hidden="true" />
             <span className="max-w-40 truncate font-medium text-foreground">
-              {loading ? "Loading…" : (workspace?.name ?? "No workspace")}
+              {loading ? "Loading…" : (workspace?.name ?? "No project")}
             </span>
             <ChevronDown className="size-4" aria-hidden="true" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-60">
           <DropdownMenuLabel className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-            Workspaces
+            Projects
           </DropdownMenuLabel>
           {workspaces.length === 0 ? (
-            <DropdownMenuItem disabled>No workspaces yet</DropdownMenuItem>
+            <DropdownMenuItem disabled>No projects yet</DropdownMenuItem>
           ) : (
             workspaces.map((w) => (
               <DropdownMenuItem key={w.id} onSelect={() => selectWorkspace(w.id)}>
@@ -146,7 +147,7 @@ export function WorkspaceSwitcher() {
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setDialogOpen(true)}>
             <Plus className="size-4" aria-hidden="true" />
-            Create workspace
+            Add project
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

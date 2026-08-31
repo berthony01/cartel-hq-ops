@@ -53,7 +53,7 @@ export const Route = createFileRoute("/_authenticated/project-profile")({
       { property: "og:title", content: "Project Profile — CARTEL HQ" },
       {
         property: "og:description",
-        content: "Operator configuration for the workspace project identity record.",
+        content: "Operator configuration for the active project identity record.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -278,8 +278,8 @@ function ProjectProfilePage() {
       <PageHeader
         eyebrow="Project Identity"
         title="Project Profile"
-        description="One project identity record per workspace. This profile is the identity Cartel Network discovery and Launch Control build on. Publishing makes it discoverable on the Cartel Network."
-        status={workspace ? workspace.name : "No workspace"}
+        description="One identity record for the active project. This profile is the identity Cartel Network discovery and Launch Control build on. Publishing makes it discoverable on the Cartel Network."
+        status={workspace ? workspace.name : "No project"}
       />
 
       <LaunchReadinessCallout workspaceId={workspaceId} title="Setup guide" />
@@ -288,13 +288,13 @@ function ProjectProfilePage() {
 
       {workspaceLoading ? (
         <Section variant="surface">
-          <p className="text-sm text-muted-foreground">Loading workspace…</p>
+          <p className="text-sm text-muted-foreground">Loading project…</p>
         </Section>
       ) : !workspaceId ? (
         <EmptyState
           icon={IdCard}
-          title="No workspace yet"
-          description="Create a workspace from the switcher in the header before setting up a project profile."
+          title="No project yet"
+          description="Add a project from the selector in the header before setting up a project profile."
         />
       ) : profileQuery.isError ? (
         <Section variant="surface" title="Could not load project profile">
@@ -464,7 +464,7 @@ function ProjectProfilePage() {
             <Section
               variant="surface"
               title="Project logo"
-              description="Choose from logo assets already stored in this workspace."
+              description="Choose from logo assets already stored in this project."
             >
               {logos.length === 0 ? (
                 <EmptyState
@@ -501,7 +501,7 @@ function ProjectProfilePage() {
             <Section
               variant="surface"
               title="Discovery status"
-              description="Draft and hidden profiles stay behind authenticated workspace access. Published profiles appear on the public Cartel Network."
+              description="Draft and hidden profiles stay behind authenticated project access. Published profiles appear on the public Cartel Network."
             >
               <div className="max-w-sm">
                 <Label htmlFor="discovery_status">Status</Label>

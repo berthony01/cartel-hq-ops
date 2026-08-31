@@ -46,7 +46,8 @@ function relativeTime(iso: string): string {
 }
 
 function StickerLabHome() {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, workspace } = useWorkspace();
+  const projectName = workspace?.name ?? "this project";
   const packsQuery = useQuery({
     queryKey: ["sticker-packs", workspaceId],
     enabled: !!workspaceId,
@@ -76,6 +77,18 @@ function StickerLabHome() {
       />
 
       <div className="sm:hidden">{newPackLink}</div>
+
+      <div className="rounded-lg border border-border/70 bg-surface-raised/40 px-4 py-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">
+          Project scope
+        </p>
+        <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+          Packs you create here belong to <strong className="text-foreground">{projectName}</strong>
+          . The project Brand Kit guides AI generation when one is saved, and a finished pack can be
+          sent to one or several Telegram communities connected to this same project. Connecting
+          communities is managed in Community Command.
+        </p>
+      </div>
 
       <Section
         variant="plain"
