@@ -485,6 +485,23 @@ function StickerLabBuilder() {
     if (step === 4 && configErrored) void configRefetch();
   }, [step, configErrored, configRefetch]);
 
+  /**
+   * Read-only image history for saved stickers (Step 4 only). The key carries
+   * the current preview storage paths, so once a successful generation swaps
+   * the current image the trigger-captured version is picked up automatically.
+   * No provider calls are involved.
+   */
+  const savedStickerIds = Object.values(draft?.stickerIds ?? {}).filter(Boolean);
+  const previewFingerprint = savedStickerIds
+    .map((id) => `${id}:${previews[id]?.storagePath ?? ""}`)
+    .join("|");
+  const versionsQuery = useQuery({
+    queryKey: ["sticker-versions", draft?.packId ?? "", previewFingerprint],
+    enabled: !!draft && step === 4 && savedStickerIds.length > 0,
+    queryFn: () => loadStickerVersions(savedStickerIds),
+  });
+  const versionsBySticker = versionsQuery.data ?? {};
+
 
   const packId = draft?.packId ?? null;
 
