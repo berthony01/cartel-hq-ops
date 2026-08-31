@@ -185,6 +185,8 @@ export type DirectoryParams = {
   chain?: string | null;
   limit?: number;
   offset?: number;
+  /** Server-side filter: only projects currently in the `verified` state. */
+  verifiedOnly?: boolean;
 };
 
 function rpcArgs(params: DirectoryParams) {
@@ -202,7 +204,8 @@ function rpcArgs(params: DirectoryParams) {
 export const networkKeys = {
   summary: () => ["cartel-network", "summary"] as const,
   projects: (p: DirectoryParams) =>
-    ["cartel-network", "projects", p.search ?? "", p.chain ?? "", p.limit ?? NETWORK_PAGE_SIZE, p.offset ?? 0] as const,
+    ["cartel-network", "projects", p.search ?? "", p.chain ?? "", p.verifiedOnly === true, p.limit ?? NETWORK_PAGE_SIZE, p.offset ?? 0] as const,
+
   project: (slug: string) => ["cartel-network", "project", slug] as const,
   projectLaunches: (slug: string) => ["cartel-network", "project-launches", slug] as const,
   upcoming: (p: DirectoryParams) =>
@@ -226,7 +229,10 @@ export type Paged<T> = { rows: T[]; totalCount: number };
 export async function fetchNetworkProjects(
   params: DirectoryParams = {},
 ): Promise<Paged<NetworkProjectCard>> {
-  const { data, error } = await supabase.rpc("get_cartel_network_projects", rpcArgs(params));
+  const { data, error } = await supabase.rpc("get_cartel_network_projects", {
+    ...rpcArgs(params),
+    _verified_only: params.verifiedOnly === true,
+  });
   if (error) throw error;
   const rows = data ?? [];
   return { rows, totalCount: Number(rows[0]?.total_count ?? 0) };

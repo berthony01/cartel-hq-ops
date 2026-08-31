@@ -4,6 +4,7 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { NetworkEmpty, ProjectCard } from "@/components/cartel-network/NetworkPieces";
 import {
   NETWORK_PAGE_SIZE,
@@ -32,15 +33,23 @@ export const Route = createFileRoute("/network/projects")({
 function NetworkProjectsPage() {
   const [searchInput, setSearchInput] = useState("");
   const [chainInput, setChainInput] = useState("");
+  const [verifiedOnlyInput, setVerifiedOnlyInput] = useState(false);
   const [search, setSearch] = useState("");
   const [chain, setChain] = useState("");
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [page, setPage] = useState(0);
   const offset = page * NETWORK_PAGE_SIZE;
 
   const query = useQuery({
-    queryKey: networkKeys.projects({ search, chain, limit: NETWORK_PAGE_SIZE, offset }),
+    queryKey: networkKeys.projects({
+      search,
+      chain,
+      verifiedOnly,
+      limit: NETWORK_PAGE_SIZE,
+      offset,
+    }),
     queryFn: () =>
-      fetchNetworkProjects({ search, chain, limit: NETWORK_PAGE_SIZE, offset }),
+      fetchNetworkProjects({ search, chain, verifiedOnly, limit: NETWORK_PAGE_SIZE, offset }),
     placeholderData: keepPreviousData,
   });
 
@@ -55,7 +64,9 @@ function NetworkProjectsPage() {
     setPage(0);
     setSearch(searchInput);
     setChain(chainInput);
+    setVerifiedOnly(verifiedOnlyInput);
   }
+
 
   return (
     <div className="space-y-6">
@@ -104,7 +115,19 @@ function NetworkProjectsPage() {
             Apply
           </Button>
         </div>
+        <div className="flex items-center gap-2 sm:col-span-full">
+          <Checkbox
+            id="project-verified-only"
+            checked={verifiedOnlyInput}
+            onCheckedChange={(value) => setVerifiedOnlyInput(value === true)}
+          />
+          <Label htmlFor="project-verified-only" className="text-xs font-normal">
+            Platform Reviewed only — CARTEL HQ reviewed the current profile and official links. Not
+            a safety, contract or investment check.
+          </Label>
+        </div>
       </form>
+
 
       {query.isLoading ? (
         <p className="text-sm text-muted-foreground">Loading projects…</p>
@@ -121,7 +144,7 @@ function NetworkProjectsPage() {
       ) : rows.length === 0 ? (
         <NetworkEmpty
           title="No projects match"
-          description="Try a different search term or clear the chain filter."
+          description="Try a different search term, clear the chain filter, or turn off Platform Reviewed only."
         />
       ) : (
         <>

@@ -256,8 +256,8 @@ function PublicLaunchPage() {
       </section>
 
       <VerificationSignals
-        platformReviewed={launch.platform_reviewed === true}
-        platformReviewedAt={launch.platform_reviewed_at}
+        verificationStatus={launch.verification_status}
+        verifiedAt={launch.verified_at}
       />
     </div>
   );

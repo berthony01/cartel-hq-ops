@@ -25,8 +25,13 @@ import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { formatDateTime } from "@/lib/cartel-network";
 import {
+  canRequestVerification,
   fetchProjectVerificationState,
   projectVerificationKeys,
+  requestProjectVerification,
+  VERIFICATION_STATUS_DESCRIPTION,
+  VERIFICATION_STATUS_LABEL,
+  verificationStatusOf,
 } from "@/lib/project-verification";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
@@ -162,6 +167,21 @@ function ProjectProfilePage() {
     enabled: !!profile?.id,
   });
   const verification = verificationQuery.data ?? null;
+  const verificationStatus = verificationStatusOf(verification?.verification_status);
+
+  const requestVerification = useMutation({
+    mutationFn: () => requestProjectVerification(profile!.id),
+    onSuccess: () => {
+      toast.success("Platform review requested");
+      queryClient.invalidateQueries({ queryKey: ["project-verification"] });
+    },
+    onError: (err: unknown) => {
+      toast.error(
+        err instanceof Error ? err.message : "Could not request a platform review right now.",
+      );
+    },
+  });
+
 
   // Saved profile is authoritative once it exists. Brand Kit never syncs over it.
   useEffect(() => {
@@ -382,7 +402,7 @@ function ProjectProfilePage() {
           <Section
             variant="surface"
             title="Verification"
-            description="Read-only trust signals for this project. These are set by CARTEL HQ, not by the project."
+            description="Layered trust signals for this project. Only CARTEL HQ can grant a review; the project can request one."
           >
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -397,7 +417,7 @@ function ProjectProfilePage() {
               </p>
 
               <div className="flex flex-wrap items-center gap-2">
-                <StatusBadge tone={verification?.platform_reviewed ? "gold" : "muted"}>
+                <StatusBadge tone={verificationStatus === "verified" ? "gold" : "muted"}>
                   <span>Platform Reviewed</span>
                 </StatusBadge>
                 <span className="text-xs text-muted-foreground">
@@ -405,21 +425,29 @@ function ProjectProfilePage() {
                     ? "Checking review state…"
                     : verificationQuery.isError
                       ? "Review state could not be loaded right now."
-                      : verification?.platform_reviewed
+                      : verificationStatus === "verified"
                         ? `Reviewed${
-                            formatDateTime(verification.platform_reviewed_at)
-                              ? ` ${formatDateTime(verification.platform_reviewed_at)}`
+                            formatDateTime(verification?.verified_at)
+                              ? ` ${formatDateTime(verification?.verified_at)}`
                               : ""
                           }`
-                        : "Not reviewed"}
+                        : verificationStatus === "pending"
+                          ? `Review requested${
+                              formatDateTime(verification?.requested_at)
+                                ? ` ${formatDateTime(verification?.requested_at)}`
+                                : ""
+                            }`
+                          : VERIFICATION_STATUS_LABEL[verificationStatus]}
                 </span>
               </div>
               <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
-                Platform Reviewed means CARTEL HQ manually reviewed the current profile and listed
-                official links. Changing material project identity or official links automatically
-                clears it until the platform owner reviews the current profile again. It does not
-                verify token safety, smart-contract code, liquidity or investment quality.
+                {VERIFICATION_STATUS_DESCRIPTION[verificationStatus]}
               </p>
+              <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
+                Platform Reviewed does not verify token safety, smart-contract code, liquidity or
+                investment quality.
+              </p>
+
               {verificationQuery.isError ? (
                 <Button
                   variant="outline"
@@ -429,9 +457,26 @@ function ProjectProfilePage() {
                 >
                   Retry
                 </Button>
+              ) : verificationQuery.isSuccess && canRequestVerification(verificationStatus) ? (
+                <div className="space-y-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="min-h-11"
+                    disabled={requestVerification.isPending}
+                    onClick={() => requestVerification.mutate()}
+                  >
+                    {requestVerification.isPending ? "Requesting…" : "Request Platform Review"}
+                  </Button>
+                  <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
+                    Requires a published profile with a name, public link name, chain and at least
+                    one official link. Requesting a review never marks this project reviewed.
+                  </p>
+                </div>
               ) : null}
             </div>
           </Section>
+
         ) : null}
 
         <div className="grid gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">

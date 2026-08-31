@@ -139,15 +139,16 @@ export function PlatformReviewedPill({ className }: { className?: string }) {
  * validates a contract, a token or a team.
  */
 export function VerificationSignals({
-  platformReviewed,
-  platformReviewedAt,
+  verificationStatus,
+  verifiedAt,
   className,
 }: {
-  platformReviewed: boolean;
-  platformReviewedAt?: string | null;
+  verificationStatus: string | null | undefined;
+  verifiedAt?: string | null;
   className?: string;
 }) {
-  const reviewedOn = platformReviewed ? formatDateTime(platformReviewedAt) : null;
+  const platformReviewed = verificationStatus === "verified";
+  const reviewedOn = platformReviewed ? formatDateTime(verifiedAt) : null;
   return (
     <section className={cn("rounded-lg border border-border bg-surface px-4 py-4", className)}>
       <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">
@@ -176,6 +177,7 @@ export function VerificationSignals({
           </p>
         )}
       </div>
+
 
       <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
         {NETWORK_TRUST_COPY.verificationClarifier}
@@ -244,7 +246,7 @@ export function ProjectCard({ project }: { project: NetworkProjectCard }) {
             {project.primary_chain ? (
               <StatusPill tone="muted">{project.primary_chain}</StatusPill>
             ) : null}
-            {project.platform_reviewed === true ? <PlatformReviewedPill /> : null}
+            {project.verification_status === "verified" ? <PlatformReviewedPill /> : null}
           </div>
         </div>
       </div>
@@ -309,7 +311,7 @@ export function LaunchCard({ launch }: { launch: NetworkUpcomingLaunch }) {
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {ticker ? <StatusPill tone="gold">{ticker}</StatusPill> : null}
             <StatusPill tone="muted">{launch.chain}</StatusPill>
-            {launch.platform_reviewed === true ? <PlatformReviewedPill /> : null}
+            {launch.verification_status === "verified" ? <PlatformReviewedPill /> : null}
           </div>
         </div>
       </div>

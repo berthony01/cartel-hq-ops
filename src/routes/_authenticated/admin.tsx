@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -29,6 +30,7 @@ import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { InlineRow } from "@/components/cartel/InlineRow";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { usePlatformAccess } from "@/hooks/usePlatformAccess";
 import {
   TelegramConnectionCard,
@@ -36,10 +38,14 @@ import {
 } from "@/components/cartel/TelegramConnectionCard";
 
 import {
+  canRequestVerification,
   fetchPlatformProjectVerifications,
   projectVerificationKeys,
-  setPlatformProjectReview,
+  reviewProjectVerification,
+  VERIFICATION_STATUS_LABEL,
+  verificationStatusOf,
   type PlatformProjectVerificationRow,
+  type ReviewAction,
 } from "@/lib/project-verification";
 import {
   formatCost,
@@ -48,19 +54,26 @@ import {
   type PlatformDropScheduleDetail,
 } from "@/lib/platform";
 
-
 function ProjectVerificationSection() {
   const queryClient = useQueryClient();
+  const [notes, setNotes] = useState<Record<string, string>>({});
   const directory = useQuery({
     queryKey: projectVerificationKeys.platformDirectory(),
     queryFn: fetchPlatformProjectVerifications,
   });
 
   const review = useMutation({
-    mutationFn: ({ id, reviewed }: { id: string; reviewed: boolean }) =>
-      setPlatformProjectReview(id, reviewed),
+    mutationFn: ({ id, action, note }: { id: string; action: ReviewAction; note: string }) =>
+      reviewProjectVerification(id, action, note),
     onSuccess: (_res, vars) => {
-      toast.success(vars.reviewed ? "Platform review recorded" : "Platform review revoked");
+      toast.success(
+        vars.action === "verify"
+          ? "Platform review recorded"
+          : vars.action === "reject"
+            ? "Verification request declined"
+            : "Platform review revoked",
+      );
+      setNotes((prev) => ({ ...prev, [vars.id]: "" }));
       queryClient.invalidateQueries({ queryKey: ["project-verification"] });
       queryClient.invalidateQueries({ queryKey: ["cartel-network"] });
     },
@@ -99,9 +112,11 @@ function ProjectVerificationSection() {
       ) : rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">No project profiles exist yet.</p>
       ) : (
-        <div className="flex min-w-0 flex-col gap-2">
+        <div className="flex min-w-0 flex-col gap-3">
           {rows.map((row) => {
+            const status = verificationStatusOf(row.verification_status);
             const pending = review.isPending && review.variables?.id === row.project_profile_id;
+            const note = notes[row.project_profile_id] ?? "";
             const meta = [
               row.public_slug ? `/${row.public_slug}` : null,
               row.ticker,
@@ -110,44 +125,106 @@ function ProjectVerificationSection() {
             ]
               .filter(Boolean)
               .join(" · ");
+            const timeline =
+              status === "pending"
+                ? `Requested ${formatTimestamp(row.requested_at)}`
+                : status === "verified"
+                  ? `Reviewed ${formatTimestamp(row.verified_at)}`
+                  : row.reviewed_at
+                    ? `Last decision ${formatTimestamp(row.reviewed_at)}`
+                    : "No review activity yet";
+            const links = [
+              row.website_url ? "Website" : null,
+              row.telegram_url ? "Telegram" : null,
+              row.x_url ? "X" : null,
+            ].filter(Boolean);
+            const act = (action: ReviewAction) =>
+              review.mutate({ id: row.project_profile_id, action, note });
+
             return (
-              <InlineRow
+              <div
                 key={row.project_profile_id}
-                leading={<Layers className="size-4" aria-hidden="true" />}
-                title={row.project_name}
-                subtitle={meta}
-                trailing={
-                  <>
-                    <StatusBadge tone="muted">
-                      <span>{row.discovery_status}</span>
-                    </StatusBadge>
-                    <StatusBadge tone={row.platform_reviewed ? "gold" : "muted"}>
-                      <span>
-                        {row.platform_reviewed
-                          ? `Reviewed ${formatTimestamp(row.platform_reviewed_at)}`
-                          : "Not reviewed"}
-                      </span>
-                    </StatusBadge>
+                className="flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-surface p-3"
+              >
+                <InlineRow
+                  leading={<Layers className="size-4" aria-hidden="true" />}
+                  title={row.project_name}
+                  subtitle={meta}
+                  trailing={
+                    <>
+                      <StatusBadge tone="muted">
+                        <span>{row.discovery_status}</span>
+                      </StatusBadge>
+                      <StatusBadge tone={status === "verified" ? "gold" : "muted"}>
+                        <span>{VERIFICATION_STATUS_LABEL[status]}</span>
+                      </StatusBadge>
+                    </>
+                  }
+                />
+
+                <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                  {timeline}
+                  {" · "}
+                  {links.length > 0
+                    ? `Official links: ${links.join(", ")}`
+                    : "No official links listed"}
+                </p>
+
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+                  <Input
+                    value={note}
+                    onChange={(event) =>
+                      setNotes((prev) => ({
+                        ...prev,
+                        [row.project_profile_id]: event.target.value,
+                      }))
+                    }
+                    maxLength={500}
+                    placeholder="Internal review note (owner-only, never public)"
+                    aria-label={`Internal review note for ${row.project_name}`}
+                    className="min-h-11 sm:flex-1"
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    {pending ? (
+                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                    ) : null}
                     <Button
                       variant="outline"
                       size="sm"
                       className="min-h-11"
-                      disabled={pending}
-                      onClick={() =>
-                        review.mutate({
-                          id: row.project_profile_id,
-                          reviewed: !row.platform_reviewed,
-                        })
-                      }
+                      disabled={pending || status === "verified"}
+                      onClick={() => act("verify")}
                     >
-                      {pending ? (
-                        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                      ) : null}
-                      {row.platform_reviewed ? "Revoke Platform Review" : "Mark Platform Reviewed"}
+                      Mark Platform Reviewed
                     </Button>
-                  </>
-                }
-              />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-h-11"
+                      disabled={pending || status !== "pending"}
+                      onClick={() => act("reject")}
+                    >
+                      Decline Request
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-h-11"
+                      disabled={pending || status !== "verified"}
+                      onClick={() => act("revoke")}
+                    >
+                      Revoke Review
+                    </Button>
+                  </div>
+                </div>
+
+                {canRequestVerification(status) ? (
+                  <p className="text-xs text-muted-foreground">
+                    No open request. Marking this project reviewed is an owner decision and does
+                    not require a request.
+                  </p>
+                ) : null}
+              </div>
             );
           })}
         </div>
@@ -155,6 +232,7 @@ function ProjectVerificationSection() {
     </Section>
   );
 }
+
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({

@@ -628,19 +628,31 @@ export type Database = {
       }
       project_platform_reviews: {
         Row: {
+          internal_note: string | null
           project_profile_id: string
-          reviewed_at: string
-          reviewed_by: string
+          requested_at: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          updated_at: string
         }
         Insert: {
+          internal_note?: string | null
           project_profile_id: string
-          reviewed_at?: string
-          reviewed_by: string
+          requested_at?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status: string
+          updated_at?: string
         }
         Update: {
+          internal_note?: string | null
           project_profile_id?: string
-          reviewed_at?: string
-          reviewed_by?: string
+          requested_at?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
         }
         Relationships: [
           {
@@ -1727,8 +1739,6 @@ export type Database = {
           launch_window_start: string
           live_at: string
           official_contract_address: string
-          platform_reviewed: boolean
-          platform_reviewed_at: string
           project_description: string
           project_name: string
           project_primary_chain: string
@@ -1740,6 +1750,8 @@ export type Database = {
           ticker: string
           timezone: string
           token_name: string
+          verification_status: string
+          verified_at: string
           watchlist_opened_at: string
           website_url: string
           x_url: string
@@ -1750,13 +1762,13 @@ export type Database = {
         Returns: {
           description: string
           has_logo: boolean
-          platform_reviewed: boolean
-          platform_reviewed_at: string
           primary_chain: string
           project_name: string
           public_slug: string
           telegram_url: string
           ticker: string
+          verification_status: string
+          verified_at: string
           website_url: string
           x_url: string
         }[]
@@ -1788,6 +1800,7 @@ export type Database = {
           _limit?: number
           _offset?: number
           _search?: string
+          _verified_only?: boolean
         }
         Returns: {
           current_launch_at: string
@@ -1801,14 +1814,14 @@ export type Database = {
           current_launch_window_start: string
           description: string
           has_logo: boolean
-          platform_reviewed: boolean
-          platform_reviewed_at: string
           primary_chain: string
           project_name: string
           public_slug: string
           telegram_url: string
           ticker: string
           total_count: number
+          verification_status: string
+          verified_at: string
           website_url: string
           x_url: string
         }[]
@@ -1854,8 +1867,6 @@ export type Database = {
           launch_at: string
           launch_window_end: string
           launch_window_start: string
-          platform_reviewed: boolean
-          platform_reviewed_at: string
           project_name: string
           project_primary_chain: string
           project_public_slug: string
@@ -1866,6 +1877,8 @@ export type Database = {
           timezone: string
           token_name: string
           total_count: number
+          verification_status: string
+          verified_at: string
           watchlist_opened_at: string
         }[]
       }
@@ -1933,23 +1946,30 @@ export type Database = {
         Args: never
         Returns: {
           discovery_status: string
-          platform_reviewed: boolean
-          platform_reviewed_at: string
           primary_chain: string
           profile_updated_at: string
           project_name: string
           project_profile_id: string
           public_slug: string
+          requested_at: string
+          reviewed_at: string
+          telegram_url: string
           ticker: string
+          verification_status: string
+          verified_at: string
+          website_url: string
           workspace_name: string
+          x_url: string
         }[]
       }
       get_project_verification_state: {
         Args: { _project_profile_id: string }
         Returns: {
-          platform_reviewed: boolean
-          platform_reviewed_at: string
           project_authenticated: boolean
+          requested_at: string
+          reviewed_at: string
+          verification_status: string
+          verified_at: string
         }[]
       }
       has_platform_unrestricted_access: {
@@ -1995,7 +2015,26 @@ export type Database = {
         }
         Returns: undefined
       }
+      request_project_verification: {
+        Args: { _project_profile_id: string }
+        Returns: {
+          requested_at: string
+          verification_status: string
+        }[]
+      }
       restore_sticker_pack: { Args: { _pack_id: string }; Returns: Json }
+      review_project_verification: {
+        Args: {
+          _action: string
+          _internal_note?: string
+          _project_profile_id: string
+        }
+        Returns: {
+          reviewed_at: string
+          verification_status: string
+          verified_at: string
+        }[]
+      }
       set_launch_contract_address: {
         Args: { _contract_address: string; _launch_id: string }
         Returns: {
@@ -2035,13 +2074,6 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
-      }
-      set_project_platform_review: {
-        Args: { _project_profile_id: string; _reviewed: boolean }
-        Returns: {
-          platform_reviewed: boolean
-          platform_reviewed_at: string
-        }[]
       }
       sticker_drop_scheduler_secret_matches: {
         Args: { p_secret: string }
