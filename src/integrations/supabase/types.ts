@@ -287,6 +287,13 @@ export type Database = {
       }
       launch_watch_subscriptions: {
         Row: {
+          confirmation_attempt_count: number
+          confirmation_attempted_at: string | null
+          confirmation_error_class: string | null
+          confirmation_last_error: string | null
+          confirmation_sent_at: string | null
+          confirmation_status: string | null
+          confirmation_telegram_message_id: number | null
           created_at: string
           id: string
           is_active: boolean
@@ -299,6 +306,13 @@ export type Database = {
           unsubscribed_at: string | null
         }
         Insert: {
+          confirmation_attempt_count?: number
+          confirmation_attempted_at?: string | null
+          confirmation_error_class?: string | null
+          confirmation_last_error?: string | null
+          confirmation_sent_at?: string | null
+          confirmation_status?: string | null
+          confirmation_telegram_message_id?: number | null
           created_at?: string
           id?: string
           is_active?: boolean
@@ -311,6 +325,13 @@ export type Database = {
           unsubscribed_at?: string | null
         }
         Update: {
+          confirmation_attempt_count?: number
+          confirmation_attempted_at?: string | null
+          confirmation_error_class?: string | null
+          confirmation_last_error?: string | null
+          confirmation_sent_at?: string | null
+          confirmation_status?: string | null
+          confirmation_telegram_message_id?: number | null
           created_at?: string
           id?: string
           is_active?: boolean
@@ -1806,6 +1827,16 @@ export type Database = {
           reminder_enabled_watchers: number
           sent_count: number
           skipped_count: number
+        }[]
+      }
+      get_launch_watch_confirmation_summary: {
+        Args: { _launch_id: string }
+        Returns: {
+          ambiguous_count: number
+          attempted_count: number
+          delivered_count: number
+          failed_count: number
+          untracked_count: number
         }[]
       }
       get_launch_watch_summary: {
