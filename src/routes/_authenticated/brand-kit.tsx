@@ -243,12 +243,38 @@ function BrandKitPage() {
   const set = (patch: Partial<BrandKitForm>) => setForm((f) => ({ ...f, ...patch }));
 
   /**
-   * Stale canonical ids (assets removed, or from another workspace) are simply
-   * not shown as selected. They are never treated as an error.
+   * Stale canonical ids (asset deleted, or belonging to another workspace) are
+   * dropped from the editable selection once both the Brand Kit row and the
+   * workspace assets have actually loaded. They are never an error, they never
+   * consume one of the three selection slots, and they are not written back on
+   * the next save. No media asset is touched.
    */
-  const selectedCanonicalCount = lockForm.canonicalReferenceAssetIds.filter((id) =>
-    brandAssets.some((a) => a.id === id),
-  ).length;
+  const eligibleAssetIds = useMemo(
+    () => new Set(brandAssets.map((a) => a.id)),
+    [brandAssets],
+  );
+
+  const canonicalReady = brandKitQuery.isSuccess && assetsQuery.isSuccess;
+
+  useEffect(() => {
+    if (!canonicalReady) return;
+    setLockForm((l) => {
+      const next = l.canonicalReferenceAssetIds
+        .filter((id) => eligibleAssetIds.has(id))
+        .slice(0, MAX_CANONICAL_REFERENCES);
+      // Only replace state when the value genuinely changed, so this effect
+      // cannot loop.
+      const same =
+        next.length === l.canonicalReferenceAssetIds.length &&
+        next.every((id, i) => id === l.canonicalReferenceAssetIds[i]);
+      return same ? l : { ...l, canonicalReferenceAssetIds: next };
+    });
+  }, [canonicalReady, eligibleAssetIds]);
+
+  const selectedCanonicalIds = lockForm.canonicalReferenceAssetIds.filter((id) =>
+    eligibleAssetIds.has(id),
+  );
+  const selectedCanonicalCount = selectedCanonicalIds.length;
 
   const toggleCanonical = (assetId: string) => {
     setLockForm((l) => {
@@ -258,16 +284,21 @@ function BrandKitPage() {
           canonicalReferenceAssetIds: l.canonicalReferenceAssetIds.filter((id) => id !== assetId),
         };
       }
-      if (l.canonicalReferenceAssetIds.length >= MAX_CANONICAL_REFERENCES) {
+      // The cap is measured against currently eligible selections only.
+      const eligibleSelected = l.canonicalReferenceAssetIds.filter((id) =>
+        eligibleAssetIds.has(id),
+      );
+      if (eligibleSelected.length >= MAX_CANONICAL_REFERENCES) {
         toast.error(`Select at most ${MAX_CANONICAL_REFERENCES} canonical references.`);
         return l;
       }
       return {
         ...l,
-        canonicalReferenceAssetIds: [...l.canonicalReferenceAssetIds, assetId],
+        canonicalReferenceAssetIds: [...eligibleSelected, assetId],
       };
     });
   };
+
 
 
   return (
