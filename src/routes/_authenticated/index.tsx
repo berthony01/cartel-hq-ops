@@ -385,7 +385,6 @@ function HqDashboard() {
               </div>
             ) : (
 
-            ) : (
               <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
                 <div className="min-w-0 space-y-3">
                   <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
