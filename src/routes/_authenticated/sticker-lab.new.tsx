@@ -82,6 +82,15 @@ import { fetchDropStatus } from "@/lib/sticker-drops";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { StickyActionBar } from "@/components/cartel/StickyActionBar";
+import {
+  FailureBlock,
+  Notice,
+  Pipeline,
+  StepCard,
+  Stepper,
+  SummaryRow,
+  SummaryStat,
+} from "@/components/sticker-lab/BuilderPrimitives";
 import { Checkbox } from "@/components/ui/checkbox";
 
 
