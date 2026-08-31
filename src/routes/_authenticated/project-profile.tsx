@@ -559,7 +559,7 @@ function ProjectProfilePage() {
             </Section>
 
             <Section
-              variant="surface"
+              variant="quiet"
               title="Discovery status"
               description="Draft and hidden profiles stay behind authenticated project access. Published profiles appear on the public Cartel Network."
             >
@@ -585,23 +585,17 @@ function ProjectProfilePage() {
                 </p>
               </div>
             </Section>
-
-            <div className="hidden items-center gap-3 lg:flex">
-              {saveButton}
-              {profileQuery.isLoading ? (
-                <span className="text-xs text-muted-foreground">Loading…</span>
-              ) : null}
-            </div>
           </form>
 
           <aside className="min-w-0">
             <Section
-              variant="primary"
+              variant="surface"
               title="Network profile preview"
               description="How this identity reads today, from the current unsaved form state."
               className="xl:sticky xl:top-6"
               contentClassName="space-y-4"
             >
+
               <div className="flex items-start gap-3">
                 <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-background/40">
                   {selectedLogo && urls[selectedLogo.storage_path] ? (
