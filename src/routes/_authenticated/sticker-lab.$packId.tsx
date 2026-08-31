@@ -19,12 +19,12 @@ export const Route = createFileRoute("/_authenticated/sticker-lab/$packId")({
       {
         name: "description",
         content:
-          "Review a saved CARTEL HQ sticker pack: stickers, publish state, Telegram set link and distribution.",
+          "Review a saved CARTEL HQ sticker pack: stickers, publish state, Telegram sticker set and community delivery.",
       },
       { property: "og:title", content: "Sticker Pack — CARTEL HQ" },
       {
         property: "og:description",
-        content: "Manage a saved PEPECARTEL sticker pack and its Telegram distribution.",
+        content: "Manage a saved PEPECARTEL sticker pack, its Telegram set and community delivery.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -32,6 +32,7 @@ export const Route = createFileRoute("/_authenticated/sticker-lab/$packId")({
   }),
   component: PackManagerPage,
 });
+
 
 function PackManagerPage() {
   const { packId } = Route.useParams();
@@ -115,34 +116,55 @@ function PackManagerPage() {
         description={`${pack.theme} · ${pack.pack_size} stickers · ${readyCount}/${stickers.length} ready`}
       />
 
-      <div className="flex flex-wrap gap-2 [&>*]:min-w-0">
-        <Button asChild className="min-h-11 flex-1 sm:flex-none">
-          <Link to="/sticker-lab/new" search={{ pack: pack.id }}>
-            <Pencil className="size-4" aria-hidden="true" />
-            Edit in builder
-          </Link>
-        </Button>
-        {setUrl ? (
-          <Button asChild variant="outline" className="min-h-11 flex-1 sm:flex-none">
-            <a href={setUrl} target="_blank" rel="noreferrer noopener">
-              <ExternalLink className="size-4" aria-hidden="true" />
-              Open Telegram pack
-            </a>
+      <Section
+        variant="hero"
+        title={published ? "Published to Telegram" : readyCount > 0 ? "Ready to publish" : "In progress"}
+        description={
+          published
+            ? "One Telegram sticker set exists for this pack. Publishing again only adds missing reviewed stickers; adding a community sends the same set."
+            : readyCount > 0
+              ? `${readyCount} of ${stickers.length} stickers are ready. Finish Review & Publish to create the Telegram sticker set.`
+              : "Keep generating and reviewing stickers in the builder before publishing."
+        }
+        actions={<StatusBadge tone={published ? "green" : readyCount > 0 ? "gold" : "muted"}>{statusLabel}</StatusBadge>}
+      >
+        <div className="flex flex-wrap gap-2 [&>*]:min-w-0">
+          {readyCount > 0 ? (
+            <Button asChild className="min-h-11 flex-1 sm:flex-none">
+              <Link to="/sticker-lab/new" search={{ pack: pack.id, step: 5 }}>
+                <Send className="size-4" aria-hidden="true" />
+                Review &amp; publish
+              </Link>
+            </Button>
+          ) : null}
+          <Button
+            asChild
+            variant={readyCount > 0 ? "outline" : "default"}
+            className="min-h-11 flex-1 sm:flex-none"
+          >
+            <Link to="/sticker-lab/new" search={{ pack: pack.id }}>
+              <Pencil className="size-4" aria-hidden="true" />
+              Continue editing
+            </Link>
           </Button>
-        ) : null}
-        <Button asChild variant="outline" className="min-h-11 flex-1 sm:flex-none">
-          <Link to="/sticker-lab/new" search={{ pack: pack.id, step: 5 }}>
-            <Send className="size-4" aria-hidden="true" />
-            Manage Telegram &amp; Distribution
-          </Link>
-        </Button>
-        <Button asChild variant="ghost" size="sm" className="min-h-11">
-          <Link to="/distribution" search={{ pack: pack.id }}>
-            Distribution Center
-          </Link>
-        </Button>
+          {setUrl ? (
+            <Button asChild variant="outline" className="min-h-11 flex-1 sm:flex-none">
+              <a href={setUrl} target="_blank" rel="noreferrer noopener">
+                <ExternalLink className="size-4" aria-hidden="true" />
+                Open Telegram pack
+              </a>
+            </Button>
+          ) : null}
+          {setUrl ? (
+            <Button asChild variant="ghost" size="sm" className="min-h-11">
+              <Link to="/distribution" search={{ pack: pack.id }}>
+                Manage Sticker Drops
+              </Link>
+            </Button>
+          ) : null}
+        </div>
+      </Section>
 
-      </div>
 
       <Section
         variant="primary"

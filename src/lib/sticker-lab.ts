@@ -163,12 +163,11 @@ export function starterConcepts(theme: PackTheme, size: number): Concept[] {
 }
 
 export const FLOW_STEPS = [
-  "Character / Brand",
+  "Character Reference",
   "Pack Setup",
-  "Concepts",
+  "Sticker Concepts",
   "Generate",
-  "Review",
-  "Telegram",
+  "Review & Publish",
 ] as const;
 
 export const BUILDER_STEPS = [
@@ -176,8 +175,9 @@ export const BUILDER_STEPS = [
   { id: 2, title: "Pack Setup", short: "Setup" },
   { id: 3, title: "Sticker Concepts", short: "Concepts" },
   { id: 4, title: "Generation Preview", short: "Generate" },
-  { id: 5, title: "Review & Telegram", short: "Review" },
+  { id: 5, title: "Review & Publish", short: "Review" },
 ] as const;
+
 
 export type BuilderDraft = {
   characterName: string;

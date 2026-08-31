@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { PackageOpen, Plus } from "lucide-react";
+import { PackageOpen, Plus, TriangleAlert } from "lucide-react";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
@@ -20,13 +20,13 @@ export const Route = createFileRoute("/_authenticated/sticker-lab/")({
       {
         name: "description",
         content:
-          "Sticker Lab is the first CARTEL HQ production module: plan, generate, review and publish PEPECARTEL sticker packs to Telegram.",
+          "Create, generate, review and publish PEPECARTEL sticker packs to Telegram, then send them to your communities.",
       },
       { property: "og:title", content: "Sticker Lab — CARTEL HQ" },
       {
         property: "og:description",
         content:
-          "Plan, generate and publish PEPECARTEL sticker packs inside the CARTEL HQ operating layer.",
+          "Create, generate, review and publish PEPECARTEL sticker packs from the CARTEL HQ operating layer.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -45,16 +45,6 @@ function relativeTime(iso: string): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
-const LIVE_CAPABILITIES = [
-  "Private, workspace-scoped asset storage",
-  "Pack and sticker persistence",
-  "Server-side AI generation with transparency validation",
-  "Review, export and Telegram pack publishing",
-  "Scheduled Sticker Drops per pack in Review & Telegram, managed workspace wide in the Distribution Center",
-];
-
-const FUTURE_CAPABILITIES = ["Motion and video stickers"];
-
 function StickerLabHome() {
   const { workspaceId } = useWorkspace();
   const packsQuery = useQuery({
@@ -63,6 +53,8 @@ function StickerLabHome() {
     queryFn: () => listWorkspacePacks(workspaceId!),
   });
   const packs = packsQuery.data ?? [];
+  const failed = packsQuery.isError;
+  const staleWhileFailed = failed && packs.length > 0;
 
   const newPackLink = (
     <Button asChild className="min-h-11 w-full sm:w-auto">
@@ -78,7 +70,7 @@ function StickerLabHome() {
       <PageHeader
         eyebrow="Module 01"
         title="Sticker Lab"
-        description="Plan a PEPECARTEL sticker pack end to end: private character references, pack setup, concepts, server-side AI generation with verified transparency, review, and Telegram publishing."
+        description="Design a branded sticker pack, generate it with verified transparency, review it, then publish one Telegram sticker set and send it to your communities."
         status="Live Beta"
         actions={<div className="hidden sm:block">{newPackLink}</div>}
       />
@@ -88,11 +80,11 @@ function StickerLabHome() {
       <Section
         variant="plain"
         title="Workflow"
-        description="Six guided steps from reference to published Telegram pack."
+        description="Five guided steps from reference to published Telegram pack."
       >
         <ScrollRail
           aria-label="Sticker Lab workflow steps"
-          desktopClassName="lg:grid lg:grid-cols-6 lg:overflow-visible lg:mx-0 lg:px-0"
+          desktopClassName="lg:grid lg:grid-cols-5 lg:overflow-visible lg:mx-0 lg:px-0"
         >
           {FLOW_STEPS.map((step, i) => (
             <div
@@ -108,99 +100,103 @@ function StickerLabHome() {
         </ScrollRail>
       </Section>
 
-      <div className="grid gap-4 sm:gap-6 lg:grid-cols-3 [&>*]:min-w-0">
-        <Section
-          variant="primary"
-          className="lg:col-span-2"
-          title="Recent Packs"
-          actions={
-            <StatusBadge tone={packs.length > 0 ? "gold" : "muted"}>
-              {packsQuery.isLoading ? "Loading" : `${packs.length} saved`}
-            </StatusBadge>
-          }
-        >
-          {packsQuery.isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading packs…</p>
-          ) : packs.length === 0 ? (
-            <EmptyState
-              compact
-              icon={PackageOpen}
-              title="No sticker packs yet"
-              description="Packs you save in the builder are stored in this workspace and appear here."
-              action={
-                <Button asChild variant="outline" size="sm" className="mt-1 min-h-10">
-                  <Link to="/sticker-lab/new" search={{}} onClick={() => clearDraft()}>
-                    Open the builder
-                  </Link>
-                </Button>
-              }
-            />
-          ) : (
-            <ul className="space-y-2">
-              {packs.map((pack) => {
-                // A pack is only "generating" while stickers are actually active.
-                const label =
-                  pack.status === "generating" && pack.active === 0
-                    ? pack.ready > 0
-                      ? "review"
-                      : "draft"
-                    : pack.status;
-                return (
-                  <li key={pack.id}>
-                    <InlineRow
-                      title={pack.title}
-                      subtitle={`${pack.pack_size} stickers · ${pack.ready}/${pack.total} ready · updated ${relativeTime(pack.updated_at)}`}
-                      trailing={
-                        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-                          <StatusBadge tone={label === "review" ? "green" : "muted"}>
-                            {label}
-                          </StatusBadge>
-                          <Button asChild variant="outline" size="sm" className="min-h-9">
-                            <Link to="/sticker-lab/$packId" params={{ packId: pack.id }}>
-                              Manage
-                            </Link>
-                          </Button>
-                          <Button asChild variant="outline" size="sm" className="min-h-9">
-                            <Link to="/sticker-lab/new" search={{ pack: pack.id }}>
-                              Resume
-                            </Link>
-                          </Button>
-                        </div>
-                      }
-                    />
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Section>
+      <Section
+        variant="primary"
+        title="Your packs"
+        actions={
+          <StatusBadge tone={failed ? "red" : packs.length > 0 ? "gold" : "muted"}>
+            {packsQuery.isLoading
+              ? "Loading"
+              : failed && packs.length === 0
+                ? "Unavailable"
+                : `${packs.length} saved`}
+          </StatusBadge>
+        }
+      >
+        {staleWhileFailed ? (
+          <p className="mb-3 flex items-start gap-2 rounded-md border border-gold/40 bg-gold/5 p-3 text-xs text-muted-foreground">
+            <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-gold" aria-hidden="true" />
+            <span>
+              Showing the last loaded packs; refreshing the list failed.{" "}
+              <button
+                type="button"
+                className="underline underline-offset-2"
+                onClick={() => void packsQuery.refetch()}
+              >
+                Retry
+              </button>
+            </span>
+          </p>
+        ) : null}
 
-        <Section
-          variant="primary"
-          title="Module status"
-          actions={<StatusBadge tone="green">Live Beta</StatusBadge>}
-          contentClassName="space-y-4 text-sm"
-        >
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-pepe">Live</p>
-            <ul className="mt-2 space-y-1.5 text-muted-foreground">
-              {LIVE_CAPABILITIES.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              Coming later
-            </p>
-            <ul className="mt-2 space-y-1.5 text-muted-foreground">
-              {FUTURE_CAPABILITIES.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </div>
-        </Section>
-      </div>
+        {packsQuery.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading packs…</p>
+        ) : failed && packs.length === 0 ? (
+          <EmptyState
+            compact
+            icon={TriangleAlert}
+            title="Pack list unavailable"
+            description="We could not load your sticker packs. Nothing has been lost — try again."
+            action={
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-1 min-h-10"
+                disabled={packsQuery.isFetching}
+                onClick={() => void packsQuery.refetch()}
+              >
+                {packsQuery.isFetching ? "Retrying…" : "Retry"}
+              </Button>
+            }
+          />
+        ) : packs.length === 0 ? (
+          <EmptyState
+            compact
+            icon={PackageOpen}
+            title="No sticker packs yet"
+            description="Packs you save in the builder are stored in this workspace and appear here."
+            action={
+              <Button asChild variant="outline" size="sm" className="mt-1 min-h-10">
+                <Link to="/sticker-lab/new" search={{}} onClick={() => clearDraft()}>
+                  Open the builder
+                </Link>
+              </Button>
+            }
+          />
+        ) : (
+          <ul className="space-y-2">
+            {packs.map((pack) => {
+              // A pack is only "generating" while stickers are actually active.
+              const label =
+                pack.status === "generating" && pack.active === 0
+                  ? pack.ready > 0
+                    ? "review"
+                    : "draft"
+                  : pack.status;
+              return (
+                <li key={pack.id}>
+                  <InlineRow
+                    title={pack.title}
+                    subtitle={`${pack.pack_size} stickers · ${pack.ready}/${pack.total} ready · updated ${relativeTime(pack.updated_at)}`}
+                    trailing={
+                      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                        <StatusBadge tone={label === "review" ? "green" : "muted"}>
+                          {label}
+                        </StatusBadge>
+                        <Button asChild size="sm" className="min-h-9">
+                          <Link to="/sticker-lab/$packId" params={{ packId: pack.id }}>
+                            Open pack
+                          </Link>
+                        </Button>
+                      </div>
+                    }
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Section>
     </div>
   );
 }
