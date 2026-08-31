@@ -31,9 +31,18 @@ export type StickerConceptSuggestion = {
   usage: StickerConceptUsage | null;
 };
 
+export type ConceptSuggestionMode = "board" | "alternatives";
+
 export type SuggestStickerConceptsInput = {
   workspaceId: string;
+  /** Total pack size (6 / 12 / 24). */
   size: number;
+  /** How many concepts to return. Defaults to `size` (backwards compatible). */
+  targetCount?: number;
+  /** `board` = fresh ideas for open slots, `alternatives` = 1:1 replacements. */
+  mode?: ConceptSuggestionMode;
+  /** Concepts an `alternatives` request must replace, in order. */
+  focusConcepts?: Array<{ label: string; action: string }>;
   characterName?: string;
   theme?: string;
   brief?: string;
