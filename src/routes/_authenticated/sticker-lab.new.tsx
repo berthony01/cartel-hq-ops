@@ -2406,11 +2406,18 @@ function StickerLabBuilder() {
 
           <AlertDialog
             open={confirmApplySuggestions}
-            onOpenChange={setConfirmApplySuggestions}
+            onOpenChange={(open) => {
+              setConfirmApplySuggestions(open);
+              if (!open) setPendingApplyTargetIds(null);
+            }}
           >
             <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
               <AlertDialogHeader>
-                <AlertDialogTitle>Replace these concepts in this saved pack?</AlertDialogTitle>
+                <AlertDialogTitle>
+                  {(pendingApplyTargetIds?.length ?? 0) === 1
+                    ? "Replace this concept in this saved pack?"
+                    : "Replace these concepts in this saved pack?"}
+                </AlertDialogTitle>
                 <AlertDialogDescription asChild>
                   <div className="space-y-2 text-left">
                     <p>
@@ -2422,8 +2429,9 @@ function StickerLabBuilder() {
                       the stored concept rows to match.
                     </p>
                     <p>
-                      Only unlocked, targeted concepts change. Keyword metadata is cleared for those
-                      concepts only.
+                      {(pendingApplyTargetIds?.length ?? 0) === 1
+                        ? "Only this one unlocked concept changes. Keyword metadata is cleared for that concept only."
+                        : "Only unlocked, targeted concepts change. Keyword metadata is cleared for those concepts only."}
                     </p>
                   </div>
                 </AlertDialogDescription>
@@ -2431,15 +2439,20 @@ function StickerLabBuilder() {
               <AlertDialogFooter>
                 <AlertDialogCancel>Keep current concepts</AlertDialogCancel>
                 <AlertDialogAction
-                  onClick={() =>
-                    applyPreviewItems(pendingPreviewItems.map((item) => item.targetId))
-                  }
+                  onClick={() => {
+                    const ids =
+                      pendingApplyTargetIds ?? pendingPreviewItems.map((item) => item.targetId);
+                    applyPreviewItems(ids);
+                  }}
                 >
-                  Use these concepts
+                  {(pendingApplyTargetIds?.length ?? 0) === 1
+                    ? "Use this concept"
+                    : "Use these concepts"}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
         </StepCard>
       ) : null}
 
