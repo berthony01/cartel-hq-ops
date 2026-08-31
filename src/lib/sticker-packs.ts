@@ -1,4 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
+import { ASSETS_BUCKET } from "@/lib/media";
+
 import {
   PACK_SIZES,
   PACK_THEMES,
