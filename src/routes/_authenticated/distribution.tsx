@@ -53,7 +53,7 @@ export const Route = createFileRoute("/_authenticated/distribution")({
       {
         property: "og:description",
         content:
-          "Community automation console for recurring Telegram sticker drops: schedules, delivery health and emergency control.",
+          "Sticker Drops console for recurring Telegram sticker posting: schedules, delivery health and emergency control.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -175,9 +175,9 @@ function DistributionPage() {
   return (
     <div className="flex min-w-0 flex-col gap-6 sm:gap-8">
       <PageHeader
-        eyebrow="Community Automation"
+        eyebrow="Recurring Sticker Drops"
         title="Sticker Drops"
-        description="Schedule and monitor recurring automated sticker posts across your connected Telegram communities. Pack publishing and one-time sends stay in Sticker Lab."
+        description="Schedule and monitor recurring sticker posts across your connected Telegram communities. Pack publishing and one-time sends stay in Sticker Lab."
         status="Live Beta"
       />
 
@@ -204,14 +204,14 @@ function DistributionPage() {
         <Section variant="primary" title="Loading Sticker Drops">
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-            Loading automation state…
+            Loading Sticker Drops state…
           </p>
         </Section>
       ) : (
         <>
           <Section
             variant="hero"
-            title="Automation state"
+            title="Sticker Drops state"
             actions={
               <StatusBadge tone={killSwitch ? "red" : "green"}>
                 {killSwitch ? "Emergency pause ON" : "Normal operation"}

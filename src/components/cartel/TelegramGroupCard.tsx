@@ -255,7 +255,7 @@ export function useTelegramGroupSetup(enabled = true) {
       if (prev.includes(id)) return prev.filter((x) => x !== id);
       if (prev.length >= MAX_DISTRIBUTION_TARGETS) {
         toast.error(
-          `You can distribute to up to ${MAX_DISTRIBUTION_TARGETS} groups in one run.`,
+          `You can send to up to ${MAX_DISTRIBUTION_TARGETS} communities in one send.`,
         );
         return prev;
       }
@@ -266,7 +266,7 @@ export function useTelegramGroupSetup(enabled = true) {
     setSelectedGroupIds(groups.slice(0, MAX_DISTRIBUTION_TARGETS).map((g) => g.id));
     if (groups.length > MAX_DISTRIBUTION_TARGETS) {
       toast.message(
-        `Selected the first ${MAX_DISTRIBUTION_TARGETS} groups — one distribution run is capped at ${MAX_DISTRIBUTION_TARGETS}.`,
+        `Selected the first ${MAX_DISTRIBUTION_TARGETS} communities — one send is capped at ${MAX_DISTRIBUTION_TARGETS}.`,
       );
     }
   }, [groups]);
@@ -393,7 +393,7 @@ function GroupRow({
             checked={selected}
             onCheckedChange={onToggle}
             className="mt-1 size-5"
-            aria-label={`Select ${g.title} as a distribution target`}
+            aria-label={`Select ${g.title} as a community target`}
           />
         ) : null}
         <div className="min-w-0 flex-1">
@@ -922,13 +922,13 @@ export function TelegramGroupCard({
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-surface-raised p-2.5 sm:p-3">
             <div className="min-w-0">
               <p className="text-xs font-semibold text-foreground">
-                {selectedGroupIds.length} of {groups.length} group
-                {groups.length === 1 ? "" : "s"} selected for distribution
+                {selectedGroupIds.length} of {groups.length} communit
+                {groups.length === 1 ? "y" : "ies"} selected to receive this pack
               </p>
               {groups.length > MAX_DISTRIBUTION_TARGETS ? (
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  One distribution run covers up to {MAX_DISTRIBUTION_TARGETS} groups. Run it again
-                  for the rest — the sticker set is never recreated.
+                  One send covers up to {MAX_DISTRIBUTION_TARGETS} communities. Run it again for the
+                  rest — the sticker set is never recreated.
                 </p>
               ) : null}
             </div>

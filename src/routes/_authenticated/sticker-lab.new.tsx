@@ -2969,7 +2969,7 @@ function StickerLabBuilder() {
               <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
                 <CardTitle className="text-base">Next step — Sticker Drops</CardTitle>
                 <StatusBadge tone={packSchedules.length > 0 ? "green" : "muted"}>
-                  {packSchedules.length > 0 ? `${packSchedules.length} scheduled` : "Not automated"}
+                  {packSchedules.length > 0 ? `${packSchedules.length} scheduled` : "No schedule"}
                 </StatusBadge>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
