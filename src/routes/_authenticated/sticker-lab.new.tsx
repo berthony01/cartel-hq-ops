@@ -429,6 +429,20 @@ function StickerLabBuilder() {
   const brandLock = characterLockQuery.data ?? null;
   const brandLockActive = !!brandLock?.enabled;
 
+  /**
+   * Concept-suggestion provider status. Free probe: it never contacts the
+   * language model and spends nothing. Only runs while Step 3 is visible.
+   */
+  const conceptConfigQuery = useQuery({
+    queryKey: ["sticker-concepts-config"],
+    enabled: step === 3,
+    staleTime: 300_000,
+    retry: 0,
+    refetchOnWindowFocus: false,
+    queryFn: fetchStickerConceptConfig,
+  });
+  const conceptsConfigured = conceptConfigQuery.data?.configured === true;
+
 
   // Provider status. Free probe, never a generation call.
   const configQuery = useQuery({
