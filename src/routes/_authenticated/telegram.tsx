@@ -41,139 +41,121 @@ function TelegramPage() {
   const { workspaceId } = useWorkspace();
 
   const groupCount = groupSetup.connectedGroupCount;
+  const readyCount = groupSetup.readiness.filter((r) => r.ready).length;
+  const attentionCount = Math.max(groupCount - readyCount, 0);
 
+  const serviceChecking = setup.configQuery.isPending;
+  const serviceError = setup.configQuery.isError;
+  const serviceAvailable = !serviceChecking && !serviceError && setup.botConfigured;
+  const serviceLabel = serviceChecking
+    ? "Checking"
+    : serviceError
+      ? "Status unavailable"
+      : setup.botConfigured
+        ? "Available"
+        : "Unavailable";
+
+  const groupsPending = groupSetup.groupQuery.isPending;
+  const checking = serviceChecking || groupsPending;
+  const hasProblem = !checking && (!serviceAvailable || attentionCount > 0);
+
+  const overallTone = checking
+    ? "muted"
+    : hasProblem
+      ? "red"
+      : groupCount === 0
+        ? "gold"
+        : "green";
+  const overallLabel = checking
+    ? "Checking"
+    : hasProblem
+      ? "Needs attention"
+      : groupCount === 0
+        ? "No communities connected"
+        : "Operational";
+
+  const primaryLine = checking
+    ? "Checking Telegram service and connected communities…"
+    : groupCount === 0
+      ? "Connect your first Telegram community below to start onboarding members."
+      : hasProblem
+        ? "Review the community rows below and follow the listed fix for each one."
+        : `All ${groupCount} connected communit${groupCount === 1 ? "y is" : "ies are"} operational.`;
 
   return (
-    <div className="flex max-w-4xl flex-col gap-4 sm:gap-6">
+    <div className="flex max-w-5xl flex-col gap-4 sm:gap-6">
       <PageHeader
         eyebrow="Community Operations"
         title="Community Command"
-        description="The operator control center for every connected Telegram community. Manage connection health, welcome and onboarding, Sticker Drops, and sticker distribution from one place."
+        description="Connection health and per-community controls for every Telegram community you have connected."
         status={groupCount > 0 ? "Connected · Live Beta" : "Live Beta"}
       />
 
       <LaunchReadinessCallout workspaceId={workspaceId} />
 
-
-
-      <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge
-          tone={
-            setup.configQuery.isPending
-              ? "muted"
-              : setup.botConfigured
-                ? "green"
-                : "red"
-          }
-        >
-          {setup.configQuery.isPending
-            ? "Checking Telegram service…"
-            : setup.configQuery.isError
-              ? "Telegram service status unavailable"
-              : setup.botConfigured
-                ? "Telegram service available"
-                : "Telegram service unavailable"}
-        </StatusBadge>
-        <StatusBadge tone={groupCount > 0 ? "green" : "muted"}>
-          {groupCount > 0
-            ? `${groupCount} community${groupCount === 1 ? "" : "s"} connected`
-            : "No communities connected"}
-        </StatusBadge>
-      </div>
-
-      {groupCount > 0 ? (
-        <div className="rounded-md border border-gold/30 bg-gold/5 p-3 text-xs leading-relaxed text-foreground">
-          <p className="font-semibold text-gold">Welcome & onboarding controls are available.</p>
-          <p className="mt-1 text-muted-foreground">
-            Select a connected community and open Community controls to set the join message,
-            member mention, and auto-delete timer. Each community must explicitly enable its real
-            join welcome before new members receive it.
-          </p>
-        </div>
-      ) : null}
-
       <Section
-        variant="surface"
-        title="Command overview"
-        actions={<StatusBadge tone="gold">Live Beta</StatusBadge>}
+        variant="hero"
+        title="Community state"
+        description={primaryLine}
+        actions={<StatusBadge tone={overallTone}>{overallLabel}</StatusBadge>}
       >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge tone="green">Active</StatusBadge>
-              <span className="text-sm font-medium text-foreground">Connection health</span>
-            </div>
-            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              Monitor connected communities and reconnect when the bot is removed or permissions change.
-            </p>
+        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="min-w-0">
+            <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+              Telegram service
+            </dt>
+            <dd className="mt-1 text-sm font-semibold text-foreground">{serviceLabel}</dd>
           </div>
-
-          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge tone="green">Active</StatusBadge>
-              <span className="text-sm font-medium text-foreground">Welcome & onboarding</span>
-            </div>
-            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              Set per-community join messages, optional member mention, and auto-delete timers.
-            </p>
+          <div className="min-w-0">
+            <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+              Connected
+            </dt>
+            <dd className="mt-1 text-sm font-semibold text-foreground">
+              {groupsPending && groupCount === 0 ? "—" : groupCount}
+            </dd>
           </div>
-
-          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge tone="green">Active</StatusBadge>
-              <span className="text-sm font-medium text-foreground">Sticker Drops</span>
-            </div>
-            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              Schedule and send native sticker announcements to connected communities.
-            </p>
+          <div className="min-w-0">
+            <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+              Ready
+            </dt>
+            <dd className="mt-1 text-sm font-semibold text-foreground">
+              {groupsPending && groupCount === 0 ? "—" : readyCount}
+            </dd>
           </div>
-
-          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge tone="green">Active</StatusBadge>
-              <span className="text-sm font-medium text-foreground">Sticker distribution</span>
-            </div>
-            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              Push published packs and test stickers to selected communities from Sticker Lab.
-            </p>
+          <div className="min-w-0">
+            <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+              Needs attention
+            </dt>
+            <dd className="mt-1 text-sm font-semibold text-foreground">
+              {groupsPending && groupCount === 0 ? "—" : attentionCount}
+            </dd>
           </div>
-
-          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3 opacity-80">
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge tone="muted">Planned</StatusBadge>
-              <span className="text-sm font-medium text-foreground">Announcements</span>
-            </div>
-            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              Broadcast text updates to connected communities.
-            </p>
-          </div>
-
-          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3 opacity-80">
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge tone="muted">Planned</StatusBadge>
-              <span className="text-sm font-medium text-foreground">Launch Distribution</span>
-            </div>
-            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              Distribute launch alerts and verified signals through connected communities.
-            </p>
-          </div>
-
-          <div className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3 opacity-80 sm:col-span-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge tone="muted">Planned</StatusBadge>
-              <span className="text-sm font-medium text-foreground">Community Analytics</span>
-            </div>
-            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              Track growth, engagement, and Sticker Drop outcomes across communities.
-            </p>
-          </div>
-        </div>
+        </dl>
       </Section>
+
+      {hasProblem ? (
+        <Section variant="surface" title="Attention required">
+          <ul className="list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-muted-foreground">
+            {serviceError ? (
+              <li>Telegram service status could not be loaded right now.</li>
+            ) : !setup.botConfigured ? (
+              <li>The Telegram service is unavailable, so community actions may not work.</li>
+            ) : null}
+            {attentionCount > 0 ? (
+              <li>
+                {attentionCount} connected communit{attentionCount === 1 ? "y" : "ies"} not ready.
+                Open the matching community below for the exact fix.
+              </li>
+            ) : null}
+          </ul>
+        </Section>
+      ) : null}
 
       <TelegramGroupCard
         setup={groupSetup}
         personalConnected={setup.ownerConnected}
         botConfigured={setup.botConfigured}
+        selectable={false}
       />
 
       <details className="mt-4 rounded-md border border-border/60 bg-background/40 p-3">
@@ -182,21 +164,21 @@ function TelegramPage() {
         </summary>
         <div className="mt-2 space-y-2 text-xs leading-relaxed text-muted-foreground">
           <p>
+            Community Command owns connection health and onboarding. Recurring automation lives in{" "}
+            <strong>Sticker Drops</strong>, and pack publishing and one-time sends live in{" "}
+            <strong>Sticker Lab</strong>.
+          </p>
+          <p>
             Assigning a pack as a community’s <strong>official</strong> Telegram sticker set is an
             optional Telegram capability that exists only for <strong>supergroups</strong>, and
             Telegram decides when it is available for a given group. Otherwise CARTEL HQ posts the
             pack link in the community instead — publishing and native sticker sending are
             unaffected.
           </p>
-          <p>
-            Telegram allows one community per add-bot flow, so connect them one at a time.
-          </p>
-          <p>
-            Inline mode, the Telegram Mini App, channel posting and distribution automation beyond
-            Sticker Drops remain future phases.
-          </p>
+          <p>Telegram allows one community per add-bot flow, so connect them one at a time.</p>
         </div>
       </details>
     </div>
   );
 }
+
