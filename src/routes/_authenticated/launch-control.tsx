@@ -786,6 +786,12 @@ function LaunchControlPage() {
                             ? `${formatTimestamp(selected.launch_window_start)} → ${formatTimestamp(selected.launch_window_end)}`
                             : "Not set"}
                       </dd>
+                      {countdownText ? (
+                        <dd className="mt-1 text-xs leading-relaxed text-gold [overflow-wrap:anywhere]">
+                          {anchorPassed ? countdownText : `${countdownLabel} ${countdownText}`}
+                        </dd>
+                      ) : null}
+
                     </div>
                     <div className="min-w-0">
                       <dt className="type-meta text-muted-foreground">Launch Watch</dt>
