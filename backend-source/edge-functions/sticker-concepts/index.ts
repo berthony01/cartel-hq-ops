@@ -249,18 +249,37 @@ function buildPrompt(input: {
     if (prohibited.length) lines.push(`BRAND PROHIBITED: ${prohibited.join("; ")}.`);
   }
 
+  const describe = (c: { label: string; action: string }) =>
+    `${c.label}${c.action ? ` (${c.action})` : ""}`;
+
   if (input.existing.length) {
     lines.push(
-      `The pack currently uses these concepts — propose a genuinely different, more interesting set rather than repeating them: ${input.existing
-        .map((c) => `${c.label}${c.action ? ` (${c.action})` : ""}`)
+      `THE CURRENT BOARD (do not duplicate any of these): ${input.existing.map(describe).join(" | ")}.`,
+    );
+  }
+
+  if (input.mode === "alternatives") {
+    lines.push(
+      `REPLACEMENT TASK: produce exactly one replacement alternative for each of the ${input.focus.length} concepts listed below, in the SAME ORDER. Result ${"#"}N must replace focus concept ${"#"}N.`,
+    );
+    lines.push(
+      `FOCUS CONCEPTS TO REPLACE: ${input.focus
+        .map((c, i) => `${i + 1}. ${describe(c)}`)
         .join(" | ")}.`,
+    );
+    lines.push(
+      "Each alternative must be meaningfully different from the concept it replaces and from every concept already on the board, while still fitting the same character, brand and creative direction.",
+    );
+  } else {
+    lines.push(
+      `Propose a genuinely different, more interesting set of ${input.targetCount} concepts that does not repeat anything already on the board.`,
     );
   }
 
   lines.push(
     "RULES: label is a short punchy caption-style name (max 48 characters). action is one concrete visible pose, expression or action (max 200 characters), no camera or rendering jargon. emoji is a single short emoji. Every label must be unique. No slurs, no hate, no financial promises, no claims of guaranteed profit or token safety.",
   );
-  lines.push(`Return exactly ${input.size} concepts.`);
+  lines.push(`Return exactly ${input.targetCount} concepts, in order.`);
 
   return lines.join("\n");
 }
