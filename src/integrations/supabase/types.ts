@@ -1781,6 +1781,24 @@ export type Database = {
           x_url: string
         }[]
       }
+      get_cartel_network_signals: {
+        Args: { _chain?: string; _limit?: number; _offset?: number }
+        Returns: {
+          chain: string
+          has_logo: boolean
+          launch_public_slug: string
+          occurred_at: string
+          official_contract_address: string
+          project_name: string
+          project_primary_chain: string
+          project_public_slug: string
+          signal_type: string
+          status: string
+          ticker: string
+          token_name: string
+          total_count: number
+        }[]
+      }
       get_cartel_network_summary: {
         Args: never
         Returns: {
@@ -1844,6 +1862,36 @@ export type Database = {
         Returns: {
           active_count: number
           total_count: number
+        }[]
+      }
+      get_my_launch_watchlist: {
+        Args: never
+        Returns: {
+          chain: string
+          contract_registered_at: string
+          has_logo: boolean
+          launch_at: string
+          launch_public_slug: string
+          launch_window_end: string
+          launch_window_start: string
+          live_at: string
+          official_contract_address: string
+          project_name: string
+          project_primary_chain: string
+          project_public_slug: string
+          reminders_enabled: boolean
+          status: string
+          subscribed_at: string
+          ticker: string
+          timezone: string
+          token_name: string
+        }[]
+      }
+      get_my_launch_watchlist_state: {
+        Args: never
+        Returns: {
+          active_watch_count: number
+          telegram_connected: boolean
         }[]
       }
       get_platform_owner_dashboard_metrics: { Args: never; Returns: Json }

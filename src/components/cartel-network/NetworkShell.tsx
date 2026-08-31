@@ -13,6 +13,8 @@ const NAV = [
   { label: "Overview", to: "/network" as const },
   { label: "Projects", to: "/network/projects" as const },
   { label: "Upcoming Launches", to: "/network/launches" as const },
+  { label: "Signals", to: "/network/signals" as const },
+
 ];
 
 function Wordmark() {

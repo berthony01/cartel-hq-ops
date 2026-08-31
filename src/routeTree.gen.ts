@@ -30,10 +30,12 @@ import { Route as AuthenticatedReputationRouteImport } from './routes/_authentic
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedStickerLabRouteImport } from './routes/_authenticated/sticker-lab'
 import { Route as AuthenticatedTelegramRouteImport } from './routes/_authenticated/telegram'
+import { Route as AuthenticatedWatchlistRouteImport } from './routes/_authenticated/watchlist'
 import { Route as AuthCallbackRouteImport } from './routes/auth_.callback'
 import { Route as NetworkIndexRouteImport } from './routes/network.index'
 import { Route as NetworkLaunchesRouteImport } from './routes/network.launches'
 import { Route as NetworkProjectsRouteImport } from './routes/network.projects'
+import { Route as NetworkSignalsRouteImport } from './routes/network.signals'
 import { Route as AuthenticatedStickerLabIndexRouteImport } from './routes/_authenticated/sticker-lab.index'
 import { Route as AuthenticatedStickerLabPackIdRouteImport } from './routes/_authenticated/sticker-lab.$packId'
 import { Route as AuthenticatedStickerLabNewRouteImport } from './routes/_authenticated/sticker-lab.new'
@@ -149,6 +151,11 @@ const AuthenticatedTelegramRoute = AuthenticatedTelegramRouteImport.update({
   path: '/telegram',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedWatchlistRoute = AuthenticatedWatchlistRouteImport.update({
+  id: '/watchlist',
+  path: '/watchlist',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/auth_/callback',
   path: '/auth/callback',
@@ -167,6 +174,11 @@ const NetworkLaunchesRoute = NetworkLaunchesRouteImport.update({
 const NetworkProjectsRoute = NetworkProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
+  getParentRoute: () => NetworkRoute,
+} as any)
+const NetworkSignalsRoute = NetworkSignalsRouteImport.update({
+  id: '/signals',
+  path: '/signals',
   getParentRoute: () => NetworkRoute,
 } as any)
 const AuthenticatedStickerLabIndexRoute =
@@ -220,9 +232,11 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthenticatedSettingsRoute
   '/sticker-lab': typeof AuthenticatedStickerLabRouteWithChildren
   '/telegram': typeof AuthenticatedTelegramRoute
+  '/watchlist': typeof AuthenticatedWatchlistRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/network/launches': typeof NetworkLaunchesRoute
   '/network/projects': typeof NetworkProjectsRoute
+  '/network/signals': typeof NetworkSignalsRoute
   '/network/': typeof NetworkIndexRoute
   '/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
   '/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
@@ -248,9 +262,11 @@ export interface FileRoutesByTo {
   '/reputation': typeof AuthenticatedReputationRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/telegram': typeof AuthenticatedTelegramRoute
+  '/watchlist': typeof AuthenticatedWatchlistRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/network/launches': typeof NetworkLaunchesRoute
   '/network/projects': typeof NetworkProjectsRoute
+  '/network/signals': typeof NetworkSignalsRoute
   '/': typeof AuthenticatedIndexRoute
   '/network': typeof NetworkIndexRoute
   '/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
@@ -281,9 +297,11 @@ export interface FileRoutesById {
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/sticker-lab': typeof AuthenticatedStickerLabRouteWithChildren
   '/_authenticated/telegram': typeof AuthenticatedTelegramRoute
+  '/_authenticated/watchlist': typeof AuthenticatedWatchlistRoute
   '/auth_/callback': typeof AuthCallbackRoute
   '/network/launches': typeof NetworkLaunchesRoute
   '/network/projects': typeof NetworkProjectsRoute
+  '/network/signals': typeof NetworkSignalsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/network/': typeof NetworkIndexRoute
   '/_authenticated/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
@@ -315,9 +333,11 @@ export interface FileRouteTypes {
     | '/settings'
     | '/sticker-lab'
     | '/telegram'
+    | '/watchlist'
     | '/auth/callback'
     | '/network/launches'
     | '/network/projects'
+    | '/network/signals'
     | '/network/'
     | '/sticker-lab/$packId'
     | '/sticker-lab/new'
@@ -343,9 +363,11 @@ export interface FileRouteTypes {
     | '/reputation'
     | '/settings'
     | '/telegram'
+    | '/watchlist'
     | '/auth/callback'
     | '/network/launches'
     | '/network/projects'
+    | '/network/signals'
     | '/'
     | '/network'
     | '/sticker-lab/$packId'
@@ -375,9 +397,11 @@ export interface FileRouteTypes {
     | '/_authenticated/settings'
     | '/_authenticated/sticker-lab'
     | '/_authenticated/telegram'
+    | '/_authenticated/watchlist'
     | '/auth_/callback'
     | '/network/launches'
     | '/network/projects'
+    | '/network/signals'
     | '/_authenticated/'
     | '/network/'
     | '/_authenticated/sticker-lab/$packId'
@@ -543,6 +567,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTelegramRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/watchlist': {
+      id: '/_authenticated/watchlist'
+      path: '/watchlist'
+      fullPath: '/watchlist'
+      preLoaderRoute: typeof AuthenticatedWatchlistRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/auth_/callback': {
       id: '/auth_/callback'
       path: '/auth/callback'
@@ -569,6 +600,13 @@ declare module '@tanstack/react-router' {
       path: '/projects'
       fullPath: '/network/projects'
       preLoaderRoute: typeof NetworkProjectsRouteImport
+      parentRoute: typeof NetworkRoute
+    }
+    '/network/signals': {
+      id: '/network/signals'
+      path: '/signals'
+      fullPath: '/network/signals'
+      preLoaderRoute: typeof NetworkSignalsRouteImport
       parentRoute: typeof NetworkRoute
     }
     '/_authenticated/sticker-lab/': {
@@ -645,6 +683,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedStickerLabRoute: typeof AuthenticatedStickerLabRouteWithChildren
   AuthenticatedTelegramRoute: typeof AuthenticatedTelegramRoute
+  AuthenticatedWatchlistRoute: typeof AuthenticatedWatchlistRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
 }
 
@@ -666,6 +705,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedStickerLabRoute: AuthenticatedStickerLabRouteWithChildren,
   AuthenticatedTelegramRoute: AuthenticatedTelegramRoute,
+  AuthenticatedWatchlistRoute: AuthenticatedWatchlistRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
 }
 
@@ -675,6 +715,7 @@ const AuthenticatedRouteRouteWithChildren =
 interface NetworkRouteChildren {
   NetworkLaunchesRoute: typeof NetworkLaunchesRoute
   NetworkProjectsRoute: typeof NetworkProjectsRoute
+  NetworkSignalsRoute: typeof NetworkSignalsRoute
   NetworkIndexRoute: typeof NetworkIndexRoute
   NetworkLaunchLaunchSlugRoute: typeof NetworkLaunchLaunchSlugRoute
   NetworkProjectProjectSlugRoute: typeof NetworkProjectProjectSlugRoute
@@ -683,6 +724,7 @@ interface NetworkRouteChildren {
 const NetworkRouteChildren: NetworkRouteChildren = {
   NetworkLaunchesRoute: NetworkLaunchesRoute,
   NetworkProjectsRoute: NetworkProjectsRoute,
+  NetworkSignalsRoute: NetworkSignalsRoute,
   NetworkIndexRoute: NetworkIndexRoute,
   NetworkLaunchLaunchSlugRoute: NetworkLaunchLaunchSlugRoute,
   NetworkProjectProjectSlugRoute: NetworkProjectProjectSlugRoute,
