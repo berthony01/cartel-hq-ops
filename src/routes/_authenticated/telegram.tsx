@@ -21,12 +21,12 @@ export const Route = createFileRoute("/_authenticated/telegram")({
       {
         name: "description",
         content:
-          "Operator control center for connected Telegram communities. Manage onboarding, Sticker Drops, sticker distribution, and connection health from one place.",
+          "Operator control center for connected Telegram communities. Manage onboarding, Sticker Drops, sticker sends, and connection health from one place.",
       },
       { property: "og:title", content: "Community Command — CARTEL HQ" },
       {
         property: "og:description",
-        content: "Operator control center for Telegram communities, onboarding, Sticker Drops, sticker distribution, and connection health.",
+        content: "Operator control center for Telegram communities, onboarding, Sticker Drops, sticker sends, and connection health.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
