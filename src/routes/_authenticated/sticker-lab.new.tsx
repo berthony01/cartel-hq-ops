@@ -2949,10 +2949,12 @@ function StickerLabBuilder() {
                       in total and consumes Kie credits on your account.
                     </p>
                     <p>
-                      The selection runs one sticker at a time, in board order. Ready stickers and
-                      any sticker that still has a valid existing image are excluded from this
-                      batch. There are no automatic retries, and nothing happens until you confirm.
+                      The selection runs up to 2 stickers at a time, admitted in board order. Ready
+                      stickers and any sticker that still has a valid existing image are excluded
+                      from this batch. There are no automatic retries, and nothing happens until you
+                      confirm.
                     </p>
+
                   </div>
                 </AlertDialogDescription>
               </AlertDialogHeader>
