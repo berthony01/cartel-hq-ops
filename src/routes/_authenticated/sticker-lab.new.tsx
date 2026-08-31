@@ -2392,8 +2392,10 @@ function StickerLabBuilder() {
                 <AlertDialogAction
                   onClick={() => {
                     const mode = confirmSuggest ?? "board";
+                    const ids = refreshTargetIds;
                     setConfirmSuggest(null);
-                    void runConceptSuggestion(mode);
+                    setRefreshTargetIds(null);
+                    void runConceptSuggestion(mode, ids);
                   }}
                 >
                   Suggest concepts
