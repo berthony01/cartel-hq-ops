@@ -2869,126 +2869,30 @@ function StickerLabBuilder() {
 
 
           <Card className="cartel-panel mt-6">
-              <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
-                <CardTitle className="text-base">Sticker Drops for this pack</CardTitle>
-                <StatusBadge tone={packSchedules.length > 0 ? "green" : "muted"}>
-                  {packSchedules.length > 0
-                    ? `${packSchedules.length} automated`
-                    : "Not automated"}
-                </StatusBadge>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <p className="text-xs text-muted-foreground">
-                  Scheduled, capped delivery of this pack into a community. Drops run server-side
-                  and stay disabled until you enable them.
+            <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+              <CardTitle className="text-base">Sticker Drops</CardTitle>
+              <StatusBadge tone={packSchedules.length > 0 ? "green" : "muted"}>
+                {packSchedules.length > 0 ? `${packSchedules.length} scheduled` : "Not automated"}
+              </StatusBadge>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <p className="text-xs text-muted-foreground">
+                Recurring, capped automatic posting of this pack into your communities is managed on
+                the Sticker Drops page. Sending a pack here is a one-time delivery.
+              </p>
+              {dropKillSwitch ? (
+                <p className="rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
+                  Workspace emergency pause is on — no automated drops are running.
                 </p>
-
-                {!telegramSetExists ? (
-                  <p className="rounded-md border border-border/70 bg-surface-raised/50 p-3 text-xs text-muted-foreground">
-                    Sticker Drops become available after this pack is published and distributed to a
-                    community.
-                  </p>
-                ) : dropStatusQuery.isLoading ? (
-                  <p className="text-xs text-muted-foreground">Loading drop automation…</p>
-                ) : dropGroups.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    No connected community is available for automation yet.
-                  </p>
-                ) : (
-                  <ul className="space-y-2">
-                    {dropGroups.map((g) => {
-                      const sched = dropScheduleByGroup[g.id] ?? null;
-                      const forThisPack = sched?.pack_id === packId;
-                      // Automation may only be pointed at a pack this community
-                      // has actually received.
-                      const deliveredStatus = distStatusFor(g.id);
-                      const packDeliveredHere =
-                        deliveredStatus === "assigned" || deliveredStatus === "announced";
-                      const actionEnabled = forThisPack
-                        ? dropCanManage
-                        : dropCanManage && packDeliveredHere;
-                      const state = sched ? scheduleState(sched, dropKillSwitch) : "unconfigured";
-                      const otherPackTitle = sched
-                        ? (dropPacks.find((dp) => dp.id === sched.pack_id)?.title ?? "another pack")
-                        : null;
-                      return (
-                        <li
-                          key={g.id}
-                          className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-background/40 p-3"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium text-foreground">{g.title}</p>
-                            <p className="mt-0.5 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
-                              {!forThisPack && !packDeliveredHere
-                                ? sched
-                                  ? `Currently automating ${otherPackTitle}. Distribute this pack to this community before switching.`
-                                  : "Distribute this pack to this community first."
-                                : !sched
-                                  ? "No drop automation configured."
-                                  : forThisPack
-                                    ? [
-                                        SCHEDULE_STATE_LABEL[state],
-                                        formatCadence(sched.interval_minutes),
-                                        formatNextRun(sched.next_run_at),
-                                      ]
-                                        .filter(Boolean)
-                                        .join(" · ")
-                                    : `Currently dropping ${otherPackTitle}.`}
-                            </p>
-                          </div>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={forThisPack ? "outline" : "secondary"}
-                            className="min-h-10 shrink-0"
-                            disabled={!actionEnabled}
-                            onClick={() => {
-                              setDropDialogGroup(g);
-                              setDropDialogSchedule(sched);
-                              setDropDialogOpen(true);
-                            }}
-                          >
-                            {forThisPack
-                              ? "Edit drops"
-                              : sched
-                                ? "Switch to this pack"
-                                : "Set up drops"}
-                          </Button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-
-                {!dropCanManage && !dropStatusQuery.isLoading ? (
-                  <p className="text-xs text-muted-foreground">
-                    Only a workspace owner or admin can change drop automation.
-                  </p>
-                ) : null}
-
-                <Button asChild variant="ghost" size="sm" className="min-h-10">
-                  <Link to="/distribution" search={packId ? { pack: packId } : {}}>
-                    Open Distribution Center
-                  </Link>
-                </Button>
+              ) : null}
+              <Button asChild variant="outline" size="sm" className="min-h-10">
+                <Link to="/distribution" search={packId ? { pack: packId } : {}}>
+                  Manage Sticker Drops
+                </Link>
+              </Button>
             </CardContent>
           </Card>
 
-          {packId ? (
-            <StickerDropScheduleDialog
-              open={dropDialogOpen}
-              onOpenChange={setDropDialogOpen}
-              workspaceId={workspaceId ?? ""}
-              group={dropDialogGroup}
-              groups={dropGroups}
-              schedule={dropDialogSchedule}
-              packs={dropPacks}
-              stickers={dropStickers}
-              canManage={dropCanManage}
-              lockedPackId={packId}
-              onChanged={() => void dropStatusQuery.refetch()}
-            />
-          ) : null}
 
           <AlertDialog open={confirmPublish} onOpenChange={setConfirmPublish}>
             <AlertDialogContent>
