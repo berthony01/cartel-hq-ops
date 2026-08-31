@@ -17,7 +17,12 @@ import {
   suggestStickerConcepts,
   type SuggestedConcept,
 } from "@/lib/sticker-concepts";
-import { loadStickerVersions } from "@/lib/sticker-versions";
+import {
+  loadStickerVersions,
+  setCurrentStickerVersion,
+  type SetCurrentVersionStatus,
+} from "@/lib/sticker-versions";
+
 
 
 import {
@@ -70,11 +75,13 @@ import {
   previewShortName,
   publishPack,
   refreshPackStatus,
+  replacePublishedStickerVersion,
   telegramErrorMessage,
   type PackTelegramState,
   type StickerTelegramState,
   type TelegramPublishResult,
 } from "@/lib/telegram-stickers";
+
 import { useTelegramSetup } from "@/components/cartel/TelegramConnectionCard";
 import { useTelegramGroupSetup } from "@/components/cartel/TelegramGroupCard";
 import {
@@ -501,6 +508,22 @@ function StickerLabBuilder() {
     queryFn: () => loadStickerVersions(savedStickerIds),
   });
   const versionsBySticker = versionsQuery.data ?? {};
+
+  /**
+   * Phase 4B restore state. Declared with the other top-level hooks, ABOVE every
+   * conditional return, so hook order can never change between renders.
+   */
+  type RestoreTarget = {
+    stickerId: string;
+    versionId: string;
+    versionNumber: number;
+    label: string;
+  };
+  const [restoreTarget, setRestoreTarget] = useState<RestoreTarget | null>(null);
+  const [restoreTelegramTarget, setRestoreTelegramTarget] = useState<RestoreTarget | null>(null);
+  const [restoringStickerId, setRestoringStickerId] = useState<string | null>(null);
+
+
 
 
   const packId = draft?.packId ?? null;
@@ -1013,6 +1036,90 @@ function StickerLabBuilder() {
     if (step === 4 && savedStickerIds.length > 0) void versionsQuery.refetch();
     const id = draft.packId;
     if (id) void loadExisting(id);
+  };
+
+  /* ---------------- Phase 4B: set current / restore version ---------------- */
+
+  /** Re-reads durable sticker state and history. Never assumes local success. */
+  const reconcileAfterRestore = async () => {
+    const id = draft.packId;
+    if (id) await loadExisting(id);
+    await versionsQuery.refetch();
+  };
+
+  const RESTORE_MESSAGE: Record<Exclude<SetCurrentVersionStatus, "switched" | "telegram_required">, string> = {
+    unchanged: "That version is already the current sticker image.",
+    active_generation:
+      "This sticker is still generating. Wait for it to finish before restoring a version.",
+    version_unavailable: "That version is no longer available for this sticker.",
+    asset_not_ready: "That version's image is not transparency-verified and cannot be used.",
+    forbidden: "You do not have access to change this sticker.",
+    sticker_not_found: "This sticker could not be found.",
+    unauthenticated: "Your session expired. Sign in again.",
+    unknown: "That version could not be restored. Refresh the status and try again.",
+  };
+
+  /** First confirmation accepted. Server decides whether Telegram is involved. */
+  const confirmRestore = async (target: RestoreTarget) => {
+    setRestoreTarget(null);
+    setRestoringStickerId(target.stickerId);
+    try {
+      const result = await setCurrentStickerVersion({
+        stickerId: target.stickerId,
+        versionId: target.versionId,
+      });
+      if (result.status === "telegram_required") {
+        setRestoreTelegramTarget(target);
+        return;
+      }
+      if (result.status === "switched") {
+        await reconcileAfterRestore();
+        toast.success(`Version ${target.versionNumber} is now the current image.`);
+        return;
+      }
+      if (result.status === "unchanged") {
+        await reconcileAfterRestore();
+      }
+      toast.error(result.message || RESTORE_MESSAGE[result.status]);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "That version could not be restored right now.",
+      );
+    } finally {
+      if (aliveRef.current) setRestoringStickerId(null);
+    }
+  };
+
+  /** Second confirmation accepted. Replaces the sticker in place on Telegram. */
+  const confirmTelegramRestore = async (target: RestoreTarget) => {
+    setRestoreTelegramTarget(null);
+    if (!workspaceId || !draft.packId) {
+      toast.error("Select a project first.");
+      return;
+    }
+    setRestoringStickerId(target.stickerId);
+    try {
+      const result = await replacePublishedStickerVersion({
+        workspaceId,
+        packId: draft.packId,
+        stickerId: target.stickerId,
+        versionId: target.versionId,
+      });
+      await reconcileAfterRestore();
+      if (result.status === "switched") {
+        toast.success(
+          result.telegramReplaced
+            ? `Version ${target.versionNumber} replaced the live sticker in the existing Telegram set.`
+            : `Version ${target.versionNumber} is now the current image.`,
+        );
+      } else {
+        toast.message(result.message || "That version is already the current sticker image.");
+      }
+    } catch (err) {
+      toast.error(telegramErrorMessage(err));
+    } finally {
+      if (aliveRef.current) setRestoringStickerId(null);
+    }
   };
 
 
@@ -2874,13 +2981,15 @@ function StickerLabBuilder() {
                         Version history ({versionsBySticker[stickerId]!.length})
                       </summary>
                       <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
-                        Previous successful images are kept for this sticker. Choosing an earlier
-                        version is coming in a later update.
+                        Previous successful images are kept for this sticker. You can make an
+                        earlier version current again without losing history.
                       </p>
                       <ul className="mt-2 space-y-2">
                         {versionsBySticker[stickerId]!.map((v) => {
                           const isCurrent =
                             !!v.storagePath && v.storagePath === preview?.storagePath;
+                          const restoreDisabled =
+                            busy(stage) || restoringStickerId !== null || v.unavailable;
                           return (
                             <li key={v.id} className="flex min-w-0 items-center gap-2">
                               <span
@@ -2907,11 +3016,30 @@ function StickerLabBuilder() {
                               </span>
                               {isCurrent ? (
                                 <StatusBadge tone="green">Current</StatusBadge>
-                              ) : null}
+                              ) : (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 shrink-0 text-[11px]"
+                                  disabled={restoreDisabled}
+                                  onClick={() =>
+                                    setRestoreTarget({
+                                      stickerId,
+                                      versionId: v.id,
+                                      versionNumber: v.versionNumber,
+                                      label: c.label,
+                                    })
+                                  }
+                                >
+                                  {restoringStickerId === stickerId ? "Working…" : "Set current"}
+                                </Button>
+                              )}
                             </li>
                           );
                         })}
                       </ul>
+
                     </details>
                   ) : null}
 
@@ -3032,7 +3160,87 @@ function StickerLabBuilder() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          {/* Phase 4B — first confirmation. No Telegram call happens here. */}
+          <AlertDialog
+            open={!!restoreTarget}
+            onOpenChange={(open) => {
+              if (!open) setRestoreTarget(null);
+            }}
+          >
+            <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  Make version {restoreTarget?.versionNumber} the current image?
+                </AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p>
+                      This changes the current image for{" "}
+                      <strong>{restoreTarget?.label}</strong> to the selected historical version.
+                      No image is generated and no Kie credits are used. The version you are
+                      replacing stays in history.
+                    </p>
+                    <p>
+                      If CARTEL HQ detects that this sticker is already live on Telegram, nothing
+                      will be changed until you confirm a second time.
+                    </p>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    const target = restoreTarget;
+                    if (target) void confirmRestore(target);
+                  }}
+                >
+                  Set as current
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Phase 4B — second confirmation, required before any Telegram edit. */}
+          <AlertDialog
+            open={!!restoreTelegramTarget}
+            onOpenChange={(open) => {
+              if (!open) setRestoreTelegramTarget(null);
+            }}
+          >
+            <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Replace the live Telegram sticker?</AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p>
+                      <strong>{restoreTelegramTarget?.label}</strong> is already live on Telegram.
+                      Confirming replaces the live sticker in the existing Telegram set in place.
+                    </p>
+                    <p>
+                      The pack and set link stay the same, no new sticker is added, no new set is
+                      created, and no Kie credits are used. The previous version remains in
+                      history.
+                    </p>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    const target = restoreTelegramTarget;
+                    if (target) void confirmTelegramRestore(target);
+                  }}
+                >
+                  Replace on Telegram
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </StepCard>
+
       ) : null}
 
       {step === 5 ? (

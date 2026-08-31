@@ -373,7 +373,102 @@ Deno.serve(async (req: Request) => {
         return respond({ sent: false, bot, message, ...(technical ? { technical } : {}), botStartUrl: `https://t.me/${bot.username}?start=cartelhq` });
       }
     }
+    /**
+     * Phase 4B — restore an earlier successful image version for a sticker that
+     * is (or may be) live on Telegram. Replaces the sticker IN PLACE inside the
+     * SAME set via replaceStickerInSet. Never creates a set, never adds a
+     * sticker, never redistributes, never calls an image provider.
+     */
+    if (action === "replace_version") {
+      const workspaceId = String(body.workspaceId ?? "");
+      const packId = String(body.packId ?? "");
+      const stickerId = String(body.stickerId ?? "");
+      const versionId = String(body.versionId ?? "");
+      if (!workspaceId || !packId || !stickerId || !versionId) {
+        return respond({ error: "INVALID_INPUT", message: "Version restore information is missing." }, 400);
+      }
+      if (!(await member(workspaceId))) return respond({ error: "FORBIDDEN", message: "You do not have access to this workspace." }, 403);
+
+      const { data: pack } = await admin.from("sticker_packs").select("*").eq("id", packId).eq("workspace_id", workspaceId).maybeSingle();
+      if (!pack) return respond({ error: "PACK_NOT_FOUND", message: "This sticker pack could not be found." }, 404);
+      const { data: sticker } = await admin.from("stickers").select("*").eq("id", stickerId).eq("pack_id", packId).maybeSingle();
+      if (!sticker) return respond({ error: "STICKER_NOT_FOUND", message: "This sticker could not be found in the pack." }, 404);
+      const { data: version } = await admin.from("sticker_versions").select("id,sticker_id,pack_id,asset_id,version_number").eq("id", versionId).eq("sticker_id", stickerId).eq("pack_id", packId).maybeSingle();
+      if (!version?.asset_id) return respond({ error: "VERSION_UNAVAILABLE", message: "That version is no longer available for this sticker." }, 404);
+
+      const { data: targetAsset } = await admin.from("media_assets").select("id,workspace_id,kind,storage_path,transparency_valid").eq("id", version.asset_id).maybeSingle();
+      if (!targetAsset || targetAsset.workspace_id !== workspaceId || targetAsset.kind !== "generated_sticker" || targetAsset.transparency_valid !== true || !targetAsset.storage_path) {
+        return respond({ error: "ASSET_NOT_READY", message: "That version's image is not a transparency-verified sticker image." }, 409);
+      }
+
+      const { data: activeJobs } = await admin.from("ai_jobs").select("id").eq("sticker_id", stickerId).in("status", ["queued", "running"]).limit(1);
+      if ((activeJobs ?? []).length) {
+        return respond({ error: "ACTIVE_GENERATION", message: "This sticker is still generating. Wait for it to finish before restoring a version." }, 409);
+      }
+
+      if (sticker.image_asset_id === targetAsset.id) {
+        return respond({ status: "unchanged", telegramReplaced: false, stickerId, versionId, setName: pack.telegram_set_name ?? undefined, setUrl: pack.telegram_set_url ?? undefined, message: "That version is already the current sticker image." });
+      }
+
+      const oldFileId = sticker.telegram_file_id ? String(sticker.telegram_file_id) : "";
+      const setName = pack.telegram_set_name ? String(pack.telegram_set_name) : "";
+      const dbClaimsPublished = sticker.status === "published" || !!sticker.telegram_published_at;
+
+      let liveInSet = false;
+      if (setName && oldFileId) {
+        const existingSet = await maybeGetStickerSet(TELEGRAM_BOT_TOKEN, setName);
+        const setStickers = Array.isArray(existingSet?.stickers) ? existingSet.stickers : [];
+        liveInSet = setStickers.some((s: any) => String(s?.file_id ?? "") === oldFileId);
+      }
+
+      if (!liveInSet) {
+        if (dbClaimsPublished) {
+          return respond({ error: "TELEGRAM_STATE_MISMATCH", message: "CARTEL HQ could not confirm this sticker inside its Telegram set. Refresh the Telegram status before restoring a version." }, 409);
+        }
+        // Only stale, non-published upload state exists. Safe to repoint locally.
+        const { error: updateError } = await admin.from("stickers").update({ image_asset_id: targetAsset.id, status: "ready", telegram_file_id: null, telegram_publish_error: null, telegram_published_at: null, updated_at: new Date().toISOString() }).eq("id", stickerId);
+        if (updateError) return respond({ error: "UPDATE_FAILED", message: "The sticker image could not be updated. Nothing was changed on Telegram." }, 500);
+        return respond({ status: "switched", telegramReplaced: false, stickerId, versionId, setName: setName || undefined, setUrl: pack.telegram_set_url ?? undefined });
+      }
+
+      const { data: connection } = await admin.from("telegram_connections").select("*").eq("user_id", user.id).maybeSingle();
+      if (!connection?.telegram_user_id) return respond({ error: "OWNER_ID_REQUIRED", message: "Telegram owner user ID is required before replacing a published sticker." }, 400);
+      const ownerId = String(connection.telegram_user_id);
+
+      const emojiList = normalizeEmoji(sticker.emoji_list);
+      const keywords = normalizeKeywords(sticker.keyword_list);
+      const inputFor = (fileId: string) => ({ sticker: fileId, format: "static", emoji_list: emojiList, ...(keywords.length ? { keywords } : {}) });
+
+      let newFileId = "";
+      try {
+        const { data: blob, error: downloadError } = await admin.storage.from(BUCKET).download(targetAsset.storage_path);
+        if (downloadError || !blob) throw new Error("Could not read that version's image from private storage.");
+        const prepared = prepareForTelegram(new Uint8Array(await blob.arrayBuffer()));
+        newFileId = await uploadStickerFile(TELEGRAM_BOT_TOKEN, ownerId, prepared.bytes);
+        await telegramJson(TELEGRAM_BOT_TOKEN, "replaceStickerInSet", { user_id: ownerId, name: setName, old_sticker: oldFileId, sticker: inputFor(newFileId) });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Telegram could not replace this sticker.";
+        const technical = err instanceof TelegramError ? err.technical : undefined;
+        return respond({ error: "TELEGRAM_REPLACE_FAILED", message, ...(technical ? { technical } : {}) }, 502);
+      }
+
+      const now = new Date().toISOString();
+      const { error: updateError } = await admin.from("stickers").update({ image_asset_id: targetAsset.id, telegram_file_id: newFileId, status: "published", telegram_publish_error: null, telegram_published_at: now, updated_at: now }).eq("id", stickerId);
+      if (updateError) {
+        // Cross-system guard: Telegram already changed, CARTEL HQ did not.
+        try {
+          await telegramJson(TELEGRAM_BOT_TOKEN, "replaceStickerInSet", { user_id: ownerId, name: setName, old_sticker: newFileId, sticker: inputFor(oldFileId) });
+          return respond({ error: "RESTORE_ROLLED_BACK", message: "CARTEL HQ could not save the change, so the Telegram sticker was restored to its previous image. Nothing was changed." }, 500);
+        } catch (compensationError) {
+          console.error("[telegram-stickers] replace_version reconciliation required", { stickerId, setName, oldFileId, newFileId, dbError: updateError.message, compensationError: compensationError instanceof Error ? compensationError.message : "unknown error" });
+          return respond({ error: "RECONCILIATION_REQUIRED", message: "The Telegram sticker was replaced but CARTEL HQ could not save the change and could not undo it. Refresh the Telegram status and review this sticker before publishing again." }, 500);
+        }
+      }
+      return respond({ status: "switched", telegramReplaced: true, stickerId, versionId, setName, setUrl: pack.telegram_set_url ?? undefined, bot });
+    }
+
     return respond({ error: "UNKNOWN_ACTION", message: "Unknown Telegram action." }, 400);
+
   } catch (err) {
     console.error("[telegram-stickers]", err instanceof Error ? err.message : "unknown error");
     const message = err instanceof Error ? err.message : "Unexpected Telegram publishing error.";
