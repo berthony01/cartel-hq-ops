@@ -2907,6 +2907,43 @@ function StickerLabBuilder() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          <AlertDialog open={confirmSelectedBatch} onOpenChange={setConfirmSelectedBatch}>
+            <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  Generate {selectedCount} selected{" "}
+                  {selectedCount === 1 ? "sticker" : "stickers"}?
+                </AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p>
+                      {selectedCount === 1
+                        ? "1 sticker is selected."
+                        : `${selectedCount} stickers are selected.`}{" "}
+                      Each sticker uses TWO Kie provider tasks — image generation plus background
+                      removal — so this run is{" "}
+                      <strong>
+                        {selectedCount * 2} provider {selectedCount * 2 === 1 ? "task" : "tasks"}
+                      </strong>{" "}
+                      in total and consumes Kie credits on your account.
+                    </p>
+                    <p>
+                      The selection runs one sticker at a time, in board order. Ready stickers and
+                      any sticker that still has a valid existing image are excluded from this
+                      batch. There are no automatic retries, and nothing happens until you confirm.
+                    </p>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => void generateSelected()}>
+                  Generate {selectedCount * 2} tasks
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </StepCard>
       ) : null}
 
