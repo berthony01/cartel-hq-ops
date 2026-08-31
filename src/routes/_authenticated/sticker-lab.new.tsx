@@ -46,6 +46,7 @@ import {
   RefreshCw,
   RotateCcw,
   Send,
+  ShieldCheck,
   Sparkles,
   Trash2,
   X,
@@ -114,7 +115,10 @@ import {
   type Concept,
   type PackSize,
   type PackTheme,
+  type CreativeBlueprint,
 } from "@/lib/sticker-lab";
+import { supabase } from "@/integrations/supabase/client";
+import { readCharacterLock, hasCharacterLockContent } from "@/lib/brand-kit";
 
 type BuilderSearch = { pack?: string; step?: number };
 
