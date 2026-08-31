@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Palette, Save } from "lucide-react";
+import { FolderLock, Loader2, Palette, Save } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useSession } from "@/hooks/useSession";
 import { useWorkspace } from "@/lib/workspace-context";
 import {
   listWorkspaceAssets,
@@ -14,7 +13,6 @@ import {
 } from "@/lib/media";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { EmptyState } from "@/components/cartel/EmptyState";
-import { AssetUploader } from "@/components/cartel/AssetUploader";
 import { Section } from "@/components/cartel/Section";
 import { StickyActionBar } from "@/components/cartel/StickyActionBar";
 import { Button } from "@/components/ui/button";
@@ -85,7 +83,6 @@ const BRAND_ASSET_TYPES: AssetType[] = ["logo", "mascot", "reference_image"];
 
 function BrandKitPage() {
   const { workspaceId, workspace, loading: workspaceLoading } = useWorkspace();
-  const { user } = useSession();
   const queryClient = useQueryClient();
   const [form, setForm] = useState<BrandKitForm>(EMPTY_FORM);
 
@@ -192,7 +189,7 @@ function BrandKitPage() {
       <PageHeader
         eyebrow="Module"
         title="Brand Kit"
-        description="One Brand Kit per project — colour, type, marks, links and AI style rules. Sticker Lab generation automatically uses this project's Brand Kit when one is saved."
+        description="Brand Kit holds this project's creative rules — identity, colour, type, links and AI style guidance. Actual files live in Asset Vault. Sticker Lab uses this Brand Kit when one is saved and can reuse Asset Vault references."
         status={workspace ? workspace.name : "No project"}
       />
 
