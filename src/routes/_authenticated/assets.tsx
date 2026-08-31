@@ -243,7 +243,7 @@ function AssetsPage() {
                         variant="ghost"
                         className="min-h-10 min-w-10 text-signal hover:text-signal"
                         aria-label="Delete asset"
-                        onClick={() => void remove(asset)}
+                        onClick={() => setPendingDelete(asset)}
                       >
                         <Trash2 className="size-4" aria-hidden="true" />
                       </Button>
@@ -255,6 +255,52 @@ function AssetsPage() {
           </Section>
         </>
       )}
+
+      <AlertDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete this{" "}
+              {pendingDelete
+                ? (
+                    ASSET_TYPE_LABELS[pendingDelete.asset_type as AssetType] ??
+                    pendingDelete.asset_type
+                  ).toLowerCase()
+                : "asset"}
+              ?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  This removes the file from this project&apos;s Asset Vault. It cannot be undone.
+                </p>
+                <p>
+                  Anywhere still using this file — Brand Kit, Sticker Lab references or earlier
+                  work — may no longer show it.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              onClick={(e) => {
+                e.preventDefault();
+                if (pendingDelete) void remove(pendingDelete);
+              }}
+            >
+              {deleting ? "Deleting…" : "Delete asset"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
+
 }
