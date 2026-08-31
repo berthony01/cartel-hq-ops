@@ -114,14 +114,3 @@ export function parseLockList(value: string): string[] {
 
 export const formatLockList = (list: string[]): string => list.join(", ");
 
-/** True when the lock carries any meaningful identity content. */
-export function hasCharacterLockContent(lock: CharacterLock): boolean {
-  return (
-    lock.subjectName.trim().length > 0 ||
-    lock.identityNotes.trim().length > 0 ||
-    lock.protectedTraits.length > 0 ||
-    lock.wardrobeAccessories.length > 0 ||
-    lock.negativeConstraints.length > 0 ||
-    lock.canonicalReferenceAssetIds.length > 0
-  );
-}
