@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ExternalLink, ImageOff, Pencil, Send } from "lucide-react";
+import { Archive, ExternalLink, ImageOff, Pencil, Send } from "lucide-react";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/cartel/EmptyState";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/lib/workspace-context";
 import { loadAssets, loadPack, loadPackStickers } from "@/lib/sticker-packs";
+import { PackLifecycleMenu } from "@/routes/_authenticated/sticker-lab.index";
 import { loadPackTelegramState } from "@/lib/telegram-stickers";
 import { signedUrlMap } from "@/lib/media";
 
@@ -37,6 +38,7 @@ export const Route = createFileRoute("/_authenticated/sticker-lab/$packId")({
 function PackManagerPage() {
   const { packId } = Route.useParams();
   const { workspaceId } = useWorkspace();
+  const navigate = useNavigate();
   const [urls, setUrls] = useState<Record<string, string>>({});
 
   const packQuery = useQuery({
@@ -106,13 +108,16 @@ function PackManagerPage() {
     (s) => s.status === "ready" || s.status === "published",
   ).length;
   const allReady = stickers.length > 0 && readyCount === stickers.length;
-  const statusLabel = published
-    ? "Published"
-    : allReady
-      ? "Ready to publish"
-      : readyCount > 0
-        ? "Review in progress"
-        : "In progress";
+  const isArchived = !!pack.archived_at;
+  const statusLabel = isArchived
+    ? "Archived"
+    : published
+      ? "Published"
+      : allReady
+        ? "Ready to publish"
+        : readyCount > 0
+          ? "Review in progress"
+          : "In progress";
 
   return (
     <div className="flex min-w-0 flex-col gap-6 sm:gap-8">
@@ -121,8 +126,30 @@ function PackManagerPage() {
         title={pack.title}
         status={statusLabel}
         description={`${pack.theme} · ${pack.pack_size} stickers · ${readyCount}/${stickers.length} ready`}
+        actions={
+          <PackLifecycleMenu
+            packId={pack.id}
+            packTitle={pack.title}
+            workspaceId={workspaceId}
+            onDeleted={() => void navigate({ to: "/sticker-lab" })}
+          />
+        }
       />
 
+      {isArchived ? (
+        <Section
+          variant="quiet"
+          title="This pack is archived"
+          description="Archived packs stay out of your active packs and their Sticker Drops are paused. Publishing, delivery and generation history are preserved, and the existing Telegram sticker set is not deleted from Telegram. Restore it from the pack options menu to make it active again — Sticker Drops stay paused until you re-enable them."
+          actions={<StatusBadge tone="muted">archived</StatusBadge>}
+        >
+          <p className="flex items-start gap-2 text-sm text-muted-foreground">
+            <Archive className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>Editing, publishing and community delivery actions are hidden while archived.</span>
+          </p>
+        </Section>
+      ) : null}
+      {isArchived ? null : (
       <Section
         variant="hero"
         title={
@@ -185,6 +212,7 @@ function PackManagerPage() {
           ) : null}
         </div>
       </Section>
+      )}
 
 
       <Section

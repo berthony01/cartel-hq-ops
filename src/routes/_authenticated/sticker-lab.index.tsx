@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { PackageOpen, Plus, TriangleAlert } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Archive, ArchiveRestore, MoreVertical, PackageOpen, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
@@ -8,9 +10,33 @@ import { Section } from "@/components/cartel/Section";
 import { InlineRow } from "@/components/cartel/InlineRow";
 import { ScrollRail } from "@/components/cartel/ScrollRail";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { FLOW_STEPS } from "@/lib/sticker-lab";
 import { useWorkspace } from "@/lib/workspace-context";
-import { listWorkspacePacks } from "@/lib/sticker-packs";
+import {
+  archivePack,
+  deletePackPermanently,
+  describeBlockingReasons,
+  inspectPackLifecycle,
+  listArchivedPacks,
+  listWorkspacePacks,
+  restorePack,
+  type PackLifecycleState,
+} from "@/lib/sticker-packs";
 import { clearDraft } from "@/lib/sticker-lab";
 
 export const Route = createFileRoute("/_authenticated/sticker-lab/")({
@@ -45,6 +71,234 @@ function relativeTime(iso: string): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
+/**
+ * Compact lifecycle control for one pack. Every action and its availability is
+ * decided by the server (`sticker_pack_lifecycle_state`); this menu only
+ * renders what the database says the signed-in operator may actually do.
+ */
+export function PackLifecycleMenu({
+  packId,
+  packTitle,
+  workspaceId,
+  onDeleted,
+  align = "end",
+}: {
+  packId: string;
+  packTitle: string;
+  workspaceId: string | null | undefined;
+  onDeleted?: () => void;
+  align?: "start" | "end";
+}) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [dialog, setDialog] = useState<null | "delete" | "archive" | "restore">(null);
+  const [confirmTitle, setConfirmTitle] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const stateQuery = useQuery<PackLifecycleState>({
+    queryKey: ["pack-lifecycle", packId],
+    queryFn: () => inspectPackLifecycle(packId),
+    enabled: open || dialog !== null,
+    staleTime: 15_000,
+  });
+  const state = stateQuery.data;
+
+  function refresh() {
+    void queryClient.invalidateQueries({ queryKey: ["sticker-packs", workspaceId] });
+    void queryClient.invalidateQueries({ queryKey: ["sticker-packs-archived", workspaceId] });
+    void queryClient.invalidateQueries({ queryKey: ["pack-lifecycle", packId] });
+    void queryClient.invalidateQueries({ queryKey: ["pack-manager", packId] });
+  }
+
+  function close() {
+    setDialog(null);
+    setConfirmTitle("");
+  }
+
+  async function run(kind: "delete" | "archive" | "restore") {
+    setBusy(true);
+    try {
+      if (kind === "archive") {
+        await archivePack(packId);
+        toast.success("Pack archived", {
+          description: "Any Sticker Drops for this pack were paused. The Telegram sticker set is untouched.",
+        });
+      } else if (kind === "restore") {
+        await restorePack(packId);
+        toast.success("Pack restored", {
+          description: "Sticker Drops stay paused until you re-enable them in Sticker Drops.",
+        });
+      } else {
+        const result = await deletePackPermanently(packId);
+        if (!result.deleted) {
+          toast.error("This pack cannot be deleted", {
+            description: `${describeBlockingReasons(result.blockingReasons).join(", ") || "It has durable history"}. Archive it instead.`,
+          });
+          refresh();
+          close();
+          return;
+        }
+        toast.success("Pack deleted permanently", {
+          description: result.storageCleanupPending
+            ? "The pack is gone. Some stored images will be cleaned up later."
+            : `Removed the pack, its stickers and ${result.removedImages} generated image${result.removedImages === 1 ? "" : "s"}.`,
+        });
+        onDeleted?.();
+      }
+      refresh();
+      close();
+    } catch (err) {
+      toast.error("That action could not be completed", {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const blocking = describeBlockingReasons(state?.blocking_reasons ?? []);
+
+  return (
+    <>
+      <DropdownMenu open={open} onOpenChange={setOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="size-9 shrink-0" aria-label={`Pack options for ${packTitle}`}>
+            <MoreVertical className="size-4" aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align={align} className="w-60">
+          {stateQuery.isLoading ? (
+            <DropdownMenuItem disabled>Checking pack…</DropdownMenuItem>
+          ) : stateQuery.isError ? (
+            <DropdownMenuItem disabled>Options unavailable</DropdownMenuItem>
+          ) : !state?.can_manage ? (
+            <DropdownMenuItem disabled>Owners and admins only</DropdownMenuItem>
+          ) : state.can_restore ? (
+            <DropdownMenuItem onSelect={() => setDialog("restore")}>
+              <ArchiveRestore className="size-4" aria-hidden="true" />
+              Restore pack
+            </DropdownMenuItem>
+          ) : state.can_delete ? (
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onSelect={() => setDialog("delete")}
+            >
+              <Trash2 className="size-4" aria-hidden="true" />
+              Delete pack permanently
+            </DropdownMenuItem>
+          ) : state.can_archive ? (
+            <DropdownMenuItem onSelect={() => setDialog("archive")}>
+              <Archive className="size-4" aria-hidden="true" />
+              Archive pack
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem disabled>Busy — try again shortly</DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Dialog open={dialog !== null} onOpenChange={(v) => (v ? null : close())}>
+        <DialogContent className="max-w-md">
+          {dialog === "delete" ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Delete “{packTitle}” permanently?</DialogTitle>
+                <DialogDescription asChild>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p>
+                      This removes the CARTEL HQ pack, its sticker rows and the generated sticker
+                      images that belong only to this pack. It cannot be undone.
+                    </p>
+                    <p>
+                      Shared project assets and Brand Kit logos, mascots and references are{" "}
+                      <strong className="text-foreground">not</strong> removed.
+                    </p>
+                    <p>
+                      Type <strong className="text-foreground">{packTitle}</strong> to confirm.
+                    </p>
+                  </div>
+                </DialogDescription>
+              </DialogHeader>
+              <Input
+                value={confirmTitle}
+                onChange={(e) => setConfirmTitle(e.target.value)}
+                aria-label="Type the pack title to confirm"
+                placeholder={packTitle}
+                className="min-h-11"
+              />
+              <DialogFooter className="gap-2">
+                <Button variant="outline" className="min-h-11" onClick={close} disabled={busy}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  className="min-h-11"
+                  disabled={busy || confirmTitle.trim() !== packTitle}
+                  onClick={() => void run("delete")}
+                >
+                  {busy ? "Deleting…" : "Delete permanently"}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : dialog === "archive" ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Archive “{packTitle}”?</DialogTitle>
+                <DialogDescription asChild>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p>The pack leaves your active packs and moves to Archived packs.</p>
+                    <p>Any Sticker Drops using this pack are paused so nothing keeps posting.</p>
+                    <p>
+                      Publishing, delivery and generation history are preserved, and the existing
+                      Telegram sticker set is{" "}
+                      <strong className="text-foreground">not deleted from Telegram</strong>.
+                    </p>
+                    {blocking.length > 0 ? (
+                      <p className="text-xs">Why archive instead of delete: {blocking.join(", ")}.</p>
+                    ) : null}
+                  </div>
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="gap-2">
+                <Button variant="outline" className="min-h-11" onClick={close} disabled={busy}>
+                  Cancel
+                </Button>
+                <Button className="min-h-11" disabled={busy} onClick={() => void run("archive")}>
+                  {busy ? "Archiving…" : "Archive pack"}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : dialog === "restore" ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Restore “{packTitle}”?</DialogTitle>
+                <DialogDescription asChild>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p>The pack returns to your active packs.</p>
+                    <p>
+                      Sticker Drops stay paused on purpose. Re-enable them yourself in Sticker Drops
+                      when you want recurring posts again.
+                    </p>
+                  </div>
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="gap-2">
+                <Button variant="outline" className="min-h-11" onClick={close} disabled={busy}>
+                  Cancel
+                </Button>
+                <Button className="min-h-11" disabled={busy} onClick={() => void run("restore")}>
+                  {busy ? "Restoring…" : "Restore pack"}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+
 function StickerLabHome() {
   const { workspaceId, workspace } = useWorkspace();
   const projectName = workspace?.name ?? "this project";
@@ -56,6 +310,14 @@ function StickerLabHome() {
   const packs = packsQuery.data ?? [];
   const failed = packsQuery.isError;
   const staleWhileFailed = failed && packs.length > 0;
+
+  const archivedQuery = useQuery({
+    queryKey: ["sticker-packs-archived", workspaceId],
+    enabled: !!workspaceId,
+    queryFn: () => listArchivedPacks(workspaceId!),
+  });
+  const archived = archivedQuery.data ?? [];
+
 
   const newPackLink = (
     <Button asChild className="min-h-11 w-full sm:w-auto">
@@ -201,6 +463,11 @@ function StickerLabHome() {
                             Open pack
                           </Link>
                         </Button>
+                        <PackLifecycleMenu
+                          packId={pack.id}
+                          packTitle={pack.title}
+                          workspaceId={workspaceId}
+                        />
                       </div>
                     }
                   />
@@ -210,6 +477,42 @@ function StickerLabHome() {
           </ul>
         )}
       </Section>
+
+      {archived.length > 0 ? (
+        <Section
+          variant="quiet"
+          title="Archived packs"
+          description="Archived packs keep their Telegram sticker set, delivery history and Sticker Drop history. Their Sticker Drops are paused."
+          actions={<StatusBadge tone="muted">{`${archived.length} archived`}</StatusBadge>}
+        >
+          <ul className="space-y-2">
+            {archived.map((pack) => (
+              <li key={pack.id}>
+                <InlineRow
+                  title={pack.title}
+                  subtitle={`${pack.pack_size} stickers · archived ${pack.archived_at ? relativeTime(pack.archived_at) : "recently"}`}
+                  trailing={
+                    <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                      <StatusBadge tone="muted">archived</StatusBadge>
+                      <Button asChild size="sm" variant="outline" className="min-h-9">
+                        <Link to="/sticker-lab/$packId" params={{ packId: pack.id }}>
+                          View pack
+                        </Link>
+                      </Button>
+                      <PackLifecycleMenu
+                        packId={pack.id}
+                        packTitle={pack.title}
+                        workspaceId={workspaceId}
+                      />
+                    </div>
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+
     </div>
   );
 }
