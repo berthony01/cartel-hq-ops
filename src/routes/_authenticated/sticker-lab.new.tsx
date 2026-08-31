@@ -105,18 +105,25 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   BUILDER_STEPS,
+  HUMOR_LEVELS,
+  INTENSITY_LEVELS,
   MAX_REFERENCES,
   PACK_SIZES,
   PACK_THEMES,
+  TEXT_PREFERENCES,
+  formatDirectionList,
   loadDraft,
+  parseDirectionList,
   saveDraft,
   starterConcepts,
   type BuilderDraft,
   type Concept,
+  type CreativeDirection,
   type PackSize,
   type PackTheme,
   type CreativeBlueprint,
 } from "@/lib/sticker-lab";
+
 import { supabase } from "@/integrations/supabase/client";
 import { readCharacterLock, hasCharacterLockContent } from "@/lib/brand-kit";
 
