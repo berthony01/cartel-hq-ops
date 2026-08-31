@@ -318,6 +318,13 @@ function StickerLabBuilder() {
   });
 
   const [confirmRemaining, setConfirmRemaining] = useState(false);
+  /**
+   * Sticker Studio selective generation. Editor-only local state: never
+   * persisted, never sent to the server, and always re-validated against live
+   * sticker state immediately before any provider work starts.
+   */
+  const [selectedForGeneration, setSelectedForGeneration] = useState<string[]>([]);
+  const [confirmSelectedBatch, setConfirmSelectedBatch] = useState(false);
   const [exporting, setExporting] = useState(false);
   /**
    * Existing browser-side review/quality runtime (local transparency checks,
