@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ExternalLink, ImageOff, Pencil, Send } from "lucide-react";
+import { Archive, ExternalLink, ImageOff, Pencil, Send } from "lucide-react";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/cartel/EmptyState";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/lib/workspace-context";
 import { loadAssets, loadPack, loadPackStickers } from "@/lib/sticker-packs";
+import { PackLifecycleMenu } from "@/routes/_authenticated/sticker-lab.index";
 import { loadPackTelegramState } from "@/lib/telegram-stickers";
 import { signedUrlMap } from "@/lib/media";
 
