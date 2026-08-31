@@ -962,6 +962,8 @@ export type Database = {
       }
       sticker_packs: {
         Row: {
+          archived_at: string | null
+          archived_by: string | null
           brief: string | null
           character_name: string | null
           created_at: string
@@ -982,6 +984,8 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
           brief?: string | null
           character_name?: string | null
           created_at?: string
@@ -1002,6 +1006,8 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          archived_at?: string | null
+          archived_by?: string | null
           brief?: string | null
           character_name?: string | null
           created_at?: string
@@ -1022,6 +1028,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "sticker_packs_archived_by_fkey"
+            columns: ["archived_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "sticker_packs_created_by_fkey"
             columns: ["created_by"]
@@ -1614,6 +1627,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      archive_sticker_pack: { Args: { _pack_id: string }; Returns: Json }
       can_access_pack: {
         Args: { _pack_id: string; _user_id: string }
         Returns: boolean
@@ -1641,6 +1655,10 @@ export type Database = {
           telegram_chat_id: number
           telegram_message_id: number
         }[]
+      }
+      delete_sticker_pack_if_eligible: {
+        Args: { _pack_id: string }
+        Returns: Json
       }
       enqueue_due_launch_reminder_events: {
         Args: { _now?: string }
@@ -1830,6 +1848,7 @@ export type Database = {
         Returns: boolean
       }
       mark_stale_launch_notification_claims: { Args: never; Returns: number }
+      restore_sticker_pack: { Args: { _pack_id: string }; Returns: Json }
       set_launch_contract_address: {
         Args: { _contract_address: string; _launch_id: string }
         Returns: {
@@ -1873,6 +1892,10 @@ export type Database = {
       sticker_drop_scheduler_secret_matches: {
         Args: { p_secret: string }
         Returns: boolean
+      }
+      sticker_pack_lifecycle_state: {
+        Args: { _pack_id: string }
+        Returns: Json
       }
       telegram_message_cleanup_scheduler_secret_matches: {
         Args: { p_secret: string }
