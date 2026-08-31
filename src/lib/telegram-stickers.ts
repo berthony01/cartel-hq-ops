@@ -125,6 +125,38 @@ export function sendTestSticker(params: {
   });
 }
 
+export type TelegramReplaceVersionResult = {
+  status: "switched" | "unchanged";
+  /** True only when the live Telegram set was actually edited in place. */
+  telegramReplaced: boolean;
+  stickerId?: string;
+  versionId?: string;
+  setName?: string;
+  setUrl?: string;
+  message?: string;
+};
+
+/**
+ * Restores an earlier image version for a sticker that is live in a Telegram
+ * set. The server replaces the sticker IN PLACE in the SAME set — it never
+ * creates a set, never adds a sticker and never calls an image provider.
+ */
+export function replacePublishedStickerVersion(params: {
+  workspaceId: string;
+  packId: string;
+  stickerId: string;
+  versionId: string;
+}): Promise<TelegramReplaceVersionResult> {
+  return invoke<TelegramReplaceVersionResult>({
+    action: "replace_version",
+    workspaceId: params.workspaceId,
+    packId: params.packId,
+    stickerId: params.stickerId,
+    versionId: params.versionId,
+  });
+}
+
+
 /* ------------------------------------------------------------------ */
 /* telegram_connections — own-row RLS, read/upsert only                */
 /* ------------------------------------------------------------------ */
