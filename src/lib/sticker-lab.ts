@@ -1,4 +1,7 @@
+import { normalizeCharacterLock, type CharacterLock } from "@/lib/brand-kit";
+
 export type PackTheme = "Reactions" | "Crypto" | "Community" | "Meme" | "Custom";
+
 
 export const PACK_THEMES: PackTheme[] = [
   "Reactions",
@@ -179,6 +182,37 @@ export const BUILDER_STEPS = [
 ] as const;
 
 
+/**
+ * Versioned, additive creative blueprint persisted on `sticker_packs.creative_blueprint`.
+ * Phase 1A stores and hydrates it only — generation ignores it entirely.
+ */
+export type CreativeBlueprint = {
+  version: 1;
+  useBrandCharacterLock: boolean;
+  characterLock: CharacterLock | null;
+};
+
+export function emptyBlueprint(): CreativeBlueprint {
+  return { version: 1, useBrandCharacterLock: false, characterLock: null };
+}
+
+/** Parses an unknown `creative_blueprint` value. `{}` and junk degrade to defaults. */
+export function normalizeBlueprint(value: unknown): CreativeBlueprint {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return emptyBlueprint();
+  }
+  const raw = value as Record<string, unknown>;
+  const lock = raw['characterLock'];
+  return {
+    version: 1,
+    useBrandCharacterLock: raw['useBrandCharacterLock'] === true,
+    characterLock:
+      typeof lock === "object" && lock !== null && !Array.isArray(lock)
+        ? normalizeCharacterLock(lock)
+        : null,
+  };
+}
+
 export type BuilderDraft = {
   characterName: string;
   imageName: string | null;
@@ -198,7 +232,10 @@ export type BuilderDraft = {
   packId: string | null;
   /** Local concept id -> persisted sticker row id. */
   stickerIds: Record<string, string>;
+  /** Versioned creative blueprint. Not wired into generation in this phase. */
+  creativeBlueprint: CreativeBlueprint;
 };
+
 
 export const MAX_REFERENCES = 3;
 
@@ -220,6 +257,7 @@ export function emptyDraft(): BuilderDraft {
     keywords: {},
     packId: null,
     stickerIds: {},
+    creativeBlueprint: emptyBlueprint(),
   };
 }
 
@@ -229,7 +267,14 @@ export function loadDraft(): BuilderDraft {
   try {
     const raw = window.sessionStorage.getItem(DRAFT_KEY);
     if (!raw) return emptyDraft();
-    return { ...emptyDraft(), ...(JSON.parse(raw) as Partial<BuilderDraft>) };
+    const parsed = JSON.parse(raw) as Partial<BuilderDraft>;
+    // Older session drafts predate the blueprint — hydrate them safely.
+    return {
+      ...emptyDraft(),
+      ...parsed,
+      creativeBlueprint: normalizeBlueprint(parsed.creativeBlueprint),
+    };
+
   } catch {
     return emptyDraft();
   }

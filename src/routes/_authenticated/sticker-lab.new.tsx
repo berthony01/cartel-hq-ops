@@ -46,6 +46,7 @@ import {
   RefreshCw,
   RotateCcw,
   Send,
+  ShieldCheck,
   Sparkles,
   Trash2,
   X,
@@ -114,7 +115,10 @@ import {
   type Concept,
   type PackSize,
   type PackTheme,
+  type CreativeBlueprint,
 } from "@/lib/sticker-lab";
+import { supabase } from "@/integrations/supabase/client";
+import { readCharacterLock, hasCharacterLockContent } from "@/lib/brand-kit";
 
 type BuilderSearch = { pack?: string; step?: number };
 
@@ -313,6 +317,27 @@ function StickerLabBuilder() {
     },
   });
 
+  /**
+   * Read-only Brand Kit Character Lock. Free metadata read — never a
+   * generation call, and it never touches `referenceAssetIds`.
+   */
+  const characterLockQuery = useQuery({
+    queryKey: ["brand-kit-character-lock", workspaceId],
+    enabled: !!workspaceId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("brand_kits")
+        .select("metadata")
+        .eq("workspace_id", workspaceId!)
+        .maybeSingle();
+      if (error) throw error;
+      return readCharacterLock(data?.metadata);
+    },
+  });
+  const brandLock = characterLockQuery.data ?? null;
+  const brandLockActive = !!brandLock?.enabled;
+
+
   // Provider status. Free probe, never a generation call.
   const configQuery = useQuery({
     queryKey: ["sticker-ai-config"],
@@ -507,7 +532,27 @@ function StickerLabBuilder() {
     update({ referenceAssetIds: [...draft.referenceAssetIds, asset.id] });
   };
 
+  const blueprint = draft.creativeBlueprint;
+  const packLockSnapshot = blueprint.characterLock;
+
+  /**
+   * Character Lock toggle. Snapshots the Brand Kit lock into a draft that has
+   * none yet; an already-saved pack keeps its own snapshot untouched. Turning
+   * it off preserves the snapshot. Generation ignores both in this phase and
+   * `referenceAssetIds` is never modified here.
+   */
+  const toggleUseCharacterLock = (next: boolean) => {
+    const blueprintNext: CreativeBlueprint = {
+      version: 1,
+      useBrandCharacterLock: next,
+      characterLock:
+        next && !packLockSnapshot && brandLockActive ? brandLock : packLockSnapshot,
+    };
+    update({ creativeBlueprint: blueprintNext });
+  };
+
   const setTheme = (theme: PackTheme) =>
+
     update({ theme, concepts: starterConcepts(theme, draft.size) });
 
   const setSize = (size: PackSize) => {
@@ -1259,7 +1304,116 @@ function StickerLabBuilder() {
               </ul>
             )}
           </div>
+
+          <div className="mt-8 rounded-lg border border-border/70 bg-surface-raised/40 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-2.5">
+                <ShieldCheck className="mt-0.5 size-4 shrink-0 text-gold" aria-hidden="true" />
+                <div className="min-w-0">
+                  <h3 className="text-sm font-medium text-foreground">Character Lock</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Canonical character identity from this project’s Brand Kit.
+                  </p>
+                </div>
+              </div>
+              {characterLockQuery.isLoading ? (
+                <span className="text-xs text-muted-foreground">Loading…</span>
+              ) : brandLockActive ? (
+                <span className="rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 text-[11px] uppercase tracking-[0.12em] text-gold">
+                  Character Lock active
+                </span>
+              ) : null}
+            </div>
+
+            {characterLockQuery.isError ? (
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <p role="alert" className="text-xs text-signal">
+                  The Brand Kit Character Lock could not be loaded, so its status is unknown right
+                  now.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-10"
+                  onClick={() => void characterLockQuery.refetch()}
+                >
+                  Retry
+                </Button>
+              </div>
+            ) : characterLockQuery.isLoading ? null : !brandLockActive ? (
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <p className="text-xs text-muted-foreground">
+                  No Character Lock is active for this project yet.
+                </p>
+                <Button asChild variant="outline" size="sm" className="min-h-10">
+                  <Link to="/brand-kit">Set up in Brand Kit</Link>
+                </Button>
+              </div>
+            ) : (
+              <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2 [&>*]:min-w-0">
+                <div>
+                  <dt className="uppercase tracking-[0.12em] text-muted-foreground">Subject</dt>
+                  <dd className="mt-0.5 text-foreground [overflow-wrap:anywhere]">
+                    {brandLock!.subjectName || "Not named"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="uppercase tracking-[0.12em] text-muted-foreground">
+                    Protected traits
+                  </dt>
+                  <dd className="mt-0.5 text-foreground [overflow-wrap:anywhere]">
+                    {brandLock!.protectedTraits.join(", ") || "None listed"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="uppercase tracking-[0.12em] text-muted-foreground">
+                    Wardrobe &amp; accessories
+                  </dt>
+                  <dd className="mt-0.5 text-foreground [overflow-wrap:anywhere]">
+                    {brandLock!.wardrobeAccessories.join(", ") || "None listed"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="uppercase tracking-[0.12em] text-muted-foreground">
+                    Never change
+                  </dt>
+                  <dd className="mt-0.5 text-foreground [overflow-wrap:anywhere]">
+                    {brandLock!.negativeConstraints.join(", ") || "None listed"}
+                  </dd>
+                </div>
+              </dl>
+            )}
+
+            <label className="mt-4 flex cursor-pointer items-start gap-2.5">
+              <Checkbox
+                checked={blueprint.useBrandCharacterLock}
+                onCheckedChange={(v) => toggleUseCharacterLock(v === true)}
+                disabled={!brandLockActive && !packLockSnapshot}
+                className="mt-0.5"
+                aria-describedby="character-lock-help"
+              />
+              <span className="min-w-0 text-xs">
+                <span className="font-medium text-foreground">
+                  Use Brand Kit Character Lock for this pack
+                </span>
+                <span id="character-lock-help" className="mt-1 block text-muted-foreground">
+                  Saved with this pack for the V2 prompt upgrade; current generation behaviour is
+                  unchanged.
+                </span>
+              </span>
+            </label>
+
+            {packLockSnapshot && hasCharacterLockContent(packLockSnapshot) ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                This pack keeps its own saved snapshot
+                {packLockSnapshot.subjectName ? ` of “${packLockSnapshot.subjectName}”` : ""}. Later
+                Brand Kit edits do not overwrite it.
+              </p>
+            ) : null}
+          </div>
         </StepCard>
+
       ) : null}
 
       {step === 2 ? (
