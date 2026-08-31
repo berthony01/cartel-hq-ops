@@ -13,6 +13,12 @@ import {
 } from "@/lib/media";
 import { fetchStickerAiConfig } from "@/lib/sticker-ai";
 import {
+  fetchStickerConceptConfig,
+  suggestStickerConcepts,
+  type SuggestedConcept,
+} from "@/lib/sticker-concepts";
+
+import {
   STAGE_LABEL,
   useStickerGenerationRuntime,
   type Stage,
