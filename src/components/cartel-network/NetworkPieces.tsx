@@ -139,15 +139,16 @@ export function PlatformReviewedPill({ className }: { className?: string }) {
  * validates a contract, a token or a team.
  */
 export function VerificationSignals({
-  platformReviewed,
-  platformReviewedAt,
+  verificationStatus,
+  verifiedAt,
   className,
 }: {
-  platformReviewed: boolean;
-  platformReviewedAt?: string | null;
+  verificationStatus: string | null | undefined;
+  verifiedAt?: string | null;
   className?: string;
 }) {
-  const reviewedOn = platformReviewed ? formatDateTime(platformReviewedAt) : null;
+  const platformReviewed = verificationStatus === "verified";
+  const reviewedOn = platformReviewed ? formatDateTime(verifiedAt) : null;
   return (
     <section className={cn("rounded-lg border border-border bg-surface px-4 py-4", className)}>
       <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">
@@ -176,6 +177,7 @@ export function VerificationSignals({
           </p>
         )}
       </div>
+
 
       <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
         {NETWORK_TRUST_COPY.verificationClarifier}
