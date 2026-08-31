@@ -217,7 +217,9 @@ function HqDashboard() {
   const killSwitch = drops?.control?.kill_switch === true;
   const schedules = drops?.schedules ?? [];
   const events = drops?.events ?? [];
-  const activeSchedules = schedules.filter((s) => s.enabled).length;
+  /** Presentation-only: nothing is effectively active while the kill switch is on. */
+  const activeSchedules = killSwitch ? 0 : schedules.filter((s) => s.enabled).length;
+
   const autoPaused = schedules.filter((s) => scheduleState(s, killSwitch) === "auto_paused").length;
   const failedEvents = events.filter((e) => e.status !== "sent").length;
   const dropsSentToday = drops ? sentToday(events) : 0;
@@ -288,6 +290,13 @@ function HqDashboard() {
           ? "No community connected"
           : `${groupCount} connected · ${healthyGroups} healthy`;
 
+  const packsUnavailable = packsQuery.isError;
+  const launchesUnavailable = launchesQuery.isError;
+  const aiJobsClause = usageQuery.isError
+    ? "AI usage unavailable"
+    : `${usageQuery.isPending ? "—" : (usageQuery.data ?? 0)} AI jobs run`;
+
+
   const dropsBadge = dropsQuery.isError ? (
     <StatusBadge tone="muted">Unavailable</StatusBadge>
   ) : killSwitch ? (
@@ -340,6 +349,23 @@ function HqDashboard() {
           <Section variant="hero" className="min-w-0">
             {launchesQuery.isPending ? (
               <p className="text-sm text-muted-foreground">Loading launch state…</p>
+            ) : launchesUnavailable ? (
+              <div className="min-w-0 space-y-3">
+                <p className="type-meta text-muted-foreground">Launch status</p>
+                <h2 className="font-display text-2xl uppercase leading-tight text-muted-foreground sm:text-3xl">
+                  Launch state unavailable
+                </h2>
+                <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
+                  Launch data could not be loaded right now. This does not change your launch —
+                  open Launch Control to view the authoritative state.
+                </p>
+                <Link
+                  to="/launch-control"
+                  className="touch-target inline-flex w-fit items-center gap-1.5 rounded-md border border-gold/50 bg-gold/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-gold transition-colors hover:bg-gold/20"
+                >
+                  Open Launch Control <ChevronRight className="size-4" aria-hidden="true" />
+                </Link>
+              </div>
             ) : !primaryLaunch ? (
               <div className="min-w-0 space-y-3">
                 <p className="type-meta text-gold">Launch status</p>
@@ -358,6 +384,7 @@ function HqDashboard() {
                 </Link>
               </div>
             ) : (
+
               <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
                 <div className="min-w-0 space-y-3">
                   <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
@@ -477,7 +504,9 @@ function HqDashboard() {
             <SnapshotCard
               title="Launch"
               badge={
-                status ? (
+                launchesUnavailable ? (
+                  <StatusBadge tone="muted">Unavailable</StatusBadge>
+                ) : status ? (
                   <StatusBadge tone={STATUS_TONE[status]}>
                     <span>{LAUNCH_STATUS_LABELS[status]}</span>
                   </StatusBadge>
@@ -485,15 +514,29 @@ function HqDashboard() {
                   <StatusBadge tone="muted">No launch</StatusBadge>
                 )
               }
-              primary={primaryLaunch ? primaryLaunch.token_name : "No launch created"}
-              secondary={primaryLaunch ? nextLine : "Create a launch to start the lifecycle."}
+              primary={
+                launchesUnavailable
+                  ? "Unavailable"
+                  : primaryLaunch
+                    ? primaryLaunch.token_name
+                    : "No launch created"
+              }
+              secondary={
+                launchesUnavailable
+                  ? "Launch state could not be loaded. Open Launch Control for the authoritative state."
+                  : primaryLaunch
+                    ? nextLine
+                    : "Create a launch to start the lifecycle."
+              }
               to="/launch-control"
               linkLabel="Launch Control"
             />
             <SnapshotCard
               title="Communities"
               badge={
-                groupCount > 0 ? (
+                telegramQuery.isError ? (
+                  <StatusBadge tone="muted">Unavailable</StatusBadge>
+                ) : groupCount > 0 ? (
                   <StatusBadge tone={healthyGroups === groupCount ? "green" : "gold"}>
                     {healthyGroups}/{groupCount} healthy
                   </StatusBadge>
@@ -503,9 +546,11 @@ function HqDashboard() {
               }
               primary={communitiesPrimary}
               secondary={
-                groupCount > 0
-                  ? "Welcome, onboarding and publishing run against these communities."
-                  : "Connect a Telegram community to publish packs and welcome new members."
+                telegramQuery.isError
+                  ? "Community state could not be loaded right now."
+                  : groupCount > 0
+                    ? "Welcome, onboarding and publishing run against these communities."
+                    : "Connect a Telegram community to publish packs and welcome new members."
               }
               to="/telegram"
               linkLabel={groupCount > 0 ? "Community Command" : "Connect a community"}
@@ -513,25 +558,34 @@ function HqDashboard() {
             <SnapshotCard
               title="Sticker Lab"
               badge={
-                <StatusBadge tone={packTotal > 0 ? "green" : "muted"}>
-                  {packsQuery.isPending ? "—" : `${packTotal} packs`}
-                </StatusBadge>
+                packsUnavailable ? (
+                  <StatusBadge tone="muted">Unavailable</StatusBadge>
+                ) : (
+                  <StatusBadge tone={packTotal > 0 ? "green" : "muted"}>
+                    {packsQuery.isPending ? "—" : `${packTotal} packs`}
+                  </StatusBadge>
+                )
               }
               primary={
-                packsQuery.isPending
-                  ? "Loading…"
-                  : latestPack
-                    ? `Latest: ${latestPack.title}`
-                    : "No packs yet"
+                packsUnavailable
+                  ? "Unavailable"
+                  : packsQuery.isPending
+                    ? "Loading…"
+                    : latestPack
+                      ? `Latest: ${latestPack.title}`
+                      : "No packs yet"
               }
               secondary={
-                latestPack
-                  ? `${latestPack.status} · ${usageQuery.isPending ? "—" : usageQuery.data ?? 0} AI jobs run`
-                  : "Create your first sticker pack in Sticker Lab."
+                packsUnavailable
+                  ? "Sticker pack state could not be loaded right now."
+                  : latestPack
+                    ? `${latestPack.status} · ${aiJobsClause}`
+                    : "Create your first sticker pack in Sticker Lab."
               }
               to="/sticker-lab"
               linkLabel="Open Lab"
             />
+
             <SnapshotCard
               title="Sticker Drops"
               badge={dropsBadge}
@@ -565,7 +619,12 @@ function HqDashboard() {
           >
             {packsQuery.isPending ? (
               <p className="text-xs text-muted-foreground">Loading packs…</p>
+            ) : packsUnavailable ? (
+              <p className="text-xs text-muted-foreground">
+                Recent packs are unavailable right now.
+              </p>
             ) : recentPacks.length === 0 ? (
+
               <EmptyState
                 icon={PackageOpen}
                 title="No packs yet"
