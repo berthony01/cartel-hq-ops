@@ -19,6 +19,11 @@ export type Concept = {
   label: string;
   action: string;
   emoji: string;
+  /**
+   * Editor/session-only flag. Locked concepts are protected from AI
+   * replacement; they are never persisted to the database.
+   */
+  locked?: boolean;
 };
 
 type Seed = [label: string, action: string, emoji: string];
@@ -340,6 +345,12 @@ export type BuilderDraft = {
   stickerIds: Record<string, string>;
   /** Versioned creative blueprint. Not wired into generation in this phase. */
   creativeBlueprint: CreativeBlueprint;
+  /**
+   * Editor/session-only flag: the user explicitly marked the concept board
+   * ready. Never persisted to the database; any material concept change
+   * resets it to false.
+   */
+  conceptBoardApproved: boolean;
 };
 
 
@@ -364,6 +375,7 @@ export function emptyDraft(): BuilderDraft {
     packId: null,
     stickerIds: {},
     creativeBlueprint: emptyBlueprint(),
+    conceptBoardApproved: false,
   };
 }
 
@@ -379,6 +391,8 @@ export function loadDraft(): BuilderDraft {
       ...emptyDraft(),
       ...parsed,
       creativeBlueprint: normalizeBlueprint(parsed.creativeBlueprint),
+      // Older session drafts predate the board-ready flag — never assume ready.
+      conceptBoardApproved: parsed.conceptBoardApproved === true,
     };
 
   } catch {

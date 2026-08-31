@@ -188,6 +188,9 @@ type BrandKit = {
 
 function buildPrompt(input: {
   size: number;
+  targetCount: number;
+  mode: "board" | "alternatives";
+  focus: Array<{ label: string; action: string }>;
   characterName: string;
   theme: string;
   brief: string;
@@ -202,7 +205,7 @@ function buildPrompt(input: {
   const lines: string[] = [];
 
   lines.push(
-    `You are a creative director for a messaging sticker pack. Produce exactly ${input.size} distinct sticker CONCEPT IDEAS.`,
+    `You are a creative director for a messaging sticker pack of ${input.size} stickers. Produce exactly ${input.targetCount} distinct sticker CONCEPT IDEAS.`,
   );
   lines.push(
     "These are concept ideas, not image prompts. Each concept describes ONE single character sticker: a concrete, visible pose, expression or action that an illustrator could draw without further explanation.",
@@ -246,18 +249,37 @@ function buildPrompt(input: {
     if (prohibited.length) lines.push(`BRAND PROHIBITED: ${prohibited.join("; ")}.`);
   }
 
+  const describe = (c: { label: string; action: string }) =>
+    `${c.label}${c.action ? ` (${c.action})` : ""}`;
+
   if (input.existing.length) {
     lines.push(
-      `The pack currently uses these concepts — propose a genuinely different, more interesting set rather than repeating them: ${input.existing
-        .map((c) => `${c.label}${c.action ? ` (${c.action})` : ""}`)
+      `THE CURRENT BOARD (do not duplicate any of these): ${input.existing.map(describe).join(" | ")}.`,
+    );
+  }
+
+  if (input.mode === "alternatives") {
+    lines.push(
+      `REPLACEMENT TASK: produce exactly one replacement alternative for each of the ${input.focus.length} concepts listed below, in the SAME ORDER. Result ${"#"}N must replace focus concept ${"#"}N.`,
+    );
+    lines.push(
+      `FOCUS CONCEPTS TO REPLACE: ${input.focus
+        .map((c, i) => `${i + 1}. ${describe(c)}`)
         .join(" | ")}.`,
+    );
+    lines.push(
+      "Each alternative must be meaningfully different from the concept it replaces and from every concept already on the board, while still fitting the same character, brand and creative direction.",
+    );
+  } else {
+    lines.push(
+      `Propose a genuinely different, more interesting set of ${input.targetCount} concepts that does not repeat anything already on the board.`,
     );
   }
 
   lines.push(
     "RULES: label is a short punchy caption-style name (max 48 characters). action is one concrete visible pose, expression or action (max 200 characters), no camera or rendering jargon. emoji is a single short emoji. Every label must be unique. No slurs, no hate, no financial promises, no claims of guaranteed profit or token safety.",
   );
-  lines.push(`Return exactly ${input.size} concepts.`);
+  lines.push(`Return exactly ${input.targetCount} concepts, in order.`);
 
   return lines.join("\n");
 }
@@ -366,6 +388,33 @@ Deno.serve(async (req: Request) => {
   const size = Number(body["size"]);
   if (!workspaceId || !ALLOWED_SIZES.includes(size)) return respond({ error: "INVALID_INPUT" }, 400);
 
+  // Backwards compatible: absent targetCount means "the whole board".
+  const rawTarget = body["targetCount"];
+  const targetCount = rawTarget === undefined || rawTarget === null ? size : Number(rawTarget);
+  if (!Number.isInteger(targetCount) || targetCount < 1 || targetCount > size) {
+    return respond({ error: "INVALID_TARGET_COUNT" }, 400);
+  }
+
+  const modeRaw = safeStr(body["mode"], 20);
+  const mode: "board" | "alternatives" = modeRaw === "alternatives" ? "alternatives" : "board";
+
+  const toConcept = (c: Record<string, unknown>) => ({
+    label: safeStr(c["label"], 48),
+    action: safeStr(c["action"], 200),
+  });
+
+  const focus = Array.isArray(body["focusConcepts"])
+    ? (body["focusConcepts"] as unknown[])
+        .filter(isRecord)
+        .map(toConcept)
+        .filter((c) => c.label || c.action)
+        .slice(0, Math.min(targetCount, 24))
+    : [];
+
+  if (mode === "alternatives" && focus.length !== targetCount) {
+    return respond({ error: "INVALID_FOCUS_CONCEPTS" }, 400);
+  }
+
   const { data: membership } = await admin
     .from("workspace_members")
     .select("user_id")
@@ -378,7 +427,7 @@ Deno.serve(async (req: Request) => {
     ? (body["concepts"] as unknown[])
         .filter(isRecord)
         .slice(0, 24)
-        .map((c) => ({ label: safeStr(c["label"], 48), action: safeStr(c["action"], 200) }))
+        .map(toConcept)
         .filter((c) => c.label || c.action)
     : [];
 
@@ -390,6 +439,9 @@ Deno.serve(async (req: Request) => {
 
   const prompt = buildPrompt({
     size,
+    targetCount,
+    mode,
+    focus,
     characterName: safeStr(body["characterName"], 120),
     theme: safeStr(body["theme"], 60),
     brief: safeStr(body["brief"]),
@@ -406,8 +458,8 @@ Deno.serve(async (req: Request) => {
     properties: {
       concepts: {
         type: "array",
-        minItems: size,
-        maxItems: size,
+        minItems: targetCount,
+        maxItems: targetCount,
         items: {
           type: "object",
           additionalProperties: false,
@@ -471,13 +523,13 @@ Deno.serve(async (req: Request) => {
   const choices = payload["choices"];
   const first = Array.isArray(choices) && isRecord(choices[0]) ? (choices[0] as Record<string, unknown>) : null;
   const message = first && isRecord(first["message"]) ? (first["message"] as Record<string, unknown>) : null;
-  const concepts = parseConcepts(message?.["content"], size);
+  const concepts = parseConcepts(message?.["content"], targetCount);
 
   if (!concepts) {
     return respond(
       {
         error: "PROVIDER_MALFORMED",
-        message: `The concept service did not return ${size} usable concepts. Nothing was changed — try again or keep the starter concepts.`,
+        message: `The concept service did not return ${targetCount} usable concepts. Nothing was changed — try again or keep your current concepts.`,
       },
       502,
     );

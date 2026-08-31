@@ -40,14 +40,19 @@ import {
 } from "@/lib/sticker-export";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
+  ArrowDown,
   ArrowLeft,
   ArrowRight,
+  ArrowUp,
   Check,
   CircleCheck,
+  Copy,
   Download,
   FileArchive,
   ImagePlus,
   Loader2,
+  Lock,
+  LockOpen,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -276,10 +281,14 @@ function StickerLabBuilder() {
   const [saving, setSaving] = useState(false);
 
   /* ------- Step 3 AI Concept Studio (text only, never image generation) ------ */
-  const [conceptSuggestions, setConceptSuggestions] = useState<SuggestedConcept[] | null>(null);
+  const [preview, setPreview] = useState<{
+    mode: "board" | "alternatives";
+    items: Array<{ targetId: string; suggestion: SuggestedConcept; applied: boolean }>;
+  } | null>(null);
+  const [selectedForAlternatives, setSelectedForAlternatives] = useState<string[]>([]);
   const [conceptError, setConceptError] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState(false);
-  const [confirmSuggest, setConfirmSuggest] = useState(false);
+  const [confirmSuggest, setConfirmSuggest] = useState<"board" | "alternatives" | null>(null);
   const [confirmApplySuggestions, setConfirmApplySuggestions] = useState(false);
 
   /**
@@ -668,9 +677,28 @@ function StickerLabBuilder() {
     });
 
 
-  const setTheme = (theme: PackTheme) =>
+  /**
+   * Every material concept change flows through here so the local
+   * "concept board ready" flag can never survive a content mutation.
+   * `clearKeywordsFor` clears keyword metadata for exactly the concept ids
+   * whose content actually changed. `stickerIds` is never touched.
+   */
+  const mutateConcepts = (concepts: Concept[], clearKeywordsFor?: string[]) => {
+    let keywords = draft.keywords;
+    if (clearKeywordsFor?.length) {
+      keywords = { ...draft.keywords };
+      for (const id of clearKeywordsFor) delete keywords[id];
+    }
+    update({ concepts, keywords, conceptBoardApproved: false });
+  };
 
-    update({ theme, concepts: starterConcepts(theme, draft.size) });
+  const setTheme = (theme: PackTheme) =>
+    update({
+      theme,
+      concepts: starterConcepts(theme, draft.size),
+      keywords: {},
+      conceptBoardApproved: false,
+    });
 
   const setSize = (size: PackSize) => {
     const next =
@@ -678,33 +706,80 @@ function StickerLabBuilder() {
         ? draft.concepts.slice(0, size)
         : [
             ...draft.concepts,
-            ...starterConcepts(draft.theme, size).slice(draft.concepts.length),
+            ...starterConcepts(draft.theme, size)
+              .slice(draft.concepts.length)
+              .map((c, i) => ({ ...c, id: `c${Date.now()}-${i}` })),
           ];
-    update({ size, concepts: next });
+    update({ size, concepts: next, conceptBoardApproved: false });
   };
 
   const editConcept = (id: string, patch: Partial<Concept>) =>
-    update({
-      concepts: draft.concepts.map((c) => (c.id === id ? { ...c, ...patch } : c)),
-    });
+    mutateConcepts(draft.concepts.map((c) => (c.id === id ? { ...c, ...patch } : c)));
 
-  const removeConcept = (id: string) =>
-    update({ concepts: draft.concepts.filter((c) => c.id !== id) });
+  /** Lock/unlock does not change concept content, so it never resets approval. */
+  const toggleConceptLock = (id: string) => {
+    const locking = !draft.concepts.find((c) => c.id === id)?.locked;
+    update({
+      concepts: draft.concepts.map((c) => (c.id === id ? { ...c, locked: !c.locked } : c)),
+    });
+    if (locking) setSelectedForAlternatives((s) => s.filter((x) => x !== id));
+  };
+
+  const removeConcept = (id: string) => {
+    mutateConcepts(
+      draft.concepts.filter((c) => c.id !== id),
+      [id],
+    );
+    setSelectedForAlternatives((s) => s.filter((x) => x !== id));
+    setPreview((p) =>
+      p ? { ...p, items: p.items.filter((item) => item.targetId !== id) } : p,
+    );
+  };
+
+  const moveConcept = (index: number, delta: -1 | 1) => {
+    const target = index + delta;
+    if (target < 0 || target >= draft.concepts.length) return;
+    const next = [...draft.concepts];
+    const [moved] = next.splice(index, 1);
+    next.splice(target, 0, moved!);
+    // Ids travel with the object, so keywords and stickerIds stay associated.
+    update({ concepts: next, conceptBoardApproved: false });
+  };
+
+  const duplicateConcept = (id: string) => {
+    if (draft.concepts.length >= draft.size) return;
+    const index = draft.concepts.findIndex((c) => c.id === id);
+    const source = draft.concepts[index];
+    if (!source) return;
+    const copy: Concept = {
+      id: `d${Date.now()}`,
+      label: source.label,
+      action: source.action,
+      emoji: source.emoji,
+      locked: false,
+    };
+    const next = [...draft.concepts];
+    next.splice(index + 1, 0, copy);
+    update({ concepts: next, conceptBoardApproved: false });
+  };
 
   const addConcept = () => {
     if (draft.concepts.length >= draft.size) return;
-    update({
-      concepts: [
-        ...draft.concepts,
-        {
-          id: `c${Date.now()}`,
-          label: "NEW CONCEPT",
-          action: "describe the pose or expression",
-          emoji: "⭐",
-        },
-      ],
-    });
+    mutateConcepts([
+      ...draft.concepts,
+      {
+        id: `c${Date.now()}`,
+        label: "NEW CONCEPT",
+        action: "describe the pose or expression",
+        emoji: "⭐",
+      },
+    ]);
   };
+
+  const unlockedConcepts = draft.concepts.filter((c) => !c.locked);
+  const selectedConcepts = draft.concepts.filter(
+    (c) => !c.locked && selectedForAlternatives.includes(c.id),
+  );
 
   /**
    * ONE explicit, confirmed language-model request. It never calls
@@ -712,17 +787,25 @@ function StickerLabBuilder() {
    * never touches persisted sticker rows. On any failure the current concepts
    * stay exactly as they are.
    */
-  const runConceptSuggestion = async () => {
+  const runConceptSuggestion = async (mode: "board" | "alternatives") => {
     if (!workspaceId) {
       toast.error("Select a project first.");
       return;
     }
+    const targets = mode === "alternatives" ? selectedConcepts : unlockedConcepts;
+    if (!targets.length) return;
     setSuggesting(true);
     setConceptError(null);
     try {
       const result = await suggestStickerConcepts({
         workspaceId,
         size: draft.size,
+        targetCount: targets.length,
+        mode,
+        focusConcepts:
+          mode === "alternatives"
+            ? targets.map((c) => ({ label: c.label, action: c.action }))
+            : [],
         characterName: draft.characterName,
         theme: draft.theme,
         brief: draft.brief,
@@ -730,12 +813,19 @@ function StickerLabBuilder() {
         creativeBlueprint: draft.creativeBlueprint,
         concepts: draft.concepts.map((c) => ({ label: c.label, action: c.action })),
       });
-      setConceptSuggestions(result.concepts);
+      setPreview({
+        mode,
+        items: result.concepts.map((suggestion, i) => ({
+          targetId: targets[i]!.id,
+          suggestion,
+          applied: false,
+        })),
+      });
       toast.success(`${result.concepts.length} concept suggestions ready to review.`);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Could not get concept suggestions.";
-      setConceptSuggestions(null);
+      setPreview(null);
       setConceptError(message);
       toast.error(message);
     } finally {
@@ -744,29 +834,48 @@ function StickerLabBuilder() {
   };
 
   /**
-   * Applies suggestions to the LOCAL draft only. Keyword metadata is cleared
-   * because concept ids change. `stickerIds`, packId, Character Lock, Creative
-   * Direction, references, generation stages and provider jobs are untouched,
-   * and nothing is saved.
+   * Applies preview items to the LOCAL draft only. Concept ids and positions
+   * are preserved, so `stickerIds` stays valid and only the keywords of the
+   * concepts that actually changed are cleared. Locked concepts are untouched.
    */
-  const applySuggestions = () => {
-    const suggestions = conceptSuggestions;
-    if (!suggestions?.length) return;
-    const stamp = Date.now();
-    update({
-      concepts: suggestions.map((s, i) => ({
-        id: `ai${stamp}-${i}`,
-        label: s.label,
-        action: s.action,
-        emoji: s.emoji,
-      })),
-      keywords: {},
+  const applyPreviewItems = (targetIds: string[]) => {
+    const current = preview;
+    if (!current) return;
+    const byTarget = new Map(
+      current.items
+        .filter((item) => !item.applied && targetIds.includes(item.targetId))
+        .map((item) => [item.targetId, item.suggestion]),
+    );
+    if (!byTarget.size) return;
+
+    const changed: string[] = [];
+    const concepts = draft.concepts.map((c) => {
+      const suggestion = byTarget.get(c.id);
+      if (!suggestion || c.locked) return c;
+      changed.push(c.id);
+      return { ...c, label: suggestion.label, action: suggestion.action, emoji: suggestion.emoji };
     });
-    setConceptSuggestions(null);
-    setConceptError(null);
+    mutateConcepts(concepts, changed);
+
+    const remaining = current.items.map((item) =>
+      changed.includes(item.targetId) ? { ...item, applied: true } : item,
+    );
+    setPreview(remaining.every((item) => item.applied) ? null : { ...current, items: remaining });
     setConfirmApplySuggestions(false);
+    if (current.mode === "alternatives") {
+      setSelectedForAlternatives((s) => s.filter((id) => !changed.includes(id)));
+    }
     toast.success("Suggestions applied to your draft. Review and edit before saving.");
   };
+
+  const pendingPreviewItems = preview?.items.filter((item) => !item.applied) ?? [];
+
+  const conceptAt = (id: string) => draft.concepts.find((c) => c.id === id) ?? null;
+
+  const boardReadyEligible =
+    draft.concepts.length === draft.size &&
+    draft.concepts.every((c) => c.label.trim() && c.action.trim());
+
 
 
 
@@ -1809,8 +1918,8 @@ function StickerLabBuilder() {
 
       {step === 3 ? (
         <StepCard
-          title="Sticker Concepts"
-          hint="Starter suggestions come from a fixed local list. AI suggestions are optional, text-only concept ideas."
+          title="Concept Studio"
+          hint="Lock the ideas you want to keep, reorder or duplicate concepts, and use AI only where you choose. Text-only — nothing here generates images."
           action={
             <div className="flex flex-wrap gap-2">
               <Button
@@ -1818,25 +1927,45 @@ function StickerLabBuilder() {
                 variant="outline"
                 size="sm"
                 className="min-h-10"
-                onClick={() => update({ concepts: starterConcepts(draft.theme, draft.size) })}
+                onClick={() =>
+                  mutateConcepts(
+                    draft.concepts.map((c, i) =>
+                      c.locked
+                        ? c
+                        : { ...starterConcepts(draft.theme, draft.size)[i]!, id: c.id },
+                    ),
+                    draft.concepts.filter((c) => !c.locked).map((c) => c.id),
+                  )
+                }
               >
                 <RotateCcw className="size-4" aria-hidden="true" />
-                Reset suggestions
+                Reset unlocked
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="min-h-10"
-                disabled={suggesting || !conceptsConfigured}
-                onClick={() => setConfirmSuggest(true)}
+                disabled={suggesting || !conceptsConfigured || unlockedConcepts.length === 0}
+                onClick={() => setConfirmSuggest("board")}
               >
                 {suggesting ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                 ) : (
                   <Sparkles className="size-4" aria-hidden="true" />
                 )}
-                Suggest concepts with AI
+                Suggest unlocked concepts
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-10"
+                disabled={suggesting || !conceptsConfigured || selectedConcepts.length === 0}
+                onClick={() => setConfirmSuggest("alternatives")}
+              >
+                <Sparkles className="size-4" aria-hidden="true" />
+                Alternatives for selected ({selectedConcepts.length})
               </Button>
               <Button
                 type="button"
@@ -1855,7 +1984,11 @@ function StickerLabBuilder() {
             <span className="font-semibold text-foreground">
               {draft.concepts.length} of {draft.size}
             </span>{" "}
-            concepts used for this pack size.
+            concepts used ·{" "}
+            <span className="font-semibold text-foreground">
+              {draft.concepts.length - unlockedConcepts.length} locked
+            </span>
+            . Locked concepts are never replaced by AI and stay editable by you.
           </p>
 
           {!conceptsConfigured && !conceptConfigQuery.isLoading ? (
@@ -1873,35 +2006,53 @@ function StickerLabBuilder() {
             </div>
           ) : null}
 
-          {conceptSuggestions?.length ? (
+          {pendingPreviewItems.length ? (
             <section className="cartel-panel mb-5 rounded-lg p-3 sm:p-4">
               <header className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-foreground">AI concept suggestions</h3>
+                <h3 className="text-sm font-semibold text-foreground">
+                  {preview?.mode === "alternatives"
+                    ? "AI alternatives for selected concepts"
+                    : "AI suggestions for unlocked concepts"}
+                </h3>
                 <span className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                  {conceptSuggestions.length} ideas · not applied yet
+                  {pendingPreviewItems.length} ideas · not applied yet
                 </span>
               </header>
               <p className="mt-1 text-xs text-muted-foreground">
-                Nothing below is saved or generated. Your current concepts stay exactly as they are
-                until you apply these.
+                Nothing below is saved or generated. Each suggestion replaces one specific concept
+                in place, keeping its position. Locked concepts are never touched.
               </p>
               <ol className="mt-3 space-y-2">
-                {conceptSuggestions.map((s, i) => (
-                  <li
-                    key={`${s.label}-${i}`}
-                    className="flex min-w-0 items-start gap-3 rounded-md border border-border/60 p-2.5"
-                  >
-                    <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <span className="min-w-0 flex-1 break-words">
-                      <span className="block text-sm font-medium text-foreground">
-                        {s.emoji} {s.label}
-                      </span>
-                      <span className="block text-xs text-muted-foreground">{s.action}</span>
-                    </span>
-                  </li>
-                ))}
+                {pendingPreviewItems.map((item) => {
+                  const target = conceptAt(item.targetId);
+                  return (
+                    <li
+                      key={item.targetId}
+                      className="min-w-0 rounded-md border border-border/60 p-2.5"
+                    >
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                        Replaces: {target ? target.label || "Untitled concept" : "removed concept"}
+                      </p>
+                      <p className="mt-1 break-words text-sm font-medium text-foreground">
+                        {item.suggestion.emoji} {item.suggestion.label}
+                      </p>
+                      <p className="break-words text-xs text-muted-foreground">
+                        {item.suggestion.action}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-2 min-h-10"
+                        disabled={!target || target.locked}
+                        onClick={() => applyPreviewItems([item.targetId])}
+                      >
+                        <Check className="size-4" aria-hidden="true" />
+                        Use this one
+                      </Button>
+                    </li>
+                  );
+                })}
               </ol>
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button
@@ -1910,22 +2061,11 @@ function StickerLabBuilder() {
                   className="min-h-10"
                   onClick={() => {
                     if (draft.packId) setConfirmApplySuggestions(true);
-                    else applySuggestions();
+                    else applyPreviewItems(pendingPreviewItems.map((item) => item.targetId));
                   }}
                 >
                   <Check className="size-4" aria-hidden="true" />
-                  Use these concepts
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="min-h-10"
-                  disabled={suggesting || !conceptsConfigured}
-                  onClick={() => setConfirmSuggest(true)}
-                >
-                  <Sparkles className="size-4" aria-hidden="true" />
-                  Suggest another set
+                  Use all suggestions
                 </Button>
                 <Button
                   type="button"
@@ -1933,7 +2073,7 @@ function StickerLabBuilder() {
                   size="sm"
                   className="min-h-10 text-muted-foreground"
                   onClick={() => {
-                    setConceptSuggestions(null);
+                    setPreview(null);
                     setConceptError(null);
                   }}
                 >
@@ -1951,6 +2091,7 @@ function StickerLabBuilder() {
           <ul className="grid gap-2 sm:gap-3 xl:grid-cols-2 [&>*]:min-w-0">
             {draft.concepts.map((c, i) => (
               <li key={c.id}>
+
                 <details
                   ref={(el) => {
                     if (el && !el.dataset["initOpen"]) {
@@ -1974,6 +2115,12 @@ function StickerLabBuilder() {
                         </span>
                       ) : null}
                     </span>
+                    {c.locked ? (
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-gold/40 px-2 py-0.5 text-[11px] uppercase tracking-[0.12em] text-gold">
+                        <Lock className="size-3" aria-hidden="true" />
+                        Locked
+                      </span>
+                    ) : null}
                     <span className="shrink-0 text-[11px] uppercase tracking-[0.12em] text-muted-foreground group-open:hidden">
                       Edit
                     </span>
@@ -2001,7 +2148,7 @@ function StickerLabBuilder() {
                         onChange={(e) => editConcept(c.id, { action: e.target.value })}
                       />
                     </div>
-                    <div className="flex items-end justify-between gap-3">
+                    <div className="flex flex-wrap items-end justify-between gap-3">
                       <div>
                         <Label htmlFor={`${c.id}-emoji`} className="text-xs">
                           Emoji
@@ -2025,11 +2172,124 @@ function StickerLabBuilder() {
                         Remove
                       </Button>
                     </div>
+
+                    <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="min-h-10"
+                        onClick={() => toggleConceptLock(c.id)}
+                        aria-pressed={c.locked ? "true" : "false"}
+                        aria-label={
+                          c.locked ? `Unlock concept ${i + 1}` : `Lock concept ${i + 1}`
+                        }
+                      >
+                        {c.locked ? (
+                          <LockOpen className="size-4" aria-hidden="true" />
+                        ) : (
+                          <Lock className="size-4" aria-hidden="true" />
+                        )}
+                        {c.locked ? "Unlock" : "Lock"}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="min-h-10"
+                        disabled={i === 0}
+                        onClick={() => moveConcept(i, -1)}
+                        aria-label={`Move concept ${i + 1} up`}
+                      >
+                        <ArrowUp className="size-4" aria-hidden="true" />
+                        Up
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="min-h-10"
+                        disabled={i === draft.concepts.length - 1}
+                        onClick={() => moveConcept(i, 1)}
+                        aria-label={`Move concept ${i + 1} down`}
+                      >
+                        <ArrowDown className="size-4" aria-hidden="true" />
+                        Down
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="min-h-10"
+                        disabled={draft.concepts.length >= draft.size}
+                        onClick={() => duplicateConcept(c.id)}
+                        aria-label={`Duplicate concept ${i + 1}`}
+                      >
+                        <Copy className="size-4" aria-hidden="true" />
+                        Duplicate
+                      </Button>
+                      <label className="ml-auto flex min-h-10 items-center gap-2 text-xs text-muted-foreground">
+                        <Checkbox
+                          checked={selectedForAlternatives.includes(c.id)}
+                          disabled={c.locked}
+                          onCheckedChange={(checked) =>
+                            setSelectedForAlternatives((s) =>
+                              checked === true
+                                ? s.includes(c.id)
+                                  ? s
+                                  : [...s, c.id]
+                                : s.filter((x) => x !== c.id),
+                            )
+                          }
+                          aria-label={`Select concept ${i + 1} for AI alternatives`}
+                        />
+                        Select for AI alternative
+                      </label>
+                    </div>
+
                   </div>
                 </details>
               </li>
             ))}
           </ul>
+
+          <section className="cartel-panel mt-6 rounded-lg p-3 sm:p-4">
+            <h3 className="text-sm font-semibold text-foreground">Concept board status</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {draft.conceptBoardApproved
+                ? "You marked this concept board ready. Any concept edit clears this again."
+                : "Marking the board ready is an editor-side checkpoint only. It is not saved and it does not generate or publish anything."}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              {draft.conceptBoardApproved ? (
+                <span className="inline-flex min-h-10 items-center gap-2 text-xs font-semibold text-pepe">
+                  <CircleCheck className="size-4" aria-hidden="true" />
+                  Concept board marked ready
+                </span>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11"
+                  disabled={!boardReadyEligible || pendingPreviewItems.length > 0}
+                  onClick={() => update({ conceptBoardApproved: true })}
+                >
+                  <Check className="size-4" aria-hidden="true" />
+                  Mark concept board ready
+                </Button>
+              )}
+              {!draft.conceptBoardApproved && !boardReadyEligible ? (
+                <span className="text-xs text-muted-foreground">
+                  Fill every label and action, and use all {draft.size} concept slots first.
+                </span>
+              ) : null}
+              {!draft.conceptBoardApproved && boardReadyEligible && pendingPreviewItems.length ? (
+                <span className="text-xs text-muted-foreground">
+                  Apply or discard the pending AI suggestions first.
+                </span>
+              ) : null}
+            </div>
+          </section>
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <Button
@@ -2047,7 +2307,12 @@ function StickerLabBuilder() {
             ) : null}
           </div>
 
-          <AlertDialog open={confirmSuggest} onOpenChange={setConfirmSuggest}>
+          <AlertDialog
+            open={confirmSuggest !== null}
+            onOpenChange={(open) => {
+              if (!open) setConfirmSuggest(null);
+            }}
+          >
             <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
               <AlertDialogHeader>
                 <AlertDialogTitle>Ask AI for concept ideas?</AlertDialogTitle>
@@ -2063,6 +2328,12 @@ function StickerLabBuilder() {
                       two-task image pipeline.
                     </p>
                     <p>
+                      {confirmSuggest === "alternatives"
+                        ? `This asks for ${selectedConcepts.length} alternative${selectedConcepts.length === 1 ? "" : "s"} for the concepts you selected.`
+                        : `This asks for ${unlockedConcepts.length} idea${unlockedConcepts.length === 1 ? "" : "s"} for your unlocked concepts only.`}{" "}
+                      Locked concepts are never sent for replacement.
+                    </p>
+                    <p>
                       Your current concepts stay untouched unless you explicitly apply the
                       suggestions.
                     </p>
@@ -2073,8 +2344,9 @@ function StickerLabBuilder() {
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction
                   onClick={() => {
-                    setConfirmSuggest(false);
-                    void runConceptSuggestion();
+                    const mode = confirmSuggest ?? "board";
+                    setConfirmSuggest(null);
+                    void runConceptSuggestion(mode);
                   }}
                 >
                   Suggest concepts
@@ -2089,7 +2361,7 @@ function StickerLabBuilder() {
           >
             <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
               <AlertDialogHeader>
-                <AlertDialogTitle>Replace the concepts in this saved pack?</AlertDialogTitle>
+                <AlertDialogTitle>Replace these concepts in this saved pack?</AlertDialogTitle>
                 <AlertDialogDescription asChild>
                   <div className="space-y-2 text-left">
                     <p>
@@ -2098,15 +2370,24 @@ function StickerLabBuilder() {
                     </p>
                     <p>
                       However, this pack is already saved: a later <strong>Save</strong> will update
-                      or remove the stored concept rows to match the new list.
+                      the stored concept rows to match.
                     </p>
-                    <p>Emoji and keyword metadata for the current concepts will be cleared.</p>
+                    <p>
+                      Only unlocked, targeted concepts change. Keyword metadata is cleared for those
+                      concepts only.
+                    </p>
                   </div>
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Keep current concepts</AlertDialogCancel>
-                <AlertDialogAction onClick={applySuggestions}>Use these concepts</AlertDialogAction>
+                <AlertDialogAction
+                  onClick={() =>
+                    applyPreviewItems(pendingPreviewItems.map((item) => item.targetId))
+                  }
+                >
+                  Use these concepts
+                </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
