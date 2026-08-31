@@ -1228,6 +1228,63 @@ function LaunchControlPage() {
                       </div>
 
                       <div className="rounded-md border border-border/60 bg-background/30 p-3">
+                        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                          Private confirmation health
+                        </p>
+                        {confirmationSummaryQuery.isError ? (
+                          <div className="mt-2">
+                            <p className="text-xs leading-relaxed text-muted-foreground">
+                              Confirmation counts could not be loaded right now.
+                            </p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-2 min-h-11"
+                              onClick={() => void confirmationSummaryQuery.refetch()}
+                            >
+                              Retry
+                            </Button>
+                          </div>
+                        ) : (
+                          <>
+                            <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                              <div className="min-w-0">
+                                <dt className="text-muted-foreground">Confirmations delivered</dt>
+                                <dd className="font-mono text-sm text-foreground">
+                                  {confirmationStatsReady ? confirmationSummary!.delivered_count : "—"}
+                                </dd>
+                              </div>
+                              <div className="min-w-0">
+                                <dt className="text-muted-foreground">Confirmation failed</dt>
+                                <dd className="font-mono text-sm text-foreground">
+                                  {confirmationStatsReady ? confirmationSummary!.failed_count : "—"}
+                                </dd>
+                              </div>
+                              <div className="min-w-0">
+                                <dt className="text-muted-foreground">Outcome unconfirmed</dt>
+                                <dd className="font-mono text-sm text-foreground">
+                                  {confirmationStatsReady ? confirmationSummary!.ambiguous_count : "—"}
+                                </dd>
+                              </div>
+                              <div className="min-w-0">
+                                <dt className="text-muted-foreground">Pre-tracking opt-ins</dt>
+                                <dd className="font-mono text-sm text-foreground">
+                                  {confirmationStatsReady ? confirmationSummary!.untracked_count : "—"}
+                                </dd>
+                              </div>
+                            </dl>
+                            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                              {confirmationStatsReady
+                                ? "Counts describe the most recent private confirmation message per active watcher. Outcome unconfirmed means Telegram never returned a clear result, so the message may or may not have arrived; it is never resent automatically. Pre-tracking opt-ins happened before confirmation diagnostics existed — their delivery cannot be reconstructed and is not a failure."
+                                : "Loading confirmation health…"}
+                            </p>
+                          </>
+                        )}
+                      </div>
+
+
+
+                      <div className="rounded-md border border-border/60 bg-background/30 p-3">
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
                           <StatusBadge tone={armingState.tone}>
                             <span>{armingState.badge}</span>
