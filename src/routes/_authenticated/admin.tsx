@@ -30,6 +30,7 @@ import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { InlineRow } from "@/components/cartel/InlineRow";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { usePlatformAccess } from "@/hooks/usePlatformAccess";
 import {
   TelegramConnectionCard,
