@@ -100,16 +100,227 @@ async function kieRequest(path: string, apiKey: string, init: RequestInit) {
   };
 }
 
-function buildPrompt(brand: Record<string, unknown> | null, pack: Record<string, unknown>, sticker: Record<string, unknown>) {
+/* ---------------------------------------------------------------------------
+ * V2 creative blueprint parsing (defensive — `creative_blueprint` is untrusted)
+ * ------------------------------------------------------------------------- */
+
+const MAX_STR = 600;
+const MAX_LIST_ITEMS = 12;
+const MAX_LIST_ITEM = 160;
+
+function safeStr(value: unknown, cap = MAX_STR): string {
+  return typeof value === "string" ? value.trim().slice(0, cap) : "";
+}
+
+function safeList(value: unknown, maxItems = MAX_LIST_ITEMS): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of value) {
+    if (typeof raw !== "string") continue;
+    const item = raw.trim().slice(0, MAX_LIST_ITEM);
+    if (!item) continue;
+    const key = item.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+    if (out.length >= maxItems) break;
+  }
+  return out;
+}
+
+function safeEnum<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return typeof value === "string" && (allowed as readonly string[]).includes(value)
+    ? (value as T)
+    : fallback;
+}
+
+type CharacterLock = {
+  enabled: boolean;
+  subjectName: string;
+  identityNotes: string;
+  protectedTraits: string[];
+  wardrobeAccessories: string[];
+  negativeConstraints: string[];
+  canonicalReferenceAssetIds: string[];
+};
+
+const HUMOR = ["unspecified", "none", "light", "medium", "high"] as const;
+const INTENSITY = ["unspecified", "calm", "balanced", "bold", "extreme"] as const;
+const TEXT_PREF = ["unspecified", "no_text", "minimal", "balanced", "text_forward"] as const;
+
+type CreativeDirection = {
+  purpose: string;
+  audience: string;
+  toneKeywords: string[];
+  humorLevel: (typeof HUMOR)[number];
+  intensity: (typeof INTENSITY)[number];
+  visualDirection: string;
+  textPreference: (typeof TEXT_PREF)[number];
+  textNotes: string;
+  packRules: string[];
+};
+
+type Blueprint = {
+  useBrandCharacterLock: boolean;
+  characterLock: CharacterLock | null;
+  creativeDirection: CreativeDirection | null;
+};
+
+function parseBlueprint(raw: unknown): Blueprint {
+  const empty: Blueprint = {
+    useBrandCharacterLock: false,
+    characterLock: null,
+    creativeDirection: null,
+  };
+  let obj: Record<string, unknown> | null = null;
+  if (typeof raw === "string" && raw.trim()) {
+    try { obj = JSON.parse(raw) as Record<string, unknown>; } catch { obj = null; }
+  } else if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    obj = raw as Record<string, unknown>;
+  }
+  if (!obj) return empty;
+
+  const lockRaw = obj.characterLock;
+  let characterLock: CharacterLock | null = null;
+  if (lockRaw && typeof lockRaw === "object" && !Array.isArray(lockRaw)) {
+    const l = lockRaw as Record<string, unknown>;
+    characterLock = {
+      enabled: l.enabled === true,
+      subjectName: safeStr(l.subjectName, 160),
+      identityNotes: safeStr(l.identityNotes),
+      protectedTraits: safeList(l.protectedTraits),
+      wardrobeAccessories: safeList(l.wardrobeAccessories),
+      negativeConstraints: safeList(l.negativeConstraints),
+      canonicalReferenceAssetIds: safeList(l.canonicalReferenceAssetIds, 3),
+    };
+  }
+
+  const cdRaw = obj.creativeDirection;
+  let creativeDirection: CreativeDirection | null = null;
+  if (cdRaw && typeof cdRaw === "object" && !Array.isArray(cdRaw)) {
+    const c = cdRaw as Record<string, unknown>;
+    creativeDirection = {
+      purpose: safeStr(c.purpose),
+      audience: safeStr(c.audience),
+      toneKeywords: safeList(c.toneKeywords),
+      humorLevel: safeEnum(c.humorLevel, HUMOR, "unspecified"),
+      intensity: safeEnum(c.intensity, INTENSITY, "unspecified"),
+      visualDirection: safeStr(c.visualDirection),
+      textPreference: safeEnum(c.textPreference, TEXT_PREF, "unspecified"),
+      textNotes: safeStr(c.textNotes),
+      packRules: safeList(c.packRules),
+    };
+  }
+
+  return {
+    useBrandCharacterLock: obj.useBrandCharacterLock === true,
+    characterLock,
+    creativeDirection,
+  };
+}
+
+function hasCreativeDirectionContent(cd: CreativeDirection | null): boolean {
+  if (!cd) return false;
+  return Boolean(
+    cd.purpose || cd.audience || cd.toneKeywords.length || cd.visualDirection ||
+    cd.textNotes || cd.packRules.length ||
+    cd.humorLevel !== "unspecified" || cd.intensity !== "unspecified" ||
+    cd.textPreference !== "unspecified",
+  );
+}
+
+function hasCharacterLockContent(lock: CharacterLock | null): boolean {
+  if (!lock) return false;
+  return Boolean(
+    lock.subjectName || lock.identityNotes || lock.protectedTraits.length ||
+    lock.wardrobeAccessories.length || lock.negativeConstraints.length,
+  );
+}
+
+const HUMOR_TEXT: Record<string, string> = {
+  none: "Keep humor out of it; play the concept straight.",
+  light: "Keep humor light and subtle.",
+  medium: "Use a clearly comedic but not absurd tone.",
+  high: "Lean into strong, exaggerated comedic energy.",
+};
+
+const INTENSITY_TEXT: Record<string, string> = {
+  calm: "Keep the energy calm and understated.",
+  balanced: "Keep the energy balanced and natural.",
+  bold: "Make the pose and expression bold and high-contrast.",
+  extreme: "Push the pose and expression to an extreme, maximal reaction.",
+};
+
+/**
+ * V2 prompt compiler. Hierarchy, highest priority first:
+ *  1. Production/one-sticker safety constraints
+ *  2. Character Lock identity rules (pack snapshot only)
+ *  3. Explicit concept pose/action + explicit text preference
+ *  4. Brand Kit styling
+ *  5. Pack Creative Direction
+ *  6. Legacy freeform brief / style notes / pack rules (guidance only)
+ *  7. Final production constraints restated
+ */
+function buildPrompt(
+  brand: Record<string, unknown> | null,
+  pack: Record<string, unknown>,
+  sticker: Record<string, unknown>,
+  blueprint: Blueprint,
+) {
   const parts: string[] = [];
   const label = String(sticker.label ?? "").trim();
   const action = String(sticker.action_description ?? "").trim();
   const characterName = String(pack.character_name ?? "").trim();
+
+  const lockApplied =
+    blueprint.useBrandCharacterLock === true && hasCharacterLockContent(blueprint.characterLock);
+  const lock = lockApplied ? blueprint.characterLock! : null;
+  const cd = blueprint.creativeDirection;
+  const textPreference = cd?.textPreference ?? "unspecified";
+  const noText = textPreference === "no_text";
+
+  // 1. Hard production constraints.
   parts.push("Create exactly ONE clean die-cut messaging sticker using the SAME character identity shown in the supplied reference image.");
   parts.push("Preserve the character's face, proportions, colors, wardrobe, accessories and overall identity. Only change the pose and expression requested.");
-  if (characterName) parts.push(`Character or brand subject: ${characterName}.`);
+
+  // 2. Character Lock (mandatory identity contract).
+  if (lock) {
+    parts.push("MANDATORY CHARACTER LOCK — these identity rules outrank every style, brief or creative note below and must never be reinterpreted:");
+    if (lock.subjectName) parts.push(`Locked character identity: ${lock.subjectName}.`);
+    else if (characterName) parts.push(`Locked character identity: ${characterName}.`);
+    if (lock.identityNotes) parts.push(`Identity definition: ${lock.identityNotes}`);
+    if (lock.protectedTraits.length) parts.push(`Protected traits that must be reproduced exactly and never restyled: ${lock.protectedTraits.join(", ")}.`);
+    if (lock.wardrobeAccessories.length) parts.push(`Required wardrobe and accessories: ${lock.wardrobeAccessories.join(", ")}.`);
+    if (lock.negativeConstraints.length) parts.push(`Never do any of the following to this character: ${lock.negativeConstraints.join(", ")}.`);
+    if (characterName && lock.subjectName && characterName !== lock.subjectName) {
+      parts.push(`Additional legacy subject context: ${characterName}.`);
+    }
+  } else if (characterName) {
+    parts.push(`Character or brand subject: ${characterName}.`);
+  }
+
+  // 3. Explicit concept intent.
   if (action) parts.push(`Pose or expression: ${action}.`);
-  if (label) parts.push(`Include the short caption text \"${label}\" spelled exactly as written, in bold readable sticker lettering. Do not add any other words.`);
+
+  // 3b. Text preference (overrides any freeform text guidance below).
+  if (noText) {
+    parts.push("TEXT RULE (mandatory, overrides any other text guidance): render NO visible text, caption, lettering, numerals or written words anywhere in the image. The concept name is planning metadata only and must not appear.");
+  } else if (label) {
+    const caption =
+      textPreference === "minimal"
+        ? `Include the short caption text "${label}" spelled exactly as written, as a compact supporting caption. Do not add any other words.`
+        : textPreference === "balanced"
+          ? `Include the caption text "${label}" spelled exactly as written, as a clear readable caption. Do not add any other words.`
+          : textPreference === "text_forward"
+            ? `Include the caption text "${label}" spelled exactly as written, rendered prominently as a major design element of the sticker. Do not add any other words.`
+            : `Include the short caption text "${label}" spelled exactly as written, in bold readable sticker lettering. Do not add any other words.`;
+    parts.push(`TEXT RULE (mandatory, overrides any other text guidance): ${caption}`);
+  } else {
+    parts.push("TEXT RULE (mandatory, overrides any other text guidance): no caption text was supplied, so do not invent, add or imply any words or lettering.");
+  }
+
+  // 4. Brand Kit styling (unchanged behavior).
   if (brand) {
     const brandName = String(brand.brand_name ?? "").trim();
     const ticker = String(brand.ticker ?? "").trim();
@@ -123,15 +334,39 @@ function buildPrompt(brand: Record<string, unknown> | null, pack: Record<string,
     const prohibited = stringArray(brand.prohibited_styles);
     if (prohibited.length) parts.push(`Strictly avoid: ${prohibited.slice(0, 12).join(", ")}.`);
   }
+
+  // 5. Pack Creative Direction (style guidance inside the hard constraints).
+  if (hasCreativeDirectionContent(cd)) {
+    parts.push("Pack creative direction (guides style only; never overrides the identity or text rules above):");
+    if (cd!.purpose) parts.push(`Pack purpose: ${cd!.purpose}`);
+    if (cd!.audience) parts.push(`Intended audience: ${cd!.audience}`);
+    if (cd!.toneKeywords.length) parts.push(`Tone: ${cd!.toneKeywords.join(", ")}.`);
+    const humor = HUMOR_TEXT[cd!.humorLevel];
+    if (humor) parts.push(humor);
+    const intensity = INTENSITY_TEXT[cd!.intensity];
+    if (intensity) parts.push(intensity);
+    if (cd!.visualDirection) parts.push(`Visual direction: ${cd!.visualDirection}`);
+    if (!noText && cd!.textNotes) parts.push(`Caption styling notes (styling only, never changes the exact caption wording): ${cd!.textNotes}`);
+    if (cd!.packRules.length) parts.push(`Pack rules (lower priority than the identity and text rules above): ${cd!.packRules.join("; ")}.`);
+  }
+
+  // 6. Legacy freeform fields.
   const brief = String(pack.brief ?? "").trim();
   if (brief) parts.push(`Pack brief: ${brief}`);
   const packStyle = String(pack.style_notes ?? "").trim();
   if (packStyle) parts.push(`Pack-specific style direction: ${packStyle}`);
+
+  // 7. Final production constraints.
   parts.push("Square 1:1 composition. Center the subject with generous margin. Use a simple flat solid backdrop only, with no environment, no scene, no background objects, no ground shadow and no gradient backdrop.");
   parts.push("Use crisp edges, a strong silhouette, high contrast and a thick clean outline suitable for automatic background removal.");
-  parts.push("No watermark, no signature, no frame, no unrelated logos, no extra characters and no extra text.");
+  parts.push(
+    noText
+      ? "No watermark, no signature, no frame, no unrelated logos, no extra characters and no text of any kind."
+      : "No watermark, no signature, no frame, no unrelated logos, no extra characters and no extra text beyond the exact caption requested above.",
+  );
   return parts.join(" ");
 }
+
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -209,21 +444,56 @@ Deno.serve(async (req: Request) => {
       const { data: sticker } = await admin.from("stickers").select("*").eq("id", stickerId).eq("pack_id", packId).maybeSingle();
       if (!sticker) return respond({ error: "STICKER_NOT_FOUND" }, 404);
 
+      const blueprint = parseBlueprint((pack as Record<string, unknown>).creative_blueprint);
+      const characterLockApplied =
+        blueprint.useBrandCharacterLock === true && hasCharacterLockContent(blueprint.characterLock);
+      const creativeDirectionApplied = hasCreativeDirectionContent(blueprint.creativeDirection);
+
       let refs: Array<{ id: string; storage_path: string; asset_type: string }> = [];
+      let referenceSource: "explicit" | "character_lock" | "pack_reference" | "workspace_auto" =
+        "workspace_auto";
       const explicit = stringArray(body.referenceAssetIds).slice(0, 3);
       if (explicit.length) {
         const { data } = await admin.from("media_assets").select("id,storage_path,asset_type").eq("workspace_id", workspaceId).in("id", explicit);
         refs = data ?? [];
+        if (refs.length) {
+          refs = explicit
+            .map((id) => refs.find((r) => r.id === id))
+            .filter((r): r is { id: string; storage_path: string; asset_type: string } => Boolean(r));
+          referenceSource = "explicit";
+        }
+      }
+      // Character Lock canonical references are a FALLBACK only — they never
+      // override explicit user-selected references.
+      if (!refs.length && blueprint.useBrandCharacterLock === true) {
+        const canonical = (blueprint.characterLock?.canonicalReferenceAssetIds ?? []).slice(0, 3);
+        if (canonical.length) {
+          const { data } = await admin.from("media_assets").select("id,storage_path,asset_type").eq("workspace_id", workspaceId).in("id", canonical).in("asset_type", ["mascot", "reference_image", "logo"]);
+          const found = data ?? [];
+          const ordered = canonical
+            .map((id) => found.find((r) => r.id === id))
+            .filter((r): r is { id: string; storage_path: string; asset_type: string } => Boolean(r));
+          if (ordered.length) {
+            refs = ordered;
+            referenceSource = "character_lock";
+          }
+        }
       }
       if (!refs.length && pack.reference_asset_id) {
         const { data } = await admin.from("media_assets").select("id,storage_path,asset_type").eq("workspace_id", workspaceId).eq("id", pack.reference_asset_id).maybeSingle();
-        if (data) refs = [data];
+        if (data) {
+          refs = [data];
+          referenceSource = "pack_reference";
+        }
       }
       if (!refs.length) {
         const { data } = await admin.from("media_assets").select("id,storage_path,asset_type,created_at").eq("workspace_id", workspaceId).in("asset_type", ["mascot", "reference_image", "logo"]).order("created_at", { ascending: false });
         const priority = ["mascot", "reference_image", "logo"];
         const candidate = (data ?? []).sort((a, b) => priority.indexOf(a.asset_type) - priority.indexOf(b.asset_type))[0];
-        if (candidate) refs = [candidate];
+        if (candidate) {
+          refs = [candidate];
+          referenceSource = "workspace_auto";
+        }
       }
       if (!refs.length) return respond({ error: "NO_REFERENCE", message: "Upload or select a mascot/reference image before generating." }, 400);
 
@@ -235,13 +505,19 @@ Deno.serve(async (req: Request) => {
       if (!signedUrls.length) return respond({ error: "REFERENCE_UNAVAILABLE" }, 400);
 
       const { data: brand } = await admin.from("brand_kits").select("*").eq("workspace_id", workspaceId).maybeSingle();
-      const prompt = buildPrompt(brand, pack, sticker);
+      const prompt = buildPrompt(brand, pack, sticker, blueprint);
       const priorAssetId = sticker.image_asset_id ?? null;
 
       const { data: job, error: jobError } = await admin.from("ai_jobs").insert({
         workspace_id: workspaceId, user_id: user.id, pack_id: packId, sticker_id: stickerId,
         job_type: "sticker_generate", provider: "kie", provider_model: MODEL, status: "queued",
-        input_json: { model: MODEL, prompt, reference_asset_ids: refs.map((r) => r.id), prior_image_asset_id: priorAssetId },
+        input_json: {
+          model: MODEL, prompt, reference_asset_ids: refs.map((r) => r.id), prior_image_asset_id: priorAssetId,
+          prompt_compiler_version: "v2",
+          reference_source: referenceSource,
+          character_lock_applied: characterLockApplied,
+          creative_direction_applied: creativeDirectionApplied,
+        },
       }).select("*").single();
       if (jobError || !job) return respond({ error: "JOB_CREATE_FAILED" }, 500);
 

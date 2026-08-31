@@ -1338,8 +1338,10 @@ function StickerLabBuilder() {
               </span>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Mascots, reference images and logos already in your Asset Vault. If none are
-              selected, the server picks the best available reference automatically.
+              Mascots, reference images and logos already in your Asset Vault. Explicitly selected
+              references always win. If none are selected, an enabled Character Lock’s canonical
+              references are tried next, then the server picks the best available reference
+              automatically.
             </p>
             {referencesQuery.isLoading ? (
               <p className="mt-4 text-xs text-muted-foreground">Loading references…</p>
@@ -1487,8 +1489,9 @@ function StickerLabBuilder() {
                   Use Brand Kit Character Lock for this pack
                 </span>
                 <span id="character-lock-help" className="mt-1 block text-muted-foreground">
-                  Saved with this pack for the V2 prompt upgrade; current generation behaviour is
-                  unchanged.
+                  Saved with this pack and used by V2 generation after the pack is saved. Its
+                  canonical references are only a fallback for generation when no explicit
+                  references are selected.
                 </span>
               </span>
             </label>
@@ -1599,8 +1602,9 @@ function StickerLabBuilder() {
             <section className="md:col-span-2 rounded-lg border border-border bg-background/40 p-4">
               <h3 className="text-sm font-semibold text-foreground">Creative Direction</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                The pack-level creative source of truth for Sticker Lab V2. Saved with this pack.
-                Current generation behaviour is unchanged until the V2 prompt upgrade ships.
+                The pack-level creative source of truth for Sticker Lab V2. Saved with this pack and
+                used by V2 generation after you save. On conflict, Character Lock identity and the
+                explicit concept and text rules take priority.
               </p>
 
               <div className="mt-4 grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
