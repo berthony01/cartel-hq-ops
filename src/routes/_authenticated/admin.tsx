@@ -60,11 +60,19 @@ import {
   type ReviewAction,
 } from "@/lib/project-verification";
 import {
+  fetchPlatformNetworkModeration,
+  MODERATION_REASON_MAX,
+  platformModerationKeys,
+  setProjectNetworkModeration,
+  type PlatformNetworkModerationRow,
+} from "@/lib/platform-moderation";
+import {
   formatCost,
   formatCount,
   formatTimestamp,
   type PlatformDropScheduleDetail,
 } from "@/lib/platform";
+
 
 function ProjectVerificationSection() {
   const queryClient = useQueryClient();
