@@ -6,10 +6,10 @@ import {
   NetworkEmpty,
   ProjectLogo,
   StatusPill,
+  VerificationSignals,
   WatchButton,
 } from "@/components/cartel-network/NetworkPieces";
 import {
-  NETWORK_TRUST_COPY,
   fetchNetworkProject,
   fetchNetworkProjectLaunches,
   formatSchedule,
@@ -149,14 +149,10 @@ function PublicProjectPage() {
         </section>
       ) : null}
 
-      <section className="rounded-lg border border-border bg-surface px-4 py-4">
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">
-          Trust
-        </h2>
-        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-          {NETWORK_TRUST_COPY.projectSupplied} {NETWORK_TRUST_COPY.notAnAudit}
-        </p>
-      </section>
+      <VerificationSignals
+        platformReviewed={project.platform_reviewed === true}
+        platformReviewedAt={project.platform_reviewed_at}
+      />
 
       <section className="space-y-4">
         <h2 className="border-b border-border pb-3 font-display text-xl uppercase text-foreground sm:text-2xl">

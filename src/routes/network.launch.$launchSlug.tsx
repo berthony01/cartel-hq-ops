@@ -8,6 +8,7 @@ import {
   NetworkEmpty,
   ProjectLogo,
   StatusPill,
+  VerificationSignals,
   WatchButton,
 } from "@/components/cartel-network/NetworkPieces";
 import {
@@ -254,12 +255,10 @@ function PublicLaunchPage() {
         </div>
       </section>
 
-      <section className="rounded-lg border border-border bg-surface px-4 py-4">
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">Trust</h2>
-        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-          {NETWORK_TRUST_COPY.projectSupplied} {NETWORK_TRUST_COPY.notAnAudit}
-        </p>
-      </section>
+      <VerificationSignals
+        platformReviewed={launch.platform_reviewed === true}
+        platformReviewedAt={launch.platform_reviewed_at}
+      />
     </div>
   );
 }
