@@ -53,7 +53,7 @@ export const Route = createFileRoute("/_authenticated/project-profile")({
       { property: "og:title", content: "Project Profile — CARTEL HQ" },
       {
         property: "og:description",
-        content: "Operator configuration for the workspace project identity record.",
+        content: "Operator configuration for the active project identity record.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -464,7 +464,7 @@ function ProjectProfilePage() {
             <Section
               variant="surface"
               title="Project logo"
-              description="Choose from logo assets already stored in this workspace."
+              description="Choose from logo assets already stored in this project."
             >
               {logos.length === 0 ? (
                 <EmptyState
@@ -501,7 +501,7 @@ function ProjectProfilePage() {
             <Section
               variant="surface"
               title="Discovery status"
-              description="Draft and hidden profiles stay behind authenticated workspace access. Published profiles appear on the public Cartel Network."
+              description="Draft and hidden profiles stay behind authenticated project access. Published profiles appear on the public Cartel Network."
             >
               <div className="max-w-sm">
                 <Label htmlFor="discovery_status">Status</Label>
