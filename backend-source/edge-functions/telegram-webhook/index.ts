@@ -49,6 +49,47 @@ async function sendMessage(token: string, chatId: string, text: string, extra: R
     return null;
   }
 }
+/**
+ * Result-aware send used only by the private Launch Watch deep-link confirmation.
+ *
+ * Classification is deliberately conservative: anything that is not a parsed
+ * Telegram rejection or a parsed ok:true is `ambiguous`, because the message may
+ * still have been delivered. Ambiguous outcomes are never auto-resent.
+ */
+type SendOutcome =
+  | { status: "sent"; messageId: number | null }
+  | { status: "failed"; errorClass: string; detail: string }
+  | { status: "ambiguous"; errorClass: string; detail: string };
+
+async function sendMessageWithOutcome(
+  token: string,
+  chatId: string,
+  text: string,
+  extra: Record<string, unknown> = {},
+): Promise<SendOutcome> {
+  const bound = (value: unknown) => String(value ?? "").slice(0, 300);
+  let res: Response;
+  try {
+    res = await fetch(`${TG_BASE}/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true, ...extra }),
+      signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
+    });
+  } catch (error) {
+    return { status: "ambiguous", errorClass: "uncertain_outcome", detail: bound((error as Error)?.message ?? "Telegram request did not complete.") };
+  }
+  const payload = await res.json().catch(() => null) as any;
+  if (payload && payload.ok === true) {
+    const messageId = Number(payload?.result?.message_id);
+    return { status: "sent", messageId: Number.isFinite(messageId) ? messageId : null };
+  }
+  if (payload && payload.ok === false) {
+    return { status: "failed", errorClass: "telegram_rejected", detail: bound(payload?.description ?? `Telegram rejected the message (${res.status}).`) };
+  }
+  return { status: "ambiguous", errorClass: "uncertain_outcome", detail: bound(`Unparseable Telegram response (${res.status}).`) };
+}
+
 async function answerCallback(token: string, callbackId: string, text: string) {
   try { await telegramJson(token, "answerCallbackQuery", { callback_query_id: callbackId, text, show_alert: false }); } catch { }
 }
