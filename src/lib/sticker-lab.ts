@@ -391,6 +391,8 @@ export function loadDraft(): BuilderDraft {
       ...emptyDraft(),
       ...parsed,
       creativeBlueprint: normalizeBlueprint(parsed.creativeBlueprint),
+      // Older session drafts predate the board-ready flag — never assume ready.
+      conceptBoardApproved: parsed.conceptBoardApproved === true,
     };
 
   } catch {
