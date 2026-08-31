@@ -2354,7 +2354,10 @@ function StickerLabBuilder() {
           <AlertDialog
             open={confirmSuggest !== null}
             onOpenChange={(open) => {
-              if (!open) setConfirmSuggest(null);
+              if (!open) {
+                setConfirmSuggest(null);
+                setRefreshTargetIds(null);
+              }
             }}
           >
             <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
