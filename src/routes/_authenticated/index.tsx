@@ -504,7 +504,9 @@ function HqDashboard() {
             <SnapshotCard
               title="Launch"
               badge={
-                status ? (
+                launchesUnavailable ? (
+                  <StatusBadge tone="muted">Unavailable</StatusBadge>
+                ) : status ? (
                   <StatusBadge tone={STATUS_TONE[status]}>
                     <span>{LAUNCH_STATUS_LABELS[status]}</span>
                   </StatusBadge>
@@ -512,15 +514,29 @@ function HqDashboard() {
                   <StatusBadge tone="muted">No launch</StatusBadge>
                 )
               }
-              primary={primaryLaunch ? primaryLaunch.token_name : "No launch created"}
-              secondary={primaryLaunch ? nextLine : "Create a launch to start the lifecycle."}
+              primary={
+                launchesUnavailable
+                  ? "Unavailable"
+                  : primaryLaunch
+                    ? primaryLaunch.token_name
+                    : "No launch created"
+              }
+              secondary={
+                launchesUnavailable
+                  ? "Launch state could not be loaded. Open Launch Control for the authoritative state."
+                  : primaryLaunch
+                    ? nextLine
+                    : "Create a launch to start the lifecycle."
+              }
               to="/launch-control"
               linkLabel="Launch Control"
             />
             <SnapshotCard
               title="Communities"
               badge={
-                groupCount > 0 ? (
+                telegramQuery.isError ? (
+                  <StatusBadge tone="muted">Unavailable</StatusBadge>
+                ) : groupCount > 0 ? (
                   <StatusBadge tone={healthyGroups === groupCount ? "green" : "gold"}>
                     {healthyGroups}/{groupCount} healthy
                   </StatusBadge>
@@ -530,9 +546,11 @@ function HqDashboard() {
               }
               primary={communitiesPrimary}
               secondary={
-                groupCount > 0
-                  ? "Welcome, onboarding and publishing run against these communities."
-                  : "Connect a Telegram community to publish packs and welcome new members."
+                telegramQuery.isError
+                  ? "Community state could not be loaded right now."
+                  : groupCount > 0
+                    ? "Welcome, onboarding and publishing run against these communities."
+                    : "Connect a Telegram community to publish packs and welcome new members."
               }
               to="/telegram"
               linkLabel={groupCount > 0 ? "Community Command" : "Connect a community"}
@@ -540,25 +558,34 @@ function HqDashboard() {
             <SnapshotCard
               title="Sticker Lab"
               badge={
-                <StatusBadge tone={packTotal > 0 ? "green" : "muted"}>
-                  {packsQuery.isPending ? "—" : `${packTotal} packs`}
-                </StatusBadge>
+                packsUnavailable ? (
+                  <StatusBadge tone="muted">Unavailable</StatusBadge>
+                ) : (
+                  <StatusBadge tone={packTotal > 0 ? "green" : "muted"}>
+                    {packsQuery.isPending ? "—" : `${packTotal} packs`}
+                  </StatusBadge>
+                )
               }
               primary={
-                packsQuery.isPending
-                  ? "Loading…"
-                  : latestPack
-                    ? `Latest: ${latestPack.title}`
-                    : "No packs yet"
+                packsUnavailable
+                  ? "Unavailable"
+                  : packsQuery.isPending
+                    ? "Loading…"
+                    : latestPack
+                      ? `Latest: ${latestPack.title}`
+                      : "No packs yet"
               }
               secondary={
-                latestPack
-                  ? `${latestPack.status} · ${usageQuery.isPending ? "—" : usageQuery.data ?? 0} AI jobs run`
-                  : "Create your first sticker pack in Sticker Lab."
+                packsUnavailable
+                  ? "Sticker pack state could not be loaded right now."
+                  : latestPack
+                    ? `${latestPack.status} · ${aiJobsClause}`
+                    : "Create your first sticker pack in Sticker Lab."
               }
               to="/sticker-lab"
               linkLabel="Open Lab"
             />
+
             <SnapshotCard
               title="Sticker Drops"
               badge={dropsBadge}
