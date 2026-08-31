@@ -30,7 +30,7 @@ import {
   downloadStickersZip,
   packZipName,
   stickerFileName,
-  prepareTelegramCutoutAtUrl,
+  
 } from "@/lib/sticker-export";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
