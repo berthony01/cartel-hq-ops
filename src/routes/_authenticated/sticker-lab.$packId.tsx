@@ -149,8 +149,7 @@ function PackManagerPage() {
           </p>
         </Section>
       ) : null}
-
-
+      {isArchived ? null : (
       <Section
         variant="hero"
         title={
