@@ -1810,7 +1810,7 @@ function StickerLabBuilder() {
       {step === 3 ? (
         <StepCard
           title="Sticker Concepts"
-          hint="Starter suggestions come from a fixed local list — not AI output."
+          hint="Starter suggestions come from a fixed local list. AI suggestions are optional, text-only concept ideas."
           action={
             <div className="flex flex-wrap gap-2">
               <Button
@@ -1822,6 +1822,21 @@ function StickerLabBuilder() {
               >
                 <RotateCcw className="size-4" aria-hidden="true" />
                 Reset suggestions
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-10"
+                disabled={suggesting || !conceptsConfigured}
+                onClick={() => setConfirmSuggest(true)}
+              >
+                {suggesting ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Sparkles className="size-4" aria-hidden="true" />
+                )}
+                Suggest concepts with AI
               </Button>
               <Button
                 type="button"
@@ -1842,6 +1857,97 @@ function StickerLabBuilder() {
             </span>{" "}
             concepts used for this pack size.
           </p>
+
+          {!conceptsConfigured && !conceptConfigQuery.isLoading ? (
+            <p className="mb-4 text-xs text-muted-foreground">
+              AI concept suggestions are unavailable right now. Starter concepts and manual editing
+              still work exactly as before.
+            </p>
+          ) : null}
+
+          {conceptError ? (
+            <div className="mb-4">
+              <Notice tone="warn">
+                {conceptError} Your current concepts were not changed.
+              </Notice>
+            </div>
+          ) : null}
+
+          {conceptSuggestions?.length ? (
+            <section className="cartel-panel mb-5 rounded-lg p-3 sm:p-4">
+              <header className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-foreground">AI concept suggestions</h3>
+                <span className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                  {conceptSuggestions.length} ideas · not applied yet
+                </span>
+              </header>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Nothing below is saved or generated. Your current concepts stay exactly as they are
+                until you apply these.
+              </p>
+              <ol className="mt-3 space-y-2">
+                {conceptSuggestions.map((s, i) => (
+                  <li
+                    key={`${s.label}-${i}`}
+                    className="flex min-w-0 items-start gap-3 rounded-md border border-border/60 p-2.5"
+                  >
+                    <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <span className="min-w-0 flex-1 break-words">
+                      <span className="block text-sm font-medium text-foreground">
+                        {s.emoji} {s.label}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">{s.action}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="min-h-10"
+                  onClick={() => {
+                    if (draft.packId) setConfirmApplySuggestions(true);
+                    else applySuggestions();
+                  }}
+                >
+                  <Check className="size-4" aria-hidden="true" />
+                  Use these concepts
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-10"
+                  disabled={suggesting || !conceptsConfigured}
+                  onClick={() => setConfirmSuggest(true)}
+                >
+                  <Sparkles className="size-4" aria-hidden="true" />
+                  Suggest another set
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="min-h-10 text-muted-foreground"
+                  onClick={() => {
+                    setConceptSuggestions(null);
+                    setConceptError(null);
+                  }}
+                >
+                  <X className="size-4" aria-hidden="true" />
+                  Discard suggestions
+                </Button>
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Review and edit before saving or generating.
+              </p>
+            </section>
+          ) : null}
+
+
           <ul className="grid gap-2 sm:gap-3 xl:grid-cols-2 [&>*]:min-w-0">
             {draft.concepts.map((c, i) => (
               <li key={c.id}>
