@@ -13,6 +13,12 @@ import {
 } from "@/lib/media";
 import { fetchStickerAiConfig } from "@/lib/sticker-ai";
 import {
+  fetchStickerConceptConfig,
+  suggestStickerConcepts,
+  type SuggestedConcept,
+} from "@/lib/sticker-concepts";
+
+import {
   STAGE_LABEL,
   useStickerGenerationRuntime,
   type Stage,
@@ -268,6 +274,14 @@ function StickerLabBuilder() {
   const [fileError, setFileError] = useState<string | null>(null);
   const [packNameError, setPackNameError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  /* ------- Step 3 AI Concept Studio (text only, never image generation) ------ */
+  const [conceptSuggestions, setConceptSuggestions] = useState<SuggestedConcept[] | null>(null);
+  const [conceptError, setConceptError] = useState<string | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+  const [confirmSuggest, setConfirmSuggest] = useState(false);
+  const [confirmApplySuggestions, setConfirmApplySuggestions] = useState(false);
+
   /**
    * Existing generation runtime (stages, structured failures, notes, previews,
    * durable ai_jobs history, polling ownership, reconciliation and the
@@ -414,6 +428,20 @@ function StickerLabBuilder() {
   });
   const brandLock = characterLockQuery.data ?? null;
   const brandLockActive = !!brandLock?.enabled;
+
+  /**
+   * Concept-suggestion provider status. Free probe: it never contacts the
+   * language model and spends nothing. Only runs while Step 3 is visible.
+   */
+  const conceptConfigQuery = useQuery({
+    queryKey: ["sticker-concepts-config"],
+    enabled: step === 3,
+    staleTime: 300_000,
+    retry: 0,
+    refetchOnWindowFocus: false,
+    queryFn: fetchStickerConceptConfig,
+  });
+  const conceptsConfigured = conceptConfigQuery.data?.configured === true;
 
 
   // Provider status. Free probe, never a generation call.
@@ -677,6 +705,70 @@ function StickerLabBuilder() {
       ],
     });
   };
+
+  /**
+   * ONE explicit, confirmed language-model request. It never calls
+   * `sticker-ai`, never starts image generation, never saves the pack and
+   * never touches persisted sticker rows. On any failure the current concepts
+   * stay exactly as they are.
+   */
+  const runConceptSuggestion = async () => {
+    if (!workspaceId) {
+      toast.error("Select a project first.");
+      return;
+    }
+    setSuggesting(true);
+    setConceptError(null);
+    try {
+      const result = await suggestStickerConcepts({
+        workspaceId,
+        size: draft.size,
+        characterName: draft.characterName,
+        theme: draft.theme,
+        brief: draft.brief,
+        styleNotes: draft.styleNotes,
+        creativeBlueprint: draft.creativeBlueprint,
+        concepts: draft.concepts.map((c) => ({ label: c.label, action: c.action })),
+      });
+      setConceptSuggestions(result.concepts);
+      toast.success(`${result.concepts.length} concept suggestions ready to review.`);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not get concept suggestions.";
+      setConceptSuggestions(null);
+      setConceptError(message);
+      toast.error(message);
+    } finally {
+      setSuggesting(false);
+    }
+  };
+
+  /**
+   * Applies suggestions to the LOCAL draft only. Keyword metadata is cleared
+   * because concept ids change. `stickerIds`, packId, Character Lock, Creative
+   * Direction, references, generation stages and provider jobs are untouched,
+   * and nothing is saved.
+   */
+  const applySuggestions = () => {
+    const suggestions = conceptSuggestions;
+    if (!suggestions?.length) return;
+    const stamp = Date.now();
+    update({
+      concepts: suggestions.map((s, i) => ({
+        id: `ai${stamp}-${i}`,
+        label: s.label,
+        action: s.action,
+        emoji: s.emoji,
+      })),
+      keywords: {},
+    });
+    setConceptSuggestions(null);
+    setConceptError(null);
+    setConfirmApplySuggestions(false);
+    toast.success("Suggestions applied to your draft. Review and edit before saving.");
+  };
+
+
 
   /** Persists pack + concepts. Never triggers a provider call. */
   const persist = async (): Promise<PersistResult | null> => {
@@ -1718,7 +1810,7 @@ function StickerLabBuilder() {
       {step === 3 ? (
         <StepCard
           title="Sticker Concepts"
-          hint="Starter suggestions come from a fixed local list — not AI output."
+          hint="Starter suggestions come from a fixed local list. AI suggestions are optional, text-only concept ideas."
           action={
             <div className="flex flex-wrap gap-2">
               <Button
@@ -1730,6 +1822,21 @@ function StickerLabBuilder() {
               >
                 <RotateCcw className="size-4" aria-hidden="true" />
                 Reset suggestions
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-10"
+                disabled={suggesting || !conceptsConfigured}
+                onClick={() => setConfirmSuggest(true)}
+              >
+                {suggesting ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Sparkles className="size-4" aria-hidden="true" />
+                )}
+                Suggest concepts with AI
               </Button>
               <Button
                 type="button"
@@ -1750,6 +1857,97 @@ function StickerLabBuilder() {
             </span>{" "}
             concepts used for this pack size.
           </p>
+
+          {!conceptsConfigured && !conceptConfigQuery.isLoading ? (
+            <p className="mb-4 text-xs text-muted-foreground">
+              AI concept suggestions are unavailable right now. Starter concepts and manual editing
+              still work exactly as before.
+            </p>
+          ) : null}
+
+          {conceptError ? (
+            <div className="mb-4">
+              <Notice tone="warn">
+                {conceptError} Your current concepts were not changed.
+              </Notice>
+            </div>
+          ) : null}
+
+          {conceptSuggestions?.length ? (
+            <section className="cartel-panel mb-5 rounded-lg p-3 sm:p-4">
+              <header className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-foreground">AI concept suggestions</h3>
+                <span className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                  {conceptSuggestions.length} ideas · not applied yet
+                </span>
+              </header>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Nothing below is saved or generated. Your current concepts stay exactly as they are
+                until you apply these.
+              </p>
+              <ol className="mt-3 space-y-2">
+                {conceptSuggestions.map((s, i) => (
+                  <li
+                    key={`${s.label}-${i}`}
+                    className="flex min-w-0 items-start gap-3 rounded-md border border-border/60 p-2.5"
+                  >
+                    <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <span className="min-w-0 flex-1 break-words">
+                      <span className="block text-sm font-medium text-foreground">
+                        {s.emoji} {s.label}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">{s.action}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="min-h-10"
+                  onClick={() => {
+                    if (draft.packId) setConfirmApplySuggestions(true);
+                    else applySuggestions();
+                  }}
+                >
+                  <Check className="size-4" aria-hidden="true" />
+                  Use these concepts
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-10"
+                  disabled={suggesting || !conceptsConfigured}
+                  onClick={() => setConfirmSuggest(true)}
+                >
+                  <Sparkles className="size-4" aria-hidden="true" />
+                  Suggest another set
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="min-h-10 text-muted-foreground"
+                  onClick={() => {
+                    setConceptSuggestions(null);
+                    setConceptError(null);
+                  }}
+                >
+                  <X className="size-4" aria-hidden="true" />
+                  Discard suggestions
+                </Button>
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Review and edit before saving or generating.
+              </p>
+            </section>
+          ) : null}
+
+
           <ul className="grid gap-2 sm:gap-3 xl:grid-cols-2 [&>*]:min-w-0">
             {draft.concepts.map((c, i) => (
               <li key={c.id}>
@@ -1848,8 +2046,73 @@ function StickerLabBuilder() {
               <span className="text-xs text-pepe">Pack saved. Retries reuse the same rows.</span>
             ) : null}
           </div>
+
+          <AlertDialog open={confirmSuggest} onOpenChange={setConfirmSuggest}>
+            <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Ask AI for concept ideas?</AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2 text-left">
+                    <p>This uses Kie language-model credits (tokens) on your account.</p>
+                    <p>
+                      It generates <strong>concept ideas only</strong> — text labels, actions and
+                      emoji.
+                    </p>
+                    <p>
+                      It does <strong>not</strong> generate sticker images and does not start the
+                      two-task image pipeline.
+                    </p>
+                    <p>
+                      Your current concepts stay untouched unless you explicitly apply the
+                      suggestions.
+                    </p>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    setConfirmSuggest(false);
+                    void runConceptSuggestion();
+                  }}
+                >
+                  Suggest concepts
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <AlertDialog
+            open={confirmApplySuggestions}
+            onOpenChange={setConfirmApplySuggestions}
+          >
+            <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Replace the concepts in this saved pack?</AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2 text-left">
+                    <p>
+                      Applying changes only your local draft right now. Nothing is saved and no
+                      generated or published sticker is touched.
+                    </p>
+                    <p>
+                      However, this pack is already saved: a later <strong>Save</strong> will update
+                      or remove the stored concept rows to match the new list.
+                    </p>
+                    <p>Emoji and keyword metadata for the current concepts will be cleared.</p>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Keep current concepts</AlertDialogCancel>
+                <AlertDialogAction onClick={applySuggestions}>Use these concepts</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </StepCard>
       ) : null}
+
 
       {step === 4 ? (
         <StepCard
