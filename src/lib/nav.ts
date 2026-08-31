@@ -2,28 +2,13 @@ import {
   LayoutDashboard,
   IdCard,
   Rocket,
-  Globe,
-  CalendarClock,
-  Bookmark,
-
-
-
-  ShieldCheck,
-  TerminalSquare,
   Sticker,
   Palette,
   FolderLock,
-  Radio,
-  Target,
-  Users,
-  Send,
-  Radar,
-  Award,
-  BarChart3,
   MessageSquare,
+  Send,
+  Globe,
   ShieldHalf,
-
-  Settings,
   type LucideIcon,
 } from "lucide-react";
 
@@ -43,8 +28,6 @@ export type NavItem = {
   ownerOnly?: boolean;
 };
 
-
-
 export type NavSection = {
   label: string;
   items: NavItem[];
@@ -56,12 +39,13 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "HQ", to: "/", icon: LayoutDashboard, mobilePrimary: true },
       { label: "Project Profile", to: "/project-profile", icon: IdCard },
-      { label: "Launch Control", to: "/launch-control", icon: Rocket },
-
-
-
-      { label: "Cartel Clearance", to: "/clearance", icon: ShieldCheck, status: "planned" },
-      { label: "Command Terminal", to: "/command-terminal", icon: TerminalSquare, status: "planned" },
+      {
+        label: "Launch Control",
+        to: "/launch-control",
+        icon: Rocket,
+        mobilePrimary: true,
+        mobileLabel: "Launch",
+      },
     ],
   },
   {
@@ -75,15 +59,12 @@ export const NAV_SECTIONS: NavSection[] = [
         mobileLabel: "Lab",
       },
       { label: "Brand Kit", to: "/brand-kit", icon: Palette },
-      { label: "Assets", to: "/assets", icon: FolderLock, mobilePrimary: true },
+      { label: "Assets", to: "/assets", icon: FolderLock },
     ],
   },
   {
-    label: "Operations",
+    label: "Community",
     items: [
-      { label: "Operations", to: "/operations", icon: Radio, status: "planned" },
-      { label: "Missions", to: "/missions", icon: Target, status: "planned" },
-      { label: "Operatives", to: "/operatives", icon: Users, status: "planned" },
       {
         label: "Community Command",
         to: "/telegram",
@@ -91,30 +72,16 @@ export const NAV_SECTIONS: NavSection[] = [
         mobilePrimary: true,
         mobileLabel: "Community",
       },
-      { label: "Distribution Center", to: "/distribution", icon: Send },
+      { label: "Sticker Drops", to: "/distribution", icon: Send },
     ],
   },
   {
-    label: "Intelligence",
-    items: [
-      { label: "Cartel Shield", to: "/cartel-shield", icon: Radar, status: "planned" },
-      { label: "Reputation", to: "/reputation", icon: Award, status: "planned" },
-      { label: "Analytics", to: "/analytics", icon: BarChart3, status: "planned" },
-    ],
-  },
-  {
-    label: "Cartel Network",
-    items: [
-      { label: "Projects", to: "/network/projects", icon: Globe },
-      { label: "Upcoming Launches", to: "/network/launches", icon: CalendarClock },
-      { label: "My Watchlist", to: "/watchlist", icon: Bookmark, status: "planned" },
-      { label: "Cartel Signals", to: "/signals", icon: Radio, status: "planned" },
-    ],
+    label: "Network",
+    items: [{ label: "Cartel Network", to: "/network", icon: Globe }],
   },
   {
     label: "System",
     items: [
-      { label: "Settings", to: "/settings", icon: Settings },
       { label: "Owner Console", to: "/admin", icon: ShieldHalf, ownerOnly: true },
     ],
   },
