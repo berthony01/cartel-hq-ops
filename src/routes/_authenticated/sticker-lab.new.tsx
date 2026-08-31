@@ -877,6 +877,7 @@ function StickerLabBuilder() {
     );
     setPreview(remaining.every((item) => item.applied) ? null : { ...current, items: remaining });
     setConfirmApplySuggestions(false);
+    setPendingApplyTargetIds(null);
     if (current.mode === "alternatives") {
       setSelectedForAlternatives((s) => s.filter((id) => !changed.includes(id)));
     }
