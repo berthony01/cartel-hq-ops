@@ -509,6 +509,22 @@ function StickerLabBuilder() {
   });
   const versionsBySticker = versionsQuery.data ?? {};
 
+  /**
+   * Phase 4B restore state. Declared with the other top-level hooks, ABOVE every
+   * conditional return, so hook order can never change between renders.
+   */
+  type RestoreTarget = {
+    stickerId: string;
+    versionId: string;
+    versionNumber: number;
+    label: string;
+  };
+  const [restoreTarget, setRestoreTarget] = useState<RestoreTarget | null>(null);
+  const [restoreTelegramTarget, setRestoreTelegramTarget] = useState<RestoreTarget | null>(null);
+  const [restoringStickerId, setRestoringStickerId] = useState<string | null>(null);
+
+
+
 
   const packId = draft?.packId ?? null;
 
