@@ -510,9 +510,10 @@ function LaunchControlPage() {
           ) : null}
 
           <Section
-            variant="surface"
+            variant="quiet"
             title="Launches"
-            description={`Launch records for ${profile.project_name}. One project profile can hold multiple launches.`}
+            description={`Select a launch to work on. One project profile can hold multiple launches.`}
+
             actions={
               canManage ? (
                 <Button size="sm" className="min-h-11" onClick={startCreate}>
