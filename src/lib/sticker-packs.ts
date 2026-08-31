@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { ASSETS_BUCKET } from "@/lib/media";
 
 import {
@@ -412,7 +413,7 @@ export async function persistDraft(params: {
     style_notes: draft.styleNotes.trim() || null,
     reference_asset_id: draft.referenceAssetIds[0] ?? draft.referenceAssetId ?? null,
     // Additive, versioned creative blueprint. Not read by generation in this phase.
-    creative_blueprint: normalizeBlueprint(draft.creativeBlueprint) as unknown as never,
+    creative_blueprint: normalizeBlueprint(draft.creativeBlueprint) as unknown as Json,
   };
 
   let packId = draft.packId;
