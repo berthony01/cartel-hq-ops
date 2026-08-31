@@ -164,6 +164,16 @@ function PublicProjectPage() {
         </h2>
         {launchesQuery.isLoading ? (
           <p className="text-sm text-muted-foreground">Loading launches…</p>
+        ) : launchesQuery.isError ? (
+          <div className="space-y-3">
+            <NetworkEmpty
+              title="Launches unavailable"
+              description="We could not load launches for this project right now. Try again shortly."
+            />
+            <Button variant="outline" size="sm" onClick={() => launchesQuery.refetch()}>
+              Retry
+            </Button>
+          </div>
         ) : launches.length === 0 ? (
           <NetworkEmpty
             title="No launches announced yet"
