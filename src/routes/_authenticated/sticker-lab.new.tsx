@@ -706,6 +706,70 @@ function StickerLabBuilder() {
     });
   };
 
+  /**
+   * ONE explicit, confirmed language-model request. It never calls
+   * `sticker-ai`, never starts image generation, never saves the pack and
+   * never touches persisted sticker rows. On any failure the current concepts
+   * stay exactly as they are.
+   */
+  const runConceptSuggestion = async () => {
+    if (!workspaceId) {
+      toast.error("Select a project first.");
+      return;
+    }
+    setSuggesting(true);
+    setConceptError(null);
+    try {
+      const result = await suggestStickerConcepts({
+        workspaceId,
+        size: draft.size,
+        characterName: draft.characterName,
+        theme: draft.theme,
+        brief: draft.brief,
+        styleNotes: draft.styleNotes,
+        creativeBlueprint: draft.creativeBlueprint,
+        concepts: draft.concepts.map((c) => ({ label: c.label, action: c.action })),
+      });
+      setConceptSuggestions(result.concepts);
+      toast.success(`${result.concepts.length} concept suggestions ready to review.`);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not get concept suggestions.";
+      setConceptSuggestions(null);
+      setConceptError(message);
+      toast.error(message);
+    } finally {
+      setSuggesting(false);
+    }
+  };
+
+  /**
+   * Applies suggestions to the LOCAL draft only. Keyword metadata is cleared
+   * because concept ids change. `stickerIds`, packId, Character Lock, Creative
+   * Direction, references, generation stages and provider jobs are untouched,
+   * and nothing is saved.
+   */
+  const applySuggestions = () => {
+    const suggestions = conceptSuggestions;
+    if (!suggestions?.length) return;
+    const stamp = Date.now();
+    update({
+      concepts: suggestions.map((s, i) => ({
+        id: `ai${stamp}-${i}`,
+        label: s.label,
+        action: s.action,
+        emoji: s.emoji,
+      })),
+      keywords: {},
+    });
+    setConceptSuggestions(null);
+    setConceptError(null);
+    setConfirmApplySuggestions(false);
+    toast.success("Suggestions applied to your draft. Review and edit before saving.");
+  };
+
+
+
   /** Persists pack + concepts. Never triggers a provider call. */
   const persist = async (): Promise<PersistResult | null> => {
     if (!workspaceId || !user) {
