@@ -2247,6 +2247,10 @@ export type Database = {
           restored_at: string
         }[]
       }
+      set_sticker_current_version: {
+        Args: { _sticker_id: string; _version_id: string }
+        Returns: Json
+      }
       sticker_drop_scheduler_secret_matches: {
         Args: { p_secret: string }
         Returns: boolean
