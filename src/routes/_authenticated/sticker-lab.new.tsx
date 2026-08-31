@@ -543,6 +543,7 @@ function StickerLabBuilder() {
    */
   const toggleUseCharacterLock = (next: boolean) => {
     const blueprintNext: CreativeBlueprint = {
+      ...blueprint,
       version: 1,
       useBrandCharacterLock: next,
       characterLock:
@@ -550,6 +551,16 @@ function StickerLabBuilder() {
     };
     update({ creativeBlueprint: blueprintNext });
   };
+
+  const direction = blueprint.creativeDirection;
+  const updateDirection = (patch: Partial<CreativeDirection>) =>
+    update({
+      creativeBlueprint: {
+        ...blueprint,
+        creativeDirection: { ...direction, ...patch },
+      },
+    });
+
 
   const setTheme = (theme: PackTheme) =>
 
