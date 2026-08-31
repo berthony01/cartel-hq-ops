@@ -73,7 +73,7 @@ export function TelegramConnectionCard({
 }) {
   const queryClient = useQueryClient();
   const { launchTelegram, isMobileDevice } = useTelegramLauncher();
-  const { userId, configQuery, connection, botConfigured, botUsername, botStartUrl, config } = setup;
+  const { userId, configQuery, connection, botConfigured, botUsername, botStartUrl } = setup;
 
   const [starting, setStarting] = useState(false);
   const [requestId, setRequestId] = useState<string | null>(null);
