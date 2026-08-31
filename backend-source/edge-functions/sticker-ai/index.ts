@@ -444,21 +444,56 @@ Deno.serve(async (req: Request) => {
       const { data: sticker } = await admin.from("stickers").select("*").eq("id", stickerId).eq("pack_id", packId).maybeSingle();
       if (!sticker) return respond({ error: "STICKER_NOT_FOUND" }, 404);
 
+      const blueprint = parseBlueprint((pack as Record<string, unknown>).creative_blueprint);
+      const characterLockApplied =
+        blueprint.useBrandCharacterLock === true && hasCharacterLockContent(blueprint.characterLock);
+      const creativeDirectionApplied = hasCreativeDirectionContent(blueprint.creativeDirection);
+
       let refs: Array<{ id: string; storage_path: string; asset_type: string }> = [];
+      let referenceSource: "explicit" | "character_lock" | "pack_reference" | "workspace_auto" =
+        "workspace_auto";
       const explicit = stringArray(body.referenceAssetIds).slice(0, 3);
       if (explicit.length) {
         const { data } = await admin.from("media_assets").select("id,storage_path,asset_type").eq("workspace_id", workspaceId).in("id", explicit);
         refs = data ?? [];
+        if (refs.length) {
+          refs = explicit
+            .map((id) => refs.find((r) => r.id === id))
+            .filter((r): r is { id: string; storage_path: string; asset_type: string } => Boolean(r));
+          referenceSource = "explicit";
+        }
+      }
+      // Character Lock canonical references are a FALLBACK only — they never
+      // override explicit user-selected references.
+      if (!refs.length && blueprint.useBrandCharacterLock === true) {
+        const canonical = (blueprint.characterLock?.canonicalReferenceAssetIds ?? []).slice(0, 3);
+        if (canonical.length) {
+          const { data } = await admin.from("media_assets").select("id,storage_path,asset_type").eq("workspace_id", workspaceId).in("id", canonical).in("asset_type", ["mascot", "reference_image", "logo"]);
+          const found = data ?? [];
+          const ordered = canonical
+            .map((id) => found.find((r) => r.id === id))
+            .filter((r): r is { id: string; storage_path: string; asset_type: string } => Boolean(r));
+          if (ordered.length) {
+            refs = ordered;
+            referenceSource = "character_lock";
+          }
+        }
       }
       if (!refs.length && pack.reference_asset_id) {
         const { data } = await admin.from("media_assets").select("id,storage_path,asset_type").eq("workspace_id", workspaceId).eq("id", pack.reference_asset_id).maybeSingle();
-        if (data) refs = [data];
+        if (data) {
+          refs = [data];
+          referenceSource = "pack_reference";
+        }
       }
       if (!refs.length) {
         const { data } = await admin.from("media_assets").select("id,storage_path,asset_type,created_at").eq("workspace_id", workspaceId).in("asset_type", ["mascot", "reference_image", "logo"]).order("created_at", { ascending: false });
         const priority = ["mascot", "reference_image", "logo"];
         const candidate = (data ?? []).sort((a, b) => priority.indexOf(a.asset_type) - priority.indexOf(b.asset_type))[0];
-        if (candidate) refs = [candidate];
+        if (candidate) {
+          refs = [candidate];
+          referenceSource = "workspace_auto";
+        }
       }
       if (!refs.length) return respond({ error: "NO_REFERENCE", message: "Upload or select a mascot/reference image before generating." }, 400);
 
@@ -470,13 +505,19 @@ Deno.serve(async (req: Request) => {
       if (!signedUrls.length) return respond({ error: "REFERENCE_UNAVAILABLE" }, 400);
 
       const { data: brand } = await admin.from("brand_kits").select("*").eq("workspace_id", workspaceId).maybeSingle();
-      const prompt = buildPrompt(brand, pack, sticker);
+      const prompt = buildPrompt(brand, pack, sticker, blueprint);
       const priorAssetId = sticker.image_asset_id ?? null;
 
       const { data: job, error: jobError } = await admin.from("ai_jobs").insert({
         workspace_id: workspaceId, user_id: user.id, pack_id: packId, sticker_id: stickerId,
         job_type: "sticker_generate", provider: "kie", provider_model: MODEL, status: "queued",
-        input_json: { model: MODEL, prompt, reference_asset_ids: refs.map((r) => r.id), prior_image_asset_id: priorAssetId },
+        input_json: {
+          model: MODEL, prompt, reference_asset_ids: refs.map((r) => r.id), prior_image_asset_id: priorAssetId,
+          prompt_compiler_version: "v2",
+          reference_source: referenceSource,
+          character_lock_applied: characterLockApplied,
+          creative_direction_applied: creativeDirectionApplied,
+        },
       }).select("*").single();
       if (jobError || !job) return respond({ error: "JOB_CREATE_FAILED" }, 500);
 
