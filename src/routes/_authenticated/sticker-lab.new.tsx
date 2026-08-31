@@ -1318,6 +1318,7 @@ function StickerLabBuilder() {
 
   /** Retries only the failed stickers. Finished stickers are never touched. */
   const retryFailed = async () => {
+    clearSelection();
     const result = await persist();
     if (!result) return;
     for (const concept of failedConcepts) {
@@ -1328,6 +1329,45 @@ function StickerLabBuilder() {
       if (!aliveRef.current) return;
     }
   };
+
+  /**
+   * Sticker Studio selective generation. Sequential by design in this phase:
+   * one confirmed batch, one save, then the existing proven per-sticker
+   * runtime is re-used one sticker at a time. Eligibility is re-checked for
+   * the batch and again immediately before every single provider call.
+   */
+  const generateSelected = async () => {
+    setConfirmSelectedBatch(false);
+    const batch = draft.concepts.filter(
+      (c) => selectedForGeneration.includes(c.id) && bulkSelectable(c.id),
+    );
+    if (batch.length === 0) {
+      clearSelection();
+      toast.info("Those stickers are no longer eligible — nothing was generated.");
+      return;
+    }
+    const result = await persist();
+    if (!result) return;
+    for (const concept of batch) {
+      if (!aliveRef.current) return;
+      const stickerId = result.stickerIds[concept.id];
+      if (!stickerId) {
+        setSelectedForGeneration((prev) => prev.filter((id) => id !== concept.id));
+        continue;
+      }
+      // Live re-check: skip anything that became ready, busy or previewed.
+      if (stages[stickerId] === "ready" || previews[stickerId] || busy(stageFor(concept.id))) {
+        setSelectedForGeneration((prev) => prev.filter((id) => id !== concept.id));
+        continue;
+      }
+      // eslint-disable-next-line no-await-in-loop
+      await runGeneration(concept.id, stickerId, result.packId);
+      setSelectedForGeneration((prev) => prev.filter((id) => id !== concept.id));
+      if (!aliveRef.current) return;
+    }
+    clearSelection();
+  };
+
 
   /** Sends the user back to Step 3 with the offending concept focused. */
   const editConceptFromFailure = (conceptId: string) => {
