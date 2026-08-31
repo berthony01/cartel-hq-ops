@@ -64,11 +64,11 @@ export function CreateWorkspaceDialog({
       await queryClient.invalidateQueries({ queryKey: workspacesQueryKey });
       await queryClient.refetchQueries({ queryKey: workspacesQueryKey });
       if (data?.id) selectWorkspace(data.id);
-      toast.success(`Workspace “${trimmed}” created`);
+      toast.success(`Project “${trimmed}” added`);
       setName("");
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not create the workspace.");
+      toast.error(err instanceof Error ? err.message : "Could not add the project.");
     } finally {
       setBusy(false);
     }
