@@ -201,7 +201,7 @@ function BrandKitPage() {
           icon={Palette}
           title="No project yet"
           description="Add a project from the selector in the header before setting up a Brand Kit."
-        />న
+        />
       ) : (
         <>
           <form
