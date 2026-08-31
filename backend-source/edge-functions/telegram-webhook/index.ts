@@ -1476,7 +1476,8 @@ Deno.serve(async (req: Request) => {
         String(launch.status) === "OFFICIAL_CONTRACT_REGISTERED"
           ? verifiedLaunchPacket(launch, profile)
           : "";
-      await sendMessage(
+      const confirmationAttemptedAt = new Date().toISOString();
+      const confirmation = await sendMessageWithOutcome(
         TELEGRAM_BOT_TOKEN,
         chatId,
         `${launchWatchIntro(launch, profile)}\n\n${line}${launchWatchDisclaimer}${packet}`,
@@ -1485,7 +1486,9 @@ Deno.serve(async (req: Request) => {
           reply_markup: launchWatchKeyboard(token, true, result.remindersEnabled, true, profile),
         },
       );
+      await recordLaunchWatchConfirmation(result.subscriptionId, confirmationAttemptedAt, confirmation);
       return json({ ok: true });
+
 
     }
 
