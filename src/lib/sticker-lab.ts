@@ -202,10 +202,10 @@ export function normalizeBlueprint(value: unknown): CreativeBlueprint {
     return emptyBlueprint();
   }
   const raw = value as Record<string, unknown>;
-  const lock = raw.characterLock;
+  const lock = raw['characterLock'];
   return {
     version: 1,
-    useBrandCharacterLock: raw.useBrandCharacterLock === true,
+    useBrandCharacterLock: raw['useBrandCharacterLock'] === true,
     characterLock:
       typeof lock === "object" && lock !== null && !Array.isArray(lock)
         ? normalizeCharacterLock(lock)

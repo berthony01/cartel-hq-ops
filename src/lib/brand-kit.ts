@@ -58,14 +58,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function normalizeCharacterLock(value: unknown): CharacterLock {
   if (!isRecord(value)) return emptyCharacterLock();
   return {
-    enabled: value.enabled === true,
-    subjectName: asString(value.subjectName).trim(),
-    identityNotes: asString(value.identityNotes),
-    protectedTraits: asStringList(value.protectedTraits),
-    wardrobeAccessories: asStringList(value.wardrobeAccessories),
-    negativeConstraints: asStringList(value.negativeConstraints),
+    enabled: value['enabled'] === true,
+    subjectName: asString(value['subjectName']).trim(),
+    identityNotes: asString(value['identityNotes']),
+    protectedTraits: asStringList(value['protectedTraits']),
+    wardrobeAccessories: asStringList(value['wardrobeAccessories']),
+    negativeConstraints: asStringList(value['negativeConstraints']),
     canonicalReferenceAssetIds: asStringList(
-      value.canonicalReferenceAssetIds,
+      value['canonicalReferenceAssetIds'],
       MAX_CANONICAL_REFERENCES,
     ),
   };
