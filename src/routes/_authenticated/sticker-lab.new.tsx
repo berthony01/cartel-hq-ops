@@ -532,7 +532,27 @@ function StickerLabBuilder() {
     update({ referenceAssetIds: [...draft.referenceAssetIds, asset.id] });
   };
 
+  const blueprint = draft.creativeBlueprint;
+  const packLockSnapshot = blueprint.characterLock;
+
+  /**
+   * Character Lock toggle. Snapshots the Brand Kit lock into a draft that has
+   * none yet; an already-saved pack keeps its own snapshot untouched. Turning
+   * it off preserves the snapshot. Generation ignores both in this phase and
+   * `referenceAssetIds` is never modified here.
+   */
+  const toggleUseCharacterLock = (next: boolean) => {
+    const blueprintNext: CreativeBlueprint = {
+      version: 1,
+      useBrandCharacterLock: next,
+      characterLock:
+        next && !packLockSnapshot && brandLockActive ? brandLock : packLockSnapshot,
+    };
+    update({ creativeBlueprint: blueprintNext });
+  };
+
   const setTheme = (theme: PackTheme) =>
+
     update({ theme, concepts: starterConcepts(theme, draft.size) });
 
   const setSize = (size: PackSize) => {
