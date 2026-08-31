@@ -255,7 +255,7 @@ export function useTelegramGroupSetup(enabled = true) {
       if (prev.includes(id)) return prev.filter((x) => x !== id);
       if (prev.length >= MAX_DISTRIBUTION_TARGETS) {
         toast.error(
-          `You can distribute to up to ${MAX_DISTRIBUTION_TARGETS} groups in one run.`,
+          `You can send to up to ${MAX_DISTRIBUTION_TARGETS} communities in one send.`,
         );
         return prev;
       }
