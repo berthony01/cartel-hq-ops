@@ -1602,8 +1602,9 @@ function StickerLabBuilder() {
             <section className="md:col-span-2 rounded-lg border border-border bg-background/40 p-4">
               <h3 className="text-sm font-semibold text-foreground">Creative Direction</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                The pack-level creative source of truth for Sticker Lab V2. Saved with this pack.
-                Current generation behaviour is unchanged until the V2 prompt upgrade ships.
+                The pack-level creative source of truth for Sticker Lab V2. Saved with this pack and
+                used by V2 generation after you save. On conflict, Character Lock identity and the
+                explicit concept and text rules take priority.
               </p>
 
               <div className="mt-4 grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
