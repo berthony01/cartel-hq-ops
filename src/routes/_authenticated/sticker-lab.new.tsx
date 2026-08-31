@@ -1487,8 +1487,9 @@ function StickerLabBuilder() {
                   Use Brand Kit Character Lock for this pack
                 </span>
                 <span id="character-lock-help" className="mt-1 block text-muted-foreground">
-                  Saved with this pack for the V2 prompt upgrade; current generation behaviour is
-                  unchanged.
+                  Saved with this pack and used by V2 generation after the pack is saved. Its
+                  canonical references are only a fallback for generation when no explicit
+                  references are selected.
                 </span>
               </span>
             </label>
