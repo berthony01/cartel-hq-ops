@@ -32,15 +32,23 @@ export const Route = createFileRoute("/network/projects")({
 function NetworkProjectsPage() {
   const [searchInput, setSearchInput] = useState("");
   const [chainInput, setChainInput] = useState("");
+  const [verifiedOnlyInput, setVerifiedOnlyInput] = useState(false);
   const [search, setSearch] = useState("");
   const [chain, setChain] = useState("");
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [page, setPage] = useState(0);
   const offset = page * NETWORK_PAGE_SIZE;
 
   const query = useQuery({
-    queryKey: networkKeys.projects({ search, chain, limit: NETWORK_PAGE_SIZE, offset }),
+    queryKey: networkKeys.projects({
+      search,
+      chain,
+      verifiedOnly,
+      limit: NETWORK_PAGE_SIZE,
+      offset,
+    }),
     queryFn: () =>
-      fetchNetworkProjects({ search, chain, limit: NETWORK_PAGE_SIZE, offset }),
+      fetchNetworkProjects({ search, chain, verifiedOnly, limit: NETWORK_PAGE_SIZE, offset }),
     placeholderData: keepPreviousData,
   });
 
@@ -55,7 +63,9 @@ function NetworkProjectsPage() {
     setPage(0);
     setSearch(searchInput);
     setChain(chainInput);
+    setVerifiedOnly(verifiedOnlyInput);
   }
+
 
   return (
     <div className="space-y-6">
