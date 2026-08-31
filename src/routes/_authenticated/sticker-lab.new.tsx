@@ -2910,11 +2910,11 @@ function StickerLabBuilder() {
                   {selectedGroupIds.length === 0 ? (
                     <>
                       No connected group is selected. Select at least one group above before
-                      publishing and distributing.
+                      publishing and sending to communities.
                     </>
                   ) : (
                     <>
-                      After the set is created it will be distributed once to the{" "}
+                      After the set is created it will be sent once to the{" "}
                       <strong>
                         {selectedGroupIds.length} selected group
                         {selectedGroupIds.length === 1 ? "" : "s"}
@@ -2937,7 +2937,7 @@ function StickerLabBuilder() {
                     void doPublish(selectedGroupIds);
                   }}
                 >
-                  Publish &amp; distribute
+                  Publish &amp; send
                 </AlertDialogAction>
 
               </AlertDialogFooter>
