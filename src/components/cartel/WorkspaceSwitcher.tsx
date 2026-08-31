@@ -78,14 +78,15 @@ export function CreateWorkspaceDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Create workspace</DialogTitle>
+          <DialogTitle>Add project</DialogTitle>
           <DialogDescription>
-            Workspaces separate brand kits, assets, and packs. You become the owner.
+            Each project keeps its own Project Profile, Brand Kit, assets, sticker packs, launches
+            and connected Telegram communities separated. You become the owner.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
           <div>
-            <Label htmlFor="workspace-name">Workspace name</Label>
+            <Label htmlFor="workspace-name">Project name</Label>
             <Input
               id="workspace-name"
               className="mt-2 min-h-11"
@@ -98,7 +99,7 @@ export function CreateWorkspaceDialog({
           <DialogFooter>
             <Button type="submit" disabled={busy || !name.trim()} className="min-h-11">
               {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
-              Create workspace
+              Add project
             </Button>
           </DialogFooter>
         </form>
