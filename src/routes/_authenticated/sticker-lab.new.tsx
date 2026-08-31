@@ -2400,50 +2400,61 @@ function StickerLabBuilder() {
                     ) : null}
                   </div>
 
-                  <div className="mt-3 grid grid-cols-[5rem_1fr] gap-2 [&>*]:min-w-0">
-                    <div>
-                      <Label htmlFor={`${c.id}-review-emoji`} className="text-xs">
-                        Emoji
-                      </Label>
-                      <Input
-                        id={`${c.id}-review-emoji`}
-                        className="mt-1.5 min-h-10"
-                        value={c.emoji}
-                        onChange={(e) => editConcept(c.id, { emoji: e.target.value })}
-                      />
+                  <details className="mt-3 rounded-md border border-border/60 bg-background/30 p-2">
+                    <summary className="min-h-9 cursor-pointer text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      Emoji &amp; search keywords
+                    </summary>
+                    <div className="mt-2 grid grid-cols-[5rem_1fr] gap-2 [&>*]:min-w-0">
+                      <div>
+                        <Label htmlFor={`${c.id}-review-emoji`} className="text-xs">
+                          Emoji
+                        </Label>
+                        <Input
+                          id={`${c.id}-review-emoji`}
+                          className="mt-1.5 min-h-10"
+                          value={c.emoji}
+                          onChange={(e) => editConcept(c.id, { emoji: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor={`${c.id}-keywords`} className="text-xs">
+                          Keywords
+                        </Label>
+                        <Input
+                          id={`${c.id}-keywords`}
+                          className="mt-1.5 min-h-10"
+                          placeholder="comma, separated"
+                          value={draft.keywords[c.id] ?? ""}
+                          onChange={(e) =>
+                            update({ keywords: { ...draft.keywords, [c.id]: e.target.value } })
+                          }
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <Label htmlFor={`${c.id}-keywords`} className="text-xs">
-                        Keywords
-                      </Label>
-                      <Input
-                        id={`${c.id}-keywords`}
-                        className="mt-1.5 min-h-10"
-                        placeholder="comma, separated"
-                        value={draft.keywords[c.id] ?? ""}
-                        onChange={(e) =>
-                          update({ keywords: { ...draft.keywords, [c.id]: e.target.value } })
-                        }
-                      />
-                    </div>
-                  </div>
+                  </details>
                 </li>
               );
             })}
           </ul>
 
-          <div className="mt-6 flex flex-wrap items-center gap-3">
+          <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button
               type="button"
               variant="outline"
-              className="min-h-11"
+              size="sm"
+              className="min-h-10"
               disabled={saving}
               onClick={() => void persist()}
             >
               {saving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
               Save emoji &amp; keywords
             </Button>
+            <p className="text-xs text-muted-foreground">
+              Emoji and search keywords are Telegram metadata for this pack — optional to adjust
+              before publishing.
+            </p>
           </div>
+
 
           <Card className="cartel-panel mt-6">
             <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
