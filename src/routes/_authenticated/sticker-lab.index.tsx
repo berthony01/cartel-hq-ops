@@ -179,7 +179,10 @@ export function PackLifecycleMenu({
               Restore pack
             </DropdownMenuItem>
           ) : state.can_delete ? (
-            <DropdownMenuItem variant="destructive" onSelect={() => setDialog("delete")}>
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onSelect={() => setDialog("delete")}
+            >
               <Trash2 className="size-4" aria-hidden="true" />
               Delete pack permanently
             </DropdownMenuItem>
