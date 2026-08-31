@@ -273,9 +273,15 @@ function buildPrompt(
   const action = String(sticker.action_description ?? "").trim();
   const characterName = String(pack.character_name ?? "").trim();
 
+  // Applied == opted in AND a snapshot object exists (canonical-reference-only
+  // locks are valid). The textual block below is emitted only when there is
+  // actual identity text to compile.
   const lockApplied =
-    blueprint.useBrandCharacterLock === true && hasCharacterLockContent(blueprint.characterLock);
-  const lock = lockApplied ? blueprint.characterLock! : null;
+    blueprint.useBrandCharacterLock === true && blueprint.characterLock !== null;
+  const lock =
+    lockApplied && hasCharacterLockContent(blueprint.characterLock)
+      ? blueprint.characterLock!
+      : null;
   const cd = blueprint.creativeDirection;
   const textPreference = cd?.textPreference ?? "unspecified";
   const noText = textPreference === "no_text";
