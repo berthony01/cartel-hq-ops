@@ -424,7 +424,7 @@ function GroupRow({
             <p className="mt-2 rounded-md border border-signal/40 bg-signal/5 p-2.5 text-xs leading-relaxed text-signal">
               CARTEL HQ detected that @PepeCartelHQBot was removed from this community.
               Community automations that need bot access (Sticker Drops, welcomes, native sticker
-              delivery) are paused. Your CARTEL HQ account, workspace and this community's saved
+              delivery) are paused. Your CARTEL HQ account, project and this community's saved
               settings are preserved — nothing was cancelled. Re-add the bot as an administrator with
               the <strong>Change Group Info</strong> right, then re-check.
             </p>

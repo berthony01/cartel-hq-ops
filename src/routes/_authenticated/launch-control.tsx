@@ -448,7 +448,7 @@ function LaunchControlPage() {
         eyebrow="Launch Operations"
         title="Launch Control"
         description="Manage the authenticated project's launch lifecycle: launch records, schedule, status progression and official contract registration. Launch Watch opt-ins, the Telegram notification engine and public Cartel Network launch pages are active."
-        status={workspace ? workspace.name : "No workspace"}
+        status={workspace ? workspace.name : "No project"}
       />
 
       {profile ? <LaunchReadinessCallout workspaceId={workspaceId} /> : null}
@@ -457,13 +457,13 @@ function LaunchControlPage() {
 
       {workspaceLoading ? (
         <Section variant="surface">
-          <p className="text-sm text-muted-foreground">Loading workspace…</p>
+          <p className="text-sm text-muted-foreground">Loading project…</p>
         </Section>
       ) : !workspaceId ? (
         <EmptyState
           icon={Rocket}
-          title="No workspace yet"
-          description="Create a workspace from the switcher in the header before setting up launches."
+          title="No project yet"
+          description="Add a project from the switcher in the header before setting up launches."
         />
       ) : profileQuery.isLoading ? (
         <Section variant="surface">
@@ -486,7 +486,7 @@ function LaunchControlPage() {
         <EmptyState
           icon={IdCard}
           title="Project Profile required"
-          description="Launch Control operates on the workspace project identity record. Create the Project Profile first, then return here to add a launch."
+          description="Launch Control operates on this project’s identity record. Create the Project Profile first, then return here to add a launch."
           action={
             <Button asChild className="min-h-11">
               <Link to="/project-profile">Go to Project Profile</Link>
@@ -502,8 +502,8 @@ function LaunchControlPage() {
                   <span>Read only</span>
                 </StatusBadge>
                 <p className="min-w-0 text-xs leading-relaxed text-muted-foreground">
-                  You can view launches for this workspace. Creating, editing, advancing or
-                  deleting a launch requires the workspace owner or admin role.
+                  You can view launches for this project. Creating, editing, advancing or
+                  deleting a launch requires the project owner or admin role.
                 </p>
               </div>
             </Section>
@@ -774,7 +774,7 @@ function LaunchControlPage() {
                         </Button>
                       ) : (
                         <p className="text-xs text-muted-foreground">
-                          Advancing the lifecycle requires the workspace owner or admin role.
+                          Advancing the lifecycle requires the project owner or admin role.
                         </p>
                       )}
                       <p className="text-xs text-muted-foreground">
@@ -937,7 +937,7 @@ function LaunchControlPage() {
                     <Section
                       variant="surface"
                       title="Internal notes"
-                      description="Operator-only. Never shown outside this workspace."
+                      description="Operator-only. Never shown outside this project."
                     >
                       <Textarea
                         id="internal-notes"
@@ -1107,7 +1107,7 @@ function LaunchControlPage() {
                         </Button>
                       ) : (
                         <p className="text-xs text-muted-foreground">
-                          Registering the official contract address requires the workspace owner
+                          Registering the official contract address requires the project owner
                           or admin role.
                         </p>
                       )}
@@ -1119,7 +1119,7 @@ function LaunchControlPage() {
                       </p>
                       <p className="text-xs leading-relaxed text-muted-foreground">
                         Official contract registered by the authenticated project. This confirms
-                        the address submitted by the project that controls this workspace. It is
+                        the address submitted by the authenticated project itself. It is
                         not a safety check, an audit, or an investment guarantee.
                       </p>
                       <p className="text-xs leading-relaxed text-muted-foreground">

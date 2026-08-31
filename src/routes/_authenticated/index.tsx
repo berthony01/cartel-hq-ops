@@ -315,7 +315,7 @@ function HqDashboard() {
         ? `Next drop ${nextRun.isDue ? "due now" : formatClock(nextRun.at)}${failedEvents > 0 ? ` · ${failedEvents} recent failure${failedEvents === 1 ? "" : "s"}` : ""}`
         : activeSchedules > 0
           ? "Active schedules have no upcoming run time yet."
-          : "No active drop schedule for this workspace.";
+          : "No active drop schedule for this project.";
 
   return (
     <div className="space-y-5 sm:space-y-8">
@@ -334,11 +334,11 @@ function HqDashboard() {
         <Section
           variant="surface"
           className="rise-in"
-          title={workspaceLoading ? "Loading…" : "No workspace"}
+          title={workspaceLoading ? "Loading…" : "No project"}
           description={
             workspaceLoading
-              ? "Reading your workspace context."
-              : "Create a workspace from the switcher in the header to start using CARTEL HQ."
+              ? "Reading your project context."
+              : "Add a project from the switcher in the header to start using CARTEL HQ."
           }
           actions={<StatusBadge tone="gold">Setup required</StatusBadge>}
           headerClassName="mb-0"
@@ -632,7 +632,7 @@ function HqDashboard() {
               <EmptyState
                 icon={PackageOpen}
                 title="No packs yet"
-                description="Sticker packs saved from Sticker Lab appear here for this workspace."
+                description="Sticker packs saved from Sticker Lab appear here for this project."
               />
             ) : (
               recentPacks.map((pack) => (

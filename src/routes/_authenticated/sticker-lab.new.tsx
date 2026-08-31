@@ -274,7 +274,7 @@ function StickerLabBuilder() {
         if (!active) return;
         if (!hydrated) {
           setHydrateError(
-            "That pack could not be found in this workspace. It may belong to another workspace, or the link is wrong. Nothing was created or changed.",
+            "That pack could not be found in this project. It may belong to another project, or the link is wrong. Nothing was created or changed.",
           );
           return;
         }
@@ -505,7 +505,7 @@ function StickerLabBuilder() {
         nextFailures[row.id] = {
           kind: "unknown",
           title: "No image was stored",
-          body: "The last attempt finished but no transparent image was saved to your workspace. Retry this sticker.",
+          body: "The last attempt finished but no transparent image was saved to this project. Retry this sticker.",
           raw: null,
         };
       } else {
@@ -653,7 +653,7 @@ function StickerLabBuilder() {
       return;
     }
     if (!workspaceId || !user) {
-      setFileError("Select or create a workspace before uploading a reference.");
+      setFileError("Select or add a project before uploading a reference.");
       return;
     }
     setFileError(null);
@@ -676,7 +676,7 @@ function StickerLabBuilder() {
         ).slice(0, MAX_REFERENCES),
       });
       void referencesQuery.refetch();
-      toast.success("Reference stored privately in this workspace");
+      toast.success("Reference stored privately in this project");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Upload failed.";
       setFileError(message);
@@ -752,7 +752,7 @@ function StickerLabBuilder() {
   /** Persists pack + concepts. Never triggers a provider call. */
   const persist = async (): Promise<PersistResult | null> => {
     if (!workspaceId || !user) {
-      toast.error("Select a workspace first.");
+      toast.error("Select a project first.");
       return null;
     }
     if (!draft.packName.trim()) {
@@ -1522,7 +1522,7 @@ function StickerLabBuilder() {
               </div>
               <Notice tone="muted">
                 Uploads go straight into the private <strong>workspace-assets</strong> bucket in
-                Supabase and are recorded in your Asset Vault. Previews use short-lived signed
+                Supabase and are recorded in this project’s Asset Vault. Previews use short-lived signed
                 URLs; nothing is public.
               </Notice>
             </div>
@@ -1531,7 +1531,7 @@ function StickerLabBuilder() {
           <div className="mt-8">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-medium text-foreground">
-                Reuse existing workspace references
+                Reuse existing project references
               </h3>
               <span className="text-xs text-muted-foreground">
                 {draft.referenceAssetIds.length} of {MAX_REFERENCES} selected
@@ -1597,7 +1597,7 @@ function StickerLabBuilder() {
       ) : null}
 
       {step === 2 ? (
-        <StepCard title="Pack Setup" hint="Saved to this workspace's sticker packs.">
+        <StepCard title="Pack Setup" hint="Saved to this project’s sticker packs.">
           <div className="grid gap-6 md:grid-cols-2 [&>*]:min-w-0">
             <div>
               <Label htmlFor="pack-name">Pack name</Label>
@@ -1817,7 +1817,7 @@ function StickerLabBuilder() {
               onClick={() => void persist()}
             >
               {saving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
-              Save pack to workspace
+              Save pack to project
             </Button>
             {draft.packId ? (
               <span className="text-xs text-pepe">Pack saved. Retries reuse the same rows.</span>
@@ -2491,7 +2491,7 @@ function StickerLabBuilder() {
                 </div>
               ) : telegramGroup.connectedGroupCount === 0 ? (
                 <div className="space-y-2 rounded-md border border-border/70 bg-surface-raised/50 p-3 text-xs text-muted-foreground">
-                  <p>No Telegram community is connected to this workspace yet.</p>
+                  <p>No Telegram community is connected to this project yet.</p>
                   <Button asChild size="sm" variant="outline" className="min-h-10">
                     <Link to="/telegram">Open Community Command</Link>
                   </Button>
@@ -2887,7 +2887,7 @@ function StickerLabBuilder() {
               </p>
               {dropKillSwitch ? (
                 <p className="rounded-md border border-signal/40 bg-signal/5 p-3 text-xs text-signal">
-                  Workspace emergency pause is on — no automated drops are running.
+                  Project emergency pause is on — no automated drops are running.
                 </p>
               ) : null}
               <Button asChild variant="outline" size="sm" className="min-h-10">
