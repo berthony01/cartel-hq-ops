@@ -668,9 +668,28 @@ function StickerLabBuilder() {
     });
 
 
-  const setTheme = (theme: PackTheme) =>
+  /**
+   * Every material concept change flows through here so the local
+   * "concept board ready" flag can never survive a content mutation.
+   * `clearKeywordsFor` clears keyword metadata for exactly the concept ids
+   * whose content actually changed. `stickerIds` is never touched.
+   */
+  const mutateConcepts = (concepts: Concept[], clearKeywordsFor?: string[]) => {
+    let keywords = draft.keywords;
+    if (clearKeywordsFor?.length) {
+      keywords = { ...draft.keywords };
+      for (const id of clearKeywordsFor) delete keywords[id];
+    }
+    update({ concepts, keywords, conceptBoardApproved: false });
+  };
 
-    update({ theme, concepts: starterConcepts(theme, draft.size) });
+  const setTheme = (theme: PackTheme) =>
+    update({
+      theme,
+      concepts: starterConcepts(theme, draft.size),
+      keywords: {},
+      conceptBoardApproved: false,
+    });
 
   const setSize = (size: PackSize) => {
     const next =
@@ -678,33 +697,80 @@ function StickerLabBuilder() {
         ? draft.concepts.slice(0, size)
         : [
             ...draft.concepts,
-            ...starterConcepts(draft.theme, size).slice(draft.concepts.length),
+            ...starterConcepts(draft.theme, size)
+              .slice(draft.concepts.length)
+              .map((c, i) => ({ ...c, id: `c${Date.now()}-${i}` })),
           ];
-    update({ size, concepts: next });
+    update({ size, concepts: next, conceptBoardApproved: false });
   };
 
   const editConcept = (id: string, patch: Partial<Concept>) =>
-    update({
-      concepts: draft.concepts.map((c) => (c.id === id ? { ...c, ...patch } : c)),
-    });
+    mutateConcepts(draft.concepts.map((c) => (c.id === id ? { ...c, ...patch } : c)));
 
-  const removeConcept = (id: string) =>
-    update({ concepts: draft.concepts.filter((c) => c.id !== id) });
+  /** Lock/unlock does not change concept content, so it never resets approval. */
+  const toggleConceptLock = (id: string) => {
+    const locking = !draft.concepts.find((c) => c.id === id)?.locked;
+    update({
+      concepts: draft.concepts.map((c) => (c.id === id ? { ...c, locked: !c.locked } : c)),
+    });
+    if (locking) setSelectedForAlternatives((s) => s.filter((x) => x !== id));
+  };
+
+  const removeConcept = (id: string) => {
+    mutateConcepts(
+      draft.concepts.filter((c) => c.id !== id),
+      [id],
+    );
+    setSelectedForAlternatives((s) => s.filter((x) => x !== id));
+    setPreview((p) =>
+      p ? { ...p, items: p.items.filter((item) => item.targetId !== id) } : p,
+    );
+  };
+
+  const moveConcept = (index: number, delta: -1 | 1) => {
+    const target = index + delta;
+    if (target < 0 || target >= draft.concepts.length) return;
+    const next = [...draft.concepts];
+    const [moved] = next.splice(index, 1);
+    next.splice(target, 0, moved!);
+    // Ids travel with the object, so keywords and stickerIds stay associated.
+    update({ concepts: next, conceptBoardApproved: false });
+  };
+
+  const duplicateConcept = (id: string) => {
+    if (draft.concepts.length >= draft.size) return;
+    const index = draft.concepts.findIndex((c) => c.id === id);
+    const source = draft.concepts[index];
+    if (!source) return;
+    const copy: Concept = {
+      id: `d${Date.now()}`,
+      label: source.label,
+      action: source.action,
+      emoji: source.emoji,
+      locked: false,
+    };
+    const next = [...draft.concepts];
+    next.splice(index + 1, 0, copy);
+    update({ concepts: next, conceptBoardApproved: false });
+  };
 
   const addConcept = () => {
     if (draft.concepts.length >= draft.size) return;
-    update({
-      concepts: [
-        ...draft.concepts,
-        {
-          id: `c${Date.now()}`,
-          label: "NEW CONCEPT",
-          action: "describe the pose or expression",
-          emoji: "⭐",
-        },
-      ],
-    });
+    mutateConcepts([
+      ...draft.concepts,
+      {
+        id: `c${Date.now()}`,
+        label: "NEW CONCEPT",
+        action: "describe the pose or expression",
+        emoji: "⭐",
+      },
+    ]);
   };
+
+  const unlockedConcepts = draft.concepts.filter((c) => !c.locked);
+  const selectedConcepts = draft.concepts.filter(
+    (c) => !c.locked && selectedForAlternatives.includes(c.id),
+  );
 
   /**
    * ONE explicit, confirmed language-model request. It never calls
@@ -712,17 +778,25 @@ function StickerLabBuilder() {
    * never touches persisted sticker rows. On any failure the current concepts
    * stay exactly as they are.
    */
-  const runConceptSuggestion = async () => {
+  const runConceptSuggestion = async (mode: "board" | "alternatives") => {
     if (!workspaceId) {
       toast.error("Select a project first.");
       return;
     }
+    const targets = mode === "alternatives" ? selectedConcepts : unlockedConcepts;
+    if (!targets.length) return;
     setSuggesting(true);
     setConceptError(null);
     try {
       const result = await suggestStickerConcepts({
         workspaceId,
         size: draft.size,
+        targetCount: targets.length,
+        mode,
+        focusConcepts:
+          mode === "alternatives"
+            ? targets.map((c) => ({ label: c.label, action: c.action }))
+            : [],
         characterName: draft.characterName,
         theme: draft.theme,
         brief: draft.brief,
@@ -730,12 +804,19 @@ function StickerLabBuilder() {
         creativeBlueprint: draft.creativeBlueprint,
         concepts: draft.concepts.map((c) => ({ label: c.label, action: c.action })),
       });
-      setConceptSuggestions(result.concepts);
+      setPreview({
+        mode,
+        items: result.concepts.map((suggestion, i) => ({
+          targetId: targets[i]!.id,
+          suggestion,
+          applied: false,
+        })),
+      });
       toast.success(`${result.concepts.length} concept suggestions ready to review.`);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Could not get concept suggestions.";
-      setConceptSuggestions(null);
+      setPreview(null);
       setConceptError(message);
       toast.error(message);
     } finally {
@@ -744,29 +825,48 @@ function StickerLabBuilder() {
   };
 
   /**
-   * Applies suggestions to the LOCAL draft only. Keyword metadata is cleared
-   * because concept ids change. `stickerIds`, packId, Character Lock, Creative
-   * Direction, references, generation stages and provider jobs are untouched,
-   * and nothing is saved.
+   * Applies preview items to the LOCAL draft only. Concept ids and positions
+   * are preserved, so `stickerIds` stays valid and only the keywords of the
+   * concepts that actually changed are cleared. Locked concepts are untouched.
    */
-  const applySuggestions = () => {
-    const suggestions = conceptSuggestions;
-    if (!suggestions?.length) return;
-    const stamp = Date.now();
-    update({
-      concepts: suggestions.map((s, i) => ({
-        id: `ai${stamp}-${i}`,
-        label: s.label,
-        action: s.action,
-        emoji: s.emoji,
-      })),
-      keywords: {},
+  const applyPreviewItems = (targetIds: string[]) => {
+    const current = preview;
+    if (!current) return;
+    const byTarget = new Map(
+      current.items
+        .filter((item) => !item.applied && targetIds.includes(item.targetId))
+        .map((item) => [item.targetId, item.suggestion]),
+    );
+    if (!byTarget.size) return;
+
+    const changed: string[] = [];
+    const concepts = draft.concepts.map((c) => {
+      const suggestion = byTarget.get(c.id);
+      if (!suggestion || c.locked) return c;
+      changed.push(c.id);
+      return { ...c, label: suggestion.label, action: suggestion.action, emoji: suggestion.emoji };
     });
-    setConceptSuggestions(null);
-    setConceptError(null);
+    mutateConcepts(concepts, changed);
+
+    const remaining = current.items.map((item) =>
+      changed.includes(item.targetId) ? { ...item, applied: true } : item,
+    );
+    setPreview(remaining.every((item) => item.applied) ? null : { ...current, items: remaining });
     setConfirmApplySuggestions(false);
+    if (current.mode === "alternatives") {
+      setSelectedForAlternatives((s) => s.filter((id) => !changed.includes(id)));
+    }
     toast.success("Suggestions applied to your draft. Review and edit before saving.");
   };
+
+  const pendingPreviewItems = preview?.items.filter((item) => !item.applied) ?? [];
+
+  const conceptAt = (id: string) => draft.concepts.find((c) => c.id === id) ?? null;
+
+  const boardReadyEligible =
+    draft.concepts.length === draft.size &&
+    draft.concepts.every((c) => c.label.trim() && c.action.trim());
+
 
 
 
