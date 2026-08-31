@@ -6,6 +6,7 @@ import {
   Activity,
   AlertTriangle,
   BadgeCheck,
+  BarChart3,
   Bot,
   CalendarClock,
   CheckCircle2,
@@ -67,6 +68,12 @@ import {
   setProjectNetworkModeration,
   type PlatformNetworkModerationRow,
 } from "@/lib/platform-moderation";
+import {
+  CANONICAL_DELIVERY_STATES,
+  fetchPlatformLaunchAnalytics,
+  platformAnalyticsKeys,
+} from "@/lib/platform-analytics";
+import { LAUNCH_STATUS_LABELS, LAUNCH_STATUSES } from "@/lib/launch-control";
 import {
   formatCost,
   formatCount,
@@ -544,6 +551,15 @@ function AnalyticsMetric({ label, value, hint }: { label: string; value: number;
   );
 }
 
+function MiniStat({ label, value }: { label: string; value: number }) {
+  return (
+    <p className={`min-w-0 text-[11px] text-muted-foreground ${WRAP}`}>
+      <span className="uppercase tracking-[0.12em]">{label}</span>{" "}
+      <span className="font-medium text-foreground">{formatCount(value)}</span>
+    </p>
+  );
+}
+
 function launchStatusLabel(status: string | null): string {
   if (!status) return "—";
   return (
@@ -762,12 +778,12 @@ function LaunchAnalyticsSection() {
                       </div>
                     </div>
                     <div className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-3 lg:grid-cols-6">
-                      <InlineRow label="Active" value={formatCount(row.active_watchers)} />
-                      <InlineRow label="Muted" value={formatCount(row.muted_watchers)} />
-                      <InlineRow label="Events" value={formatCount(row.events_total)} />
-                      <InlineRow label="Sent" value={formatCount(row.deliveries_sent)} />
-                      <InlineRow label="Waiting" value={formatCount(row.deliveries_pending)} />
-                      <InlineRow label="Failed" value={formatCount(row.deliveries_failed)} />
+                      <MiniStat label="Active" value={row.active_watchers} />
+                      <MiniStat label="Muted" value={row.muted_watchers} />
+                      <MiniStat label="Events" value={row.events_total} />
+                      <MiniStat label="Sent" value={row.deliveries_sent} />
+                      <MiniStat label="Waiting" value={row.deliveries_pending} />
+                      <MiniStat label="Failed" value={row.deliveries_failed} />
                     </div>
                   </div>
                 ))}
@@ -995,6 +1011,8 @@ function AdminPage() {
       <ProjectVerificationSection />
 
       <NetworkModerationSection />
+
+      <LaunchAnalyticsSection />
 
       <Section
         leading={<Zap className="size-4" aria-hidden="true" />}
