@@ -54,7 +54,10 @@ export type StickerMotionTelegramStartResult = {
   telegramAccepted?: boolean;
   telegramChanged?: boolean;
   releaseChanged?: boolean;
+  /** R3 — present only for a normalization-only recovery job. */
+  retryKind?: "normalization_only";
 };
+
 
 export type StickerMotionTelegramSyncResult = {
   aiJobId?: string;
@@ -140,3 +143,19 @@ export function syncStickerMotionTelegramPrepare(
 ): Promise<StickerMotionTelegramSyncResult> {
   return invoke<StickerMotionTelegramSyncResult>({ action: "sync", aiJobId });
 }
+
+/**
+ * MAY BE BILLABLE — normalization only.
+ *
+ * R3 recovery: reuses the already-completed background-removal result of a
+ * failed preparation and starts at most ONE new normalization job. It never
+ * submits new background-removal or motion-generation work. Only ever call
+ * from an explicit, confirmed user action.
+ */
+export function retryStickerMotionTelegramNormalization(params: {
+  workspaceId: string;
+  failedPrepJobId: string;
+}): Promise<StickerMotionTelegramStartResult> {
+  return invoke<StickerMotionTelegramStartResult>({ action: "retry_normalization", ...params });
+}
+

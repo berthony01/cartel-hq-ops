@@ -4,7 +4,9 @@ import type { AiJobRow, ProviderFailure } from "@/lib/sticker-packs";
 import {
   startStickerMotionTelegramPrepare,
   syncStickerMotionTelegramPrepare,
+  retryStickerMotionTelegramNormalization,
 } from "@/lib/sticker-motion-telegram";
+
 
 /**
  * Phase C2 — Telegram motion preparation runtime.
@@ -58,9 +60,33 @@ export type TelegramPrepRun = {
   stage: TelegramPrepStage;
   aiJobId: string | null;
   failure?: ProviderFailure | undefined;
+  /**
+   * R3 — id of a FAILED preparation job whose durable `error_code` proves the
+   * failure happened after background removal completed. Only then may the UI
+   * offer normalization-only recovery. The server re-validates eligibility.
+   */
+  retryableNormalizationJobId?: string | null;
+  /** True while the explicit normalization-only retry request is in flight. */
+  retryingNormalization?: boolean;
 };
 
-const EMPTY_RUN: TelegramPrepRun = { stage: "idle", aiJobId: null };
+/** Durable failure codes eligible for normalization-only recovery. */
+const NORMALIZATION_RETRYABLE_CODES = [
+  "CLOUDCONVERT_START_FAILED",
+  "CLOUDCONVERT_FAILED",
+  "TELEGRAM_DOWNLOAD_FAILED",
+  "TELEGRAM_VALIDATION_FAILED",
+];
+
+const isNormalizationRetryable = (code: string | null | undefined) =>
+  !!code && NORMALIZATION_RETRYABLE_CODES.includes(code);
+
+const EMPTY_RUN: TelegramPrepRun = {
+  stage: "idle",
+  aiJobId: null,
+  retryableNormalizationJobId: null,
+};
+
 
 const POLL_TIMEOUT_MS = 15 * 60 * 1000;
 const POLL_START_MS = 3000;
@@ -114,6 +140,29 @@ export function useStickerMotionTelegramRuntime(params: {
     setRuns((r) => ({ ...r, [stickerId]: { ...(r[stickerId] ?? EMPTY_RUN), ...patch } }));
   }, []);
 
+  /**
+   * READ-ONLY. Re-reads the durable job row so normalization-only eligibility
+   * comes from the persisted `error_code`, never from a message string.
+   */
+  const resolveRetryEligibility = useCallback(
+    async (stickerId: string, jobId: string) => {
+      try {
+        const jobs = await loadLatestJobs([stickerId]);
+        const row = (jobs[stickerId] ?? []).find((j) => j.id === jobId);
+        if (!aliveRef.current) return;
+        patchRun(stickerId, {
+          retryableNormalizationJobId:
+            row && row.status === "failed" && isNormalizationRetryable(row.error_code)
+              ? row.id
+              : null,
+        });
+      } catch {
+        // Eligibility stays unknown; the retry action simply is not offered.
+      }
+    },
+    [patchRun],
+  );
+
   /** Polls one already-created prep job. Never starts provider work. */
   const pollPrepare = useCallback(
     async (stickerId: string, jobId: string): Promise<PollOutcome> => {
@@ -138,6 +187,7 @@ export function useStickerMotionTelegramRuntime(params: {
               ),
             ),
           });
+          void resolveRetryEligibility(stickerId, jobId);
           return "failed";
         }
         if (!aliveRef.current) return "aborted";
@@ -147,10 +197,15 @@ export function useStickerMotionTelegramRuntime(params: {
             stage: "failed",
             failure: withSafetySentence(classifyProviderError(res.message ?? res.error, res.stage)),
           });
+          void resolveRetryEligibility(stickerId, jobId);
           return "failed";
         }
         if (res.status === "succeeded" || res.status === "ready") {
-          patchRun(stickerId, { stage: "ready", failure: undefined });
+          patchRun(stickerId, {
+            stage: "ready",
+            failure: undefined,
+            retryableNormalizationJobId: null,
+          });
           setTelegramMotionReadySignal((n) => n + 1);
           return "succeeded";
         }
@@ -168,8 +223,9 @@ export function useStickerMotionTelegramRuntime(params: {
       });
       return "timeout";
     },
-    [patchRun],
+    [patchRun, resolveRetryEligibility],
   );
+
 
   /**
    * MAY BE BILLABLE. Prepares the APPROVED Current Motion for Telegram exactly
@@ -183,7 +239,11 @@ export function useStickerMotionTelegramRuntime(params: {
       if (runningRef.current.has(stickerId)) return;
       runningRef.current.add(stickerId);
 
-      setRuns((r) => ({ ...r, [stickerId]: { stage: "starting", aiJobId: null } }));
+      setRuns((r) => ({
+        ...r,
+        [stickerId]: { stage: "starting", aiJobId: null, retryableNormalizationJobId: null },
+      }));
+
 
       try {
         let started: Awaited<ReturnType<typeof startStickerMotionTelegramPrepare>>;
@@ -213,7 +273,13 @@ export function useStickerMotionTelegramRuntime(params: {
         // spent nothing. No job to poll.
         if (!started.aiJobId) {
           if (started.status === "ready" || started.telegramMotionAssetId) {
-            patchRun(stickerId, { stage: "ready", aiJobId: null, failure: undefined });
+            patchRun(stickerId, {
+              stage: "ready",
+              aiJobId: null,
+              failure: undefined,
+              retryableNormalizationJobId: null,
+            });
+
             setTelegramMotionReadySignal((n) => n + 1);
             return;
           }
@@ -301,6 +367,9 @@ export function useStickerMotionTelegramRuntime(params: {
             failure: withSafetySentence(
               classifyProviderError(latest.error_message, latest.job_type),
             ),
+            retryableNormalizationJobId: isNormalizationRetryable(latest.error_code)
+              ? latest.id
+              : null,
           });
         }
       }
@@ -308,11 +377,93 @@ export function useStickerMotionTelegramRuntime(params: {
     [patchRun, pollPrepare],
   );
 
+  /**
+   * MAY BE BILLABLE — exactly ONE normalization job.
+   *
+   * R3 explicit recovery. Reuses the already-completed background-removal
+   * result of the failed preparation; it never starts a new background removal
+   * and never starts motion generation. Only call from a confirmed user action.
+   * The server independently re-validates eligibility and lineage.
+   */
+  const retryTelegramNormalization = useCallback(
+    async (stickerId: string) => {
+      if (!workspaceId) return;
+      if (runningRef.current.has(stickerId)) return;
+      const failedPrepJobId = runs[stickerId]?.retryableNormalizationJobId;
+      if (!failedPrepJobId) return;
+
+      runningRef.current.add(stickerId);
+      patchRun(stickerId, { retryingNormalization: true });
+      try {
+        let started: Awaited<ReturnType<typeof retryStickerMotionTelegramNormalization>>;
+        try {
+          started = await retryStickerMotionTelegramNormalization({
+            workspaceId,
+            failedPrepJobId,
+          });
+        } catch (err) {
+          patchRun(stickerId, {
+            stage: "failed",
+            retryingNormalization: false,
+            failure: withSafetySentence(
+              classifyProviderError(
+                err instanceof Error
+                  ? err.message
+                  : "Telegram normalization could not be restarted.",
+              ),
+            ),
+          });
+          return;
+        }
+
+        if (!started.aiJobId) {
+          if (started.status === "ready" || started.telegramMotionAssetId) {
+            patchRun(stickerId, {
+              stage: "ready",
+              retryingNormalization: false,
+              failure: undefined,
+              retryableNormalizationJobId: null,
+            });
+            setTelegramMotionReadySignal((n) => n + 1);
+            return;
+          }
+          patchRun(stickerId, {
+            stage: "failed",
+            retryingNormalization: false,
+            failure: withSafetySentence({
+              kind: "service",
+              title: "Telegram normalization could not be started",
+              body: "The preparation service did not return a job id.",
+              raw: null,
+            }),
+          });
+          return;
+        }
+
+        patchRun(stickerId, {
+          stage: "normalizing",
+          aiJobId: started.aiJobId,
+          failure: undefined,
+          retryingNormalization: false,
+          retryableNormalizationJobId: null,
+        });
+        // No automatic retry: this poll's conclusion is final.
+        await pollPrepare(stickerId, started.aiJobId);
+      } finally {
+        patchRun(stickerId, { retryingNormalization: false });
+        runningRef.current.delete(stickerId);
+      }
+    },
+    [workspaceId, runs, patchRun, pollPrepare],
+  );
+
   return {
     telegramPrepRuns: runs,
     telegramMotionReadySignal,
     startTelegramPrepare,
+    retryTelegramNormalization,
     recoverTelegramPrepare,
+
     telegramPrepRunFor: (stickerId: string | null | undefined): TelegramPrepRun =>
       (stickerId && runs[stickerId]) || EMPTY_RUN,
   };

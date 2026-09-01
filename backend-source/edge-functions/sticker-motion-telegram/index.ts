@@ -227,6 +227,63 @@ function ccTask(job: Json, name: string, operation: string): CcTask | null {
   );
 }
 
+/**
+ * R3 — the SINGLE CloudConvert `/jobs` create implementation.
+ *
+ * Both the ordinary fal -> CloudConvert progression and the explicit
+ * `retry_normalization` recovery call this exact function, so the fixed FFmpeg
+ * contract and the deterministic `cartelhq-motion-telegram-<aiJobId>` tag can
+ * never diverge. Callers must already own the active job row / stage claim:
+ * this function performs no claiming of its own and never retries.
+ */
+async function createCloudConvertJob(
+  ccKey: string,
+  aiJobId: string,
+  alphaUrl: string,
+): Promise<{ ok: true; ccJobId: string; tag: string } | { ok: false; message: string }> {
+  const tag = `cartelhq-motion-telegram-${aiJobId}`;
+  const create = await ccFetch("/jobs", ccKey, {
+    method: "POST",
+    body: JSON.stringify({
+      tag,
+      tasks: {
+        "import-motion": { operation: "import/url", url: alphaUrl, filename: "motion-alpha.webm" },
+        "normalize-motion": {
+          operation: "command",
+          input: "import-motion",
+          engine: "ffmpeg",
+          command: "ffmpeg",
+          arguments: FFMPEG_ARGUMENTS,
+        },
+        "metadata-motion": { operation: "metadata", input: "normalize-motion" },
+        "export-motion": { operation: "export/url", input: "normalize-motion" },
+      },
+    }),
+  });
+  if (!create.ok) return { ok: false, message: create.message };
+  const ccJobId = str(asObject(create.payload.data).id);
+  if (!ccJobId) return { ok: false, message: "CloudConvert returned no job identifier." };
+  return { ok: true, ccJobId, tag };
+}
+
+/**
+ * Failure codes that prove fal background removal already completed and the
+ * failure happened strictly DOWNSTREAM of fal. Only these are eligible for
+ * normalization-only recovery. fal submission/processing failures, source URL
+ * failures and pre-fal interruptions are deliberately excluded.
+ */
+const NORMALIZATION_RETRYABLE_CODES = [
+  "CLOUDCONVERT_START_FAILED",
+  "CLOUDCONVERT_FAILED",
+  "TELEGRAM_DOWNLOAD_FAILED",
+  "TELEGRAM_VALIDATION_FAILED",
+] as const;
+
+function isNormalizationRetryable(code: unknown): boolean {
+  return typeof code === "string" && (NORMALIZATION_RETRYABLE_CODES as readonly string[]).includes(code);
+}
+
+
 /* ------------------------------------------------------------------ server */
 
 Deno.serve(async (req: Request) => {
@@ -802,7 +859,11 @@ Deno.serve(async (req: Request) => {
               cloudconvert_credits: ccCredits || null,
               normalize_contract_version: NORMALIZE_CONTRACT_VERSION,
               prep_contract_version: PREP_CONTRACT_VERSION,
+              // R3 auditability only — no behavioural difference.
+              normalization_only: input.normalization_only === true,
+              retry_of_prepare_job_id: str(input.retry_of_prepare_job_id),
               validation,
+
               telegram_ready: true,
               telegram_accepted: false,
             },
@@ -847,42 +908,291 @@ Deno.serve(async (req: Request) => {
 
       return respond({ aiJobId: job.id, jobType: JOB_TYPE, status: job.status, stage });
 
-      /** Creates exactly ONE CloudConvert job. Only reachable from a claimed transition. */
+      /**
+       * Creates exactly ONE CloudConvert job through the shared implementation.
+       * Only reachable from a claimed stage transition.
+       */
       async function createCloudConvert(alphaUrl: string, currentOutput: Json) {
-        const tag = `cartelhq-motion-telegram-${job!.id}`;
-        const create = await ccFetch("/jobs", CLOUDCONVERT_API_KEY, {
-          method: "POST",
-          body: JSON.stringify({
-            tag,
-            tasks: {
-              "import-motion": { operation: "import/url", url: alphaUrl, filename: "motion-alpha.webm" },
-              "normalize-motion": {
-                operation: "command",
-                input: "import-motion",
-                engine: "ffmpeg",
-                command: "ffmpeg",
-                arguments: FFMPEG_ARGUMENTS,
-              },
-              "metadata-motion": { operation: "metadata", input: "normalize-motion" },
-              "export-motion": { operation: "export/url", input: "normalize-motion" },
-            },
-          }),
-        });
-        if (!create.ok) {
-          return await failJob(job!.id, create.message, "CLOUDCONVERT_START_FAILED");
-        }
-        const ccJobId = str(asObject(create.payload.data).id);
-        if (!ccJobId) {
-          return await failJob(job!.id, "CloudConvert returned no job identifier.", "CLOUDCONVERT_START_FAILED");
+        const created = await createCloudConvertJob(CLOUDCONVERT_API_KEY, job!.id, alphaUrl);
+        if (!created.ok) {
+          return await failJob(job!.id, created.message, "CLOUDCONVERT_START_FAILED");
         }
         await admin.from("ai_jobs").update({
-          output_json: { ...currentOutput, stage: "cloudconvert_processing", cloudconvert_job_id: ccJobId, cloudconvert_tag: tag },
+          output_json: {
+            ...currentOutput,
+            stage: "cloudconvert_processing",
+            cloudconvert_job_id: created.ccJobId,
+            cloudconvert_tag: created.tag,
+          },
         }).eq("id", job!.id);
         return respond({ aiJobId: job!.id, jobType: JOB_TYPE, status: "running", stage: "telegram_normalizing" });
       }
+
+    }
+
+    /* ------------------------------------------- retry_normalization ---
+     * R3 — EXPLICIT normalization-only recovery.
+     *
+     * It reuses the ALREADY-COMPLETED fal background-removal result of a failed
+     * preparation and may start exactly ONE new CloudConvert normalization job.
+     * It NEVER submits fal work (fal is only read through the existing request's
+     * status/response endpoints) and NEVER submits Kie work. There is no
+     * automatic retry anywhere: only an explicit user action reaches this. */
+    if (action === "retry_normalization") {
+      const workspaceId = String(body.workspaceId ?? "");
+      const failedPrepJobId = String(body.failedPrepJobId ?? "");
+      if (!workspaceId || !failedPrepJobId) return respond({ error: "INVALID_INPUT" }, 400);
+      if (!(await isMember(workspaceId))) return respond({ error: "FORBIDDEN" }, 403);
+
+      const { data: source } = await admin
+        .from("ai_jobs").select("*").eq("id", failedPrepJobId).maybeSingle();
+      if (!source) return respond({ error: "JOB_NOT_FOUND" }, 404);
+      if (source.job_type !== JOB_TYPE) return respond({ error: "WRONG_JOB_TYPE" }, 400);
+      if (source.workspace_id !== workspaceId) return respond({ error: "FORBIDDEN" }, 403);
+      if (source.status !== "failed") {
+        return respond({
+          error: "RETRY_NOT_ELIGIBLE",
+          message: "Only a failed Telegram preparation can be recovered.",
+        }, 409);
+      }
+      // Fail-closed eligibility: the failure MUST be downstream of fal.
+      if (!isNormalizationRetryable(source.error_code)) {
+        return respond({
+          error: "RETRY_NOT_ELIGIBLE",
+          message:
+            "This failure happened before or during background removal, so normalization-only recovery is not possible. A full preparation would be required.",
+        }, 409);
+      }
+
+      const srcInput = asObject(source.input_json);
+      const srcOutput = asObject(source.output_json);
+      const motionVersionId = str(srcInput.motion_version_id);
+      const motionAssetId = str(srcInput.motion_asset_id);
+      const sourceStaticAssetId = str(srcInput.source_static_asset_id);
+      if (!motionVersionId || !motionAssetId || !sourceStaticAssetId) {
+        return respond({
+          error: "RETRY_NOT_ELIGIBLE",
+          message: "This preparation job is missing its motion linkage.",
+        }, 409);
+      }
+
+      const falRequestId = str(srcOutput.fal_request_id);
+      const falStatusUrl = str(srcOutput.fal_status_url);
+      const falResponseUrl = str(srcOutput.fal_response_url);
+      if (!falRequestId && !falStatusUrl && !falResponseUrl) {
+        return respond({
+          error: "RETRY_NOT_ELIGIBLE",
+          message:
+            "The completed background-removal result for this preparation cannot be located, so a full preparation would be required.",
+        }, 409);
+      }
+
+      const stickerId = str(source.sticker_id);
+      const packId = str(source.pack_id);
+      if (!stickerId || !packId) {
+        return respond({ error: "RETRY_NOT_ELIGIBLE", message: "This preparation job is missing its sticker linkage." }, 409);
+      }
+
+      // Live lineage re-check: the sticker must STILL point at the exact motion
+      // version and static image the failed preparation was based on.
+      const { data: sticker } = await admin
+        .from("stickers").select("id,pack_id,image_asset_id,current_motion_version_id")
+        .eq("id", stickerId).maybeSingle();
+      if (!sticker || sticker.pack_id !== packId) return respond({ error: "STICKER_NOT_FOUND" }, 404);
+      if (
+        sticker.current_motion_version_id !== motionVersionId ||
+        sticker.image_asset_id !== sourceStaticAssetId
+      ) {
+        return respond({
+          error: "MOTION_SOURCE_STALE",
+          message: "The sticker's Current Motion or static image changed, so this preparation can no longer be recovered.",
+        }, 409);
+      }
+
+      const { data: version } = await admin
+        .from("sticker_motion_versions")
+        .select("id,workspace_id,pack_id,sticker_id,motion_asset_id,source_static_asset_id,telegram_asset_id")
+        .eq("id", motionVersionId).maybeSingle();
+      if (
+        !version || version.workspace_id !== workspaceId || version.pack_id !== packId ||
+        version.sticker_id !== stickerId || version.motion_asset_id !== motionAssetId ||
+        version.source_static_asset_id !== sourceStaticAssetId
+      ) {
+        return respond({ error: "MOTION_SOURCE_STALE", message: "This motion version no longer matches the failed preparation." }, 409);
+      }
+
+      // Already durably prepared — never pay again.
+      if (version.telegram_asset_id) {
+        const { data: existing } = await admin
+          .from("media_assets").select("id,workspace_id,asset_type,metadata")
+          .eq("id", version.telegram_asset_id).maybeSingle();
+        const existingMeta = asObject(existing?.metadata);
+        const provenReady =
+          existingMeta.telegram_ready === true &&
+          str(existingMeta.source_motion_version_id) === motionVersionId;
+        if (existing && existing.workspace_id === workspaceId && existing.asset_type === "telegram_motion" && provenReady) {
+          return respond({
+            status: "ready", stage: "telegram_source_ready", reused: true, billable: false,
+            telegramMotionAssetId: existing.id, motionVersionId, telegramReady: true,
+            telegramAccepted: false, telegramChanged: false, releaseChanged: false,
+          });
+        }
+      }
+
+      if (!FAL_KEY || !CLOUDCONVERT_API_KEY) {
+        return respond({
+          error: "MOTION_TELEGRAM_NOT_CONFIGURED",
+          message: "Telegram motion preparation is not configured (FAL_KEY / CLOUDCONVERT_API_KEY).",
+        }, 503);
+      }
+
+      /** True when an existing job row is this exact normalization-only retry. */
+      const sameRetryLineage = (input: unknown) => {
+        const i = asObject(input);
+        return (
+          i.normalization_only === true &&
+          str(i.retry_of_prepare_job_id) === failedPrepJobId &&
+          str(i.motion_version_id) === motionVersionId &&
+          str(i.motion_asset_id) === motionAssetId &&
+          str(i.source_static_asset_id) === sourceStaticAssetId
+        );
+      };
+      const readActiveJob = async () => {
+        const { data } = await admin
+          .from("ai_jobs").select("id,status,input_json,output_json")
+          .eq("job_type", JOB_TYPE).eq("sticker_id", stickerId)
+          .in("status", ["queued", "running"]).maybeSingle();
+        return data ?? null;
+      };
+      /**
+       * Distributed-failure safety: an existing retry row is returned AS-IS.
+       * Nothing is (re)submitted from here even when it has no provider task yet.
+       */
+      const reuseRetry = (job: { id: string; status: string; output_json?: unknown }) =>
+        respond({
+          aiJobId: job.id, status: job.status === "queued" ? "queued" : "running",
+          stage: str(asObject(job.output_json).stage) ?? "cloudconvert_processing",
+          retryKind: "normalization_only", reused: true, billable: false,
+          telegramChanged: false, releaseChanged: false,
+        });
+
+      const active = await readActiveJob();
+      if (active) {
+        if (sameRetryLineage(active.input_json)) return reuseRetry(active);
+        return respond({
+          error: "MOTION_TELEGRAM_PREP_ACTIVE",
+          message: "A different Telegram motion preparation is already running for this sticker.",
+        }, 409);
+      }
+
+      /* --- READ-ONLY fal retrieval. No submit endpoint is used here. ------ */
+      const statusUrl = falStatusUrl ?? (falRequestId ? `${FAL_QUEUE_BASE}/requests/${falRequestId}/status` : null);
+      if (statusUrl) {
+        const status = await falFetch(statusUrl, FAL_KEY, { method: "GET" });
+        if (status.ok) {
+          const falStatus = String(status.payload.status ?? "").toUpperCase();
+          if (falStatus && falStatus !== "COMPLETED") {
+            return respond({
+              error: "RETRY_NOT_ELIGIBLE",
+              message: "The original background removal is not retrievable as a completed result, so a full preparation would be required.",
+            }, 409);
+          }
+        }
+      }
+      const resultUrl = falResponseUrl ?? (falRequestId ? `${FAL_QUEUE_BASE}/requests/${falRequestId}/response` : null);
+      if (!resultUrl) {
+        return respond({
+          error: "RETRY_NOT_ELIGIBLE",
+          message: "The completed background-removal result cannot be retrieved, so a full preparation would be required.",
+        }, 409);
+      }
+      const result = await falFetch(resultUrl, FAL_KEY, { method: "GET" });
+      if (!result.ok) {
+        return respond({
+          error: "FAL_RESULT_UNAVAILABLE",
+          message: "The completed background-removal result could not be retrieved right now. Nothing was started and nothing was charged.",
+        }, 409);
+      }
+      const videoArr = result.payload.video;
+      const firstVideo = Array.isArray(videoArr) ? asObject(videoArr[0]) : asObject(videoArr);
+      const alphaUrl = str(firstVideo.url);
+      if (!alphaUrl) {
+        return respond({
+          error: "FAL_RESULT_UNAVAILABLE",
+          message: "The original background-removal output is no longer available, so a full preparation would be required.",
+        }, 409);
+      }
+
+      /* --- Job row FIRST. The partial unique index is the race authority. -- */
+      const retryInput = {
+        motion_version_id: motionVersionId,
+        motion_asset_id: motionAssetId,
+        source_static_asset_id: sourceStaticAssetId,
+        prep_contract_version: PREP_CONTRACT_VERSION,
+        normalize_contract_version: NORMALIZE_CONTRACT_VERSION,
+        normalization_only: true,
+        retry_of_prepare_job_id: failedPrepJobId,
+      };
+      const retryOutput: Json = {
+        stage: "cloudconvert_starting",
+        normalization_only: true,
+        retry_of_prepare_job_id: failedPrepJobId,
+        fal_model: FAL_MODEL,
+        fal_request_id: falRequestId,
+        fal_status_url: falStatusUrl,
+        fal_response_url: falResponseUrl,
+        fal_alpha_url: alphaUrl,
+        prep_contract_version: PREP_CONTRACT_VERSION,
+      };
+
+      const { data: retryJob, error: retryError } = await admin.from("ai_jobs").insert({
+        workspace_id: workspaceId, user_id: user.id, pack_id: packId, sticker_id: stickerId,
+        job_type: JOB_TYPE, status: "running", provider: "cloudconvert",
+        provider_model: NORMALIZE_CONTRACT_VERSION,
+        input_json: retryInput,
+        output_json: retryOutput,
+      }).select("id,status").maybeSingle();
+
+      if (retryError || !retryJob) {
+        if ((retryError as { code?: string } | null)?.code !== "23505") {
+          return respond({ error: "JOB_CREATE_FAILED", message: "Could not start Telegram normalization." }, 500);
+        }
+        // The loser of the race returns BEFORE any CloudConvert create.
+        const raced = await readActiveJob();
+        if (raced && sameRetryLineage(raced.input_json)) return reuseRetry(raced);
+        if (raced) {
+          return respond({
+            error: "MOTION_TELEGRAM_PREP_ACTIVE",
+            message: "A different Telegram motion preparation is already running for this sticker.",
+          }, 409);
+        }
+        return respond({ error: "JOB_CREATE_FAILED", message: "Could not start Telegram normalization." }, 500);
+      }
+
+      // Exactly ONE CloudConvert create, and only for the insert winner.
+      const created = await createCloudConvertJob(CLOUDCONVERT_API_KEY, retryJob.id, alphaUrl);
+      if (!created.ok) {
+        return await failJob(retryJob.id, created.message, "CLOUDCONVERT_START_FAILED");
+      }
+      await admin.from("ai_jobs").update({
+        provider_task_id: created.ccJobId,
+        output_json: {
+          ...retryOutput,
+          stage: "cloudconvert_processing",
+          cloudconvert_job_id: created.ccJobId,
+          cloudconvert_tag: created.tag,
+        },
+      }).eq("id", retryJob.id);
+
+      return respond({
+        aiJobId: retryJob.id, status: "running", stage: "telegram_normalizing",
+        retryKind: "normalization_only", billable: true,
+        telegramChanged: false, releaseChanged: false,
+      });
     }
 
     return respond({ error: "UNKNOWN_ACTION" }, 400);
+
   } catch (error) {
     console.error("[sticker-motion-telegram] unexpected error", error instanceof Error ? error.message : "unknown");
     return respond({ error: "INTERNAL_ERROR", message: "Unexpected server error." }, 500);

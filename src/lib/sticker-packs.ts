@@ -225,6 +225,9 @@ export type AiJobRow = {
   job_type: string;
   status: string;
   error_message: string | null;
+  /** Existing durable failure classification, used for retry eligibility. */
+  error_code: string | null;
+
   created_at: string;
   /**
    * Phase 4D — true when this job generates a CANDIDATE image for an already
@@ -255,7 +258,7 @@ export async function loadLatestJobs(
   if (unique.length === 0) return out;
   const { data, error } = await supabase
     .from("ai_jobs")
-    .select("id,sticker_id,job_type,status,error_message,created_at,input_json")
+    .select("id,sticker_id,job_type,status,error_message,error_code,created_at,input_json")
     .in("sticker_id", unique)
     .order("created_at", { ascending: false })
     .limit(500);
@@ -275,6 +278,9 @@ export async function loadLatestJobs(
       job_type: String(record["job_type"] ?? ""),
       status: String(record["status"] ?? ""),
       error_message: (record["error_message"] as string | null) ?? null,
+      error_code:
+        typeof record["error_code"] === "string" ? (record["error_code"] as string) : null,
+
       created_at: String(record["created_at"] ?? ""),
       is_candidate: input["mode"] === "candidate",
       is_variation: input["mode"] === "variation",

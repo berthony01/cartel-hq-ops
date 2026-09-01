@@ -106,7 +106,9 @@ export function MotionStudioPanel({
   onGenerate,
   onSetCurrentMotion,
   onPrepareTelegram,
+  onRetryNormalization,
   onReleaseMotion,
+
 }: {
   stickerId: string;
   stickerLabel: string;
@@ -139,6 +141,12 @@ export function MotionStudioPanel({
   onSetCurrentMotion: (input: { stickerId: string; motionVersionId: string }) => void;
   /** MAY BE BILLABLE — only ever called from the Telegram confirmation dialog. */
   onPrepareTelegram: (input: { stickerId: string; motionVersionId: string }) => void;
+  /**
+   * MAY BE BILLABLE — exactly one normalization job. Only ever called from the
+   * normalization-retry confirmation dialog below.
+   */
+  onRetryNormalization?: ((input: { stickerId: string }) => void) | undefined;
+
   /** REAL Telegram change — only ever called from the release confirmation dialog. */
   onReleaseMotion: (input: { stickerId: string; motionVersionId: string }) => void;
 }) {
@@ -149,7 +157,9 @@ export function MotionStudioPanel({
   const [confirmGenerate, setConfirmGenerate] = useState(false);
   const [approveTarget, setApproveTarget] = useState<StickerMotionVersion | null>(null);
   const [confirmTelegramPrep, setConfirmTelegramPrep] = useState(false);
+  const [confirmNormalizationRetry, setConfirmNormalizationRetry] = useState(false);
   const [confirmMotionRelease, setConfirmMotionRelease] = useState(false);
+
 
 
   const current = currentMotionVersion(state);
@@ -174,6 +184,18 @@ export function MotionStudioPanel({
     !!current && currentFromCurrentStatic && !currentIsTelegramReady;
   const prepareDisabled =
     telegramBusy || telegramProviderBlocked || busy || approvingVersionId !== null;
+
+  // ---- R3 normalization-only recovery eligibility (client gate only; the
+  // server independently re-validates the durable failure code and lineage).
+  const canRetryNormalization =
+    !!onRetryNormalization &&
+    !!telegramRun.retryableNormalizationJobId &&
+    !telegramBusy &&
+    !currentIsTelegramReady &&
+    canPrepareTelegram;
+  const retryNormalizationDisabled =
+    prepareDisabled || telegramRun.retryingNormalization === true;
+
 
   // ---- Phase C3 motion release (real Telegram replacement, no provider work)
   const anyMotionIsLive = state?.releaseVariant === "motion";
@@ -444,6 +466,30 @@ export function MotionStudioPanel({
           </p>
         ) : null}
 
+        {/* ---- R3 normalization-only recovery. Never a new background removal. */}
+        {canRetryNormalization ? (
+          <>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-2 min-h-10 w-full text-[11px]"
+              disabled={retryNormalizationDisabled}
+              onClick={() => setConfirmNormalizationRetry(true)}
+            >
+              {telegramRun.retryingNormalization ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              Retry normalization only
+            </Button>
+            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              Background removal already completed for this motion. This reuses that result and
+              re-runs formatting only.
+            </p>
+          </>
+        ) : null}
+
+
         {/* -------------------- Phase C3 explicit motion release to Telegram */}
         {canShowRelease ? (
           <>
@@ -686,6 +732,44 @@ export function MotionStudioPanel({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* --------- R3 MAY BE BILLABLE normalization-only retry confirmation */}
+      <AlertDialog
+        open={confirmNormalizationRetry}
+        onOpenChange={(open) => !open && setConfirmNormalizationRetry(false)}
+      >
+        <AlertDialogContent>
+          <AlertDialogTitle>Retry normalization for {stickerLabel}?</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2 text-left">
+              <p>This reuses the background removal that already completed. Before you confirm:</p>
+              <ul className="list-disc space-y-1 pl-4">
+                <li>It starts exactly ONE new Telegram normalization job</li>
+                <li>It does NOT start a new background removal</li>
+                <li>It does NOT start new motion generation</li>
+                <li>No automatic retry</li>
+                <li>Your current static sticker will not change</li>
+                <li>Your Current Motion will not change</li>
+                <li>Your Telegram release will not change</li>
+                <li>Nothing is published to Telegram in this step</li>
+              </ul>
+            </div>
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmNormalizationRetry(false);
+                onRetryNormalization?.({ stickerId });
+              }}
+            >
+              Retry normalization
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+
 
       {/* ---------------- REAL Telegram change: motion release confirmation */}
       <AlertDialog
