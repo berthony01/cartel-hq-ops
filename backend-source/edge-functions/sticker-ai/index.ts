@@ -875,8 +875,14 @@ Deno.serve(async (req: Request) => {
         workspace_id: workspaceId, user_id: user.id, pack_id: failedPackId, sticker_id: failedStickerId,
         job_type: "remove_background", provider: "kie", provider_model: BG_MODEL, status: "queued",
         input_json: {
-          // `parent_job_id` is deliberately OMITTED: it is uniquely indexed for
-          // the original child. The retry records its lineage under new keys.
+          // R1.1 — the DATABASE is the final duplicate-spend authority. For a
+          // retry child, `parent_job_id` is an IDEMPOTENCY-CHAIN key pointing at
+          // the FAILED background row, not at the generation row. The original
+          // child already used `parent_job_id = sourceGenerationJobId`, so this
+          // value is new and the existing unique index admits exactly ONE retry
+          // per failed background job. True lineage stays in
+          // `source_generation_job_id`, which finalization prefers.
+          parent_job_id: backgroundJobId,
           source_generation_job_id: sourceGenerationJobId,
           retry_of_background_job_id: backgroundJobId,
           prior_image_asset_id: retryPriorAssetId,
@@ -885,7 +891,50 @@ Deno.serve(async (req: Request) => {
           ...(retryIsVariation ? { variation_group_id: retryMeta.groupId, variation_label: retryMeta.label } : {}),
         },
       }).select("*").single();
-      if (retryChildError || !retryChild) return respond({ error: "JOB_CREATE_FAILED" }, 500);
+      if (retryChildError || !retryChild) {
+        // 23505: another concurrent confirmation already created THE retry child.
+        // This branch must NEVER reach createTask.
+        if (retryChildError && String((retryChildError as { code?: string }).code ?? "") === "23505") {
+          const { data: winner } = await admin.from("ai_jobs")
+            .select("*")
+            .eq("job_type", "remove_background")
+            .eq("sticker_id", failedStickerId)
+            .contains("input_json", { parent_job_id: backgroundJobId })
+            .maybeSingle();
+          const winnerInput = (winner?.input_json && typeof winner.input_json === "object" ? winner.input_json : {}) as Record<string, unknown>;
+          const winnerMeta = winner ? variationMetaOf(winner as unknown as Record<string, unknown>) : { groupId: null, label: null };
+          const sameLineage =
+            !!winner &&
+            String(winner.workspace_id) === workspaceId &&
+            String(winner.pack_id ?? "") === failedPackId &&
+            String(winner.sticker_id ?? "") === failedStickerId &&
+            jobModeOf(winner as unknown as Record<string, unknown>) === failedMode &&
+            winnerInput.source_generation_job_id === sourceGenerationJobId &&
+            winnerInput.retry_of_background_job_id === backgroundJobId &&
+            (!retryIsVariation ||
+              (winnerMeta.groupId === retryMeta.groupId && winnerMeta.label === retryMeta.label));
+          if (!sameLineage) {
+            // Fail closed: an unexplained conflicting row must never authorise spend.
+            return respond({
+              error: "RETRY_CONFLICT",
+              message: "Another background-removal retry already exists for this take and could not be verified. No task was started.",
+            }, 409);
+          }
+          // Distributed-failure safety: a queued/running winner without a
+          // provider task is NOT re-submitted here. Returned as-is.
+          return respond({
+            aiJobId: winner.id,
+            status: winner.status === "succeeded" ? "succeeded" : winner.status === "failed" ? "failed" : winner.status === "queued" ? "queued" : "running",
+            model: BG_MODEL,
+            mode: failedMode,
+            retryKind: "background_only",
+            ...(winner.status === "failed" && winner.error_message ? { error: String(winner.error_message) } : {}),
+            ...(retryIsVariation ? { variationGroupId: retryMeta.groupId, variationLabel: retryMeta.label } : {}),
+          });
+        }
+        return respond({ error: "JOB_CREATE_FAILED" }, 500);
+      }
+
 
       const retryCreate = await kieRequest("/api/v1/jobs/createTask", KIE_API_KEY, {
         method: "POST",
