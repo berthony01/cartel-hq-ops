@@ -29,8 +29,21 @@ export const STICKER_MOTION_PRESETS = [
 
 export type StickerMotionPreset = (typeof STICKER_MOTION_PRESETS)[number];
 
+/** Human labels for the eight server presets. Display only — the key is sent. */
+export const MOTION_PRESET_LABELS: Record<StickerMotionPreset, string> = {
+  blink: "Blink",
+  head_nod: "Head nod",
+  eye_glow: "Eye glow",
+  money_rain: "Money rain",
+  angry_shake: "Angry shake",
+  laugh: "Laugh",
+  bounce: "Bounce",
+  raise_cigar: "Raise cigar",
+};
+
 /** Server-enforced cap on a Custom Motion instruction. */
 export const MAX_MOTION_INSTRUCTION_LENGTH = 500;
+
 
 export type StickerMotionAiConfig = {
   configured: boolean;
