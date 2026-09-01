@@ -54,7 +54,10 @@ export type StickerMotionTelegramStartResult = {
   telegramAccepted?: boolean;
   telegramChanged?: boolean;
   releaseChanged?: boolean;
+  /** R3 — present only for a normalization-only recovery job. */
+  retryKind?: "normalization_only";
 };
+
 
 export type StickerMotionTelegramSyncResult = {
   aiJobId?: string;
