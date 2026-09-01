@@ -624,6 +624,15 @@ Deno.serve(async (req: Request) => {
         return respond({ error: "TELEGRAM_STATE_MISMATCH", message: "CARTEL HQ could not confirm this sticker inside its Telegram set. Refresh the Telegram status before releasing the motion." }, 409);
       }
 
+      // Idempotency: this exact motion file is already the live Telegram sticker.
+      if (
+        expectedOldVariant === "motion" &&
+        motionMetadata["telegram_accepted"] === true &&
+        String(motionMetadata["telegram_file_id"] ?? "") === oldFileId
+      ) {
+        return respond({ status: "unchanged", releaseVariant: "motion", telegramReplaced: false, stickerId, motionVersionId, setName, setUrl: pack.telegram_set_url ?? undefined, bot });
+      }
+
       const { data: connection } = await admin.from("telegram_connections").select("*").eq("user_id", user.id).maybeSingle();
       if (!connection?.telegram_user_id) return respond({ error: "OWNER_ID_REQUIRED", message: "Telegram owner user ID is required before releasing a motion sticker." }, 400);
       const ownerId = String(connection.telegram_user_id);
