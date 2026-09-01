@@ -3742,10 +3742,14 @@ function StickerLabBuilder() {
                     </div>
                   ) : null}
 
-                  {/* Motion Studio — read-only surface attached to the approved
-                      static. No generation, provider or Telegram behaviour. */}
+                  {/* Motion Studio — review-only motion attached to the approved
+                      static. Generation is billable and gated behind an explicit
+                      confirmation inside the panel; approval is non-billable and
+                      never touches release_variant or Telegram. */}
                   {stickerId && preview ? (
                     <MotionStudioPanel
+                      stickerId={stickerId}
+                      stickerLabel={c.label}
                       state={motionBySticker[stickerId]}
                       loading={motionQuery.isPending || motionQuery.isFetching}
                       error={
@@ -3754,8 +3758,26 @@ function StickerLabBuilder() {
                           !motionQuery.isFetching &&
                           motionBySticker[stickerId] === undefined)
                       }
+                      run={motionRunFor(stickerId)}
+                      config={motionConfigQuery.data}
+                      configLoading={motionConfigQuery.isPending || motionConfigQuery.isFetching}
+                      configError={motionConfigQuery.isError}
+                      approvingVersionId={approvingMotionVersionId}
+                      approveError={motionApproveError}
+                      onGenerate={(input: {
+                        stickerId: string;
+                        motionMode: MotionMode;
+                        motionPreset?: StickerMotionPreset;
+                        motionInstruction?: string;
+                      }) => {
+                        const id = draft.packId;
+                        if (!id) return;
+                        void startMotion({ packId: id, ...input });
+                      }}
+                      onSetCurrentMotion={(input) => void approveCurrentMotion(input)}
                     />
                   ) : null}
+
 
 
 
