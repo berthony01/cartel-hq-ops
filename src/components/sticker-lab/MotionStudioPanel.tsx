@@ -350,7 +350,7 @@ export function MotionStudioPanel({
                     </p>
                   ) : null}
 
-                  {!isCurrent && version.previewUrl ? (
+                  {!isCurrent && version.motionAssetId ? (
                     <Button
                       type="button"
                       size="sm"

@@ -407,7 +407,7 @@ function StickerLabBuilder() {
   } = useStickerMotionGenerationRuntime({ workspaceId });
   /** Motion version currently being approved as Current Motion (non-billable). */
   const [approvingMotionVersionId, setApprovingMotionVersionId] = useState<string | null>(null);
-  const [motionApproveError, setMotionApproveError] = useState<string | null>(null);
+  const [motionApproveError, setMotionApproveError] = useState<{ stickerId: string; message: string } | null>(null);
 
 
 
@@ -640,7 +640,7 @@ function StickerLabBuilder() {
     async (input: { stickerId: string; motionVersionId: string }) => {
       const id = draft?.packId;
       if (!workspaceId || !id) return;
-      setMotionApproveError(null);
+      setMotionApproveError((prev) => (prev?.stickerId === input.stickerId ? null : prev));
       setApprovingMotionVersionId(input.motionVersionId);
       try {
         await setCurrentStickerMotion({
@@ -649,11 +649,14 @@ function StickerLabBuilder() {
           stickerId: input.stickerId,
           motionVersionId: input.motionVersionId,
         });
+        setMotionApproveError((prev) => (prev?.stickerId === input.stickerId ? null : prev));
         await motionQuery.refetch();
       } catch (err) {
-        setMotionApproveError(
-          err instanceof Error ? err.message : "This motion version could not be approved.",
-        );
+        setMotionApproveError({
+          stickerId: input.stickerId,
+          message:
+            err instanceof Error ? err.message : "This motion version could not be approved.",
+        });
       } finally {
         setApprovingMotionVersionId(null);
       }
@@ -3763,7 +3766,9 @@ function StickerLabBuilder() {
                       configLoading={motionConfigQuery.isPending || motionConfigQuery.isFetching}
                       configError={motionConfigQuery.isError}
                       approvingVersionId={approvingMotionVersionId}
-                      approveError={motionApproveError}
+                      approveError={
+                        motionApproveError?.stickerId === stickerId ? motionApproveError.message : null
+                      }
                       onGenerate={(input: {
                         stickerId: string;
                         motionMode: MotionMode;
