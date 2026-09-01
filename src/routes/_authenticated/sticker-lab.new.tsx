@@ -532,11 +532,36 @@ function StickerLabBuilder() {
     .map((id) => `${id}:${previews[id]?.storagePath ?? ""}`)
     .join("|");
   const versionsQuery = useQuery({
-    queryKey: ["sticker-versions", draft?.packId ?? "", previewFingerprint],
+    // `candidateReadySignal` bumps when a candidate finishes so the durable
+    // candidate row appears without any manual refresh.
+    queryKey: [
+      "sticker-versions",
+      draft?.packId ?? "",
+      previewFingerprint,
+      candidateReadySignal,
+    ],
     enabled: !!draft && step === 4 && savedStickerIds.length > 0,
     queryFn: () => loadStickerVersions(savedStickerIds),
   });
   const versionsBySticker = versionsQuery.data ?? {};
+
+  /**
+   * Read-only candidate recovery for Step 4. Resumes polling of in-flight
+   * candidate jobs from existing `ai_jobs` rows; it can never call
+   * `start_candidate` and therefore never creates a provider task.
+   */
+  const candidateRecoveryKey =
+    step === 4 && draft?.packId ? `${draft.packId}:${savedStickerIds.join(",")}` : "";
+  useEffect(() => {
+    if (!candidateRecoveryKey) return;
+    const [packId, ids] = [
+      candidateRecoveryKey.slice(0, candidateRecoveryKey.indexOf(":")),
+      candidateRecoveryKey.slice(candidateRecoveryKey.indexOf(":") + 1),
+    ];
+    const stickerIds = ids.split(",").filter(Boolean);
+    if (stickerIds.length === 0) return;
+    void recoverCandidates(packId, stickerIds);
+  }, [candidateRecoveryKey, recoverCandidates]);
 
   /**
    * Phase 4B restore state. Declared with the other top-level hooks, ABOVE every
