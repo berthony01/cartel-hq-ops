@@ -18,11 +18,19 @@ export type StickerVersionOrigin =
   | "backfill"
   /** Phase 4D — image generated for review while the live sticker stays live. */
   | "candidate_generation"
+  /** A/B/C Variations — deliberate review-only alternate take. */
+  | "variation_generation"
   | string;
 
 /** True for a Phase 4D candidate history row. Presentation helper only. */
 export const isCandidateVersionOrigin = (origin: StickerVersionOrigin) =>
   origin === "candidate_generation";
+
+/** True for an A/B/C variation history row. Presentation helper only. */
+export const isVariationVersionOrigin = (origin: StickerVersionOrigin) =>
+  origin === "variation_generation";
+
+export type StickerVariationLabel = "A" | "B" | "C";
 
 export type StickerVersion = {
   id: string;
@@ -38,6 +46,10 @@ export type StickerVersion = {
   previewUrl: string | null;
   /** True when the image behind this history row can no longer be shown. */
   unavailable: boolean;
+  /** A/B/C round this row belongs to; null for non-variation rows. */
+  variationGroupId: string | null;
+  /** "A" | "B" | "C" for a variation row, otherwise null. */
+  variationLabel: StickerVariationLabel | null;
 };
 
 export type StickerVersionsBySticker = Record<string, StickerVersion[]>;
