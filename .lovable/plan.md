@@ -1,65 +1,105 @@
-# C3 Read-Only Diagnostic Audit — no changes made
+# Sticker Lab V2A — Published Candidate Generation (Phase 4D) Preflight Audit
 
-State inspected: HEAD `a1a58328f9cec905986c891ec68e44338e904a88` ("Fixed static replace version", on top of `81c3609`), working tree clean. No files edited, nothing deployed, no DB/Telegram/provider calls.
+Read-only. No files, migrations, functions, secrets or database state were changed. Git HEAD verified as `8720799acdfc97b8da35885ce469090b2cf8275c` (matches the authoritative start SHA).
 
-## A) Preview crash on `/sticker-lab/new`
+## 1. What breaks if ordinary `runGeneration` is reused for a published sticker
 
-Facts established:
+Confirmed in source, in order of severity:
 
-- SSR for the route returns HTTP 200 (`curl http://localhost:8080/sticker-lab/new`), so this is not a server/module-init failure.
-- `/tmp/observability/` contains no `runtime-errors.log`, `console-logs.log`, or `build-errors.log` for this turn — no preview telemetry was captured with the request, so the exact exception text and stack are **not available to me**.
-- Dev-server log shows only normal HMR/SSR reloads (last entries 05:45–05:50), no exception.
-- `LOVABLE_BROWSER_AUTH_STATUS=external_unmanaged` — this project uses external Supabase `ocoinbnjgstkmnwwvnhi`, so no browser session can be minted here and `/sticker-lab/new` (under `_authenticated`) cannot be driven end-to-end from this sandbox. Unauthenticated reproduction only reaches the `/auth` gate.
+1. **Hard server block (by design).** `sticker-ai` action `start` returns HTTP 409 `STICKER_PUBLISHED` before any reference resolution or Kie call when `telegram_file_id` or `telegram_published_at` is set. A candidate flow cannot go through `start` unchanged.
+2. **Current pointer is overwritten on success.** In the `remove_background` branch, `sticker-ai` does `stickers.update({ image_asset_id: asset.id, status: 'ready' })` unconditionally. That alone would silently repoint the live sticker and desynchronise CARTEL HQ from the Telegram set.
+3. **Status is mutated at start and on failure.** `start` sets `stickers.status = 'generating'` and `sticker_packs.status = 'generating'`; `failSticker` sets sticker status to `ready`/`failed`. Both would downgrade a `published` sticker — violating requirement 8.
+4. **Pack rollup rewrites pack status.** After background removal the function recomputes pack status to `review`/`draft`, which would demote a released pack.
+5. **Client reconciliation mislabels the current sticker.** `useStickerGenerationRuntime.loadExisting` keys purely on `stickers.id` + the newest `ai_jobs` row, so an in-flight or failed candidate job renders the *current* sticker as `generating` / `failed` / `replacement_failed`, and `runGeneration` writes those same stages into `stages[stickerId]` (requirement A).
+6. **Version history would not record the candidate at all.** `public.sticker_versions` rows are written **only** by trigger function `public.capture_sticker_version()`, which fires on `stickers` when `image_asset_id` actually changes. A candidate that deliberately does not move the pointer produces **zero** history rows under today's mechanics.
+7. **Restore is blocked while any job runs.** Both `public.set_sticker_current_version` and `telegram-stickers` `replace_version` reject when any `ai_jobs` row for the sticker is `queued`/`running`. Correct and safe, but it means approval is only possible after the candidate job reaches a terminal state.
 
-Conclusion: **the crash cause is UNCONFIRMED.** I will not name a root cause I could not observe.
+## 2. Smallest safe architecture
 
-What the symptom pattern does tell us: the Sticker Lab cards render underneath the modal, so this is a captured/reported error (Lovable overlay via `reportLovableError` / global `error` + `unhandledrejection` listeners in `src/lib/error-capture.ts`), not a React render crash — a render crash inside the route would replace the tree with the root `errorComponent`.
+Candidate generation is a **third mode of the existing pipeline**, not a new pipeline. Reuse the same prompt compiler, blueprint parsing, reference precedence, Kie models and the same two provider tasks; change only what is written on completion.
 
-Highest-probability candidates, all Step 4 code, none yet verified:
+Server (`backend-source/edge-functions/sticker-ai/index.ts`):
+- New action `start_candidate`. Same membership check, same `parseBlueprint` / reference precedence / `buildPrompt` / signed URLs — literally the existing code path, with the published guard inverted: **require** Telegram footprint (else 409 `NOT_PUBLISHED`, pointing the user at ordinary Regenerate). Requirement E.
+- Keep `job_type = 'sticker_generate'` and mark the job with `input_json.mode = 'candidate'` (see §4). Do **not** invent a new job_type — see §3/§B.
+- Skip the `stickers.status = 'generating'` and `sticker_packs.status = 'generating'` writes when `mode = 'candidate'`.
+- Propagate `mode` into the `remove_background` child `input_json` (the existing child-creation block already copies `prior_image_asset_id`).
+- In the `remove_background` completion branch, branch on candidate mode: insert the `media_assets` row exactly as today (`generated_sticker`, transparency-validated), then **insert a `sticker_versions` row directly** instead of updating `stickers`, and skip the pack-status rollup.
+- In `failSticker`, skip the `stickers.status` write when the job is a candidate job.
 
-1. A rejected promise from one of the Step-4 probes — `motionConfigQuery` (`sticker-lab.new.tsx:655`), `telegramMotionConfigQuery` (`:668`), or `motionQuery` (`:634`, `loadStickerMotionState`). These throw into React Query, but a rejection reaching the global handler still trips the overlay.
-2. An edge-function invoke error surfaced from `fetchStickerMotionTelegramConfig` — the last live probe reported `prep.configured=false`, `falConfigured=false`, `cloudConvertConfigured=false`, so this path is the least exercised.
-3. Preview/Lovable infrastructure noise (HMR, preview auth broker) unrelated to Motion Studio.
+Client:
+- `src/lib/sticker-ai.ts` — add `startStickerCandidate()` next to `startStickerGeneration()`, same `invoke` error normalisation.
+- `src/hooks/useStickerGenerationRuntime.ts` — add a **separate** candidate state map (`candidateStages` / `candidateFailures` keyed by sticker id) and a `runCandidateGeneration()` that never writes into `stages`/`failures`; and make `loadExisting` ignore `ai_jobs` rows whose `input_json.mode = 'candidate'` when deriving the current sticker's stage.
+- `src/lib/sticker-packs.ts` — `loadLatestJobs` currently selects `id,sticker_id,job_type,status,error_message,created_at`; it must also select `input_json` (or a derived flag) so candidate jobs can be partitioned rather than treated as the newest attempt on the current image.
+- `src/lib/sticker-versions.ts` — surface `origin` (already returned) so the UI can badge candidate rows.
+- `src/routes/_authenticated/sticker-lab.new.tsx` — candidate button, cost confirmation dialog, candidate preview panel, and reuse of the **existing** `confirmTelegramRestore` / `confirmRestore` handlers for approval. No new Telegram mutation path.
 
-Smallest safe fix boundary (NOT implemented): whichever single Step-4 client call is identified as the rejecting source — i.e. one of `src/lib/sticker-motion.ts`, `src/lib/sticker-motion-ai.ts`, `src/lib/sticker-motion-telegram.ts`, or the query wiring in `sticker-lab.new.tsx:628-676`. No backend, schema, RLS, or edge-function change is implied by anything observed.
+`backend-source/edge-functions/telegram-stickers/index.ts` needs **no change**: `replace_version` already revalidates the asset (workspace, `generated_sticker`, `transparency_valid`), re-confirms the file lives in the set, re-checks active jobs, guards the write on the exact old `image_asset_id` + `telegram_file_id`, and rolls Telegram back if the DB write loses the race. That satisfies requirement G.
 
-Required first step before any fix: capture the exact overlay text/stack (screenshot or copied stack, or send a message from the affected preview so console/runtime telemetry is attached). Without it, any fix would be speculative.
+## 3. Is a migration necessary? Yes — one, and it is unavoidable
 
-## B) Lovable Queue item `SC-2 QA RECOVERY RUN...`
+Live constraint on the external project:
 
-The Lovable message queue is editor-side state. It is **not readable from this environment** — there is no tool exposing queued-but-unsent prompts, and it leaves no repository or database trace. I cannot report its full text, origin, or status.
+```text
+sticker_versions_origin_check  CHECK (origin = ANY (ARRAY['generation','backfill']))
+```
 
-What the repository does show: the SC-1/SC-2/SC-3 Sticker Lab surface-consolidation work is already landed (unified builder steps in `sticker-lab.new.tsx`, pack command summary, release orientation strip), and several later phases (4B/4C/4D, variations, motion A1–C3) were built on top of it. A "QA RECOVERY RUN" written against an SC-2-era tree would be reasoning about a surface that has since changed substantially.
+Writing `origin = 'candidate_generation'` fails today. Options:
+- **(preferred)** one narrow migration widening the CHECK to include `'candidate_generation'`. Nothing else changes: `unique(sticker_id, asset_id)` and `unique(sticker_id, version_number)` already give the idempotency and ordering guarantees needed.
+- reusing `origin = 'generation'` avoids the migration but makes candidates indistinguishable from promoted history — rejected, it destroys the audit trail the phase exists to create.
 
-Recommendation: **CANCEL** (or at minimum, do not run as-is). Running a stale SC-2 recovery prompt now risks re-applying superseded edits over ten-plus later commits, and its start gate/SHA will not match `a1a5832`. If its intent still matters, re-author it against the current HEAD rather than replaying it.
+No new table, column, index or RPC is required. `sticker_versions` is service-role written and already readable by members.
 
-## C) Motion Studio layout — why it is compressed
+## 4. Distinguishing candidate jobs without breaking history
 
-This is confirmed from source, not inference:
+Use `ai_jobs.input_json.mode = 'candidate'` on both the generation job and its `remove_background` child, and keep `job_type` unchanged.
 
-- `MotionStudioPanel` is rendered **inside every concept card**, at `src/routes/_authenticated/sticker-lab.new.tsx:3856`, within the card list at `:3399`:
-  `<ul className="mt-6 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-4 …">`
-- So on a desktop viewport each card is roughly a quarter of the content width (~280–320px), and the entire Motion Studio (mode chooser, explanatory copy, version history, prepare/release controls, dialogs) is squeezed into that cell.
-- The panel's own internal layout uses viewport breakpoints, not container queries — e.g. the three motion modes at `src/components/sticker-lab/MotionStudioPanel.tsx:264`: `<ul className="mt-2 grid gap-1.5 sm:grid-cols-3">`. `sm:` fires on the 1280px+ **viewport**, so Quick / AI / Custom render as three columns inside a ~300px cell. That is exactly the "extremely narrow vertical columns" the user sees.
-- The panel is 737 lines of stateful UI with confirmation dialogs; multiplied across up to 12 cards it also produces heavy visual repetition and no single obvious "next action".
+Why not a new `job_type`:
+- `ai_jobs_active_sticker_generate_uniq` is `UNIQUE (sticker_id) WHERE job_type = 'sticker_generate' AND status IN ('queued','running')`. Keeping the job_type means a candidate and an ordinary generation **cannot both be active** for one sticker, across tabs, at the database level — requirement B is satisfied with zero new code. A new job_type would silently escape this index and allow two billable tasks.
+- `ai_jobs_remove_background_parent_uniq` is keyed on `input_json->>'parent_job_id'` and is job_type-agnostic in the way that matters, so child duplicate protection (requirement C) also carries over unchanged.
 
-Recommended information architecture (frontend/presentation only; no change to motion backend, runtime hooks, or edge functions):
+The consequence is that reconciliation must filter on `mode`, not on `job_type` — which is exactly the `loadLatestJobs` / `loadExisting` change in §2 (requirement A).
 
-1. **Card keeps only a compact motion summary strip**: one `StatusBadge` line (`No motion` / `Motion draft ready` / `Current Motion approved` / `Prepared for Telegram` / `Motion live` / `Update available`) plus a single primary button — `Open Motion Studio`.
-2. **Full Motion Studio moves into a focused per-sticker workspace** — a right-side Sheet/Drawer on desktop and a full-screen sheet on mobile, one sticker at a time, titled with the sticker label and showing the static Current alongside the motion preview.
-3. Inside the drawer the existing panel gets real width, so the three-mode grid, explanatory copy, version history, and the Prepare/Release actions read normally; no breakpoint hacks needed and the current `sm:grid-cols-3` becomes correct rather than pathological.
-4. **Linear step ordering inside the drawer**, with exactly one enabled primary action at a time: Generate motion (billable, confirmed) → Set Current Motion (free) → Prepare for Telegram (billable, confirmed) → Release motion to Telegram (mutating, confirmed). Later steps stay visible but disabled with a one-line reason.
-5. All existing props, guards, confirmation dialogs, error scoping, and eligibility logic (`currentMotionIsLive` / `anyMotionIsLive`, lineage checks, `telegramAssetId` gating) are carried over unchanged — this is a container/placement change, not a behavior change.
+## 5. Exactly one version row per candidate, pointer untouched
 
-Alternative if a drawer is unwanted: keep it inline but render Motion Studio as a **full-width expanded row below the grid** for the single selected sticker. Same benefit, less new UI surface. The one option not worth keeping is the status quo — full Motion Studio in every grid cell.
+The `remove_background` branch is already effectively single-winner: the child job's own row is flipped to `succeeded` with the asset id in `output_json`, and the asset is only created once because concurrent pollers race on the child insert, not the completion. For candidates, write:
 
-## D) Test recommendation
+```sql
+insert into public.sticker_versions (workspace_id, pack_id, sticker_id, asset_id, version_number, origin)
+values (..., coalesce(max(version_number),0)+1 for this sticker, 'candidate_generation')
+on conflict (sticker_id, asset_id) do nothing
+```
 
-**Wait.** Two independent reasons, both observed:
+- `unique(sticker_id, asset_id)` + `ON CONFLICT DO NOTHING` makes a duplicated completion a no-op (requirement D).
+- `unique(sticker_id, version_number)` may throw `23505` if two pollers compute the same next number; retry the number computation once and treat a second `23505` as "already recorded", then re-read the row. Same pattern the existing trigger relies on.
+- No `stickers` update at all on this path, so `image_asset_id`, `status`, `telegram_file_id`, `telegram_published_at`, pack Telegram state, distribution and Sticker Drops are untouched by construction (requirement 4).
 
-1. The last live `cartel-e2e-motion` probe reported `prep.configured=false`, `falConfigured=false`, `cloudConvertConfigured=false`. The Telegram preparation stage (fal.ai + CloudConvert VP9 normalization) cannot complete, so a motion test would spend on generation and then stall before `Prepare for Telegram`, and `release_motion` could never be exercised.
-2. An unexplained error modal is currently firing on the exact surface under test, so any failure observed now would be ambiguous between the real motion path and the unknown client fault.
+Note: because the *trigger* only fires on pointer change, a later approval of that candidate through `replace_version` will not double-insert — `capture_sticker_version` short-circuits on the existing `(sticker_id, asset_id)` row and leaves the `candidate_generation` origin intact.
 
-Sequence I would recommend: capture the exact overlay error → fix that single boundary → configure the fal/CloudConvert secrets → then run one manual motion E2E on a single sticker. The Motion Studio layout rework (C) can be done in parallel since it touches only presentation.
+## 6. UI shape
 
-STOP. No files changed, no deploys, no database, Telegram, or provider calls.
+In Step 4 (Sticker Studio), on a Telegram-locked card:
+- Primary state stays "Live on Telegram" with the current image labelled **Current — live on Telegram**.
+- `Generate candidate` opens an `AlertDialog` stating: exactly 2 Kie tasks (generation + background removal), the current CARTEL HQ image and the live Telegram sticker stay unchanged during generation, and nothing is promoted automatically.
+- Candidate progress renders in its own row using the separate candidate stage map; the current image never changes stage, never shows `failed`/`replacement_failed`.
+- On success the candidate appears as a new **Candidate** badged row in the existing Version history panel with a side-by-side thumbnail against the current image.
+- `Set as live` on that row calls the existing published path — `confirmTelegramRestore` → `telegram-stickers` `replace_version` — with no new mutation. For a non-published sticker the existing `set_sticker_current_version` path still applies.
+- Reject is simply "do nothing"; the candidate stays in history. Requirement 7.
+- Refresh recovery (requirement F): completed candidates reappear because they are durable `sticker_versions` rows. An *in-flight* candidate can be recognised without a new provider task because the job row has `input_json.mode = 'candidate'`; on refresh the separate candidate map simply resumes polling.
+
+## 7. Files that would change under this plan
+
+- `supabase/migrations/202608..._sticker_candidate_generation.sql` — widen `sticker_versions_origin_check` only.
+- `backend-source/edge-functions/sticker-ai/index.ts` — new `start_candidate` action and candidate-aware branches in `remove_background` / `failSticker`.
+- `src/lib/sticker-ai.ts` — `startStickerCandidate()`.
+- `src/hooks/useStickerGenerationRuntime.ts` — candidate state maps + `loadExisting` filtering.
+- `src/lib/sticker-packs.ts` — select `input_json` in `loadLatestJobs`.
+- `src/lib/sticker-versions.ts` — expose `origin`.
+- `src/routes/_authenticated/sticker-lab.new.tsx` — candidate UI.
+
+## 8. STOP conditions / what would block implementation
+
+- If `sticker_versions.origin` is not actually constrained to `['generation','backfill']` in the live project, the migration assumption is wrong and must be re-validated.
+- If `ai_jobs.input_json` is not readable by the authenticated client through `loadLatestJobs`, the client partition strategy changes.
+- If `telegram-stickers` `replace_version` does not accept a `generated_sticker` asset whose `transparency_valid` flag is true, the approval path is blocked and that function must be fixed first.
+
+No changes made. STOP.
