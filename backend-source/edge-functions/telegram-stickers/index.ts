@@ -6,6 +6,8 @@ import { Buffer } from "node:buffer";
 const BUCKET = "workspace-assets";
 const TG_BASE = "https://api.telegram.org";
 const MAX_STATIC_BYTES = 512 * 1024;
+/** Telegram video-sticker (WEBM) hard limit. */
+const MAX_MOTION_BYTES = 256 * 1024;
 const OUTSIDE_ALPHA = 24;
 const HALO_MIN_CHANNEL = 200;
 const HALO_MAX_SPREAD = 90;
