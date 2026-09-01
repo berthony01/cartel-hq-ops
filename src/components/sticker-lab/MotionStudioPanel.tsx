@@ -444,6 +444,30 @@ export function MotionStudioPanel({
           </p>
         ) : null}
 
+        {/* ---- R3 normalization-only recovery. Never a new background removal. */}
+        {canRetryNormalization ? (
+          <>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-2 min-h-10 w-full text-[11px]"
+              disabled={retryNormalizationDisabled}
+              onClick={() => setConfirmNormalizationRetry(true)}
+            >
+              {telegramRun.retryingNormalization ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              Retry normalization only
+            </Button>
+            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              Background removal already completed for this motion. This reuses that result and
+              re-runs formatting only.
+            </p>
+          </>
+        ) : null}
+
+
         {/* -------------------- Phase C3 explicit motion release to Telegram */}
         {canShowRelease ? (
           <>
