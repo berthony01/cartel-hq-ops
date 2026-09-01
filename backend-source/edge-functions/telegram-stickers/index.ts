@@ -436,6 +436,7 @@ Deno.serve(async (req: Request) => {
       const oldFileId = sticker.telegram_file_id ? String(sticker.telegram_file_id) : "";
       const expectedOldFileId = sticker.telegram_file_id ? String(sticker.telegram_file_id) : null;
       const expectedOldVariant = sticker.release_variant ? String(sticker.release_variant) : null;
+      const expectedOldReleasedMotionVersionId = sticker.telegram_motion_version_id ? String(sticker.telegram_motion_version_id) : null;
       const setName = pack.telegram_set_name ? String(pack.telegram_set_name) : "";
       const dbClaimsPublished = sticker.status === "published" || !!sticker.telegram_published_at;
 
