@@ -861,7 +861,7 @@ Deno.serve(async (req: Request) => {
                 input: "import-motion",
                 engine: "ffmpeg",
                 command: "ffmpeg",
-                arguments: FFMPEG_COMMAND,
+                arguments: FFMPEG_ARGUMENTS,
               },
               "metadata-motion": { operation: "metadata", input: "normalize-motion" },
               "export-motion": { operation: "export/url", input: "normalize-motion" },
