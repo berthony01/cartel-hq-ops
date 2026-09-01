@@ -232,24 +232,6 @@ function PackManagerPage() {
         </Button>
       ),
     };
-  } else if (distributionQuery.isPending) {
-    nextStep = {
-      title: "Checking community delivery…",
-      body: "Waiting for community delivery state before recommending the next step.",
-      action: null,
-    };
-  } else if (distributionQuery.isError) {
-    nextStep = {
-      title: "Community delivery status unavailable",
-      body: "Community delivery state could not be loaded right now. Open Quality & Release to inspect or retry by normal page behavior.",
-      action: (
-        <Button asChild className="min-h-11">
-          <Link to="/sticker-lab/new" search={{ pack: pack.id, step: 5 }}>
-            Open Quality &amp; Release
-          </Link>
-        </Button>
-      ),
-    };
   } else if (deliveredTargets === 0) {
     nextStep = {
       title: "Send to communities",
@@ -265,31 +247,13 @@ function PackManagerPage() {
         </Button>
       ),
     };
-  } else if (dropsQuery.isPending) {
-    nextStep = {
-      title: "Checking Sticker Drops state…",
-      body: "Waiting for Sticker Drops state before recommending the next step.",
-      action: null,
-    };
-  } else if (dropsQuery.isError) {
-    nextStep = {
-      title: "Sticker Drops status unavailable",
-      body: "Sticker Drop state could not be loaded right now. Manage Sticker Drops to inspect safely.",
-      action: (
-        <Button asChild className="min-h-11">
-          <Link to="/distribution" search={{ pack: pack.id }}>
-            Manage Sticker Drops
-          </Link>
-        </Button>
-      ),
-    };
   } else if (packSchedules.length === 0) {
     nextStep = {
       title: "Set up Sticker Drops",
       body: "Your set is live and delivered. Schedule automatic drops so the community keeps seeing it.",
       action: (
         <Button asChild className="min-h-11">
-
+          <Link to="/distribution" search={{ pack: pack.id }}>
             Set up Sticker Drops
           </Link>
         </Button>
