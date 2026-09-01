@@ -362,6 +362,29 @@ function StickerLabBuilder() {
     label: string;
   } | null>(null);
 
+  /**
+   * A/B/C Variations runtime. Another fully separate store: variations are
+   * review-only, never touch the current image, sticker status or Telegram, and
+   * `start_variation` is only reachable from the confirmed dialog handler below.
+   */
+  const {
+    variationReadySignal,
+    startVariationRound,
+    cancelVariationRound,
+    recoverVariations,
+    clearVariationState,
+    variationRoundFor,
+  } = useStickerVariationRuntime({
+    workspaceId,
+    referenceAssetIds: draft?.referenceAssetIds ?? [],
+  });
+  /** Sticker awaiting the explicit 6-task A/B/C confirmation. */
+  const [variationConfirm, setVariationConfirm] = useState<{
+    stickerId: string;
+    label: string;
+  } | null>(null);
+
+
   const [confirmRemaining, setConfirmRemaining] = useState(false);
   /**
    * Sticker Studio selective generation. Editor-only local state: never
