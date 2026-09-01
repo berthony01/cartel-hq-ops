@@ -441,25 +441,48 @@ Deno.serve(async (req: Request) => {
   }
 
   /**
-   * Phase 4D.1 — a candidate job produces a NEW image for review only. It must
-   * never write sticker or pack status, and never move the current pointer.
+   * Generation mode of a job.
+   *  - "current"   : ordinary generation; owns the current image pointer.
+   *  - "candidate" : Phase 4D published review-only image.
+   *  - "variation" : A/B/C review-only image.
+   * Both review-only modes must never write sticker or pack status, never move
+   * the current pointer and never touch Telegram fields.
    */
-  const isCandidateJob = (job: Record<string, unknown>) => {
+  type JobMode = "current" | "candidate" | "variation";
+  const jobModeOf = (job: Record<string, unknown>): JobMode => {
     const input = (job.input_json && typeof job.input_json === "object" ? job.input_json : {}) as Record<string, unknown>;
-    return input.mode === "candidate";
+    return input.mode === "candidate"
+      ? "candidate"
+      : input.mode === "variation"
+        ? "variation"
+        : "current";
+  };
+  const isReviewOnlyMode = (mode: JobMode) => mode !== "current";
+  const variationMetaOf = (job: Record<string, unknown>) => {
+    const input = (job.input_json && typeof job.input_json === "object" ? job.input_json : {}) as Record<string, unknown>;
+    return {
+      groupId: typeof input.variation_group_id === "string" ? input.variation_group_id : null,
+      label: typeof input.variation_label === "string" ? input.variation_label : null,
+    };
   };
 
   const failSticker = async (job: Record<string, unknown>, message: string, code = "PROVIDER_FAILED") => {
     await admin.from("ai_jobs").update({
       status: "failed", error_code: code, error_message: message.slice(0, 500), completed_at: new Date().toISOString(),
     }).eq("id", String(job.id));
-    const candidate = isCandidateJob(job);
-    if (job.sticker_id && !candidate) {
+    const mode = jobModeOf(job);
+    const reviewOnly = isReviewOnlyMode(mode);
+    if (job.sticker_id && !reviewOnly) {
       const input = (job.input_json && typeof job.input_json === "object" ? job.input_json : {}) as Record<string, unknown>;
       const prior = typeof input.prior_image_asset_id === "string" ? input.prior_image_asset_id : null;
       await admin.from("stickers").update({ status: prior ? "ready" : "failed" }).eq("id", String(job.sticker_id));
     }
-    return respond({ aiJobId: job.id, jobType: job.job_type, status: "failed", error: message, ...(candidate ? { mode: "candidate" } : {}) });
+    const meta = mode === "variation" ? variationMetaOf(job) : null;
+    return respond({
+      aiJobId: job.id, jobType: job.job_type, status: "failed", error: message,
+      ...(reviewOnly ? { mode } : {}),
+      ...(meta ? { variationGroupId: meta.groupId, variationLabel: meta.label } : {}),
+    });
   };
 
 
