@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadLatestJobs, classifyProviderError } from "@/lib/sticker-packs";
 import type { AiJobRow, ProviderFailure } from "@/lib/sticker-packs";
-import { startStickerVariationGeneration, syncStickerJob } from "@/lib/sticker-ai";
+import {
+  retryReviewBackgroundGeneration,
+  startStickerVariationGeneration,
+  syncStickerJob,
+} from "@/lib/sticker-ai";
 import type { StickerVariationLabel } from "@/lib/sticker-ai";
 
 /**
@@ -224,7 +228,13 @@ export function useStickerVariationRuntime(params: {
       const completed: StickerVariationLabel[] = [];
       setRounds((r) => ({
         ...r,
-        [stickerId]: { groupId, stage: "starting", currentLabel: "A", completed: [] },
+        [stickerId]: {
+          groupId,
+          stage: "starting",
+          currentLabel: "A",
+          completed: [],
+          retryableBackgroundJobId: null,
+        },
       }));
 
       try {
@@ -234,7 +244,12 @@ export function useStickerVariationRuntime(params: {
             patchRound(stickerId, { stage: "cancelled", currentLabel: null });
             return;
           }
-          patchRound(stickerId, { stage: "starting", currentLabel: label, failure: undefined });
+          patchRound(stickerId, {
+            stage: "starting",
+            currentLabel: label,
+            failure: undefined,
+            retryableBackgroundJobId: null,
+          });
 
           let started: Awaited<ReturnType<typeof startStickerVariationGeneration>>;
           try {
@@ -285,7 +300,11 @@ export function useStickerVariationRuntime(params: {
           if (outcome !== "succeeded") return;
 
           completed.push(label);
-          patchRound(stickerId, { completed: [...completed], currentLabel: null });
+          patchRound(stickerId, {
+            completed: [...completed],
+            currentLabel: null,
+            retryableBackgroundJobId: null,
+          });
           setVariationReadySignal((n) => n + 1);
         }
         patchRound(stickerId, { stage: "done", currentLabel: null });
