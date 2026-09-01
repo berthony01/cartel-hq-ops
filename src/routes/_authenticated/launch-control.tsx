@@ -1641,10 +1641,13 @@ function LaunchControlPage() {
                       </p>
                     </div>
                   ) : (
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      Contract registration becomes available later in the lifecycle, once the
-                      launch reaches contract pending.
-                    </p>
+                    <div className="space-y-2">
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        {status === "WATCHLIST_OPEN"
+                          ? "Contract entry is not open yet. First confirm the schedule and arm countdowns. Then open Contract Registration. At Contract Pending, the official CA field becomes editable."
+                          : "Contract registration becomes available later in the lifecycle, once the launch reaches Contract Pending."}
+                      </p>
+                    </div>
                   )}
                 </Section>
 
