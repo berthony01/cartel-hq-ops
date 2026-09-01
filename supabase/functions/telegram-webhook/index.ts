@@ -286,7 +286,7 @@ function launchWatchKeyboard(
     ]);
     // Project updates are a SEPARATE preference from countdown reminders.
     rows.push([
-      updatesEnabled === true
+      updatesEnabled
         ? { text: "🔇 Mute project updates", callback_data: `ln_updates_off_${token}` }
         : { text: "📣 Enable project updates", callback_data: `ln_updates_on_${token}` },
     ]);
