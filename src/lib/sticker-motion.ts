@@ -1,0 +1,138 @@
+import { supabase } from "@/integrations/supabase/client";
+
+/**
+ * Read-only motion (animated sticker) state.
+ *
+ * Phase A2 is presentation only. This module NEVER inserts, updates or deletes
+ * anything, never calls an RPC, an Edge Function or a provider, and never
+ * touches Telegram, storage or `ai_jobs`. `stickers.image_asset_id` remains the
+ * authoritative Static Current; `sticker_versions` remains static-only history.
+ */
+
+export type MotionMode = "quick" | "ai" | "custom";
+export type ReleaseVariant = "static" | "motion";
+
+export type StickerMotionVersion = {
+  id: string;
+  stickerId: string;
+  sourceStaticVersionId: string | null;
+  sourceStaticAssetId: string | null;
+  motionAssetId: string | null;
+  telegramAssetId: string | null;
+  versionNumber: number;
+  motionMode: MotionMode | null;
+  motionPreset: string | null;
+  motionInstruction: string | null;
+  createdAt: string;
+};
+
+export type StickerMotionState = {
+  /** Durable pointer from `stickers.current_motion_version_id`. */
+  currentMotionVersionId: string | null;
+  /** Durable `stickers.release_variant`. */
+  releaseVariant: ReleaseVariant;
+  /** Newest motion version first. */
+  versions: StickerMotionVersion[];
+};
+
+export type StickerMotionStateBySticker = Record<string, StickerMotionState>;
+
+const asReleaseVariant = (value: string | null): ReleaseVariant =>
+  value === "motion" ? "motion" : "static";
+
+const asMotionMode = (value: string | null): MotionMode | null =>
+  value === "quick" || value === "ai" || value === "custom" ? value : null;
+
+/**
+ * Loads durable motion state for the supplied saved sticker ids.
+ * Two plain SELECTs against RLS-protected tables — nothing else.
+ */
+export async function loadStickerMotionState(
+  stickerIds: string[],
+): Promise<StickerMotionStateBySticker> {
+  const ids = Array.from(new Set(stickerIds.filter(Boolean)));
+  const out: StickerMotionStateBySticker = {};
+  if (ids.length === 0) return out;
+
+  const { data: stickerRows, error: stickerError } = await supabase
+    .from("stickers")
+    .select("id,current_motion_version_id,release_variant")
+    .in("id", ids);
+  if (stickerError) throw stickerError;
+
+  for (const row of stickerRows ?? []) {
+    out[row.id] = {
+      currentMotionVersionId: row.current_motion_version_id ?? null,
+      releaseVariant: asReleaseVariant(row.release_variant ?? null),
+      versions: [],
+    };
+  }
+
+  const { data: motionRows, error: motionError } = await supabase
+    .from("sticker_motion_versions")
+    .select(
+      "id,sticker_id,source_static_version_id,source_static_asset_id,motion_asset_id,telegram_asset_id,version_number,motion_mode,motion_preset,motion_instruction,created_at",
+    )
+    .in("sticker_id", ids)
+    .order("version_number", { ascending: false });
+  if (motionError) throw motionError;
+
+  for (const row of motionRows ?? []) {
+    const bucket = out[row.sticker_id];
+    if (!bucket) continue;
+    bucket.versions.push({
+      id: row.id,
+      stickerId: row.sticker_id,
+      sourceStaticVersionId: row.source_static_version_id ?? null,
+      sourceStaticAssetId: row.source_static_asset_id ?? null,
+      motionAssetId: row.motion_asset_id ?? null,
+      telegramAssetId: row.telegram_asset_id ?? null,
+      versionNumber: row.version_number,
+      motionMode: asMotionMode(row.motion_mode ?? null),
+      motionPreset: row.motion_preset ?? null,
+      motionInstruction: row.motion_instruction ?? null,
+      createdAt: row.created_at,
+    });
+  }
+
+  return out;
+}
+
+/**
+ * The motion version the durable pointer refers to, or null when there is no
+ * pointer or the referenced row was not loaded. Never guesses a "latest".
+ */
+export function currentMotionVersion(
+  state: StickerMotionState | undefined,
+): StickerMotionVersion | null {
+  if (!state?.currentMotionVersionId) return null;
+  return state.versions.find((v) => v.id === state.currentMotionVersionId) ?? null;
+}
+
+/** The three future motion creation modes, described factually. */
+export const MOTION_MODE_CHOICES: ReadonlyArray<{
+  mode: MotionMode;
+  title: string;
+  description: string;
+}> = [
+  {
+    mode: "quick",
+    title: "Quick Motion",
+    description: "Presets such as blink, nod, eye glow or money rain.",
+  },
+  {
+    mode: "ai",
+    title: "AI Motion",
+    description: "CARTEL HQ proposes motion from the concept and Blueprint.",
+  },
+  {
+    mode: "custom",
+    title: "Custom Motion",
+    description: "You write the motion instruction yourself.",
+  },
+];
+
+export const MOTION_UNAVAILABLE_NOTE = "Motion generation is not connected yet.";
+
+export const MOTION_SAFETY_NOTE =
+  "Your static sticker remains the source of truth until you explicitly approve a motion version.";
