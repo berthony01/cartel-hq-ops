@@ -278,6 +278,9 @@ export async function loadLatestJobs(
       job_type: String(record["job_type"] ?? ""),
       status: String(record["status"] ?? ""),
       error_message: (record["error_message"] as string | null) ?? null,
+      error_code:
+        typeof record["error_code"] === "string" ? (record["error_code"] as string) : null,
+
       created_at: String(record["created_at"] ?? ""),
       is_candidate: input["mode"] === "candidate",
       is_variation: input["mode"] === "variation",
