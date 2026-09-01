@@ -105,6 +105,7 @@ import {
   SummaryRow,
   SummaryStat,
 } from "@/components/sticker-lab/BuilderPrimitives";
+import { StepGuide } from "@/components/sticker-lab/StickerLabJourney";
 import { Checkbox } from "@/components/ui/checkbox";
 
 
