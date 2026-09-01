@@ -253,22 +253,25 @@ export async function loadLatestJobs(
   if (error) throw error;
   for (const raw of data ?? []) {
     const record = raw as Record<string, unknown>;
-    if (!record.sticker_id) continue;
+    const stickerId = record["sticker_id"];
+    if (typeof stickerId !== "string" || !stickerId) continue;
+    const rawInput = record["input_json"];
     const input =
-      record.input_json && typeof record.input_json === "object"
-        ? (record.input_json as Record<string, unknown>)
+      rawInput && typeof rawInput === "object"
+        ? (rawInput as Record<string, unknown>)
         : {};
     const row: AiJobRow = {
-      id: String(record.id),
-      sticker_id: String(record.sticker_id),
-      job_type: String(record.job_type ?? ""),
-      status: String(record.status ?? ""),
-      error_message: (record.error_message as string | null) ?? null,
-      created_at: String(record.created_at ?? ""),
-      is_candidate: input.mode === "candidate",
+      id: String(record["id"]),
+      sticker_id: stickerId,
+      job_type: String(record["job_type"] ?? ""),
+      status: String(record["status"] ?? ""),
+      error_message: (record["error_message"] as string | null) ?? null,
+      created_at: String(record["created_at"] ?? ""),
+      is_candidate: input["mode"] === "candidate",
     };
-    (out[row.sticker_id as string] ??= []).push(row);
+    (out[stickerId] ??= []).push(row);
   }
+
   return out;
 }
 
