@@ -631,25 +631,36 @@ Deno.serve(async (req: Request) => {
           return await failJob(job.id, "The normalized Telegram clip was empty.", "TELEGRAM_DOWNLOAD_FAILED");
         }
 
-        /* ----------------------------------------------- validation ------- */
+        /* ----------------------------------------------- validation -------
+         * Fail closed: core Telegram-relevant properties MUST be provable from
+         * CloudConvert metadata. Missing evidence is a validation failure, never
+         * an assumption, and values are never fabricated. */
         const metadata = asObject(asObject(metaTask?.result).metadata);
         const width = num(findKey(metadata, ["ImageWidth", "width", "VideoWidth", "SourceImageWidth"]));
         const height = num(findKey(metadata, ["ImageHeight", "height", "VideoHeight", "SourceImageHeight"]));
-        const duration = num(findKey(metadata, ["Duration", "duration", "MediaDuration"]));
+        const duration = parseDurationSeconds(findKey(metadata, ["Duration", "duration", "MediaDuration"]));
         const fps = num(findKey(metadata, ["VideoFrameRate", "frame_rate", "FrameRate", "fps"]));
         const codecRaw = str(findKey(metadata, ["VideoCodec", "codec", "CompressorID", "CodecID", "VideoCodecID"]) as string | undefined);
         const audioCodec = findKey(metadata, ["AudioCodec", "audio_codec", "AudioFormat"]);
+        const audioStream = findKey(metadata, ["AudioChannels", "AudioSampleRate", "AudioBitrate"]);
         const alphaRaw = findKey(metadata, ["AlphaMode", "alpha_mode", "HasAlpha", "alpha"]);
+        const containerRaw = str(findKey(metadata, ["MIMEType", "mime_type", "FileType", "FileTypeExtension", "Format"]) as string | undefined);
 
         const failures: string[] = [];
+
+        // Byte size is always provable from the actual download.
         if (bytes.byteLength > TG.maxBytes) failures.push(`file size ${bytes.byteLength} exceeds ${TG.maxBytes} bytes`);
+
+        if (width == null) failures.push("width unavailable");
+        if (height == null) failures.push("height unavailable");
+        if (duration == null) failures.push("duration unavailable");
+        if (fps == null) failures.push("fps unavailable");
+        if (!codecRaw) failures.push("codec unavailable");
+
         if (duration != null && duration > TG.maxDurationSeconds + 0.001) failures.push(`duration ${duration}s exceeds ${TG.maxDurationSeconds}s`);
         if (fps != null && fps > TG.maxFps + 0.5) failures.push(`frame rate ${fps} exceeds ${TG.maxFps}`);
         if (codecRaw && !codecRaw.toLowerCase().includes("vp9") && !codecRaw.toLowerCase().includes("vp09")) {
           failures.push(`codec ${codecRaw} is not VP9`);
-        }
-        if (typeof audioCodec === "string" && audioCodec.trim() && audioCodec.toLowerCase() !== "none") {
-          failures.push("an audio stream is present");
         }
         if (width != null && height != null) {
           const longest = Math.max(width, height);
@@ -657,6 +668,21 @@ Deno.serve(async (req: Request) => {
           if (longest !== TG.maxDimension || shortest > TG.maxDimension) {
             failures.push(`dimensions ${width}x${height} do not satisfy longest-side ${TG.maxDimension}`);
           }
+        }
+
+        // Audio: explicit evidence of an audio stream fails. Absent evidence is
+        // encoder-enforced by the fixed `-an` command; never fabricate a codec.
+        let audioEvidence: string;
+        const explicitAudioCodec =
+          typeof audioCodec === "string" && audioCodec.trim() && !["none", "no", "false", "0"].includes(audioCodec.trim().toLowerCase())
+            ? audioCodec.trim()
+            : null;
+        const explicitAudioStream = num(audioStream);
+        if (explicitAudioCodec || (explicitAudioStream != null && explicitAudioStream > 0)) {
+          audioEvidence = "present";
+          failures.push("an audio stream is present");
+        } else {
+          audioEvidence = "encoder-enforced";
         }
 
         // Alpha is fail-closed only when metadata EXPLICITLY reports no alpha.
@@ -671,12 +697,31 @@ Deno.serve(async (req: Request) => {
           alphaEvidence = "encoder-enforced";
         }
 
+        // Container: explicit non-WEBM fails; unavailable is encoder-enforced by
+        // the fixed `/output/telegram-motion.webm` output path.
+        let containerEvidence: string;
+        if (containerRaw) {
+          const c = containerRaw.toLowerCase();
+          if (c.includes("webm")) {
+            containerEvidence = "reported";
+          } else {
+            containerEvidence = "mismatch";
+            failures.push(`container ${containerRaw} is not WEBM`);
+          }
+        } else {
+          containerEvidence = "encoder-enforced";
+        }
+
         const validation = {
           bytes: bytes.byteLength,
           max_bytes: TG.maxBytes,
           width, height, duration_seconds: duration, fps,
-          codec: codecRaw, audio: typeof audioCodec === "string" ? audioCodec : null,
+          codec: codecRaw,
+          audio: explicitAudioCodec,
+          audio_evidence: audioEvidence,
           alpha: alphaEvidence,
+          container: containerRaw,
+          container_evidence: containerEvidence,
           mime_type: TG.mimeType,
           normalize_contract_version: NORMALIZE_CONTRACT_VERSION,
           telegram_accepted: false,
