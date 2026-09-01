@@ -326,6 +326,90 @@ export function useStickerVariationRuntime(params: {
   }, []);
 
   /**
+   * BILLABLE — ONE background-removal task. Recovery R1.
+   *
+   * Retries only the failed background-removal step of a take whose image
+   * generation already succeeded. It never generates an image, never retries
+   * automatically and never continues the round to B or C.
+   */
+  const retryVariationBackground = useCallback(
+    async (stickerId: string) => {
+      if (!workspaceId) return;
+      if (runningRef.current.has(stickerId)) return;
+      const round = roundsRef.current[stickerId];
+      const backgroundJobId = round?.retryableBackgroundJobId;
+      if (!backgroundJobId) return;
+
+      runningRef.current.add(stickerId);
+      patchRound(stickerId, {
+        stage: "starting",
+        failure: undefined,
+        retryableBackgroundJobId: null,
+      });
+      try {
+        let started: Awaited<ReturnType<typeof retryReviewBackgroundGeneration>>;
+        try {
+          started = await retryReviewBackgroundGeneration({ workspaceId, backgroundJobId });
+        } catch (err) {
+          patchRound(stickerId, {
+            stage: "failed",
+            currentLabel: null,
+            failure: withSafetySentence(
+              classifyProviderError(
+                err instanceof Error ? err.message : "This background retry could not be started.",
+              ),
+            ),
+            retryableBackgroundJobId: backgroundJobId,
+          });
+          return;
+        }
+        if (!started.aiJobId || started.status === "failed") {
+          patchRound(stickerId, {
+            stage: "failed",
+            currentLabel: null,
+            failure: withSafetySentence(
+              classifyProviderError(
+                started.error ?? "The background retry could not be started.",
+                "remove_background",
+              ),
+            ),
+            retryableBackgroundJobId: started.aiJobId ?? backgroundJobId,
+          });
+          return;
+        }
+
+        patchRound(stickerId, { stage: "background" });
+        const outcome = await pollTake(stickerId, started.aiJobId, { startsOnBackground: true });
+        if (outcome !== "succeeded") return;
+
+        setRounds((r) => {
+          const prev = r[stickerId] ?? EMPTY_ROUND;
+          const label = (started.variationLabel ?? prev.currentLabel) as
+            | StickerVariationLabel
+            | null;
+          const done =
+            label && !prev.completed.includes(label) ? [...prev.completed, label] : prev.completed;
+          return {
+            ...r,
+            [stickerId]: {
+              ...prev,
+              stage: "done",
+              currentLabel: null,
+              completed: done,
+              failure: undefined,
+              retryableBackgroundJobId: null,
+            },
+          };
+        });
+        setVariationReadySignal((n) => n + 1);
+      } finally {
+        runningRef.current.delete(stickerId);
+      }
+    },
+    [workspaceId, patchRound, pollTake],
+  );
+
+  /**
    * READ-ONLY recovery after a refresh. Resumes polling of an in-flight take
    * and surfaces the last variation failure. It never starts a take and never
    * continues a round automatically — the user must explicitly run a new round.
