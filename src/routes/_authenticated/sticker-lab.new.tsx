@@ -579,6 +579,21 @@ function StickerLabBuilder() {
   const versionsBySticker = versionsQuery.data ?? {};
 
   /**
+   * Read-only motion state for saved stickers (Step 4 only). One batched read
+   * of durable `stickers` pointers plus `sticker_motion_versions` rows. No
+   * writes, no RPCs, no provider or Telegram involvement.
+   */
+  const motionStickerKey = [...savedStickerIds].sort().join(",");
+  const motionQuery = useQuery({
+    queryKey: ["sticker-motion", draft?.packId ?? "", motionStickerKey],
+    enabled: !!draft && step === 4 && savedStickerIds.length > 0,
+    queryFn: () => loadStickerMotionState(savedStickerIds),
+  });
+  const motionBySticker = motionQuery.data ?? {};
+
+
+
+  /**
    * Read-only candidate recovery for Step 4. Resumes polling of in-flight
    * candidate jobs from existing `ai_jobs` rows; it can never call
    * `start_candidate` and therefore never creates a provider task.
