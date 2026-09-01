@@ -780,7 +780,34 @@ Deno.serve(async (req: Request) => {
           ? `${job.workspace_id}/generated_sticker/candidate-${job.id}.png`
           : `${job.workspace_id}/generated_sticker/${crypto.randomUUID()}.png`;
         const { error: uploadError } = await admin.storage.from(BUCKET).upload(path, finalPng, { contentType: "image/png", upsert: false });
-        if (uploadError && !jobIsCandidate) return await failSticker(job, "Could not save the finished sticker image.", "STORAGE_UPLOAD_FAILED");
+
+        // A losing candidate poller reuses the asset the winner already recorded.
+        let assetId: string | null = null;
+        const findCandidateAsset = async () => {
+          const { data } = await admin.from("media_assets").select("id").eq("workspace_id", job.workspace_id).eq("storage_path", path).maybeSingle();
+          return data?.id ?? null;
+        };
+        if (uploadError) {
+          // Ordinary generation is unchanged: any upload failure is terminal.
+          if (!jobIsCandidate) return await failSticker(job, "Could not save the finished sticker image.", "STORAGE_UPLOAD_FAILED");
+          // Candidate: an upload error is only survivable when the deterministic
+          // object is PROVEN to already exist (idempotent retry). A network or
+          // service error must never produce a media/version row for an object
+          // that was never stored, so this fails closed unless proven.
+          assetId = await findCandidateAsset();
+          if (!assetId) {
+            const slash = path.lastIndexOf("/");
+            const dir = path.slice(0, slash);
+            const name = path.slice(slash + 1);
+            const { data: listed } = await admin.storage.from(BUCKET).list(dir, { search: name, limit: 100 });
+            const objectExists = (listed ?? []).some((entry) => entry.name === name);
+            if (!objectExists) {
+              return await failSticker(job, "Could not save the finished sticker image.", "STORAGE_UPLOAD_FAILED");
+            }
+          }
+        } else if (jobIsCandidate) {
+          assetId = await findCandidateAsset();
+        }
 
         const parentJobId = job.input_json && typeof job.input_json === "object" ? (job.input_json as Record<string, unknown>).parent_job_id : null;
         let parentTaskId: string | null = null;
@@ -791,12 +818,6 @@ Deno.serve(async (req: Request) => {
           parentModel = parent?.provider_model ?? null;
         }
 
-        // A losing candidate poller reuses the asset the winner already recorded.
-        let assetId: string | null = null;
-        if (jobIsCandidate) {
-          const { data: existingAsset } = await admin.from("media_assets").select("id").eq("workspace_id", job.workspace_id).eq("storage_path", path).maybeSingle();
-          assetId = existingAsset?.id ?? null;
-        }
         if (!assetId) {
           const { data: asset, error: assetError } = await admin.from("media_assets").insert({
             workspace_id: job.workspace_id, uploaded_by: job.user_id, storage_path: path, asset_type: "generated_sticker",
