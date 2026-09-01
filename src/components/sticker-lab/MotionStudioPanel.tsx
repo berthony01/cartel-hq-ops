@@ -354,7 +354,9 @@ export function MotionStudioPanel({
           <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Telegram preparation
           </p>
-          {currentIsTelegramReady ? (
+          {motionIsLive ? (
+            <StatusBadge tone="green">Motion live on Telegram</StatusBadge>
+          ) : currentIsTelegramReady ? (
             <StatusBadge tone="green">Telegram-ready</StatusBadge>
           ) : null}
         </div>
@@ -365,12 +367,21 @@ export function MotionStudioPanel({
             Motion.
           </p>
         ) : currentIsTelegramReady ? (
-          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-            A Telegram-formatted derivative of Version {current.versionNumber} is prepared and
-            stored. It has not been published to Telegram and Telegram has not accepted it. The
-            Telegram release is unchanged.
-          </p>
+          motionIsLive ? (
+            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              Version {current.versionNumber} is the live Telegram release for this sticker. Its
+              Telegram-formatted derivative was accepted by Telegram and replaced this sticker in
+              the existing set.
+            </p>
+          ) : (
+            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              A Telegram-formatted derivative of Version {current.versionNumber} is prepared and
+              stored. The Telegram release for this sticker is still static until you release motion
+              explicitly.
+            </p>
+          )
         ) : !currentFromCurrentStatic ? (
+
           <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
             This Current Motion came from an earlier static image. Generate and approve motion from
             the current static image before preparing it for Telegram.
