@@ -617,6 +617,9 @@ Deno.serve(async (req: Request) => {
       const expectedOldMotionVersionId = String(sticker.current_motion_version_id);
       const expectedOldFileId = oldFileId;
       const expectedOldVariant = sticker.release_variant ? String(sticker.release_variant) : null;
+      const expectedOldReleasedMotionVersionId = sticker.telegram_motion_version_id
+        ? String(sticker.telegram_motion_version_id)
+        : null;
 
       const existingSet = await maybeGetStickerSet(TELEGRAM_BOT_TOKEN, setName);
       const setStickers = Array.isArray(existingSet?.stickers) ? existingSet.stickers : [];
@@ -624,14 +627,11 @@ Deno.serve(async (req: Request) => {
         return respond({ error: "TELEGRAM_STATE_MISMATCH", message: "CARTEL HQ could not confirm this sticker inside its Telegram set. Refresh the Telegram status before releasing the motion." }, 409);
       }
 
-      // Idempotency: this exact motion file is already the live Telegram sticker.
-      if (
-        expectedOldVariant === "motion" &&
-        motionMetadata["telegram_accepted"] === true &&
-        String(motionMetadata["telegram_file_id"] ?? "") === oldFileId
-      ) {
+      // Idempotency: this exact motion version is already the live Telegram release.
+      if (expectedOldVariant === "motion" && expectedOldReleasedMotionVersionId === motionVersionId) {
         return respond({ status: "unchanged", releaseVariant: "motion", telegramReplaced: false, stickerId, motionVersionId, setName, setUrl: pack.telegram_set_url ?? undefined, bot });
       }
+
 
       const { data: connection } = await admin.from("telegram_connections").select("*").eq("user_id", user.id).maybeSingle();
       if (!connection?.telegram_user_id) return respond({ error: "OWNER_ID_REQUIRED", message: "Telegram owner user ID is required before releasing a motion sticker." }, 400);
