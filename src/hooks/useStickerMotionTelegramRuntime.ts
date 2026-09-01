@@ -273,7 +273,13 @@ export function useStickerMotionTelegramRuntime(params: {
         // spent nothing. No job to poll.
         if (!started.aiJobId) {
           if (started.status === "ready" || started.telegramMotionAssetId) {
-            patchRun(stickerId, { stage: "ready", aiJobId: null, failure: undefined });
+            patchRun(stickerId, {
+              stage: "ready",
+              aiJobId: null,
+              failure: undefined,
+              retryableNormalizationJobId: null,
+            });
+
             setTelegramMotionReadySignal((n) => n + 1);
             return;
           }
