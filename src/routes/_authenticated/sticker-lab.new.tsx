@@ -727,7 +727,17 @@ function StickerLabBuilder() {
     // Motion recovery is read-only too: it resumes an existing motion job and
     // can never call `start`, so it never creates provider work.
     void recoverMotion(packId, stickerIds);
-  }, [candidateRecoveryKey, recoverCandidates, recoverVariations, recoverMotion]);
+    // Telegram preparation recovery is read-only for the same reason: it can
+    // only resume an existing prep job and never calls the C1 `start` action.
+    void recoverTelegramPrepare(packId, stickerIds);
+  }, [
+    candidateRecoveryKey,
+    recoverCandidates,
+    recoverVariations,
+    recoverMotion,
+    recoverTelegramPrepare,
+  ]);
+
 
 
   /**
