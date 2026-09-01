@@ -16,7 +16,6 @@ import { countStickerVersions } from "@/lib/sticker-versions";
 import { fetchPackGroupDistribution } from "@/lib/telegram-group";
 import { fetchDropStatus, scheduleState, SCHEDULE_STATE_LABEL } from "@/lib/sticker-drops";
 
-
 export const Route = createFileRoute("/_authenticated/sticker-lab/$packId")({
   head: () => ({
     meta: [
@@ -37,7 +36,6 @@ export const Route = createFileRoute("/_authenticated/sticker-lab/$packId")({
   }),
   component: PackManagerPage,
 });
-
 
 function PackManagerPage() {
   const { packId } = Route.useParams();
@@ -82,7 +80,6 @@ function PackManagerPage() {
     };
   }, [assets]);
 
-
   const stickerIds = useMemo(() => stickers.map((s) => s.id), [stickers]);
   const sameWorkspace = !!pack && !!workspaceId && pack.workspace_id === workspaceId;
 
@@ -110,7 +107,6 @@ function PackManagerPage() {
   const setUrl = data?.telegram.pack?.telegram_set_url ?? null;
   const published = !!setUrl;
   const wrongWorkspace = !!pack && !!workspaceId && pack.workspace_id !== workspaceId;
-
 
   if (packQuery.isLoading) {
     return <p className="text-sm text-muted-foreground">Loading pack…</p>;
@@ -357,7 +353,6 @@ function PackManagerPage() {
   ];
 
   return (
-
     <div className="flex min-w-0 flex-col gap-6 sm:gap-8">
       <PageHeader
         eyebrow="Sticker Pack"
@@ -383,7 +378,9 @@ function PackManagerPage() {
         >
           <p className="flex items-start gap-2 text-sm text-muted-foreground">
             <Archive className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-            <span>Editing, publishing and community delivery actions are hidden while archived.</span>
+            <span>
+              Editing, publishing and community delivery actions are hidden while archived.
+            </span>
           </p>
         </Section>
       ) : null}
@@ -419,83 +416,85 @@ function PackManagerPage() {
         </div>
       </Section>
 
-
       {isArchived ? null : (
-      <Section
-        variant="hero"
-        title={
-          published
-            ? "Published to Telegram"
-            : allReady
-              ? "Ready to publish"
-              : readyCount > 0
-                ? "Review in progress"
-                : "In progress"
-        }
-        description={
-          published
-            ? "One Telegram sticker set exists for this pack. Publishing again only adds missing reviewed stickers; adding a community sends the same set."
-            : allReady
-              ? `${readyCount} of ${stickers.length} stickers are ready. Open Quality & Release to create the Telegram sticker set.`
-              : readyCount > 0
-                ? `${readyCount} of ${stickers.length} stickers are ready. Open Quality & Release to review what can be published and what still needs work.`
-                : "Keep generating and reviewing stickers in the builder before publishing."
-        }
-        actions={
-          <StatusBadge tone={published ? "green" : allReady ? "gold" : "muted"}>
-            {statusLabel}
-          </StatusBadge>
-        }
-      >
-        <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
-          <strong className="text-foreground">Continue editing</strong> returns you to the same
-          five-step Studio flow (Blueprint → Concept Studio → Sticker Studio → Quality &amp;
-          Release). <strong className="text-foreground">Review &amp; release</strong> jumps straight
-          to Quality &amp; Release.
-        </p>
-        <div className="flex flex-wrap gap-2 [&>*]:min-w-0">
-          {readyCount > 0 ? (
-            <Button asChild className="min-h-11 flex-1 sm:flex-none">
-              <Link to="/sticker-lab/new" search={{ pack: pack.id, step: 5 }}>
-                <Send className="size-4" aria-hidden="true" />
-                Review &amp; release
+        <Section
+          variant="hero"
+          title={
+            published
+              ? "Published to Telegram"
+              : allReady
+                ? "Ready to publish"
+                : readyCount > 0
+                  ? "Review in progress"
+                  : "In progress"
+          }
+          description={
+            published
+              ? "One Telegram sticker set exists for this pack. Publishing again only adds missing reviewed stickers; adding a community sends the same set."
+              : allReady
+                ? `${readyCount} of ${stickers.length} stickers are ready. Open Quality & Release to create the Telegram sticker set.`
+                : readyCount > 0
+                  ? `${readyCount} of ${stickers.length} stickers are ready. Open Quality & Release to review what can be published and what still needs work.`
+                  : "Keep generating and reviewing stickers in the builder before publishing."
+          }
+          actions={
+            <StatusBadge tone={published ? "green" : allReady ? "gold" : "muted"}>
+              {statusLabel}
+            </StatusBadge>
+          }
+        >
+          <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
+            <strong className="text-foreground">Continue editing</strong> returns you to the same
+            five-step Studio flow (Blueprint → Concept Studio → Sticker Studio → Quality &amp;
+            Release). <strong className="text-foreground">Review &amp; release</strong> jumps
+            straight to Quality &amp; Release.
+          </p>
+          <div className="flex flex-wrap gap-2 [&>*]:min-w-0">
+            {readyCount > 0 ? (
+              <Button asChild className="min-h-11 flex-1 sm:flex-none">
+                <Link to="/sticker-lab/new" search={{ pack: pack.id, step: 5 }}>
+                  <Send className="size-4" aria-hidden="true" />
+                  Review &amp; release
+                </Link>
+              </Button>
+            ) : null}
+            <Button
+              asChild
+              variant={readyCount > 0 ? "outline" : "default"}
+              className="min-h-11 flex-1 sm:flex-none"
+            >
+              <Link to="/sticker-lab/new" search={{ pack: pack.id }}>
+                <Pencil className="size-4" aria-hidden="true" />
+                Continue editing
               </Link>
             </Button>
-          ) : null}
-          <Button
-            asChild
-            variant={readyCount > 0 ? "outline" : "default"}
-            className="min-h-11 flex-1 sm:flex-none"
-          >
-            <Link to="/sticker-lab/new" search={{ pack: pack.id }}>
-              <Pencil className="size-4" aria-hidden="true" />
-              Continue editing
-            </Link>
-          </Button>
-          {setUrl ? (
-            <Button asChild variant="outline" className="min-h-11 flex-1 sm:flex-none">
-              <a href={setUrl} target="_blank" rel="noreferrer noopener">
-                <ExternalLink className="size-4" aria-hidden="true" />
-                Open Telegram pack
-              </a>
-            </Button>
-          ) : null}
-          {setUrl ? (
-            <Button asChild variant="ghost" size="sm" className="min-h-11">
-              <Link to="/distribution" search={{ pack: pack.id }}>
-                Manage Sticker Drops
-              </Link>
-            </Button>
-          ) : null}
-        </div>
-      </Section>
+            {setUrl ? (
+              <Button asChild variant="outline" className="min-h-11 flex-1 sm:flex-none">
+                <a href={setUrl} target="_blank" rel="noreferrer noopener">
+                  <ExternalLink className="size-4" aria-hidden="true" />
+                  Open Telegram pack
+                </a>
+              </Button>
+            ) : null}
+            {setUrl ? (
+              <Button asChild variant="ghost" size="sm" className="min-h-11">
+                <Link to="/distribution" search={{ pack: pack.id }}>
+                  Manage Sticker Drops
+                </Link>
+              </Button>
+            ) : null}
+          </div>
+        </Section>
       )}
-
 
       <Section
         variant="primary"
         title="Stickers"
-        actions={<StatusBadge tone={readyCount > 0 ? "green" : "muted"}>{`${stickers.length} total`}</StatusBadge>}
+        actions={
+          <StatusBadge
+            tone={readyCount > 0 ? "green" : "muted"}
+          >{`${stickers.length} total`}</StatusBadge>
+        }
       >
         {stickers.length === 0 ? (
           <EmptyState
