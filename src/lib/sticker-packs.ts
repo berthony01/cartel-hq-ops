@@ -225,6 +225,9 @@ export type AiJobRow = {
   job_type: string;
   status: string;
   error_message: string | null;
+  /** Existing durable failure classification, used for retry eligibility. */
+  error_code: string | null;
+
   created_at: string;
   /**
    * Phase 4D — true when this job generates a CANDIDATE image for an already
