@@ -255,7 +255,6 @@ function PackManagerPage() {
       title: "Send to communities",
       body:
         targets.length > 0
-
           ? "Delivery was attempted but no group is confirmed. Retry from Quality & Release."
           : "The set is live on Telegram. Deliver it to your connected communities from Quality & Release.",
       action: (
@@ -288,7 +287,6 @@ function PackManagerPage() {
     nextStep = {
       title: "Set up Sticker Drops",
       body: "Your set is live and delivered. Schedule automatic drops so the community keeps seeing it.",
-      action: (
 
         <Button asChild className="min-h-11">
           <Link to="/distribution" search={{ pack: pack.id }}>
