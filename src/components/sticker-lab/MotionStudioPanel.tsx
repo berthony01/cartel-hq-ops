@@ -138,6 +138,7 @@ export function MotionStudioPanel({
   const [instruction, setInstruction] = useState("");
   const [confirmGenerate, setConfirmGenerate] = useState(false);
   const [approveTarget, setApproveTarget] = useState<StickerMotionVersion | null>(null);
+  const [confirmTelegramPrep, setConfirmTelegramPrep] = useState(false);
 
   const current = currentMotionVersion(state);
   const known = !error && !loading && !!state;
@@ -146,6 +147,22 @@ export function MotionStudioPanel({
   // Unknown must stay unknown: a failed probe never claims "not configured".
   const providerUnknown = configError || (configLoading && !config);
   const providerBlocked = providerUnknown || config?.configured !== true;
+
+  // ---- Phase C2 Telegram preparation (media formatting only, never publishing)
+  const telegramBusy = isTelegramPrepBusy(telegramRun.stage);
+  const telegramProviderUnknown =
+    telegramConfigError || (telegramConfigLoading && !telegramConfig);
+  const telegramProviderBlocked =
+    telegramProviderUnknown || telegramConfig?.configured !== true;
+  const currentIsTelegramReady = !!current?.telegramAssetId;
+  const currentFromCurrentStatic = current
+    ? sourceIsCurrentStatic(current, state?.currentStaticAssetId)
+    : false;
+  const canPrepareTelegram =
+    !!current && currentFromCurrentStatic && !currentIsTelegramReady;
+  const prepareDisabled =
+    telegramBusy || telegramProviderBlocked || busy || approvingVersionId !== null;
+
 
   const requirementsMet =
     mode === "quick"
