@@ -904,39 +904,26 @@ Deno.serve(async (req: Request) => {
 
       return respond({ aiJobId: job.id, jobType: JOB_TYPE, status: job.status, stage });
 
-      /** Creates exactly ONE CloudConvert job. Only reachable from a claimed transition. */
+      /**
+       * Creates exactly ONE CloudConvert job through the shared implementation.
+       * Only reachable from a claimed stage transition.
+       */
       async function createCloudConvert(alphaUrl: string, currentOutput: Json) {
-        const tag = `cartelhq-motion-telegram-${job!.id}`;
-        const create = await ccFetch("/jobs", CLOUDCONVERT_API_KEY, {
-          method: "POST",
-          body: JSON.stringify({
-            tag,
-            tasks: {
-              "import-motion": { operation: "import/url", url: alphaUrl, filename: "motion-alpha.webm" },
-              "normalize-motion": {
-                operation: "command",
-                input: "import-motion",
-                engine: "ffmpeg",
-                command: "ffmpeg",
-                arguments: FFMPEG_ARGUMENTS,
-              },
-              "metadata-motion": { operation: "metadata", input: "normalize-motion" },
-              "export-motion": { operation: "export/url", input: "normalize-motion" },
-            },
-          }),
-        });
-        if (!create.ok) {
-          return await failJob(job!.id, create.message, "CLOUDCONVERT_START_FAILED");
-        }
-        const ccJobId = str(asObject(create.payload.data).id);
-        if (!ccJobId) {
-          return await failJob(job!.id, "CloudConvert returned no job identifier.", "CLOUDCONVERT_START_FAILED");
+        const created = await createCloudConvertJob(CLOUDCONVERT_API_KEY, job!.id, alphaUrl);
+        if (!created.ok) {
+          return await failJob(job!.id, created.message, "CLOUDCONVERT_START_FAILED");
         }
         await admin.from("ai_jobs").update({
-          output_json: { ...currentOutput, stage: "cloudconvert_processing", cloudconvert_job_id: ccJobId, cloudconvert_tag: tag },
+          output_json: {
+            ...currentOutput,
+            stage: "cloudconvert_processing",
+            cloudconvert_job_id: created.ccJobId,
+            cloudconvert_tag: created.tag,
+          },
         }).eq("id", job!.id);
         return respond({ aiJobId: job!.id, jobType: JOB_TYPE, status: "running", stage: "telegram_normalizing" });
       }
+
     }
 
     return respond({ error: "UNKNOWN_ACTION" }, 400);
