@@ -1352,6 +1352,126 @@ function StickerLabBuilder() {
     if (lifecycleMode === "retry") void doDistribute(failedTargetIds);
   };
 
+  /* -------- Quality & Release orientation (presentation-derived, no new queries) -------- */
+  const totalStickers = draft.concepts.length;
+  const qualityPathState = checksRunning ? "Checking" : exportReady ? "Ready" : "Needs review";
+  const telegramPathState = allPublished
+    ? "Live"
+    : partiallyPublished || telegramSetExists
+      ? "Partly published"
+      : "Not published";
+  const communityPathState =
+    telegramGroup.connectedGroupCount === 0
+      ? "No community"
+      : selectedGroupIds.length === 0
+        ? "Select targets"
+        : !groupsSelectedAndReady
+          ? "Needs setup"
+          : `${selectedGroupIds.length} selected`;
+  const dropsPathState = dropStatusQuery.isPending
+    ? "Checking"
+    : dropStatusQuery.isError
+      ? "Unavailable"
+      : dropKillSwitch && packSchedules.length > 0
+        ? "Emergency pause"
+        : packSchedules.length === 0
+          ? "Not configured"
+          : "Configured";
+  const releasePath: { label: string; state: string }[] = [
+    { label: "1 Quality checks", state: qualityPathState },
+    { label: "2 Export", state: "Optional" },
+    { label: "3 Telegram pack", state: telegramPathState },
+    { label: "4 Communities", state: communityPathState },
+    { label: "5 Sticker Drops", state: dropsPathState },
+  ];
+
+  const releaseAdvice: {
+    title: string;
+    body: string;
+    cta: null | "sticker-studio" | "telegram" | "drops" | "lifecycle";
+  } = checksRunning
+    ? {
+        title: "Quality checks are running",
+        body: "Transparency and Telegram cutout checks are still finishing. The next step appears once they complete.",
+        cta: null,
+      }
+    : !exportReady
+      ? {
+          title: "Finish quality review",
+          body:
+            attentionCount > 0
+              ? `${attentionCount} sticker${attentionCount === 1 ? "" : "s"} need attention. Fix or regenerate them in Sticker Studio, then come back.`
+              : `${exportableCount} of ${totalStickers} stickers pass every check. Finish the remaining ones in Sticker Studio before release.`,
+          cta: "sticker-studio",
+        }
+      : !telegram.botConfigured || !telegram.ownerConnected
+        ? {
+            title: "Finish Telegram setup",
+            body: "Telegram is not fully connected yet, so this pack cannot be published. Complete setup in Community Command.",
+            cta: "telegram",
+          }
+        : telegramGroup.connectedGroupCount === 0
+          ? {
+              title: "Connect a community",
+              body: "Connect at least one Telegram community in Community Command to release this pack.",
+              cta: "telegram",
+            }
+          : selectedGroupIds.length === 0
+            ? {
+                title: "Choose community targets",
+                body: "Select at least one connected community below to receive this pack.",
+                cta: null,
+              }
+            : !groupsSelectedAndReady
+              ? {
+                  title: "Fix community setup",
+                  body: "One of the selected communities is not ready. Review its setup in Community Command.",
+                  cta: "telegram",
+                }
+              : lifecycleMode === "attention"
+                ? {
+                    title: "Finish quality review",
+                    body: "Some stickers are still not published because they have not passed review. Finish them in Sticker Studio.",
+                    cta: "sticker-studio",
+                  }
+                : lifecycleMode !== "current"
+                  ? {
+                      title: "Release this pack",
+                      body: `The recommended action is: ${lifecycleLabel}.`,
+                      cta: "lifecycle",
+                    }
+                  : dropStatusQuery.isPending
+                    ? {
+                        title: "Checking Sticker Drops",
+                        body: "Sticker Drops status is still loading for this pack.",
+                        cta: null,
+                      }
+                    : dropStatusQuery.isError
+                      ? {
+                          title: "Sticker Drops status unavailable",
+                          body: "Sticker Drops status could not be loaded right now. Open Sticker Drops to inspect it safely.",
+                          cta: "drops",
+                        }
+                      : dropKillSwitch && packSchedules.length > 0
+                        ? {
+                            title: "Sticker Drops emergency pause",
+                            body: "Automation is paused by the emergency stop. Review it in Sticker Drops before relying on scheduled posts.",
+                            cta: "drops",
+                          }
+                        : packSchedules.length === 0
+                          ? {
+                              title: "Set up Sticker Drops",
+                              body: "Release is complete. Schedule Sticker Drops so your community keeps seeing this pack.",
+                              cta: "drops",
+                            }
+                          : {
+                              title: "Release complete",
+                              body: "This pack is published, delivered and has Sticker Drops configured. Manage them any time.",
+                              cta: "drops",
+                            };
+
+
+
   const shortNamePreview = packId
     ? previewShortName(draft.packName, packId, telegram.botUsername)
     : null;
@@ -3329,6 +3449,24 @@ function StickerLabBuilder() {
           title="Quality & Release"
           hint="In order: quality checks → export (optional) → Telegram pack → communities → Sticker Drops."
         >
+          <ol
+            className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5 [&>*]:min-w-0"
+            aria-label="Release path"
+          >
+            {releasePath.map((s) => (
+              <li
+                key={s.label}
+                className="rounded-md border border-border bg-background/40 px-3 py-2"
+              >
+                <p className="truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {s.label}
+                </p>
+                <p className="mt-1 truncate text-xs font-semibold text-foreground">{s.state}</p>
+              </li>
+            ))}
+          </ol>
+
+
 
           <section className="cartel-panel mb-6 rounded-lg p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -3358,19 +3496,42 @@ function StickerLabBuilder() {
               </StatusBadge>
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 [&>*]:min-w-0">
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 xl:grid-cols-5 [&>*]:min-w-0">
               <SummaryStat
-                label="Ready to publish"
-                value={`${exportableCount}/${draft.concepts.length}`}
-                tone={exportReady && exportableCount > 0 ? "green" : "muted"}
+                label="Generated"
+                value={`${generatedCount}/${totalStickers}`}
+                tone={allReady && totalStickers > 0 ? "green" : "muted"}
               />
-              <SummaryStat label="In progress" value={String(activeCount)} tone="muted" />
               <SummaryStat
-                label="Failed / needs attention"
-                value={String(attentionCount)}
-                tone={attentionCount > 0 ? "red" : "muted"}
+                label="Server transparency"
+                value={`${transparentCount}/${totalStickers}`}
+                tone={transparentCount === totalStickers && totalStickers > 0 ? "green" : "muted"}
+              />
+              <SummaryStat
+                label="Browser alpha"
+                value={`${browserVerifiedCount}/${totalStickers}`}
+                tone={
+                  browserVerifiedCount === totalStickers && totalStickers > 0 ? "green" : "muted"
+                }
+              />
+              <SummaryStat
+                label="Telegram cutout"
+                value={`${cutoutVerifiedCount}/${totalStickers}`}
+                tone={cutoutVerifiedCount === totalStickers && totalStickers > 0 ? "green" : "muted"}
+              />
+              <SummaryStat
+                label="Release ready"
+                value={`${exportableCount}/${totalStickers}`}
+                tone={
+                  exportReady && exportableCount > 0
+                    ? "green"
+                    : attentionCount > 0
+                      ? "red"
+                      : "muted"
+                }
               />
             </div>
+
 
             <div
               className="mt-4 flex flex-wrap items-center gap-3 rounded-md border border-border bg-background/40 p-3"
@@ -3429,47 +3590,50 @@ function StickerLabBuilder() {
                 </Button>
               </div>
             </div>
-
-            <details className="mt-3 rounded-md border border-border/70 bg-background/30 p-3">
-              <summary className="min-h-9 cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                Verification detail
-              </summary>
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4 [&>*]:min-w-0">
-                <SummaryStat
-                  label="Backend ready"
-                  value={`${generatedCount}/${draft.concepts.length}`}
-                  tone={allReady ? "green" : "muted"}
-                />
-                <SummaryStat
-                  label="Backend transparency verified"
-                  value={`${transparentCount}/${draft.concepts.length}`}
-                  tone={
-                    transparentCount === draft.concepts.length && draft.concepts.length > 0
-                      ? "green"
-                      : "muted"
-                  }
-                />
-                <SummaryStat
-                  label="Browser alpha verified"
-                  value={`${browserVerifiedCount}/${draft.concepts.length}`}
-                  tone={
-                    browserVerifiedCount === draft.concepts.length && draft.concepts.length > 0
-                      ? "green"
-                      : "muted"
-                  }
-                />
-                <SummaryStat
-                  label="Telegram cutout verified"
-                  value={`${cutoutVerifiedCount}/${draft.concepts.length}`}
-                  tone={
-                    cutoutVerifiedCount === draft.concepts.length && draft.concepts.length > 0
-                      ? "green"
-                      : "muted"
-                  }
-                />
-              </div>
-            </details>
           </section>
+
+          <section className="cartel-panel mb-6 rounded-lg p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              What to do now
+            </p>
+            <p className="mt-1 text-sm font-semibold text-foreground">{releaseAdvice.title}</p>
+            <p className="mt-1 max-w-prose text-xs text-muted-foreground">{releaseAdvice.body}</p>
+            {releaseAdvice.cta === "sticker-studio" ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-3 min-h-11"
+                onClick={() => setStep(4)}
+              >
+                Open Sticker Studio
+              </Button>
+            ) : releaseAdvice.cta === "telegram" ? (
+              <Button asChild variant="outline" className="mt-3 min-h-11">
+                <Link to="/telegram">Open Community Command</Link>
+              </Button>
+            ) : releaseAdvice.cta === "drops" ? (
+              <Button asChild variant="outline" className="mt-3 min-h-11">
+                <Link to="/distribution" search={packId ? { pack: packId } : {}}>
+                  Manage Sticker Drops
+                </Link>
+              </Button>
+            ) : releaseAdvice.cta === "lifecycle" ? (
+              <Button
+                type="button"
+                className="mt-3 min-h-11"
+                disabled={!lifecycleEnabled || lifecycleBusy}
+                onClick={runLifecycleAction}
+              >
+                {lifecycleBusy ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Send className="size-4" aria-hidden="true" />
+                )}
+                {lifecycleLabel}
+              </Button>
+            ) : null}
+          </section>
+
 
 
           {!exportReady ? (
