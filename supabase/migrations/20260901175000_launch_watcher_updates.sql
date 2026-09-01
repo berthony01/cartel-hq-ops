@@ -136,7 +136,9 @@ begin
     raise exception 'A client request id is required.' using errcode = '22023';
   end if;
 
-  select * into _launch from public.launches l where l.id = _launch_id;
+  -- Serialize concurrent sends for this launch so two different
+  -- client_request_ids cannot both pass the anti-spam and daily-cap checks.
+  select * into _launch from public.launches l where l.id = _launch_id for update;
   if _launch.id is null then
     raise exception 'Launch not found.' using errcode = 'P0002';
   end if;
