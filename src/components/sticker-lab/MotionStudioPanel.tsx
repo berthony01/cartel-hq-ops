@@ -330,7 +330,7 @@ export function MotionStudioPanel({
             Telegram preparation
           </p>
           {currentIsTelegramReady ? (
-            <StatusBadge tone="success">Telegram-ready</StatusBadge>
+            <StatusBadge tone="green">Telegram-ready</StatusBadge>
           ) : null}
         </div>
 
