@@ -2021,7 +2021,11 @@ function StickerLabBuilder() {
       ) : null}
 
       {step === 2 ? (
-        <StepCard title="Pack Setup" hint="Saved to this project’s sticker packs.">
+        <StepCard
+          title="Creative Direction"
+          hint="Blueprint, part 2. Name the pack and set the creative rules the AI must follow. Saved to this project’s sticker packs."
+        >
+
           <div className="grid gap-6 md:grid-cols-2 [&>*]:min-w-0">
             <div>
               <Label htmlFor="pack-name">Pack name</Label>
