@@ -4208,6 +4208,10 @@ function StickerLabBuilder() {
                             if (!id) return;
                             void startTelegramPrepare({ packId: id, ...input });
                           }}
+                          onRetryNormalization={(input) => {
+                            void retryTelegramNormalization(input.stickerId);
+                          }}
+
                           telegramPublished={mLocked}
                           releasingMotion={motionReleaseStickerId === mStickerId}
                           releaseError={
