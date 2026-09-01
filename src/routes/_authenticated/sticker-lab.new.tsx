@@ -120,7 +120,18 @@ import {
 } from "@/components/sticker-lab/BuilderPrimitives";
 import { StepGuide } from "@/components/sticker-lab/StickerLabJourney";
 import { MotionStudioPanel } from "@/components/sticker-lab/MotionStudioPanel";
-import { loadStickerMotionState, type MotionMode } from "@/lib/sticker-motion";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  loadStickerMotionState,
+  currentMotionVersion,
+  type MotionMode,
+} from "@/lib/sticker-motion";
 import { useStickerMotionGenerationRuntime } from "@/hooks/useStickerMotionGenerationRuntime";
 import {
   fetchStickerMotionAiConfig,
@@ -426,6 +437,12 @@ function StickerLabBuilder() {
     recoverTelegramPrepare,
     telegramPrepRunFor,
   } = useStickerMotionTelegramRuntime({ workspaceId });
+  /**
+   * R2 — presentation only. Concept whose Motion Studio is open in the focused
+   * Sheet. Opening or closing it starts, cancels or changes nothing: the
+   * route-level motion runtimes stay mounted either way.
+   */
+  const [motionSheetConceptId, setMotionSheetConceptId] = useState<string | null>(null);
   /** Motion version currently being approved as Current Motion (non-billable). */
   const [approvingMotionVersionId, setApprovingMotionVersionId] = useState<string | null>(null);
   const [motionApproveError, setMotionApproveError] = useState<{ stickerId: string; message: string } | null>(null);
@@ -3402,7 +3419,7 @@ function StickerLabBuilder() {
           ) : null}
 
 
-          <ul className="mt-6 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-4 [&>*]:min-w-0">
+          <ul className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3 [&>*]:min-w-0">
             {draft.concepts.map((c, index) => {
               const stage = stageFor(c.id);
               const stickerId = stickerIdFor(c.id);
@@ -3460,6 +3477,47 @@ function StickerLabBuilder() {
                 };
               });
               const hasVariationTakes = variationTakes.some((t) => t.version);
+              const takeCount = variationTakes.filter((t) => t.version).length;
+              /**
+               * R2 — presentation only. Derived from already-loaded round state
+               * and durable takes. No query, no provider call.
+               */
+              const variationSummary: { label: string; tone: "gold" | "green" | "red" | "muted" } =
+                variationBusy
+                  ? { label: "Running", tone: "gold" }
+                  : varRound.failure
+                    ? { label: "Failed", tone: "red" }
+                    : takeCount === 3
+                      ? { label: "Variations ready", tone: "green" }
+                      : takeCount > 0
+                        ? { label: "Partial", tone: "gold" }
+                        : { label: "Not generated", tone: "muted" };
+              /** R2 — compact motion status, read only from loaded motion state. */
+              const motionState = stickerId ? motionBySticker[stickerId] : undefined;
+              const motionStateError =
+                motionQuery.isError ||
+                (!!stickerId &&
+                  !motionQuery.isPending &&
+                  !motionQuery.isFetching &&
+                  motionState === undefined);
+              const motionCurrent = currentMotionVersion(motionState);
+              const motionSummary: { label: string; tone: "gold" | "green" | "red" | "muted" } =
+                motionStateError
+                  ? { label: "Status unavailable", tone: "muted" }
+                  : motionState?.releaseVariant === "motion"
+                    ? { label: "Motion live", tone: "green" }
+                    : motionCurrent?.telegramAssetId
+                      ? { label: "Telegram-ready", tone: "green" }
+                      : motionCurrent
+                        ? { label: "Current approved", tone: "gold" }
+                        : (motionState?.versions.length ?? 0) > 0
+                          ? {
+                              label: `${motionState!.versions.length} motion version${
+                                motionState!.versions.length === 1 ? "" : "s"
+                              }`,
+                              tone: "gold",
+                            }
+                          : { label: "No motion yet", tone: "muted" };
               return (
                 <li key={c.id} className="cartel-panel rounded-lg p-2.5 sm:p-4">
                   <div className="mb-3 flex items-center justify-between gap-2">
@@ -3695,7 +3753,16 @@ function StickerLabBuilder() {
                   {/* A/B/C variations — review only. The current image, sticker
                       status and any live Telegram set are never touched. */}
                   {stickerId && preview ? (
-                    <div className="mt-3 rounded-md border border-border bg-background/40 p-2.5">
+                    <details className="mt-3 rounded-md border border-border bg-background/40">
+                      {/* Collapsed by default. Expanding is presentation only —
+                          no provider call is attached to this summary. */}
+                      <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 p-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        <span className="truncate">A/B/C Variations</span>
+                        <StatusBadge tone={variationSummary.tone}>
+                          {variationSummary.label}
+                        </StatusBadge>
+                      </summary>
+                    <div className="border-t border-border p-2.5">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                           A/B/C variations
@@ -3875,65 +3942,34 @@ function StickerLabBuilder() {
                         ) : null}
                       </div>
                     </div>
+                    </details>
                   ) : null}
 
-                  {/* Motion Studio — review-only motion attached to the approved
-                      static. Generation is billable and gated behind an explicit
-                      confirmation inside the panel; approval is non-billable and
-                      never touches release_variant or Telegram. */}
+                  {/* Motion — compact status only. The full Motion Studio lives
+                      in one focused Sheet outside this list. Nothing here starts
+                      provider work or touches Telegram. */}
                   {stickerId && preview ? (
-                    <MotionStudioPanel
-                      stickerId={stickerId}
-                      stickerLabel={c.label}
-                      state={motionBySticker[stickerId]}
-                      loading={motionQuery.isPending || motionQuery.isFetching}
-                      error={
-                        motionQuery.isError ||
-                        (!motionQuery.isPending &&
-                          !motionQuery.isFetching &&
-                          motionBySticker[stickerId] === undefined)
-                      }
-                      run={motionRunFor(stickerId)}
-                      config={motionConfigQuery.data}
-                      configLoading={motionConfigQuery.isPending || motionConfigQuery.isFetching}
-                      configError={motionConfigQuery.isError}
-                      approvingVersionId={approvingMotionVersionId}
-                      approveError={
-                        motionApproveError?.stickerId === stickerId ? motionApproveError.message : null
-                      }
-                      onGenerate={(input: {
-                        stickerId: string;
-                        motionMode: MotionMode;
-                        motionPreset?: StickerMotionPreset;
-                        motionInstruction?: string;
-                      }) => {
-                        const id = draft.packId;
-                        if (!id) return;
-                        void startMotion({ packId: id, ...input });
-                      }}
-                      onSetCurrentMotion={(input) => void approveCurrentMotion(input)}
-                      telegramRun={telegramPrepRunFor(stickerId)}
-                      telegramConfig={telegramMotionConfigQuery.data}
-                      telegramConfigLoading={
-                        telegramMotionConfigQuery.isPending || telegramMotionConfigQuery.isFetching
-                      }
-                      telegramConfigError={telegramMotionConfigQuery.isError}
-                      onPrepareTelegram={(input) => {
-                        const id = draft.packId;
-                        if (!id) return;
-                        void startTelegramPrepare({ packId: id, ...input });
-                      }}
-                      telegramPublished={locked}
-                      releasingMotion={motionReleaseStickerId === stickerId}
-                      releaseError={
-                        motionReleaseError?.stickerId === stickerId
-                          ? motionReleaseError.message
-                          : null
-                      }
-                      onReleaseMotion={(input) => void releaseCurrentMotion(input)}
-
-
-                    />
+                    <div className="mt-3 rounded-md border border-border bg-background/40 p-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          Motion
+                        </p>
+                        <StatusBadge tone={motionSummary.tone}>{motionSummary.label}</StatusBadge>
+                      </div>
+                      <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                        Animation is created, approved and released in a focused Motion Studio
+                        workspace.
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="mt-2 min-h-10 w-full"
+                        onClick={() => setMotionSheetConceptId(c.id)}
+                      >
+                        Open Motion Studio
+                      </Button>
+                    </div>
                   ) : null}
 
 
@@ -4052,6 +4088,132 @@ function StickerLabBuilder() {
               );
             })}
           </ul>
+
+          {/* R2 — the ONE Motion Studio instance. Presentation only: the motion
+              runtimes stay mounted at route level, so closing this Sheet never
+              cancels in-flight work and reopening shows the same live state. */}
+          {(() => {
+            const mc = motionSheetConceptId
+              ? (draft.concepts.find((x) => x.id === motionSheetConceptId) ?? null)
+              : null;
+            const mStickerId = mc ? stickerIdFor(mc.id) : null;
+            const mPreview = mStickerId ? previews[mStickerId] : undefined;
+            const mLocked = mc ? conceptTelegramLocked(mc.id) : false;
+            return (
+              <Sheet
+                open={!!mc && !!mStickerId}
+                onOpenChange={(open) => {
+                  if (!open) setMotionSheetConceptId(null);
+                }}
+              >
+                <SheetContent
+                  side="right"
+                  className="w-full overflow-y-auto p-4 sm:max-w-3xl sm:p-6"
+                >
+                  {mc && mStickerId ? (
+                    <>
+                      <SheetHeader>
+                        <SheetTitle>{mc.label} — Motion Studio</SheetTitle>
+                        <SheetDescription>
+                          Generate, approve, prepare and release motion for this sticker. The
+                          static sticker remains the source of truth until you explicitly release
+                          motion.
+                        </SheetDescription>
+                      </SheetHeader>
+                      <div className="mt-4 flex items-center gap-3">
+                        <span
+                          className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border"
+                          style={CHECKERBOARD}
+                        >
+                          {mPreview ? (
+                            <img
+                              src={mPreview.url}
+                              alt={`${mc.label} current static sticker`}
+                              className="max-h-full max-w-full object-contain"
+                            />
+                          ) : null}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
+                            {mc.emoji} {mc.label}
+                          </p>
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            {mLocked ? (
+                              <StatusBadge tone="green">Live on Telegram</StatusBadge>
+                            ) : (
+                              <StatusBadge tone="muted">Not on Telegram</StatusBadge>
+                            )}
+                            <span className="text-[10px] text-muted-foreground">
+                              Current static image
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-4">
+                        <MotionStudioPanel
+                          stickerId={mStickerId}
+                          stickerLabel={mc.label}
+                          state={motionBySticker[mStickerId]}
+                          loading={motionQuery.isPending || motionQuery.isFetching}
+                          error={
+                            motionQuery.isError ||
+                            (!motionQuery.isPending &&
+                              !motionQuery.isFetching &&
+                              motionBySticker[mStickerId] === undefined)
+                          }
+                          run={motionRunFor(mStickerId)}
+                          config={motionConfigQuery.data}
+                          configLoading={
+                            motionConfigQuery.isPending || motionConfigQuery.isFetching
+                          }
+                          configError={motionConfigQuery.isError}
+                          approvingVersionId={approvingMotionVersionId}
+                          approveError={
+                            motionApproveError?.stickerId === mStickerId
+                              ? motionApproveError.message
+                              : null
+                          }
+                          onGenerate={(input: {
+                            stickerId: string;
+                            motionMode: MotionMode;
+                            motionPreset?: StickerMotionPreset;
+                            motionInstruction?: string;
+                          }) => {
+                            const id = draft.packId;
+                            if (!id) return;
+                            void startMotion({ packId: id, ...input });
+                          }}
+                          onSetCurrentMotion={(input) => void approveCurrentMotion(input)}
+                          telegramRun={telegramPrepRunFor(mStickerId)}
+                          telegramConfig={telegramMotionConfigQuery.data}
+                          telegramConfigLoading={
+                            telegramMotionConfigQuery.isPending ||
+                            telegramMotionConfigQuery.isFetching
+                          }
+                          telegramConfigError={telegramMotionConfigQuery.isError}
+                          onPrepareTelegram={(input) => {
+                            const id = draft.packId;
+                            if (!id) return;
+                            void startTelegramPrepare({ packId: id, ...input });
+                          }}
+                          telegramPublished={mLocked}
+                          releasingMotion={motionReleaseStickerId === mStickerId}
+                          releaseError={
+                            motionReleaseError?.stickerId === mStickerId
+                              ? motionReleaseError.message
+                              : null
+                          }
+                          onReleaseMotion={(input) => void releaseCurrentMotion(input)}
+                        />
+                      </div>
+                    </>
+                  ) : null}
+                </SheetContent>
+              </Sheet>
+            );
+          })()}
+
+
 
 
           <AlertDialog open={confirmRemaining} onOpenChange={setConfirmRemaining}>
