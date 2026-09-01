@@ -344,6 +344,7 @@ function StickerLabBuilder() {
     candidateReadySignal,
     startCandidate,
     recoverCandidates,
+    clearCandidateState,
     candidateStageFor,
   } = usePublishedStickerCandidateRuntime({
     workspaceId,
@@ -1106,6 +1107,10 @@ function StickerLabBuilder() {
     if (step === 4 && savedStickerIds.length > 0) void versionsQuery.refetch();
     const id = draft.packId;
     if (id) void loadExisting(id);
+    // Read-only forced candidate reconciliation. Never starts provider work.
+    if (step === 4 && id && savedStickerIds.length > 0) {
+      void recoverCandidates(id, savedStickerIds, { force: true });
+    }
   };
 
   /* ---------------- Phase 4B: set current / restore version ---------------- */
@@ -1144,12 +1149,15 @@ function StickerLabBuilder() {
       }
       if (result.status === "switched") {
         await reconcileAfterRestore();
+        // Durable reconciliation succeeded: stale candidate badge is no longer true.
+        clearCandidateState(target.stickerId);
         toast.success(`Version ${target.versionNumber} is now the current image.`);
         return;
       }
       if (result.status === "unchanged") {
         // Not a failure: durable state already matches the requested version.
         await reconcileAfterRestore();
+        clearCandidateState(target.stickerId);
         toast.message(result.message || RESTORE_MESSAGE.unchanged);
         return;
       }
@@ -1180,6 +1188,8 @@ function StickerLabBuilder() {
         versionId: target.versionId,
       });
       await reconcileAfterRestore();
+      // Only after durable reconciliation of the Telegram replacement.
+      clearCandidateState(target.stickerId);
       if (result.status === "switched") {
         toast.success(
           result.telegramReplaced
@@ -3429,8 +3439,7 @@ function StickerLabBuilder() {
                         </p>
                         {candFailure && !isCandidateBusy(candStage) ? (
                           <p className="mt-2 text-[11px] text-signal">
-                            {candFailure.title}. {candFailure.body} Your live Telegram sticker was
-                            not changed.
+                            {candFailure.title}. {candFailure.body}
                           </p>
                         ) : null}
                         <Button
