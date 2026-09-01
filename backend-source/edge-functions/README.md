@@ -11,13 +11,14 @@ The Cartel HQ Lovable project uses the TanStack project structure. Lovable curre
 No secrets belong in this directory. Runtime credentials and API keys must remain in Supabase Edge Function secrets or another approved secret store.
 
 
-## Production inventory captured 2026-08-31
+## Production inventory captured 2026-09-01
 
 
 
 | Function | Live version | verify_jwt | Supabase deployment hash |
 | --- | ---: | :---: | --- |
-| sticker-ai | 7 | true | `3d6b111e81b36f13d09cc259b392cec77fa46acd8598d354e6309bd15139408e` |
+| sticker-ai | 9 | true | `2ea61be3e8205fba5f7bdb28288524f2e8848fe828f896af0c080d3882cfdd2f` |
+| sticker-motion-ai | 1 | true | `837caedbd9b366f01bf252d57533c7811c5442864e7f966c6d85ae76515e8e81` |
 | telegram-stickers | 6 | true | `d7d60a12cf98ca9d9313fff32102de6cc10319526e80d1cff100f21523224208` |
 | telegram-link | 3 | true | `9996641ed725ff32335ca24f576396856191fdf390bbaf622ae6ef688508e486` |
 | telegram-webhook | 45 | false | `214c3f87cfc2a1b3601e3c4b24f47314e30980ab7a817a95bcc84e4c016fbac7` |
