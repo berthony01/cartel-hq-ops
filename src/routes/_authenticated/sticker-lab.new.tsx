@@ -3477,6 +3477,47 @@ function StickerLabBuilder() {
                 };
               });
               const hasVariationTakes = variationTakes.some((t) => t.version);
+              const takeCount = variationTakes.filter((t) => t.version).length;
+              /**
+               * R2 — presentation only. Derived from already-loaded round state
+               * and durable takes. No query, no provider call.
+               */
+              const variationSummary: { label: string; tone: "gold" | "green" | "red" | "muted" } =
+                variationBusy
+                  ? { label: "Running", tone: "gold" }
+                  : varRound.failure
+                    ? { label: "Failed", tone: "red" }
+                    : takeCount === 3
+                      ? { label: "Variations ready", tone: "green" }
+                      : takeCount > 0
+                        ? { label: "Partial", tone: "gold" }
+                        : { label: "Not generated", tone: "muted" };
+              /** R2 — compact motion status, read only from loaded motion state. */
+              const motionState = stickerId ? motionBySticker[stickerId] : undefined;
+              const motionStateError =
+                motionQuery.isError ||
+                (!!stickerId &&
+                  !motionQuery.isPending &&
+                  !motionQuery.isFetching &&
+                  motionState === undefined);
+              const motionCurrent = currentMotionVersion(motionState);
+              const motionSummary: { label: string; tone: "gold" | "green" | "red" | "muted" } =
+                motionStateError
+                  ? { label: "Status unavailable", tone: "muted" }
+                  : motionState?.releaseVariant === "motion"
+                    ? { label: "Motion live", tone: "green" }
+                    : motionCurrent?.telegramAssetId
+                      ? { label: "Telegram-ready", tone: "green" }
+                      : motionCurrent
+                        ? { label: "Current approved", tone: "gold" }
+                        : (motionState?.versions.length ?? 0) > 0
+                          ? {
+                              label: `${motionState!.versions.length} motion version${
+                                motionState!.versions.length === 1 ? "" : "s"
+                              }`,
+                              tone: "gold",
+                            }
+                          : { label: "No motion yet", tone: "muted" };
               return (
                 <li key={c.id} className="cartel-panel rounded-lg p-2.5 sm:p-4">
                   <div className="mb-3 flex items-center justify-between gap-2">
