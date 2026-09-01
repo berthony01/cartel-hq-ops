@@ -119,7 +119,14 @@ import {
 } from "@/components/sticker-lab/BuilderPrimitives";
 import { StepGuide } from "@/components/sticker-lab/StickerLabJourney";
 import { MotionStudioPanel } from "@/components/sticker-lab/MotionStudioPanel";
-import { loadStickerMotionState } from "@/lib/sticker-motion";
+import { loadStickerMotionState, type MotionMode } from "@/lib/sticker-motion";
+import { useStickerMotionGenerationRuntime } from "@/hooks/useStickerMotionGenerationRuntime";
+import {
+  fetchStickerMotionAiConfig,
+  setCurrentStickerMotion,
+  type StickerMotionPreset,
+} from "@/lib/sticker-motion-ai";
+
 import { Checkbox } from "@/components/ui/checkbox";
 
 
