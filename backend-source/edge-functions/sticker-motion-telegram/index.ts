@@ -741,6 +741,26 @@ Deno.serve(async (req: Request) => {
           return await failJob(job.id, "The preparation job is missing its motion linkage.", "PREP_INTERRUPTED");
         }
 
+        // Staleness guard: the sticker must still point at the exact motion
+        // version and static image this paid preparation was based on. If it
+        // moved, we do NOT link — and we never switch release state or delete
+        // the source/derivative.
+        const { data: liveSticker } = await admin
+          .from("stickers").select("id,image_asset_id,current_motion_version_id")
+          .eq("id", job.sticker_id).maybeSingle();
+        if (
+          !liveSticker ||
+          liveSticker.current_motion_version_id !== motionVersionId ||
+          liveSticker.image_asset_id !== sourceStaticAssetId
+        ) {
+          return await failJob(
+            job.id,
+            "The sticker's current motion or static image changed during preparation, so the Telegram clip was not linked.",
+            "MOTION_SOURCE_STALE",
+          );
+        }
+
+
         const path = `${job.workspace_id}/telegram_motion/motion-${motionVersionId}-${job.id}.webm`;
         const findAsset = async () => {
           const { data: found } = await admin.from("media_assets").select("id")
