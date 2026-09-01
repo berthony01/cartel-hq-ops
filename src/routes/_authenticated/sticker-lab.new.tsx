@@ -668,7 +668,7 @@ function StickerLabBuilder() {
       motionReadySignal,
       telegramMotionReadySignal,
     ],
-    enabled: !!draft && step === 4 && savedStickerIds.length > 0,
+    enabled: !!draft && (step === 4 || step === 5) && savedStickerIds.length > 0,
     queryFn: () => loadStickerMotionState(savedStickerIds),
   });
   const motionBySticker = motionQuery.data ?? {};
@@ -1901,7 +1901,7 @@ function StickerLabBuilder() {
 
   /** A native test always targets exactly one selected group — never a broadcast. */
   const testTargetGroup = selectedGroups.length === 1 ? selectedGroups[0]! : null;
-  const doSendTest = async () => {
+  const doSendTest = async (options?: { stickerId?: string; label?: string }) => {
     if (!packId || !workspaceId || !testTargetGroup) return;
     setSendingTest(true);
     setTestResult(null);
@@ -1910,6 +1910,7 @@ function StickerLabBuilder() {
         workspaceId,
         packId,
         groupConnectionId: testTargetGroup.id,
+        ...(options?.stickerId ? { stickerId: options.stickerId } : {}),
       });
       const title = testTargetGroup.title;
 
@@ -4698,6 +4699,130 @@ function StickerLabBuilder() {
             ) : null}
           </section>
 
+          {/* R4 — Animated stickers. Read-only durable motion state plus reuse of
+              the existing per-sticker community test send. Nothing here starts
+              generation, preparation, release or any provider work. */}
+          {(() => {
+            const motionState = motionQuery.data ?? {};
+            const rows = draft.concepts
+              .map((c) => {
+                const sid = stickerIdFor(c.id);
+                const state = sid ? motionState[sid] : undefined;
+                return { concept: c, stickerId: sid, state };
+              })
+              .filter((r) => !!r.stickerId && !!r.state && r.state.versions.length > 0);
+
+            if (motionQuery.isLoading) {
+              return (
+                <section className="mb-6">
+                  <h3 className="text-sm font-semibold text-foreground">Animated stickers</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">Loading motion state…</p>
+                </section>
+              );
+            }
+            if (rows.length === 0) return null;
+
+            return (
+              <section className="mb-6">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-foreground">Animated stickers</h3>
+                  <StatusBadge tone="muted">{rows.length}</StatusBadge>
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  These stickers have motion work saved. “Live in sticker pack” means the animated
+                  file replaced that sticker inside the Telegram sticker pack. Sending to a
+                  community is a separate action that posts one message.
+                </p>
+                <ul className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 [&>*]:min-w-0">
+                  {rows.map(({ concept, stickerId, state }) => {
+                    const current = currentMotionVersion(state);
+                    const live =
+                      state!.releaseVariant === "motion" &&
+                      !!state!.releasedMotionVersionId &&
+                      state!.releasedMotionVersionId === current?.id;
+                    const badge = live
+                      ? { tone: "green" as const, label: "Live in sticker pack" }
+                      : current?.telegramAssetId
+                        ? { tone: "gold" as const, label: "Telegram-ready" }
+                        : current
+                          ? { tone: "gold" as const, label: "Motion approved" }
+                          : { tone: "muted" as const, label: "Motion in progress" };
+                    const src =
+                      current?.telegramPreviewUrl ?? current?.previewUrl ?? null;
+                    return (
+                      <li
+                        key={concept.id}
+                        className="cartel-panel rounded-lg p-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="truncate text-xs font-semibold text-foreground">
+                            {concept.label}
+                          </p>
+                          <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>
+                        </div>
+                        <div className="mt-2">
+                          {src ? (
+                            <video
+                              src={src}
+                              controls
+                              muted
+                              loop
+                              playsInline
+                              preload="metadata"
+                              className="max-h-44 w-full rounded bg-black/40 object-contain"
+                            />
+                          ) : (
+                            <p className="text-[10px] text-muted-foreground">
+                              Preview unavailable
+                            </p>
+                          )}
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="min-h-10 flex-1"
+                            onClick={() => {
+                              setStep(4);
+                              setMotionSheetConceptId(concept.id);
+                            }}
+                          >
+                            Open Motion Studio
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="min-h-10 flex-1"
+                            disabled={sendingTest || !testTargetGroup}
+                            onClick={() =>
+                              void doSendTest({
+                                stickerId: stickerId!,
+                                label: concept.label,
+                              })
+                            }
+                          >
+                            {sendingTest ? (
+                              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                            ) : (
+                              <Send className="size-4" aria-hidden="true" />
+                            )}
+                            Send this sticker to selected community
+                          </Button>
+                        </div>
+                        {!testTargetGroup ? (
+                          <p className="mt-1 text-[10px] text-muted-foreground">
+                            Select a connected community below to enable sending.
+                          </p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            );
+          })()}
 
 
           {!exportReady ? (

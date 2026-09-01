@@ -33,7 +33,15 @@ export type StickerMotionVersion = {
   previewUrl: string | null;
   mimeType: string | null;
   fileSizeBytes: number | null;
+  /**
+   * Short-lived signed playback URL for the actual `telegram_motion`
+   * derivative, or null when no valid derivative asset exists.
+   */
+  telegramPreviewUrl: string | null;
+  telegramMimeType: string | null;
+  telegramFileSizeBytes: number | null;
 };
+
 
 export type StickerMotionState = {
   /** Durable pointer from `stickers.current_motion_version_id`. */
@@ -97,12 +105,19 @@ export async function loadStickerMotionState(
 
   const rows = motionRows ?? [];
 
-  /* Only a real `generated_motion` asset may be presented as a preview. A
-     missing or wrongly typed asset degrades to "preview unavailable". */
+  /* Only a real `generated_motion` asset may be presented as the creative
+     source preview, and only a real `telegram_motion` asset may be presented
+     as the Telegram derivative. A missing or wrongly typed asset degrades to
+     "preview unavailable" — never guessed. */
   type AssetInfo = { storagePath: string; mimeType: string | null; fileSizeBytes: number | null };
   const assetById: Record<string, AssetInfo> = {};
+  const telegramAssetById: Record<string, AssetInfo> = {};
   const assetIds = Array.from(
-    new Set(rows.map((r) => r.motion_asset_id).filter((v): v is string => !!v)),
+    new Set(
+      rows
+        .flatMap((r) => [r.motion_asset_id, r.telegram_asset_id])
+        .filter((v): v is string => !!v),
+    ),
   );
   if (assetIds.length > 0) {
     const { data: assets, error: assetError } = await supabase
@@ -111,16 +126,23 @@ export async function loadStickerMotionState(
       .in("id", assetIds);
     if (assetError) throw assetError;
     for (const asset of assets ?? []) {
-      if (asset.asset_type !== "generated_motion") continue;
-      assetById[asset.id] = {
+      const info: AssetInfo = {
         storagePath: asset.storage_path,
         mimeType: asset.mime_type ?? null,
         fileSizeBytes: asset.file_size_bytes ?? null,
       };
+      if (asset.asset_type === "generated_motion") assetById[asset.id] = info;
+      else if (asset.asset_type === "telegram_motion") telegramAssetById[asset.id] = info;
     }
   }
 
-  const paths = Object.values(assetById).map((a) => a.storagePath);
+  const paths = Array.from(
+    new Set(
+      [...Object.values(assetById), ...Object.values(telegramAssetById)].map(
+        (a) => a.storagePath,
+      ),
+    ),
+  );
   let urls: Record<string, string> = {};
   if (paths.length > 0) {
     try {
@@ -135,6 +157,9 @@ export async function loadStickerMotionState(
     const bucket = out[row.sticker_id];
     if (!bucket) continue;
     const asset = row.motion_asset_id ? assetById[row.motion_asset_id] : undefined;
+    const tgAsset = row.telegram_asset_id
+      ? telegramAssetById[row.telegram_asset_id]
+      : undefined;
     bucket.versions.push({
       id: row.id,
       stickerId: row.sticker_id,
@@ -150,6 +175,9 @@ export async function loadStickerMotionState(
       previewUrl: asset ? (urls[asset.storagePath] ?? null) : null,
       mimeType: asset?.mimeType ?? null,
       fileSizeBytes: asset?.fileSizeBytes ?? null,
+      telegramPreviewUrl: tgAsset ? (urls[tgAsset.storagePath] ?? null) : null,
+      telegramMimeType: tgAsset?.mimeType ?? null,
+      telegramFileSizeBytes: tgAsset?.fileSizeBytes ?? null,
     });
   }
 
