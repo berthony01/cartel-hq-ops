@@ -668,7 +668,7 @@ function StickerLabBuilder() {
       motionReadySignal,
       telegramMotionReadySignal,
     ],
-    enabled: !!draft && step === 4 && savedStickerIds.length > 0,
+    enabled: !!draft && (step === 4 || step === 5) && savedStickerIds.length > 0,
     queryFn: () => loadStickerMotionState(savedStickerIds),
   });
   const motionBySticker = motionQuery.data ?? {};
@@ -1901,7 +1901,7 @@ function StickerLabBuilder() {
 
   /** A native test always targets exactly one selected group — never a broadcast. */
   const testTargetGroup = selectedGroups.length === 1 ? selectedGroups[0]! : null;
-  const doSendTest = async () => {
+  const doSendTest = async (options?: { stickerId?: string; label?: string }) => {
     if (!packId || !workspaceId || !testTargetGroup) return;
     setSendingTest(true);
     setTestResult(null);
@@ -1910,6 +1910,7 @@ function StickerLabBuilder() {
         workspaceId,
         packId,
         groupConnectionId: testTargetGroup.id,
+        ...(options?.stickerId ? { stickerId: options.stickerId } : {}),
       });
       const title = testTargetGroup.title;
 
