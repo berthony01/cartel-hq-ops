@@ -141,6 +141,12 @@ export function MotionStudioPanel({
   onSetCurrentMotion: (input: { stickerId: string; motionVersionId: string }) => void;
   /** MAY BE BILLABLE — only ever called from the Telegram confirmation dialog. */
   onPrepareTelegram: (input: { stickerId: string; motionVersionId: string }) => void;
+  /**
+   * MAY BE BILLABLE — exactly one normalization job. Only ever called from the
+   * normalization-retry confirmation dialog below.
+   */
+  onRetryNormalization?: ((input: { stickerId: string }) => void) | undefined;
+
   /** REAL Telegram change — only ever called from the release confirmation dialog. */
   onReleaseMotion: (input: { stickerId: string; motionVersionId: string }) => void;
 }) {
