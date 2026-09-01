@@ -742,9 +742,16 @@ Deno.serve(async (req: Request) => {
         }
         if (!transparent || !finalPng) return await failSticker(job, "Transparency validation failed: the processed image does not contain real transparent pixels.", "TRANSPARENCY_FAILED");
 
-        const path = `${job.workspace_id}/generated_sticker/${crypto.randomUUID()}.png`;
+        // Candidate finalization must be idempotent across concurrent pollers,
+        // so its object path is DERIVED from the background job id. A retry then
+        // collides on the unique storage path / unique media_assets row instead
+        // of creating a second logical candidate. Ordinary generation keeps its
+        // existing random path and behaviour untouched.
+        const path = jobIsCandidate
+          ? `${job.workspace_id}/generated_sticker/candidate-${job.id}.png`
+          : `${job.workspace_id}/generated_sticker/${crypto.randomUUID()}.png`;
         const { error: uploadError } = await admin.storage.from(BUCKET).upload(path, finalPng, { contentType: "image/png", upsert: false });
-        if (uploadError) return await failSticker(job, "Could not save the finished sticker image.", "STORAGE_UPLOAD_FAILED");
+        if (uploadError && !jobIsCandidate) return await failSticker(job, "Could not save the finished sticker image.", "STORAGE_UPLOAD_FAILED");
 
         const parentJobId = job.input_json && typeof job.input_json === "object" ? (job.input_json as Record<string, unknown>).parent_job_id : null;
         let parentTaskId: string | null = null;
@@ -755,18 +762,65 @@ Deno.serve(async (req: Request) => {
           parentModel = parent?.provider_model ?? null;
         }
 
-        const { data: asset, error: assetError } = await admin.from("media_assets").insert({
-          workspace_id: job.workspace_id, uploaded_by: job.user_id, storage_path: path, asset_type: "generated_sticker",
-          mime_type: "image/png", width, height, file_size_bytes: finalPng.byteLength, transparency_valid: true,
-          metadata: { source: "kie", generation_model: parentModel, generation_task_id: parentTaskId, background_model: job.provider_model, background_task_id: job.provider_task_id, generation_job_id: parentJobId, background_job_id: job.id },
-        }).select("id").single();
-        if (assetError || !asset) {
-          await admin.storage.from(BUCKET).remove([path]);
-          return await failSticker(job, "Could not record the finished sticker asset.", "ASSET_RECORD_FAILED");
+        // A losing candidate poller reuses the asset the winner already recorded.
+        let assetId: string | null = null;
+        if (jobIsCandidate) {
+          const { data: existingAsset } = await admin.from("media_assets").select("id").eq("workspace_id", job.workspace_id).eq("storage_path", path).maybeSingle();
+          assetId = existingAsset?.id ?? null;
+        }
+        if (!assetId) {
+          const { data: asset, error: assetError } = await admin.from("media_assets").insert({
+            workspace_id: job.workspace_id, uploaded_by: job.user_id, storage_path: path, asset_type: "generated_sticker",
+            mime_type: "image/png", width, height, file_size_bytes: finalPng.byteLength, transparency_valid: true,
+            metadata: { source: "kie", generation_model: parentModel, generation_task_id: parentTaskId, background_model: job.provider_model, background_task_id: job.provider_task_id, generation_job_id: parentJobId, background_job_id: job.id, ...(jobIsCandidate ? { candidate: true } : {}) },
+          }).select("id").single();
+          if (assetError || !asset) {
+            if (jobIsCandidate) {
+              // Recover a concurrently inserted candidate asset before failing.
+              const { data: racedAsset } = await admin.from("media_assets").select("id").eq("workspace_id", job.workspace_id).eq("storage_path", path).maybeSingle();
+              assetId = racedAsset?.id ?? null;
+            }
+            if (!assetId) {
+              if (!jobIsCandidate) await admin.storage.from(BUCKET).remove([path]);
+              return await failSticker(job, "Could not record the finished sticker asset.", "ASSET_RECORD_FAILED");
+            }
+          } else {
+            assetId = asset.id;
+          }
         }
 
-        await admin.from("stickers").update({ image_asset_id: asset.id, status: "ready" }).eq("id", job.sticker_id);
-        await admin.from("ai_jobs").update({ status: "succeeded", completed_at: new Date().toISOString(), output_json: { asset_id: asset.id, storage_path: path, transparency_valid: true, width, height } }).eq("id", job.id);
+        if (jobIsCandidate) {
+          // Durable candidate record ONLY. The current pointer, sticker status,
+          // Telegram fields and pack status are deliberately never written here.
+          let versionId: string | null = null;
+          const readVersion = async () => {
+            const { data } = await admin.from("sticker_versions").select("id").eq("sticker_id", job.sticker_id).eq("asset_id", assetId).maybeSingle();
+            return data?.id ?? null;
+          };
+          versionId = await readVersion();
+          for (let attempt = 0; attempt < 3 && !versionId; attempt++) {
+            const { data: maxRow } = await admin.from("sticker_versions").select("version_number").eq("sticker_id", job.sticker_id).order("version_number", { ascending: false }).limit(1).maybeSingle();
+            const nextVersion = (maxRow?.version_number ?? 0) + 1;
+            const { data: inserted, error: versionError } = await admin.from("sticker_versions").insert({
+              workspace_id: job.workspace_id, pack_id: job.pack_id, sticker_id: job.sticker_id,
+              asset_id: assetId, version_number: nextVersion, origin: "candidate_generation",
+            }).select("id").maybeSingle();
+            if (!versionError && inserted) { versionId = inserted.id; break; }
+            // Unique conflict on (sticker_id, asset_id) or (sticker_id, version_number):
+            // re-read and reuse rather than creating a second logical candidate.
+            versionId = await readVersion();
+          }
+          if (!versionId) {
+            return await failSticker(job, "The candidate image was created but could not be recorded in version history.", "CANDIDATE_VERSION_FAILED");
+          }
+
+          await admin.from("ai_jobs").update({ status: "succeeded", completed_at: new Date().toISOString(), output_json: { asset_id: assetId, storage_path: path, transparency_valid: true, width, height, mode: "candidate", version_id: versionId } }).eq("id", job.id);
+          await logCredits(job, credits);
+          return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", assetId, transparencyValid: true, stage: "candidate_ready", mode: "candidate", versionId });
+        }
+
+        await admin.from("stickers").update({ image_asset_id: assetId, status: "ready" }).eq("id", job.sticker_id);
+        await admin.from("ai_jobs").update({ status: "succeeded", completed_at: new Date().toISOString(), output_json: { asset_id: assetId, storage_path: path, transparency_valid: true, width, height } }).eq("id", job.id);
         await logCredits(job, credits);
 
         if (job.pack_id) {
@@ -776,7 +830,8 @@ Deno.serve(async (req: Request) => {
           await admin.from("sticker_packs").update({ status: allReady ? "review" : "draft" }).eq("id", job.pack_id);
         }
 
-        return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", assetId: asset.id, transparencyValid: true, stage: "ready" });
+        return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", assetId, transparencyValid: true, stage: "ready" });
+
       }
 
       return respond({ aiJobId: job.id, jobType: job.job_type, status: job.status });
