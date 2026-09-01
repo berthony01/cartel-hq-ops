@@ -516,10 +516,11 @@ Deno.serve(async (req: Request) => {
       const now = new Date().toISOString();
       // Guarded write: only the exact pre-restore row may be advanced. Zero
       // matched rows means someone else moved the sticker, which is a failure.
-      let guardedUpdate = admin.from("stickers").update({ image_asset_id: targetAsset.id, telegram_file_id: newFileId, telegram_static_file_id: newFileId, release_variant: "static", status: "published", telegram_publish_error: null, telegram_published_at: now, updated_at: now }).eq("id", stickerId);
+      let guardedUpdate = admin.from("stickers").update({ image_asset_id: targetAsset.id, telegram_file_id: newFileId, telegram_static_file_id: newFileId, telegram_motion_version_id: null, release_variant: "static", status: "published", telegram_publish_error: null, telegram_published_at: now, updated_at: now }).eq("id", stickerId);
       guardedUpdate = expectedOldAssetId === null ? guardedUpdate.is("image_asset_id", null) : guardedUpdate.eq("image_asset_id", expectedOldAssetId);
       guardedUpdate = expectedOldFileId === null ? guardedUpdate.is("telegram_file_id", null) : guardedUpdate.eq("telegram_file_id", expectedOldFileId);
       guardedUpdate = expectedOldVariant === null ? guardedUpdate.is("release_variant", null) : guardedUpdate.eq("release_variant", expectedOldVariant);
+      guardedUpdate = expectedOldReleasedMotionVersionId === null ? guardedUpdate.is("telegram_motion_version_id", null) : guardedUpdate.eq("telegram_motion_version_id", expectedOldReleasedMotionVersionId);
       const { data: updatedRow, error: updateError } = await guardedUpdate.select("id").maybeSingle();
       if (updateError || !updatedRow) {
         // Cross-system guard: Telegram already changed, CARTEL HQ did not.
