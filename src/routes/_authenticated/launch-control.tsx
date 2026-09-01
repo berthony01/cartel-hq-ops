@@ -993,7 +993,29 @@ function LaunchControlPage() {
                   </p>
 
                   {next ? (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
+                      <div className="rounded-md border border-gold/20 bg-gold/5 p-3">
+                        <p className="type-meta text-gold">Current step</p>
+                        <p className="mt-1 text-sm font-semibold text-foreground">
+                          {NEXT_ACTION_GUIDE[status].current}
+                        </p>
+                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                          {NEXT_ACTION_GUIDE[status].means}
+                        </p>
+                        <div className="mt-2 border-t border-gold/10 pt-2">
+                          <p className="type-meta text-gold">Next action</p>
+                          <p className="mt-0.5 text-xs text-foreground">
+                            {NEXT_ACTION_GUIDE[status].nextAction}
+                          </p>
+                        </div>
+                        <div className="mt-2 border-t border-gold/10 pt-2">
+                          <p className="type-meta text-gold">What happens next</p>
+                          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                            {NEXT_ACTION_GUIDE[status].after}
+                          </p>
+                        </div>
+                      </div>
+
                       {blockedReason ? (
                         <p className="text-xs text-muted-foreground">{blockedReason}</p>
                       ) : null}
@@ -1006,7 +1028,7 @@ function LaunchControlPage() {
                           {transitionMutation.isPending ? (
                             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                           ) : null}
-                          Advance to {LAUNCH_STATUS_LABELS[next]}
+                          {TRANSITION_BUTTON_LABEL[status]}
                         </Button>
                       ) : (
                         <p className="text-xs text-muted-foreground">
@@ -1019,9 +1041,20 @@ function LaunchControlPage() {
                       </p>
                     </div>
                   ) : (
-                    <p className="text-xs text-muted-foreground">
-                      This launch has reached the final lifecycle state.
-                    </p>
+                    <div className="space-y-2">
+                      <div className="rounded-md border border-border/60 bg-background/30 p-3">
+                        <p className="type-meta text-muted-foreground">Current step</p>
+                        <p className="mt-1 text-sm font-semibold text-foreground">
+                          {NEXT_ACTION_GUIDE[status].current}
+                        </p>
+                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                          {NEXT_ACTION_GUIDE[status].means}
+                        </p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        This launch has reached the final lifecycle state.
+                      </p>
+                    </div>
                   )}
                 </div>
               </div>
