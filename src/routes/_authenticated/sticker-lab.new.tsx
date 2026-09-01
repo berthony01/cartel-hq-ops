@@ -1357,6 +1357,9 @@ function StickerLabBuilder() {
     const id = draft.packId;
     if (id) await loadExisting(id);
     await versionsQuery.refetch();
+    // Durable release_variant must follow immediately when a live motion is
+    // switched back to its static version. Read-only.
+    await motionQuery.refetch();
   };
 
   const RESTORE_MESSAGE: Record<Exclude<SetCurrentVersionStatus, "switched" | "telegram_required">, string> = {
