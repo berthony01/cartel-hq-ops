@@ -3457,6 +3457,136 @@ function StickerLabBuilder() {
                     </div>
                   ) : null}
 
+                  {/* A/B/C variations — review only. The current image, sticker
+                      status and any live Telegram set are never touched. */}
+                  {stickerId && preview ? (
+                    <div className="mt-3 rounded-md border border-border bg-background/40 p-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          A/B/C variations
+                        </p>
+                        {varRound.stage !== "idle" ? (
+                          <StatusBadge
+                            tone={
+                              isVariationBusy(varRound.stage)
+                                ? "gold"
+                                : varRound.stage === "done"
+                                  ? "green"
+                                  : varRound.stage === "cancelled"
+                                    ? "muted"
+                                    : "red"
+                            }
+                          >
+                            {VARIATION_STAGE_LABEL[varRound.stage]}
+                            {varRound.currentLabel ? ` ${varRound.currentLabel}` : ""}
+                          </StatusBadge>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                        Three deliberate takes of this sticker, generated one after another. They
+                        are saved to Version history for review only — nothing replaces the current
+                        image until you set a version as current.
+                      </p>
+                      {hasVariationTakes ? (
+                        <ul className="mt-2 grid grid-cols-3 gap-2">
+                          {variationTakes.map((take) => (
+                            <li key={take.label} className="min-w-0">
+                              <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                                Take {take.label}
+                              </p>
+                              <div
+                                className="mt-1 flex aspect-square items-center justify-center overflow-hidden rounded border border-border"
+                                style={CHECKERBOARD}
+                              >
+                                {take.version?.previewUrl ? (
+                                  <img
+                                    src={take.version.previewUrl}
+                                    alt={`${c.label} variation ${take.label}`}
+                                    className="max-h-full max-w-full object-contain"
+                                  />
+                                ) : varRound.currentLabel === take.label ? (
+                                  <Loader2
+                                    className="size-4 animate-spin text-gold"
+                                    aria-hidden="true"
+                                  />
+                                ) : (
+                                  <span className="px-1 text-center text-[9px] text-muted-foreground">
+                                    {take.version ? "Unavailable" : "Not run"}
+                                  </span>
+                                )}
+                              </div>
+                              {take.version && !take.version.unavailable ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="mt-1 h-8 w-full text-[10px]"
+                                  disabled={
+                                    busy(stage) ||
+                                    restoringStickerId !== null ||
+                                    isVariationBusy(varRound.stage)
+                                  }
+                                  onClick={() =>
+                                    setRestoreTarget({
+                                      stickerId,
+                                      versionId: take.version!.id,
+                                      versionNumber: take.version!.versionNumber,
+                                      label: c.label,
+                                    })
+                                  }
+                                >
+                                  Use this take
+                                </Button>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      {varRound.failure && !isVariationBusy(varRound.stage) ? (
+                        <p className="mt-2 text-[11px] text-signal">
+                          {varRound.failure.title}. {varRound.failure.body}
+                        </p>
+                      ) : null}
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="min-h-10 flex-1"
+                          disabled={
+                            !configured ||
+                            saving ||
+                            busy(stage) ||
+                            isCandidateBusy(candStage) ||
+                            isVariationBusy(varRound.stage) ||
+                            restoringStickerId !== null
+                          }
+                          onClick={() => setVariationConfirm({ stickerId, label: c.label })}
+                        >
+                          {isVariationBusy(varRound.stage) ? (
+                            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                          ) : null}
+                          {isVariationBusy(varRound.stage)
+                            ? VARIATION_STAGE_LABEL[varRound.stage]
+                            : hasVariationTakes
+                              ? "Run new A/B/C round"
+                              : "Generate A/B/C variations"}
+                        </Button>
+                        {isVariationBusy(varRound.stage) ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="min-h-10"
+                            onClick={() => cancelVariationRound(stickerId)}
+                          >
+                            Stop after this take
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+
                   {/* Batch selection: never offered for a sticker that already
                       has a usable image — those use Regenerate explicitly. */}
                   <label
