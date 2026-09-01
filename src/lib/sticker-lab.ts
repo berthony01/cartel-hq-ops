@@ -170,21 +170,108 @@ export function starterConcepts(theme: PackTheme, size: number): Concept[] {
   });
 }
 
-export const FLOW_STEPS = [
-  "Character Reference",
-  "Pack Setup",
-  "Sticker Concepts",
-  "Generate",
-  "Review & Publish",
+export const BUILDER_STEPS = [
+  { id: 1, title: "Character & Brand", short: "Character" },
+  { id: 2, title: "Creative Direction", short: "Direction" },
+  { id: 3, title: "Concept Studio", short: "Concepts" },
+  { id: 4, title: "Sticker Studio", short: "Studio" },
+  { id: 5, title: "Quality & Release", short: "Release" },
 ] as const;
 
-export const BUILDER_STEPS = [
-  { id: 1, title: "Character Reference", short: "Reference" },
-  { id: 2, title: "Pack Setup", short: "Setup" },
-  { id: 3, title: "Sticker Concepts", short: "Concepts" },
-  { id: 4, title: "Generation Preview", short: "Generate" },
-  { id: 5, title: "Review & Publish", short: "Review" },
-] as const;
+/**
+ * The four-stage user journey layered on top of the unchanged five-step
+ * builder engine. Presentation only — no step ids, routing or validation
+ * depend on this map.
+ */
+export type JourneyStage = {
+  key: string;
+  name: string;
+  steps: number[];
+  substeps?: string[];
+  does: string;
+  benefit: string;
+};
+
+export const JOURNEY_STAGES: JourneyStage[] = [
+  {
+    key: "blueprint",
+    name: "Blueprint",
+    steps: [1, 2],
+    substeps: ["1. Character & Brand", "2. Creative Direction"],
+    does: "Lock your character identity, references and creative rules.",
+    benefit: "Set it once so every generated sticker stays on-character and on-brand.",
+  },
+  {
+    key: "concepts",
+    name: "Concept Studio",
+    steps: [3],
+    does: "Plan, edit, lock, reorder and optionally AI-suggest sticker ideas.",
+    benefit: "Get the ideas right in text — before you spend anything on image generation.",
+  },
+  {
+    key: "studio",
+    name: "Sticker Studio",
+    steps: [4],
+    does: "Test one sticker, generate selected stickers or batches, review versions.",
+    benefit: "Control spend and quality sticker by sticker instead of all-or-nothing.",
+  },
+  {
+    key: "release",
+    name: "Quality & Release",
+    steps: [5],
+    does: "Verify transparency and cutout quality, export, publish to Telegram, send to communities.",
+    benefit: "Ship one clean Telegram sticker set your communities actually receive.",
+  },
+];
+
+/** Contextual per-step guide: what you're doing, why, and what comes next. */
+export const STEP_GUIDES: Record<
+  number,
+  { stage: string; doing: string; why: string; next: string }
+> = {
+  1: {
+    stage: "Blueprint · Step 1 of 2",
+    doing: "Name your character and choose the reference images the AI must match.",
+    why: "Character Lock keeps the same face, wardrobe and traits across the whole pack.",
+    next: "Next: Creative Direction, the second half of your Blueprint.",
+  },
+  2: {
+    stage: "Blueprint · Step 2 of 2",
+    doing: "Name the pack and set purpose, audience, tone and pack rules.",
+    why: "These creative rules steer every concept and every generated image.",
+    next: "Next: Concept Studio, where you plan the individual stickers.",
+  },
+  3: {
+    stage: "Concept Studio",
+    doing: "Write, edit, lock, reorder or duplicate the concepts in your pack.",
+    why: "AI suggestions here are optional and text-only — nothing is generated or charged yet.",
+    next: "Next: Sticker Studio, where concepts become paid image generations.",
+  },
+  4: {
+    stage: "Sticker Studio",
+    doing: "Test one sticker first, then generate the ones you select.",
+    why: "You choose what gets generated, so you control spend and quality.",
+    next: "Next: Quality & Release, where you verify and publish the pack.",
+  },
+  5: {
+    stage: "Quality & Release",
+    doing: "Check quality, export if you want, publish the Telegram set, then pick communities.",
+    why: "Order matters: quality checks → export (optional) → Telegram pack → communities.",
+    next: "After release: automate posting with Sticker Drops.",
+  },
+};
+
+/** Capabilities that genuinely exist today. Nothing aspirational here. */
+export const V2_CAPABILITIES: { name: string; blurb: string }[] = [
+  { name: "Character Lock", blurb: "One identity contract reused across the pack." },
+  { name: "AI Concept Suggestions", blurb: "Optional, text-only idea help." },
+  { name: "Selective & Batch Generation", blurb: "Generate only what you pick." },
+  { name: "Version History", blurb: "Successful generations are kept and restorable." },
+  { name: "Quality Verification", blurb: "Server-side transparency and cutout checks." },
+  { name: "Telegram Release", blurb: "One official sticker set per pack." },
+  { name: "Community Distribution", blurb: "Send the set to connected communities." },
+  { name: "Sticker Drops", blurb: "Scheduled posting after release." },
+];
 
 
 /**
