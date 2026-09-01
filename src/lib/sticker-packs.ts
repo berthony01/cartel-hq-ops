@@ -277,6 +277,15 @@ export async function loadLatestJobs(
       error_message: (record["error_message"] as string | null) ?? null,
       created_at: String(record["created_at"] ?? ""),
       is_candidate: input["mode"] === "candidate",
+      is_variation: input["mode"] === "variation",
+      variation_group_id:
+        typeof input["variation_group_id"] === "string"
+          ? (input["variation_group_id"] as string)
+          : null,
+      variation_label:
+        typeof input["variation_label"] === "string"
+          ? (input["variation_label"] as string)
+          : null,
     };
     (out[stickerId] ??= []).push(row);
   }
