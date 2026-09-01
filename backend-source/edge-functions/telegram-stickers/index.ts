@@ -407,17 +407,20 @@ Deno.serve(async (req: Request) => {
         return respond({ error: "ACTIVE_GENERATION", message: "This sticker is still generating. Wait for it to finish before restoring a version." }, 409);
       }
 
-      if (sticker.image_asset_id === targetAsset.id) {
-        return respond({ status: "unchanged", telegramReplaced: false, stickerId, versionId, setName: pack.telegram_set_name ?? undefined, setUrl: pack.telegram_set_url ?? undefined, message: "That version is already the current sticker image." });
-      }
-
       // Expected old state. Every later write is guarded against exactly these
-      // two pointers so a concurrent change can never be silently overwritten.
+      // pointers so a concurrent change can never be silently overwritten.
       const expectedOldAssetId = sticker.image_asset_id ? String(sticker.image_asset_id) : null;
       const oldFileId = sticker.telegram_file_id ? String(sticker.telegram_file_id) : "";
       const expectedOldFileId = sticker.telegram_file_id ? String(sticker.telegram_file_id) : null;
+      const expectedOldVariant = sticker.release_variant ? String(sticker.release_variant) : null;
       const setName = pack.telegram_set_name ? String(pack.telegram_set_name) : "";
       const dbClaimsPublished = sticker.status === "published" || !!sticker.telegram_published_at;
+
+      // Only a no-op when the live Telegram release is already this static image.
+      // If motion is live, the same static image is a real replacement target.
+      if (sticker.image_asset_id === targetAsset.id && expectedOldVariant !== "motion") {
+        return respond({ status: "unchanged", telegramReplaced: false, stickerId, versionId, setName: setName || undefined, setUrl: pack.telegram_set_url ?? undefined, message: "That version is already the current sticker image." });
+      }
 
       let liveInSet = false;
       if (setName && oldFileId) {
