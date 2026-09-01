@@ -999,6 +999,107 @@ export type Database = {
           },
         ]
       }
+      sticker_motion_versions: {
+        Row: {
+          created_at: string
+          id: string
+          motion_asset_id: string | null
+          motion_instruction: string | null
+          motion_mode: string | null
+          motion_preset: string | null
+          pack_id: string
+          provider_metadata: Json
+          source_static_asset_id: string | null
+          source_static_version_id: string | null
+          sticker_id: string
+          telegram_asset_id: string | null
+          version_number: number
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          motion_asset_id?: string | null
+          motion_instruction?: string | null
+          motion_mode?: string | null
+          motion_preset?: string | null
+          pack_id: string
+          provider_metadata?: Json
+          source_static_asset_id?: string | null
+          source_static_version_id?: string | null
+          sticker_id: string
+          telegram_asset_id?: string | null
+          version_number: number
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          motion_asset_id?: string | null
+          motion_instruction?: string | null
+          motion_mode?: string | null
+          motion_preset?: string | null
+          pack_id?: string
+          provider_metadata?: Json
+          source_static_asset_id?: string | null
+          source_static_version_id?: string | null
+          sticker_id?: string
+          telegram_asset_id?: string | null
+          version_number?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sticker_motion_versions_motion_asset_id_fkey"
+            columns: ["motion_asset_id"]
+            isOneToOne: false
+            referencedRelation: "media_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_motion_versions_pack_id_fkey"
+            columns: ["pack_id"]
+            isOneToOne: false
+            referencedRelation: "sticker_packs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_motion_versions_source_static_asset_id_fkey"
+            columns: ["source_static_asset_id"]
+            isOneToOne: false
+            referencedRelation: "media_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_motion_versions_source_static_version_id_fkey"
+            columns: ["source_static_version_id"]
+            isOneToOne: false
+            referencedRelation: "sticker_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_motion_versions_sticker_id_fkey"
+            columns: ["sticker_id"]
+            isOneToOne: false
+            referencedRelation: "stickers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_motion_versions_telegram_asset_id_fkey"
+            columns: ["telegram_asset_id"]
+            isOneToOne: false
+            referencedRelation: "media_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_motion_versions_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sticker_pack_group_targets: {
         Row: {
           announced_at: string | null
@@ -1243,6 +1344,7 @@ export type Database = {
         Row: {
           action_description: string | null
           created_at: string
+          current_motion_version_id: string | null
           emoji_list: string[]
           id: string
           image_asset_id: string | null
@@ -1250,6 +1352,7 @@ export type Database = {
           label: string
           pack_id: string
           prompt: string | null
+          release_variant: string
           sort_order: number
           status: string
           telegram_file_id: string | null
@@ -1260,6 +1363,7 @@ export type Database = {
         Insert: {
           action_description?: string | null
           created_at?: string
+          current_motion_version_id?: string | null
           emoji_list?: string[]
           id?: string
           image_asset_id?: string | null
@@ -1267,6 +1371,7 @@ export type Database = {
           label: string
           pack_id: string
           prompt?: string | null
+          release_variant?: string
           sort_order: number
           status?: string
           telegram_file_id?: string | null
@@ -1277,6 +1382,7 @@ export type Database = {
         Update: {
           action_description?: string | null
           created_at?: string
+          current_motion_version_id?: string | null
           emoji_list?: string[]
           id?: string
           image_asset_id?: string | null
@@ -1284,6 +1390,7 @@ export type Database = {
           label?: string
           pack_id?: string
           prompt?: string | null
+          release_variant?: string
           sort_order?: number
           status?: string
           telegram_file_id?: string | null
@@ -1292,6 +1399,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "stickers_current_motion_version_id_fkey"
+            columns: ["current_motion_version_id"]
+            isOneToOne: false
+            referencedRelation: "sticker_motion_versions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "stickers_image_asset_id_fkey"
             columns: ["image_asset_id"]
