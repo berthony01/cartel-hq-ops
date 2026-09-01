@@ -87,6 +87,7 @@ import {
   previewShortName,
   publishPack,
   refreshPackStatus,
+  releaseMotionSticker,
   replacePublishedStickerVersion,
   telegramErrorMessage,
   type PackTelegramState,
