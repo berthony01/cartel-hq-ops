@@ -1143,6 +1143,8 @@ function StickerLabBuilder() {
     // Read-only forced candidate reconciliation. Never starts provider work.
     if (step === 4 && id && savedStickerIds.length > 0) {
       void recoverCandidates(id, savedStickerIds, { force: true });
+      // Same contract for variation rounds: reconcile only, never re-run.
+      void recoverVariations(id, savedStickerIds, { force: true });
     }
   };
 
