@@ -18,6 +18,7 @@ import {
   type SuggestedConcept,
 } from "@/lib/sticker-concepts";
 import {
+  isCandidateVersionOrigin,
   loadStickerVersions,
   setCurrentStickerVersion,
   type SetCurrentVersionStatus,
@@ -31,6 +32,11 @@ import {
   type Stage,
 } from "@/hooks/useStickerGenerationRuntime";
 import { deriveReviewState, useStickerReviewRuntime } from "@/hooks/useStickerReviewRuntime";
+import {
+  CANDIDATE_STAGE_LABEL,
+  isCandidateBusy,
+  usePublishedStickerCandidateRuntime,
+} from "@/hooks/usePublishedStickerCandidateRuntime";
 
 import {
   hydrateDraftFromPack,
@@ -327,6 +333,27 @@ function StickerLabBuilder() {
     workspaceId,
     referenceAssetIds: draft?.referenceAssetIds ?? [],
   });
+
+  /**
+   * Phase 4D.2 — published candidate runtime. Fully separate store: it never
+   * writes current-image stages, previews or failures, and `start_candidate` is
+   * only reachable from the confirmed dialog handler below.
+   */
+  const {
+    candidateFailures,
+    candidateReadySignal,
+    startCandidate,
+    recoverCandidates,
+    candidateStageFor,
+  } = usePublishedStickerCandidateRuntime({
+    workspaceId,
+    referenceAssetIds: draft?.referenceAssetIds ?? [],
+  });
+  /** Sticker awaiting the explicit 2-task candidate confirmation. */
+  const [candidateConfirm, setCandidateConfirm] = useState<{
+    stickerId: string;
+    label: string;
+  } | null>(null);
 
   const [confirmRemaining, setConfirmRemaining] = useState(false);
   /**
