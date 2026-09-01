@@ -621,8 +621,10 @@ function LaunchControlPage() {
   const watcherUpdateMutation = useMutation({
     mutationFn: async () => {
       if (!selected) throw new Error("No launch selected.");
-      const requestId = updateRequestId ?? crypto.randomUUID();
-      if (!updateRequestId) setUpdateRequestId(requestId);
+      // The id is minted before the confirmation dialog opens, so a retry of
+      // the same confirmed attempt reuses it and stays server-side idempotent.
+      const requestId = updateRequestId;
+      if (!requestId) throw new Error("Confirm the send again to continue.");
       return createLaunchWatcherUpdate({
         launchId: selected.id,
         clientRequestId: requestId,
@@ -1715,9 +1717,10 @@ function LaunchControlPage() {
                           Watchers who opted in before Project Updates existed agreed to countdowns
                           and launch alerts only, so they start with Project Updates off. They keep
                           receiving countdowns, the Verified Launch Packet and the launch-live
-                          alert, and must re-open their Launch Watch message in Telegram and tap
-                          “Enable project updates” before they receive manual updates. CARTEL HQ
-                          never changes that choice for them.
+                          alert. Their older Launch Watch message may not show the new control yet:
+                          they can open the Launch Watch link again or interact with their Launch
+                          Watch controls in @PepeCartelHQBot to receive refreshed controls, then
+                          choose “Enable project updates”. CARTEL HQ never silently opts them in.
                         </p>
                       </div>
 
@@ -1759,7 +1762,11 @@ function LaunchControlPage() {
                                 !watcherUpdateStats ||
                                 watcherUpdateStats.updates_enabled_watchers < 1
                               }
-                              onClick={() => setConfirmUpdateSend(true)}
+                              onClick={() => {
+                                const id = updateRequestId ?? crypto.randomUUID();
+                                setUpdateRequestId(id);
+                                setConfirmUpdateSend(true);
+                              }}
                             >
                               {watcherUpdateMutation.isPending ? (
                                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -2108,7 +2115,15 @@ function LaunchControlPage() {
         <StickyActionBar desktop="hidden" end={saveButton} />
       ) : null}
 
-      <AlertDialog open={confirmUpdateSend} onOpenChange={setConfirmUpdateSend}>
+      <AlertDialog
+        open={confirmUpdateSend}
+        onOpenChange={(open) => {
+          setConfirmUpdateSend(open);
+          // Explicit cancel before any send attempt: the next confirmation
+          // starts a fresh idempotency id.
+          if (!open && !watcherUpdateMutation.isPending) setUpdateRequestId(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
@@ -2126,8 +2141,8 @@ function LaunchControlPage() {
               disabled={watcherUpdateMutation.isPending}
               onClick={(e) => {
                 e.preventDefault();
-                setConfirmUpdateSend(false);
                 watcherUpdateMutation.mutate();
+                setConfirmUpdateSend(false);
               }}
             >
               Send watcher update
