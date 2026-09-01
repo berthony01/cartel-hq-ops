@@ -41,6 +41,22 @@ import {
 } from "@/components/ui/select";
 
 
+/**
+ * Display-only labels for system-generated Sticker Lab artifacts. These types
+ * are NOT user-uploadable and are deliberately absent from `ASSET_TYPES`.
+ */
+const MANAGED_ASSET_TYPES = ["generated_motion", "telegram_motion"] as const;
+
+const isManagedAsset = (assetType: string) =>
+  (MANAGED_ASSET_TYPES as readonly string[]).includes(assetType);
+
+const assetTypeLabel = (assetType: string): string => {
+  if (assetType === "generated_motion") return "Motion source";
+  if (assetType === "telegram_motion") return "Telegram motion";
+  return ASSET_TYPE_LABELS[assetType as AssetType] ?? assetType;
+};
+
+
 export const Route = createFileRoute("/_authenticated/assets")({
   head: () => ({
     meta: [
