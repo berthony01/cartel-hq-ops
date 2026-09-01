@@ -533,7 +533,7 @@ Deno.serve(async (req: Request) => {
 
         const responseUrl = str(output.fal_response_url)
           ?? str(status.payload.response_url)
-          ?? (requestId ? `${FAL_QUEUE_BASE}/requests/${requestId}` : null);
+          ?? (requestId ? `${FAL_QUEUE_BASE}/requests/${requestId}/response` : null);
         if (!responseUrl) {
           return await failJob(job.id, "Background removal produced no retrievable result.", "FAL_FAILED");
         }
