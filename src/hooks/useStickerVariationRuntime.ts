@@ -57,7 +57,7 @@ export type VariationRound = {
   currentLabel: StickerVariationLabel | null;
   /** Takes finished in this round, in completion order. */
   completed: StickerVariationLabel[];
-  failure?: ProviderFailure;
+  failure?: ProviderFailure | undefined;
 };
 
 const EMPTY_ROUND: VariationRound = {
