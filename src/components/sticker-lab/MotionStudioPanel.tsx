@@ -323,6 +323,77 @@ export function MotionStudioPanel({
         </p>
       ) : null}
 
+      {/* --------------------------------- Phase C2 Telegram preparation */}
+      <div className="mt-3 border-t border-border/70 pt-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Telegram preparation
+          </p>
+          {currentIsTelegramReady ? (
+            <StatusBadge tone="success">Telegram-ready</StatusBadge>
+          ) : null}
+        </div>
+
+        {!current ? (
+          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+            Approve a Current Motion first. Telegram preparation only runs on the approved Current
+            Motion.
+          </p>
+        ) : currentIsTelegramReady ? (
+          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+            A Telegram-formatted derivative of Version {current.versionNumber} is prepared and
+            stored. It has not been published to Telegram and Telegram has not accepted it. The
+            Telegram release is unchanged.
+          </p>
+        ) : !currentFromCurrentStatic ? (
+          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+            This Current Motion came from an earlier static image. Generate and approve motion from
+            the current static image before preparing it for Telegram.
+          </p>
+        ) : (
+          <>
+            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              Prepares a Telegram-formatted derivative of Version {current.versionNumber}. This is
+              media preparation only — nothing is published to Telegram and the release stays
+              static.
+            </p>
+            {telegramProviderUnknown ? (
+              <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                Telegram preparation provider status is unknown right now. Use “Refresh status” to
+                re-check — nothing was lost.
+              </p>
+            ) : telegramConfig?.configured !== true ? (
+              <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                Telegram preparation is not configured yet. It stays disabled until the providers
+                are configured.
+              </p>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-2 min-h-10 w-full text-[11px]"
+              disabled={prepareDisabled || !canPrepareTelegram}
+              onClick={() => setConfirmTelegramPrep(true)}
+            >
+              {telegramBusy ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              {telegramBusy
+                ? TELEGRAM_PREP_STAGE_LABEL[telegramRun.stage]
+                : "Prepare for Telegram"}
+            </Button>
+          </>
+        )}
+
+        {telegramRun.failure && !telegramBusy ? (
+          <p className="mt-2 text-[11px] text-signal">
+            {telegramRun.failure.title}. {telegramRun.failure.body}
+          </p>
+        ) : null}
+      </div>
+
+
       {/* -------------------------------------------------- motion history */}
       {versions.length > 0 ? (
         <div className="mt-3 border-t border-border/70 pt-2">
