@@ -3660,6 +3660,18 @@ function StickerLabBuilder() {
                     </div>
                   ) : null}
 
+                  {/* Motion Studio — read-only surface attached to the approved
+                      static. No generation, provider or Telegram behaviour. */}
+                  {stickerId && preview ? (
+                    <MotionStudioPanel
+                      state={motionBySticker[stickerId]}
+                      loading={motionQuery.isPending || motionQuery.isFetching}
+                      error={motionQuery.isError}
+                    />
+                  ) : null}
+
+
+
                   {/* Batch selection: never offered for a sticker that already
                       has a usable image — those use Regenerate explicitly. */}
                   <label
