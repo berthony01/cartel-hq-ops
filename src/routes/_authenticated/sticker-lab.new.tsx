@@ -4735,48 +4735,109 @@ function StickerLabBuilder() {
                 </p>
                 <ul className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 [&>*]:min-w-0">
                   {rows.map(({ concept, stickerId, state }) => {
-                    const current = currentMotionVersion(state);
-                    const live =
-                      state!.releaseVariant === "motion" &&
-                      !!state!.releasedMotionVersionId &&
-                      state!.releasedMotionVersionId === current?.id;
-                    const badge = live
+                    const st = state!;
+                    const current = currentMotionVersion(st);
+                    const displayVersion = current ?? st.versions[0] ?? null;
+                    const liveCurrent =
+                      st.releaseVariant === "motion" &&
+                      !!current &&
+                      st.releasedMotionVersionId === current.id;
+                    const badge = liveCurrent
                       ? { tone: "green" as const, label: "Live in sticker pack" }
                       : current?.telegramAssetId
-                        ? { tone: "gold" as const, label: "Telegram-ready" }
+                        ? { tone: "green" as const, label: "Telegram-ready" }
                         : current
-                          ? { tone: "gold" as const, label: "Motion approved" }
-                          : { tone: "muted" as const, label: "Motion in progress" };
+                          ? { tone: "gold" as const, label: "Current Motion" }
+                          : { tone: "muted" as const, label: "Motion history" };
                     const src =
-                      current?.telegramPreviewUrl ?? current?.previewUrl ?? null;
+                      displayVersion?.telegramPreviewUrl ?? displayVersion?.previewUrl ?? null;
+                    const staticPreview = previews[stickerId!];
+                    const isLivePack = st.releaseVariant === "motion";
                     return (
-                      <li
-                        key={concept.id}
-                        className="cartel-panel rounded-lg p-3"
-                      >
+                      <li key={concept.id} className="cartel-panel rounded-lg p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <p className="truncate text-xs font-semibold text-foreground">
                             {concept.label}
                           </p>
                           <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>
                         </div>
-                        <div className="mt-2">
-                          {src ? (
-                            <video
-                              src={src}
-                              controls
-                              muted
-                              loop
-                              playsInline
-                              preload="metadata"
-                              className="max-h-44 w-full rounded bg-black/40 object-contain"
-                            />
-                          ) : (
-                            <p className="text-[10px] text-muted-foreground">
-                              Preview unavailable
+
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                              Static sticker
                             </p>
-                          )}
+                            <div className="mt-1 flex aspect-square items-center justify-center overflow-hidden rounded border border-border bg-background/40">
+                              {staticPreview ? (
+                                <img
+                                  src={staticPreview}
+                                  alt={`${concept.label} static sticker`}
+                                  className="max-h-full max-w-full object-contain"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground">
+                                  Preview unavailable
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                              {current ? "Current Motion" : "Motion history"}
+                            </p>
+                            <div className="mt-1">
+                              {src ? (
+                                <video
+                                  src={src}
+                                  controls
+                                  muted
+                                  loop
+                                  playsInline
+                                  preload="metadata"
+                                  className="max-h-44 w-full rounded bg-black/40 object-contain"
+                                />
+                              ) : (
+                                <p className="text-[10px] text-muted-foreground">
+                                  Preview unavailable
+                                </p>
+                              )}
+                            </div>
+                            {!current && displayVersion ? (
+                              <p className="mt-1 text-[10px] text-muted-foreground">
+                                This preview is a saved history version, not Current Motion.
+                              </p>
+                            ) : null}
+                          </div>
                         </div>
+
+                        <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+                          {isLivePack ? (
+                            <>
+                              This animated sticker is live inside the Telegram sticker pack. It is
+                              not automatically posted as a message to any community.
+                              {current && st.releasedMotionVersionId !== current.id
+                                ? " The released version is not the version currently marked as Current Motion."
+                                : ""}
+                            </>
+                          ) : current?.telegramAssetId ? (
+                            <>
+                              This motion is prepared for Telegram, but the static version remains
+                              live in the sticker pack until you explicitly release motion.
+                            </>
+                          ) : current ? (
+                            <>
+                              A Current Motion version exists, but it still needs Telegram
+                              preparation before it can be released to the sticker pack.
+                            </>
+                          ) : (
+                            <>
+                              These are saved Motion history versions. None of them is approved as
+                              Current Motion.
+                            </>
+                          )}
+                        </p>
+
                         <div className="mt-2 flex flex-wrap gap-2">
                           <Button
                             type="button"
@@ -4790,30 +4851,38 @@ function StickerLabBuilder() {
                           >
                             Open Motion Studio
                           </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="min-h-10 flex-1"
-                            disabled={sendingTest || !testTargetGroup}
-                            onClick={() =>
-                              void doSendTest({
-                                stickerId: stickerId!,
-                                label: concept.label,
-                              })
-                            }
-                          >
-                            {sendingTest ? (
-                              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                            ) : (
-                              <Send className="size-4" aria-hidden="true" />
-                            )}
-                            Send this sticker to selected community
-                          </Button>
+                          {tgPack?.telegram_set_url ? (
+                            <Button asChild size="sm" variant="outline" className="min-h-10 flex-1">
+                              <a
+                                href={tgPack.telegram_set_url}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                              >
+                                Open sticker pack
+                              </a>
+                            </Button>
+                          ) : null}
+                          {isLivePack ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="min-h-10 flex-1"
+                              disabled={sendingTest || !testTargetGroup || !groupsSelectedAndReady}
+                              onClick={() => void doSendTest({ stickerId: stickerId! })}
+                            >
+                              {sendingTest ? (
+                                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                              ) : (
+                                <Send className="size-4" aria-hidden="true" />
+                              )}
+                              Send this sticker to selected community
+                            </Button>
+                          ) : null}
                         </div>
-                        {!testTargetGroup ? (
+                        {isLivePack && (!testTargetGroup || !groupsSelectedAndReady) ? (
                           <p className="mt-1 text-[10px] text-muted-foreground">
-                            Select a connected community below to enable sending.
+                            Select and prepare a connected community below to enable sending.
                           </p>
                         ) : null}
                       </li>
