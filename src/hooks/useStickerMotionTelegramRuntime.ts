@@ -145,7 +145,7 @@ export function useStickerMotionTelegramRuntime(params: {
         if (res.status === "failed") {
           patchRun(stickerId, {
             stage: "failed",
-            failure: withSafetySentence(classifyProviderError(res.error, res.stage)),
+            failure: withSafetySentence(classifyProviderError(res.message ?? res.error, res.stage)),
           });
           return "failed";
         }

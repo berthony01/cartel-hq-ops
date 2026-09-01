@@ -386,7 +386,7 @@ export function MotionStudioPanel({
           </>
         )}
 
-        {telegramRun.failure && !telegramBusy ? (
+        {telegramRun.failure && !telegramBusy && !currentIsTelegramReady ? (
           <p className="mt-2 text-[11px] text-signal">
             {telegramRun.failure.title}. {telegramRun.failure.body}
           </p>
