@@ -3296,6 +3296,94 @@ function StickerLabBuilder() {
                     </details>
                   ) : null}
 
+                  {/* Phase 4D.2 candidate review — compare only, no mutation. */}
+                  {pendingCandidate && stickerId ? (
+                    <div className="mt-3 rounded-md border border-gold/40 bg-background/40 p-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                          Candidate ready
+                        </p>
+                        <StatusBadge tone="gold">
+                          Version {pendingCandidate.versionNumber}
+                        </StatusBadge>
+                      </div>
+                      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div className="min-w-0">
+                          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                            Current live
+                          </p>
+                          <div
+                            className="mt-1 flex aspect-square items-center justify-center overflow-hidden rounded border border-border"
+                            style={CHECKERBOARD}
+                          >
+                            {preview ? (
+                              <img
+                                src={preview.url}
+                                alt={`${c.label} current live sticker`}
+                                className="max-h-full max-w-full object-contain"
+                              />
+                            ) : (
+                              <span className="px-2 text-center text-[10px] text-muted-foreground">
+                                No preview
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                            Candidate
+                          </p>
+                          <div
+                            className="mt-1 flex aspect-square items-center justify-center overflow-hidden rounded border border-border"
+                            style={CHECKERBOARD}
+                          >
+                            {pendingCandidate.previewUrl ? (
+                              <img
+                                src={pendingCandidate.previewUrl}
+                                alt={`${c.label} candidate version ${pendingCandidate.versionNumber}`}
+                                className="max-h-full max-w-full object-contain"
+                              />
+                            ) : (
+                              <span className="px-2 text-center text-[10px] text-muted-foreground">
+                                Image unavailable
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+                        Telegram still uses Current live until you approve the candidate.
+                      </p>
+                      {pendingCandidate.unavailable ? (
+                        <p className="mt-2 text-[11px] text-signal">
+                          This candidate image is no longer available, so it cannot replace the
+                          live sticker. Generate another candidate to try again.
+                        </p>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="mt-2 min-h-10 w-full"
+                          disabled={
+                            busy(stage) || restoringStickerId !== null || isCandidateBusy(candStage)
+                          }
+                          onClick={() =>
+                            setRestoreTarget({
+                              stickerId,
+                              versionId: pendingCandidate.id,
+                              versionNumber: pendingCandidate.versionNumber,
+                              label: c.label,
+                            })
+                          }
+                        >
+                          {restoringStickerId === stickerId
+                            ? "Working…"
+                            : "Replace live sticker"}
+                        </Button>
+                      )}
+                    </div>
+                  ) : null}
+
                   {/* Batch selection: never offered for a sticker that already
                       has a usable image — those use Regenerate explicitly. */}
                   <label
