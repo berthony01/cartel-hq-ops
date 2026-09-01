@@ -436,6 +436,7 @@ Deno.serve(async (req: Request) => {
       const oldFileId = sticker.telegram_file_id ? String(sticker.telegram_file_id) : "";
       const expectedOldFileId = sticker.telegram_file_id ? String(sticker.telegram_file_id) : null;
       const expectedOldVariant = sticker.release_variant ? String(sticker.release_variant) : null;
+      const expectedOldReleasedMotionVersionId = sticker.telegram_motion_version_id ? String(sticker.telegram_motion_version_id) : null;
       const setName = pack.telegram_set_name ? String(pack.telegram_set_name) : "";
       const dbClaimsPublished = sticker.status === "published" || !!sticker.telegram_published_at;
 
@@ -487,17 +488,19 @@ Deno.serve(async (req: Request) => {
       // Last check before the only destructive Telegram call. Preparation and
       // upload take time, so re-confirm nothing changed underneath us. An unused
       // uploaded file is strictly safer than mutating the live set on stale state.
-      const { data: recheckSticker } = await admin.from("stickers").select("image_asset_id,telegram_file_id,release_variant").eq("id", stickerId).maybeSingle();
+      const { data: recheckSticker } = await admin.from("stickers").select("image_asset_id,telegram_file_id,release_variant,telegram_motion_version_id").eq("id", stickerId).maybeSingle();
       const { data: recheckJobs } = await admin.from("ai_jobs").select("id").eq("sticker_id", stickerId).in("status", ["queued", "running"]).limit(1);
       const recheckAssetId = recheckSticker?.image_asset_id ? String(recheckSticker.image_asset_id) : null;
       const recheckFileId = recheckSticker?.telegram_file_id ? String(recheckSticker.telegram_file_id) : null;
       const recheckVariant = recheckSticker?.release_variant ? String(recheckSticker.release_variant) : null;
+      const recheckReleasedMotionVersionId = recheckSticker?.telegram_motion_version_id ? String(recheckSticker.telegram_motion_version_id) : null;
       if (
         !recheckSticker ||
         (recheckJobs ?? []).length ||
         recheckAssetId !== expectedOldAssetId ||
         recheckFileId !== expectedOldFileId ||
-        recheckVariant !== expectedOldVariant
+        recheckVariant !== expectedOldVariant ||
+        recheckReleasedMotionVersionId !== expectedOldReleasedMotionVersionId
       ) {
         return respond({ error: "RESTORE_STATE_CHANGED", message: "This sticker changed while the restore was being prepared. Nothing was changed on Telegram. Refresh this pack and try the restore again." }, 409);
       }
@@ -513,10 +516,11 @@ Deno.serve(async (req: Request) => {
       const now = new Date().toISOString();
       // Guarded write: only the exact pre-restore row may be advanced. Zero
       // matched rows means someone else moved the sticker, which is a failure.
-      let guardedUpdate = admin.from("stickers").update({ image_asset_id: targetAsset.id, telegram_file_id: newFileId, telegram_static_file_id: newFileId, release_variant: "static", status: "published", telegram_publish_error: null, telegram_published_at: now, updated_at: now }).eq("id", stickerId);
+      let guardedUpdate = admin.from("stickers").update({ image_asset_id: targetAsset.id, telegram_file_id: newFileId, telegram_static_file_id: newFileId, telegram_motion_version_id: null, release_variant: "static", status: "published", telegram_publish_error: null, telegram_published_at: now, updated_at: now }).eq("id", stickerId);
       guardedUpdate = expectedOldAssetId === null ? guardedUpdate.is("image_asset_id", null) : guardedUpdate.eq("image_asset_id", expectedOldAssetId);
       guardedUpdate = expectedOldFileId === null ? guardedUpdate.is("telegram_file_id", null) : guardedUpdate.eq("telegram_file_id", expectedOldFileId);
       guardedUpdate = expectedOldVariant === null ? guardedUpdate.is("release_variant", null) : guardedUpdate.eq("release_variant", expectedOldVariant);
+      guardedUpdate = expectedOldReleasedMotionVersionId === null ? guardedUpdate.is("telegram_motion_version_id", null) : guardedUpdate.eq("telegram_motion_version_id", expectedOldReleasedMotionVersionId);
       const { data: updatedRow, error: updateError } = await guardedUpdate.select("id").maybeSingle();
       if (updateError || !updatedRow) {
         // Cross-system guard: Telegram already changed, CARTEL HQ did not.
