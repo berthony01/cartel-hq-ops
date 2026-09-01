@@ -685,6 +685,7 @@ Deno.serve(async (req: Request) => {
       const motionPatch: Record<string, unknown> = {
         telegram_file_id: newFileId,
         telegram_motion_file_id: newFileId,
+        telegram_motion_version_id: motionVersionId,
         release_variant: "motion",
         status: "published",
         telegram_publish_error: null,
@@ -697,7 +698,9 @@ Deno.serve(async (req: Request) => {
       }
       let guardedUpdate = admin.from("stickers").update(motionPatch).eq("id", stickerId).eq("image_asset_id", expectedOldAssetId).eq("current_motion_version_id", expectedOldMotionVersionId).eq("telegram_file_id", expectedOldFileId);
       guardedUpdate = expectedOldVariant === null ? guardedUpdate.is("release_variant", null) : guardedUpdate.eq("release_variant", expectedOldVariant);
+      guardedUpdate = expectedOldReleasedMotionVersionId === null ? guardedUpdate.is("telegram_motion_version_id", null) : guardedUpdate.eq("telegram_motion_version_id", expectedOldReleasedMotionVersionId);
       const { data: updatedRow, error: updateError } = await guardedUpdate.select("id").maybeSingle();
+
       if (updateError || !updatedRow) {
         const dbReason = updateError ? updateError.message : "guarded update matched zero rows";
         try {
