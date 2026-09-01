@@ -273,8 +273,8 @@ function launchWatchKeyboard(
   watching: boolean,
   remindersEnabled: boolean,
   canRewatch: boolean,
-  profile?: { website_url?: unknown; telegram_url?: unknown; x_url?: unknown } | null,
-  updatesEnabled?: boolean,
+  profile: { website_url?: unknown; telegram_url?: unknown; x_url?: unknown } | null | undefined,
+  updatesEnabled: boolean,
 ) {
   const rows: Array<Array<Record<string, string>>> = [];
   if (watching) {
@@ -286,7 +286,7 @@ function launchWatchKeyboard(
     ]);
     // Project updates are a SEPARATE preference from countdown reminders.
     rows.push([
-      updatesEnabled === true
+      updatesEnabled
         ? { text: "🔇 Mute project updates", callback_data: `ln_updates_off_${token}` }
         : { text: "📣 Enable project updates", callback_data: `ln_updates_on_${token}` },
     ]);
