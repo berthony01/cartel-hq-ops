@@ -177,6 +177,18 @@ export function MotionStudioPanel({
   const prepareDisabled =
     telegramBusy || telegramProviderBlocked || busy || approvingVersionId !== null;
 
+  // ---- R3 normalization-only recovery eligibility (client gate only; the
+  // server independently re-validates the durable failure code and lineage).
+  const canRetryNormalization =
+    !!onRetryNormalization &&
+    !!telegramRun.retryableNormalizationJobId &&
+    !telegramBusy &&
+    !currentIsTelegramReady &&
+    canPrepareTelegram;
+  const retryNormalizationDisabled =
+    prepareDisabled || telegramRun.retryingNormalization === true;
+
+
   // ---- Phase C3 motion release (real Telegram replacement, no provider work)
   const anyMotionIsLive = state?.releaseVariant === "motion";
   const currentMotionIsLive =
