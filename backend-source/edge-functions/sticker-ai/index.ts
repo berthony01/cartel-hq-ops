@@ -775,6 +775,145 @@ Deno.serve(async (req: Request) => {
 
     }
 
+    /**
+     * Recovery Phase R1 — REVIEW-ONLY background-removal retry.
+     *
+     * Reuses an already-successful `sticker_generate` provider result and
+     * starts EXACTLY ONE new background-removal task. It never starts image
+     * generation, never touches the sticker, pack, current pointer or Telegram,
+     * and is only reachable for `variation` / `candidate` review-only work.
+     */
+    if (action === "retry_review_background") {
+      const workspaceId = String(body.workspaceId ?? "");
+      const backgroundJobId = String(body.backgroundJobId ?? "");
+      if (!workspaceId || !backgroundJobId) return respond({ error: "INVALID_INPUT" }, 400);
+      if (!(await isMember(workspaceId))) return respond({ error: "FORBIDDEN" }, 403);
+
+      const { data: failedJob } = await admin.from("ai_jobs").select("*").eq("id", backgroundJobId).maybeSingle();
+      if (!failedJob) return respond({ error: "JOB_NOT_FOUND" }, 404);
+      if (String(failedJob.workspace_id) !== workspaceId) return respond({ error: "FORBIDDEN" }, 403);
+      if (failedJob.job_type !== "remove_background") {
+        return respond({ error: "NOT_A_BACKGROUND_JOB", message: "This retry only applies to a failed background-removal step." }, 409);
+      }
+      if (failedJob.status !== "failed") {
+        return respond({ error: "JOB_NOT_FAILED", message: "This background-removal step is not in a failed state." }, 409);
+      }
+      const failedMode = jobModeOf(failedJob as Record<string, unknown>);
+      if (!isReviewOnlyMode(failedMode)) {
+        return respond({ error: "NOT_REVIEW_ONLY", message: "Only review-only candidate or A/B/C variation work can be retried this way." }, 409);
+      }
+      const retryIsVariation = failedMode === "variation";
+      const retryMeta = variationMetaOf(failedJob as Record<string, unknown>);
+      if (retryIsVariation && (!retryMeta.groupId || !retryMeta.label)) {
+        return respond({ error: "VARIATION_METADATA_MISSING", message: "This variation take is missing its identity and cannot be retried." }, 409);
+      }
+      const failedStickerId = failedJob.sticker_id ? String(failedJob.sticker_id) : "";
+      const failedPackId = failedJob.pack_id ? String(failedJob.pack_id) : "";
+      if (!failedStickerId || !failedPackId) {
+        return respond({ error: "JOB_INCOMPLETE", message: "This background-removal step is missing its sticker or pack reference." }, 409);
+      }
+
+      const failedInput = (failedJob.input_json && typeof failedJob.input_json === "object" ? failedJob.input_json : {}) as Record<string, unknown>;
+      const sourceGenerationJobId =
+        typeof failedInput.source_generation_job_id === "string"
+          ? failedInput.source_generation_job_id
+          : typeof failedInput.parent_job_id === "string"
+            ? failedInput.parent_job_id
+            : null;
+      if (!sourceGenerationJobId) {
+        return respond({ error: "SOURCE_GENERATION_MISSING", message: "The original image generation for this take could not be identified. A new full generation would be required." }, 409);
+      }
+      const { data: sourceJob } = await admin.from("ai_jobs").select("*").eq("id", sourceGenerationJobId).maybeSingle();
+      if (
+        !sourceJob ||
+        sourceJob.job_type !== "sticker_generate" ||
+        sourceJob.status !== "succeeded" ||
+        String(sourceJob.workspace_id) !== workspaceId ||
+        String(sourceJob.pack_id ?? "") !== failedPackId ||
+        String(sourceJob.sticker_id ?? "") !== failedStickerId ||
+        jobModeOf(sourceJob as Record<string, unknown>) !== failedMode
+      ) {
+        return respond({ error: "SOURCE_GENERATION_INVALID", message: "The original image generation for this take is no longer usable. A new full generation would be required." }, 409);
+      }
+      if (retryIsVariation) {
+        const sourceMeta = variationMetaOf(sourceJob as Record<string, unknown>);
+        if (sourceMeta.groupId !== retryMeta.groupId || sourceMeta.label !== retryMeta.label) {
+          return respond({ error: "SOURCE_GENERATION_INVALID", message: "The original image generation does not match this variation take." }, 409);
+        }
+      }
+      if (!sourceJob.provider_task_id) {
+        return respond({ error: "SOURCE_GENERATION_INVALID", message: "The original image generation has no provider record. A new full generation would be required." }, 409);
+      }
+
+      // No overlapping generation or background work for this sticker.
+      const { data: activeJobs } = await admin.from("ai_jobs")
+        .select("id,job_type,status")
+        .eq("sticker_id", failedStickerId)
+        .in("job_type", ["sticker_generate", "remove_background"])
+        .in("status", ["queued", "running"])
+        .limit(1);
+      if ((activeJobs ?? []).length > 0) {
+        return respond({ error: "ACTIVE_JOB_CONFLICT", message: "This sticker is already running a generation task. Wait for it to finish before retrying." }, 409);
+      }
+
+      // Retrieval only — never a createTask for image generation.
+      const sourceQuery = await kieRequest(`/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(String(sourceJob.provider_task_id))}`, KIE_API_KEY, { method: "GET" });
+      if (!sourceQuery.ok) {
+        return respond({ error: "SOURCE_RESULT_UNAVAILABLE", message: "The original generated image could not be retrieved from the provider. A new full generation would be required. No task was started." }, 409);
+      }
+      if (mapKieState(sourceQuery.data.state ?? sourceQuery.data.status) !== "success") {
+        return respond({ error: "SOURCE_RESULT_UNAVAILABLE", message: "The original generated image is no longer reported as successful. A new full generation would be required. No task was started." }, 409);
+      }
+      const sourceResultUrl = resultUrlFrom(sourceQuery.data);
+      if (!sourceResultUrl) {
+        return respond({ error: "SOURCE_RESULT_UNAVAILABLE", message: "The original generated image is no longer available from the provider. A new full generation would be required. No task was started." }, 409);
+      }
+
+      const retryPriorAssetId =
+        typeof failedInput.prior_image_asset_id === "string" ? failedInput.prior_image_asset_id : null;
+      const { data: retryChild, error: retryChildError } = await admin.from("ai_jobs").insert({
+        workspace_id: workspaceId, user_id: user.id, pack_id: failedPackId, sticker_id: failedStickerId,
+        job_type: "remove_background", provider: "kie", provider_model: BG_MODEL, status: "queued",
+        input_json: {
+          // `parent_job_id` is deliberately OMITTED: it is uniquely indexed for
+          // the original child. The retry records its lineage under new keys.
+          source_generation_job_id: sourceGenerationJobId,
+          retry_of_background_job_id: backgroundJobId,
+          prior_image_asset_id: retryPriorAssetId,
+          model: BG_MODEL,
+          mode: failedMode,
+          ...(retryIsVariation ? { variation_group_id: retryMeta.groupId, variation_label: retryMeta.label } : {}),
+        },
+      }).select("*").single();
+      if (retryChildError || !retryChild) return respond({ error: "JOB_CREATE_FAILED" }, 500);
+
+      const retryCreate = await kieRequest("/api/v1/jobs/createTask", KIE_API_KEY, {
+        method: "POST",
+        body: JSON.stringify({ model: BG_MODEL, input: { image: sourceResultUrl, nsfw_checker: true } }),
+      });
+      const retryTaskId = retryCreate.ok ? String(retryCreate.data.taskId ?? retryCreate.data.task_id ?? "") : "";
+      if (!retryCreate.ok || !retryTaskId) {
+        // Only the new retry child is marked failed. Nothing else is touched.
+        await admin.from("ai_jobs").update({
+          status: "failed", error_code: "BACKGROUND_START_FAILED",
+          error_message: (retryCreate.ok ? "Kie.ai returned no background-removal task ID." : retryCreate.message).slice(0, 500),
+          completed_at: new Date().toISOString(),
+        }).eq("id", retryChild.id);
+        return respond({
+          aiJobId: retryChild.id, status: "failed", model: BG_MODEL, mode: failedMode,
+          retryKind: "background_only",
+          error: retryCreate.ok ? "Kie.ai returned no background-removal task ID." : retryCreate.message,
+          ...(retryIsVariation ? { variationGroupId: retryMeta.groupId, variationLabel: retryMeta.label } : {}),
+        });
+      }
+      await admin.from("ai_jobs").update({ status: "running", provider_task_id: retryTaskId }).eq("id", retryChild.id);
+      return respond({
+        aiJobId: retryChild.id, status: "running", model: BG_MODEL, mode: failedMode,
+        retryKind: "background_only",
+        ...(retryIsVariation ? { variationGroupId: retryMeta.groupId, variationLabel: retryMeta.label } : {}),
+      });
+    }
+
     if (action === "sync") {
       const aiJobId = String(body.aiJobId ?? "");
       if (!aiJobId) return respond({ error: "INVALID_INPUT" }, 400);
@@ -943,7 +1082,14 @@ Deno.serve(async (req: Request) => {
           assetId = await findReviewAsset();
         }
 
-        const parentJobId = job.input_json && typeof job.input_json === "object" ? (job.input_json as Record<string, unknown>).parent_job_id : null;
+        // R1 — a background-removal RETRY child records its source generation
+        // under `source_generation_job_id` (the indexed `parent_job_id` key is
+        // reserved for the original child). Prefer the new key, then the old.
+        const bgInput = (job.input_json && typeof job.input_json === "object" ? job.input_json : {}) as Record<string, unknown>;
+        const parentJobId =
+          typeof bgInput.source_generation_job_id === "string"
+            ? bgInput.source_generation_job_id
+            : (bgInput.parent_job_id ?? null);
         let parentTaskId: string | null = null;
         let parentModel: string | null = null;
         if (typeof parentJobId === "string") {

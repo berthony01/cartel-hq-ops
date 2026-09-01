@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadLatestJobs, classifyProviderError } from "@/lib/sticker-packs";
 import type { AiJobRow, ProviderFailure } from "@/lib/sticker-packs";
-import { startStickerVariationGeneration, syncStickerJob } from "@/lib/sticker-ai";
+import {
+  retryReviewBackgroundGeneration,
+  startStickerVariationGeneration,
+  syncStickerJob,
+} from "@/lib/sticker-ai";
 import type { StickerVariationLabel } from "@/lib/sticker-ai";
 
 /**
@@ -58,6 +62,12 @@ export type VariationRound = {
   /** Takes finished in this round, in completion order. */
   completed: StickerVariationLabel[];
   failure?: ProviderFailure | undefined;
+  /**
+   * R1 — set ONLY when the failure happened during background removal, i.e.
+   * the paid image generation already succeeded. Enables the one-task
+   * background-only retry instead of a full new round.
+   */
+  retryableBackgroundJobId?: string | null;
 };
 
 const EMPTY_ROUND: VariationRound = {
@@ -65,6 +75,7 @@ const EMPTY_ROUND: VariationRound = {
   stage: "idle",
   currentLabel: null,
   completed: [],
+  retryableBackgroundJobId: null,
 };
 
 /** Same conservative polling contract as ordinary generation. */
@@ -101,6 +112,10 @@ export function useStickerVariationRuntime(params: {
   /** Bumped whenever a take finishes so Version History can refetch. */
   const [variationReadySignal, setVariationReadySignal] = useState(0);
 
+  /** Latest rounds snapshot for callbacks that must not re-create on state change. */
+  const roundsRef = useRef<Record<string, VariationRound>>({});
+  roundsRef.current = rounds;
+
   const aliveRef = useRef(true);
   /** Sticker ids running a round in THIS tab — one round per sticker. */
   const runningRef = useRef<Set<string>>(new Set());
@@ -129,8 +144,14 @@ export function useStickerVariationRuntime(params: {
    * Polls one already-created take to completion. Never starts provider work.
    */
   const pollTake = useCallback(
-    async (stickerId: string, startJobId: string): Promise<PollOutcome> => {
+    async (
+      stickerId: string,
+      startJobId: string,
+      options?: { startsOnBackground?: boolean },
+    ): Promise<PollOutcome> => {
       let jobId = startJobId;
+      /** True once the polled job is the background-removal child. */
+      let onBackground = options?.startsOnBackground === true;
       let delay = POLL_START_MS;
       const deadline = Date.now() + POLL_TIMEOUT_MS;
       while (Date.now() < deadline) {
@@ -159,6 +180,9 @@ export function useStickerVariationRuntime(params: {
             stage: "failed",
             currentLabel: null,
             failure: withSafetySentence(classifyProviderError(res.error, res.stage)),
+            // Only a background-stage failure is retryable with one task: the
+            // paid image generation for this take already succeeded.
+            retryableBackgroundJobId: onBackground ? jobId : null,
           });
           return "failed";
         }
@@ -166,12 +190,14 @@ export function useStickerVariationRuntime(params: {
         if (res.status === "succeeded") {
           if (res.childJobId) {
             jobId = res.childJobId;
+            onBackground = true;
             delay = POLL_START_MS;
             patchRound(stickerId, { stage: "background" });
             continue;
           }
           return "succeeded";
         }
+
 
         if (res.stage === "background_removal") patchRound(stickerId, { stage: "background" });
       }
@@ -206,7 +232,13 @@ export function useStickerVariationRuntime(params: {
       const completed: StickerVariationLabel[] = [];
       setRounds((r) => ({
         ...r,
-        [stickerId]: { groupId, stage: "starting", currentLabel: "A", completed: [] },
+        [stickerId]: {
+          groupId,
+          stage: "starting",
+          currentLabel: "A",
+          completed: [],
+          retryableBackgroundJobId: null,
+        },
       }));
 
       try {
@@ -216,7 +248,12 @@ export function useStickerVariationRuntime(params: {
             patchRound(stickerId, { stage: "cancelled", currentLabel: null });
             return;
           }
-          patchRound(stickerId, { stage: "starting", currentLabel: label, failure: undefined });
+          patchRound(stickerId, {
+            stage: "starting",
+            currentLabel: label,
+            failure: undefined,
+            retryableBackgroundJobId: null,
+          });
 
           let started: Awaited<ReturnType<typeof startStickerVariationGeneration>>;
           try {
@@ -267,7 +304,11 @@ export function useStickerVariationRuntime(params: {
           if (outcome !== "succeeded") return;
 
           completed.push(label);
-          patchRound(stickerId, { completed: [...completed], currentLabel: null });
+          patchRound(stickerId, {
+            completed: [...completed],
+            currentLabel: null,
+            retryableBackgroundJobId: null,
+          });
           setVariationReadySignal((n) => n + 1);
         }
         patchRound(stickerId, { stage: "done", currentLabel: null });
@@ -287,6 +328,90 @@ export function useStickerVariationRuntime(params: {
     if (!runningRef.current.has(stickerId)) return;
     cancelRef.current.add(stickerId);
   }, []);
+
+  /**
+   * BILLABLE — ONE background-removal task. Recovery R1.
+   *
+   * Retries only the failed background-removal step of a take whose image
+   * generation already succeeded. It never generates an image, never retries
+   * automatically and never continues the round to B or C.
+   */
+  const retryVariationBackground = useCallback(
+    async (stickerId: string) => {
+      if (!workspaceId) return;
+      if (runningRef.current.has(stickerId)) return;
+      const round = roundsRef.current[stickerId];
+      const backgroundJobId = round?.retryableBackgroundJobId;
+      if (!backgroundJobId) return;
+
+      runningRef.current.add(stickerId);
+      patchRound(stickerId, {
+        stage: "starting",
+        failure: undefined,
+        retryableBackgroundJobId: null,
+      });
+      try {
+        let started: Awaited<ReturnType<typeof retryReviewBackgroundGeneration>>;
+        try {
+          started = await retryReviewBackgroundGeneration({ workspaceId, backgroundJobId });
+        } catch (err) {
+          patchRound(stickerId, {
+            stage: "failed",
+            currentLabel: null,
+            failure: withSafetySentence(
+              classifyProviderError(
+                err instanceof Error ? err.message : "This background retry could not be started.",
+              ),
+            ),
+            retryableBackgroundJobId: backgroundJobId,
+          });
+          return;
+        }
+        if (!started.aiJobId || started.status === "failed") {
+          patchRound(stickerId, {
+            stage: "failed",
+            currentLabel: null,
+            failure: withSafetySentence(
+              classifyProviderError(
+                started.error ?? "The background retry could not be started.",
+                "remove_background",
+              ),
+            ),
+            retryableBackgroundJobId: started.aiJobId ?? backgroundJobId,
+          });
+          return;
+        }
+
+        patchRound(stickerId, { stage: "background" });
+        const outcome = await pollTake(stickerId, started.aiJobId, { startsOnBackground: true });
+        if (outcome !== "succeeded") return;
+
+        setRounds((r) => {
+          const prev = r[stickerId] ?? EMPTY_ROUND;
+          const label = (started.variationLabel ?? prev.currentLabel) as
+            | StickerVariationLabel
+            | null;
+          const done =
+            label && !prev.completed.includes(label) ? [...prev.completed, label] : prev.completed;
+          return {
+            ...r,
+            [stickerId]: {
+              ...prev,
+              stage: "done",
+              currentLabel: null,
+              completed: done,
+              failure: undefined,
+              retryableBackgroundJobId: null,
+            },
+          };
+        });
+        setVariationReadySignal((n) => n + 1);
+      } finally {
+        runningRef.current.delete(stickerId);
+      }
+    },
+    [workspaceId, patchRound, pollTake],
+  );
 
   /**
    * READ-ONLY recovery after a refresh. Resumes polling of an in-flight take
@@ -367,6 +492,9 @@ export function useStickerVariationRuntime(params: {
             failure: withSafetySentence(
               classifyProviderError(latest.error_message, latest.job_type),
             ),
+            // One-task retry is only offered when the newest failure was the
+            // background-removal step, i.e. the image generation already paid off.
+            retryableBackgroundJobId: isBackground(latest) ? latest.id : null,
           });
         }
       }
@@ -384,6 +512,7 @@ export function useStickerVariationRuntime(params: {
     variationReadySignal,
     startVariationRound,
     cancelVariationRound,
+    retryVariationBackground,
     recoverVariations,
     clearVariationState,
     variationRoundFor: (stickerId: string | null | undefined): VariationRound =>
