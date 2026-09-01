@@ -333,6 +333,13 @@ function buildPrompt(
     parts.push("TEXT RULE (mandatory, overrides any other text guidance): no caption text was supplied, so do not invent, add or imply any words or lettering.");
   }
 
+  // 3c. Variation direction (server-controlled, lower priority than every
+  // mandatory rule above and never a licence to change identity or caption).
+  const variationText = variationLabel ? VARIATION_TEXT[variationLabel] : "";
+  if (variationText) {
+    parts.push(`VARIATION DIRECTION (lower priority than the identity, concept and text rules above, which must still be obeyed exactly): ${variationText}`);
+  }
+
   // 4. Brand Kit styling (unchanged behavior).
   if (brand) {
     const brandName = String(brand.brand_name ?? "").trim();
