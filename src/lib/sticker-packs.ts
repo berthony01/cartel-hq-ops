@@ -258,7 +258,7 @@ export async function loadLatestJobs(
   if (unique.length === 0) return out;
   const { data, error } = await supabase
     .from("ai_jobs")
-    .select("id,sticker_id,job_type,status,error_message,created_at,input_json")
+    .select("id,sticker_id,job_type,status,error_message,error_code,created_at,input_json")
     .in("sticker_id", unique)
     .order("created_at", { ascending: false })
     .limit(500);
