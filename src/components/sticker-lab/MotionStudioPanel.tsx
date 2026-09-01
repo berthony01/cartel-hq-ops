@@ -175,6 +175,19 @@ export function MotionStudioPanel({
   const prepareDisabled =
     telegramBusy || telegramProviderBlocked || busy || approvingVersionId !== null;
 
+  // ---- Phase C3 motion release (real Telegram replacement, no provider work)
+  const motionIsLive = state?.releaseVariant === "motion";
+  const canShowRelease =
+    !!current &&
+    currentIsTelegramReady &&
+    currentFromCurrentStatic &&
+    telegramPublished &&
+    !motionIsLive;
+  const releaseDisabled =
+    releasingMotion || busy || telegramBusy || approvingVersionId !== null;
+
+
+
 
   const requirementsMet =
     mode === "quick"
