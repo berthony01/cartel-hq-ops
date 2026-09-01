@@ -560,6 +560,47 @@ export function MotionStudioPanel({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ------------- MAY BE BILLABLE Telegram preparation confirmation */}
+      <AlertDialog
+        open={confirmTelegramPrep}
+        onOpenChange={(open) => !open && setConfirmTelegramPrep(false)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Prepare {stickerLabel} for Telegram?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-left">
+                <p>This starts paid external media processing. Before you confirm:</p>
+                <ul className="list-disc space-y-1 pl-4">
+                  <li>
+                    It runs motion background removal and Telegram normalization through the
+                    configured providers
+                  </li>
+                  <li>Provider billing depends on your connected provider usage and account</li>
+                  <li>No automatic retry</li>
+                  <li>Your current static sticker will not change</li>
+                  <li>Your Current Motion will not change</li>
+                  <li>Your Telegram release will not change</li>
+                  <li>Nothing is published to Telegram in this step</li>
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmTelegramPrep(false);
+                if (current) onPrepareTelegram({ stickerId, motionVersionId: current.id });
+              }}
+            >
+              Prepare for Telegram
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+
   );
 }
