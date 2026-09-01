@@ -673,7 +673,52 @@ export function MotionStudioPanel({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ---------------- REAL Telegram change: motion release confirmation */}
+      <AlertDialog
+        open={confirmMotionRelease}
+        onOpenChange={(open) => !open && setConfirmMotionRelease(false)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Release motion for {stickerLabel} to Telegram?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-left">
+                <p>This makes a real change on Telegram. Before you confirm:</p>
+                <ul className="list-disc space-y-1 pl-4">
+                  <li>
+                    It uses the already-prepared Telegram WEBM. No Kie generation, no fal
+                    background removal and no CloudConvert normalization starts in this step
+                  </li>
+                  <li>It replaces this ONE sticker in place in the existing Telegram set</li>
+                  <li>
+                    The Telegram pack link stays the same and no sticker is added or removed
+                  </li>
+                  <li>Your current static image and Current Motion pointer stay unchanged</li>
+                  <li>
+                    Community sends and Sticker Drops continue using the current live Telegram
+                    sticker ID
+                  </li>
+                  <li>No automatic retry</li>
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmMotionRelease(false);
+                if (current) onReleaseMotion({ stickerId, motionVersionId: current.id });
+              }}
+            >
+              Release motion to Telegram
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+
 
   );
 }
