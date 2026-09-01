@@ -148,3 +148,33 @@ export function syncStickerJob(aiJobId: string): Promise<StickerAiSyncResult> {
   return invoke<StickerAiSyncResult>({ action: "sync", aiJobId });
 }
 
+
+/**
+ * A/B/C Variations — creates ONE review-only alternate take for a sticker that
+ * already has a current image. The current image, sticker status and any
+ * published Telegram set are never touched; the result lands in version
+ * history only. Billable: only ever call from an explicit confirmed action.
+ *
+ * `variationGroupId` identifies one A/B/C round; the server treats a finished
+ * (sticker, group, label) slot as idempotent and will not charge twice.
+ */
+export function startStickerVariationGeneration(params: {
+  workspaceId: string;
+  packId: string;
+  stickerId: string;
+  variationGroupId: string;
+  variationLabel: StickerVariationLabel;
+  referenceAssetIds?: string[];
+}): Promise<StickerAiStartResult> {
+  return invoke<StickerAiStartResult>({
+    action: "start_variation",
+    workspaceId: params.workspaceId,
+    packId: params.packId,
+    stickerId: params.stickerId,
+    variationGroupId: params.variationGroupId,
+    variationLabel: params.variationLabel,
+    ...(params.referenceAssetIds?.length
+      ? { referenceAssetIds: params.referenceAssetIds }
+      : {}),
+  });
+}
