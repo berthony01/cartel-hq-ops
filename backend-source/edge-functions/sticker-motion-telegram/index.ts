@@ -89,6 +89,39 @@ function num(value: unknown): number | null {
   }
   return null;
 }
+/**
+ * Duration is reported inconsistently by ExifTool: a raw number, `2.90 s`,
+ * or a clock string such as `0:00:02.900`. Never fabricate — return null
+ * when the value is not provable.
+ */
+function parseDurationSeconds(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  if (!text) return null;
+  const clock = text.match(/(\d+):([0-5]?\d):([0-5]?\d(?:\.\d+)?)/);
+  if (clock) {
+    const h = Number(clock[1]);
+    const m = Number(clock[2]);
+    const s = Number(clock[3]);
+    if ([h, m, s].every((v) => Number.isFinite(v))) return h * 3600 + m * 60 + s;
+    return null;
+  }
+  const mmss = text.match(/^(\d+):([0-5]?\d(?:\.\d+)?)$/);
+  if (mmss) {
+    const m = Number(mmss[1]);
+    const s = Number(mmss[2]);
+    if (Number.isFinite(m) && Number.isFinite(s)) return m * 60 + s;
+    return null;
+  }
+  const decimal = text.match(/-?\d+(?:\.\d+)?/);
+  if (decimal) {
+    const parsed = Number(decimal[0]);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
 
 /** Case-insensitive deep lookup across defensive metadata key naming. */
 function findKey(source: unknown, keys: string[], depth = 0): unknown {
