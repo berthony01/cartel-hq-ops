@@ -1238,6 +1238,12 @@ function StickerLabBuilder() {
       void recoverCandidates(id, savedStickerIds, { force: true });
       // Same contract for variation rounds: reconcile only, never re-run.
       void recoverVariations(id, savedStickerIds, { force: true });
+      // Same contract for motion: reconcile the existing job only, never start
+      // provider work, then re-read durable motion history.
+      void recoverMotion(id, savedStickerIds, { force: true });
+      void motionQuery.refetch();
+    }
+
     }
   };
 
