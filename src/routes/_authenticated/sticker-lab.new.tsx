@@ -569,6 +569,7 @@ function StickerLabBuilder() {
       draft?.packId ?? "",
       previewFingerprint,
       candidateReadySignal,
+      variationReadySignal,
     ],
     enabled: !!draft && step === 4 && savedStickerIds.length > 0,
     queryFn: () => loadStickerVersions(savedStickerIds),
@@ -591,7 +592,10 @@ function StickerLabBuilder() {
     const stickerIds = ids.split(",").filter(Boolean);
     if (stickerIds.length === 0) return;
     void recoverCandidates(packId, stickerIds);
-  }, [candidateRecoveryKey, recoverCandidates]);
+    // Variation recovery is read-only for the same reason: it inspects existing
+    // `ai_jobs` rows and never starts a new billable round.
+    void recoverVariations(packId, stickerIds);
+  }, [candidateRecoveryKey, recoverCandidates, recoverVariations]);
 
   /**
    * Phase 4B restore state. Declared with the other top-level hooks, ABOVE every
