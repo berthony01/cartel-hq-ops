@@ -244,7 +244,7 @@ export const STEP_GUIDES: Record<
   3: {
     stage: "Concept Studio",
     doing: "Write, edit, lock, reorder or duplicate the concepts in your pack.",
-    why: "AI suggestions here are optional and text-only — nothing is generated or charged yet.",
+    why: "AI suggestions are optional and text-only. They may use text-model credits, but they never start image generation.",
     next: "Next: Sticker Studio, where concepts become paid image generations.",
   },
   4: {

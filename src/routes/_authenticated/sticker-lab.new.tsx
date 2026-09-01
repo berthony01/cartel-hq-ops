@@ -2235,7 +2235,7 @@ function StickerLabBuilder() {
       {step === 3 ? (
         <StepCard
           title="Concept Studio"
-          hint="Lock the ideas you want to keep, reorder or duplicate concepts, and use AI only where you choose. AI suggestions are optional and text-only — nothing here generates images or costs anything. Finalise concepts before paid image generation in Sticker Studio."
+          hint="Lock the ideas you want to keep, reorder or duplicate concepts, and use AI only where you choose. AI suggestions are optional and text-only, and may use text-model credits after confirmation; they do not start image generation. Finalise concepts before paid image generation in Sticker Studio."
           action={
             <div className="flex flex-wrap gap-2">
               <Button
