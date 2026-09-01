@@ -251,8 +251,8 @@ function PackManagerPage() {
       ),
     };
   } else if (deliveredTargets === 0) {
-
     nextStep = {
+
       title: "Send to communities",
       body:
         targets.length > 0
