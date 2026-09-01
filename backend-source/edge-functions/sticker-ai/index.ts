@@ -253,6 +253,17 @@ const INTENSITY_TEXT: Record<string, string> = {
 };
 
 /**
+ * A/B/C Variations — the ONLY variation wording the model ever sees. Labels are
+ * server-controlled; the browser can only ask for A, B or C.
+ */
+const VARIATION_TEXT: Record<"A" | "B" | "C", string> = {
+  A: "This is alternate take A: stay closest to the approved concept, changing only to a natural alternate pose or composition of the same idea.",
+  B: "This is alternate take B: make the pose, expression and composition noticeably different from the obvious first reading of the concept while staying fully on brief.",
+  C: "This is alternate take C: take the boldest on-brief alternate interpretation of the concept, with the most expressive pose and composition, while preserving every mandatory identity and text rule exactly.",
+};
+
+
+/**
  * V2 prompt compiler. Hierarchy, highest priority first:
  *  1. Production/one-sticker safety constraints
  *  2. Character Lock identity rules (pack snapshot only)
