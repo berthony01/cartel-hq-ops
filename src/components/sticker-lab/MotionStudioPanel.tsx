@@ -34,6 +34,13 @@ import {
   isMotionBusy,
   type MotionRun,
 } from "@/hooks/useStickerMotionGenerationRuntime";
+import {
+  TELEGRAM_PREP_STAGE_LABEL,
+  isTelegramPrepBusy,
+  type TelegramPrepRun,
+} from "@/hooks/useStickerMotionTelegramRuntime";
+import type { StickerMotionTelegramConfig } from "@/lib/sticker-motion-telegram";
+
 
 /**
  * Motion Studio for one Step 4 sticker card.
@@ -89,8 +96,13 @@ export function MotionStudioPanel({
   configError,
   approvingVersionId,
   approveError,
+  telegramRun,
+  telegramConfig,
+  telegramConfigLoading,
+  telegramConfigError,
   onGenerate,
   onSetCurrentMotion,
+  onPrepareTelegram,
 }: {
   stickerId: string;
   stickerLabel: string;
@@ -103,6 +115,11 @@ export function MotionStudioPanel({
   configError: boolean;
   approvingVersionId: string | null;
   approveError: string | null;
+  /** Phase C2 — Telegram preparation run state for THIS sticker. */
+  telegramRun: TelegramPrepRun;
+  telegramConfig: StickerMotionTelegramConfig | undefined;
+  telegramConfigLoading: boolean;
+  telegramConfigError: boolean;
   /** BILLABLE — only ever called from the confirmation dialog below. */
   onGenerate: (input: {
     stickerId: string;
@@ -112,12 +129,16 @@ export function MotionStudioPanel({
   }) => void;
   /** Non-billable Current Motion approval. */
   onSetCurrentMotion: (input: { stickerId: string; motionVersionId: string }) => void;
+  /** MAY BE BILLABLE — only ever called from the Telegram confirmation dialog. */
+  onPrepareTelegram: (input: { stickerId: string; motionVersionId: string }) => void;
 }) {
+
   const [mode, setMode] = useState<MotionMode>("quick");
   const [preset, setPreset] = useState<StickerMotionPreset | null>(null);
   const [instruction, setInstruction] = useState("");
   const [confirmGenerate, setConfirmGenerate] = useState(false);
   const [approveTarget, setApproveTarget] = useState<StickerMotionVersion | null>(null);
+  const [confirmTelegramPrep, setConfirmTelegramPrep] = useState(false);
 
   const current = currentMotionVersion(state);
   const known = !error && !loading && !!state;
@@ -126,6 +147,22 @@ export function MotionStudioPanel({
   // Unknown must stay unknown: a failed probe never claims "not configured".
   const providerUnknown = configError || (configLoading && !config);
   const providerBlocked = providerUnknown || config?.configured !== true;
+
+  // ---- Phase C2 Telegram preparation (media formatting only, never publishing)
+  const telegramBusy = isTelegramPrepBusy(telegramRun.stage);
+  const telegramProviderUnknown =
+    telegramConfigError || (telegramConfigLoading && !telegramConfig);
+  const telegramProviderBlocked =
+    telegramProviderUnknown || telegramConfig?.configured !== true;
+  const currentIsTelegramReady = !!current?.telegramAssetId;
+  const currentFromCurrentStatic = current
+    ? sourceIsCurrentStatic(current, state?.currentStaticAssetId)
+    : false;
+  const canPrepareTelegram =
+    !!current && currentFromCurrentStatic && !currentIsTelegramReady;
+  const prepareDisabled =
+    telegramBusy || telegramProviderBlocked || busy || approvingVersionId !== null;
+
 
   const requirementsMet =
     mode === "quick"
@@ -286,6 +323,77 @@ export function MotionStudioPanel({
         </p>
       ) : null}
 
+      {/* --------------------------------- Phase C2 Telegram preparation */}
+      <div className="mt-3 border-t border-border/70 pt-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Telegram preparation
+          </p>
+          {currentIsTelegramReady ? (
+            <StatusBadge tone="green">Telegram-ready</StatusBadge>
+          ) : null}
+        </div>
+
+        {!current ? (
+          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+            Approve a Current Motion first. Telegram preparation only runs on the approved Current
+            Motion.
+          </p>
+        ) : currentIsTelegramReady ? (
+          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+            A Telegram-formatted derivative of Version {current.versionNumber} is prepared and
+            stored. It has not been published to Telegram and Telegram has not accepted it. The
+            Telegram release is unchanged.
+          </p>
+        ) : !currentFromCurrentStatic ? (
+          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+            This Current Motion came from an earlier static image. Generate and approve motion from
+            the current static image before preparing it for Telegram.
+          </p>
+        ) : (
+          <>
+            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              Prepares a Telegram-formatted derivative of Version {current.versionNumber}. This is
+              media preparation only — nothing is published to Telegram and the release stays
+              static.
+            </p>
+            {telegramProviderUnknown ? (
+              <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                Telegram preparation provider status is unknown right now. Use “Refresh status” to
+                re-check — nothing was lost.
+              </p>
+            ) : telegramConfig?.configured !== true ? (
+              <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                Telegram preparation is not configured yet. It stays disabled until the providers
+                are configured.
+              </p>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-2 min-h-10 w-full text-[11px]"
+              disabled={prepareDisabled || !canPrepareTelegram}
+              onClick={() => setConfirmTelegramPrep(true)}
+            >
+              {telegramBusy ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              {telegramBusy
+                ? TELEGRAM_PREP_STAGE_LABEL[telegramRun.stage]
+                : "Prepare for Telegram"}
+            </Button>
+          </>
+        )}
+
+        {telegramRun.failure && !telegramBusy ? (
+          <p className="mt-2 text-[11px] text-signal">
+            {telegramRun.failure.title}. {telegramRun.failure.body}
+          </p>
+        ) : null}
+      </div>
+
+
       {/* -------------------------------------------------- motion history */}
       {versions.length > 0 ? (
         <div className="mt-3 border-t border-border/70 pt-2">
@@ -310,7 +418,12 @@ export function MotionStudioPanel({
                       <StatusBadge tone="muted">{MODE_LABEL[version.motionMode]}</StatusBadge>
                     ) : null}
                     {isCurrent ? <StatusBadge tone="gold">Current Motion</StatusBadge> : null}
-                    <StatusBadge tone="muted">Creative source — Telegram prep required</StatusBadge>
+                    <StatusBadge tone={version.telegramAssetId ? "green" : "muted"}>
+                      {version.telegramAssetId
+                        ? "Telegram-ready derivative"
+                        : "Creative source — Telegram prep required"}
+                    </StatusBadge>
+
                   </div>
 
                   {summary ? (
@@ -394,7 +507,9 @@ export function MotionStudioPanel({
                   <li>Current Motion will not change automatically</li>
                   <li>Telegram will not change</li>
                   <li>
-                    The result is NOT Telegram-ready yet — Telegram preparation is Phase C
+                    The result is NOT Telegram-ready yet — Telegram preparation becomes available
+                    after you approve a Current Motion
+
                   </li>
                 </ul>
               </div>
@@ -445,6 +560,47 @@ export function MotionStudioPanel({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ------------- MAY BE BILLABLE Telegram preparation confirmation */}
+      <AlertDialog
+        open={confirmTelegramPrep}
+        onOpenChange={(open) => !open && setConfirmTelegramPrep(false)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Prepare {stickerLabel} for Telegram?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-left">
+                <p>This starts paid external media processing. Before you confirm:</p>
+                <ul className="list-disc space-y-1 pl-4">
+                  <li>
+                    It runs motion background removal and Telegram normalization through the
+                    configured providers
+                  </li>
+                  <li>Provider billing depends on your connected provider usage and account</li>
+                  <li>No automatic retry</li>
+                  <li>Your current static sticker will not change</li>
+                  <li>Your Current Motion will not change</li>
+                  <li>Your Telegram release will not change</li>
+                  <li>Nothing is published to Telegram in this step</li>
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmTelegramPrep(false);
+                if (current) onPrepareTelegram({ stickerId, motionVersionId: current.id });
+              }}
+            >
+              Prepare for Telegram
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+
   );
 }

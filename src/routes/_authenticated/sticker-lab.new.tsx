@@ -126,6 +126,9 @@ import {
   setCurrentStickerMotion,
   type StickerMotionPreset,
 } from "@/lib/sticker-motion-ai";
+import { useStickerMotionTelegramRuntime } from "@/hooks/useStickerMotionTelegramRuntime";
+import { fetchStickerMotionTelegramConfig } from "@/lib/sticker-motion-telegram";
+
 
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -405,9 +408,21 @@ function StickerLabBuilder() {
     recoverMotion,
     motionRunFor,
   } = useStickerMotionGenerationRuntime({ workspaceId });
+  /**
+   * Phase C2 — Telegram motion PREPARATION runtime. Separate store again:
+   * preparation only formats media, never publishes to Telegram, never writes
+   * `release_variant`, the current static image or the Current Motion pointer.
+   */
+  const {
+    telegramMotionReadySignal,
+    startTelegramPrepare,
+    recoverTelegramPrepare,
+    telegramPrepRunFor,
+  } = useStickerMotionTelegramRuntime({ workspaceId });
   /** Motion version currently being approved as Current Motion (non-billable). */
   const [approvingMotionVersionId, setApprovingMotionVersionId] = useState<string | null>(null);
   const [motionApproveError, setMotionApproveError] = useState<{ stickerId: string; message: string } | null>(null);
+
 
 
 
@@ -610,9 +625,17 @@ function StickerLabBuilder() {
    */
   const motionStickerKey = [...savedStickerIds].sort().join(",");
   const motionQuery = useQuery({
-    // `motionReadySignal` bumps when a motion clip lands so the durable version
-    // appears without a manual refresh.
-    queryKey: ["sticker-motion", draft?.packId ?? "", motionStickerKey, motionReadySignal],
+    // `motionReadySignal` bumps when a motion clip lands and
+    // `telegramMotionReadySignal` bumps when a Telegram derivative lands, so
+    // durable state (including `telegram_asset_id`) reloads without a manual
+    // refresh.
+    queryKey: [
+      "sticker-motion",
+      draft?.packId ?? "",
+      motionStickerKey,
+      motionReadySignal,
+      telegramMotionReadySignal,
+    ],
     enabled: !!draft && step === 4 && savedStickerIds.length > 0,
     queryFn: () => loadStickerMotionState(savedStickerIds),
   });
@@ -630,6 +653,20 @@ function StickerLabBuilder() {
     refetchOnWindowFocus: false,
     queryFn: fetchStickerMotionAiConfig,
   });
+
+  /**
+   * Phase C2 — FREE Telegram preparation provider probe. Starts no provider
+   * work and spends nothing. Unknown stays unknown on failure.
+   */
+  const telegramMotionConfigQuery = useQuery({
+    queryKey: ["sticker-motion-telegram-config"],
+    enabled: step === 4,
+    staleTime: 60_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    queryFn: fetchStickerMotionTelegramConfig,
+  });
+
 
   /**
    * Non-billable Current Motion approval. Sets only
@@ -690,7 +727,17 @@ function StickerLabBuilder() {
     // Motion recovery is read-only too: it resumes an existing motion job and
     // can never call `start`, so it never creates provider work.
     void recoverMotion(packId, stickerIds);
-  }, [candidateRecoveryKey, recoverCandidates, recoverVariations, recoverMotion]);
+    // Telegram preparation recovery is read-only for the same reason: it can
+    // only resume an existing prep job and never calls the C1 `start` action.
+    void recoverTelegramPrepare(packId, stickerIds);
+  }, [
+    candidateRecoveryKey,
+    recoverCandidates,
+    recoverVariations,
+    recoverMotion,
+    recoverTelegramPrepare,
+  ]);
+
 
 
   /**
@@ -1244,9 +1291,14 @@ function StickerLabBuilder() {
       // Same contract for motion: reconcile the existing job only, never start
       // provider work, then re-read durable motion history.
       void recoverMotion(id, savedStickerIds, { force: true });
+      // Same contract for Telegram preparation: reconcile the existing prep job
+      // only, never start provider work.
+      void recoverTelegramPrepare(id, savedStickerIds, { force: true });
       void motionQuery.refetch();
     }
     void motionConfigQuery.refetch();
+    void telegramMotionConfigQuery.refetch();
+
   };
 
 
@@ -3780,6 +3832,18 @@ function StickerLabBuilder() {
                         void startMotion({ packId: id, ...input });
                       }}
                       onSetCurrentMotion={(input) => void approveCurrentMotion(input)}
+                      telegramRun={telegramPrepRunFor(stickerId)}
+                      telegramConfig={telegramMotionConfigQuery.data}
+                      telegramConfigLoading={
+                        telegramMotionConfigQuery.isPending || telegramMotionConfigQuery.isFetching
+                      }
+                      telegramConfigError={telegramMotionConfigQuery.isError}
+                      onPrepareTelegram={(input) => {
+                        const id = draft.packId;
+                        if (!id) return;
+                        void startTelegramPrepare({ packId: id, ...input });
+                      }}
+
                     />
                   ) : null}
 
