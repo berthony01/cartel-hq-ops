@@ -33,7 +33,15 @@ export type StickerMotionVersion = {
   previewUrl: string | null;
   mimeType: string | null;
   fileSizeBytes: number | null;
+  /**
+   * Short-lived signed playback URL for the actual `telegram_motion`
+   * derivative, or null when no valid derivative asset exists.
+   */
+  telegramPreviewUrl: string | null;
+  telegramMimeType: string | null;
+  telegramFileSizeBytes: number | null;
 };
+
 
 export type StickerMotionState = {
   /** Durable pointer from `stickers.current_motion_version_id`. */
