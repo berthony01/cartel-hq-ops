@@ -19,6 +19,8 @@ export type StickerAiStartResult = {
   aiJobId: string;
   status: StickerAiStatus;
   model: string;
+  /** Present only for Phase 4D candidate generation. */
+  mode?: "candidate";
 };
 
 export type StickerAiSyncResult = {
@@ -28,7 +30,12 @@ export type StickerAiSyncResult = {
   assetId?: string | null;
   transparencyValid?: boolean;
   error?: string | null;
+  /** Present only for Phase 4D candidate generation. */
+  mode?: "candidate";
+  /** `sticker_versions.id` of the durable candidate record, when finished. */
+  versionId?: string | null;
 };
+
 
 async function invoke<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke("sticker-ai", { body });
