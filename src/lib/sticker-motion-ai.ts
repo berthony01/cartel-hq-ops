@@ -5,14 +5,32 @@ import type { MotionMode } from "@/lib/sticker-motion";
  * Thin client for the external Supabase Edge Function `sticker-motion-ai`.
  *
  * Phase B1 backend contract only — nothing in the UI calls the billable
- * `startStickerMotionGeneration` yet. The function owns the Kie API key and all
- * privileged writes; no secret is ever read client-side.
+ * `startStickerMotionGeneration` yet. The function owns the Kie API key, the
+ * prompt compiler, the Quick Motion preset allowlist and all privileged writes;
+ * no secret and no prompt text is ever authored client-side.
  *
  * Motion generation is REVIEW-ONLY: it never changes the static current image,
  * `release_variant`, the current motion pointer, Telegram state or Sticker
  * Drops. The 5-second result is a creative source clip, NOT a Telegram-ready
  * animated sticker.
  */
+
+/** The eight server-supported Quick Motion presets. The UI cannot invent others. */
+export const STICKER_MOTION_PRESETS = [
+  "blink",
+  "head_nod",
+  "eye_glow",
+  "money_rain",
+  "angry_shake",
+  "laugh",
+  "bounce",
+  "raise_cigar",
+] as const;
+
+export type StickerMotionPreset = (typeof STICKER_MOTION_PRESETS)[number];
+
+/** Server-enforced cap on a Custom Motion instruction. */
+export const MAX_MOTION_INSTRUCTION_LENGTH = 500;
 
 export type StickerMotionAiConfig = {
   configured: boolean;
@@ -28,7 +46,7 @@ export type StickerMotionStartResult = {
   aiJobId: string;
   status: StickerMotionAiStatus;
   model: string;
-  /** True when an already-live job for this sticker was returned instead of a new spend. */
+  /** True when the identical live job for this sticker was returned instead of a new spend. */
   reused?: boolean;
 };
 
@@ -38,6 +56,8 @@ export type StickerMotionSyncResult = {
   stage?: string;
   motionAssetId?: string | null;
   motionVersionId?: string | null;
+  /** Normalized video MIME of the stored source clip. */
+  mimeType?: string | null;
   telegramReady?: boolean;
   providerMessage?: string;
   error?: string | null;
@@ -95,28 +115,33 @@ export function fetchStickerMotionAiConfig(): Promise<StickerMotionAiConfig> {
 
 /**
  * Creates ONE review-only motion task from the sticker's current static image.
- * Billable: only ever call from an explicit confirmed user action.
+ * Quick Motion requires a supported preset; Custom Motion requires an
+ * instruction (capped server-side); AI Motion is derived deterministically from
+ * the sticker's own concept. Billable: only ever call from an explicit
+ * confirmed user action.
  */
 export function startStickerMotionGeneration(params: {
   workspaceId: string;
   packId: string;
   stickerId: string;
   motionMode: MotionMode;
-  motionPreset?: string;
+  motionPreset?: StickerMotionPreset;
   motionInstruction?: string;
 }): Promise<StickerMotionStartResult> {
   return invoke<StickerMotionStartResult>({
-    action: "start_motion",
+    action: "start",
     workspaceId: params.workspaceId,
     packId: params.packId,
     stickerId: params.stickerId,
     motionMode: params.motionMode,
     ...(params.motionPreset ? { motionPreset: params.motionPreset } : {}),
-    ...(params.motionInstruction ? { motionInstruction: params.motionInstruction } : {}),
+    ...(params.motionInstruction
+      ? { motionInstruction: params.motionInstruction.slice(0, MAX_MOTION_INSTRUCTION_LENGTH) }
+      : {}),
   });
 }
 
 /** Polls an existing motion job. Read-only against the provider. */
 export function syncStickerMotionJob(aiJobId: string): Promise<StickerMotionSyncResult> {
-  return invoke<StickerMotionSyncResult>({ action: "sync_motion", aiJobId });
+  return invoke<StickerMotionSyncResult>({ action: "sync", aiJobId });
 }
