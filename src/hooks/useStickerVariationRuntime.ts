@@ -136,8 +136,14 @@ export function useStickerVariationRuntime(params: {
    * Polls one already-created take to completion. Never starts provider work.
    */
   const pollTake = useCallback(
-    async (stickerId: string, startJobId: string): Promise<PollOutcome> => {
+    async (
+      stickerId: string,
+      startJobId: string,
+      options?: { startsOnBackground?: boolean },
+    ): Promise<PollOutcome> => {
       let jobId = startJobId;
+      /** True once the polled job is the background-removal child. */
+      let onBackground = options?.startsOnBackground === true;
       let delay = POLL_START_MS;
       const deadline = Date.now() + POLL_TIMEOUT_MS;
       while (Date.now() < deadline) {
@@ -166,6 +172,9 @@ export function useStickerVariationRuntime(params: {
             stage: "failed",
             currentLabel: null,
             failure: withSafetySentence(classifyProviderError(res.error, res.stage)),
+            // Only a background-stage failure is retryable with one task: the
+            // paid image generation for this take already succeeded.
+            retryableBackgroundJobId: onBackground ? jobId : null,
           });
           return "failed";
         }
@@ -173,12 +182,14 @@ export function useStickerVariationRuntime(params: {
         if (res.status === "succeeded") {
           if (res.childJobId) {
             jobId = res.childJobId;
+            onBackground = true;
             delay = POLL_START_MS;
             patchRound(stickerId, { stage: "background" });
             continue;
           }
           return "succeeded";
         }
+
 
         if (res.stage === "background_removal") patchRound(stickerId, { stage: "background" });
       }
