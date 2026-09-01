@@ -136,6 +136,123 @@ const STATUS_TONE: Record<LaunchStatus, "gold" | "green" | "muted"> = {
   COMPLETED: "muted",
 };
 
+const LIFECYCLE_GUIDE: Record<LaunchStatus, { title: string; body: string }> = {
+  DRAFT: {
+    title: "Draft",
+    body:
+      "Private setup. Identity fields are editable. There are no watchers and no messages are sent.",
+  },
+  ANNOUNCED: {
+    title: "Announced",
+    body:
+      "Launch identity is locked and the public Cartel Network launch page can be visible when the Project Profile is published. This stage does NOT send a Telegram announcement or DM.",
+  },
+  WATCHLIST_OPEN: {
+    title: "Watchlist Open",
+    body:
+      "The unique Launch Watch link accepts opt-ins through @PepeCartelHQBot. Opening the watchlist does NOT itself send a broadcast.",
+  },
+  LAUNCH_APPROACHING: {
+    title: "Launch Approaching",
+    body:
+      "Schedule confirmed / countdown delivery armed. Eligible 24h and 1h reminders can be created when due for active watchers who allow countdowns.",
+  },
+  CONTRACT_PENDING: {
+    title: "Contract Pending",
+    body:
+      "Contract-address entry becomes available. Save the official contract address before advancing.",
+  },
+  OFFICIAL_CONTRACT_REGISTERED: {
+    title: "Official Contract Registered",
+    body:
+      "The authenticated project has formally registered the official contract address. Active watchers receive the Verified Launch Packet through the existing notification engine.",
+  },
+  LIVE: {
+    title: "Live",
+    body: "Active watchers receive the Launch Is Live alert.",
+  },
+  COMPLETED: {
+    title: "Completed",
+    body: "Lifecycle is finished. No new Launch Watch sign-ups.",
+  },
+};
+
+const NEXT_ACTION_GUIDE: Record<
+  LaunchStatus,
+  { current: string; means: string; nextAction: string; after: string }
+> = {
+  DRAFT: {
+    current: "Draft",
+    means:
+      "This launch is in private setup. Identity is editable and no messages are sent.",
+    nextAction: "Announce launch & lock identity",
+    after:
+      "Announced: identity locks and the Cartel Network launch page can become visible once the Project Profile is published.",
+  },
+  ANNOUNCED: {
+    current: "Announced",
+    means:
+      "Launch identity is locked. The Cartel Network page can be visible when the Project Profile is published. No Telegram announcement or DM is sent at this stage.",
+    nextAction: "Open Launch Watch",
+    after:
+      "Watchlist Open: the unique Launch Watch link starts accepting opt-ins.",
+  },
+  WATCHLIST_OPEN: {
+    current: "Watchlist Open",
+    means:
+      "Watchers can opt in privately through @PepeCartelHQBot. This stage itself does not send them a message.",
+    nextAction: "Confirm schedule & arm countdowns",
+    after:
+      "Launch Approaching: countdown delivery becomes armed. The following lifecycle step opens contract registration.",
+  },
+  LAUNCH_APPROACHING: {
+    current: "Launch Approaching",
+    means:
+      "Schedule is confirmed and countdown delivery is armed. Eligible 24h and 1h reminders can be created when due for active watchers who allow countdowns.",
+    nextAction: "Open contract registration",
+    after:
+      "Contract Pending: the official contract address field becomes editable.",
+  },
+  CONTRACT_PENDING: {
+    current: "Contract Pending",
+    means:
+      "Contract-address entry is open. Save the official contract address, then register it.",
+    nextAction: "Register official contract",
+    after:
+      "Official Contract Registered: active watchers receive the Verified Launch Packet.",
+  },
+  OFFICIAL_CONTRACT_REGISTERED: {
+    current: "Official Contract Registered",
+    means:
+      "The authenticated project has formally registered the official contract address. Active watchers will receive the Verified Launch Packet.",
+    nextAction: "Mark launch live",
+    after: "Live: active watchers receive the Launch Is Live alert.",
+  },
+  LIVE: {
+    current: "Live",
+    means: "Active watchers have received the Launch Is Live alert.",
+    nextAction: "Complete launch",
+    after:
+      "Completed: the lifecycle is finished and no new Launch Watch sign-ups are accepted.",
+  },
+  COMPLETED: {
+    current: "Completed",
+    means: "The lifecycle is finished. No new Launch Watch sign-ups.",
+    nextAction: "No further action",
+    after: "This launch record remains read-only.",
+  },
+};
+
+const TRANSITION_BUTTON_LABEL: Record<LaunchStatus, string> = {
+  DRAFT: "Announce launch & lock identity",
+  ANNOUNCED: "Open Launch Watch",
+  WATCHLIST_OPEN: "Confirm schedule & arm countdowns",
+  LAUNCH_APPROACHING: "Open contract registration",
+  CONTRACT_PENDING: "Register official contract",
+  OFFICIAL_CONTRACT_REGISTERED: "Mark launch live",
+  LIVE: "Complete launch",
+};
+
 function formFromRow(row: LaunchRow): EditorForm {
   const mode: ScheduleMode = row.launch_at
     ? "exact"
