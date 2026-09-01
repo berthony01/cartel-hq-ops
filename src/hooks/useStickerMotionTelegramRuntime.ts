@@ -140,6 +140,29 @@ export function useStickerMotionTelegramRuntime(params: {
     setRuns((r) => ({ ...r, [stickerId]: { ...(r[stickerId] ?? EMPTY_RUN), ...patch } }));
   }, []);
 
+  /**
+   * READ-ONLY. Re-reads the durable job row so normalization-only eligibility
+   * comes from the persisted `error_code`, never from a message string.
+   */
+  const resolveRetryEligibility = useCallback(
+    async (stickerId: string, jobId: string) => {
+      try {
+        const jobs = await loadLatestJobs([stickerId]);
+        const row = (jobs[stickerId] ?? []).find((j) => j.id === jobId);
+        if (!aliveRef.current) return;
+        patchRun(stickerId, {
+          retryableNormalizationJobId:
+            row && row.status === "failed" && isNormalizationRetryable(row.error_code)
+              ? row.id
+              : null,
+        });
+      } catch {
+        // Eligibility stays unknown; the retry action simply is not offered.
+      }
+    },
+    [patchRun],
+  );
+
   /** Polls one already-created prep job. Never starts provider work. */
   const pollPrepare = useCallback(
     async (stickerId: string, jobId: string): Promise<PollOutcome> => {
@@ -164,6 +187,7 @@ export function useStickerMotionTelegramRuntime(params: {
               ),
             ),
           });
+          void resolveRetryEligibility(stickerId, jobId);
           return "failed";
         }
         if (!aliveRef.current) return "aborted";
@@ -173,10 +197,15 @@ export function useStickerMotionTelegramRuntime(params: {
             stage: "failed",
             failure: withSafetySentence(classifyProviderError(res.message ?? res.error, res.stage)),
           });
+          void resolveRetryEligibility(stickerId, jobId);
           return "failed";
         }
         if (res.status === "succeeded" || res.status === "ready") {
-          patchRun(stickerId, { stage: "ready", failure: undefined });
+          patchRun(stickerId, {
+            stage: "ready",
+            failure: undefined,
+            retryableNormalizationJobId: null,
+          });
           setTelegramMotionReadySignal((n) => n + 1);
           return "succeeded";
         }
@@ -194,8 +223,9 @@ export function useStickerMotionTelegramRuntime(params: {
       });
       return "timeout";
     },
-    [patchRun],
+    [patchRun, resolveRetryEligibility],
   );
+
 
   /**
    * MAY BE BILLABLE. Prepares the APPROVED Current Motion for Telegram exactly
