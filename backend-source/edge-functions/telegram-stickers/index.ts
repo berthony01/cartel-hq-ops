@@ -502,6 +502,192 @@ Deno.serve(async (req: Request) => {
       return respond({ status: "switched", telegramReplaced: true, stickerId, versionId, setName, setUrl: pack.telegram_set_url ?? undefined, bot });
     }
 
+    /**
+     * Phase C3-2 — release the APPROVED Current Motion of an already-published
+     * sticker into the SAME Telegram set, in place, via replaceStickerInSet.
+     *
+     * This action consumes ONLY the durable Phase C1 `telegram_motion` asset that
+     * was already prepared and validated. It calls NO provider (no fal.ai, no
+     * CloudConvert, no Kie), never normalises or transcodes, never creates a set
+     * and never adds or removes set members. It only runs from an explicit
+     * `action === "release_motion"` request — nothing recovers or triggers it.
+     */
+    if (action === "release_motion") {
+      const workspaceId = String(body.workspaceId ?? "");
+      const packId = String(body.packId ?? "");
+      const stickerId = String(body.stickerId ?? "");
+      const motionVersionId = String(body.motionVersionId ?? "");
+      if (!workspaceId || !packId || !stickerId || !motionVersionId) {
+        return respond({ error: "INVALID_INPUT", message: "Motion release information is missing." }, 400);
+      }
+      if (!(await member(workspaceId))) return respond({ error: "FORBIDDEN", message: "You do not have access to this workspace." }, 403);
+
+      const { data: pack } = await admin.from("sticker_packs").select("*").eq("id", packId).eq("workspace_id", workspaceId).maybeSingle();
+      if (!pack) return respond({ error: "PACK_NOT_FOUND", message: "This sticker pack could not be found." }, 404);
+      const setName = pack.telegram_set_name ? String(pack.telegram_set_name) : "";
+      if (!setName) return respond({ error: "PACK_NOT_PUBLISHED", message: "This pack does not have a live Telegram sticker set yet." }, 409);
+
+      const { data: sticker } = await admin.from("stickers").select("*").eq("id", stickerId).eq("pack_id", packId).maybeSingle();
+      if (!sticker) return respond({ error: "STICKER_NOT_FOUND", message: "This sticker could not be found in the pack." }, 404);
+      if (sticker.status !== "published" || !sticker.telegram_file_id || !sticker.telegram_published_at) {
+        return respond({ error: "STICKER_NOT_PUBLISHED", message: "This sticker is not live on Telegram, so its motion cannot be released." }, 409);
+      }
+      if (!sticker.current_motion_version_id || String(sticker.current_motion_version_id) !== motionVersionId) {
+        return respond({ error: "MOTION_NOT_CURRENT", message: "That motion is not the approved Current Motion for this sticker." }, 409);
+      }
+
+      const { data: motionVersion } = await admin
+        .from("sticker_motion_versions")
+        .select("id,workspace_id,pack_id,sticker_id,source_static_asset_id,telegram_asset_id")
+        .eq("id", motionVersionId)
+        .maybeSingle();
+      if (
+        !motionVersion ||
+        String(motionVersion.workspace_id) !== workspaceId ||
+        String(motionVersion.pack_id) !== packId ||
+        String(motionVersion.sticker_id) !== stickerId
+      ) {
+        return respond({ error: "MOTION_VERSION_UNAVAILABLE", message: "That motion version is no longer available for this sticker." }, 404);
+      }
+      const stickerAssetId = sticker.image_asset_id ? String(sticker.image_asset_id) : null;
+      if (!stickerAssetId || String(motionVersion.source_static_asset_id ?? "") !== stickerAssetId) {
+        return respond({ error: "MOTION_LINEAGE_MISMATCH", message: "This motion was made from a different static image than the sticker's current image." }, 409);
+      }
+      if (!motionVersion.telegram_asset_id) {
+        return respond({ error: "MOTION_NOT_TELEGRAM_READY", message: "This motion has not been prepared for Telegram yet." }, 409);
+      }
+
+      const { data: motionAsset } = await admin
+        .from("media_assets")
+        .select("id,workspace_id,asset_type,mime_type,storage_path,metadata")
+        .eq("id", motionVersion.telegram_asset_id)
+        .maybeSingle();
+      const motionMetadata = motionAsset?.metadata && typeof motionAsset.metadata === "object" ? (motionAsset.metadata as Record<string, unknown>) : {};
+      if (
+        !motionAsset ||
+        String(motionAsset.workspace_id) !== workspaceId ||
+        motionAsset.asset_type !== "telegram_motion" ||
+        motionAsset.mime_type !== "video/webm" ||
+        !motionAsset.storage_path ||
+        motionMetadata["telegram_ready"] !== true ||
+        String(motionMetadata["source_motion_version_id"] ?? "") !== motionVersionId
+      ) {
+        return respond({ error: "MOTION_ASSET_NOT_READY", message: "The Telegram-ready motion file for this sticker is not available. Prepare this motion for Telegram again." }, 409);
+      }
+
+      const { data: activeJobs } = await admin.from("ai_jobs").select("id").eq("sticker_id", stickerId).in("status", ["queued", "running"]).limit(1);
+      if ((activeJobs ?? []).length) {
+        return respond({ error: "ACTIVE_GENERATION", message: "This sticker still has work in progress. Wait for it to finish before releasing the motion." }, 409);
+      }
+
+      // Expected old state. Every later write is guarded on exactly these values.
+      const oldFileId = String(sticker.telegram_file_id);
+      const expectedOldAssetId = stickerAssetId;
+      const expectedOldMotionVersionId = String(sticker.current_motion_version_id);
+      const expectedOldFileId = oldFileId;
+      const expectedOldVariant = sticker.release_variant ? String(sticker.release_variant) : null;
+
+      // Idempotency: this exact motion file is already the live Telegram sticker.
+      if (
+        expectedOldVariant === "motion" &&
+        motionMetadata["telegram_accepted"] === true &&
+        String(motionMetadata["telegram_file_id"] ?? "") === oldFileId
+      ) {
+        return respond({ status: "unchanged", releaseVariant: "motion", telegramReplaced: false, stickerId, motionVersionId, setName, setUrl: pack.telegram_set_url ?? undefined, bot });
+      }
+
+      const existingSet = await maybeGetStickerSet(TELEGRAM_BOT_TOKEN, setName);
+      const setStickers = Array.isArray(existingSet?.stickers) ? existingSet.stickers : [];
+      if (!setStickers.some((s: any) => String(s?.file_id ?? "") === oldFileId)) {
+        return respond({ error: "TELEGRAM_STATE_MISMATCH", message: "CARTEL HQ could not confirm this sticker inside its Telegram set. Refresh the Telegram status before releasing the motion." }, 409);
+      }
+
+      const { data: connection } = await admin.from("telegram_connections").select("*").eq("user_id", user.id).maybeSingle();
+      if (!connection?.telegram_user_id) return respond({ error: "OWNER_ID_REQUIRED", message: "Telegram owner user ID is required before releasing a motion sticker." }, 400);
+      const ownerId = String(connection.telegram_user_id);
+
+      const emojiList = normalizeEmoji(sticker.emoji_list);
+      const keywords = normalizeKeywords(sticker.keyword_list);
+      const inputFor = (fileId: string, format: "static" | "video") => ({ sticker: fileId, format, emoji_list: emojiList, ...(keywords.length ? { keywords } : {}) });
+      const oldFormat: "static" | "video" = expectedOldVariant === "motion" ? "video" : "static";
+
+      let newFileId = "";
+      try {
+        const { data: blob, error: downloadError } = await admin.storage.from(BUCKET).download(motionAsset.storage_path);
+        if (downloadError || !blob) throw new Error("Could not read the prepared Telegram motion file from private storage.");
+        // Consumed exactly as prepared in Phase C1 — no transform, no normalisation.
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        if (!bytes.byteLength) throw new Error("The prepared Telegram motion file is empty.");
+        if (bytes.byteLength > MAX_MOTION_BYTES) throw new Error(`The prepared Telegram motion file is ${(bytes.byteLength / 1024).toFixed(0)} KB, above Telegram's 256 KB video-sticker limit.`);
+        newFileId = await uploadVideoStickerFile(TELEGRAM_BOT_TOKEN, ownerId, bytes);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Telegram could not accept this motion file.";
+        const technical = err instanceof TelegramError ? err.technical : undefined;
+        return respond({ error: "TELEGRAM_RELEASE_FAILED", message, ...(technical ? { technical } : {}) }, 502);
+      }
+
+      // Last check before the only destructive Telegram call.
+      const { data: recheckSticker } = await admin.from("stickers").select("image_asset_id,telegram_file_id,current_motion_version_id,release_variant").eq("id", stickerId).maybeSingle();
+      const { data: recheckJobs } = await admin.from("ai_jobs").select("id").eq("sticker_id", stickerId).in("status", ["queued", "running"]).limit(1);
+      if (
+        !recheckSticker ||
+        (recheckJobs ?? []).length ||
+        (recheckSticker.image_asset_id ? String(recheckSticker.image_asset_id) : null) !== expectedOldAssetId ||
+        (recheckSticker.telegram_file_id ? String(recheckSticker.telegram_file_id) : null) !== expectedOldFileId ||
+        (recheckSticker.current_motion_version_id ? String(recheckSticker.current_motion_version_id) : null) !== expectedOldMotionVersionId ||
+        (recheckSticker.release_variant ? String(recheckSticker.release_variant) : null) !== expectedOldVariant
+      ) {
+        return respond({ error: "RELEASE_STATE_CHANGED", message: "This sticker changed while the motion release was being prepared. Nothing was changed on Telegram. Refresh this pack and try again." }, 409);
+      }
+
+      try {
+        await telegramJson(TELEGRAM_BOT_TOKEN, "replaceStickerInSet", { user_id: ownerId, name: setName, old_sticker: oldFileId, sticker: inputFor(newFileId, "video") });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Telegram could not replace this sticker with its motion version.";
+        const technical = err instanceof TelegramError ? err.technical : undefined;
+        return respond({ error: "TELEGRAM_RELEASE_FAILED", message, ...(technical ? { technical } : {}) }, 502);
+      }
+
+      const now = new Date().toISOString();
+      const motionPatch: Record<string, unknown> = {
+        telegram_file_id: newFileId,
+        telegram_motion_file_id: newFileId,
+        release_variant: "motion",
+        status: "published",
+        telegram_publish_error: null,
+        telegram_published_at: now,
+        updated_at: now,
+      };
+      // Preserve the outgoing static file id the first time motion takes over.
+      if (oldFormat === "static" && oldFileId && !sticker.telegram_static_file_id) {
+        motionPatch["telegram_static_file_id"] = oldFileId;
+      }
+      let guardedUpdate = admin.from("stickers").update(motionPatch).eq("id", stickerId).eq("image_asset_id", expectedOldAssetId).eq("current_motion_version_id", expectedOldMotionVersionId).eq("telegram_file_id", expectedOldFileId);
+      guardedUpdate = expectedOldVariant === null ? guardedUpdate.is("release_variant", null) : guardedUpdate.eq("release_variant", expectedOldVariant);
+      const { data: updatedRow, error: updateError } = await guardedUpdate.select("id").maybeSingle();
+      if (updateError || !updatedRow) {
+        const dbReason = updateError ? updateError.message : "guarded update matched zero rows";
+        try {
+          await telegramJson(TELEGRAM_BOT_TOKEN, "replaceStickerInSet", { user_id: ownerId, name: setName, old_sticker: newFileId, sticker: inputFor(oldFileId, oldFormat) });
+          return respond({ error: "RELEASE_ROLLED_BACK", message: "CARTEL HQ could not save the change, so the Telegram sticker was restored to its previous version. Nothing was changed." }, 500);
+        } catch (compensationError) {
+          console.error("[telegram-stickers] release_motion reconciliation required", { stickerId, setName, oldFileId, newFileId, oldFormat, dbError: dbReason, compensationError: compensationError instanceof Error ? compensationError.message : "unknown error" });
+          return respond({ error: "RECONCILIATION_REQUIRED", message: "The Telegram sticker was replaced but CARTEL HQ could not save the change and could not undo it. Refresh the Telegram status and review this sticker before publishing again." }, 500);
+        }
+      }
+
+      // Best effort only. The sticker row above is the live release authority.
+      const { error: metadataError } = await admin
+        .from("media_assets")
+        .update({ metadata: { ...motionMetadata, telegram_accepted: true, telegram_file_id: newFileId, telegram_accepted_at: now } })
+        .eq("id", motionAsset.id);
+      if (metadataError) {
+        console.error("[telegram-stickers] release_motion asset metadata write failed", { stickerId, assetId: motionAsset.id, error: metadataError.message });
+      }
+
+      return respond({ status: "released", releaseVariant: "motion", telegramReplaced: true, stickerId, motionVersionId, setName, setUrl: pack.telegram_set_url ?? undefined, bot });
+    }
+
     return respond({ error: "UNKNOWN_ACTION", message: "Unknown Telegram action." }, 400);
 
   } catch (err) {
