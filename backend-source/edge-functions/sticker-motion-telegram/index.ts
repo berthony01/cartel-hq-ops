@@ -859,7 +859,11 @@ Deno.serve(async (req: Request) => {
               cloudconvert_credits: ccCredits || null,
               normalize_contract_version: NORMALIZE_CONTRACT_VERSION,
               prep_contract_version: PREP_CONTRACT_VERSION,
+              // R3 auditability only — no behavioural difference.
+              normalization_only: input.normalization_only === true,
+              retry_of_prepare_job_id: str(input.retry_of_prepare_job_id),
               validation,
+
               telegram_ready: true,
               telegram_accepted: false,
             },
