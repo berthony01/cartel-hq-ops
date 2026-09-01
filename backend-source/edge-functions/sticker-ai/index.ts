@@ -632,7 +632,7 @@ Deno.serve(async (req: Request) => {
       if (!signedUrls.length) return respond({ error: "REFERENCE_UNAVAILABLE" }, 400);
 
       const { data: brand } = await admin.from("brand_kits").select("*").eq("workspace_id", workspaceId).maybeSingle();
-      const prompt = buildPrompt(brand, pack, sticker, blueprint);
+      const prompt = buildPrompt(brand, pack, sticker, blueprint, variationLabel);
       const priorAssetId = sticker.image_asset_id ?? null;
 
       // Duplicate-spend protection. Active work for this sticker is authoritative:
