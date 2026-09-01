@@ -3832,6 +3832,18 @@ function StickerLabBuilder() {
                         void startMotion({ packId: id, ...input });
                       }}
                       onSetCurrentMotion={(input) => void approveCurrentMotion(input)}
+                      telegramRun={telegramPrepRunFor(stickerId)}
+                      telegramConfig={telegramMotionConfigQuery.data}
+                      telegramConfigLoading={
+                        telegramMotionConfigQuery.isPending || telegramMotionConfigQuery.isFetching
+                      }
+                      telegramConfigError={telegramMotionConfigQuery.isError}
+                      onPrepareTelegram={(input) => {
+                        const id = draft.packId;
+                        if (!id) return;
+                        void startTelegramPrepare({ packId: id, ...input });
+                      }}
+
                     />
                   ) : null}
 
