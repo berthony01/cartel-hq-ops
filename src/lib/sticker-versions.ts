@@ -110,6 +110,8 @@ export async function loadStickerVersions(
       storagePath,
       previewUrl,
       unavailable: !previewUrl,
+      variationGroupId: row.variation_group_id ?? null,
+      variationLabel: (row.variation_label as StickerVariationLabel | null) ?? null,
     };
     (grouped[row.sticker_id] ??= []).push(entry);
   }
