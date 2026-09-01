@@ -449,7 +449,12 @@ Deno.serve(async (req: Request) => {
   };
 
   try {
-    if (action === "start") {
+    if (action === "start" || action === "start_candidate") {
+      // Phase 4D.1 — `start_candidate` shares the ENTIRE generation setup below
+      // (prompt compiler, Brand Kit, Character Lock, Creative Direction,
+      // reference precedence, model, 1:1 request, background-removal child).
+      // Only the published guard, the status writes and the finalization differ.
+      const isCandidate = action === "start_candidate";
       const workspaceId = String(body.workspaceId ?? "");
       const packId = String(body.packId ?? "");
       const stickerId = String(body.stickerId ?? "");
@@ -466,15 +471,25 @@ Deno.serve(async (req: Request) => {
       // any reference resolution, signed URL, job lookup/insert or Kie call,
       // so nothing is written and nothing is charged on this path. Status is
       // deliberately not used: generation overwrites it.
-      if (
+      const hasTelegramFootprint =
         (sticker as Record<string, unknown>).telegram_file_id != null ||
-        (sticker as Record<string, unknown>).telegram_published_at != null
-      ) {
+        (sticker as Record<string, unknown>).telegram_published_at != null;
+      if (!isCandidate && hasTelegramFootprint) {
         return respond({
           error: "STICKER_PUBLISHED",
           message: "This sticker is already connected to Telegram. Regeneration is blocked to keep the live Telegram set synchronized with CARTEL HQ.",
         }, 409);
       }
+      // Phase 4D.1 — the mirror guard. Candidate generation exists only for
+      // stickers that are already connected to Telegram; everything else uses
+      // the ordinary Regenerate path. Also runs before any billable work.
+      if (isCandidate && !hasTelegramFootprint) {
+        return respond({
+          error: "CANDIDATE_REQUIRES_PUBLISHED",
+          message: "This sticker is not connected to Telegram, so use the ordinary Regenerate action instead. No provider task was started.",
+        }, 409);
+      }
+
 
 
       const blueprint = parseBlueprint((pack as Record<string, unknown>).creative_blueprint);
