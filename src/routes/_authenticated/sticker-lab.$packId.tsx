@@ -165,9 +165,9 @@ function PackManagerPage() {
           published
             ? "One Telegram sticker set exists for this pack. Publishing again only adds missing reviewed stickers; adding a community sends the same set."
             : allReady
-              ? `${readyCount} of ${stickers.length} stickers are ready. Open Review & Publish to create the Telegram sticker set.`
+              ? `${readyCount} of ${stickers.length} stickers are ready. Open Quality & Release to create the Telegram sticker set.`
               : readyCount > 0
-                ? `${readyCount} of ${stickers.length} stickers are ready. Open Review & Publish to review what can be published and what still needs work.`
+                ? `${readyCount} of ${stickers.length} stickers are ready. Open Quality & Release to review what can be published and what still needs work.`
                 : "Keep generating and reviewing stickers in the builder before publishing."
         }
         actions={
