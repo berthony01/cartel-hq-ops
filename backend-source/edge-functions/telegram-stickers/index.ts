@@ -618,6 +618,12 @@ Deno.serve(async (req: Request) => {
       const expectedOldFileId = oldFileId;
       const expectedOldVariant = sticker.release_variant ? String(sticker.release_variant) : null;
 
+      const existingSet = await maybeGetStickerSet(TELEGRAM_BOT_TOKEN, setName);
+      const setStickers = Array.isArray(existingSet?.stickers) ? existingSet.stickers : [];
+      if (!setStickers.some((s: any) => String(s?.file_id ?? "") === oldFileId)) {
+        return respond({ error: "TELEGRAM_STATE_MISMATCH", message: "CARTEL HQ could not confirm this sticker inside its Telegram set. Refresh the Telegram status before releasing the motion." }, 409);
+      }
+
       // Idempotency: this exact motion file is already the live Telegram sticker.
       if (
         expectedOldVariant === "motion" &&
@@ -625,12 +631,6 @@ Deno.serve(async (req: Request) => {
         String(motionMetadata["telegram_file_id"] ?? "") === oldFileId
       ) {
         return respond({ status: "unchanged", releaseVariant: "motion", telegramReplaced: false, stickerId, motionVersionId, setName, setUrl: pack.telegram_set_url ?? undefined, bot });
-      }
-
-      const existingSet = await maybeGetStickerSet(TELEGRAM_BOT_TOKEN, setName);
-      const setStickers = Array.isArray(existingSet?.stickers) ? existingSet.stickers : [];
-      if (!setStickers.some((s: any) => String(s?.file_id ?? "") === oldFileId)) {
-        return respond({ error: "TELEGRAM_STATE_MISMATCH", message: "CARTEL HQ could not confirm this sticker inside its Telegram set. Refresh the Telegram status before releasing the motion." }, 409);
       }
 
       const { data: connection } = await admin.from("telegram_connections").select("*").eq("user_id", user.id).maybeSingle();
