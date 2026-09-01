@@ -1082,7 +1082,14 @@ Deno.serve(async (req: Request) => {
           assetId = await findReviewAsset();
         }
 
-        const parentJobId = job.input_json && typeof job.input_json === "object" ? (job.input_json as Record<string, unknown>).parent_job_id : null;
+        // R1 — a background-removal RETRY child records its source generation
+        // under `source_generation_job_id` (the indexed `parent_job_id` key is
+        // reserved for the original child). Prefer the new key, then the old.
+        const bgInput = (job.input_json && typeof job.input_json === "object" ? job.input_json : {}) as Record<string, unknown>;
+        const parentJobId =
+          typeof bgInput.source_generation_job_id === "string"
+            ? bgInput.source_generation_job_id
+            : (bgInput.parent_job_id ?? null);
         let parentTaskId: string | null = null;
         let parentModel: string | null = null;
         if (typeof parentJobId === "string") {
