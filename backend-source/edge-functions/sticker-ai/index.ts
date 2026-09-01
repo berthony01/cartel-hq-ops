@@ -558,9 +558,11 @@ Deno.serve(async (req: Request) => {
 
       // Duplicate-generation protection: an already queued/running generation for
       // this sticker is authoritative. Return it instead of billing a second task.
+      // The DB partial unique index on active `sticker_generate` per sticker is
+      // the real guarantee; candidate and ordinary jobs deliberately share it.
       const findActiveGeneration = async () => {
         const { data } = await admin.from("ai_jobs")
-          .select("id,status")
+          .select("id,status,input_json")
           .eq("sticker_id", stickerId)
           .eq("job_type", "sticker_generate")
           .in("status", ["queued", "running"])
@@ -569,10 +571,23 @@ Deno.serve(async (req: Request) => {
           .maybeSingle();
         return data ?? null;
       };
+      /** Reuse only a same-mode active job; a different mode fails closed. */
+      const resolveActive = (active: { id: string; status: string; input_json: unknown } | null) => {
+        if (!active) return null;
+        const activeIsCandidate = isCandidateJob(active as unknown as Record<string, unknown>);
+        if (activeIsCandidate !== isCandidate) {
+          return respond({
+            error: "ACTIVE_JOB_CONFLICT",
+            message: activeIsCandidate
+              ? "A candidate image is already being generated for this sticker. Wait for it to finish."
+              : "This sticker is already generating. Wait for it to finish before starting a candidate.",
+          }, 409);
+        }
+        return respond({ aiJobId: active.id, status: active.status === "queued" ? "queued" : "running", model: MODEL, ...(isCandidate ? { mode: "candidate" } : {}) });
+      };
       const activeExisting = await findActiveGeneration();
-      if (activeExisting) {
-        return respond({ aiJobId: activeExisting.id, status: activeExisting.status === "queued" ? "queued" : "running", model: MODEL });
-      }
+      const activeResponse = resolveActive(activeExisting);
+      if (activeResponse) return activeResponse;
 
       const { data: job, error: jobError } = await admin.from("ai_jobs").insert({
         workspace_id: workspaceId, user_id: user.id, pack_id: packId, sticker_id: stickerId,
@@ -583,15 +598,14 @@ Deno.serve(async (req: Request) => {
           reference_source: referenceSource,
           character_lock_applied: characterLockApplied,
           creative_direction_applied: creativeDirectionApplied,
+          ...(isCandidate ? { mode: "candidate" } : {}),
         },
       }).select("*").single();
       if (jobError || !job) {
         // Race: another request won the unique active-generation guard.
         if ((jobError as { code?: string } | null)?.code === "23505") {
-          const raced = await findActiveGeneration();
-          if (raced) {
-            return respond({ aiJobId: raced.id, status: raced.status === "queued" ? "queued" : "running", model: MODEL });
-          }
+          const racedResponse = resolveActive(await findActiveGeneration());
+          if (racedResponse) return racedResponse;
         }
         return respond({ error: "JOB_CREATE_FAILED" }, 500);
       }
@@ -605,8 +619,13 @@ Deno.serve(async (req: Request) => {
       if (!create.ok || !taskId) return await failSticker(job, create.ok ? "Kie.ai returned no task ID." : create.message, "PROVIDER_START_FAILED");
 
       await admin.from("ai_jobs").update({ status: "running", provider_task_id: taskId }).eq("id", job.id);
-      await admin.from("stickers").update({ status: "generating" }).eq("id", stickerId);
-      await admin.from("sticker_packs").update({ status: "generating" }).eq("id", packId);
+      // Candidate generation leaves the live sticker and its pack completely alone.
+      if (!isCandidate) {
+        await admin.from("stickers").update({ status: "generating" }).eq("id", stickerId);
+        await admin.from("sticker_packs").update({ status: "generating" }).eq("id", packId);
+      }
+      return respond({ aiJobId: job.id, status: "running", model: MODEL, ...(isCandidate ? { mode: "candidate" } : {}) });
+
       return respond({ aiJobId: job.id, status: "running", model: MODEL });
     }
 
