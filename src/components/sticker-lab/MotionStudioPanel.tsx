@@ -100,9 +100,13 @@ export function MotionStudioPanel({
   telegramConfig,
   telegramConfigLoading,
   telegramConfigError,
+  telegramPublished,
+  releasingMotion,
+  releaseError,
   onGenerate,
   onSetCurrentMotion,
   onPrepareTelegram,
+  onReleaseMotion,
 }: {
   stickerId: string;
   stickerLabel: string;
@@ -120,6 +124,10 @@ export function MotionStudioPanel({
   telegramConfig: StickerMotionTelegramConfig | undefined;
   telegramConfigLoading: boolean;
   telegramConfigError: boolean;
+  /** Durable Telegram footprint for THIS sticker (already live in a set). */
+  telegramPublished: boolean;
+  releasingMotion: boolean;
+  releaseError: string | null;
   /** BILLABLE — only ever called from the confirmation dialog below. */
   onGenerate: (input: {
     stickerId: string;
@@ -131,6 +139,8 @@ export function MotionStudioPanel({
   onSetCurrentMotion: (input: { stickerId: string; motionVersionId: string }) => void;
   /** MAY BE BILLABLE — only ever called from the Telegram confirmation dialog. */
   onPrepareTelegram: (input: { stickerId: string; motionVersionId: string }) => void;
+  /** REAL Telegram change — only ever called from the release confirmation dialog. */
+  onReleaseMotion: (input: { stickerId: string; motionVersionId: string }) => void;
 }) {
 
   const [mode, setMode] = useState<MotionMode>("quick");
@@ -139,6 +149,8 @@ export function MotionStudioPanel({
   const [confirmGenerate, setConfirmGenerate] = useState(false);
   const [approveTarget, setApproveTarget] = useState<StickerMotionVersion | null>(null);
   const [confirmTelegramPrep, setConfirmTelegramPrep] = useState(false);
+  const [confirmMotionRelease, setConfirmMotionRelease] = useState(false);
+
 
   const current = currentMotionVersion(state);
   const known = !error && !loading && !!state;
@@ -162,6 +174,19 @@ export function MotionStudioPanel({
     !!current && currentFromCurrentStatic && !currentIsTelegramReady;
   const prepareDisabled =
     telegramBusy || telegramProviderBlocked || busy || approvingVersionId !== null;
+
+  // ---- Phase C3 motion release (real Telegram replacement, no provider work)
+  const motionIsLive = state?.releaseVariant === "motion";
+  const canShowRelease =
+    !!current &&
+    currentIsTelegramReady &&
+    currentFromCurrentStatic &&
+    telegramPublished &&
+    !motionIsLive;
+  const releaseDisabled =
+    releasingMotion || busy || telegramBusy || approvingVersionId !== null;
+
+
 
 
   const requirementsMet =
@@ -195,8 +220,12 @@ export function MotionStudioPanel({
 
       <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
         Animate the approved static without replacing or damaging it. Motion keeps its own version
-        history and only becomes the Telegram release after Motion Quality &amp; Release.
+        history.{" "}
+        {motionIsLive
+          ? "The Current Motion is the live Telegram release for this sticker."
+          : "It stays separate from Telegram until you explicitly release motion."}
       </p>
+
 
       <dl className="mt-2 space-y-0.5 text-[10px] text-muted-foreground">
         {error ? (
@@ -329,7 +358,9 @@ export function MotionStudioPanel({
           <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Telegram preparation
           </p>
-          {currentIsTelegramReady ? (
+          {motionIsLive ? (
+            <StatusBadge tone="green">Motion live on Telegram</StatusBadge>
+          ) : currentIsTelegramReady ? (
             <StatusBadge tone="green">Telegram-ready</StatusBadge>
           ) : null}
         </div>
@@ -340,12 +371,21 @@ export function MotionStudioPanel({
             Motion.
           </p>
         ) : currentIsTelegramReady ? (
-          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-            A Telegram-formatted derivative of Version {current.versionNumber} is prepared and
-            stored. It has not been published to Telegram and Telegram has not accepted it. The
-            Telegram release is unchanged.
-          </p>
+          motionIsLive ? (
+            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              Version {current.versionNumber} is the live Telegram release for this sticker. Its
+              Telegram-formatted derivative was accepted by Telegram and replaced this sticker in
+              the existing set.
+            </p>
+          ) : (
+            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              A Telegram-formatted derivative of Version {current.versionNumber} is prepared and
+              stored. The Telegram release for this sticker is still static until you release motion
+              explicitly.
+            </p>
+          )
         ) : !currentFromCurrentStatic ? (
+
           <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
             This Current Motion came from an earlier static image. Generate and approve motion from
             the current static image before preparing it for Telegram.
@@ -391,7 +431,40 @@ export function MotionStudioPanel({
             {telegramRun.failure.title}. {telegramRun.failure.body}
           </p>
         ) : null}
+
+        {/* -------------------- Phase C3 explicit motion release to Telegram */}
+        {canShowRelease ? (
+          <>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-2 min-h-10 w-full text-[11px]"
+              disabled={releaseDisabled}
+              onClick={() => setConfirmMotionRelease(true)}
+            >
+              {releasingMotion ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              {releasingMotion ? "Releasing motion…" : "Release motion to Telegram"}
+            </Button>
+            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              This replaces this one sticker in place in the existing Telegram set using the
+              already-prepared file. No new provider work starts.
+            </p>
+          </>
+        ) : current && currentIsTelegramReady && !motionIsLive && !telegramPublished ? (
+          <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+            Publish the static sticker pack in Step 5 first. Releasing motion replaces an existing
+            live Telegram sticker, so there must already be one to replace.
+          </p>
+        ) : null}
+
+        {releaseError && !motionIsLive ? (
+          <p className="mt-2 text-[11px] text-signal">{releaseError}</p>
+        ) : null}
       </div>
+
 
 
       {/* -------------------------------------------------- motion history */}
@@ -600,7 +673,52 @@ export function MotionStudioPanel({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ---------------- REAL Telegram change: motion release confirmation */}
+      <AlertDialog
+        open={confirmMotionRelease}
+        onOpenChange={(open) => !open && setConfirmMotionRelease(false)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Release motion for {stickerLabel} to Telegram?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-left">
+                <p>This makes a real change on Telegram. Before you confirm:</p>
+                <ul className="list-disc space-y-1 pl-4">
+                  <li>
+                    It uses the already-prepared Telegram WEBM. No Kie generation, no fal
+                    background removal and no CloudConvert normalization starts in this step
+                  </li>
+                  <li>It replaces this ONE sticker in place in the existing Telegram set</li>
+                  <li>
+                    The Telegram pack link stays the same and no sticker is added or removed
+                  </li>
+                  <li>Your current static image and Current Motion pointer stay unchanged</li>
+                  <li>
+                    Community sends and Sticker Drops continue using the current live Telegram
+                    sticker ID
+                  </li>
+                  <li>No automatic retry</li>
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmMotionRelease(false);
+                if (current) onReleaseMotion({ stickerId, motionVersionId: current.id });
+              }}
+            >
+              Release motion to Telegram
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+
 
   );
 }

@@ -156,6 +156,40 @@ export function replacePublishedStickerVersion(params: {
   });
 }
 
+export type TelegramReleaseMotionResult = {
+  status: "released" | "unchanged";
+  releaseVariant: "motion";
+  telegramReplaced: boolean;
+  stickerId?: string;
+  motionVersionId?: string;
+  setName?: string;
+  setUrl?: string;
+  bot?: TelegramBot;
+};
+
+/**
+ * Releases the ALREADY-PREPARED Telegram WEBM derivative of the approved
+ * Current Motion by replacing this one sticker IN PLACE in the existing
+ * Telegram set. No provider generation/preparation runs here, no Telegram API
+ * is touched client-side, and there is no retry loop.
+ */
+export function releaseMotionSticker(params: {
+  workspaceId: string;
+  packId: string;
+  stickerId: string;
+  motionVersionId: string;
+}): Promise<TelegramReleaseMotionResult> {
+  return invoke<TelegramReleaseMotionResult>({
+    action: "release_motion",
+    workspaceId: params.workspaceId,
+    packId: params.packId,
+    stickerId: params.stickerId,
+    motionVersionId: params.motionVersionId,
+  });
+}
+
+
+
 
 /* ------------------------------------------------------------------ */
 /* telegram_connections — own-row RLS, read/upsert only                */

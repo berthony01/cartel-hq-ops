@@ -87,6 +87,7 @@ import {
   previewShortName,
   publishPack,
   refreshPackStatus,
+  releaseMotionSticker,
   replacePublishedStickerVersion,
   telegramErrorMessage,
   type PackTelegramState,
@@ -422,6 +423,12 @@ function StickerLabBuilder() {
   /** Motion version currently being approved as Current Motion (non-billable). */
   const [approvingMotionVersionId, setApprovingMotionVersionId] = useState<string | null>(null);
   const [motionApproveError, setMotionApproveError] = useState<{ stickerId: string; message: string } | null>(null);
+  /** Phase C3 — explicit motion release to Telegram (one sticker at a time). */
+  const [motionReleaseStickerId, setMotionReleaseStickerId] = useState<string | null>(null);
+  const [motionReleaseError, setMotionReleaseError] = useState<{
+    stickerId: string;
+    message: string;
+  } | null>(null);
 
 
 
@@ -700,6 +707,47 @@ function StickerLabBuilder() {
     },
     [workspaceId, draft?.packId, motionQuery],
   );
+
+  /**
+   * Phase C3 — REAL Telegram change. Replaces ONE already-published sticker in
+   * place with the already-prepared Telegram derivative of the approved Current
+   * Motion. No provider work, no retry, and only ever reachable from the
+   * confirmed release dialog inside Motion Studio.
+   */
+  const releaseCurrentMotion = useCallback(
+    async (input: { stickerId: string; motionVersionId: string }) => {
+      const id = draft?.packId;
+      if (!workspaceId || !id) return;
+      setMotionReleaseError((prev) => (prev?.stickerId === input.stickerId ? null : prev));
+      setMotionReleaseStickerId(input.stickerId);
+      try {
+        const result = await releaseMotionSticker({
+          workspaceId,
+          packId: id,
+          stickerId: input.stickerId,
+          motionVersionId: input.motionVersionId,
+        });
+        // Durable state is the only authority for release_variant and the
+        // Telegram lock. Both reads are read-only reconciliation.
+        await motionQuery.refetch();
+        await loadExisting(id);
+        if (result.status === "released" && result.telegramReplaced) {
+          toast.success("Motion replaced this sticker in the existing Telegram set.");
+        } else {
+          toast.message("Motion is already the Telegram release for this sticker.");
+        }
+      } catch (err) {
+        const message = telegramErrorMessage(err);
+        setMotionReleaseError({ stickerId: input.stickerId, message });
+        toast.error(message);
+      } finally {
+        if (aliveRef.current) setMotionReleaseStickerId(null);
+      }
+    },
+    [workspaceId, draft?.packId, motionQuery, loadExisting, aliveRef],
+  );
+
+
 
 
 
@@ -1309,6 +1357,9 @@ function StickerLabBuilder() {
     const id = draft.packId;
     if (id) await loadExisting(id);
     await versionsQuery.refetch();
+    // Durable release_variant must follow immediately when a live motion is
+    // switched back to its static version. Read-only.
+    await motionQuery.refetch();
   };
 
   const RESTORE_MESSAGE: Record<Exclude<SetCurrentVersionStatus, "switched" | "telegram_required">, string> = {
@@ -3843,6 +3894,15 @@ function StickerLabBuilder() {
                         if (!id) return;
                         void startTelegramPrepare({ packId: id, ...input });
                       }}
+                      telegramPublished={locked}
+                      releasingMotion={motionReleaseStickerId === stickerId}
+                      releaseError={
+                        motionReleaseError?.stickerId === stickerId
+                          ? motionReleaseError.message
+                          : null
+                      }
+                      onReleaseMotion={(input) => void releaseCurrentMotion(input)}
+
 
                     />
                   ) : null}
