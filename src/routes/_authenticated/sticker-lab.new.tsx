@@ -405,9 +405,21 @@ function StickerLabBuilder() {
     recoverMotion,
     motionRunFor,
   } = useStickerMotionGenerationRuntime({ workspaceId });
+  /**
+   * Phase C2 — Telegram motion PREPARATION runtime. Separate store again:
+   * preparation only formats media, never publishes to Telegram, never writes
+   * `release_variant`, the current static image or the Current Motion pointer.
+   */
+  const {
+    telegramMotionReadySignal,
+    startTelegramPrepare,
+    recoverTelegramPrepare,
+    telegramPrepRunFor,
+  } = useStickerMotionTelegramRuntime({ workspaceId });
   /** Motion version currently being approved as Current Motion (non-billable). */
   const [approvingMotionVersionId, setApprovingMotionVersionId] = useState<string | null>(null);
   const [motionApproveError, setMotionApproveError] = useState<{ stickerId: string; message: string } | null>(null);
+
 
 
 
