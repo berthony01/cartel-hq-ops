@@ -625,9 +625,17 @@ function StickerLabBuilder() {
    */
   const motionStickerKey = [...savedStickerIds].sort().join(",");
   const motionQuery = useQuery({
-    // `motionReadySignal` bumps when a motion clip lands so the durable version
-    // appears without a manual refresh.
-    queryKey: ["sticker-motion", draft?.packId ?? "", motionStickerKey, motionReadySignal],
+    // `motionReadySignal` bumps when a motion clip lands and
+    // `telegramMotionReadySignal` bumps when a Telegram derivative lands, so
+    // durable state (including `telegram_asset_id`) reloads without a manual
+    // refresh.
+    queryKey: [
+      "sticker-motion",
+      draft?.packId ?? "",
+      motionStickerKey,
+      motionReadySignal,
+      telegramMotionReadySignal,
+    ],
     enabled: !!draft && step === 4 && savedStickerIds.length > 0,
     queryFn: () => loadStickerMotionState(savedStickerIds),
   });
@@ -645,6 +653,20 @@ function StickerLabBuilder() {
     refetchOnWindowFocus: false,
     queryFn: fetchStickerMotionAiConfig,
   });
+
+  /**
+   * Phase C2 — FREE Telegram preparation provider probe. Starts no provider
+   * work and spends nothing. Unknown stays unknown on failure.
+   */
+  const telegramMotionConfigQuery = useQuery({
+    queryKey: ["sticker-motion-telegram-config"],
+    enabled: step === 4,
+    staleTime: 60_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    queryFn: fetchStickerMotionTelegramConfig,
+  });
+
 
   /**
    * Non-billable Current Motion approval. Sets only
