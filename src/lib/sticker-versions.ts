@@ -68,7 +68,7 @@ export async function loadStickerVersions(
 
   const { data, error } = await supabase
     .from("sticker_versions")
-    .select("id,sticker_id,pack_id,asset_id,version_number,origin,created_at")
+    .select("id,sticker_id,pack_id,asset_id,version_number,origin,created_at,variation_group_id,variation_label")
     .in("sticker_id", unique)
     .order("version_number", { ascending: false });
   if (error) throw error;
