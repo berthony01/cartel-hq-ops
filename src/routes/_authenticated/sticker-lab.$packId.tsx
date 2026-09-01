@@ -176,12 +176,18 @@ function PackManagerPage() {
           </StatusBadge>
         }
       >
+        <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
+          <strong className="text-foreground">Continue editing</strong> returns you to the same
+          five-step Studio flow (Blueprint → Concept Studio → Sticker Studio → Quality &amp;
+          Release). <strong className="text-foreground">Review &amp; release</strong> jumps straight
+          to Quality &amp; Release.
+        </p>
         <div className="flex flex-wrap gap-2 [&>*]:min-w-0">
           {readyCount > 0 ? (
             <Button asChild className="min-h-11 flex-1 sm:flex-none">
               <Link to="/sticker-lab/new" search={{ pack: pack.id, step: 5 }}>
                 <Send className="size-4" aria-hidden="true" />
-                Review &amp; publish
+                Review &amp; release
               </Link>
             </Button>
           ) : null}
