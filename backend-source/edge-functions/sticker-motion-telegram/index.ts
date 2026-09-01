@@ -573,7 +573,7 @@ Deno.serve(async (req: Request) => {
         // an already-created job by its deterministic tag first.
         const tag = `cartelhq-motion-telegram-${job.id}`;
         // List lookup only — `include=tasks` is not supported on the list call.
-        // Once the job id is persisted, normal /jobs/{id}?include=tasks polling loads tasks.
+        // Once the job id is persisted, normal /jobs/{id} polling returns the job with its tasks.
         const lookup = await ccFetch(`/jobs?filter[tag]=${encodeURIComponent(tag)}`, CLOUDCONVERT_API_KEY, { method: "GET" });
         const list = lookup.ok && Array.isArray(lookup.payload.data) ? (lookup.payload.data as unknown[]) : [];
         const found = list.map(asObject).find((entry) => str(entry.id));
