@@ -4089,6 +4089,132 @@ function StickerLabBuilder() {
             })}
           </ul>
 
+          {/* R2 — the ONE Motion Studio instance. Presentation only: the motion
+              runtimes stay mounted at route level, so closing this Sheet never
+              cancels in-flight work and reopening shows the same live state. */}
+          {(() => {
+            const mc = motionSheetConceptId
+              ? (draft.concepts.find((x) => x.id === motionSheetConceptId) ?? null)
+              : null;
+            const mStickerId = mc ? stickerIdFor(mc.id) : null;
+            const mPreview = mStickerId ? previews[mStickerId] : undefined;
+            const mLocked = mc ? conceptTelegramLocked(mc.id) : false;
+            return (
+              <Sheet
+                open={!!mc && !!mStickerId}
+                onOpenChange={(open) => {
+                  if (!open) setMotionSheetConceptId(null);
+                }}
+              >
+                <SheetContent
+                  side="right"
+                  className="w-full overflow-y-auto p-4 sm:max-w-3xl sm:p-6"
+                >
+                  {mc && mStickerId ? (
+                    <>
+                      <SheetHeader>
+                        <SheetTitle>{mc.label} — Motion Studio</SheetTitle>
+                        <SheetDescription>
+                          Generate, approve, prepare and release motion for this sticker. The
+                          static sticker remains the source of truth until you explicitly release
+                          motion.
+                        </SheetDescription>
+                      </SheetHeader>
+                      <div className="mt-4 flex items-center gap-3">
+                        <span
+                          className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border"
+                          style={CHECKERBOARD}
+                        >
+                          {mPreview ? (
+                            <img
+                              src={mPreview.url}
+                              alt={`${mc.label} current static sticker`}
+                              className="max-h-full max-w-full object-contain"
+                            />
+                          ) : null}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
+                            {mc.emoji} {mc.label}
+                          </p>
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            {mLocked ? (
+                              <StatusBadge tone="green">Live on Telegram</StatusBadge>
+                            ) : (
+                              <StatusBadge tone="muted">Not on Telegram</StatusBadge>
+                            )}
+                            <span className="text-[10px] text-muted-foreground">
+                              Current static image
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-4">
+                        <MotionStudioPanel
+                          stickerId={mStickerId}
+                          stickerLabel={mc.label}
+                          state={motionBySticker[mStickerId]}
+                          loading={motionQuery.isPending || motionQuery.isFetching}
+                          error={
+                            motionQuery.isError ||
+                            (!motionQuery.isPending &&
+                              !motionQuery.isFetching &&
+                              motionBySticker[mStickerId] === undefined)
+                          }
+                          run={motionRunFor(mStickerId)}
+                          config={motionConfigQuery.data}
+                          configLoading={
+                            motionConfigQuery.isPending || motionConfigQuery.isFetching
+                          }
+                          configError={motionConfigQuery.isError}
+                          approvingVersionId={approvingMotionVersionId}
+                          approveError={
+                            motionApproveError?.stickerId === mStickerId
+                              ? motionApproveError.message
+                              : null
+                          }
+                          onGenerate={(input: {
+                            stickerId: string;
+                            motionMode: MotionMode;
+                            motionPreset?: StickerMotionPreset;
+                            motionInstruction?: string;
+                          }) => {
+                            const id = draft.packId;
+                            if (!id) return;
+                            void startMotion({ packId: id, ...input });
+                          }}
+                          onSetCurrentMotion={(input) => void approveCurrentMotion(input)}
+                          telegramRun={telegramPrepRunFor(mStickerId)}
+                          telegramConfig={telegramMotionConfigQuery.data}
+                          telegramConfigLoading={
+                            telegramMotionConfigQuery.isPending ||
+                            telegramMotionConfigQuery.isFetching
+                          }
+                          telegramConfigError={telegramMotionConfigQuery.isError}
+                          onPrepareTelegram={(input) => {
+                            const id = draft.packId;
+                            if (!id) return;
+                            void startTelegramPrepare({ packId: id, ...input });
+                          }}
+                          telegramPublished={mLocked}
+                          releasingMotion={motionReleaseStickerId === mStickerId}
+                          releaseError={
+                            motionReleaseError?.stickerId === mStickerId
+                              ? motionReleaseError.message
+                              : null
+                          }
+                          onReleaseMotion={(input) => void releaseCurrentMotion(input)}
+                        />
+                      </div>
+                    </>
+                  ) : null}
+                </SheetContent>
+              </Sheet>
+            );
+          })()}
+
+
+
 
           <AlertDialog open={confirmRemaining} onOpenChange={setConfirmRemaining}>
             <AlertDialogContent>
