@@ -13,7 +13,16 @@ import { signedUrlMap } from "@/lib/media";
 /** Preview links for this read-only surface live about an hour. */
 const HISTORY_URL_TTL = 3600;
 
-export type StickerVersionOrigin = "generation" | "backfill" | string;
+export type StickerVersionOrigin =
+  | "generation"
+  | "backfill"
+  /** Phase 4D — image generated for review while the live sticker stays live. */
+  | "candidate_generation"
+  | string;
+
+/** True for a Phase 4D candidate history row. Presentation helper only. */
+export const isCandidateVersionOrigin = (origin: StickerVersionOrigin) =>
+  origin === "candidate_generation";
 
 export type StickerVersion = {
   id: string;
