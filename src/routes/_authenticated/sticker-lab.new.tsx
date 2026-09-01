@@ -684,7 +684,11 @@ function StickerLabBuilder() {
     // Variation recovery is read-only for the same reason: it inspects existing
     // `ai_jobs` rows and never starts a new billable round.
     void recoverVariations(packId, stickerIds);
-  }, [candidateRecoveryKey, recoverCandidates, recoverVariations]);
+    // Motion recovery is read-only too: it resumes an existing motion job and
+    // can never call `start`, so it never creates provider work.
+    void recoverMotion(packId, stickerIds);
+  }, [candidateRecoveryKey, recoverCandidates, recoverVariations, recoverMotion]);
+
 
   /**
    * Phase 4B restore state. Declared with the other top-level hooks, ABOVE every
