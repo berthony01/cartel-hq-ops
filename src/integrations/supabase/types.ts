@@ -1356,8 +1356,10 @@ export type Database = {
           sort_order: number
           status: string
           telegram_file_id: string | null
+          telegram_motion_file_id: string | null
           telegram_publish_error: string | null
           telegram_published_at: string | null
+          telegram_static_file_id: string | null
           updated_at: string
         }
         Insert: {
@@ -1375,8 +1377,10 @@ export type Database = {
           sort_order: number
           status?: string
           telegram_file_id?: string | null
+          telegram_motion_file_id?: string | null
           telegram_publish_error?: string | null
           telegram_published_at?: string | null
+          telegram_static_file_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -1394,8 +1398,10 @@ export type Database = {
           sort_order?: number
           status?: string
           telegram_file_id?: string | null
+          telegram_motion_file_id?: string | null
           telegram_publish_error?: string | null
           telegram_published_at?: string | null
+          telegram_static_file_id?: string | null
           updated_at?: string
         }
         Relationships: [
