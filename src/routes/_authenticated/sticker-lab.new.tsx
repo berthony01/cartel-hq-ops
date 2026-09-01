@@ -1186,6 +1186,7 @@ function StickerLabBuilder() {
         await reconcileAfterRestore();
         // Durable reconciliation succeeded: stale candidate badge is no longer true.
         clearCandidateState(target.stickerId);
+        clearVariationState(target.stickerId);
         toast.success(`Version ${target.versionNumber} is now the current image.`);
         return;
       }
@@ -1193,6 +1194,7 @@ function StickerLabBuilder() {
         // Not a failure: durable state already matches the requested version.
         await reconcileAfterRestore();
         clearCandidateState(target.stickerId);
+        clearVariationState(target.stickerId);
         toast.message(result.message || RESTORE_MESSAGE.unchanged);
         return;
       }
