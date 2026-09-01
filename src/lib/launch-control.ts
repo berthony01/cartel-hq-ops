@@ -451,9 +451,9 @@ export async function getLaunchWatcherUpdateStats(
   if (error) rethrow(error);
   const row = (Array.isArray(data) ? data[0] : null) as Record<string, unknown> | null;
   return {
-    active_watchers: Number(row?.active_watchers ?? 0),
-    updates_enabled_watchers: Number(row?.updates_enabled_watchers ?? 0),
-    updates_muted_watchers: Number(row?.updates_muted_watchers ?? 0),
+    active_watchers: Number(row?.["active_watchers"] ?? 0),
+    updates_enabled_watchers: Number(row?.["updates_enabled_watchers"] ?? 0),
+    updates_muted_watchers: Number(row?.["updates_muted_watchers"] ?? 0),
   };
 }
 
@@ -468,15 +468,15 @@ export async function listLaunchWatcherUpdates(
   if (error) rethrow(error);
   const rows = (Array.isArray(data) ? data : []) as Array<Record<string, unknown>>;
   return rows.map((row) => ({
-    event_id: String(row.event_id ?? ""),
-    title: typeof row.title === "string" && row.title.trim() ? row.title : null,
-    body: String(row.body ?? ""),
-    created_at: String(row.created_at ?? ""),
-    pending_count: Number(row.pending_count ?? 0),
-    sent_count: Number(row.sent_count ?? 0),
-    failed_count: Number(row.failed_count ?? 0),
-    ambiguous_count: Number(row.ambiguous_count ?? 0),
-    skipped_count: Number(row.skipped_count ?? 0),
+    event_id: String(row["event_id"] ?? ""),
+    title: typeof row["title"] === "string" && row["title"].trim() ? row["title"] : null,
+    body: String(row["body"] ?? ""),
+    created_at: String(row["created_at"] ?? ""),
+    pending_count: Number(row["pending_count"] ?? 0),
+    sent_count: Number(row["sent_count"] ?? 0),
+    failed_count: Number(row["failed_count"] ?? 0),
+    ambiguous_count: Number(row["ambiguous_count"] ?? 0),
+    skipped_count: Number(row["skipped_count"] ?? 0),
   }));
 }
 
