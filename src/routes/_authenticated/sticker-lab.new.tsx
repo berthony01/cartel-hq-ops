@@ -3459,7 +3459,10 @@ function StickerLabBuilder() {
                           size="sm"
                           className="mt-2 min-h-10 w-full"
                           disabled={
-                            busy(stage) || restoringStickerId !== null || isCandidateBusy(candStage)
+                            busy(stage) ||
+                            restoringStickerId !== null ||
+                            candidateBusy ||
+                            variationBusy
                           }
                           onClick={() =>
                             setRestoreTarget({
