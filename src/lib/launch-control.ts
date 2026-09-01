@@ -394,6 +394,121 @@ export async function getLaunchNotificationSummary(
 }
 
 // ---------------------------------------------------------------------------
+// L2A — Watcher Updates (manual project updates to active watchers).
+//
+// All three calls go through authenticated SECURITY DEFINER RPCs. The browser
+// only ever sees aggregate counts and the operator's own update text: watcher
+// identities, Telegram ids and delivery rows stay service-role only.
+// ---------------------------------------------------------------------------
+
+export type LaunchWatcherUpdateStats = {
+  active_watchers: number;
+  updates_enabled_watchers: number;
+  updates_muted_watchers: number;
+};
+
+export type LaunchWatcherUpdateRow = {
+  event_id: string;
+  title: string | null;
+  body: string;
+  created_at: string;
+  pending_count: number;
+  sent_count: number;
+  failed_count: number;
+  ambiguous_count: number;
+  skipped_count: number;
+};
+
+export const WATCHER_UPDATE_TITLE_MAX = 120;
+export const WATCHER_UPDATE_BODY_MAX = 2200;
+
+/** Lifecycle states in which a manual watcher update may be sent. */
+export const WATCHER_UPDATE_STATUSES: readonly LaunchStatus[] = [
+  "WATCHLIST_OPEN",
+  "LAUNCH_APPROACHING",
+  "CONTRACT_PENDING",
+  "OFFICIAL_CONTRACT_REGISTERED",
+  "LIVE",
+];
+
+export function canSendWatcherUpdate(status: LaunchStatus): boolean {
+  return WATCHER_UPDATE_STATUSES.includes(status);
+}
+
+// The generated Supabase types do not know these RPCs until the migration is
+// applied. Narrow local casts keep the rest of the client fully typed.
+type RpcClient = {
+  rpc: (fn: string, args?: Record<string, unknown>) => PromiseLike<{ data: unknown; error: unknown }>;
+};
+
+export async function getLaunchWatcherUpdateStats(
+  launchId: string,
+): Promise<LaunchWatcherUpdateStats> {
+  const { data, error } = await (supabase as unknown as RpcClient).rpc(
+    "get_launch_watcher_update_stats",
+    { _launch_id: launchId },
+  );
+  if (error) rethrow(error);
+  const row = (Array.isArray(data) ? data[0] : null) as Record<string, unknown> | null;
+  return {
+    active_watchers: Number(row?.active_watchers ?? 0),
+    updates_enabled_watchers: Number(row?.updates_enabled_watchers ?? 0),
+    updates_muted_watchers: Number(row?.updates_muted_watchers ?? 0),
+  };
+}
+
+export async function listLaunchWatcherUpdates(
+  launchId: string,
+  limit = 10,
+): Promise<LaunchWatcherUpdateRow[]> {
+  const { data, error } = await (supabase as unknown as RpcClient).rpc(
+    "list_launch_watcher_updates",
+    { _launch_id: launchId, _limit: limit },
+  );
+  if (error) rethrow(error);
+  const rows = (Array.isArray(data) ? data : []) as Array<Record<string, unknown>>;
+  return rows.map((row) => ({
+    event_id: String(row.event_id ?? ""),
+    title: typeof row.title === "string" && row.title.trim() ? row.title : null,
+    body: String(row.body ?? ""),
+    created_at: String(row.created_at ?? ""),
+    pending_count: Number(row.pending_count ?? 0),
+    sent_count: Number(row.sent_count ?? 0),
+    failed_count: Number(row.failed_count ?? 0),
+    ambiguous_count: Number(row.ambiguous_count ?? 0),
+    skipped_count: Number(row.skipped_count ?? 0),
+  }));
+}
+
+export type CreateWatcherUpdateInput = {
+  launchId: string;
+  clientRequestId: string;
+  title: string | null;
+  body: string;
+};
+
+/**
+ * Idempotent: repeating the same clientRequestId returns the original event id
+ * without creating a second event or a second delivery set.
+ */
+export async function createLaunchWatcherUpdate(
+  input: CreateWatcherUpdateInput,
+): Promise<string> {
+  const { data, error } = await (supabase as unknown as RpcClient).rpc(
+    "create_launch_watcher_update",
+    {
+      _launch_id: input.launchId,
+      _client_request_id: input.clientRequestId,
+      _title: input.title,
+      _body: input.body,
+    },
+  );
+  if (error) rethrow(error);
+  return String(data ?? "");
+}
+
+
+// ---------------------------------------------------------------------------
 // Launch management permission (UI hint only).
 //
 // Mirrors the authoritative RLS/RPC rule: workspace owner/admin may manage
