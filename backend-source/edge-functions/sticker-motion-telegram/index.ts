@@ -346,12 +346,19 @@ Deno.serve(async (req: Request) => {
         return respond({ error: "MOTION_ASSET_MISSING", message: "The stored clip for this motion version is not available." }, 409);
       }
 
-      // Already prepared — never re-pay.
+      // Already prepared — never re-pay. Reuse requires durable proof that the
+      // stored asset is a validated Telegram product OF THIS motion version.
+      // A weak asset_type match is not sufficient. If proof is missing we fall
+      // through to normal preparation WITHOUT clearing the existing pointer.
       if (version.telegram_asset_id) {
         const { data: existing } = await admin
-          .from("media_assets").select("id,workspace_id,asset_type")
+          .from("media_assets").select("id,workspace_id,asset_type,metadata")
           .eq("id", version.telegram_asset_id).maybeSingle();
-        if (existing && existing.workspace_id === workspaceId && existing.asset_type === "telegram_motion") {
+        const existingMeta = asObject(existing?.metadata);
+        const provenReady =
+          existingMeta.telegram_ready === true &&
+          str(existingMeta.source_motion_version_id) === motionVersionId;
+        if (existing && existing.workspace_id === workspaceId && existing.asset_type === "telegram_motion" && provenReady) {
           return respond({
             status: "ready", stage: "telegram_source_ready", reused: true, billable: false,
             telegramMotionAssetId: existing.id, motionVersionId, telegramReady: true,
@@ -359,6 +366,7 @@ Deno.serve(async (req: Request) => {
           });
         }
       }
+
 
       if (!FAL_KEY || !CLOUDCONVERT_API_KEY) {
         return respond({
