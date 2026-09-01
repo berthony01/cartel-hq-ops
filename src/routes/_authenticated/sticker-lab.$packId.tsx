@@ -82,9 +82,35 @@ function PackManagerPage() {
     };
   }, [assets]);
 
+
+  const stickerIds = useMemo(() => stickers.map((s) => s.id), [stickers]);
+  const sameWorkspace = !!pack && !!workspaceId && pack.workspace_id === workspaceId;
+
+  const versionsQuery = useQuery({
+    queryKey: ["pack-summary-versions", packId, stickerIds],
+    queryFn: () => countStickerVersions(stickerIds),
+    enabled: sameWorkspace && stickerIds.length > 0,
+    retry: false,
+  });
+
+  const distributionQuery = useQuery({
+    queryKey: ["pack-summary-distribution", workspaceId, packId],
+    queryFn: () => fetchPackGroupDistribution({ workspaceId: workspaceId!, packId }),
+    enabled: sameWorkspace && !!workspaceId,
+    retry: false,
+  });
+
+  const dropsQuery = useQuery({
+    queryKey: ["pack-summary-drops", workspaceId],
+    queryFn: () => fetchDropStatus(workspaceId!),
+    enabled: sameWorkspace && !!workspaceId,
+    retry: false,
+  });
+
   const setUrl = data?.telegram.pack?.telegram_set_url ?? null;
   const published = !!setUrl;
   const wrongWorkspace = !!pack && !!workspaceId && pack.workspace_id !== workspaceId;
+
 
   if (packQuery.isLoading) {
     return <p className="text-sm text-muted-foreground">Loading pack…</p>;
