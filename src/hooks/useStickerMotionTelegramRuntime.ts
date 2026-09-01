@@ -239,7 +239,11 @@ export function useStickerMotionTelegramRuntime(params: {
       if (runningRef.current.has(stickerId)) return;
       runningRef.current.add(stickerId);
 
-      setRuns((r) => ({ ...r, [stickerId]: { stage: "starting", aiJobId: null } }));
+      setRuns((r) => ({
+        ...r,
+        [stickerId]: { stage: "starting", aiJobId: null, retryableNormalizationJobId: null },
+      }));
+
 
       try {
         let started: Awaited<ReturnType<typeof startStickerMotionTelegramPrepare>>;
