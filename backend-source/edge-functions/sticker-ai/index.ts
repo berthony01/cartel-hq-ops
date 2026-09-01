@@ -267,6 +267,13 @@ function buildPrompt(
   pack: Record<string, unknown>,
   sticker: Record<string, unknown>,
   blueprint: Blueprint,
+  /**
+   * A/B/C Variations — server-controlled ONLY. Supplied exclusively by
+   * `start_variation`. It is injected AFTER the mandatory identity/concept/text
+   * rules and BEFORE lower-priority styling guidance, so it can never override
+   * Character Lock or the exact caption contract.
+   */
+  variationLabel: "A" | "B" | "C" | null = null,
 ) {
   const parts: string[] = [];
   const label = String(sticker.label ?? "").trim();
