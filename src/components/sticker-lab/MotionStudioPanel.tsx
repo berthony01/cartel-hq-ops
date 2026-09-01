@@ -34,6 +34,13 @@ import {
   isMotionBusy,
   type MotionRun,
 } from "@/hooks/useStickerMotionGenerationRuntime";
+import {
+  TELEGRAM_PREP_STAGE_LABEL,
+  isTelegramPrepBusy,
+  type TelegramPrepRun,
+} from "@/hooks/useStickerMotionTelegramRuntime";
+import type { StickerMotionTelegramConfig } from "@/lib/sticker-motion-telegram";
+
 
 /**
  * Motion Studio for one Step 4 sticker card.
