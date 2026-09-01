@@ -718,6 +718,22 @@ Deno.serve(async (req: Request) => {
       const activeBackgroundResponse = await resolveActiveBackground();
       if (activeBackgroundResponse) return activeBackgroundResponse;
 
+      // Variation idempotency: a finished A/B/C slot is never re-generated, so a
+      // repeated request can never double-charge for the same take.
+      if (isVariation) {
+        const { data: existingVersion } = await admin.from("sticker_versions")
+          .select("id")
+          .eq("sticker_id", stickerId)
+          .eq("variation_group_id", variationGroupId)
+          .eq("variation_label", variationLabel)
+          .maybeSingle();
+        if (existingVersion) {
+          return respond({
+            status: "succeeded", model: MODEL, versionId: existingVersion.id,
+            mode: "variation", variationGroupId, variationLabel,
+          });
+        }
+      }
 
       const { data: job, error: jobError } = await admin.from("ai_jobs").insert({
         workspace_id: workspaceId, user_id: user.id, pack_id: packId, sticker_id: stickerId,
@@ -728,7 +744,8 @@ Deno.serve(async (req: Request) => {
           reference_source: referenceSource,
           character_lock_applied: characterLockApplied,
           creative_direction_applied: creativeDirectionApplied,
-          ...(isCandidate ? { mode: "candidate" } : {}),
+          ...(reviewOnly ? { mode: requestMode } : {}),
+          ...(isVariation ? { variation_group_id: variationGroupId, variation_label: variationLabel } : {}),
         },
       }).select("*").single();
       if (jobError || !job) {
@@ -749,12 +766,12 @@ Deno.serve(async (req: Request) => {
       if (!create.ok || !taskId) return await failSticker(job, create.ok ? "Kie.ai returned no task ID." : create.message, "PROVIDER_START_FAILED");
 
       await admin.from("ai_jobs").update({ status: "running", provider_task_id: taskId }).eq("id", job.id);
-      // Candidate generation leaves the live sticker and its pack completely alone.
-      if (!isCandidate) {
+      // Review-only generation leaves the live sticker and its pack completely alone.
+      if (!reviewOnly) {
         await admin.from("stickers").update({ status: "generating" }).eq("id", stickerId);
         await admin.from("sticker_packs").update({ status: "generating" }).eq("id", packId);
       }
-      return respond({ aiJobId: job.id, status: "running", model: MODEL, ...(isCandidate ? { mode: "candidate" } : {}) });
+      return respond({ aiJobId: job.id, status: "running", model: MODEL, ...modeExtras() });
 
     }
 
