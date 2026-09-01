@@ -1,85 +1,102 @@
-# C3 Read-Only Architecture Inspection — Animated Motion Release into the existing Telegram set
+# Sticker Lab V2A — Published Candidate Generation (Phase 4D) Preflight Audit
 
-Start gate verified: HEAD = `66ec87d5f5f5e56ba25537a5fd2cc27870f73449`. No files edited, no migrations, no deploys, no provider or Telegram calls.
+Read-only. No files, migrations, functions, secrets or database state were changed. Git HEAD verified as `8720799acdfc97b8da35885ce469090b2cf8275c` (matches the authoritative start SHA).
 
-## 1. Where `telegram_file_id` is read/written
+## 1. What breaks if ordinary `runGeneration` is reused for a published sticker
 
-Backend (service-role writes):
-- `backend-source/edge-functions/telegram-stickers/index.ts`
-  - L275 publish loop skip: treats `status === 'published' && telegram_file_id && telegram_published_at` as "already live".
-  - L283/L289-290: reuse existing uploaded file id, else `uploadStickerFile` (static PNG) and write `telegram_file_id`.
-  - L356-362 (`sendSticker` owner DM test): selects published stickers with non-null `telegram_file_id`, sends that id.
-  - L417-418, L462-465, L486-488 (version restore / `replaceStickerInSet`): old file id is the `old_sticker` handle, used as an optimistic-concurrency guard (`.eq('telegram_file_id', expectedOld)`), and the new upload id is written back. L434 clears it when the sticker was never truly live in the set.
-- `backend-source/edge-functions/telegram-group/index.ts`
-  - L114-132 `reconcileNativeStickerIds`: pulls `getStickerSet`, matches published rows to native set entries by ordinal index (+ first-emoji sanity check) and rewrites `telegram_file_id` to the live native id.
-  - L219-220: group test send via `sendSticker` using that id.
-- `backend-source/edge-functions/sticker-drops/index.ts`
-  - L69-97: identical ordinal reconciliation and rewrite.
-  - L215: scheduled drop `sendSticker` with `sticker.telegram_file_id`.
-- `backend-source/edge-functions/sticker-drop-config/index.ts` L80-83: lists drop-eligible stickers (non-null `telegram_file_id`).
-- `backend-source/edge-functions/sticker-ai/index.ts` L545: `telegram_file_id != null || telegram_published_at != null` = the "Telegram-touched, block paid regeneration" guard.
-- `supabase/migrations/20260831021833_...sql` L202: pack delete eligibility blocks when any sticker has a non-null `telegram_file_id`.
+Confirmed in source, in order of severity:
 
-Client (read-only):
-- `src/lib/sticker-packs.ts` L27/L52 (row type + select list), `src/lib/telegram-stickers.ts` L224/L243 (status polling), `src/lib/sticker-drops.ts` L53 (type), `src/hooks/useStickerGenerationRuntime.ts` L122 (Telegram-touched lock), `src/routes/_authenticated/sticker-lab.$packId.tsx` L512 (`isPublished` badge).
+1. **Hard server block (by design).** `sticker-ai` action `start` returns HTTP 409 `STICKER_PUBLISHED` before any reference resolution or Kie call when `telegram_file_id` or `telegram_published_at` is set. A candidate flow cannot go through `start` unchanged.
+2. **Current pointer is overwritten on success.** In the `remove_background` branch, `sticker-ai` does `stickers.update({ image_asset_id: asset.id, status: 'ready' })` unconditionally. That alone would silently repoint the live sticker and desynchronise CARTEL HQ from the Telegram set.
+3. **Status is mutated at start and on failure.** `start` sets `stickers.status = 'generating'` and `sticker_packs.status = 'generating'`; `failSticker` sets sticker status to `ready`/`failed`. Both would downgrade a `published` sticker — violating requirement 8.
+4. **Pack rollup rewrites pack status.** After background removal the function recomputes pack status to `review`/`draft`, which would demote a released pack.
+5. **Client reconciliation mislabels the current sticker.** `useStickerGenerationRuntime.loadExisting` keys purely on `stickers.id` + the newest `ai_jobs` row, so an in-flight or failed candidate job renders the *current* sticker as `generating` / `failed` / `replacement_failed`, and `runGeneration` writes those same stages into `stages[stickerId]` (requirement A).
+6. **Version history would not record the candidate at all.** `public.sticker_versions` rows are written **only** by trigger function `public.capture_sticker_version()`, which fires on `stickers` when `image_asset_id` actually changes. A candidate that deliberately does not move the pointer produces **zero** history rows under today's mechanics.
+7. **Restore is blocked while any job runs.** Both `public.set_sticker_current_version` and `telegram-stickers` `replace_version` reject when any `ai_jobs` row for the sticker is `queued`/`running`. Correct and safe, but it means approval is only possible after the candidate job reaches a terminal state.
 
-No client code writes `telegram_file_id`.
+## 2. Smallest safe architecture
 
-## 2. Where `release_variant` is read/written
+Candidate generation is a **third mode of the existing pipeline**, not a new pipeline. Reuse the same prompt compiler, blueprint parsing, reference precedence, Kie models and the same two provider tasks; change only what is written on completion.
 
-- Written: only `supabase/migrations/20260901032740_...sql` (column add, default `'static'`, CHECK `('static','motion')`). No runtime code writes it.
-- Read: `src/lib/sticker-motion.ts` L71-78 (select + `releaseVariant` mapping), `backend-source/edge-functions/sticker-motion-ai/index.ts` L395/L434/L445-456 (selected and echoed back, never mutated).
-- Everywhere else it appears only in "never touches release_variant" comments (`sticker-motion-telegram`, `sticker-motion-ai`, the two motion hooks, `MotionStudioPanel.tsx`, `sticker-lab.new.tsx`).
+Server (`backend-source/edge-functions/sticker-ai/index.ts`):
+- New action `start_candidate`. Same membership check, same `parseBlueprint` / reference precedence / `buildPrompt` / signed URLs — literally the existing code path, with the published guard inverted: **require** Telegram footprint (else 409 `NOT_PUBLISHED`, pointing the user at ordinary Regenerate). Requirement E.
+- Keep `job_type = 'sticker_generate'` and mark the job with `input_json.mode = 'candidate'` (see §4). Do **not** invent a new job_type — see §3/§B.
+- Skip the `stickers.status = 'generating'` and `sticker_packs.status = 'generating'` writes when `mode = 'candidate'`.
+- Propagate `mode` into the `remove_background` child `input_json` (the existing child-creation block already copies `prior_image_asset_id`).
+- In the `remove_background` completion branch, branch on candidate mode: insert the `media_assets` row exactly as today (`generated_sticker`, transparency-validated), then **insert a `sticker_versions` row directly** instead of updating `stickers`, and skip the pack-status rollup.
+- In `failSticker`, skip the `stickers.status` write when the job is a candidate job.
 
-So `release_variant` is today a declared-but-inert column: no writer, no behavioral consumer.
+Client:
+- `src/lib/sticker-ai.ts` — add `startStickerCandidate()` next to `startStickerGeneration()`, same `invoke` error normalisation.
+- `src/hooks/useStickerGenerationRuntime.ts` — add a **separate** candidate state map (`candidateStages` / `candidateFailures` keyed by sticker id) and a `runCandidateGeneration()` that never writes into `stages`/`failures`; and make `loadExisting` ignore `ai_jobs` rows whose `input_json.mode = 'candidate'` when deriving the current sticker's stage.
+- `src/lib/sticker-packs.ts` — `loadLatestJobs` currently selects `id,sticker_id,job_type,status,error_message,created_at`; it must also select `input_json` (or a derived flag) so candidate jobs can be partitioned rather than treated as the newest attempt on the current image.
+- `src/lib/sticker-versions.ts` — surface `origin` (already returned) so the UI can badge candidate rows.
+- `src/routes/_authenticated/sticker-lab.new.tsx` — candidate button, cost confirmation dialog, candidate preview panel, and reuse of the **existing** `confirmTelegramRestore` / `confirmRestore` handlers for approval. No new Telegram mutation path.
 
-## 3. Does anything assume `telegram_file_id` is a static PNG?
+`backend-source/edge-functions/telegram-stickers/index.ts` needs **no change**: `replace_version` already revalidates the asset (workspace, `generated_sticker`, `transparency_valid`), re-confirms the file lives in the set, re-checks active jobs, guards the write on the exact old `image_asset_id` + `telegram_file_id`, and rolls Telegram back if the DB write loses the race. That satisfies requirement G.
 
-Only the publish/replace write path does, and only at upload time:
-- `uploadStickerFile` hardcodes `sticker_format: 'static'` and `image/png` (telegram-stickers L81-95).
-- Sticker inputs hardcode `format: 'static'` (L293 create/add, L445 replace).
-- `prepareForTelegram` produces 512px PNG bytes.
+## 3. Is a migration necessary? Yes — one, and it is unavoidable
 
-Consumers do not: `sendSticker` (owner test, group test, drops) passes the id opaquely, and reconciliation copies whatever `file_id` Telegram reports. So the assumption is confined to *producing* the id, not to *using* it.
+Live constraint on the external project:
 
-## 4. Can Drops and group test sends keep using `telegram_file_id` as the current-live id?
+```text
+sticker_versions_origin_check  CHECK (origin = ANY (ARRAY['generation','backfill']))
+```
 
-Yes. `sendSticker` accepts any file id in the set regardless of static/video/animated. The reconciliation loops re-derive the id from `getStickerSet` positionally, so after a static→video `replaceStickerInSet` in the same set the id self-heals on the next reconcile. Two caveats, both pre-existing:
-- Reconciliation matches by **ordinal index** and count equality (`local.length !== native.length` → hard fail). A motion release must not change set membership count or ordering, or drops/group distribution throw `NATIVE_SYNC_ERROR`.
-- The emoji sanity check compares first emoji; a motion replace must carry the same `emoji_list`.
+Writing `origin = 'candidate_generation'` fails today. Options:
+- **(preferred)** one narrow migration widening the CHECK to include `'candidate_generation'`. Nothing else changes: `unique(sticker_id, asset_id)` and `unique(sticker_id, version_number)` already give the idempotency and ordering guarantees needed.
+- reusing `origin = 'generation'` avoids the migration but makes candidates indistinguishable from promoted history — rejected, it destroys the audit trail the phase exists to create.
 
-## 5. Would nullable `telegram_static_file_id` + `telegram_motion_file_id` alongside `telegram_file_id` be additive/backward-compatible?
+No new table, column, index or RPC is required. `sticker_versions` is service-role written and already readable by members.
 
-Yes, based on current code. Every existing read of `telegram_file_id` means "current live id in the set", and every writer sets it to the id it just made live. Adding two nullable columns that record *which format that id came from* changes no existing predicate: publish skip, drop eligibility, the sticker-ai Telegram-touched guard, the pack-delete guard and the restore concurrency guard all continue to key on `telegram_file_id` alone. Nothing enumerates `stickers` columns exhaustively (all selects are explicit column lists), so untouched code paths never see the new columns.
+## 4. Distinguishing candidate jobs without breaking history
 
-Risk is not schema-shaped but semantic: the restore path in `telegram-stickers` rewrites `telegram_file_id` with `format: 'static'`, so restoring a static version while motion is live would silently revert the format unless the new columns are consulted there.
+Use `ai_jobs.input_json.mode = 'candidate'` on both the generation job and its `remove_background` child, and keep `job_type` unchanged.
 
-## 6. Migration conventions and the additive boundary
+Why not a new `job_type`:
+- `ai_jobs_active_sticker_generate_uniq` is `UNIQUE (sticker_id) WHERE job_type = 'sticker_generate' AND status IN ('queued','running')`. Keeping the job_type means a candidate and an ordinary generation **cannot both be active** for one sticker, across tabs, at the database level — requirement B is satisfied with zero new code. A new job_type would silently escape this index and allow two billable tasks.
+- `ai_jobs_remove_background_parent_uniq` is keyed on `input_json->>'parent_job_id'` and is job_type-agnostic in the way that matters, so child duplicate protection (requirement C) also carries over unchanged.
 
-Convention: `supabase/migrations/<UTC timestamp>_<uuid>.sql`, tool-generated, latest `20260901043908_5d5ad207-...`. Pattern in the motion migration: `ALTER TABLE ... ADD COLUMN` grouped in one statement, named CHECK constraints added separately, explicit `GRANT SELECT ... TO authenticated` / `GRANT ALL ... TO service_role`, RLS policies using `public.is_workspace_member`.
+The consequence is that reconciliation must filter on `mode`, not on `job_type` — which is exactly the `loadLatestJobs` / `loadExisting` change in §2 (requirement A).
 
-Best boundary: one additive migration on `public.stickers` adding `telegram_static_file_id text NULL`, `telegram_motion_file_id text NULL`, plus (optionally) a `telegram_release_format text NULL CHECK (... IN ('static','video'))`, with **no** backfill, no default, no constraint touching `telegram_file_id`, no change to `release_variant` semantics. Existing grants on `stickers` already cover new columns, so no grant changes are required.
+## 5. Exactly one version row per candidate, pointer untouched
 
-## 7. Hidden coupling / blockers for switching a published sticker static↔video via `replaceStickerInSet`
+The `remove_background` branch is already effectively single-winner: the child job's own row is flipped to `succeeded` with the asset id in `output_json`, and the asset is only created once because concurrent pollers race on the child insert, not the completion. For candidates, write:
 
-1. **Telegram itself**: a `regular` sticker set is format-homogeneous in practice — a set created via `createNewStickerSet` with `format: 'static'` will reject a `video` sticker in `replaceStickerInSet`/`addStickerToSet`. This is the single largest unresolved external blocker and must be probed against the live API (or a throwaway set) before C3 design is finalized, not assumed.
-2. `uploadStickerFile` is hardcoded to `sticker_format: 'static'` + PNG blob; a video upload needs a WEBM branch (`sticker_format: 'video'`, `video/webm`).
-3. `inputFor()` (L445) and the create/add input (L293) hardcode `format: 'static'`.
-4. `prepareForTelegram` is PNG-only; the C1 `sticker-motion-telegram` function already produces the validated VP9/WEBM derivative into `sticker_motion_versions.telegram_asset_id`, so C3 should consume that asset rather than re-normalize.
-5. The restore flow's guarded update sets `status: 'published'` and rewrites `telegram_file_id` unconditionally as static — it is a format-reverting path that must become format-aware.
-6. Ordinal reconciliation in both `telegram-group` and `sticker-drops` (see §4) — a replace-in-place is safe; add/remove is not.
-7. Pack delete eligibility (`20260831021833` L202) and the `sticker-ai` regeneration guard both trip once *any* Telegram file id exists — motion publishing will extend, not change, that lock.
-8. `stickers.status` has no motion-aware value; `status === 'published'` is the sole gate for drops and group distribution, so a motion release must keep the row `published` rather than introduce a new status.
+```sql
+insert into public.sticker_versions (workspace_id, pack_id, sticker_id, asset_id, version_number, origin)
+values (..., coalesce(max(version_number),0)+1 for this sticker, 'candidate_generation')
+on conflict (sticker_id, asset_id) do nothing
+```
 
-## 8. Recommended smallest C3 boundary
+- `unique(sticker_id, asset_id)` + `ON CONFLICT DO NOTHING` makes a duplicated completion a no-op (requirement D).
+- `unique(sticker_id, version_number)` may throw `23505` if two pollers compute the same next number; retry the number computation once and treat a second `23505` as "already recorded", then re-read the row. Same pattern the existing trigger relies on.
+- No `stickers` update at all on this path, so `image_asset_id`, `status`, `telegram_file_id`, `telegram_published_at`, pack Telegram state, distribution and Sticker Drops are untouched by construction (requirement 4).
 
-Phase C3 should be split, with the Telegram format-compatibility probe first:
+Note: because the *trigger* only fires on pointer change, a later approval of that candidate through `replace_version` will not double-insert — `capture_sticker_version` short-circuits on the existing `(sticker_id, asset_id)` row and leaves the `candidate_generation` origin intact.
 
-- **C3-0 (investigation, no code)**: verify against Telegram whether a set created as static accepts a video replacement. Outcome decides whether C3 is "replace in place" or "separate motion set", which is a materially different architecture. Do not commit to C3-1 before this answer.
-- **C3-1 (schema, one additive migration)**: nullable `telegram_static_file_id`, `telegram_motion_file_id` on `public.stickers`; no backfill, no writers yet.
-- **C3-2 (backend only, `telegram-stickers`)**: format-aware `uploadStickerFile`/sticker input, a new `release_motion` action that consumes `sticker_motion_versions.telegram_asset_id` for the approved Current Motion, calls `replaceStickerInSet` in the existing set, and writes `telegram_file_id` + `telegram_motion_file_id` + `release_variant='motion'` under the same expected-old-id guarded-update and rollback pattern already used by restore. Preserve set membership count and emoji list exactly.
-- **C3-3 (UI)**: a "Release motion to Telegram" action in `MotionStudioPanel`, enabled only when `telegramAssetId` exists, with billable/irreversible confirmation copy.
+## 6. UI shape
 
-Drops, group distribution, and drop config need **no** changes under this boundary.
+In Step 4 (Sticker Studio), on a Telegram-locked card:
+- Primary state stays "Live on Telegram" with the current image labelled **Current — live on Telegram**.
+- `Generate candidate` opens an `AlertDialog` stating: exactly 2 Kie tasks (generation + background removal), the current CARTEL HQ image and the live Telegram sticker stay unchanged during generation, and nothing is promoted automatically.
+- Candidate progress renders in its own row using the separate candidate stage map; the current image never changes stage, never shows `failed`/`replacement_failed`.
+- On success the candidate appears as a new **Candidate** badged row in the existing Version history panel with a side-by-side thumbnail against the current image.
+- `Set as live` on that row calls the existing published path — `confirmTelegramRestore` → `telegram-stickers` `replace_version` — with no new mutation. For a non-published sticker the existing `set_sticker_current_version` path still applies.
+- Reject is simply "do nothing"; the candidate stays in history. Requirement 7.
+- Refresh recovery (requirement F): completed candidates reappear because they are durable `sticker_versions` rows. An *in-flight* candidate can be recognised without a new provider task by reading the existing active `sticker_generate` job with `mode = 'candidate'` and resuming polling with `syncStickerJob` — no additional Kie call, so economics stay at 2 tasks (requirement H).
 
-STOP — inspection only.
+## 7. Blockers and recommended phasing — split into 4D.1 / 4D.2
+
+There is no hard blocker, but two independent risk surfaces argue against one atomic phase:
+
+- **4D.1 — backend + durable candidate record (higher risk).** Origin CHECK migration; `start_candidate`; candidate-aware status/pointer suppression; candidate version insert; `loadLatestJobs`/`loadExisting` mode filtering so existing reconciliation cannot regress. This is where a mistake can corrupt a *live published* sticker, and it must be verified against the live database and a real Telegram set before any UI encourages use.
+- **4D.2 — candidate UI + approval wiring (presentation).** Candidate button, cost dialog, candidate stage rendering, history badge, side-by-side compare, reuse of the existing restore/replace handlers.
+
+Secondary reasons for the split: `loadExisting` mode filtering touches the reconciliation logic every existing Sticker Studio state depends on, so it wants its own verification pass; and the `sticker-ai` Edge Function redeploy (currently v7) plus the migration are separate external-system mutations that should each be confirmed against `ocoinbnjgstkmnwwvnhi` before UI lands.
+
+One more thing to decide before 4D.1: while a candidate job is `queued`/`running`, **all** restores for that sticker are blocked by the existing `active_generation` guards. That is safe and I recommend keeping it, but the UI copy in 4D.2 must say so rather than surfacing a confusing rejection.
+
+## Status
+
+Report only. No implementation performed, nothing published, no database or Edge Function changes made.
