@@ -12,6 +12,10 @@ import { loadAssets, loadPack, loadPackStickers } from "@/lib/sticker-packs";
 import { PackLifecycleMenu } from "@/routes/_authenticated/sticker-lab.index";
 import { loadPackTelegramState } from "@/lib/telegram-stickers";
 import { signedUrlMap } from "@/lib/media";
+import { countStickerVersions } from "@/lib/sticker-versions";
+import { fetchPackGroupDistribution } from "@/lib/telegram-group";
+import { fetchDropStatus, scheduleState, SCHEDULE_STATE_LABEL } from "@/lib/sticker-drops";
+
 
 export const Route = createFileRoute("/_authenticated/sticker-lab/$packId")({
   head: () => ({
