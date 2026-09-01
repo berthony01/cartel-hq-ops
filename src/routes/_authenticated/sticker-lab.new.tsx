@@ -1227,6 +1227,7 @@ function StickerLabBuilder() {
       await reconcileAfterRestore();
       // Only after durable reconciliation of the Telegram replacement.
       clearCandidateState(target.stickerId);
+      clearVariationState(target.stickerId);
       if (result.status === "switched") {
         toast.success(
           result.telegramReplaced
