@@ -3217,6 +3217,13 @@ function StickerLabBuilder() {
               /**
                * A/B/C round state and the newest durable take per label.
                * Review-only: none of this changes the current image.
+               *
+               * The takes themselves always come from durable `sticker_versions`
+               * rows. Local round state only identifies WHICH group is being
+               * looked at while a round is in flight in this tab; after a
+               * refresh that state is empty and the group is derived from the
+               * newest durable variation row instead. No client-only winner is
+               * invented or persisted anywhere.
                */
               const varRound = variationRoundFor(stickerId);
               const variationVersions = stickerVersions.filter((v) =>
@@ -3224,15 +3231,23 @@ function StickerLabBuilder() {
               );
               const latestVariationGroupId =
                 varRound.groupId ?? variationVersions[0]?.variationGroupId ?? null;
-              const variationTakes = (["A", "B", "C"] as const).map((label) => ({
-                label,
-                version:
+              const variationBusy = isVariationBusy(varRound.stage);
+              const candidateBusy = isCandidateBusy(candStage);
+              const variationTakes = (["A", "B", "C"] as const).map((label) => {
+                const version =
                   variationVersions.find(
                     (v) =>
                       v.variationLabel === label &&
                       (!latestVariationGroupId || v.variationGroupId === latestVariationGroupId),
-                  ) ?? null,
-              }));
+                  ) ?? null;
+                return {
+                  label,
+                  version,
+                  /** Durable comparison against the current image only. */
+                  isCurrent:
+                    !!version?.storagePath && version.storagePath === preview?.storagePath,
+                };
+              });
               const hasVariationTakes = variationTakes.some((t) => t.version);
               return (
                 <li key={c.id} className="cartel-panel rounded-lg p-2.5 sm:p-4">
@@ -3304,8 +3319,14 @@ function StickerLabBuilder() {
                         {versionsBySticker[stickerId]!.map((v) => {
                           const isCurrent =
                             !!v.storagePath && v.storagePath === preview?.storagePath;
+                          // Any in-flight billable work for this sticker keeps
+                          // the pointer controls closed until it settles.
                           const restoreDisabled =
-                            busy(stage) || restoringStickerId !== null || v.unavailable;
+                            busy(stage) ||
+                            restoringStickerId !== null ||
+                            variationBusy ||
+                            candidateBusy ||
+                            v.unavailable;
                           return (
                             <li key={v.id} className="flex min-w-0 items-center gap-2">
                               <span
@@ -3438,7 +3459,10 @@ function StickerLabBuilder() {
                           size="sm"
                           className="mt-2 min-h-10 w-full"
                           disabled={
-                            busy(stage) || restoringStickerId !== null || isCandidateBusy(candStage)
+                            busy(stage) ||
+                            restoringStickerId !== null ||
+                            candidateBusy ||
+                            variationBusy
                           }
                           onClick={() =>
                             setRestoreTarget({
@@ -3487,62 +3511,94 @@ function StickerLabBuilder() {
                         are saved to Version history for review only — nothing replaces the current
                         image until you set a version as current.
                       </p>
-                      {hasVariationTakes ? (
-                        <ul className="mt-2 grid grid-cols-3 gap-2">
-                          {variationTakes.map((take) => (
-                            <li key={take.label} className="min-w-0">
-                              <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                      {/* Dedicated comparison: Current + Take A + Take B + Take C.
+                          Every tile is either a durable image or an explicit
+                          "Not generated" / "Unavailable" statement. */}
+                      <ul className="mt-2 grid grid-cols-2 gap-2">
+                        <li className="min-w-0">
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <span className="truncate text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                              Current
+                            </span>
+                            <StatusBadge tone="green">Current</StatusBadge>
+                          </span>
+                          <div
+                            className="mt-1 flex aspect-square items-center justify-center overflow-hidden rounded border border-border"
+                            style={CHECKERBOARD}
+                          >
+                            <img
+                              src={preview.url}
+                              alt={`${c.label} current image`}
+                              className="max-h-full max-w-full object-contain"
+                            />
+                          </div>
+                        </li>
+                        {variationTakes.map((take) => (
+                          <li key={take.label} className="min-w-0">
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              <span className="truncate text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                                 Take {take.label}
-                              </p>
-                              <div
-                                className="mt-1 flex aspect-square items-center justify-center overflow-hidden rounded border border-border"
-                                style={CHECKERBOARD}
-                              >
-                                {take.version?.previewUrl ? (
-                                  <img
-                                    src={take.version.previewUrl}
-                                    alt={`${c.label} variation ${take.label}`}
-                                    className="max-h-full max-w-full object-contain"
-                                  />
-                                ) : varRound.currentLabel === take.label ? (
-                                  <Loader2
-                                    className="size-4 animate-spin text-gold"
-                                    aria-hidden="true"
-                                  />
-                                ) : (
-                                  <span className="px-1 text-center text-[9px] text-muted-foreground">
-                                    {take.version ? "Unavailable" : "Not run"}
-                                  </span>
-                                )}
-                              </div>
-                              {take.version && !take.version.unavailable ? (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="mt-1 h-8 w-full text-[10px]"
-                                  disabled={
-                                    busy(stage) ||
-                                    restoringStickerId !== null ||
-                                    isVariationBusy(varRound.stage)
-                                  }
-                                  onClick={() =>
-                                    setRestoreTarget({
-                                      stickerId,
-                                      versionId: take.version!.id,
-                                      versionNumber: take.version!.versionNumber,
-                                      label: c.label,
-                                    })
-                                  }
-                                >
-                                  Use this take
-                                </Button>
+                              </span>
+                              {take.isCurrent ? (
+                                <StatusBadge tone="green">Current</StatusBadge>
                               ) : null}
-                            </li>
-                          ))}
-                        </ul>
+                            </span>
+                            <div
+                              className="mt-1 flex aspect-square items-center justify-center overflow-hidden rounded border border-border"
+                              style={CHECKERBOARD}
+                            >
+                              {take.version?.previewUrl ? (
+                                <img
+                                  src={take.version.previewUrl}
+                                  alt={`${c.label} variation ${take.label}`}
+                                  className="max-h-full max-w-full object-contain"
+                                />
+                              ) : varRound.currentLabel === take.label ? (
+                                <Loader2
+                                  className="size-4 animate-spin text-gold"
+                                  aria-hidden="true"
+                                />
+                              ) : (
+                                <span className="px-1 text-center text-[9px] text-muted-foreground">
+                                  {take.version ? "Unavailable" : "Not generated"}
+                                </span>
+                              )}
+                            </div>
+                            {take.version && !take.version.unavailable && !take.isCurrent ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="mt-1 h-8 w-full text-[10px]"
+                                disabled={
+                                  busy(stage) ||
+                                  restoringStickerId !== null ||
+                                  variationBusy ||
+                                  candidateBusy
+                                }
+                                onClick={() =>
+                                  setRestoreTarget({
+                                    stickerId,
+                                    versionId: take.version!.id,
+                                    versionNumber: take.version!.versionNumber,
+                                    label: c.label,
+                                  })
+                                }
+                              >
+                                Use {take.label}
+                              </Button>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                      {locked ? (
+                        <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+                          This sticker is live on Telegram. Choosing a take opens the existing
+                          Telegram replacement confirmation — nothing changes immediately, and the
+                          live sticker keeps working until you confirm.
+                        </p>
                       ) : null}
-                      {varRound.failure && !isVariationBusy(varRound.stage) ? (
+                      {varRound.failure && !variationBusy ? (
                         <p className="mt-2 text-[11px] text-signal">
                           {varRound.failure.title}. {varRound.failure.body}
                         </p>
@@ -3644,7 +3700,8 @@ function StickerLabBuilder() {
                             !configured ||
                             saving ||
                             !stickerId ||
-                            isCandidateBusy(candStage) ||
+                            candidateBusy ||
+                            variationBusy ||
                             restoringStickerId !== null
                           }
                           onClick={() =>
@@ -3669,7 +3726,7 @@ function StickerLabBuilder() {
                         size="sm"
                         variant={preview ? "outline" : "default"}
                         className="min-h-10 flex-1"
-                        disabled={!configured || busy(stage) || saving}
+                        disabled={!configured || busy(stage) || saving || variationBusy}
                         onClick={() => void generateOne(c.id)}
                       >
                         {busy(stage) ? (
