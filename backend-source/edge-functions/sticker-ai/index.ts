@@ -415,17 +415,28 @@ Deno.serve(async (req: Request) => {
     return respond({ error: "KIE_NOT_CONFIGURED", message: "KIE_API_KEY is not configured in Supabase Edge Function secrets." }, 503);
   }
 
+  /**
+   * Phase 4D.1 — a candidate job produces a NEW image for review only. It must
+   * never write sticker or pack status, and never move the current pointer.
+   */
+  const isCandidateJob = (job: Record<string, unknown>) => {
+    const input = (job.input_json && typeof job.input_json === "object" ? job.input_json : {}) as Record<string, unknown>;
+    return input.mode === "candidate";
+  };
+
   const failSticker = async (job: Record<string, unknown>, message: string, code = "PROVIDER_FAILED") => {
     await admin.from("ai_jobs").update({
       status: "failed", error_code: code, error_message: message.slice(0, 500), completed_at: new Date().toISOString(),
     }).eq("id", String(job.id));
-    if (job.sticker_id) {
+    const candidate = isCandidateJob(job);
+    if (job.sticker_id && !candidate) {
       const input = (job.input_json && typeof job.input_json === "object" ? job.input_json : {}) as Record<string, unknown>;
       const prior = typeof input.prior_image_asset_id === "string" ? input.prior_image_asset_id : null;
       await admin.from("stickers").update({ status: prior ? "ready" : "failed" }).eq("id", String(job.sticker_id));
     }
-    return respond({ aiJobId: job.id, jobType: job.job_type, status: "failed", error: message });
+    return respond({ aiJobId: job.id, jobType: job.job_type, status: "failed", error: message, ...(candidate ? { mode: "candidate" } : {}) });
   };
+
 
   const logCredits = async (job: Record<string, unknown>, credits: number | null) => {
     if (credits == null) return;
