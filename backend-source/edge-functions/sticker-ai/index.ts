@@ -862,8 +862,8 @@ Deno.serve(async (req: Request) => {
           const bgTaskId = bgCreate.ok ? String(bgCreate.data.taskId ?? bgCreate.data.task_id ?? "") : "";
           if (!bgCreate.ok || !bgTaskId) {
             await admin.from("ai_jobs").update({ status: "failed", error_code: "BACKGROUND_START_FAILED", error_message: bgCreate.ok ? "Kie.ai returned no background-removal task ID." : bgCreate.message, completed_at: new Date().toISOString() }).eq("id", childJobId);
-            // A failed candidate must never demote the live sticker.
-            if (!jobIsCandidate) {
+            // A failed review-only take must never demote the live sticker.
+            if (!jobIsReviewOnly) {
               const prior = typeof priorAssetId === "string" ? priorAssetId : null;
               await admin.from("stickers").update({ status: prior ? "ready" : "failed" }).eq("id", job.sticker_id);
             }
