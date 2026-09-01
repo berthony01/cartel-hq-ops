@@ -733,6 +733,44 @@ export function MotionStudioPanel({
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* --------- R3 MAY BE BILLABLE normalization-only retry confirmation */}
+      <AlertDialog
+        open={confirmNormalizationRetry}
+        onOpenChange={(open) => !open && setConfirmNormalizationRetry(false)}
+      >
+        <AlertDialogContent>
+          <AlertDialogTitle>Retry normalization for {stickerLabel}?</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2 text-left">
+              <p>This reuses the background removal that already completed. Before you confirm:</p>
+              <ul className="list-disc space-y-1 pl-4">
+                <li>It starts exactly ONE new Telegram normalization job</li>
+                <li>It does NOT start a new background removal</li>
+                <li>It does NOT start new motion generation</li>
+                <li>No automatic retry</li>
+                <li>Your current static sticker will not change</li>
+                <li>Your Current Motion will not change</li>
+                <li>Your Telegram release will not change</li>
+                <li>Nothing is published to Telegram in this step</li>
+              </ul>
+            </div>
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmNormalizationRetry(false);
+                onRetryNormalization?.({ stickerId });
+              }}
+            >
+              Retry normalization
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+
+
       {/* ---------------- REAL Telegram change: motion release confirmation */}
       <AlertDialog
         open={confirmMotionRelease}
