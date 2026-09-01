@@ -13,4 +13,8 @@ verify_jwt = false
 [functions.cartel-network-logo]
 verify_jwt = false
 
+[functions.sticker-motion-telegram]
+verify_jwt = true
+
+
 
