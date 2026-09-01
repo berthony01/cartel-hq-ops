@@ -1062,6 +1062,62 @@ function LaunchControlPage() {
           ) : null}
 
           {selected ? (
+            <Section
+              variant="surface"
+              title="Launch lifecycle guide"
+              description="What each lifecycle stage means for operators."
+            >
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {LAUNCH_STATUSES.map((s) => {
+                  const guide = LIFECYCLE_GUIDE[s];
+                  const current = s === status;
+                  const done = launchStatusIndex(s) < launchStatusIndex(status);
+                  return (
+                    <div
+                      key={s}
+                      className={`rounded-md border p-3 ${
+                        current
+                          ? "border-gold/50 bg-gold/5"
+                          : done
+                            ? "border-pepe/30 bg-pepe/5"
+                            : "border-border/60 bg-background/30"
+                      }`}
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span
+                          className={`flex size-4 shrink-0 items-center justify-center rounded-full border text-[10px] ${
+                            done
+                              ? "border-pepe/50 text-pepe"
+                              : current
+                                ? "border-gold/60 text-gold"
+                                : "border-border text-muted-foreground"
+                          }`}
+                        >
+                          {done ? <Check className="size-2.5" aria-hidden="true" /> : null}
+                        </span>
+                        <p
+                          className={`min-w-0 truncate text-xs font-semibold uppercase tracking-[0.12em] ${
+                            current
+                              ? "text-gold"
+                              : done
+                                ? "text-foreground"
+                                : "text-muted-foreground"
+                          }`}
+                        >
+                          {guide.title}
+                        </p>
+                      </div>
+                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                        {guide.body}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </Section>
+          ) : null}
+
+          {selected ? (
             <div className="grid min-w-0 gap-4 sm:gap-6 xl:grid-cols-2">
               <div className="min-w-0 space-y-4 sm:space-y-6">
                 {form ? (
