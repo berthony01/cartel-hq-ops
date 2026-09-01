@@ -3613,7 +3613,7 @@ function StickerLabBuilder() {
               </Button>
             ) : releaseAdvice.cta === "drops" ? (
               <Button asChild variant="outline" className="mt-3 min-h-11">
-                <Link to="/distribution" search={{ pack: packId ?? undefined }}>
+                <Link to="/distribution" search={packId ? { pack: packId } : {}}>
                   Manage Sticker Drops
                 </Link>
               </Button>
