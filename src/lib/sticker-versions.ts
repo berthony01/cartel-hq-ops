@@ -173,3 +173,22 @@ export async function setCurrentStickerVersion(params: {
   return { status: normalizeStatus(payload?.status), message, raw: data };
 }
 
+
+/* ------------------------------------------------------------------ */
+/* Read-only summary count                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Counts preserved history rows for the supplied sticker ids without
+ * loading assets or signed URLs. Read-only; used for orientation summaries.
+ */
+export async function countStickerVersions(stickerIds: string[]): Promise<number> {
+  const unique = Array.from(new Set(stickerIds.filter(Boolean)));
+  if (unique.length === 0) return 0;
+  const { count, error } = await supabase
+    .from("sticker_versions")
+    .select("id", { count: "exact", head: true })
+    .in("sticker_id", unique);
+  if (error) throw error;
+  return count ?? 0;
+}

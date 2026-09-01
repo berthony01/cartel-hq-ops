@@ -12,6 +12,10 @@ import { loadAssets, loadPack, loadPackStickers } from "@/lib/sticker-packs";
 import { PackLifecycleMenu } from "@/routes/_authenticated/sticker-lab.index";
 import { loadPackTelegramState } from "@/lib/telegram-stickers";
 import { signedUrlMap } from "@/lib/media";
+import { countStickerVersions } from "@/lib/sticker-versions";
+import { fetchPackGroupDistribution } from "@/lib/telegram-group";
+import { fetchDropStatus, scheduleState, SCHEDULE_STATE_LABEL } from "@/lib/sticker-drops";
+
 
 export const Route = createFileRoute("/_authenticated/sticker-lab/$packId")({
   head: () => ({
@@ -78,9 +82,35 @@ function PackManagerPage() {
     };
   }, [assets]);
 
+
+  const stickerIds = useMemo(() => stickers.map((s) => s.id), [stickers]);
+  const sameWorkspace = !!pack && !!workspaceId && pack.workspace_id === workspaceId;
+
+  const versionsQuery = useQuery({
+    queryKey: ["pack-summary-versions", packId, stickerIds],
+    queryFn: () => countStickerVersions(stickerIds),
+    enabled: sameWorkspace && stickerIds.length > 0,
+    retry: false,
+  });
+
+  const distributionQuery = useQuery({
+    queryKey: ["pack-summary-distribution", workspaceId, packId],
+    queryFn: () => fetchPackGroupDistribution({ workspaceId: workspaceId!, packId }),
+    enabled: sameWorkspace && !!workspaceId,
+    retry: false,
+  });
+
+  const dropsQuery = useQuery({
+    queryKey: ["pack-summary-drops", workspaceId],
+    queryFn: () => fetchDropStatus(workspaceId!),
+    enabled: sameWorkspace && !!workspaceId,
+    retry: false,
+  });
+
   const setUrl = data?.telegram.pack?.telegram_set_url ?? null;
   const published = !!setUrl;
   const wrongWorkspace = !!pack && !!workspaceId && pack.workspace_id !== workspaceId;
+
 
   if (packQuery.isLoading) {
     return <p className="text-sm text-muted-foreground">Loading pack…</p>;
@@ -119,6 +149,177 @@ function PackManagerPage() {
           ? "Review in progress"
           : "In progress";
 
+  /* ---- read-only summary derivations (no mutations, degrade to Unavailable) ---- */
+  const versionCount = versionsQuery.isError
+    ? null
+    : stickerIds.length === 0
+      ? 0
+      : versionsQuery.isPending
+        ? undefined
+        : (versionsQuery.data ?? 0);
+
+  const targets = distributionQuery.data?.targets ?? [];
+  const deliveredTargets = targets.filter(
+    (t) => t.status === "assigned" || t.status === "announced",
+  ).length;
+  const communityLabel = distributionQuery.isError
+    ? "Unavailable"
+    : distributionQuery.isPending
+      ? "Loading…"
+      : deliveredTargets > 0
+        ? `${deliveredTargets} community${deliveredTargets === 1 ? "" : "s"}`
+        : targets.length > 0
+          ? "Needs attention"
+          : "None yet";
+  const communityHint = distributionQuery.isError
+    ? "Community delivery state could not be loaded right now."
+    : deliveredTargets > 0
+      ? "These groups received the official sticker set."
+      : targets.length > 0
+        ? "Delivery was attempted but no group is confirmed yet."
+        : "Send the published set to a community from Quality & Release.";
+
+  const killSwitch = !!dropsQuery.data?.control?.kill_switch;
+  const packSchedules = (dropsQuery.data?.schedules ?? []).filter((s) => s.pack_id === pack.id);
+  const activeSchedule = packSchedules.find((s) => s.enabled);
+  const dropState = scheduleState(activeSchedule ?? packSchedules[0], killSwitch);
+  const dropLabel = dropsQuery.isError
+    ? "Unavailable"
+    : dropsQuery.isPending
+      ? "Loading…"
+      : SCHEDULE_STATE_LABEL[dropState];
+  const dropHint = dropsQuery.isError
+    ? "Sticker Drop state could not be loaded right now."
+    : killSwitch && packSchedules.length > 0
+      ? "The workspace emergency pause is on, so nothing is sending."
+      : dropState === "active"
+        ? "Stickers post automatically on your schedule."
+        : packSchedules.length > 0
+          ? "A schedule exists for this pack but is not sending."
+          : "Automated drops keep your set in front of the community.";
+
+  const hasActiveDrop = !dropsQuery.isError && !killSwitch && !!activeSchedule;
+
+  type NextStep = { title: string; body: string; action: React.ReactNode };
+  let nextStep: NextStep;
+  if (isArchived) {
+    nextStep = {
+      title: "Restore this pack",
+      body: "This pack is archived. Use the pack options menu at the top of this page to restore it — Sticker Drops stay paused until you re-enable them.",
+      action: null,
+    };
+  } else if (!allReady) {
+    nextStep = {
+      title: "Continue in the Studio",
+      body: `${readyCount} of ${stickers.length} stickers are ready. Continue editing reopens the five-step flow so you can generate and review in Sticker Studio.`,
+      action: (
+        <Button asChild className="min-h-11">
+          <Link to="/sticker-lab/new" search={{ pack: pack.id }}>
+            Continue editing
+          </Link>
+        </Button>
+      ),
+    };
+  } else if (!published) {
+    nextStep = {
+      title: "Open Quality & Release",
+      body: "Every sticker is ready. Create the Telegram sticker set from Quality & Release.",
+      action: (
+        <Button asChild className="min-h-11">
+          <Link to="/sticker-lab/new" search={{ pack: pack.id, step: 5 }}>
+            Open Quality &amp; Release
+          </Link>
+        </Button>
+      ),
+    };
+  } else if (deliveredTargets === 0) {
+    nextStep = {
+      title: "Send to communities",
+      body:
+        targets.length > 0
+          ? "Delivery was attempted but no group is confirmed. Retry from Quality & Release."
+          : "The set is live on Telegram. Deliver it to your connected communities from Quality & Release.",
+      action: (
+        <Button asChild className="min-h-11">
+          <Link to="/sticker-lab/new" search={{ pack: pack.id, step: 5 }}>
+            Open Quality &amp; Release
+          </Link>
+        </Button>
+      ),
+    };
+  } else if (packSchedules.length === 0) {
+    nextStep = {
+      title: "Set up Sticker Drops",
+      body: "Your set is live and delivered. Schedule automatic drops so the community keeps seeing it.",
+      action: (
+        <Button asChild className="min-h-11">
+          <Link to="/distribution" search={{ pack: pack.id }}>
+            Set up Sticker Drops
+          </Link>
+        </Button>
+      ),
+    };
+  } else if (!hasActiveDrop) {
+    nextStep = {
+      title: "Review Sticker Drops",
+      body: killSwitch
+        ? "The workspace emergency pause is on, so scheduled drops are not sending."
+        : "A schedule exists for this pack but is not currently sending.",
+      action: (
+        <Button asChild className="min-h-11">
+          <Link to="/distribution" search={{ pack: pack.id }}>
+            Review Sticker Drops
+          </Link>
+        </Button>
+      ),
+    };
+  } else {
+    nextStep = {
+      title: "Pack is operational",
+      body:
+        targets.length > deliveredTargets
+          ? "Drops are running. Some community deliveries did not succeed — review them when you can."
+          : "Drops are running on schedule. Adjust cadence or groups any time.",
+      action: (
+        <Button asChild variant="outline" className="min-h-11">
+          <Link to="/distribution" search={{ pack: pack.id }}>
+            Manage Sticker Drops
+          </Link>
+        </Button>
+      ),
+    };
+  }
+
+  const summaryItems: { label: string; value: string; hint: string }[] = [
+    {
+      label: "Stickers",
+      value: `${readyCount}/${stickers.length} ready`,
+      hint: "Ready stickers are the ones Quality & Release can publish.",
+    },
+    {
+      label: "Version history",
+      value:
+        versionCount === null
+          ? "Unavailable"
+          : versionCount === undefined
+            ? "Loading…"
+            : versionCount === 0
+              ? "None yet"
+              : `${versionCount} preserved`,
+      hint: "Successful generations stay recoverable. Open Sticker Studio to view or restore versions.",
+    },
+    {
+      label: "Telegram pack",
+      value: published ? "Live" : "Not published",
+      hint: published
+        ? "One official sticker set exists for this pack."
+        : "Publishing happens in Quality & Release.",
+    },
+    { label: "Communities", value: communityLabel, hint: communityHint },
+    { label: "Sticker Drops", value: dropLabel, hint: dropHint },
+  ];
+
+
   return (
     <div className="flex min-w-0 flex-col gap-6 sm:gap-8">
       <PageHeader
@@ -149,6 +350,39 @@ function PackManagerPage() {
           </p>
         </Section>
       ) : null}
+
+      <Section
+        variant="primary"
+        title="Pack command summary"
+        description="Where this pack stands right now, and what to do next."
+      >
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 [&>*]:min-w-0">
+          {summaryItems.map((item) => (
+            <li
+              key={item.label}
+              className="min-w-0 rounded-lg border border-border/70 bg-surface-raised/50 p-3"
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {item.label}
+              </p>
+              <p className="mt-1 break-words text-sm font-semibold text-foreground">{item.value}</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{item.hint}</p>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-4 rounded-lg border border-primary/40 bg-primary/5 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Recommended next step
+          </p>
+          <p className="mt-1 text-sm font-semibold text-foreground">{nextStep.title}</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{nextStep.body}</p>
+          {nextStep.action ? (
+            <div className="mt-3 flex flex-wrap gap-2 [&>*]:min-w-0">{nextStep.action}</div>
+          ) : null}
+        </div>
+      </Section>
+
+
       {isArchived ? null : (
       <Section
         variant="hero"
