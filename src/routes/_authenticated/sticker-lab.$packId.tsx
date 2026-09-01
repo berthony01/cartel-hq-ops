@@ -253,8 +253,8 @@ function PackManagerPage() {
   } else if (deliveredTargets === 0) {
     nextStep = {
       title: "Send to communities",
-
       body:
+
         targets.length > 0
           ? "Delivery was attempted but no group is confirmed. Retry from Quality & Release."
           : "The set is live on Telegram. Deliver it to your connected communities from Quality & Release.",
