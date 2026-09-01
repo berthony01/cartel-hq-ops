@@ -387,7 +387,7 @@ export function MotionStudioPanel({
             Telegram preparation
           </p>
           {currentMotionIsLive ? (
-            <StatusBadge tone="green">Motion live on Telegram</StatusBadge>
+            <StatusBadge tone="green">Live in sticker pack</StatusBadge>
           ) : currentIsTelegramReady ? (
             <StatusBadge tone="green">Telegram-ready</StatusBadge>
           ) : null}
