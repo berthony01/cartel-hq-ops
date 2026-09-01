@@ -572,7 +572,9 @@ Deno.serve(async (req: Request) => {
         // NEVER create a second CloudConvert job automatically. Try to confirm
         // an already-created job by its deterministic tag first.
         const tag = `cartelhq-motion-telegram-${job.id}`;
-        const lookup = await ccFetch(`/jobs?filter[tag]=${encodeURIComponent(tag)}&include=tasks`, CLOUDCONVERT_API_KEY, { method: "GET" });
+        // List lookup only — `include=tasks` is not supported on the list call.
+        // Once the job id is persisted, normal /jobs/{id}?include=tasks polling loads tasks.
+        const lookup = await ccFetch(`/jobs?filter[tag]=${encodeURIComponent(tag)}`, CLOUDCONVERT_API_KEY, { method: "GET" });
         const list = lookup.ok && Array.isArray(lookup.payload.data) ? (lookup.payload.data as unknown[]) : [];
         const found = list.map(asObject).find((entry) => str(entry.id));
         if (found) {
