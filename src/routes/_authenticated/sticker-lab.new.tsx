@@ -423,6 +423,12 @@ function StickerLabBuilder() {
   /** Motion version currently being approved as Current Motion (non-billable). */
   const [approvingMotionVersionId, setApprovingMotionVersionId] = useState<string | null>(null);
   const [motionApproveError, setMotionApproveError] = useState<{ stickerId: string; message: string } | null>(null);
+  /** Phase C3 — explicit motion release to Telegram (one sticker at a time). */
+  const [motionReleaseStickerId, setMotionReleaseStickerId] = useState<string | null>(null);
+  const [motionReleaseError, setMotionReleaseError] = useState<{
+    stickerId: string;
+    message: string;
+  } | null>(null);
 
 
 
