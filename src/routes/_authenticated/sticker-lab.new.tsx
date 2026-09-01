@@ -3325,8 +3325,8 @@ function StickerLabBuilder() {
 
       {step === 5 ? (
         <StepCard
-          title="Review & publish"
-          hint="Check readiness, publish one Telegram sticker set for this pack, then send it to this project's communities."
+          title="Quality & Release"
+          hint="In order: quality checks → export (optional) → Telegram pack → communities → Sticker Drops."
         >
 
           <section className="cartel-panel mb-6 rounded-lg p-4">
