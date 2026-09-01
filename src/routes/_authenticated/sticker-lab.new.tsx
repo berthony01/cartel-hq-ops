@@ -18,6 +18,7 @@ import {
   type SuggestedConcept,
 } from "@/lib/sticker-concepts";
 import {
+  isCandidateVersionOrigin,
   loadStickerVersions,
   setCurrentStickerVersion,
   type SetCurrentVersionStatus,
@@ -31,6 +32,11 @@ import {
   type Stage,
 } from "@/hooks/useStickerGenerationRuntime";
 import { deriveReviewState, useStickerReviewRuntime } from "@/hooks/useStickerReviewRuntime";
+import {
+  CANDIDATE_STAGE_LABEL,
+  isCandidateBusy,
+  usePublishedStickerCandidateRuntime,
+} from "@/hooks/usePublishedStickerCandidateRuntime";
 
 import {
   hydrateDraftFromPack,
@@ -328,6 +334,27 @@ function StickerLabBuilder() {
     referenceAssetIds: draft?.referenceAssetIds ?? [],
   });
 
+  /**
+   * Phase 4D.2 — published candidate runtime. Fully separate store: it never
+   * writes current-image stages, previews or failures, and `start_candidate` is
+   * only reachable from the confirmed dialog handler below.
+   */
+  const {
+    candidateFailures,
+    candidateReadySignal,
+    startCandidate,
+    recoverCandidates,
+    candidateStageFor,
+  } = usePublishedStickerCandidateRuntime({
+    workspaceId,
+    referenceAssetIds: draft?.referenceAssetIds ?? [],
+  });
+  /** Sticker awaiting the explicit 2-task candidate confirmation. */
+  const [candidateConfirm, setCandidateConfirm] = useState<{
+    stickerId: string;
+    label: string;
+  } | null>(null);
+
   const [confirmRemaining, setConfirmRemaining] = useState(false);
   /**
    * Sticker Studio selective generation. Editor-only local state: never
@@ -505,11 +532,36 @@ function StickerLabBuilder() {
     .map((id) => `${id}:${previews[id]?.storagePath ?? ""}`)
     .join("|");
   const versionsQuery = useQuery({
-    queryKey: ["sticker-versions", draft?.packId ?? "", previewFingerprint],
+    // `candidateReadySignal` bumps when a candidate finishes so the durable
+    // candidate row appears without any manual refresh.
+    queryKey: [
+      "sticker-versions",
+      draft?.packId ?? "",
+      previewFingerprint,
+      candidateReadySignal,
+    ],
     enabled: !!draft && step === 4 && savedStickerIds.length > 0,
     queryFn: () => loadStickerVersions(savedStickerIds),
   });
   const versionsBySticker = versionsQuery.data ?? {};
+
+  /**
+   * Read-only candidate recovery for Step 4. Resumes polling of in-flight
+   * candidate jobs from existing `ai_jobs` rows; it can never call
+   * `start_candidate` and therefore never creates a provider task.
+   */
+  const candidateRecoveryKey =
+    step === 4 && draft?.packId ? `${draft.packId}:${savedStickerIds.join(",")}` : "";
+  useEffect(() => {
+    if (!candidateRecoveryKey) return;
+    const [packId, ids] = [
+      candidateRecoveryKey.slice(0, candidateRecoveryKey.indexOf(":")),
+      candidateRecoveryKey.slice(candidateRecoveryKey.indexOf(":") + 1),
+    ];
+    const stickerIds = ids.split(",").filter(Boolean);
+    if (stickerIds.length === 0) return;
+    void recoverCandidates(packId, stickerIds);
+  }, [candidateRecoveryKey, recoverCandidates]);
 
   /**
    * Phase 4B restore state. Declared with the other top-level hooks, ABOVE every
@@ -2881,7 +2933,7 @@ function StickerLabBuilder() {
       {step === 4 ? (
         <StepCard
           title="Sticker Studio"
-          hint="Generate one test sticker, pick specific stickers, or generate all remaining. Each generated sticker runs image generation, background removal and a server-side transparency check. Successful generations are kept in Version History, and anything marked “Live on Telegram” is protected from accidental regeneration."
+          hint="Generate one test sticker, pick specific stickers, or generate all remaining. Each generated sticker runs image generation, background removal and a server-side transparency check. Successful generations are kept in Version History. Anything marked “Live on Telegram” cannot be regenerated — it uses Candidate → Review → Replace instead, so the live sticker keeps working until you approve a replacement."
           action={
             <Button
               type="button"
@@ -3098,6 +3150,22 @@ function StickerLabBuilder() {
               const preview = stickerId ? previews[stickerId] : undefined;
               const failure = stickerId ? failures[stickerId] : undefined;
               const note = stickerId ? notes[stickerId] : undefined;
+              const locked = conceptTelegramLocked(c.id);
+              const candStage = candidateStageFor(stickerId);
+              const candFailure = stickerId ? candidateFailures[stickerId] : undefined;
+              const stickerVersions = stickerId ? (versionsBySticker[stickerId] ?? []) : [];
+              /**
+               * Newest candidate history row that is NOT the current image.
+               * Leaving it alone is equivalent to rejecting it.
+               */
+              const pendingCandidate =
+                locked && !isCandidateBusy(candStage)
+                  ? (stickerVersions.find(
+                      (v) =>
+                        isCandidateVersionOrigin(v.origin) &&
+                        !(!!v.storagePath && v.storagePath === preview?.storagePath),
+                    ) ?? null)
+                  : null;
               return (
                 <li key={c.id} className="cartel-panel rounded-lg p-2.5 sm:p-4">
                   <div className="mb-3 flex items-center justify-between gap-2">
@@ -3185,8 +3253,13 @@ function StickerLabBuilder() {
                                 ) : null}
                               </span>
                               <span className="min-w-0 flex-1">
-                                <span className="block truncate text-[11px] text-foreground">
-                                  Version {v.versionNumber}
+                                <span className="flex min-w-0 items-center gap-1.5">
+                                  <span className="truncate text-[11px] text-foreground">
+                                    Version {v.versionNumber}
+                                  </span>
+                                  {isCandidateVersionOrigin(v.origin) ? (
+                                    <StatusBadge tone="gold">Candidate</StatusBadge>
+                                  ) : null}
                                 </span>
                                 {v.unavailable ? (
                                   <span className="block truncate text-[10px] text-muted-foreground">
@@ -3223,6 +3296,94 @@ function StickerLabBuilder() {
                     </details>
                   ) : null}
 
+                  {/* Phase 4D.2 candidate review — compare only, no mutation. */}
+                  {pendingCandidate && stickerId ? (
+                    <div className="mt-3 rounded-md border border-gold/40 bg-background/40 p-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                          Candidate ready
+                        </p>
+                        <StatusBadge tone="gold">
+                          Version {pendingCandidate.versionNumber}
+                        </StatusBadge>
+                      </div>
+                      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div className="min-w-0">
+                          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                            Current live
+                          </p>
+                          <div
+                            className="mt-1 flex aspect-square items-center justify-center overflow-hidden rounded border border-border"
+                            style={CHECKERBOARD}
+                          >
+                            {preview ? (
+                              <img
+                                src={preview.url}
+                                alt={`${c.label} current live sticker`}
+                                className="max-h-full max-w-full object-contain"
+                              />
+                            ) : (
+                              <span className="px-2 text-center text-[10px] text-muted-foreground">
+                                No preview
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                            Candidate
+                          </p>
+                          <div
+                            className="mt-1 flex aspect-square items-center justify-center overflow-hidden rounded border border-border"
+                            style={CHECKERBOARD}
+                          >
+                            {pendingCandidate.previewUrl ? (
+                              <img
+                                src={pendingCandidate.previewUrl}
+                                alt={`${c.label} candidate version ${pendingCandidate.versionNumber}`}
+                                className="max-h-full max-w-full object-contain"
+                              />
+                            ) : (
+                              <span className="px-2 text-center text-[10px] text-muted-foreground">
+                                Image unavailable
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+                        Telegram still uses Current live until you approve the candidate.
+                      </p>
+                      {pendingCandidate.unavailable ? (
+                        <p className="mt-2 text-[11px] text-signal">
+                          This candidate image is no longer available, so it cannot replace the
+                          live sticker. Generate another candidate to try again.
+                        </p>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="mt-2 min-h-10 w-full"
+                          disabled={
+                            busy(stage) || restoringStickerId !== null || isCandidateBusy(candStage)
+                          }
+                          onClick={() =>
+                            setRestoreTarget({
+                              stickerId,
+                              versionId: pendingCandidate.id,
+                              versionNumber: pendingCandidate.versionNumber,
+                              label: c.label,
+                            })
+                          }
+                        >
+                          {restoringStickerId === stickerId
+                            ? "Working…"
+                            : "Replace live sticker"}
+                        </Button>
+                      )}
+                    </div>
+                  ) : null}
+
                   {/* Batch selection: never offered for a sticker that already
                       has a usable image — those use Regenerate explicitly. */}
                   <label
@@ -3250,22 +3411,55 @@ function StickerLabBuilder() {
                     <span className="truncate">Select for batch</span>
                   </label>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {conceptTelegramLocked(c.id) ? (
+                    {locked ? (
                       <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <StatusBadge tone="green">Live on Telegram</StatusBadge>
+                          {candStage !== "idle" ? (
+                            <StatusBadge tone={isCandidateBusy(candStage) ? "gold" : candStage === "ready" ? "green" : "red"}>
+                              {CANDIDATE_STAGE_LABEL[candStage]}
+                            </StatusBadge>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          Regeneration is locked so CARTEL HQ stays synchronized with the live
+                          Telegram set. Generate a candidate instead: the live sticker keeps
+                          working while you review the new image, and nothing is replaced until
+                          you approve it.
+                        </p>
+                        {candFailure && !isCandidateBusy(candStage) ? (
+                          <p className="mt-2 text-[11px] text-signal">
+                            {candFailure.title}. {candFailure.body} Your live Telegram sticker was
+                            not changed.
+                          </p>
+                        ) : null}
                         <Button
                           type="button"
                           size="sm"
                           variant="outline"
-                          className="min-h-10 w-full"
-                          disabled
-                          aria-label={`${c.label} is live on Telegram — regeneration locked`}
+                          className="mt-2 min-h-10 w-full"
+                          disabled={
+                            !configured ||
+                            saving ||
+                            !stickerId ||
+                            isCandidateBusy(candStage) ||
+                            restoringStickerId !== null
+                          }
+                          onClick={() =>
+                            stickerId
+                              ? setCandidateConfirm({ stickerId, label: c.label })
+                              : undefined
+                          }
                         >
-                          Live on Telegram
+                          {isCandidateBusy(candStage) ? (
+                            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                          ) : null}
+                          {isCandidateBusy(candStage)
+                            ? CANDIDATE_STAGE_LABEL[candStage]
+                            : pendingCandidate
+                              ? "Generate another candidate"
+                              : "Generate candidate"}
                         </Button>
-                        <p className="mt-1 text-[11px] text-muted-foreground">
-                          Regeneration is locked to keep CARTEL HQ synchronized with the existing
-                          Telegram set. Version history can still restore an existing version.
-                        </p>
                       </div>
                     ) : (
                       <Button
@@ -3357,6 +3551,52 @@ function StickerLabBuilder() {
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction onClick={() => void generateSelected()}>
                   Generate {selectedCount * 2} tasks
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Phase 4D.2 — the ONLY path that can call start_candidate. */}
+          <AlertDialog
+            open={!!candidateConfirm}
+            onOpenChange={(open) => {
+              if (!open) setCandidateConfirm(null);
+            }}
+          >
+            <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  Generate a candidate for {candidateConfirm?.label}?
+                </AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p>
+                      This uses exactly <strong>2 Kie provider tasks</strong> — image generation
+                      plus background removal — and consumes Kie credits on your account.
+                    </p>
+                    <p>
+                      Your current CARTEL HQ image and the live Telegram sticker stay exactly as
+                      they are while the candidate runs.
+                    </p>
+                    <p>
+                      On success the candidate appears in Version history for review. Nothing is
+                      replaced automatically, and there are no automatic retries.
+                    </p>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    const target = candidateConfirm;
+                    setCandidateConfirm(null);
+                    if (target && draft.packId) {
+                      void startCandidate(draft.packId, target.stickerId);
+                    }
+                  }}
+                >
+                  Generate candidate (2 tasks)
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
