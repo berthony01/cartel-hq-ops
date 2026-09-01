@@ -556,38 +556,68 @@ Deno.serve(async (req: Request) => {
       const prompt = buildPrompt(brand, pack, sticker, blueprint);
       const priorAssetId = sticker.image_asset_id ?? null;
 
-      // Duplicate-generation protection: an already queued/running generation for
-      // this sticker is authoritative. Return it instead of billing a second task.
-      // The DB partial unique index on active `sticker_generate` per sticker is
-      // the real guarantee; candidate and ordinary jobs deliberately share it.
-      const findActiveGeneration = async () => {
+      // Duplicate-spend protection. Active work for this sticker is authoritative:
+      // return it instead of billing a second provider task. This covers BOTH
+      // phases of the pipeline — the parent `sticker_generate` job AND the
+      // `remove_background` child that continues after the parent succeeds —
+      // and runs before any new ai_jobs insert and before any Kie createTask.
+      // The DB partial unique index on active `sticker_generate` per sticker
+      // remains the guarantee for the simultaneous initial-start race.
+      const findActiveJob = async (jobType: "sticker_generate" | "remove_background") => {
         const { data } = await admin.from("ai_jobs")
           .select("id,status,input_json")
           .eq("sticker_id", stickerId)
-          .eq("job_type", "sticker_generate")
+          .eq("job_type", jobType)
           .in("status", ["queued", "running"])
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
         return data ?? null;
       };
-      /** Reuse only a same-mode active job; a different mode fails closed. */
+      const findActiveGeneration = () => findActiveJob("sticker_generate");
+      const crossModeConflict = (activeIsCandidate: boolean) =>
+        respond({
+          error: "ACTIVE_JOB_CONFLICT",
+          message: activeIsCandidate
+            ? "A candidate image is already being generated for this sticker. Wait for it to finish."
+            : "This sticker is already generating. Wait for it to finish before starting a candidate.",
+        }, 409);
+      /** Reuse only a same-mode active parent job; a different mode fails closed. */
       const resolveActive = (active: { id: string; status: string; input_json: unknown } | null) => {
         if (!active) return null;
         const activeIsCandidate = isCandidateJob(active as unknown as Record<string, unknown>);
-        if (activeIsCandidate !== isCandidate) {
-          return respond({
-            error: "ACTIVE_JOB_CONFLICT",
-            message: activeIsCandidate
-              ? "A candidate image is already being generated for this sticker. Wait for it to finish."
-              : "This sticker is already generating. Wait for it to finish before starting a candidate.",
-          }, 409);
-        }
+        if (activeIsCandidate !== isCandidate) return crossModeConflict(activeIsCandidate);
         return respond({ aiJobId: active.id, status: active.status === "queued" ? "queued" : "running", model: MODEL, ...(isCandidate ? { mode: "candidate" } : {}) });
+      };
+      /**
+       * Background phase: the parent already succeeded, so the unique active
+       * `sticker_generate` index no longer blocks a second start. Callers must
+       * still be sent back to the in-flight pipeline, never to a new paid task.
+       */
+      const resolveActiveBackground = async () => {
+        const child = await findActiveJob("remove_background");
+        if (!child) return null;
+        const childIsCandidate = isCandidateJob(child as unknown as Record<string, unknown>);
+        if (childIsCandidate !== isCandidate) return crossModeConflict(childIsCandidate);
+        const childInput = (child.input_json && typeof child.input_json === "object" ? child.input_json : {}) as Record<string, unknown>;
+        const parentJobId = typeof childInput.parent_job_id === "string" ? childInput.parent_job_id : null;
+        if (parentJobId) {
+          const { data: parent } = await admin.from("ai_jobs").select("id").eq("id", parentJobId).maybeSingle();
+          // Existing polling semantics are parent-driven; hand back the parent id.
+          if (parent) return respond({ aiJobId: parent.id, status: "running", model: MODEL, ...(isCandidate ? { mode: "candidate" } : {}) });
+        }
+        // Fail closed rather than returning a child id as if it were a parent.
+        return respond({
+          error: "GENERATION_ALREADY_ACTIVE",
+          message: "This sticker is still finishing an earlier generation. Wait for it to complete before starting another.",
+        }, 409);
       };
       const activeExisting = await findActiveGeneration();
       const activeResponse = resolveActive(activeExisting);
       if (activeResponse) return activeResponse;
+      const activeBackgroundResponse = await resolveActiveBackground();
+      if (activeBackgroundResponse) return activeBackgroundResponse;
+
 
       const { data: job, error: jobError } = await admin.from("ai_jobs").insert({
         workspace_id: workspaceId, user_id: user.id, pack_id: packId, sticker_id: stickerId,
@@ -626,7 +656,6 @@ Deno.serve(async (req: Request) => {
       }
       return respond({ aiJobId: job.id, status: "running", model: MODEL, ...(isCandidate ? { mode: "candidate" } : {}) });
 
-      return respond({ aiJobId: job.id, status: "running", model: MODEL });
     }
 
     if (action === "sync") {
@@ -751,7 +780,34 @@ Deno.serve(async (req: Request) => {
           ? `${job.workspace_id}/generated_sticker/candidate-${job.id}.png`
           : `${job.workspace_id}/generated_sticker/${crypto.randomUUID()}.png`;
         const { error: uploadError } = await admin.storage.from(BUCKET).upload(path, finalPng, { contentType: "image/png", upsert: false });
-        if (uploadError && !jobIsCandidate) return await failSticker(job, "Could not save the finished sticker image.", "STORAGE_UPLOAD_FAILED");
+
+        // A losing candidate poller reuses the asset the winner already recorded.
+        let assetId: string | null = null;
+        const findCandidateAsset = async () => {
+          const { data } = await admin.from("media_assets").select("id").eq("workspace_id", job.workspace_id).eq("storage_path", path).maybeSingle();
+          return data?.id ?? null;
+        };
+        if (uploadError) {
+          // Ordinary generation is unchanged: any upload failure is terminal.
+          if (!jobIsCandidate) return await failSticker(job, "Could not save the finished sticker image.", "STORAGE_UPLOAD_FAILED");
+          // Candidate: an upload error is only survivable when the deterministic
+          // object is PROVEN to already exist (idempotent retry). A network or
+          // service error must never produce a media/version row for an object
+          // that was never stored, so this fails closed unless proven.
+          assetId = await findCandidateAsset();
+          if (!assetId) {
+            const slash = path.lastIndexOf("/");
+            const dir = path.slice(0, slash);
+            const name = path.slice(slash + 1);
+            const { data: listed } = await admin.storage.from(BUCKET).list(dir, { search: name, limit: 100 });
+            const objectExists = (listed ?? []).some((entry) => entry.name === name);
+            if (!objectExists) {
+              return await failSticker(job, "Could not save the finished sticker image.", "STORAGE_UPLOAD_FAILED");
+            }
+          }
+        } else if (jobIsCandidate) {
+          assetId = await findCandidateAsset();
+        }
 
         const parentJobId = job.input_json && typeof job.input_json === "object" ? (job.input_json as Record<string, unknown>).parent_job_id : null;
         let parentTaskId: string | null = null;
@@ -762,12 +818,6 @@ Deno.serve(async (req: Request) => {
           parentModel = parent?.provider_model ?? null;
         }
 
-        // A losing candidate poller reuses the asset the winner already recorded.
-        let assetId: string | null = null;
-        if (jobIsCandidate) {
-          const { data: existingAsset } = await admin.from("media_assets").select("id").eq("workspace_id", job.workspace_id).eq("storage_path", path).maybeSingle();
-          assetId = existingAsset?.id ?? null;
-        }
         if (!assetId) {
           const { data: asset, error: assetError } = await admin.from("media_assets").insert({
             workspace_id: job.workspace_id, uploaded_by: job.user_id, storage_path: path, asset_type: "generated_sticker",
