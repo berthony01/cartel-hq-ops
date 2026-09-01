@@ -3328,6 +3328,11 @@ function StickerLabBuilder() {
                                   {isCandidateVersionOrigin(v.origin) ? (
                                     <StatusBadge tone="gold">Candidate</StatusBadge>
                                   ) : null}
+                                  {isVariationVersionOrigin(v.origin) ? (
+                                    <StatusBadge tone="gold">
+                                      Variation {v.variationLabel ?? ""}
+                                    </StatusBadge>
+                                  ) : null}
                                 </span>
                                 {v.unavailable ? (
                                   <span className="block truncate text-[10px] text-muted-foreground">
