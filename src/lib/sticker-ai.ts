@@ -107,7 +107,31 @@ export function startStickerGeneration(params: {
   });
 }
 
+/**
+ * Phase 4D — creates ONE candidate generation task for a sticker that is
+ * already connected to Telegram. The live sticker, its current image and the
+ * published Telegram set are never touched; the result lands in version
+ * history only. Billable: only ever call from an explicit confirmed action.
+ */
+export function startStickerCandidateGeneration(params: {
+  workspaceId: string;
+  packId: string;
+  stickerId: string;
+  referenceAssetIds?: string[];
+}): Promise<StickerAiStartResult> {
+  return invoke<StickerAiStartResult>({
+    action: "start_candidate",
+    workspaceId: params.workspaceId,
+    packId: params.packId,
+    stickerId: params.stickerId,
+    ...(params.referenceAssetIds?.length
+      ? { referenceAssetIds: params.referenceAssetIds }
+      : {}),
+  });
+}
+
 /** Polls an existing job. Read-only against the provider. */
 export function syncStickerJob(aiJobId: string): Promise<StickerAiSyncResult> {
   return invoke<StickerAiSyncResult>({ action: "sync", aiJobId });
 }
+
