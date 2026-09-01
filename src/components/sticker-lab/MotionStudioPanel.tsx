@@ -96,8 +96,13 @@ export function MotionStudioPanel({
   configError,
   approvingVersionId,
   approveError,
+  telegramRun,
+  telegramConfig,
+  telegramConfigLoading,
+  telegramConfigError,
   onGenerate,
   onSetCurrentMotion,
+  onPrepareTelegram,
 }: {
   stickerId: string;
   stickerLabel: string;
@@ -110,6 +115,11 @@ export function MotionStudioPanel({
   configError: boolean;
   approvingVersionId: string | null;
   approveError: string | null;
+  /** Phase C2 — Telegram preparation run state for THIS sticker. */
+  telegramRun: TelegramPrepRun;
+  telegramConfig: StickerMotionTelegramConfig | undefined;
+  telegramConfigLoading: boolean;
+  telegramConfigError: boolean;
   /** BILLABLE — only ever called from the confirmation dialog below. */
   onGenerate: (input: {
     stickerId: string;
@@ -119,7 +129,10 @@ export function MotionStudioPanel({
   }) => void;
   /** Non-billable Current Motion approval. */
   onSetCurrentMotion: (input: { stickerId: string; motionVersionId: string }) => void;
+  /** MAY BE BILLABLE — only ever called from the Telegram confirmation dialog. */
+  onPrepareTelegram: (input: { stickerId: string; motionVersionId: string }) => void;
 }) {
+
   const [mode, setMode] = useState<MotionMode>("quick");
   const [preset, setPreset] = useState<StickerMotionPreset | null>(null);
   const [instruction, setInstruction] = useState("");
