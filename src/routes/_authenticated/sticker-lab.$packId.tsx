@@ -327,8 +327,8 @@ function PackManagerPage() {
   }
 
   const summaryItems: { label: string; value: string; hint: string }[] = [
-
     {
+
       label: "Stickers",
       value: `${readyCount}/${stickers.length} ready`,
       hint: "Ready stickers are the ones Quality & Release can publish.",
