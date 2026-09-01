@@ -904,30 +904,31 @@ Deno.serve(async (req: Request) => {
         }
         if (!transparent || !finalPng) return await failSticker(job, "Transparency validation failed: the processed image does not contain real transparent pixels.", "TRANSPARENCY_FAILED");
 
-        // Candidate finalization must be idempotent across concurrent pollers,
-        // so its object path is DERIVED from the background job id. A retry then
-        // collides on the unique storage path / unique media_assets row instead
-        // of creating a second logical candidate. Ordinary generation keeps its
-        // existing random path and behaviour untouched.
-        const path = jobIsCandidate
-          ? `${job.workspace_id}/generated_sticker/candidate-${job.id}.png`
+        // Review-only finalization (candidate and A/B/C variation) must be
+        // idempotent across concurrent pollers, so its object path is DERIVED
+        // from the background job id. A retry then collides on the unique
+        // storage path / unique media_assets row instead of creating a second
+        // logical image. Ordinary generation keeps its existing random path and
+        // behaviour untouched.
+        const path = jobIsReviewOnly
+          ? `${job.workspace_id}/generated_sticker/${jobIsVariation ? "variation" : "candidate"}-${job.id}.png`
           : `${job.workspace_id}/generated_sticker/${crypto.randomUUID()}.png`;
         const { error: uploadError } = await admin.storage.from(BUCKET).upload(path, finalPng, { contentType: "image/png", upsert: false });
 
-        // A losing candidate poller reuses the asset the winner already recorded.
+        // A losing review-only poller reuses the asset the winner already recorded.
         let assetId: string | null = null;
-        const findCandidateAsset = async () => {
+        const findReviewAsset = async () => {
           const { data } = await admin.from("media_assets").select("id").eq("workspace_id", job.workspace_id).eq("storage_path", path).maybeSingle();
           return data?.id ?? null;
         };
         if (uploadError) {
           // Ordinary generation is unchanged: any upload failure is terminal.
-          if (!jobIsCandidate) return await failSticker(job, "Could not save the finished sticker image.", "STORAGE_UPLOAD_FAILED");
-          // Candidate: an upload error is only survivable when the deterministic
+          if (!jobIsReviewOnly) return await failSticker(job, "Could not save the finished sticker image.", "STORAGE_UPLOAD_FAILED");
+          // Review-only: an upload error is only survivable when the deterministic
           // object is PROVEN to already exist (idempotent retry). A network or
           // service error must never produce a media/version row for an object
           // that was never stored, so this fails closed unless proven.
-          assetId = await findCandidateAsset();
+          assetId = await findReviewAsset();
           if (!assetId) {
             const slash = path.lastIndexOf("/");
             const dir = path.slice(0, slash);
@@ -938,8 +939,8 @@ Deno.serve(async (req: Request) => {
               return await failSticker(job, "Could not save the finished sticker image.", "STORAGE_UPLOAD_FAILED");
             }
           }
-        } else if (jobIsCandidate) {
-          assetId = await findCandidateAsset();
+        } else if (jobIsReviewOnly) {
+          assetId = await findReviewAsset();
         }
 
         const parentJobId = job.input_json && typeof job.input_json === "object" ? (job.input_json as Record<string, unknown>).parent_job_id : null;
