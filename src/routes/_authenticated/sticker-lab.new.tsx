@@ -3666,7 +3666,12 @@ function StickerLabBuilder() {
                     <MotionStudioPanel
                       state={motionBySticker[stickerId]}
                       loading={motionQuery.isPending || motionQuery.isFetching}
-                      error={motionQuery.isError}
+                      error={
+                        motionQuery.isError ||
+                        (!motionQuery.isPending &&
+                          !motionQuery.isFetching &&
+                          motionBySticker[stickerId] === undefined)
+                      }
                     />
                   ) : null}
 
