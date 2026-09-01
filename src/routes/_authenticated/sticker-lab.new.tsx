@@ -118,6 +118,8 @@ import {
   SummaryStat,
 } from "@/components/sticker-lab/BuilderPrimitives";
 import { StepGuide } from "@/components/sticker-lab/StickerLabJourney";
+import { MotionStudioPanel } from "@/components/sticker-lab/MotionStudioPanel";
+import { loadStickerMotionState } from "@/lib/sticker-motion";
 import { Checkbox } from "@/components/ui/checkbox";
 
 
