@@ -136,6 +136,124 @@ const STATUS_TONE: Record<LaunchStatus, "gold" | "green" | "muted"> = {
   COMPLETED: "muted",
 };
 
+const LIFECYCLE_GUIDE: Record<LaunchStatus, { title: string; body: string }> = {
+  DRAFT: {
+    title: "Draft",
+    body:
+      "Private setup. Identity fields are editable. There are no watchers and no messages are sent.",
+  },
+  ANNOUNCED: {
+    title: "Announced",
+    body:
+      "Launch identity is locked and the public Cartel Network launch page can be visible when the Project Profile is published. This stage does NOT send a Telegram announcement or DM.",
+  },
+  WATCHLIST_OPEN: {
+    title: "Watchlist Open",
+    body:
+      "The unique Launch Watch link accepts opt-ins through @PepeCartelHQBot. Opening the watchlist does NOT itself send a broadcast.",
+  },
+  LAUNCH_APPROACHING: {
+    title: "Launch Approaching",
+    body:
+      "Schedule confirmed / countdown delivery armed. Eligible 24h and 1h reminders can be created when due for active watchers who allow countdowns.",
+  },
+  CONTRACT_PENDING: {
+    title: "Contract Pending",
+    body:
+      "Contract-address entry becomes available. Save the official contract address before advancing.",
+  },
+  OFFICIAL_CONTRACT_REGISTERED: {
+    title: "Official Contract Registered",
+    body:
+      "The authenticated project has formally registered the official contract address. Active watchers receive the Verified Launch Packet through the existing notification engine.",
+  },
+  LIVE: {
+    title: "Live",
+    body: "Active watchers receive the Launch Is Live alert.",
+  },
+  COMPLETED: {
+    title: "Completed",
+    body: "Lifecycle is finished. No new Launch Watch sign-ups.",
+  },
+};
+
+const NEXT_ACTION_GUIDE: Record<
+  LaunchStatus,
+  { current: string; means: string; nextAction: string; after: string }
+> = {
+  DRAFT: {
+    current: "Draft",
+    means:
+      "This launch is in private setup. Identity is editable and no messages are sent.",
+    nextAction: "Announce launch & lock identity",
+    after:
+      "Announced: identity locks and the Cartel Network launch page can become visible once the Project Profile is published.",
+  },
+  ANNOUNCED: {
+    current: "Announced",
+    means:
+      "Launch identity is locked. The Cartel Network page can be visible when the Project Profile is published. No Telegram announcement or DM is sent at this stage.",
+    nextAction: "Open Launch Watch",
+    after:
+      "Watchlist Open: the unique Launch Watch link starts accepting opt-ins.",
+  },
+  WATCHLIST_OPEN: {
+    current: "Watchlist Open",
+    means:
+      "Watchers can opt in privately through @PepeCartelHQBot. This stage itself does not send them a message.",
+    nextAction: "Confirm schedule & arm countdowns",
+    after:
+      "Launch Approaching: countdown delivery becomes armed. The following lifecycle step opens contract registration.",
+  },
+  LAUNCH_APPROACHING: {
+    current: "Launch Approaching",
+    means:
+      "Schedule is confirmed and countdown delivery is armed. Eligible 24h and 1h reminders can be created when due for active watchers who allow countdowns.",
+    nextAction: "Open contract registration",
+    after:
+      "Contract Pending: the official contract address field becomes editable.",
+  },
+  CONTRACT_PENDING: {
+    current: "Contract Pending",
+    means:
+      "Contract-address entry is open. Save the official contract address, then register it.",
+    nextAction: "Register official contract",
+    after:
+      "Official Contract Registered: active watchers receive the Verified Launch Packet.",
+  },
+  OFFICIAL_CONTRACT_REGISTERED: {
+    current: "Official Contract Registered",
+    means:
+      "The authenticated project has formally registered the official contract address. Active watchers will receive the Verified Launch Packet.",
+    nextAction: "Mark launch live",
+    after: "Live: active watchers receive the Launch Is Live alert.",
+  },
+  LIVE: {
+    current: "Live",
+    means: "Active watchers have received the Launch Is Live alert.",
+    nextAction: "Complete launch",
+    after:
+      "Completed: the lifecycle is finished and no new Launch Watch sign-ups are accepted.",
+  },
+  COMPLETED: {
+    current: "Completed",
+    means: "The lifecycle is finished. No new Launch Watch sign-ups.",
+    nextAction: "No further action",
+    after: "This launch record remains read-only.",
+  },
+};
+
+const TRANSITION_BUTTON_LABEL: Record<LaunchStatus, string> = {
+  DRAFT: "Announce launch & lock identity",
+  ANNOUNCED: "Open Launch Watch",
+  WATCHLIST_OPEN: "Confirm schedule & arm countdowns",
+  LAUNCH_APPROACHING: "Open contract registration",
+  CONTRACT_PENDING: "Register official contract",
+  OFFICIAL_CONTRACT_REGISTERED: "Mark launch live",
+  LIVE: "Complete launch",
+  COMPLETED: "No further action",
+};
+
 function formFromRow(row: LaunchRow): EditorForm {
   const mode: ScheduleMode = row.launch_at
     ? "exact"
@@ -528,9 +646,9 @@ function LaunchControlPage() {
 
   const blockedReason =
     next === "LAUNCH_APPROACHING" && !scheduleReady
-      ? "Set an exact launch time or a complete launch window before advancing."
+      ? "Set an exact launch time or a complete launch window before you can arm countdowns."
       : next === "OFFICIAL_CONTRACT_REGISTERED" && !contractSaved
-        ? "Save the official contract address before advancing."
+        ? "Save the official contract address before registering it."
         : null;
 
   const saveButton =
@@ -876,7 +994,29 @@ function LaunchControlPage() {
                   </p>
 
                   {next ? (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
+                      <div className="rounded-md border border-gold/20 bg-gold/5 p-3">
+                        <p className="type-meta text-gold">Current step</p>
+                        <p className="mt-1 text-sm font-semibold text-foreground">
+                          {NEXT_ACTION_GUIDE[status].current}
+                        </p>
+                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                          {NEXT_ACTION_GUIDE[status].means}
+                        </p>
+                        <div className="mt-2 border-t border-gold/10 pt-2">
+                          <p className="type-meta text-gold">Next action</p>
+                          <p className="mt-0.5 text-xs text-foreground">
+                            {NEXT_ACTION_GUIDE[status].nextAction}
+                          </p>
+                        </div>
+                        <div className="mt-2 border-t border-gold/10 pt-2">
+                          <p className="type-meta text-gold">What happens next</p>
+                          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                            {NEXT_ACTION_GUIDE[status].after}
+                          </p>
+                        </div>
+                      </div>
+
                       {blockedReason ? (
                         <p className="text-xs text-muted-foreground">{blockedReason}</p>
                       ) : null}
@@ -889,7 +1029,7 @@ function LaunchControlPage() {
                           {transitionMutation.isPending ? (
                             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                           ) : null}
-                          Advance to {LAUNCH_STATUS_LABELS[next]}
+                          {TRANSITION_BUTTON_LABEL[status]}
                         </Button>
                       ) : (
                         <p className="text-xs text-muted-foreground">
@@ -902,11 +1042,78 @@ function LaunchControlPage() {
                       </p>
                     </div>
                   ) : (
-                    <p className="text-xs text-muted-foreground">
-                      This launch has reached the final lifecycle state.
-                    </p>
+                    <div className="space-y-2">
+                      <div className="rounded-md border border-border/60 bg-background/30 p-3">
+                        <p className="type-meta text-muted-foreground">Current step</p>
+                        <p className="mt-1 text-sm font-semibold text-foreground">
+                          {NEXT_ACTION_GUIDE[status].current}
+                        </p>
+                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                          {NEXT_ACTION_GUIDE[status].means}
+                        </p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        This launch has reached the final lifecycle state.
+                      </p>
+                    </div>
                   )}
                 </div>
+              </div>
+            </Section>
+          ) : null}
+
+          {selected ? (
+            <Section
+              variant="surface"
+              title="Launch lifecycle guide"
+              description="What each lifecycle stage means for operators."
+            >
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {LAUNCH_STATUSES.map((s) => {
+                  const guide = LIFECYCLE_GUIDE[s];
+                  const current = s === status;
+                  const done = launchStatusIndex(s) < launchStatusIndex(status);
+                  return (
+                    <div
+                      key={s}
+                      className={`rounded-md border p-3 ${
+                        current
+                          ? "border-gold/50 bg-gold/5"
+                          : done
+                            ? "border-pepe/30 bg-pepe/5"
+                            : "border-border/60 bg-background/30"
+                      }`}
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span
+                          className={`flex size-4 shrink-0 items-center justify-center rounded-full border text-[10px] ${
+                            done
+                              ? "border-pepe/50 text-pepe"
+                              : current
+                                ? "border-gold/60 text-gold"
+                                : "border-border text-muted-foreground"
+                          }`}
+                        >
+                          {done ? <Check className="size-2.5" aria-hidden="true" /> : null}
+                        </span>
+                        <p
+                          className={`min-w-0 truncate text-xs font-semibold uppercase tracking-[0.12em] ${
+                            current
+                              ? "text-gold"
+                              : done
+                                ? "text-foreground"
+                                : "text-muted-foreground"
+                          }`}
+                        >
+                          {guide.title}
+                        </p>
+                      </div>
+                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                        {guide.body}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
             </Section>
           ) : null}
@@ -1360,6 +1567,11 @@ function LaunchControlPage() {
                         Launch Watch is privacy-first: project operators see aggregate watcher
                         activity, not individual Telegram identities.
                       </p>
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        Current automated messages are countdown reminders, the Verified Launch
+                        Packet and the launch-live alert. Manual watcher updates are handled
+                        separately once that tool is enabled.
+                      </p>
 
                     </div>
                   ) : (
@@ -1430,10 +1642,13 @@ function LaunchControlPage() {
                       </p>
                     </div>
                   ) : (
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      Contract registration becomes available later in the lifecycle, once the
-                      launch reaches contract pending.
-                    </p>
+                    <div className="space-y-2">
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        {status === "WATCHLIST_OPEN"
+                          ? "Contract entry is not open yet. First confirm the schedule and arm countdowns. Then open Contract Registration. At Contract Pending, the official CA field becomes editable."
+                          : "Contract registration becomes available later in the lifecycle, once the launch reaches Contract Pending."}
+                      </p>
+                    </div>
                   )}
                 </Section>
 
