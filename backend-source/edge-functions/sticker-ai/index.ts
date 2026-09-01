@@ -956,16 +956,16 @@ Deno.serve(async (req: Request) => {
           const { data: asset, error: assetError } = await admin.from("media_assets").insert({
             workspace_id: job.workspace_id, uploaded_by: job.user_id, storage_path: path, asset_type: "generated_sticker",
             mime_type: "image/png", width, height, file_size_bytes: finalPng.byteLength, transparency_valid: true,
-            metadata: { source: "kie", generation_model: parentModel, generation_task_id: parentTaskId, background_model: job.provider_model, background_task_id: job.provider_task_id, generation_job_id: parentJobId, background_job_id: job.id, ...(jobIsCandidate ? { candidate: true } : {}) },
+            metadata: { source: "kie", generation_model: parentModel, generation_task_id: parentTaskId, background_model: job.provider_model, background_task_id: job.provider_task_id, generation_job_id: parentJobId, background_job_id: job.id, ...(jobIsCandidate ? { candidate: true } : {}), ...(jobIsVariation ? { variation: true, variation_group_id: jobVariationMeta.groupId, variation_label: jobVariationMeta.label } : {}) },
           }).select("id").single();
           if (assetError || !asset) {
-            if (jobIsCandidate) {
-              // Recover a concurrently inserted candidate asset before failing.
+            if (jobIsReviewOnly) {
+              // Recover a concurrently inserted review-only asset before failing.
               const { data: racedAsset } = await admin.from("media_assets").select("id").eq("workspace_id", job.workspace_id).eq("storage_path", path).maybeSingle();
               assetId = racedAsset?.id ?? null;
             }
             if (!assetId) {
-              if (!jobIsCandidate) await admin.storage.from(BUCKET).remove([path]);
+              if (!jobIsReviewOnly) await admin.storage.from(BUCKET).remove([path]);
               return await failSticker(job, "Could not record the finished sticker asset.", "ASSET_RECORD_FAILED");
             }
           } else {
@@ -973,34 +973,47 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        if (jobIsCandidate) {
-          // Durable candidate record ONLY. The current pointer, sticker status,
+        if (jobIsReviewOnly) {
+          // Durable review-only record ONLY. The current pointer, sticker status,
           // Telegram fields and pack status are deliberately never written here.
+          const versionOrigin = jobIsVariation ? "variation_generation" : "candidate_generation";
           let versionId: string | null = null;
           const readVersion = async () => {
             const { data } = await admin.from("sticker_versions").select("id").eq("sticker_id", job.sticker_id).eq("asset_id", assetId).maybeSingle();
             return data?.id ?? null;
           };
-          versionId = await readVersion();
+          /** A finished A/B/C slot is unique per (sticker, group, label). */
+          const readVariationSlot = async () => {
+            if (!jobIsVariation || !jobVariationMeta.groupId || !jobVariationMeta.label) return null;
+            const { data } = await admin.from("sticker_versions").select("id")
+              .eq("sticker_id", job.sticker_id)
+              .eq("variation_group_id", jobVariationMeta.groupId)
+              .eq("variation_label", jobVariationMeta.label)
+              .maybeSingle();
+            return data?.id ?? null;
+          };
+          versionId = (await readVersion()) ?? (await readVariationSlot());
           for (let attempt = 0; attempt < 3 && !versionId; attempt++) {
             const { data: maxRow } = await admin.from("sticker_versions").select("version_number").eq("sticker_id", job.sticker_id).order("version_number", { ascending: false }).limit(1).maybeSingle();
             const nextVersion = (maxRow?.version_number ?? 0) + 1;
             const { data: inserted, error: versionError } = await admin.from("sticker_versions").insert({
               workspace_id: job.workspace_id, pack_id: job.pack_id, sticker_id: job.sticker_id,
-              asset_id: assetId, version_number: nextVersion, origin: "candidate_generation",
+              asset_id: assetId, version_number: nextVersion, origin: versionOrigin,
+              ...(jobIsVariation ? { variation_group_id: jobVariationMeta.groupId, variation_label: jobVariationMeta.label } : {}),
             }).select("id").maybeSingle();
             if (!versionError && inserted) { versionId = inserted.id; break; }
-            // Unique conflict on (sticker_id, asset_id) or (sticker_id, version_number):
-            // re-read and reuse rather than creating a second logical candidate.
-            versionId = await readVersion();
+            // Unique conflict on (sticker_id, asset_id), (sticker_id, version_number)
+            // or the variation slot: re-read and reuse rather than creating a
+            // second logical review image.
+            versionId = (await readVersion()) ?? (await readVariationSlot());
           }
           if (!versionId) {
-            return await failSticker(job, "The candidate image was created but could not be recorded in version history.", "CANDIDATE_VERSION_FAILED");
+            return await failSticker(job, "The image was created but could not be recorded in version history.", jobIsVariation ? "VARIATION_VERSION_FAILED" : "CANDIDATE_VERSION_FAILED");
           }
 
-          await admin.from("ai_jobs").update({ status: "succeeded", completed_at: new Date().toISOString(), output_json: { asset_id: assetId, storage_path: path, transparency_valid: true, width, height, mode: "candidate", version_id: versionId } }).eq("id", job.id);
+          await admin.from("ai_jobs").update({ status: "succeeded", completed_at: new Date().toISOString(), output_json: { asset_id: assetId, storage_path: path, transparency_valid: true, width, height, mode: jobMode, version_id: versionId, ...(jobIsVariation ? { variation_group_id: jobVariationMeta.groupId, variation_label: jobVariationMeta.label } : {}) } }).eq("id", job.id);
           await logCredits(job, credits);
-          return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", assetId, transparencyValid: true, stage: "candidate_ready", mode: "candidate", versionId });
+          return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", assetId, transparencyValid: true, stage: jobIsVariation ? "variation_ready" : "candidate_ready", versionId, ...jobModeExtras });
         }
 
         await admin.from("stickers").update({ image_asset_id: assetId, status: "ready" }).eq("id", job.sticker_id);
