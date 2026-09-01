@@ -58,6 +58,12 @@ export type VariationRound = {
   /** Takes finished in this round, in completion order. */
   completed: StickerVariationLabel[];
   failure?: ProviderFailure | undefined;
+  /**
+   * R1 — set ONLY when the failure happened during background removal, i.e.
+   * the paid image generation already succeeded. Enables the one-task
+   * background-only retry instead of a full new round.
+   */
+  retryableBackgroundJobId?: string | null;
 };
 
 const EMPTY_ROUND: VariationRound = {
@@ -65,6 +71,7 @@ const EMPTY_ROUND: VariationRound = {
   stage: "idle",
   currentLabel: null,
   completed: [],
+  retryableBackgroundJobId: null,
 };
 
 /** Same conservative polling contract as ordinary generation. */
