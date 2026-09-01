@@ -700,6 +700,15 @@ Deno.serve(async (req: Request) => {
           return crossModeConflict(childMode);
         }
         const childInput = (child.input_json && typeof child.input_json === "object" ? child.input_json : {}) as Record<string, unknown>;
+        // R1.1 — a background-only RETRY child stores the FAILED background row
+        // id in `parent_job_id` as an idempotency-chain key. It is NOT a
+        // generation job id, so it must never be handed back as one.
+        if (typeof childInput.retry_of_background_job_id === "string") {
+          return respond({
+            error: "BACKGROUND_RETRY_ACTIVE",
+            message: "A background-only retry is still running for this sticker. Wait for it to finish before starting new work.",
+          }, 409);
+        }
         const parentJobId = typeof childInput.parent_job_id === "string" ? childInput.parent_job_id : null;
         if (parentJobId) {
           const { data: parent } = await admin.from("ai_jobs").select("id").eq("id", parentJobId).maybeSingle();
