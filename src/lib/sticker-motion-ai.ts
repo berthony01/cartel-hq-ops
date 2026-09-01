@@ -158,3 +158,29 @@ export function startStickerMotionGeneration(params: {
 export function syncStickerMotionJob(aiJobId: string): Promise<StickerMotionSyncResult> {
   return invoke<StickerMotionSyncResult>({ action: "sync", aiJobId });
 }
+
+export type StickerMotionSetCurrentResult = {
+  alreadyCurrent?: boolean;
+  currentMotionVersionId: string | null;
+  /** Echoed only — this action never changes it. */
+  releaseVariant: string;
+  telegramChanged: boolean;
+  billable: boolean;
+};
+
+/**
+ * NON-BILLABLE. Approves an existing motion version as Current Motion by
+ * setting `stickers.current_motion_version_id` only. It creates no provider
+ * task, and never changes `release_variant`, the static current image, sticker
+ * or pack status, Telegram state or Sticker Drops. The server rejects a take
+ * whose source static image is no longer the sticker's current static image
+ * with `MOTION_SOURCE_STALE`.
+ */
+export function setCurrentStickerMotion(params: {
+  workspaceId: string;
+  packId: string;
+  stickerId: string;
+  motionVersionId: string;
+}): Promise<StickerMotionSetCurrentResult> {
+  return invoke<StickerMotionSetCurrentResult>({ action: "set_current", ...params });
+}
