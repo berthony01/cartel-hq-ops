@@ -251,6 +251,7 @@ const TRANSITION_BUTTON_LABEL: Record<LaunchStatus, string> = {
   CONTRACT_PENDING: "Register official contract",
   OFFICIAL_CONTRACT_REGISTERED: "Mark launch live",
   LIVE: "Complete launch",
+  COMPLETED: "No further action",
 };
 
 function formFromRow(row: LaunchRow): EditorForm {
