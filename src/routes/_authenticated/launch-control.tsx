@@ -8,6 +8,7 @@ import {
   ExternalLink,
   IdCard,
   Loader2,
+  Megaphone,
   Plus,
   Rocket,
   Save,
@@ -31,6 +32,12 @@ import {
   getLaunchNotificationSummary,
   getLaunchWatchSummary,
   getLaunchWatchConfirmationSummary,
+  getLaunchWatcherUpdateStats,
+  listLaunchWatcherUpdates,
+  createLaunchWatcherUpdate,
+  canSendWatcherUpdate,
+  WATCHER_UPDATE_TITLE_MAX,
+  WATCHER_UPDATE_BODY_MAX,
 
   isLaunchWatchClosedStatus,
   isLaunchWatchOpenStatus,
@@ -579,6 +586,62 @@ function LaunchControlPage() {
     queryFn: () => getLaunchNotificationSummary(selected!.id),
   });
   const notificationSummary = notificationSummaryQuery.data ?? null;
+
+  // ---- Watcher Updates (manual project updates) ----------------------------
+  // Aggregate audience counts and the operator's own update text only. No
+  // watcher identity is ever fetched here.
+  const watcherUpdateStatsQuery = useQuery({
+    queryKey: ["launch-watcher-update-stats", selected?.id ?? null],
+    enabled: !!selected?.id && !!watchToken,
+    queryFn: () => getLaunchWatcherUpdateStats(selected!.id),
+  });
+  const watcherUpdateStats = watcherUpdateStatsQuery.data ?? null;
+
+  const watcherUpdateHistoryQuery = useQuery({
+    queryKey: ["launch-watcher-updates", selected?.id ?? null],
+    enabled: !!selected?.id && !!watchToken,
+    queryFn: () => listLaunchWatcherUpdates(selected!.id, 10),
+  });
+  const watcherUpdates = watcherUpdateHistoryQuery.data ?? [];
+
+  const [updateTitle, setUpdateTitle] = useState("");
+  const [updateBody, setUpdateBody] = useState("");
+  // ONE client request id per confirmed send attempt. It survives errors so a
+  // retry is idempotent server-side, and is only cleared on definite success.
+  const [updateRequestId, setUpdateRequestId] = useState<string | null>(null);
+  const [confirmUpdateSend, setConfirmUpdateSend] = useState(false);
+
+  useEffect(() => {
+    setUpdateTitle("");
+    setUpdateBody("");
+    setUpdateRequestId(null);
+    setConfirmUpdateSend(false);
+  }, [selected?.id]);
+
+  const watcherUpdateMutation = useMutation({
+    mutationFn: async () => {
+      if (!selected) throw new Error("No launch selected.");
+      const requestId = updateRequestId ?? crypto.randomUUID();
+      if (!updateRequestId) setUpdateRequestId(requestId);
+      return createLaunchWatcherUpdate({
+        launchId: selected.id,
+        clientRequestId: requestId,
+        title: updateTitle.trim() ? updateTitle.trim() : null,
+        body: updateBody,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Watcher update queued for delivery");
+      setUpdateTitle("");
+      setUpdateBody("");
+      setUpdateRequestId(null);
+      void watcherUpdateStatsQuery.refetch();
+      void watcherUpdateHistoryQuery.refetch();
+      void notificationSummaryQuery.refetch();
+    },
+    onError: (err: unknown) =>
+      toast.error(err instanceof Error ? err.message : "Could not send the watcher update."),
+  });
 
   // ---- countdown + reminder readiness (saved launch fields only) -----------
   const nowMs = useClientNow(30_000);
@@ -1568,9 +1631,9 @@ function LaunchControlPage() {
                         activity, not individual Telegram identities.
                       </p>
                       <p className="text-xs leading-relaxed text-muted-foreground">
-                        Current automated messages are countdown reminders, the Verified Launch
-                        Packet and the launch-live alert. Manual watcher updates are handled
-                        separately once that tool is enabled.
+                        Automated messages are the countdown reminders, the Verified Launch Packet
+                        and the launch-live alert. Manual project updates are sent separately from
+                        Watcher Updates below.
                       </p>
 
                     </div>
@@ -1585,6 +1648,224 @@ function LaunchControlPage() {
                         official-contract packet and launch-live alert for this launch.
                       </p>
                     </div>
+                  )}
+                </Section>
+
+                <Section
+                  variant="surface"
+                  title="Watcher Updates"
+                  leading={<Megaphone className="size-4" aria-hidden="true" />}
+                  description="Send a private text update to active watchers who allow Project Updates."
+                >
+                  {watchToken ? (
+                    <div className="space-y-3">
+                      <ul className="space-y-1 text-xs leading-relaxed text-muted-foreground">
+                        <li>
+                          Delivered as a private @PepeCartelHQBot message to active watchers who
+                          allow Project Updates.
+                        </li>
+                        <li>Separate from countdown reminders — muting one never mutes the other.</li>
+                        <li>Never posted to your connected Telegram community group.</li>
+                        <li>No watcher identities are exposed in CARTEL HQ.</li>
+                      </ul>
+
+                      <div className="rounded-md border border-border/60 bg-background/30 p-3">
+                        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                          Update audience
+                        </p>
+                        {watcherUpdateStatsQuery.isError ? (
+                          <div className="mt-2">
+                            <p className="text-xs leading-relaxed text-muted-foreground">
+                              Update audience counts could not be loaded right now.
+                            </p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-2 min-h-11"
+                              onClick={() => void watcherUpdateStatsQuery.refetch()}
+                            >
+                              Retry
+                            </Button>
+                          </div>
+                        ) : (
+                          <dl className="mt-2 grid grid-cols-3 gap-x-4 gap-y-2 text-xs">
+                            <div className="min-w-0">
+                              <dt className="text-muted-foreground">Active watchers</dt>
+                              <dd className="font-mono text-sm text-foreground">
+                                {watcherUpdateStats ? watcherUpdateStats.active_watchers : "—"}
+                              </dd>
+                            </div>
+                            <div className="min-w-0">
+                              <dt className="text-muted-foreground">Project updates on</dt>
+                              <dd className="font-mono text-sm text-foreground">
+                                {watcherUpdateStats
+                                  ? watcherUpdateStats.updates_enabled_watchers
+                                  : "—"}
+                              </dd>
+                            </div>
+                            <div className="min-w-0">
+                              <dt className="text-muted-foreground">Project updates muted</dt>
+                              <dd className="font-mono text-sm text-foreground">
+                                {watcherUpdateStats ? watcherUpdateStats.updates_muted_watchers : "—"}
+                              </dd>
+                            </div>
+                          </dl>
+                        )}
+                        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                          Watchers who opted in before Project Updates existed agreed to countdowns
+                          and launch alerts only, so they start with Project Updates off. They keep
+                          receiving countdowns, the Verified Launch Packet and the launch-live
+                          alert, and must re-open their Launch Watch message in Telegram and tap
+                          “Enable project updates” before they receive manual updates. CARTEL HQ
+                          never changes that choice for them.
+                        </p>
+                      </div>
+
+                      {canManage ? (
+                        canSendWatcherUpdate(status) ? (
+                          <div className="space-y-3">
+                            <div className="min-w-0">
+                              <Label htmlFor="watcher-update-title">Title (optional)</Label>
+                              <Input
+                                id="watcher-update-title"
+                                maxLength={WATCHER_UPDATE_TITLE_MAX}
+                                value={updateTitle}
+                                onChange={(e) => setUpdateTitle(e.target.value)}
+                                placeholder="Short headline for this update"
+                              />
+                              <p className="mt-1 text-right text-xs text-muted-foreground">
+                                {updateTitle.length}/{WATCHER_UPDATE_TITLE_MAX}
+                              </p>
+                            </div>
+                            <div className="min-w-0">
+                              <Label htmlFor="watcher-update-body">Update text</Label>
+                              <Textarea
+                                id="watcher-update-body"
+                                rows={5}
+                                maxLength={WATCHER_UPDATE_BODY_MAX}
+                                value={updateBody}
+                                onChange={(e) => setUpdateBody(e.target.value)}
+                                placeholder="What do your watchers need to know?"
+                              />
+                              <p className="mt-1 text-right text-xs text-muted-foreground">
+                                {updateBody.length}/{WATCHER_UPDATE_BODY_MAX}
+                              </p>
+                            </div>
+                            <Button
+                              className="min-h-11"
+                              disabled={
+                                watcherUpdateMutation.isPending ||
+                                !updateBody.trim() ||
+                                !watcherUpdateStats ||
+                                watcherUpdateStats.updates_enabled_watchers < 1
+                              }
+                              onClick={() => setConfirmUpdateSend(true)}
+                            >
+                              {watcherUpdateMutation.isPending ? (
+                                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                              ) : (
+                                <Megaphone className="size-4" aria-hidden="true" />
+                              )}
+                              Send watcher update
+                            </Button>
+                            {watcherUpdateStats &&
+                            watcherUpdateStats.updates_enabled_watchers < 1 ? (
+                              <p className="text-xs leading-relaxed text-muted-foreground">
+                                No active watcher currently allows Project Updates, so there is
+                                nobody to send this update to yet.
+                              </p>
+                            ) : null}
+                            <p className="text-xs leading-relaxed text-muted-foreground">
+                              Updates send immediately when confirmed. There is no scheduling and no
+                              media attachment in this phase — text only.
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-xs leading-relaxed text-muted-foreground">
+                            Watcher updates can be sent from Watchlist open through Live. This
+                            launch is currently {LAUNCH_STATUS_LABELS[status]}.
+                          </p>
+                        )
+                      ) : (
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          Only project owners and admins can send watcher updates. You can view the
+                          audience counts and update history.
+                        </p>
+                      )}
+
+                      <div className="rounded-md border border-border/60 bg-background/30 p-3">
+                        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                          Recent updates
+                        </p>
+                        {watcherUpdateHistoryQuery.isError ? (
+                          <div className="mt-2">
+                            <p className="text-xs leading-relaxed text-muted-foreground">
+                              Update history could not be loaded right now.
+                            </p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-2 min-h-11"
+                              onClick={() => void watcherUpdateHistoryQuery.refetch()}
+                            >
+                              Retry
+                            </Button>
+                          </div>
+                        ) : watcherUpdateHistoryQuery.isLoading ? (
+                          <p className="mt-2 text-xs text-muted-foreground">Loading updates…</p>
+                        ) : watcherUpdates.length === 0 ? (
+                          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                            No manual watcher updates have been sent for this launch.
+                          </p>
+                        ) : (
+                          <ul className="mt-2 space-y-3">
+                            {watcherUpdates.map((item) => (
+                              <li
+                                key={item.event_id}
+                                className="min-w-0 rounded-md border border-border/50 bg-background/40 p-2.5"
+                              >
+                                <p className="text-xs font-semibold text-foreground [overflow-wrap:anywhere]">
+                                  {item.title ?? "Project update"}
+                                </p>
+                                <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+                                  {item.body}
+                                </p>
+                                <p className="mt-1.5 text-xs text-muted-foreground">
+                                  {formatTimestamp(item.created_at)}
+                                </p>
+                                <dl className="mt-1.5 grid grid-cols-3 gap-x-3 gap-y-1 text-xs sm:grid-cols-5">
+                                  {(
+                                    [
+                                      ["Pending", item.pending_count],
+                                      ["Delivered", item.sent_count],
+                                      ["Failed", item.failed_count],
+                                      ["Outcome unconfirmed", item.ambiguous_count],
+                                      ["Skipped", item.skipped_count],
+                                    ] as const
+                                  ).map(([label, value]) => (
+                                    <div key={label} className="min-w-0">
+                                      <dt className="truncate uppercase tracking-[0.1em] text-muted-foreground">
+                                        {label}
+                                      </dt>
+                                      <dd className="font-mono text-sm text-foreground">{value}</dd>
+                                    </div>
+                                  ))}
+                                </dl>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                          Aggregate delivery counts only. Individual watchers, Telegram identifiers
+                          and delivery rows are never shown.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Watcher updates become available once this launch reaches Watchlist open and
+                      the Launch Watch link starts collecting watchers.
+                    </p>
                   )}
                 </Section>
 
@@ -1724,6 +2005,7 @@ function LaunchControlPage() {
                       <li>24h + 1h countdown reminders (watchers who allow them)</li>
                       <li>Official-contract Verified Launch Packet</li>
                       <li>Launch-live alert</li>
+                      <li>Manual project updates (watchers who allow them)</li>
                     </ul>
 
                     {watchToken ? (
@@ -1759,11 +2041,12 @@ function LaunchControlPage() {
                         </p>
 
                         <p className="text-xs leading-relaxed text-muted-foreground">
-                          <span className="text-foreground">Alerts created</span> can stay at 0 even
-                          with a saved schedule and active watchers. Reminder events are created
-                          when the 24h or 1h reminder actually becomes due, not when the launch date
-                          is saved, and countdown delivery must be in an armed lifecycle state at
-                          that moment.
+                          <span className="text-foreground">Alerts created</span> counts every
+                          watcher alert for this launch, including manual project updates. It can
+                          stay at 0 even with a saved schedule and active watchers: reminder events
+                          are created when the 24h or 1h reminder actually becomes due, not when the
+                          launch date is saved, and countdown delivery must be in an armed lifecycle
+                          state at that moment.
                         </p>
 
                       </>
@@ -1824,6 +2107,34 @@ function LaunchControlPage() {
       {selected && saveButton ? (
         <StickyActionBar desktop="hidden" end={saveButton} />
       ) : null}
+
+      <AlertDialog open={confirmUpdateSend} onOpenChange={setConfirmUpdateSend}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Send this update privately to {watcherUpdateStats?.updates_enabled_watchers ?? 0}{" "}
+              watcher(s)?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This creates one private bot message per eligible watcher and does not post to your
+              community group.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={watcherUpdateMutation.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                setConfirmUpdateSend(false);
+                watcherUpdateMutation.mutate();
+              }}
+            >
+              Send watcher update
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>

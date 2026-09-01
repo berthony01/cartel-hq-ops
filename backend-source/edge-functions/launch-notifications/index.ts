@@ -35,6 +35,10 @@ const TRUST_STATEMENT =
 const REMINDER_DISCLAIMER =
   `This is a countdown reminder for a launch you chose to watch. It is not a safety check, audit, verification or endorsement of any token.`;
 
+const WATCHER_UPDATE_DISCLAIMER =
+  `This project update was sent by the authenticated Cartel HQ project you chose to watch. ` +
+  `It is not a safety audit, verification or investment endorsement.`;
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
@@ -165,7 +169,7 @@ Deno.serve(async (req: Request) => {
       // ---- Revalidate against CURRENT state ------------------------------
       const { data: subscription, error: subError } = await admin
         .from("launch_watch_subscriptions")
-        .select("id,is_active,reminders_enabled")
+        .select("id,is_active,reminders_enabled,updates_enabled")
         .eq("id", claim.subscription_id)
         .maybeSingle();
       if (subError) throw new Error("subscription_read_failed");
@@ -176,6 +180,13 @@ Deno.serve(async (req: Request) => {
       const isReminder = eventType === "REMINDER_24H" || eventType === "REMINDER_1H";
       if (isReminder && subscription.reminders_enabled !== true) {
         await skip(deliveryId, "reminders_muted");
+        continue;
+      }
+      const isWatcherUpdate = eventType === "WATCHER_UPDATE";
+      // Current-state revalidation: a watcher who muted project updates after
+      // the event was queued must never be contacted.
+      if (isWatcherUpdate && subscription.updates_enabled !== true) {
+        await skip(deliveryId, "updates_muted");
         continue;
       }
 
@@ -290,6 +301,22 @@ Deno.serve(async (req: Request) => {
         text =
           `<b>🚀 LAUNCH IS LIVE</b>\n\n${identity}\n\n<b>📦 VERIFIED LAUNCH PACKET</b>${packetLines.join("\n")}` +
           `${timingLine}${linksBlock}\n\n${TRUST_STATEMENT}`;
+      } else if (isWatcherUpdate) {
+        // Operator-authored text only. Never any sender identity, and every
+        // operator-supplied character is HTML-escaped before output.
+        const rawPayload =
+          claim.payload && typeof claim.payload === "object" ? (claim.payload as Record<string, unknown>) : {};
+        const rawTitle = typeof rawPayload.title === "string" ? rawPayload.title.trim() : "";
+        const rawBody = typeof rawPayload.body === "string" ? rawPayload.body.trim() : "";
+        if (!rawBody) {
+          await skip(deliveryId, "update_body_missing");
+          continue;
+        }
+        const titleLine = rawTitle ? `\n<b>${escapeHtml(rawTitle)}</b>` : "";
+        const bodyBlock = escapeHtml(rawBody).replace(/\r\n/g, "\n");
+        text =
+          `<b>📣 LAUNCH UPDATE</b>\n\n${identity}\n${titleLine}\n\n${bodyBlock}` +
+          `${linksBlock}\n\n${WATCHER_UPDATE_DISCLAIMER}`;
       } else {
         await skip(deliveryId, "unknown_event_type");
         continue;
@@ -312,6 +339,13 @@ Deno.serve(async (req: Request) => {
           controls.push({ text: "🔇 Mute countdowns", callback_data: `ln_reminders_off_${token}` });
         }
         keyboardRows.push(controls);
+        // Project-update preference is independent of countdowns: muting it
+        // never suppresses the Verified Launch Packet or the live alert.
+        keyboardRows.push([
+          subscription.updates_enabled === true
+            ? { text: "🔇 Mute project updates", callback_data: `ln_updates_off_${token}` }
+            : { text: "📣 Enable project updates", callback_data: `ln_updates_on_${token}` },
+        ]);
       }
 
       // ---- Send -------------------------------------------------------------
