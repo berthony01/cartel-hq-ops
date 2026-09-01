@@ -438,8 +438,14 @@ export function MotionStudioPanel({
               </p>
             ) : telegramConfig?.configured !== true ? (
               <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-                Telegram preparation is not configured yet. It stays disabled until the providers
-                are configured.
+                {(() => {
+                  const missing = [];
+                  if (telegramConfig?.falConfigured !== true) missing.push("fal.ai");
+                  if (telegramConfig?.cloudConvertConfigured !== true) missing.push("CloudConvert");
+                  if (missing.length === 0) return "Telegram preparation is not configured yet.";
+                  const list = missing.join(missing.length === 2 ? " and " : "");
+                  return `Telegram preparation is unavailable. Missing provider${missing.length === 2 ? "s" : ""}: ${list}.`;
+                })()}
               </p>
             ) : null}
             <Button
@@ -483,8 +489,8 @@ export function MotionStudioPanel({
               Retry normalization only
             </Button>
             <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-              Background removal already completed for this motion. This reuses that result and
-              re-runs formatting only.
+              This reuses the successful fal.ai background-removal result and re-runs CloudConvert
+              formatting only.
             </p>
           </>
         ) : null}
@@ -742,16 +748,19 @@ export function MotionStudioPanel({
           <AlertDialogTitle>Retry normalization for {stickerLabel}?</AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-2 text-left">
-              <p>This reuses the background removal that already completed. Before you confirm:</p>
+              <p>
+                This reuses the successful fal.ai background-removal result and re-runs CloudConvert
+                formatting only. Before you confirm:
+              </p>
               <ul className="list-disc space-y-1 pl-4">
-                <li>It starts exactly ONE new Telegram normalization job</li>
-                <li>It does NOT start a new background removal</li>
-                <li>It does NOT start new motion generation</li>
-                <li>No automatic retry</li>
-                <li>Your current static sticker will not change</li>
-                <li>Your Current Motion will not change</li>
-                <li>Your Telegram release will not change</li>
-                <li>Nothing is published to Telegram in this step</li>
+                <li>fal.ai background removal already succeeded and will NOT run again.</li>
+                <li>Kling/Kie motion generation will NOT run.</li>
+                <li>Exactly ONE CloudConvert normalization job may be started.</li>
+                <li>There is no automatic retry.</li>
+                <li>Your current static sticker remains unchanged.</li>
+                <li>Your Current Motion remains unchanged.</li>
+                <li>Your Telegram release remains unchanged.</li>
+                <li>Nothing is published to Telegram in this step.</li>
               </ul>
             </div>
           </AlertDialogDescription>
@@ -763,7 +772,7 @@ export function MotionStudioPanel({
                 onRetryNormalization?.({ stickerId });
               }}
             >
-              Retry normalization
+              Retry normalization only (1 job)
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
