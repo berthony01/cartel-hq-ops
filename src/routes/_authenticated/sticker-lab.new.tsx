@@ -3217,6 +3217,13 @@ function StickerLabBuilder() {
               /**
                * A/B/C round state and the newest durable take per label.
                * Review-only: none of this changes the current image.
+               *
+               * The takes themselves always come from durable `sticker_versions`
+               * rows. Local round state only identifies WHICH group is being
+               * looked at while a round is in flight in this tab; after a
+               * refresh that state is empty and the group is derived from the
+               * newest durable variation row instead. No client-only winner is
+               * invented or persisted anywhere.
                */
               const varRound = variationRoundFor(stickerId);
               const variationVersions = stickerVersions.filter((v) =>
@@ -3224,15 +3231,23 @@ function StickerLabBuilder() {
               );
               const latestVariationGroupId =
                 varRound.groupId ?? variationVersions[0]?.variationGroupId ?? null;
-              const variationTakes = (["A", "B", "C"] as const).map((label) => ({
-                label,
-                version:
+              const variationBusy = isVariationBusy(varRound.stage);
+              const candidateBusy = isCandidateBusy(candStage);
+              const variationTakes = (["A", "B", "C"] as const).map((label) => {
+                const version =
                   variationVersions.find(
                     (v) =>
                       v.variationLabel === label &&
                       (!latestVariationGroupId || v.variationGroupId === latestVariationGroupId),
-                  ) ?? null,
-              }));
+                  ) ?? null;
+                return {
+                  label,
+                  version,
+                  /** Durable comparison against the current image only. */
+                  isCurrent:
+                    !!version?.storagePath && version.storagePath === preview?.storagePath,
+                };
+              });
               const hasVariationTakes = variationTakes.some((t) => t.version);
               return (
                 <li key={c.id} className="cartel-panel rounded-lg p-2.5 sm:p-4">
