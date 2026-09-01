@@ -1566,6 +1566,11 @@ function LaunchControlPage() {
                         Launch Watch is privacy-first: project operators see aggregate watcher
                         activity, not individual Telegram identities.
                       </p>
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        Current automated messages are countdown reminders, the Verified Launch
+                        Packet and the launch-live alert. Manual watcher updates are handled
+                        separately once that tool is enabled.
+                      </p>
 
                     </div>
                   ) : (
