@@ -287,8 +287,8 @@ function PackManagerPage() {
   } else if (packSchedules.length === 0) {
     nextStep = {
       title: "Set up Sticker Drops",
-
       body: "Your set is live and delivered. Schedule automatic drops so the community keeps seeing it.",
+
       action: (
         <Button asChild className="min-h-11">
           <Link to="/distribution" search={{ pack: pack.id }}>
