@@ -3150,6 +3150,22 @@ function StickerLabBuilder() {
               const preview = stickerId ? previews[stickerId] : undefined;
               const failure = stickerId ? failures[stickerId] : undefined;
               const note = stickerId ? notes[stickerId] : undefined;
+              const locked = conceptTelegramLocked(c.id);
+              const candStage = candidateStageFor(stickerId);
+              const candFailure = stickerId ? candidateFailures[stickerId] : undefined;
+              const stickerVersions = stickerId ? (versionsBySticker[stickerId] ?? []) : [];
+              /**
+               * Newest candidate history row that is NOT the current image.
+               * Leaving it alone is equivalent to rejecting it.
+               */
+              const pendingCandidate =
+                locked && !isCandidateBusy(candStage)
+                  ? (stickerVersions.find(
+                      (v) =>
+                        isCandidateVersionOrigin(v.origin) &&
+                        !(!!v.storagePath && v.storagePath === preview?.storagePath),
+                    ) ?? null)
+                  : null;
               return (
                 <li key={c.id} className="cartel-panel rounded-lg p-2.5 sm:p-4">
                   <div className="mb-3 flex items-center justify-between gap-2">
@@ -3237,8 +3253,13 @@ function StickerLabBuilder() {
                                 ) : null}
                               </span>
                               <span className="min-w-0 flex-1">
-                                <span className="block truncate text-[11px] text-foreground">
-                                  Version {v.versionNumber}
+                                <span className="flex min-w-0 items-center gap-1.5">
+                                  <span className="truncate text-[11px] text-foreground">
+                                    Version {v.versionNumber}
+                                  </span>
+                                  {isCandidateVersionOrigin(v.origin) ? (
+                                    <StatusBadge tone="gold">Candidate</StatusBadge>
+                                  ) : null}
                                 </span>
                                 {v.unavailable ? (
                                   <span className="block truncate text-[10px] text-muted-foreground">
@@ -3302,22 +3323,55 @@ function StickerLabBuilder() {
                     <span className="truncate">Select for batch</span>
                   </label>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {conceptTelegramLocked(c.id) ? (
+                    {locked ? (
                       <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <StatusBadge tone="green">Live on Telegram</StatusBadge>
+                          {candStage !== "idle" ? (
+                            <StatusBadge tone={isCandidateBusy(candStage) ? "gold" : candStage === "ready" ? "green" : "red"}>
+                              {CANDIDATE_STAGE_LABEL[candStage]}
+                            </StatusBadge>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          Regeneration is locked so CARTEL HQ stays synchronized with the live
+                          Telegram set. Generate a candidate instead: the live sticker keeps
+                          working while you review the new image, and nothing is replaced until
+                          you approve it.
+                        </p>
+                        {candFailure && !isCandidateBusy(candStage) ? (
+                          <p className="mt-2 text-[11px] text-signal">
+                            {candFailure.title}. {candFailure.body} Your live Telegram sticker was
+                            not changed.
+                          </p>
+                        ) : null}
                         <Button
                           type="button"
                           size="sm"
                           variant="outline"
-                          className="min-h-10 w-full"
-                          disabled
-                          aria-label={`${c.label} is live on Telegram — regeneration locked`}
+                          className="mt-2 min-h-10 w-full"
+                          disabled={
+                            !configured ||
+                            saving ||
+                            !stickerId ||
+                            isCandidateBusy(candStage) ||
+                            restoringStickerId !== null
+                          }
+                          onClick={() =>
+                            stickerId
+                              ? setCandidateConfirm({ stickerId, label: c.label })
+                              : undefined
+                          }
                         >
-                          Live on Telegram
+                          {isCandidateBusy(candStage) ? (
+                            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                          ) : null}
+                          {isCandidateBusy(candStage)
+                            ? CANDIDATE_STAGE_LABEL[candStage]
+                            : pendingCandidate
+                              ? "Generate another candidate"
+                              : "Generate candidate"}
                         </Button>
-                        <p className="mt-1 text-[11px] text-muted-foreground">
-                          Regeneration is locked to keep CARTEL HQ synchronized with the existing
-                          Telegram set. Version history can still restore an existing version.
-                        </p>
                       </div>
                     ) : (
                       <Button
