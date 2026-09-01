@@ -4751,7 +4751,7 @@ function StickerLabBuilder() {
                           : { tone: "muted" as const, label: "Motion history" };
                     const src =
                       displayVersion?.telegramPreviewUrl ?? displayVersion?.previewUrl ?? null;
-                    const staticPreview = previews[stickerId!];
+                    const staticPreview = previews[stickerId!]?.url ?? null;
                     const isLivePack = st.releaseVariant === "motion";
                     return (
                       <li key={concept.id} className="cartel-panel rounded-lg p-3">
