@@ -618,15 +618,6 @@ Deno.serve(async (req: Request) => {
       const expectedOldFileId = oldFileId;
       const expectedOldVariant = sticker.release_variant ? String(sticker.release_variant) : null;
 
-      // Idempotency: this exact motion file is already the live Telegram sticker.
-      if (
-        expectedOldVariant === "motion" &&
-        motionMetadata["telegram_accepted"] === true &&
-        String(motionMetadata["telegram_file_id"] ?? "") === oldFileId
-      ) {
-        return respond({ status: "unchanged", releaseVariant: "motion", telegramReplaced: false, stickerId, motionVersionId, setName, setUrl: pack.telegram_set_url ?? undefined, bot });
-      }
-
       const existingSet = await maybeGetStickerSet(TELEGRAM_BOT_TOKEN, setName);
       const setStickers = Array.isArray(existingSet?.stickers) ? existingSet.stickers : [];
       if (!setStickers.some((s: any) => String(s?.file_id ?? "") === oldFileId)) {
