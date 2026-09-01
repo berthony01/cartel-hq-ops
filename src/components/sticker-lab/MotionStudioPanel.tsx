@@ -465,14 +465,15 @@ export function MotionStudioPanel({
               already-prepared file. No new provider work starts.
             </p>
           </>
-        ) : current && currentIsTelegramReady && !motionIsLive && !telegramPublished ? (
+        ) : current && currentIsTelegramReady && !currentMotionIsLive && !telegramPublished ? (
           <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
             Publish the static sticker pack in Step 5 first. Releasing motion replaces an existing
             live Telegram sticker, so there must already be one to replace.
           </p>
         ) : null}
 
-        {releaseError && !motionIsLive ? (
+        {releaseError && !currentMotionIsLive ? (
+
           <p className="mt-2 text-[11px] text-signal">{releaseError}</p>
         ) : null}
       </div>
