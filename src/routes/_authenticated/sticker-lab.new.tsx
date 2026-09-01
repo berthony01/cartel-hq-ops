@@ -3319,8 +3319,14 @@ function StickerLabBuilder() {
                         {versionsBySticker[stickerId]!.map((v) => {
                           const isCurrent =
                             !!v.storagePath && v.storagePath === preview?.storagePath;
+                          // Any in-flight billable work for this sticker keeps
+                          // the pointer controls closed until it settles.
                           const restoreDisabled =
-                            busy(stage) || restoringStickerId !== null || v.unavailable;
+                            busy(stage) ||
+                            restoringStickerId !== null ||
+                            variationBusy ||
+                            candidateBusy ||
+                            v.unavailable;
                           return (
                             <li key={v.id} className="flex min-w-0 items-center gap-2">
                               <span
