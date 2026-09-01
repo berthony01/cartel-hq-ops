@@ -3478,19 +3478,42 @@ function StickerLabBuilder() {
               </StatusBadge>
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 [&>*]:min-w-0">
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 xl:grid-cols-5 [&>*]:min-w-0">
               <SummaryStat
-                label="Ready to publish"
-                value={`${exportableCount}/${draft.concepts.length}`}
-                tone={exportReady && exportableCount > 0 ? "green" : "muted"}
+                label="Generated"
+                value={`${generatedCount}/${totalStickers}`}
+                tone={allReady && totalStickers > 0 ? "green" : "muted"}
               />
-              <SummaryStat label="In progress" value={String(activeCount)} tone="muted" />
               <SummaryStat
-                label="Failed / needs attention"
-                value={String(attentionCount)}
-                tone={attentionCount > 0 ? "red" : "muted"}
+                label="Server transparency"
+                value={`${transparentCount}/${totalStickers}`}
+                tone={transparentCount === totalStickers && totalStickers > 0 ? "green" : "muted"}
+              />
+              <SummaryStat
+                label="Browser alpha"
+                value={`${browserVerifiedCount}/${totalStickers}`}
+                tone={
+                  browserVerifiedCount === totalStickers && totalStickers > 0 ? "green" : "muted"
+                }
+              />
+              <SummaryStat
+                label="Telegram cutout"
+                value={`${cutoutVerifiedCount}/${totalStickers}`}
+                tone={cutoutVerifiedCount === totalStickers && totalStickers > 0 ? "green" : "muted"}
+              />
+              <SummaryStat
+                label="Release ready"
+                value={`${exportableCount}/${totalStickers}`}
+                tone={
+                  exportReady && exportableCount > 0
+                    ? "green"
+                    : attentionCount > 0
+                      ? "red"
+                      : "muted"
+                }
               />
             </div>
+
 
             <div
               className="mt-4 flex flex-wrap items-center gap-3 rounded-md border border-border bg-background/40 p-3"
