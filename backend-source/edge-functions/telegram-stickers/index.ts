@@ -442,7 +442,9 @@ Deno.serve(async (req: Request) => {
 
       const emojiList = normalizeEmoji(sticker.emoji_list);
       const keywords = normalizeKeywords(sticker.keyword_list);
-      const inputFor = (fileId: string) => ({ sticker: fileId, format: "static", emoji_list: emojiList, ...(keywords.length ? { keywords } : {}) });
+      const inputFor = (fileId: string, format: "static" | "video" = "static") => ({ sticker: fileId, format, emoji_list: emojiList, ...(keywords.length ? { keywords } : {}) });
+      // The restore target is always static; a rollback must match whatever was live.
+      const oldFormat: "static" | "video" = expectedOldVariant === "motion" ? "video" : "static";
 
       let newFileId = "";
       try {
