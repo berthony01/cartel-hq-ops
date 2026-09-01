@@ -434,6 +434,8 @@ function StickerLabBuilder() {
   const {
     telegramMotionReadySignal,
     startTelegramPrepare,
+    retryTelegramNormalization,
+
     recoverTelegramPrepare,
     telegramPrepRunFor,
   } = useStickerMotionTelegramRuntime({ workspaceId });
