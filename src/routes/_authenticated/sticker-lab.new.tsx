@@ -437,6 +437,12 @@ function StickerLabBuilder() {
     recoverTelegramPrepare,
     telegramPrepRunFor,
   } = useStickerMotionTelegramRuntime({ workspaceId });
+  /**
+   * R2 — presentation only. Concept whose Motion Studio is open in the focused
+   * Sheet. Opening or closing it starts, cancels or changes nothing: the
+   * route-level motion runtimes stay mounted either way.
+   */
+  const [motionSheetConceptId, setMotionSheetConceptId] = useState<string | null>(null);
   /** Motion version currently being approved as Current Motion (non-billable). */
   const [approvingMotionVersionId, setApprovingMotionVersionId] = useState<string | null>(null);
   const [motionApproveError, setMotionApproveError] = useState<{ stickerId: string; message: string } | null>(null);
