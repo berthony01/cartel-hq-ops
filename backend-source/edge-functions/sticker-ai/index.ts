@@ -636,11 +636,13 @@ Deno.serve(async (req: Request) => {
       if (!job) return respond({ error: "JOB_NOT_FOUND" }, 404);
       if (!(await isMember(job.workspace_id))) return respond({ error: "FORBIDDEN" }, 403);
 
-      if (job.status === "failed") return respond({ aiJobId: job.id, jobType: job.job_type, status: "failed", error: job.error_message });
+      const jobIsCandidate = isCandidateJob(job as Record<string, unknown>);
+      if (job.status === "failed") return respond({ aiJobId: job.id, jobType: job.job_type, status: "failed", error: job.error_message, ...(jobIsCandidate ? { mode: "candidate" } : {}) });
       if (job.status === "succeeded") {
         const output = (job.output_json ?? {}) as Record<string, unknown>;
-        return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", childJobId: output.child_job_id ?? null, assetId: output.asset_id ?? null, transparencyValid: output.transparency_valid ?? null });
+        return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", childJobId: output.child_job_id ?? null, assetId: output.asset_id ?? null, transparencyValid: output.transparency_valid ?? null, versionId: output.version_id ?? null, ...(jobIsCandidate ? { mode: "candidate" } : {}) });
       }
+
       if (!job.provider_task_id) return respond({ aiJobId: job.id, jobType: job.job_type, status: job.status });
 
       const query = await kieRequest(`/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(job.provider_task_id)}`, KIE_API_KEY, { method: "GET" });
