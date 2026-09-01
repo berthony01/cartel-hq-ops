@@ -404,6 +404,9 @@ export function useStickerVariationRuntime(params: {
             failure: withSafetySentence(
               classifyProviderError(latest.error_message, latest.job_type),
             ),
+            // One-task retry is only offered when the newest failure was the
+            // background-removal step, i.e. the image generation already paid off.
+            retryableBackgroundJobId: isBackground(latest) ? latest.id : null,
           });
         }
       }
