@@ -3942,65 +3942,34 @@ function StickerLabBuilder() {
                         ) : null}
                       </div>
                     </div>
+                    </details>
                   ) : null}
 
-                  {/* Motion Studio — review-only motion attached to the approved
-                      static. Generation is billable and gated behind an explicit
-                      confirmation inside the panel; approval is non-billable and
-                      never touches release_variant or Telegram. */}
+                  {/* Motion — compact status only. The full Motion Studio lives
+                      in one focused Sheet outside this list. Nothing here starts
+                      provider work or touches Telegram. */}
                   {stickerId && preview ? (
-                    <MotionStudioPanel
-                      stickerId={stickerId}
-                      stickerLabel={c.label}
-                      state={motionBySticker[stickerId]}
-                      loading={motionQuery.isPending || motionQuery.isFetching}
-                      error={
-                        motionQuery.isError ||
-                        (!motionQuery.isPending &&
-                          !motionQuery.isFetching &&
-                          motionBySticker[stickerId] === undefined)
-                      }
-                      run={motionRunFor(stickerId)}
-                      config={motionConfigQuery.data}
-                      configLoading={motionConfigQuery.isPending || motionConfigQuery.isFetching}
-                      configError={motionConfigQuery.isError}
-                      approvingVersionId={approvingMotionVersionId}
-                      approveError={
-                        motionApproveError?.stickerId === stickerId ? motionApproveError.message : null
-                      }
-                      onGenerate={(input: {
-                        stickerId: string;
-                        motionMode: MotionMode;
-                        motionPreset?: StickerMotionPreset;
-                        motionInstruction?: string;
-                      }) => {
-                        const id = draft.packId;
-                        if (!id) return;
-                        void startMotion({ packId: id, ...input });
-                      }}
-                      onSetCurrentMotion={(input) => void approveCurrentMotion(input)}
-                      telegramRun={telegramPrepRunFor(stickerId)}
-                      telegramConfig={telegramMotionConfigQuery.data}
-                      telegramConfigLoading={
-                        telegramMotionConfigQuery.isPending || telegramMotionConfigQuery.isFetching
-                      }
-                      telegramConfigError={telegramMotionConfigQuery.isError}
-                      onPrepareTelegram={(input) => {
-                        const id = draft.packId;
-                        if (!id) return;
-                        void startTelegramPrepare({ packId: id, ...input });
-                      }}
-                      telegramPublished={locked}
-                      releasingMotion={motionReleaseStickerId === stickerId}
-                      releaseError={
-                        motionReleaseError?.stickerId === stickerId
-                          ? motionReleaseError.message
-                          : null
-                      }
-                      onReleaseMotion={(input) => void releaseCurrentMotion(input)}
-
-
-                    />
+                    <div className="mt-3 rounded-md border border-border bg-background/40 p-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          Motion
+                        </p>
+                        <StatusBadge tone={motionSummary.tone}>{motionSummary.label}</StatusBadge>
+                      </div>
+                      <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                        Animation is created, approved and released in a focused Motion Studio
+                        workspace.
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="mt-2 min-h-10 w-full"
+                        onClick={() => setMotionSheetConceptId(c.id)}
+                      >
+                        Open Motion Studio
+                      </Button>
+                    </div>
                   ) : null}
 
 
