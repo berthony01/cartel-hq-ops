@@ -35,6 +35,10 @@ const TRUST_STATEMENT =
 const REMINDER_DISCLAIMER =
   `This is a countdown reminder for a launch you chose to watch. It is not a safety check, audit, verification or endorsement of any token.`;
 
+const WATCHER_UPDATE_DISCLAIMER =
+  `This project update was sent by the authenticated Cartel HQ project you chose to watch. ` +
+  `It is not a safety audit, verification or investment endorsement.`;
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
