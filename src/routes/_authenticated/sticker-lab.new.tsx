@@ -3804,6 +3804,53 @@ function StickerLabBuilder() {
             </AlertDialogContent>
           </AlertDialog>
 
+          {/* The ONLY path that can start a billable A/B/C round. */}
+          <AlertDialog
+            open={!!variationConfirm}
+            onOpenChange={(open) => {
+              if (!open) setVariationConfirm(null);
+            }}
+          >
+            <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
+              <AlertDialogTitle>
+                Generate A/B/C variations for {variationConfirm?.label}?
+              </AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-2 text-sm text-muted-foreground">
+                  <p>
+                    This runs three takes one after another and uses up to{" "}
+                    <strong>6 Kie provider tasks</strong> — image generation plus background
+                    removal for each take — consuming Kie credits on your account.
+                  </p>
+                  <p>
+                    Your current image, this sticker&apos;s status and any live Telegram set stay
+                    exactly as they are. Each finished take is saved to Version history for review
+                    only.
+                  </p>
+                  <p>
+                    The round stops immediately if a take fails, and there are no automatic
+                    retries. You can stop after the take that is already running.
+                  </p>
+                </div>
+              </AlertDialogDescription>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    const target = variationConfirm;
+                    setVariationConfirm(null);
+                    if (target && draft.packId) {
+                      void startVariationRound(draft.packId, target.stickerId);
+                    }
+                  }}
+                >
+                  Generate A/B/C (up to 6 tasks)
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+
           {/* Phase 4B — first confirmation. No Telegram call happens here. */}
           <AlertDialog
             open={!!restoreTarget}
