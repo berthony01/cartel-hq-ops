@@ -118,6 +118,8 @@ import {
   SummaryStat,
 } from "@/components/sticker-lab/BuilderPrimitives";
 import { StepGuide } from "@/components/sticker-lab/StickerLabJourney";
+import { MotionStudioPanel } from "@/components/sticker-lab/MotionStudioPanel";
+import { loadStickerMotionState } from "@/lib/sticker-motion";
 import { Checkbox } from "@/components/ui/checkbox";
 
 
@@ -575,6 +577,21 @@ function StickerLabBuilder() {
     queryFn: () => loadStickerVersions(savedStickerIds),
   });
   const versionsBySticker = versionsQuery.data ?? {};
+
+  /**
+   * Read-only motion state for saved stickers (Step 4 only). One batched read
+   * of durable `stickers` pointers plus `sticker_motion_versions` rows. No
+   * writes, no RPCs, no provider or Telegram involvement.
+   */
+  const motionStickerKey = [...savedStickerIds].sort().join(",");
+  const motionQuery = useQuery({
+    queryKey: ["sticker-motion", draft?.packId ?? "", motionStickerKey],
+    enabled: !!draft && step === 4 && savedStickerIds.length > 0,
+    queryFn: () => loadStickerMotionState(savedStickerIds),
+  });
+  const motionBySticker = motionQuery.data ?? {};
+
+
 
   /**
    * Read-only candidate recovery for Step 4. Resumes polling of in-flight
@@ -2981,7 +2998,7 @@ function StickerLabBuilder() {
       {step === 4 ? (
         <StepCard
           title="Sticker Studio"
-          hint="Generate one test sticker, pick specific stickers, or generate all remaining. Each generated sticker runs image generation, background removal and a server-side transparency check. Successful generations are kept in Version History. Anything marked “Live on Telegram” cannot be regenerated — it uses Candidate → Review → Replace instead, so the live sticker keeps working until you approve a replacement."
+          hint="Generate one test sticker, pick specific stickers, or generate all remaining. Each generated sticker runs image generation, background removal and a server-side transparency check. Successful generations are kept in Version History. Anything marked “Live on Telegram” cannot be regenerated — it uses Candidate → Review → Replace instead, so the live sticker keeps working until you approve a replacement. Motion Studio is attached to each approved static and does not replace this pack flow."
           action={
             <Button
               type="button"
@@ -3642,6 +3659,18 @@ function StickerLabBuilder() {
                       </div>
                     </div>
                   ) : null}
+
+                  {/* Motion Studio — read-only surface attached to the approved
+                      static. No generation, provider or Telegram behaviour. */}
+                  {stickerId && preview ? (
+                    <MotionStudioPanel
+                      state={motionBySticker[stickerId]}
+                      loading={motionQuery.isPending || motionQuery.isFetching}
+                      error={motionQuery.isError}
+                    />
+                  ) : null}
+
+
 
                   {/* Batch selection: never offered for a sticker that already
                       has a usable image — those use Regenerate explicitly. */}
