@@ -15,12 +15,23 @@ export type StickerAiConfig = {
 
 export type StickerAiStatus = "queued" | "running" | "succeeded" | "failed";
 
+/** Review-only generation modes; absent means ordinary current-image work. */
+export type StickerAiMode = "candidate" | "variation";
+
+/** Server-controlled A/B/C variation slot. */
+export type StickerVariationLabel = "A" | "B" | "C";
+
 export type StickerAiStartResult = {
-  aiJobId: string;
+  /** Absent only when the server short-circuits an already finished variation. */
+  aiJobId?: string;
   status: StickerAiStatus;
   model: string;
-  /** Present only for Phase 4D candidate generation. */
-  mode?: "candidate";
+  /** Present only for review-only generation. */
+  mode?: StickerAiMode;
+  variationGroupId?: string | null;
+  variationLabel?: StickerVariationLabel | null;
+  /** Present when a finished variation slot was reused instead of regenerated. */
+  versionId?: string | null;
 };
 
 export type StickerAiSyncResult = {
@@ -30,10 +41,12 @@ export type StickerAiSyncResult = {
   assetId?: string | null;
   transparencyValid?: boolean;
   error?: string | null;
-  /** Present only for Phase 4D candidate generation. */
-  mode?: "candidate";
-  /** `sticker_versions.id` of the durable candidate record, when finished. */
+  /** Present only for review-only generation. */
+  mode?: StickerAiMode;
+  /** `sticker_versions.id` of the durable review-only record, when finished. */
   versionId?: string | null;
+  variationGroupId?: string | null;
+  variationLabel?: StickerVariationLabel | null;
 };
 
 
