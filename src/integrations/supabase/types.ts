@@ -304,6 +304,7 @@ export type Database = {
           subscribed_at: string
           telegram_user_id: number
           unsubscribed_at: string | null
+          updates_enabled: boolean
         }
         Insert: {
           confirmation_attempt_count?: number
@@ -323,6 +324,7 @@ export type Database = {
           subscribed_at?: string
           telegram_user_id: number
           unsubscribed_at?: string | null
+          updates_enabled?: boolean
         }
         Update: {
           confirmation_attempt_count?: number
@@ -342,6 +344,7 @@ export type Database = {
           subscribed_at?: string
           telegram_user_id?: number
           unsubscribed_at?: string | null
+          updates_enabled?: boolean
         }
         Relationships: [
           {
@@ -1960,6 +1963,15 @@ export type Database = {
           telegram_message_id: number
         }[]
       }
+      create_launch_watcher_update: {
+        Args: {
+          _body: string
+          _client_request_id: string
+          _launch_id: string
+          _title: string
+        }
+        Returns: string
+      }
       delete_sticker_pack_if_eligible: {
         Args: { _pack_id: string }
         Returns: Json
@@ -2156,6 +2168,14 @@ export type Database = {
           total_count: number
         }[]
       }
+      get_launch_watcher_update_stats: {
+        Args: { _launch_id: string }
+        Returns: {
+          active_watchers: number
+          updates_enabled_watchers: number
+          updates_muted_watchers: number
+        }[]
+      }
       get_my_launch_watchlist: {
         Args: never
         Returns: {
@@ -2296,6 +2316,20 @@ export type Database = {
       launch_notification_scheduler_secret_matches: {
         Args: { p_secret: string }
         Returns: boolean
+      }
+      list_launch_watcher_updates: {
+        Args: { _launch_id: string; _limit?: number }
+        Returns: {
+          ambiguous_count: number
+          body: string
+          created_at: string
+          event_id: string
+          failed_count: number
+          pending_count: number
+          sent_count: number
+          skipped_count: number
+          title: string
+        }[]
       }
       mark_stale_launch_notification_claims: { Args: never; Returns: number }
       record_launch_watch_confirmation: {
