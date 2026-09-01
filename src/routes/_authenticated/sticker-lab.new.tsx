@@ -757,7 +757,7 @@ function StickerLabBuilder() {
         await motionQuery.refetch();
         await loadExisting(id);
         if (result.status === "released" && result.telegramReplaced) {
-          toast.success("Motion replaced this sticker in the existing Telegram set.");
+          toast.success("Motion replaced this sticker inside the existing Telegram sticker pack.");
         } else {
           toast.message("Motion is already the Telegram release for this sticker.");
         }
@@ -1901,7 +1901,7 @@ function StickerLabBuilder() {
 
   /** A native test always targets exactly one selected group — never a broadcast. */
   const testTargetGroup = selectedGroups.length === 1 ? selectedGroups[0]! : null;
-  const doSendTest = async (options?: { stickerId?: string; label?: string }) => {
+  const doSendTest = async (options?: { stickerId?: string }) => {
     if (!packId || !workspaceId || !testTargetGroup) return;
     setSendingTest(true);
     setTestResult(null);
@@ -4152,7 +4152,7 @@ function StickerLabBuilder() {
                           </p>
                           <div className="mt-1 flex flex-wrap items-center gap-2">
                             {mLocked ? (
-                              <StatusBadge tone="green">Live on Telegram</StatusBadge>
+                              <StatusBadge tone="green">In Telegram pack</StatusBadge>
                             ) : (
                               <StatusBadge tone="muted">Not on Telegram</StatusBadge>
                             )}
