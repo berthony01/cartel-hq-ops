@@ -418,7 +418,12 @@ export function MotionStudioPanel({
                       <StatusBadge tone="muted">{MODE_LABEL[version.motionMode]}</StatusBadge>
                     ) : null}
                     {isCurrent ? <StatusBadge tone="gold">Current Motion</StatusBadge> : null}
-                    <StatusBadge tone="muted">Creative source — Telegram prep required</StatusBadge>
+                    <StatusBadge tone={version.telegramAssetId ? "green" : "muted"}>
+                      {version.telegramAssetId
+                        ? "Telegram-ready derivative"
+                        : "Creative source — Telegram prep required"}
+                    </StatusBadge>
+
                   </div>
 
                   {summary ? (
