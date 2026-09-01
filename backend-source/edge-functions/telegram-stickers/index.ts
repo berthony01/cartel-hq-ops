@@ -95,6 +95,27 @@ async function uploadStickerFile(token: string, userId: string, pngBytes: Uint8A
   return String(payload.result.file_id);
 }
 
+/**
+ * Separate video-sticker upload. The WEBM is uploaded exactly as prepared in
+ * Phase C1 — this helper never transforms, normalises or re-encodes anything.
+ */
+async function uploadVideoStickerFile(token: string, userId: string, webmBytes: Uint8Array) {
+  const form = new FormData();
+  form.append("user_id", userId);
+  form.append("sticker_format", "video");
+  form.append("sticker", new Blob([webmBytes as BlobPart], { type: "video/webm" }), "sticker.webm");
+  let res: Response;
+  try { res = await tgFetch(`${TG_BASE}/bot${token}/uploadStickerFile`, { method: "POST", body: form }, TELEGRAM_UPLOAD_TIMEOUT_MS); }
+  catch { throw new TelegramError("Could not upload the motion sticker to Telegram. Try again shortly."); }
+  let payload: any = null;
+  try { payload = await res.json(); } catch { payload = null; }
+  if (!res.ok || !payload?.ok || !payload?.result?.file_id) {
+    const raw = String(payload?.description ?? `Telegram upload failed (${res.status}).`);
+    throw new TelegramError(friendlyTelegramError(raw, payload?.error_code ?? res.status), raw, payload?.error_code ?? res.status);
+  }
+  return String(payload.result.file_id);
+}
+
 function normalizeStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string" && v.trim().length > 0) : [];
 }
