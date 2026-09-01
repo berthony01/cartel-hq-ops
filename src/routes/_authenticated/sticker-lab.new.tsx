@@ -2760,7 +2760,7 @@ function StickerLabBuilder() {
       {step === 4 ? (
         <StepCard
           title="Sticker Studio"
-          hint="Generate one test sticker, pick specific stickers, or generate all remaining. Each generated sticker runs image generation, background removal and a server-side transparency check."
+          hint="Generate one test sticker, pick specific stickers, or generate all remaining. Each generated sticker runs image generation, background removal and a server-side transparency check. Successful generations are kept in Version History, and anything marked “Live on Telegram” is protected from accidental regeneration."
           action={
             <Button
               type="button"
