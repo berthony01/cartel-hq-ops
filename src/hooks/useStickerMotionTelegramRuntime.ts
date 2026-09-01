@@ -60,9 +60,33 @@ export type TelegramPrepRun = {
   stage: TelegramPrepStage;
   aiJobId: string | null;
   failure?: ProviderFailure | undefined;
+  /**
+   * R3 — id of a FAILED preparation job whose durable `error_code` proves the
+   * failure happened after background removal completed. Only then may the UI
+   * offer normalization-only recovery. The server re-validates eligibility.
+   */
+  retryableNormalizationJobId?: string | null;
+  /** True while the explicit normalization-only retry request is in flight. */
+  retryingNormalization?: boolean;
 };
 
-const EMPTY_RUN: TelegramPrepRun = { stage: "idle", aiJobId: null };
+/** Durable failure codes eligible for normalization-only recovery. */
+const NORMALIZATION_RETRYABLE_CODES = [
+  "CLOUDCONVERT_START_FAILED",
+  "CLOUDCONVERT_FAILED",
+  "TELEGRAM_DOWNLOAD_FAILED",
+  "TELEGRAM_VALIDATION_FAILED",
+];
+
+const isNormalizationRetryable = (code: string | null | undefined) =>
+  !!code && NORMALIZATION_RETRYABLE_CODES.includes(code);
+
+const EMPTY_RUN: TelegramPrepRun = {
+  stage: "idle",
+  aiJobId: null,
+  retryableNormalizationJobId: null,
+};
+
 
 const POLL_TIMEOUT_MS = 15 * 60 * 1000;
 const POLL_START_MS = 3000;
