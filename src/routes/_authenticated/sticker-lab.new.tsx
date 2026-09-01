@@ -3449,6 +3449,24 @@ function StickerLabBuilder() {
           title="Quality & Release"
           hint="In order: quality checks → export (optional) → Telegram pack → communities → Sticker Drops."
         >
+          <ol
+            className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5 [&>*]:min-w-0"
+            aria-label="Release path"
+          >
+            {releasePath.map((s) => (
+              <li
+                key={s.label}
+                className="rounded-md border border-border bg-background/40 px-3 py-2"
+              >
+                <p className="truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {s.label}
+                </p>
+                <p className="mt-1 truncate text-xs font-semibold text-foreground">{s.state}</p>
+              </li>
+            ))}
+          </ol>
+
+
 
           <section className="cartel-panel mb-6 rounded-lg p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
