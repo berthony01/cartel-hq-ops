@@ -232,6 +232,15 @@ export type AiJobRow = {
    * caller deriving current-image state must exclude them.
    */
   is_candidate: boolean;
+  /**
+   * A/B/C Variations — true when this job generates a review-only alternate
+   * take. Like candidates, variation jobs never change the current image.
+   */
+  is_variation: boolean;
+  /** Variation round this job belongs to, when it is a variation job. */
+  variation_group_id: string | null;
+  /** "A" | "B" | "C" for a variation job, otherwise null. */
+  variation_label: string | null;
 };
 
 /**
@@ -268,6 +277,15 @@ export async function loadLatestJobs(
       error_message: (record["error_message"] as string | null) ?? null,
       created_at: String(record["created_at"] ?? ""),
       is_candidate: input["mode"] === "candidate",
+      is_variation: input["mode"] === "variation",
+      variation_group_id:
+        typeof input["variation_group_id"] === "string"
+          ? (input["variation_group_id"] as string)
+          : null,
+      variation_label:
+        typeof input["variation_label"] === "string"
+          ? (input["variation_label"] as string)
+          : null,
     };
     (out[stickerId] ??= []).push(row);
   }

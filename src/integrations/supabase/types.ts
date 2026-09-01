@@ -1179,6 +1179,8 @@ export type Database = {
           origin: string
           pack_id: string
           sticker_id: string
+          variation_group_id: string | null
+          variation_label: string | null
           version_number: number
           workspace_id: string
         }
@@ -1189,6 +1191,8 @@ export type Database = {
           origin?: string
           pack_id: string
           sticker_id: string
+          variation_group_id?: string | null
+          variation_label?: string | null
           version_number: number
           workspace_id: string
         }
@@ -1199,6 +1203,8 @@ export type Database = {
           origin?: string
           pack_id?: string
           sticker_id?: string
+          variation_group_id?: string | null
+          variation_label?: string | null
           version_number?: number
           workspace_id?: string
         }

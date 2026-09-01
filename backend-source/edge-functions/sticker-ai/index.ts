@@ -253,6 +253,17 @@ const INTENSITY_TEXT: Record<string, string> = {
 };
 
 /**
+ * A/B/C Variations — the ONLY variation wording the model ever sees. Labels are
+ * server-controlled; the browser can only ask for A, B or C.
+ */
+const VARIATION_TEXT: Record<"A" | "B" | "C", string> = {
+  A: "This is alternate take A: stay closest to the approved concept, changing only to a natural alternate pose or composition of the same idea.",
+  B: "This is alternate take B: make the pose, expression and composition noticeably different from the obvious first reading of the concept while staying fully on brief.",
+  C: "This is alternate take C: take the boldest on-brief alternate interpretation of the concept, with the most expressive pose and composition, while preserving every mandatory identity and text rule exactly.",
+};
+
+
+/**
  * V2 prompt compiler. Hierarchy, highest priority first:
  *  1. Production/one-sticker safety constraints
  *  2. Character Lock identity rules (pack snapshot only)
@@ -267,6 +278,13 @@ function buildPrompt(
   pack: Record<string, unknown>,
   sticker: Record<string, unknown>,
   blueprint: Blueprint,
+  /**
+   * A/B/C Variations — server-controlled ONLY. Supplied exclusively by
+   * `start_variation`. It is injected AFTER the mandatory identity/concept/text
+   * rules and BEFORE lower-priority styling guidance, so it can never override
+   * Character Lock or the exact caption contract.
+   */
+  variationLabel: "A" | "B" | "C" | null = null,
 ) {
   const parts: string[] = [];
   const label = String(sticker.label ?? "").trim();
@@ -324,6 +342,13 @@ function buildPrompt(
     parts.push(`TEXT RULE (mandatory, overrides any other text guidance): ${caption}`);
   } else {
     parts.push("TEXT RULE (mandatory, overrides any other text guidance): no caption text was supplied, so do not invent, add or imply any words or lettering.");
+  }
+
+  // 3c. Variation direction (server-controlled, lower priority than every
+  // mandatory rule above and never a licence to change identity or caption).
+  const variationText = variationLabel ? VARIATION_TEXT[variationLabel] : "";
+  if (variationText) {
+    parts.push(`VARIATION DIRECTION (lower priority than the identity, concept and text rules above, which must still be obeyed exactly): ${variationText}`);
   }
 
   // 4. Brand Kit styling (unchanged behavior).
@@ -416,25 +441,48 @@ Deno.serve(async (req: Request) => {
   }
 
   /**
-   * Phase 4D.1 — a candidate job produces a NEW image for review only. It must
-   * never write sticker or pack status, and never move the current pointer.
+   * Generation mode of a job.
+   *  - "current"   : ordinary generation; owns the current image pointer.
+   *  - "candidate" : Phase 4D published review-only image.
+   *  - "variation" : A/B/C review-only image.
+   * Both review-only modes must never write sticker or pack status, never move
+   * the current pointer and never touch Telegram fields.
    */
-  const isCandidateJob = (job: Record<string, unknown>) => {
+  type JobMode = "current" | "candidate" | "variation";
+  const jobModeOf = (job: Record<string, unknown>): JobMode => {
     const input = (job.input_json && typeof job.input_json === "object" ? job.input_json : {}) as Record<string, unknown>;
-    return input.mode === "candidate";
+    return input.mode === "candidate"
+      ? "candidate"
+      : input.mode === "variation"
+        ? "variation"
+        : "current";
+  };
+  const isReviewOnlyMode = (mode: JobMode) => mode !== "current";
+  const variationMetaOf = (job: Record<string, unknown>) => {
+    const input = (job.input_json && typeof job.input_json === "object" ? job.input_json : {}) as Record<string, unknown>;
+    return {
+      groupId: typeof input.variation_group_id === "string" ? input.variation_group_id : null,
+      label: typeof input.variation_label === "string" ? input.variation_label : null,
+    };
   };
 
   const failSticker = async (job: Record<string, unknown>, message: string, code = "PROVIDER_FAILED") => {
     await admin.from("ai_jobs").update({
       status: "failed", error_code: code, error_message: message.slice(0, 500), completed_at: new Date().toISOString(),
     }).eq("id", String(job.id));
-    const candidate = isCandidateJob(job);
-    if (job.sticker_id && !candidate) {
+    const mode = jobModeOf(job);
+    const reviewOnly = isReviewOnlyMode(mode);
+    if (job.sticker_id && !reviewOnly) {
       const input = (job.input_json && typeof job.input_json === "object" ? job.input_json : {}) as Record<string, unknown>;
       const prior = typeof input.prior_image_asset_id === "string" ? input.prior_image_asset_id : null;
       await admin.from("stickers").update({ status: prior ? "ready" : "failed" }).eq("id", String(job.sticker_id));
     }
-    return respond({ aiJobId: job.id, jobType: job.job_type, status: "failed", error: message, ...(candidate ? { mode: "candidate" } : {}) });
+    const meta = mode === "variation" ? variationMetaOf(job) : null;
+    return respond({
+      aiJobId: job.id, jobType: job.job_type, status: "failed", error: message,
+      ...(reviewOnly ? { mode } : {}),
+      ...(meta ? { variationGroupId: meta.groupId, variationLabel: meta.label } : {}),
+    });
   };
 
 
@@ -449,16 +497,38 @@ Deno.serve(async (req: Request) => {
   };
 
   try {
-    if (action === "start" || action === "start_candidate") {
-      // Phase 4D.1 — `start_candidate` shares the ENTIRE generation setup below
-      // (prompt compiler, Brand Kit, Character Lock, Creative Direction,
-      // reference precedence, model, 1:1 request, background-removal child).
-      // Only the published guard, the status writes and the finalization differ.
-      const isCandidate = action === "start_candidate";
+    if (action === "start" || action === "start_candidate" || action === "start_variation") {
+      // Phase 4D.1 / A-B-C Variations — the review-only actions share the ENTIRE
+      // generation setup below (prompt compiler, Brand Kit, Character Lock,
+      // Creative Direction, reference precedence, model, 1:1 request,
+      // background-removal child). Only the entry guard, the status writes and
+      // the finalization differ.
+      const requestMode: JobMode =
+        action === "start_candidate"
+          ? "candidate"
+          : action === "start_variation"
+            ? "variation"
+            : "current";
+      const isCandidate = requestMode === "candidate";
+      const isVariation = requestMode === "variation";
+      const reviewOnly = isReviewOnlyMode(requestMode);
       const workspaceId = String(body.workspaceId ?? "");
       const packId = String(body.packId ?? "");
       const stickerId = String(body.stickerId ?? "");
       if (!workspaceId || !packId || !stickerId) return respond({ error: "INVALID_INPUT" }, 400);
+      // Variation identity is validated before any lookup, job row or Kie call.
+      const variationGroupId = isVariation ? String(body.variationGroupId ?? "") : null;
+      const rawLabel = isVariation ? String(body.variationLabel ?? "").trim().toUpperCase() : "";
+      const variationLabel = isVariation ? (rawLabel as "A" | "B" | "C") : null;
+      if (isVariation) {
+        const uuidShape = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!variationGroupId || !uuidShape.test(variationGroupId)) {
+          return respond({ error: "INVALID_VARIATION_GROUP", message: "The variation group id is not valid." }, 400);
+        }
+        if (!["A", "B", "C"].includes(rawLabel)) {
+          return respond({ error: "INVALID_VARIATION_LABEL", message: "Variation label must be A, B or C." }, 400);
+        }
+      }
       if (!(await isMember(workspaceId))) return respond({ error: "FORBIDDEN" }, 403);
 
       const { data: pack } = await admin.from("sticker_packs").select("*").eq("id", packId).eq("workspace_id", workspaceId).maybeSingle();
@@ -474,7 +544,7 @@ Deno.serve(async (req: Request) => {
       const hasTelegramFootprint =
         (sticker as Record<string, unknown>).telegram_file_id != null ||
         (sticker as Record<string, unknown>).telegram_published_at != null;
-      if (!isCandidate && hasTelegramFootprint) {
+      if (requestMode === "current" && hasTelegramFootprint) {
         return respond({
           error: "STICKER_PUBLISHED",
           message: "This sticker is already connected to Telegram. Regeneration is blocked to keep the live Telegram set synchronized with CARTEL HQ.",
@@ -487,6 +557,15 @@ Deno.serve(async (req: Request) => {
         return respond({
           error: "CANDIDATE_REQUIRES_PUBLISHED",
           message: "This sticker is not connected to Telegram, so use the ordinary Regenerate action instead. No provider task was started.",
+        }, 409);
+      }
+      // A/B/C variations are alternates OF an existing current image. Published
+      // or unpublished is irrelevant, but there must be something to vary from.
+      // Fails before any provider task or job row, so nothing is charged.
+      if (isVariation && (sticker as Record<string, unknown>).image_asset_id == null) {
+        return respond({
+          error: "VARIATION_REQUIRES_CURRENT",
+          message: "Generate this sticker first. A/B/C variations are alternates of an existing sticker image. No provider task was started.",
         }, 409);
       }
 
@@ -553,7 +632,7 @@ Deno.serve(async (req: Request) => {
       if (!signedUrls.length) return respond({ error: "REFERENCE_UNAVAILABLE" }, 400);
 
       const { data: brand } = await admin.from("brand_kits").select("*").eq("workspace_id", workspaceId).maybeSingle();
-      const prompt = buildPrompt(brand, pack, sticker, blueprint);
+      const prompt = buildPrompt(brand, pack, sticker, blueprint, variationLabel);
       const priorAssetId = sticker.image_asset_id ?? null;
 
       // Duplicate-spend protection. Active work for this sticker is authoritative:
@@ -575,19 +654,37 @@ Deno.serve(async (req: Request) => {
         return data ?? null;
       };
       const findActiveGeneration = () => findActiveJob("sticker_generate");
-      const crossModeConflict = (activeIsCandidate: boolean) =>
+      const MODE_NOUN: Record<JobMode, string> = {
+        current: "a regeneration",
+        candidate: "a candidate image",
+        variation: "an A/B/C variation",
+      };
+      const crossModeConflict = (activeMode: JobMode) =>
         respond({
           error: "ACTIVE_JOB_CONFLICT",
-          message: activeIsCandidate
-            ? "A candidate image is already being generated for this sticker. Wait for it to finish."
-            : "This sticker is already generating. Wait for it to finish before starting a candidate.",
+          message: `This sticker is already running ${MODE_NOUN[activeMode]}. Wait for it to finish before starting another task.`,
         }, 409);
+      const modeExtras = () =>
+        reviewOnly
+          ? { mode: requestMode, ...(isVariation ? { variationGroupId, variationLabel } : {}) }
+          : {};
+      /**
+       * Variations must additionally match group AND label, so A/B/C can never
+       * silently reuse each other's in-flight pipeline. Anything else fails closed.
+       */
+      const sameVariationIdentity = (job: Record<string, unknown>) => {
+        const meta = variationMetaOf(job);
+        return meta.groupId === variationGroupId && meta.label === variationLabel;
+      };
       /** Reuse only a same-mode active parent job; a different mode fails closed. */
       const resolveActive = (active: { id: string; status: string; input_json: unknown } | null) => {
         if (!active) return null;
-        const activeIsCandidate = isCandidateJob(active as unknown as Record<string, unknown>);
-        if (activeIsCandidate !== isCandidate) return crossModeConflict(activeIsCandidate);
-        return respond({ aiJobId: active.id, status: active.status === "queued" ? "queued" : "running", model: MODEL, ...(isCandidate ? { mode: "candidate" } : {}) });
+        const activeMode = jobModeOf(active as unknown as Record<string, unknown>);
+        if (activeMode !== requestMode) return crossModeConflict(activeMode);
+        if (isVariation && !sameVariationIdentity(active as unknown as Record<string, unknown>)) {
+          return crossModeConflict(activeMode);
+        }
+        return respond({ aiJobId: active.id, status: active.status === "queued" ? "queued" : "running", model: MODEL, ...modeExtras() });
       };
       /**
        * Background phase: the parent already succeeded, so the unique active
@@ -597,14 +694,17 @@ Deno.serve(async (req: Request) => {
       const resolveActiveBackground = async () => {
         const child = await findActiveJob("remove_background");
         if (!child) return null;
-        const childIsCandidate = isCandidateJob(child as unknown as Record<string, unknown>);
-        if (childIsCandidate !== isCandidate) return crossModeConflict(childIsCandidate);
+        const childMode = jobModeOf(child as unknown as Record<string, unknown>);
+        if (childMode !== requestMode) return crossModeConflict(childMode);
+        if (isVariation && !sameVariationIdentity(child as unknown as Record<string, unknown>)) {
+          return crossModeConflict(childMode);
+        }
         const childInput = (child.input_json && typeof child.input_json === "object" ? child.input_json : {}) as Record<string, unknown>;
         const parentJobId = typeof childInput.parent_job_id === "string" ? childInput.parent_job_id : null;
         if (parentJobId) {
           const { data: parent } = await admin.from("ai_jobs").select("id").eq("id", parentJobId).maybeSingle();
           // Existing polling semantics are parent-driven; hand back the parent id.
-          if (parent) return respond({ aiJobId: parent.id, status: "running", model: MODEL, ...(isCandidate ? { mode: "candidate" } : {}) });
+          if (parent) return respond({ aiJobId: parent.id, status: "running", model: MODEL, ...modeExtras() });
         }
         // Fail closed rather than returning a child id as if it were a parent.
         return respond({
@@ -618,6 +718,22 @@ Deno.serve(async (req: Request) => {
       const activeBackgroundResponse = await resolveActiveBackground();
       if (activeBackgroundResponse) return activeBackgroundResponse;
 
+      // Variation idempotency: a finished A/B/C slot is never re-generated, so a
+      // repeated request can never double-charge for the same take.
+      if (isVariation) {
+        const { data: existingVersion } = await admin.from("sticker_versions")
+          .select("id")
+          .eq("sticker_id", stickerId)
+          .eq("variation_group_id", variationGroupId)
+          .eq("variation_label", variationLabel)
+          .maybeSingle();
+        if (existingVersion) {
+          return respond({
+            status: "succeeded", model: MODEL, versionId: existingVersion.id,
+            mode: "variation", variationGroupId, variationLabel,
+          });
+        }
+      }
 
       const { data: job, error: jobError } = await admin.from("ai_jobs").insert({
         workspace_id: workspaceId, user_id: user.id, pack_id: packId, sticker_id: stickerId,
@@ -628,7 +744,8 @@ Deno.serve(async (req: Request) => {
           reference_source: referenceSource,
           character_lock_applied: characterLockApplied,
           creative_direction_applied: creativeDirectionApplied,
-          ...(isCandidate ? { mode: "candidate" } : {}),
+          ...(reviewOnly ? { mode: requestMode } : {}),
+          ...(isVariation ? { variation_group_id: variationGroupId, variation_label: variationLabel } : {}),
         },
       }).select("*").single();
       if (jobError || !job) {
@@ -649,12 +766,12 @@ Deno.serve(async (req: Request) => {
       if (!create.ok || !taskId) return await failSticker(job, create.ok ? "Kie.ai returned no task ID." : create.message, "PROVIDER_START_FAILED");
 
       await admin.from("ai_jobs").update({ status: "running", provider_task_id: taskId }).eq("id", job.id);
-      // Candidate generation leaves the live sticker and its pack completely alone.
-      if (!isCandidate) {
+      // Review-only generation leaves the live sticker and its pack completely alone.
+      if (!reviewOnly) {
         await admin.from("stickers").update({ status: "generating" }).eq("id", stickerId);
         await admin.from("sticker_packs").update({ status: "generating" }).eq("id", packId);
       }
-      return respond({ aiJobId: job.id, status: "running", model: MODEL, ...(isCandidate ? { mode: "candidate" } : {}) });
+      return respond({ aiJobId: job.id, status: "running", model: MODEL, ...modeExtras() });
 
     }
 
@@ -665,11 +782,23 @@ Deno.serve(async (req: Request) => {
       if (!job) return respond({ error: "JOB_NOT_FOUND" }, 404);
       if (!(await isMember(job.workspace_id))) return respond({ error: "FORBIDDEN" }, 403);
 
-      const jobIsCandidate = isCandidateJob(job as Record<string, unknown>);
-      if (job.status === "failed") return respond({ aiJobId: job.id, jobType: job.job_type, status: "failed", error: job.error_message, ...(jobIsCandidate ? { mode: "candidate" } : {}) });
+      const jobMode = jobModeOf(job as Record<string, unknown>);
+      const jobIsCandidate = jobMode === "candidate";
+      const jobIsVariation = jobMode === "variation";
+      const jobIsReviewOnly = isReviewOnlyMode(jobMode);
+      const jobVariationMeta = variationMetaOf(job as Record<string, unknown>);
+      const jobModeExtras = jobIsReviewOnly
+        ? {
+            mode: jobMode,
+            ...(jobIsVariation
+              ? { variationGroupId: jobVariationMeta.groupId, variationLabel: jobVariationMeta.label }
+              : {}),
+          }
+        : {};
+      if (job.status === "failed") return respond({ aiJobId: job.id, jobType: job.job_type, status: "failed", error: job.error_message, ...jobModeExtras });
       if (job.status === "succeeded") {
         const output = (job.output_json ?? {}) as Record<string, unknown>;
-        return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", childJobId: output.child_job_id ?? null, assetId: output.asset_id ?? null, transparencyValid: output.transparency_valid ?? null, versionId: output.version_id ?? null, ...(jobIsCandidate ? { mode: "candidate" } : {}) });
+        return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", childJobId: output.child_job_id ?? null, assetId: output.asset_id ?? null, transparencyValid: output.transparency_valid ?? null, versionId: output.version_id ?? null, ...jobModeExtras });
       }
 
       if (!job.provider_task_id) return respond({ aiJobId: job.id, jobType: job.job_type, status: job.status });
@@ -704,7 +833,11 @@ Deno.serve(async (req: Request) => {
           const { data: child, error: childError } = await admin.from("ai_jobs").insert({
             workspace_id: job.workspace_id, user_id: job.user_id, pack_id: job.pack_id, sticker_id: job.sticker_id,
             job_type: "remove_background", provider: "kie", provider_model: BG_MODEL, status: "queued",
-            input_json: { parent_job_id: job.id, prior_image_asset_id: priorAssetId, model: BG_MODEL, ...(jobIsCandidate ? { mode: "candidate" } : {}) },
+            input_json: {
+              parent_job_id: job.id, prior_image_asset_id: priorAssetId, model: BG_MODEL,
+              ...(jobIsReviewOnly ? { mode: jobMode } : {}),
+              ...(jobIsVariation ? { variation_group_id: jobVariationMeta.groupId, variation_label: jobVariationMeta.label } : {}),
+            },
           }).select("*").single();
           if (childError || !child) {
             // Race: a concurrent poller already created the child. Reuse it and
@@ -729,8 +862,8 @@ Deno.serve(async (req: Request) => {
           const bgTaskId = bgCreate.ok ? String(bgCreate.data.taskId ?? bgCreate.data.task_id ?? "") : "";
           if (!bgCreate.ok || !bgTaskId) {
             await admin.from("ai_jobs").update({ status: "failed", error_code: "BACKGROUND_START_FAILED", error_message: bgCreate.ok ? "Kie.ai returned no background-removal task ID." : bgCreate.message, completed_at: new Date().toISOString() }).eq("id", childJobId);
-            // A failed candidate must never demote the live sticker.
-            if (!jobIsCandidate) {
+            // A failed review-only take must never demote the live sticker.
+            if (!jobIsReviewOnly) {
               const prior = typeof priorAssetId === "string" ? priorAssetId : null;
               await admin.from("stickers").update({ status: prior ? "ready" : "failed" }).eq("id", job.sticker_id);
             }
@@ -771,30 +904,31 @@ Deno.serve(async (req: Request) => {
         }
         if (!transparent || !finalPng) return await failSticker(job, "Transparency validation failed: the processed image does not contain real transparent pixels.", "TRANSPARENCY_FAILED");
 
-        // Candidate finalization must be idempotent across concurrent pollers,
-        // so its object path is DERIVED from the background job id. A retry then
-        // collides on the unique storage path / unique media_assets row instead
-        // of creating a second logical candidate. Ordinary generation keeps its
-        // existing random path and behaviour untouched.
-        const path = jobIsCandidate
-          ? `${job.workspace_id}/generated_sticker/candidate-${job.id}.png`
+        // Review-only finalization (candidate and A/B/C variation) must be
+        // idempotent across concurrent pollers, so its object path is DERIVED
+        // from the background job id. A retry then collides on the unique
+        // storage path / unique media_assets row instead of creating a second
+        // logical image. Ordinary generation keeps its existing random path and
+        // behaviour untouched.
+        const path = jobIsReviewOnly
+          ? `${job.workspace_id}/generated_sticker/${jobIsVariation ? "variation" : "candidate"}-${job.id}.png`
           : `${job.workspace_id}/generated_sticker/${crypto.randomUUID()}.png`;
         const { error: uploadError } = await admin.storage.from(BUCKET).upload(path, finalPng, { contentType: "image/png", upsert: false });
 
-        // A losing candidate poller reuses the asset the winner already recorded.
+        // A losing review-only poller reuses the asset the winner already recorded.
         let assetId: string | null = null;
-        const findCandidateAsset = async () => {
+        const findReviewAsset = async () => {
           const { data } = await admin.from("media_assets").select("id").eq("workspace_id", job.workspace_id).eq("storage_path", path).maybeSingle();
           return data?.id ?? null;
         };
         if (uploadError) {
           // Ordinary generation is unchanged: any upload failure is terminal.
-          if (!jobIsCandidate) return await failSticker(job, "Could not save the finished sticker image.", "STORAGE_UPLOAD_FAILED");
-          // Candidate: an upload error is only survivable when the deterministic
+          if (!jobIsReviewOnly) return await failSticker(job, "Could not save the finished sticker image.", "STORAGE_UPLOAD_FAILED");
+          // Review-only: an upload error is only survivable when the deterministic
           // object is PROVEN to already exist (idempotent retry). A network or
           // service error must never produce a media/version row for an object
           // that was never stored, so this fails closed unless proven.
-          assetId = await findCandidateAsset();
+          assetId = await findReviewAsset();
           if (!assetId) {
             const slash = path.lastIndexOf("/");
             const dir = path.slice(0, slash);
@@ -805,8 +939,8 @@ Deno.serve(async (req: Request) => {
               return await failSticker(job, "Could not save the finished sticker image.", "STORAGE_UPLOAD_FAILED");
             }
           }
-        } else if (jobIsCandidate) {
-          assetId = await findCandidateAsset();
+        } else if (jobIsReviewOnly) {
+          assetId = await findReviewAsset();
         }
 
         const parentJobId = job.input_json && typeof job.input_json === "object" ? (job.input_json as Record<string, unknown>).parent_job_id : null;
@@ -822,16 +956,16 @@ Deno.serve(async (req: Request) => {
           const { data: asset, error: assetError } = await admin.from("media_assets").insert({
             workspace_id: job.workspace_id, uploaded_by: job.user_id, storage_path: path, asset_type: "generated_sticker",
             mime_type: "image/png", width, height, file_size_bytes: finalPng.byteLength, transparency_valid: true,
-            metadata: { source: "kie", generation_model: parentModel, generation_task_id: parentTaskId, background_model: job.provider_model, background_task_id: job.provider_task_id, generation_job_id: parentJobId, background_job_id: job.id, ...(jobIsCandidate ? { candidate: true } : {}) },
+            metadata: { source: "kie", generation_model: parentModel, generation_task_id: parentTaskId, background_model: job.provider_model, background_task_id: job.provider_task_id, generation_job_id: parentJobId, background_job_id: job.id, ...(jobIsCandidate ? { candidate: true } : {}), ...(jobIsVariation ? { variation: true, variation_group_id: jobVariationMeta.groupId, variation_label: jobVariationMeta.label } : {}) },
           }).select("id").single();
           if (assetError || !asset) {
-            if (jobIsCandidate) {
-              // Recover a concurrently inserted candidate asset before failing.
+            if (jobIsReviewOnly) {
+              // Recover a concurrently inserted review-only asset before failing.
               const { data: racedAsset } = await admin.from("media_assets").select("id").eq("workspace_id", job.workspace_id).eq("storage_path", path).maybeSingle();
               assetId = racedAsset?.id ?? null;
             }
             if (!assetId) {
-              if (!jobIsCandidate) await admin.storage.from(BUCKET).remove([path]);
+              if (!jobIsReviewOnly) await admin.storage.from(BUCKET).remove([path]);
               return await failSticker(job, "Could not record the finished sticker asset.", "ASSET_RECORD_FAILED");
             }
           } else {
@@ -839,34 +973,47 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        if (jobIsCandidate) {
-          // Durable candidate record ONLY. The current pointer, sticker status,
+        if (jobIsReviewOnly) {
+          // Durable review-only record ONLY. The current pointer, sticker status,
           // Telegram fields and pack status are deliberately never written here.
+          const versionOrigin = jobIsVariation ? "variation_generation" : "candidate_generation";
           let versionId: string | null = null;
           const readVersion = async () => {
             const { data } = await admin.from("sticker_versions").select("id").eq("sticker_id", job.sticker_id).eq("asset_id", assetId).maybeSingle();
             return data?.id ?? null;
           };
-          versionId = await readVersion();
+          /** A finished A/B/C slot is unique per (sticker, group, label). */
+          const readVariationSlot = async () => {
+            if (!jobIsVariation || !jobVariationMeta.groupId || !jobVariationMeta.label) return null;
+            const { data } = await admin.from("sticker_versions").select("id")
+              .eq("sticker_id", job.sticker_id)
+              .eq("variation_group_id", jobVariationMeta.groupId)
+              .eq("variation_label", jobVariationMeta.label)
+              .maybeSingle();
+            return data?.id ?? null;
+          };
+          versionId = (await readVersion()) ?? (await readVariationSlot());
           for (let attempt = 0; attempt < 3 && !versionId; attempt++) {
             const { data: maxRow } = await admin.from("sticker_versions").select("version_number").eq("sticker_id", job.sticker_id).order("version_number", { ascending: false }).limit(1).maybeSingle();
             const nextVersion = (maxRow?.version_number ?? 0) + 1;
             const { data: inserted, error: versionError } = await admin.from("sticker_versions").insert({
               workspace_id: job.workspace_id, pack_id: job.pack_id, sticker_id: job.sticker_id,
-              asset_id: assetId, version_number: nextVersion, origin: "candidate_generation",
+              asset_id: assetId, version_number: nextVersion, origin: versionOrigin,
+              ...(jobIsVariation ? { variation_group_id: jobVariationMeta.groupId, variation_label: jobVariationMeta.label } : {}),
             }).select("id").maybeSingle();
             if (!versionError && inserted) { versionId = inserted.id; break; }
-            // Unique conflict on (sticker_id, asset_id) or (sticker_id, version_number):
-            // re-read and reuse rather than creating a second logical candidate.
-            versionId = await readVersion();
+            // Unique conflict on (sticker_id, asset_id), (sticker_id, version_number)
+            // or the variation slot: re-read and reuse rather than creating a
+            // second logical review image.
+            versionId = (await readVersion()) ?? (await readVariationSlot());
           }
           if (!versionId) {
-            return await failSticker(job, "The candidate image was created but could not be recorded in version history.", "CANDIDATE_VERSION_FAILED");
+            return await failSticker(job, "The image was created but could not be recorded in version history.", jobIsVariation ? "VARIATION_VERSION_FAILED" : "CANDIDATE_VERSION_FAILED");
           }
 
-          await admin.from("ai_jobs").update({ status: "succeeded", completed_at: new Date().toISOString(), output_json: { asset_id: assetId, storage_path: path, transparency_valid: true, width, height, mode: "candidate", version_id: versionId } }).eq("id", job.id);
+          await admin.from("ai_jobs").update({ status: "succeeded", completed_at: new Date().toISOString(), output_json: { asset_id: assetId, storage_path: path, transparency_valid: true, width, height, mode: jobMode, version_id: versionId, ...(jobIsVariation ? { variation_group_id: jobVariationMeta.groupId, variation_label: jobVariationMeta.label } : {}) } }).eq("id", job.id);
           await logCredits(job, credits);
-          return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", assetId, transparencyValid: true, stage: "candidate_ready", mode: "candidate", versionId });
+          return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", assetId, transparencyValid: true, stage: jobIsVariation ? "variation_ready" : "candidate_ready", versionId, ...jobModeExtras });
         }
 
         await admin.from("stickers").update({ image_asset_id: assetId, status: "ready" }).eq("id", job.sticker_id);

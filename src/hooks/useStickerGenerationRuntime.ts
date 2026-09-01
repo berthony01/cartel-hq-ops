@@ -100,10 +100,11 @@ export function useStickerGenerationRuntime(params: {
     } catch {
       /* keep whatever resolved; states below degrade safely */
     }
-    // Phase 4D — candidate jobs deliberately never change the current image, so
-    // they must not drive current-image stage, failure or attempt state here.
+    // Phase 4D / A-B-C Variations — review-only jobs deliberately never change
+    // the current image, so they must not drive current-image stage, failure or
+    // attempt state here.
     for (const key of Object.keys(jobs)) {
-      jobs[key] = (jobs[key] ?? []).filter((job) => !job.is_candidate);
+      jobs[key] = (jobs[key] ?? []).filter((job) => !job.is_candidate && !job.is_variation);
     }
 
     const paths = Object.values(assets).map((a) => a.storage_path);

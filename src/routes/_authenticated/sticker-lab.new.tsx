@@ -19,6 +19,7 @@ import {
 } from "@/lib/sticker-concepts";
 import {
   isCandidateVersionOrigin,
+  isVariationVersionOrigin,
   loadStickerVersions,
   setCurrentStickerVersion,
   type SetCurrentVersionStatus,
@@ -37,6 +38,11 @@ import {
   isCandidateBusy,
   usePublishedStickerCandidateRuntime,
 } from "@/hooks/usePublishedStickerCandidateRuntime";
+import {
+  VARIATION_STAGE_LABEL,
+  isVariationBusy,
+  useStickerVariationRuntime,
+} from "@/hooks/useStickerVariationRuntime";
 
 import {
   hydrateDraftFromPack,
@@ -356,6 +362,29 @@ function StickerLabBuilder() {
     label: string;
   } | null>(null);
 
+  /**
+   * A/B/C Variations runtime. Another fully separate store: variations are
+   * review-only, never touch the current image, sticker status or Telegram, and
+   * `start_variation` is only reachable from the confirmed dialog handler below.
+   */
+  const {
+    variationReadySignal,
+    startVariationRound,
+    cancelVariationRound,
+    recoverVariations,
+    clearVariationState,
+    variationRoundFor,
+  } = useStickerVariationRuntime({
+    workspaceId,
+    referenceAssetIds: draft?.referenceAssetIds ?? [],
+  });
+  /** Sticker awaiting the explicit 6-task A/B/C confirmation. */
+  const [variationConfirm, setVariationConfirm] = useState<{
+    stickerId: string;
+    label: string;
+  } | null>(null);
+
+
   const [confirmRemaining, setConfirmRemaining] = useState(false);
   /**
    * Sticker Studio selective generation. Editor-only local state: never
@@ -540,6 +569,7 @@ function StickerLabBuilder() {
       draft?.packId ?? "",
       previewFingerprint,
       candidateReadySignal,
+      variationReadySignal,
     ],
     enabled: !!draft && step === 4 && savedStickerIds.length > 0,
     queryFn: () => loadStickerVersions(savedStickerIds),
@@ -562,7 +592,10 @@ function StickerLabBuilder() {
     const stickerIds = ids.split(",").filter(Boolean);
     if (stickerIds.length === 0) return;
     void recoverCandidates(packId, stickerIds);
-  }, [candidateRecoveryKey, recoverCandidates]);
+    // Variation recovery is read-only for the same reason: it inspects existing
+    // `ai_jobs` rows and never starts a new billable round.
+    void recoverVariations(packId, stickerIds);
+  }, [candidateRecoveryKey, recoverCandidates, recoverVariations]);
 
   /**
    * Phase 4B restore state. Declared with the other top-level hooks, ABOVE every
@@ -1110,6 +1143,8 @@ function StickerLabBuilder() {
     // Read-only forced candidate reconciliation. Never starts provider work.
     if (step === 4 && id && savedStickerIds.length > 0) {
       void recoverCandidates(id, savedStickerIds, { force: true });
+      // Same contract for variation rounds: reconcile only, never re-run.
+      void recoverVariations(id, savedStickerIds, { force: true });
     }
   };
 
@@ -1151,6 +1186,7 @@ function StickerLabBuilder() {
         await reconcileAfterRestore();
         // Durable reconciliation succeeded: stale candidate badge is no longer true.
         clearCandidateState(target.stickerId);
+        clearVariationState(target.stickerId);
         toast.success(`Version ${target.versionNumber} is now the current image.`);
         return;
       }
@@ -1158,6 +1194,7 @@ function StickerLabBuilder() {
         // Not a failure: durable state already matches the requested version.
         await reconcileAfterRestore();
         clearCandidateState(target.stickerId);
+        clearVariationState(target.stickerId);
         toast.message(result.message || RESTORE_MESSAGE.unchanged);
         return;
       }
@@ -1190,6 +1227,7 @@ function StickerLabBuilder() {
       await reconcileAfterRestore();
       // Only after durable reconciliation of the Telegram replacement.
       clearCandidateState(target.stickerId);
+      clearVariationState(target.stickerId);
       if (result.status === "switched") {
         toast.success(
           result.telegramReplaced
@@ -3176,6 +3214,26 @@ function StickerLabBuilder() {
                         !(!!v.storagePath && v.storagePath === preview?.storagePath),
                     ) ?? null)
                   : null;
+              /**
+               * A/B/C round state and the newest durable take per label.
+               * Review-only: none of this changes the current image.
+               */
+              const varRound = variationRoundFor(stickerId);
+              const variationVersions = stickerVersions.filter((v) =>
+                isVariationVersionOrigin(v.origin),
+              );
+              const latestVariationGroupId =
+                varRound.groupId ?? variationVersions[0]?.variationGroupId ?? null;
+              const variationTakes = (["A", "B", "C"] as const).map((label) => ({
+                label,
+                version:
+                  variationVersions.find(
+                    (v) =>
+                      v.variationLabel === label &&
+                      (!latestVariationGroupId || v.variationGroupId === latestVariationGroupId),
+                  ) ?? null,
+              }));
+              const hasVariationTakes = variationTakes.some((t) => t.version);
               return (
                 <li key={c.id} className="cartel-panel rounded-lg p-2.5 sm:p-4">
                   <div className="mb-3 flex items-center justify-between gap-2">
@@ -3269,6 +3327,11 @@ function StickerLabBuilder() {
                                   </span>
                                   {isCandidateVersionOrigin(v.origin) ? (
                                     <StatusBadge tone="gold">Candidate</StatusBadge>
+                                  ) : null}
+                                  {isVariationVersionOrigin(v.origin) ? (
+                                    <StatusBadge tone="gold">
+                                      Variation {v.variationLabel ?? ""}
+                                    </StatusBadge>
                                   ) : null}
                                 </span>
                                 {v.unavailable ? (
@@ -3391,6 +3454,136 @@ function StickerLabBuilder() {
                             : "Replace live sticker"}
                         </Button>
                       )}
+                    </div>
+                  ) : null}
+
+                  {/* A/B/C variations — review only. The current image, sticker
+                      status and any live Telegram set are never touched. */}
+                  {stickerId && preview ? (
+                    <div className="mt-3 rounded-md border border-border bg-background/40 p-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          A/B/C variations
+                        </p>
+                        {varRound.stage !== "idle" ? (
+                          <StatusBadge
+                            tone={
+                              isVariationBusy(varRound.stage)
+                                ? "gold"
+                                : varRound.stage === "done"
+                                  ? "green"
+                                  : varRound.stage === "cancelled"
+                                    ? "muted"
+                                    : "red"
+                            }
+                          >
+                            {VARIATION_STAGE_LABEL[varRound.stage]}
+                            {varRound.currentLabel ? ` ${varRound.currentLabel}` : ""}
+                          </StatusBadge>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                        Three deliberate takes of this sticker, generated one after another. They
+                        are saved to Version history for review only — nothing replaces the current
+                        image until you set a version as current.
+                      </p>
+                      {hasVariationTakes ? (
+                        <ul className="mt-2 grid grid-cols-3 gap-2">
+                          {variationTakes.map((take) => (
+                            <li key={take.label} className="min-w-0">
+                              <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                                Take {take.label}
+                              </p>
+                              <div
+                                className="mt-1 flex aspect-square items-center justify-center overflow-hidden rounded border border-border"
+                                style={CHECKERBOARD}
+                              >
+                                {take.version?.previewUrl ? (
+                                  <img
+                                    src={take.version.previewUrl}
+                                    alt={`${c.label} variation ${take.label}`}
+                                    className="max-h-full max-w-full object-contain"
+                                  />
+                                ) : varRound.currentLabel === take.label ? (
+                                  <Loader2
+                                    className="size-4 animate-spin text-gold"
+                                    aria-hidden="true"
+                                  />
+                                ) : (
+                                  <span className="px-1 text-center text-[9px] text-muted-foreground">
+                                    {take.version ? "Unavailable" : "Not run"}
+                                  </span>
+                                )}
+                              </div>
+                              {take.version && !take.version.unavailable ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="mt-1 h-8 w-full text-[10px]"
+                                  disabled={
+                                    busy(stage) ||
+                                    restoringStickerId !== null ||
+                                    isVariationBusy(varRound.stage)
+                                  }
+                                  onClick={() =>
+                                    setRestoreTarget({
+                                      stickerId,
+                                      versionId: take.version!.id,
+                                      versionNumber: take.version!.versionNumber,
+                                      label: c.label,
+                                    })
+                                  }
+                                >
+                                  Use this take
+                                </Button>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      {varRound.failure && !isVariationBusy(varRound.stage) ? (
+                        <p className="mt-2 text-[11px] text-signal">
+                          {varRound.failure.title}. {varRound.failure.body}
+                        </p>
+                      ) : null}
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="min-h-10 flex-1"
+                          disabled={
+                            !configured ||
+                            saving ||
+                            busy(stage) ||
+                            isCandidateBusy(candStage) ||
+                            isVariationBusy(varRound.stage) ||
+                            restoringStickerId !== null
+                          }
+                          onClick={() => setVariationConfirm({ stickerId, label: c.label })}
+                        >
+                          {isVariationBusy(varRound.stage) ? (
+                            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                          ) : null}
+                          {isVariationBusy(varRound.stage)
+                            ? VARIATION_STAGE_LABEL[varRound.stage]
+                            : hasVariationTakes
+                              ? "Run new A/B/C round"
+                              : "Generate A/B/C variations"}
+                        </Button>
+                        {isVariationBusy(varRound.stage) ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="min-h-10"
+                            onClick={() => cancelVariationRound(stickerId)}
+                          >
+                            Stop after this take
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
                   ) : null}
 
@@ -3610,6 +3803,53 @@ function StickerLabBuilder() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          {/* The ONLY path that can start a billable A/B/C round. */}
+          <AlertDialog
+            open={!!variationConfirm}
+            onOpenChange={(open) => {
+              if (!open) setVariationConfirm(null);
+            }}
+          >
+            <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
+              <AlertDialogTitle>
+                Generate A/B/C variations for {variationConfirm?.label}?
+              </AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-2 text-sm text-muted-foreground">
+                  <p>
+                    This runs three takes one after another and uses up to{" "}
+                    <strong>6 Kie provider tasks</strong> — image generation plus background
+                    removal for each take — consuming Kie credits on your account.
+                  </p>
+                  <p>
+                    Your current image, this sticker&apos;s status and any live Telegram set stay
+                    exactly as they are. Each finished take is saved to Version history for review
+                    only.
+                  </p>
+                  <p>
+                    The round stops immediately if a take fails, and there are no automatic
+                    retries. You can stop after the take that is already running.
+                  </p>
+                </div>
+              </AlertDialogDescription>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    const target = variationConfirm;
+                    setVariationConfirm(null);
+                    if (target && draft.packId) {
+                      void startVariationRound(draft.packId, target.stickerId);
+                    }
+                  }}
+                >
+                  Generate A/B/C (up to 6 tasks)
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
 
           {/* Phase 4B — first confirmation. No Telegram call happens here. */}
           <AlertDialog
