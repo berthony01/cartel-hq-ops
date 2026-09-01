@@ -25,7 +25,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { FLOW_STEPS } from "@/lib/sticker-lab";
+import {
+  CapabilityStrip,
+  JourneyAfterRelease,
+  JourneyOverview,
+} from "@/components/sticker-lab/StickerLabJourney";
 import { useWorkspace } from "@/lib/workspace-context";
 import {
   archivePack,
