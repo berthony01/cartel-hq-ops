@@ -645,9 +645,9 @@ function LaunchControlPage() {
 
   const blockedReason =
     next === "LAUNCH_APPROACHING" && !scheduleReady
-      ? "Set an exact launch time or a complete launch window before advancing."
+      ? "Set an exact launch time or a complete launch window before you can arm countdowns."
       : next === "OFFICIAL_CONTRACT_REGISTERED" && !contractSaved
-        ? "Save the official contract address before advancing."
+        ? "Save the official contract address before registering it."
         : null;
 
   const saveButton =
