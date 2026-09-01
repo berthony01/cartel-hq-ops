@@ -4,7 +4,9 @@ import type { AiJobRow, ProviderFailure } from "@/lib/sticker-packs";
 import {
   startStickerMotionTelegramPrepare,
   syncStickerMotionTelegramPrepare,
+  retryStickerMotionTelegramNormalization,
 } from "@/lib/sticker-motion-telegram";
+
 
 /**
  * Phase C2 — Telegram motion preparation runtime.
