@@ -384,6 +384,7 @@ function StickerLabBuilder() {
     variationReadySignal,
     startVariationRound,
     cancelVariationRound,
+    retryVariationBackground,
     recoverVariations,
     clearVariationState,
     variationRoundFor,
@@ -393,6 +394,11 @@ function StickerLabBuilder() {
   });
   /** Sticker awaiting the explicit 6-task A/B/C confirmation. */
   const [variationConfirm, setVariationConfirm] = useState<{
+    stickerId: string;
+    label: string;
+  } | null>(null);
+  /** Sticker awaiting the explicit one-task background-only retry confirmation. */
+  const [variationBgRetryConfirm, setVariationBgRetryConfirm] = useState<{
     stickerId: string;
     label: string;
   } | null>(null);
@@ -3844,6 +3850,29 @@ function StickerLabBuilder() {
                             Stop after this take
                           </Button>
                         ) : null}
+                        {/* R1 — one-task recovery, only when the paid image
+                            generation already succeeded and background removal
+                            was the step that failed. */}
+                        {!variationBusy && varRound.retryableBackgroundJobId ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            className="min-h-10"
+                            disabled={
+                              !configured ||
+                              saving ||
+                              busy(stage) ||
+                              isCandidateBusy(candStage) ||
+                              restoringStickerId !== null
+                            }
+                            onClick={() =>
+                              setVariationBgRetryConfirm({ stickerId, label: c.label })
+                            }
+                          >
+                            Retry background only
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
                   ) : null}
@@ -4174,6 +4203,50 @@ function StickerLabBuilder() {
             </AlertDialogContent>
           </AlertDialog>
 
+
+          {/* The ONLY path that can start a billable background-only retry. */}
+          <AlertDialog
+            open={!!variationBgRetryConfirm}
+            onOpenChange={(open) => {
+              if (!open) setVariationBgRetryConfirm(null);
+            }}
+          >
+            <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
+              <AlertDialogTitle>
+                Retry background removal for {variationBgRetryConfirm?.label}?
+              </AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-2 text-sm text-muted-foreground">
+                  <p>
+                    The sticker image for this take was already generated successfully. This retry
+                    reuses that exact image.
+                  </p>
+                  <p>
+                    Exactly <strong>one Kie background-removal task</strong> will be started. It
+                    does <strong>not</strong> generate a new image.
+                  </p>
+                  <p>
+                    There are no automatic retries. Your current sticker image and any live
+                    Telegram set remain unchanged.
+                  </p>
+                </div>
+              </AlertDialogDescription>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    const target = variationBgRetryConfirm;
+                    setVariationBgRetryConfirm(null);
+                    if (target) {
+                      void retryVariationBackground(target.stickerId);
+                    }
+                  }}
+                >
+                  Retry background only (1 task)
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           {/* Phase 4B — first confirmation. No Telegram call happens here. */}
           <AlertDialog
