@@ -364,7 +364,7 @@ export function MotionStudioPanel({
           <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Telegram preparation
           </p>
-          {motionIsLive ? (
+          {currentMotionIsLive ? (
             <StatusBadge tone="green">Motion live on Telegram</StatusBadge>
           ) : currentIsTelegramReady ? (
             <StatusBadge tone="green">Telegram-ready</StatusBadge>
@@ -377,11 +377,16 @@ export function MotionStudioPanel({
             Motion.
           </p>
         ) : currentIsTelegramReady ? (
-          motionIsLive ? (
+          currentMotionIsLive ? (
             <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
               Version {current.versionNumber} is the live Telegram release for this sticker. Its
               Telegram-formatted derivative was accepted by Telegram and replaced this sticker in
               the existing set.
+            </p>
+          ) : anyMotionIsLive ? (
+            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              A different Motion version is currently live on Telegram for this sticker. Version{" "}
+              {current.versionNumber} is prepared and can replace it when you release it explicitly.
             </p>
           ) : (
             <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
@@ -390,6 +395,7 @@ export function MotionStudioPanel({
               explicitly.
             </p>
           )
+
         ) : !currentFromCurrentStatic ? (
 
           <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
