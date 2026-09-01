@@ -3894,6 +3894,15 @@ function StickerLabBuilder() {
                         if (!id) return;
                         void startTelegramPrepare({ packId: id, ...input });
                       }}
+                      telegramPublished={locked}
+                      releasingMotion={motionReleaseStickerId === stickerId}
+                      releaseError={
+                        motionReleaseError?.stickerId === stickerId
+                          ? motionReleaseError.message
+                          : null
+                      }
+                      onReleaseMotion={(input) => void releaseCurrentMotion(input)}
+
 
                     />
                   ) : null}
