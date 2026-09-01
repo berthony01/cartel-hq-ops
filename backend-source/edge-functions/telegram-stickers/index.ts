@@ -483,18 +483,19 @@ Deno.serve(async (req: Request) => {
       const now = new Date().toISOString();
       // Guarded write: only the exact pre-restore row may be advanced. Zero
       // matched rows means someone else moved the sticker, which is a failure.
-      let guardedUpdate = admin.from("stickers").update({ image_asset_id: targetAsset.id, telegram_file_id: newFileId, status: "published", telegram_publish_error: null, telegram_published_at: now, updated_at: now }).eq("id", stickerId);
+      let guardedUpdate = admin.from("stickers").update({ image_asset_id: targetAsset.id, telegram_file_id: newFileId, telegram_static_file_id: newFileId, release_variant: "static", status: "published", telegram_publish_error: null, telegram_published_at: now, updated_at: now }).eq("id", stickerId);
       guardedUpdate = expectedOldAssetId === null ? guardedUpdate.is("image_asset_id", null) : guardedUpdate.eq("image_asset_id", expectedOldAssetId);
       guardedUpdate = expectedOldFileId === null ? guardedUpdate.is("telegram_file_id", null) : guardedUpdate.eq("telegram_file_id", expectedOldFileId);
+      guardedUpdate = expectedOldVariant === null ? guardedUpdate.is("release_variant", null) : guardedUpdate.eq("release_variant", expectedOldVariant);
       const { data: updatedRow, error: updateError } = await guardedUpdate.select("id").maybeSingle();
       if (updateError || !updatedRow) {
         // Cross-system guard: Telegram already changed, CARTEL HQ did not.
         const dbReason = updateError ? updateError.message : "guarded update matched zero rows";
         try {
-          await telegramJson(TELEGRAM_BOT_TOKEN, "replaceStickerInSet", { user_id: ownerId, name: setName, old_sticker: newFileId, sticker: inputFor(oldFileId) });
+          await telegramJson(TELEGRAM_BOT_TOKEN, "replaceStickerInSet", { user_id: ownerId, name: setName, old_sticker: newFileId, sticker: inputFor(oldFileId, oldFormat) });
           return respond({ error: "RESTORE_ROLLED_BACK", message: "CARTEL HQ could not save the change, so the Telegram sticker was restored to its previous image. Nothing was changed." }, 500);
         } catch (compensationError) {
-          console.error("[telegram-stickers] replace_version reconciliation required", { stickerId, setName, oldFileId, newFileId, dbError: dbReason, compensationError: compensationError instanceof Error ? compensationError.message : "unknown error" });
+          console.error("[telegram-stickers] replace_version reconciliation required", { stickerId, setName, oldFileId, newFileId, oldFormat, dbError: dbReason, compensationError: compensationError instanceof Error ? compensationError.message : "unknown error" });
           return respond({ error: "RECONCILIATION_REQUIRED", message: "The Telegram sticker was replaced but CARTEL HQ could not save the change and could not undo it. Refresh the Telegram status and review this sticker before publishing again." }, 500);
         }
       }
