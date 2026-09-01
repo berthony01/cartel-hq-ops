@@ -350,6 +350,39 @@ function PackManagerPage() {
           </p>
         </Section>
       ) : null}
+
+      <Section
+        variant="primary"
+        title="Pack command summary"
+        description="Where this pack stands right now, and what to do next."
+      >
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 [&>*]:min-w-0">
+          {summaryItems.map((item) => (
+            <li
+              key={item.label}
+              className="min-w-0 rounded-lg border border-border/70 bg-surface-raised/50 p-3"
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {item.label}
+              </p>
+              <p className="mt-1 break-words text-sm font-semibold text-foreground">{item.value}</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{item.hint}</p>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-4 rounded-lg border border-primary/40 bg-primary/5 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Recommended next step
+          </p>
+          <p className="mt-1 text-sm font-semibold text-foreground">{nextStep.title}</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{nextStep.body}</p>
+          {nextStep.action ? (
+            <div className="mt-3 flex flex-wrap gap-2 [&>*]:min-w-0">{nextStep.action}</div>
+          ) : null}
+        </div>
+      </Section>
+
+
       {isArchived ? null : (
       <Section
         variant="hero"
