@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/cartel/EmptyState";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { Section } from "@/components/cartel/Section";
 import { InlineRow } from "@/components/cartel/InlineRow";
-import { ScrollRail } from "@/components/cartel/ScrollRail";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -25,7 +25,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { FLOW_STEPS } from "@/lib/sticker-lab";
+import {
+  CapabilityStrip,
+  JourneyAfterRelease,
+  JourneyOverview,
+} from "@/components/sticker-lab/StickerLabJourney";
 import { useWorkspace } from "@/lib/workspace-context";
 import {
   archivePack,
@@ -354,25 +358,19 @@ function StickerLabHome() {
 
       <Section
         variant="plain"
-        title="Workflow"
-        description="Five guided steps from reference to published Telegram pack."
+        title="How Sticker Lab works"
+        description="Four stages, powered by the same five-step builder. Blueprint covers builder steps 1 and 2."
       >
-        <ScrollRail
-          aria-label="Sticker Lab workflow steps"
-          desktopClassName="lg:grid lg:grid-cols-5 lg:overflow-visible lg:mx-0 lg:px-0"
-        >
-          {FLOW_STEPS.map((step, i) => (
-            <div
-              key={step}
-              className="min-w-[8.5rem] rounded-lg border border-border/70 bg-surface-raised/60 px-3 py-2.5"
-            >
-              <p className="text-[11px] font-semibold tracking-[0.16em] text-gold">
-                {String(i + 1).padStart(2, "0")}
-              </p>
-              <p className="mt-1 text-sm font-medium leading-snug text-foreground">{step}</p>
-            </div>
-          ))}
-        </ScrollRail>
+        <JourneyOverview />
+        <JourneyAfterRelease />
+      </Section>
+
+      <Section
+        variant="plain"
+        title="What you get"
+        description="Capabilities available in Sticker Lab today."
+      >
+        <CapabilityStrip />
       </Section>
 
       <Section

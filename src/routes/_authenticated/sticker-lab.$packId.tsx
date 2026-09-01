@@ -165,9 +165,9 @@ function PackManagerPage() {
           published
             ? "One Telegram sticker set exists for this pack. Publishing again only adds missing reviewed stickers; adding a community sends the same set."
             : allReady
-              ? `${readyCount} of ${stickers.length} stickers are ready. Open Review & Publish to create the Telegram sticker set.`
+              ? `${readyCount} of ${stickers.length} stickers are ready. Open Quality & Release to create the Telegram sticker set.`
               : readyCount > 0
-                ? `${readyCount} of ${stickers.length} stickers are ready. Open Review & Publish to review what can be published and what still needs work.`
+                ? `${readyCount} of ${stickers.length} stickers are ready. Open Quality & Release to review what can be published and what still needs work.`
                 : "Keep generating and reviewing stickers in the builder before publishing."
         }
         actions={
@@ -176,12 +176,18 @@ function PackManagerPage() {
           </StatusBadge>
         }
       >
+        <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
+          <strong className="text-foreground">Continue editing</strong> returns you to the same
+          five-step Studio flow (Blueprint → Concept Studio → Sticker Studio → Quality &amp;
+          Release). <strong className="text-foreground">Review &amp; release</strong> jumps straight
+          to Quality &amp; Release.
+        </p>
         <div className="flex flex-wrap gap-2 [&>*]:min-w-0">
           {readyCount > 0 ? (
             <Button asChild className="min-h-11 flex-1 sm:flex-none">
               <Link to="/sticker-lab/new" search={{ pack: pack.id, step: 5 }}>
                 <Send className="size-4" aria-hidden="true" />
-                Review &amp; publish
+                Review &amp; release
               </Link>
             </Button>
           ) : null}

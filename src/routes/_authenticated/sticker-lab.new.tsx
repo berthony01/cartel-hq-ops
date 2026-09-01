@@ -105,6 +105,7 @@ import {
   SummaryRow,
   SummaryStat,
 } from "@/components/sticker-lab/BuilderPrimitives";
+import { StepGuide } from "@/components/sticker-lab/StickerLabJourney";
 import { Checkbox } from "@/components/ui/checkbox";
 
 
@@ -1723,10 +1724,12 @@ function StickerLabBuilder() {
 
       <Stepper current={step} onSelect={setStep} />
 
+      <StepGuide step={step} />
+
       {step === 1 ? (
         <StepCard
-          title="Character Reference"
-          hint="Stored privately in this project's Asset Vault. Sticker generation uses this project's Brand Kit when one is saved, plus the selected or available project reference assets."
+          title="Character & Brand"
+          hint="Blueprint, part 1. Character Lock lives here. References are stored privately in this project's Asset Vault, and generation uses this project's Brand Kit when one is saved, plus the selected or available project reference assets."
         >
           <div className="grid gap-6 md:grid-cols-2 [&>*]:min-w-0">
             <div>
@@ -2019,7 +2022,11 @@ function StickerLabBuilder() {
       ) : null}
 
       {step === 2 ? (
-        <StepCard title="Pack Setup" hint="Saved to this project’s sticker packs.">
+        <StepCard
+          title="Creative Direction"
+          hint="Blueprint, part 2. Name the pack and set the creative rules the AI must follow. Saved to this project’s sticker packs."
+        >
+
           <div className="grid gap-6 md:grid-cols-2 [&>*]:min-w-0">
             <div>
               <Label htmlFor="pack-name">Pack name</Label>
@@ -2228,7 +2235,7 @@ function StickerLabBuilder() {
       {step === 3 ? (
         <StepCard
           title="Concept Studio"
-          hint="Lock the ideas you want to keep, reorder or duplicate concepts, and use AI only where you choose. Text-only — nothing here generates images."
+          hint="Lock the ideas you want to keep, reorder or duplicate concepts, and use AI only where you choose. AI suggestions are optional and text-only — nothing here generates images or costs anything. Finalise concepts before paid image generation in Sticker Studio."
           action={
             <div className="flex flex-wrap gap-2">
               <Button
@@ -2754,7 +2761,7 @@ function StickerLabBuilder() {
       {step === 4 ? (
         <StepCard
           title="Sticker Studio"
-          hint="Generate one test sticker, pick specific stickers, or generate all remaining. Each generated sticker runs image generation, background removal and a server-side transparency check."
+          hint="Generate one test sticker, pick specific stickers, or generate all remaining. Each generated sticker runs image generation, background removal and a server-side transparency check. Successful generations are kept in Version History, and anything marked “Live on Telegram” is protected from accidental regeneration."
           action={
             <Button
               type="button"
@@ -3319,8 +3326,8 @@ function StickerLabBuilder() {
 
       {step === 5 ? (
         <StepCard
-          title="Review & publish"
-          hint="Check readiness, publish one Telegram sticker set for this pack, then send it to this project's communities."
+          title="Quality & Release"
+          hint="In order: quality checks → export (optional) → Telegram pack → communities → Sticker Drops."
         >
 
           <section className="cartel-panel mb-6 rounded-lg p-4">
