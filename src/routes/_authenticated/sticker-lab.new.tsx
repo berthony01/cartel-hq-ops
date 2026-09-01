@@ -1723,10 +1723,12 @@ function StickerLabBuilder() {
 
       <Stepper current={step} onSelect={setStep} />
 
+      <StepGuide step={step} />
+
       {step === 1 ? (
         <StepCard
-          title="Character Reference"
-          hint="Stored privately in this project's Asset Vault. Sticker generation uses this project's Brand Kit when one is saved, plus the selected or available project reference assets."
+          title="Character & Brand"
+          hint="Blueprint, part 1. Character Lock lives here. References are stored privately in this project's Asset Vault, and generation uses this project's Brand Kit when one is saved, plus the selected or available project reference assets."
         >
           <div className="grid gap-6 md:grid-cols-2 [&>*]:min-w-0">
             <div>
