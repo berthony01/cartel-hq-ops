@@ -19,6 +19,7 @@ No secrets belong in this directory. Runtime credentials and API keys must remai
 | --- | ---: | :---: | --- |
 | sticker-ai | 9 | true | `2ea61be3e8205fba5f7bdb28288524f2e8848fe828f896af0c080d3882cfdd2f` |
 | sticker-motion-ai | 2 | true | `dbf96b1b7751f2c3fae6ab1816b7e1b589ef450c6f7beb8b2e275af99838328a` |
+| sticker-motion-telegram | 2 | true | `24e42ecc10067c5bae27307694d72f0d8cb955ccdd9da7dc3aa9ce2e14cbb08b` |
 | telegram-stickers | 6 | true | `d7d60a12cf98ca9d9313fff32102de6cc10319526e80d1cff100f21523224208` |
 | telegram-link | 3 | true | `9996641ed725ff32335ca24f576396856191fdf390bbaf622ae6ef688508e486` |
 | telegram-webhook | 45 | false | `214c3f87cfc2a1b3601e3c4b24f47314e30980ab7a817a95bcc84e4c016fbac7` |
