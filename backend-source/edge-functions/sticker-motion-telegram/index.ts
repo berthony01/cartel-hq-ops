@@ -227,6 +227,63 @@ function ccTask(job: Json, name: string, operation: string): CcTask | null {
   );
 }
 
+/**
+ * R3 — the SINGLE CloudConvert `/jobs` create implementation.
+ *
+ * Both the ordinary fal -> CloudConvert progression and the explicit
+ * `retry_normalization` recovery call this exact function, so the fixed FFmpeg
+ * contract and the deterministic `cartelhq-motion-telegram-<aiJobId>` tag can
+ * never diverge. Callers must already own the active job row / stage claim:
+ * this function performs no claiming of its own and never retries.
+ */
+async function createCloudConvertJob(
+  ccKey: string,
+  aiJobId: string,
+  alphaUrl: string,
+): Promise<{ ok: true; ccJobId: string; tag: string } | { ok: false; message: string }> {
+  const tag = `cartelhq-motion-telegram-${aiJobId}`;
+  const create = await ccFetch("/jobs", ccKey, {
+    method: "POST",
+    body: JSON.stringify({
+      tag,
+      tasks: {
+        "import-motion": { operation: "import/url", url: alphaUrl, filename: "motion-alpha.webm" },
+        "normalize-motion": {
+          operation: "command",
+          input: "import-motion",
+          engine: "ffmpeg",
+          command: "ffmpeg",
+          arguments: FFMPEG_ARGUMENTS,
+        },
+        "metadata-motion": { operation: "metadata", input: "normalize-motion" },
+        "export-motion": { operation: "export/url", input: "normalize-motion" },
+      },
+    }),
+  });
+  if (!create.ok) return { ok: false, message: create.message };
+  const ccJobId = str(asObject(create.payload.data).id);
+  if (!ccJobId) return { ok: false, message: "CloudConvert returned no job identifier." };
+  return { ok: true, ccJobId, tag };
+}
+
+/**
+ * Failure codes that prove fal background removal already completed and the
+ * failure happened strictly DOWNSTREAM of fal. Only these are eligible for
+ * normalization-only recovery. fal submission/processing failures, source URL
+ * failures and pre-fal interruptions are deliberately excluded.
+ */
+const NORMALIZATION_RETRYABLE_CODES = [
+  "CLOUDCONVERT_START_FAILED",
+  "CLOUDCONVERT_FAILED",
+  "TELEGRAM_DOWNLOAD_FAILED",
+  "TELEGRAM_VALIDATION_FAILED",
+] as const;
+
+function isNormalizationRetryable(code: unknown): boolean {
+  return typeof code === "string" && (NORMALIZATION_RETRYABLE_CODES as readonly string[]).includes(code);
+}
+
+
 /* ------------------------------------------------------------------ server */
 
 Deno.serve(async (req: Request) => {
