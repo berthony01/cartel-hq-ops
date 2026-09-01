@@ -3549,47 +3549,50 @@ function StickerLabBuilder() {
                 </Button>
               </div>
             </div>
-
-            <details className="mt-3 rounded-md border border-border/70 bg-background/30 p-3">
-              <summary className="min-h-9 cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                Verification detail
-              </summary>
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4 [&>*]:min-w-0">
-                <SummaryStat
-                  label="Backend ready"
-                  value={`${generatedCount}/${draft.concepts.length}`}
-                  tone={allReady ? "green" : "muted"}
-                />
-                <SummaryStat
-                  label="Backend transparency verified"
-                  value={`${transparentCount}/${draft.concepts.length}`}
-                  tone={
-                    transparentCount === draft.concepts.length && draft.concepts.length > 0
-                      ? "green"
-                      : "muted"
-                  }
-                />
-                <SummaryStat
-                  label="Browser alpha verified"
-                  value={`${browserVerifiedCount}/${draft.concepts.length}`}
-                  tone={
-                    browserVerifiedCount === draft.concepts.length && draft.concepts.length > 0
-                      ? "green"
-                      : "muted"
-                  }
-                />
-                <SummaryStat
-                  label="Telegram cutout verified"
-                  value={`${cutoutVerifiedCount}/${draft.concepts.length}`}
-                  tone={
-                    cutoutVerifiedCount === draft.concepts.length && draft.concepts.length > 0
-                      ? "green"
-                      : "muted"
-                  }
-                />
-              </div>
-            </details>
           </section>
+
+          <section className="cartel-panel mb-6 rounded-lg p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              What to do now
+            </p>
+            <p className="mt-1 text-sm font-semibold text-foreground">{releaseAdvice.title}</p>
+            <p className="mt-1 max-w-prose text-xs text-muted-foreground">{releaseAdvice.body}</p>
+            {releaseAdvice.cta === "sticker-studio" ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-3 min-h-11"
+                onClick={() => setStep(4)}
+              >
+                Open Sticker Studio
+              </Button>
+            ) : releaseAdvice.cta === "telegram" ? (
+              <Button asChild variant="outline" className="mt-3 min-h-11">
+                <Link to="/telegram">Open Community Command</Link>
+              </Button>
+            ) : releaseAdvice.cta === "drops" ? (
+              <Button asChild variant="outline" className="mt-3 min-h-11">
+                <Link to="/distribution" search={packId ? { pack: packId } : undefined}>
+                  Manage Sticker Drops
+                </Link>
+              </Button>
+            ) : releaseAdvice.cta === "lifecycle" ? (
+              <Button
+                type="button"
+                className="mt-3 min-h-11"
+                disabled={!lifecycleEnabled || lifecycleBusy}
+                onClick={runLifecycleAction}
+              >
+                {lifecycleBusy ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Send className="size-4" aria-hidden="true" />
+                )}
+                {lifecycleLabel}
+              </Button>
+            ) : null}
+          </section>
+
 
 
           {!exportReady ? (
