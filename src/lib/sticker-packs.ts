@@ -232,6 +232,15 @@ export type AiJobRow = {
    * caller deriving current-image state must exclude them.
    */
   is_candidate: boolean;
+  /**
+   * A/B/C Variations — true when this job generates a review-only alternate
+   * take. Like candidates, variation jobs never change the current image.
+   */
+  is_variation: boolean;
+  /** Variation round this job belongs to, when it is a variation job. */
+  variation_group_id: string | null;
+  /** "A" | "B" | "C" for a variation job, otherwise null. */
+  variation_label: string | null;
 };
 
 /**
