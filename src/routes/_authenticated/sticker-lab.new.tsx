@@ -3503,9 +3503,19 @@ function StickerLabBuilder() {
                   !motionQuery.isFetching &&
                   motionState === undefined);
               const motionCurrent = currentMotionVersion(motionState);
+              // "No motion yet" must never be shown while motion state is still
+              // being read — unknown stays unknown.
+              const motionStateLoading =
+                !!stickerId &&
+                !motionStateError &&
+                motionState === undefined &&
+                (motionQuery.isPending || motionQuery.isFetching);
               const motionSummary: { label: string; tone: "gold" | "green" | "red" | "muted" } =
                 motionStateError
                   ? { label: "Status unavailable", tone: "muted" }
+                  : motionStateLoading
+                    ? { label: "Checking…", tone: "muted" }
+
                   : motionState?.releaseVariant === "motion"
                     ? { label: "Motion live", tone: "green" }
                     : motionCurrent?.telegramAssetId
