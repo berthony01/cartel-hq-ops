@@ -3214,6 +3214,26 @@ function StickerLabBuilder() {
                         !(!!v.storagePath && v.storagePath === preview?.storagePath),
                     ) ?? null)
                   : null;
+              /**
+               * A/B/C round state and the newest durable take per label.
+               * Review-only: none of this changes the current image.
+               */
+              const varRound = variationRoundFor(stickerId);
+              const variationVersions = stickerVersions.filter((v) =>
+                isVariationVersionOrigin(v.origin),
+              );
+              const latestVariationGroupId =
+                varRound.groupId ?? variationVersions[0]?.variationGroupId ?? null;
+              const variationTakes = (["A", "B", "C"] as const).map((label) => ({
+                label,
+                version:
+                  variationVersions.find(
+                    (v) =>
+                      v.variationLabel === label &&
+                      (!latestVariationGroupId || v.variationGroupId === latestVariationGroupId),
+                  ) ?? null,
+              }));
+              const hasVariationTakes = variationTakes.some((t) => t.version);
               return (
                 <li key={c.id} className="cartel-panel rounded-lg p-2.5 sm:p-4">
                   <div className="mb-3 flex items-center justify-between gap-2">
