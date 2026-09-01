@@ -274,6 +274,7 @@ function launchWatchKeyboard(
   remindersEnabled: boolean,
   canRewatch: boolean,
   profile?: { website_url?: unknown; telegram_url?: unknown; x_url?: unknown } | null,
+  updatesEnabled?: boolean,
 ) {
   const rows: Array<Array<Record<string, string>>> = [];
   if (watching) {
@@ -282,6 +283,12 @@ function launchWatchKeyboard(
       remindersEnabled
         ? { text: "🔇 Mute countdowns", callback_data: `ln_reminders_off_${token}` }
         : { text: "⏳ Enable countdowns", callback_data: `ln_reminders_on_${token}` },
+    ]);
+    // Project updates are a SEPARATE preference from countdown reminders.
+    rows.push([
+      updatesEnabled === true
+        ? { text: "🔇 Mute project updates", callback_data: `ln_updates_off_${token}` }
+        : { text: "📣 Enable project updates", callback_data: `ln_updates_on_${token}` },
     ]);
   } else if (canRewatch) {
     rows.push([{ text: "🔔 Watch again", callback_data: `lw_rewatch_${token}` }]);
@@ -352,7 +359,7 @@ Deno.serve(async (req: Request) => {
     `<b>🔔 LAUNCH WATCH</b>\n\n<b>${escapeHtml(String(profile?.project_name ?? "Project"))}</b>\n${escapeHtml(String(launch.token_name ?? ""))} • ${escapeHtml(String(launch.ticker ?? ""))} • ${escapeHtml(String(launch.chain ?? ""))}\nStatus: ${escapeHtml(LAUNCH_STATUS_LABELS[String(launch.status)] ?? String(launch.status))}`;
 
   const launchWatchDisclaimer =
-    `\n\nWhile you are watching, this bot can send you a controlled <b>24-hour</b> and <b>1-hour</b> countdown reminder, the <b>official-contract Verified Launch Packet</b>, and a <b>launch-live alert</b>. Nothing else is sent.\n\nYou can mute the countdowns or stop watching at any time with the buttons below.\n\nThis is not a safety check, audit, verification or endorsement of any token.`;
+    `\n\nWhile you are watching, this bot can send you:\n• a controlled <b>24-hour</b> and <b>1-hour</b> countdown reminder\n• the <b>official-contract Verified Launch Packet</b>\n• the <b>launch-live alert</b>\n• <b>project updates</b> sent by the authenticated project team\n\nYou can mute the countdowns, mute project updates, or stop watching at any time with the buttons below. Each of those is a separate choice.\n\nThis is not a safety check, audit, verification or endorsement of any token.`;
 
   const isHttpUrl = (value: unknown): value is string => {
     if (typeof value !== "string" || !value.trim()) return false;
@@ -444,7 +451,7 @@ Deno.serve(async (req: Request) => {
   const readLaunchWatchRow = async (launchId: string, telegramUserId: number) => {
     const { data, error } = await admin
       .from("launch_watch_subscriptions")
-      .select("id,is_active,reminders_enabled")
+      .select("id,is_active,reminders_enabled,updates_enabled")
       .eq("launch_id", launchId)
       .eq("telegram_user_id", telegramUserId)
       .maybeSingle();
@@ -478,27 +485,42 @@ Deno.serve(async (req: Request) => {
     if (error) throw new Error("Could not update countdown reminder preference.");
   };
 
+  /** Explicit project-update preference toggle for an already-active watcher. */
+  const setLaunchWatchUpdates = async (id: string, enabled: boolean, now: string) => {
+    const { error } = await admin
+      .from("launch_watch_subscriptions")
+      .update({ updates_enabled: enabled, last_interaction_at: now })
+      .eq("id", id);
+    if (error) throw new Error("Could not update project update preference.");
+  };
+
   type LaunchWatchOutcome = "subscribed" | "reactivated" | "already_active";
 
   /**
    * Idempotent subscribe / reactivate. Never creates a duplicate row: a lost
    * race against a simultaneous deep link surfaces as unique violation 23505,
    * which is resolved by refetching and applying the normal patch. New rows
-   * take the database default reminders_enabled = true.
+   * take the database defaults reminders_enabled = true and
+   * updates_enabled = true; neither is forced explicitly here.
    */
   const launchWatchSubscribe = async (
     launchId: string,
     telegramUserId: number,
-  ): Promise<{ outcome: LaunchWatchOutcome; remindersEnabled: boolean; subscriptionId: string | null }> => {
+  ): Promise<{
+    outcome: LaunchWatchOutcome;
+    remindersEnabled: boolean;
+    updatesEnabled: boolean;
+    subscriptionId: string | null;
+  }> => {
     const now = new Date().toISOString();
     const existing = await readLaunchWatchRow(launchId, telegramUserId);
     if (existing?.id) {
       if (existing.is_active) {
         await touchLaunchWatchRow(existing.id, now);
-        return { outcome: "already_active", remindersEnabled: existing.reminders_enabled !== false, subscriptionId: String(existing.id) };
+        return { outcome: "already_active", remindersEnabled: existing.reminders_enabled !== false, updatesEnabled: existing.updates_enabled === true, subscriptionId: String(existing.id) };
       }
       await reactivateLaunchWatchRow(existing.id, now);
-      return { outcome: "reactivated", remindersEnabled: existing.reminders_enabled !== false, subscriptionId: String(existing.id) };
+      return { outcome: "reactivated", remindersEnabled: existing.reminders_enabled !== false, updatesEnabled: existing.updates_enabled === true, subscriptionId: String(existing.id) };
     }
 
     const { data: inserted, error: insertError } = await admin.from("launch_watch_subscriptions").insert({
@@ -517,13 +539,13 @@ Deno.serve(async (req: Request) => {
       if (!raced?.id) throw new Error("Could not save launch watch subscription.");
       if (raced.is_active) {
         await touchLaunchWatchRow(raced.id, now);
-        return { outcome: "already_active", remindersEnabled: raced.reminders_enabled !== false, subscriptionId: String(raced.id) };
+        return { outcome: "already_active", remindersEnabled: raced.reminders_enabled !== false, updatesEnabled: raced.updates_enabled === true, subscriptionId: String(raced.id) };
       }
       await reactivateLaunchWatchRow(raced.id, now);
-      return { outcome: "reactivated", remindersEnabled: raced.reminders_enabled !== false, subscriptionId: String(raced.id) };
+      return { outcome: "reactivated", remindersEnabled: raced.reminders_enabled !== false, updatesEnabled: raced.updates_enabled === true, subscriptionId: String(raced.id) };
     }
 
-    return { outcome: "subscribed", remindersEnabled: true, subscriptionId: inserted?.id ? String(inserted.id) : null };
+    return { outcome: "subscribed", remindersEnabled: true, updatesEnabled: true, subscriptionId: inserted?.id ? String(inserted.id) : null };
   };
 
   /**
@@ -940,9 +962,16 @@ Deno.serve(async (req: Request) => {
       const lwRewatch = callbackData.match(/^lw_rewatch_([a-f0-9]{24})$/);
       const lnRemindersOff = callbackData.match(/^ln_reminders_off_([a-f0-9]{24})$/);
       const lnRemindersOn = callbackData.match(/^ln_reminders_on_([a-f0-9]{24})$/);
-      if (lwUnwatch || lwRewatch || lnRemindersOff || lnRemindersOn) {
+      const lnUpdatesOff = callbackData.match(/^ln_updates_off_([a-f0-9]{24})$/);
+      const lnUpdatesOn = callbackData.match(/^ln_updates_on_([a-f0-9]{24})$/);
+      if (lwUnwatch || lwRewatch || lnRemindersOff || lnRemindersOn || lnUpdatesOff || lnUpdatesOn) {
         const token = String(
-          lwUnwatch?.[1] ?? lwRewatch?.[1] ?? lnRemindersOff?.[1] ?? lnRemindersOn?.[1],
+          lwUnwatch?.[1] ??
+            lwRewatch?.[1] ??
+            lnRemindersOff?.[1] ??
+            lnRemindersOn?.[1] ??
+            lnUpdatesOff?.[1] ??
+            lnUpdatesOn?.[1],
         );
         const resolved = await resolveLaunchWatch(token);
         if (!resolved) {
@@ -957,14 +986,51 @@ Deno.serve(async (req: Request) => {
           text: string,
           watching: boolean,
           remindersEnabled: boolean,
+          updatesEnabled: boolean,
         ) => {
-          const markup = launchWatchKeyboard(token, watching, remindersEnabled, rewatchAllowed, profile);
+          const markup = launchWatchKeyboard(
+            token,
+            watching,
+            remindersEnabled,
+            rewatchAllowed,
+            profile,
+            updatesEnabled,
+          );
           if (callback.message?.message_id) {
             await editMessage(TELEGRAM_BOT_TOKEN, callbackChatId, Number(callback.message.message_id), text, markup);
           } else {
             await sendMessage(TELEGRAM_BOT_TOKEN, callbackChatId, text, { parse_mode: "HTML", reply_markup: markup });
           }
         };
+
+        if (lnUpdatesOff || lnUpdatesOn) {
+          const enable = Boolean(lnUpdatesOn);
+          const existing = await readLaunchWatchRow(launch.id, telegramUserId);
+          if (!existing?.id || existing.is_active !== true) {
+            await answerCallback(
+              TELEGRAM_BOT_TOKEN,
+              callback.id,
+              "You are not currently watching this launch.",
+            );
+            return json({ ok: true });
+          }
+          await setLaunchWatchUpdates(existing.id, enable, new Date().toISOString());
+          await answerCallback(
+            TELEGRAM_BOT_TOKEN,
+            callback.id,
+            enable ? "Project updates enabled." : "Project updates muted.",
+          );
+          const body = enable
+            ? "📣 Project updates are on. The project team can send you occasional updates about this launch."
+            : "🔇 Project updates are muted. You will still get your countdown reminders (if enabled), the official-contract Verified Launch Packet and the launch-live alert while you are watching.";
+          await renderLaunchWatch(
+            `${launchWatchIntro(launch, profile)}\n\n${body}`,
+            true,
+            existing.reminders_enabled !== false,
+            enable,
+          );
+          return json({ ok: true });
+        }
 
         if (lnRemindersOff || lnRemindersOn) {
           const enable = Boolean(lnRemindersOn);
@@ -986,7 +1052,12 @@ Deno.serve(async (req: Request) => {
               "Countdown reminders have ended for this launch.",
             );
             const endedText = `${launchWatchIntro(launch, profile)}\n\n⏳ Countdown reminders can no longer be enabled for this launch. You are still watching it.`;
-            await renderLaunchWatch(endedText, true, existing.reminders_enabled !== false);
+            await renderLaunchWatch(
+              endedText,
+              true,
+              existing.reminders_enabled !== false,
+              existing.updates_enabled === true,
+            );
             return json({ ok: true });
           }
           await setLaunchWatchReminders(existing.id, enable, new Date().toISOString());
@@ -998,11 +1069,17 @@ Deno.serve(async (req: Request) => {
           const body = enable
             ? "⏳ Countdown reminders are on. You will get the 24-hour and 1-hour reminders, plus the official-contract packet and the launch-live alert."
             : "🔇 Countdown reminders are muted. You will still get the official-contract Verified Launch Packet and the launch-live alert while you are watching.";
-          await renderLaunchWatch(`${launchWatchIntro(launch, profile)}\n\n${body}`, true, enable);
+          await renderLaunchWatch(
+            `${launchWatchIntro(launch, profile)}\n\n${body}`,
+            true,
+            enable,
+            existing.updates_enabled === true,
+          );
           return json({ ok: true });
         }
 
         if (lwUnwatch) {
+          const priorRow = await readLaunchWatchRow(launch.id, telegramUserId);
           const outcome = await launchWatchUnsubscribe(launch.id, telegramUserId);
           const answer =
             outcome === "not_found"
@@ -1015,7 +1092,12 @@ Deno.serve(async (req: Request) => {
             outcome === "not_found"
               ? "🔕 You are not currently watching this launch. No Launch Watch messages will be sent to you."
               : "🔕 You are no longer watching this launch. No further Launch Watch messages will be sent to you.";
-          await renderLaunchWatch(`${launchWatchIntro(launch, profile)}\n\n${body}`, false, true);
+          await renderLaunchWatch(
+            `${launchWatchIntro(launch, profile)}\n\n${body}`,
+            false,
+            priorRow?.reminders_enabled !== false,
+            priorRow?.updates_enabled === true,
+          );
           return json({ ok: true });
         }
 
@@ -1031,7 +1113,7 @@ Deno.serve(async (req: Request) => {
             ? verifiedLaunchPacket(launch, profile)
             : "";
         const text = `${launchWatchIntro(launch, profile)}\n\n🔔 You are watching this launch again.${launchWatchDisclaimer}${packet}`;
-        await renderLaunchWatch(text, true, rewatched.remindersEnabled);
+        await renderLaunchWatch(text, true, rewatched.remindersEnabled, rewatched.updatesEnabled);
         return json({ ok: true });
       }
 
@@ -1469,7 +1551,14 @@ Deno.serve(async (req: Request) => {
         `${launchWatchIntro(launch, profile)}\n\n${line}${launchWatchDisclaimer}${packet}`,
         {
           parse_mode: "HTML",
-          reply_markup: launchWatchKeyboard(token, true, result.remindersEnabled, true, profile),
+          reply_markup: launchWatchKeyboard(
+            token,
+            true,
+            result.remindersEnabled,
+            true,
+            profile,
+            result.updatesEnabled,
+          ),
         },
       );
       await recordLaunchWatchConfirmation(result.subscriptionId, confirmationAttemptedAt, confirmation);
