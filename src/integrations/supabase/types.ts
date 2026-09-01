@@ -1357,6 +1357,7 @@ export type Database = {
           status: string
           telegram_file_id: string | null
           telegram_motion_file_id: string | null
+          telegram_motion_version_id: string | null
           telegram_publish_error: string | null
           telegram_published_at: string | null
           telegram_static_file_id: string | null
@@ -1378,6 +1379,7 @@ export type Database = {
           status?: string
           telegram_file_id?: string | null
           telegram_motion_file_id?: string | null
+          telegram_motion_version_id?: string | null
           telegram_publish_error?: string | null
           telegram_published_at?: string | null
           telegram_static_file_id?: string | null
@@ -1399,6 +1401,7 @@ export type Database = {
           status?: string
           telegram_file_id?: string | null
           telegram_motion_file_id?: string | null
+          telegram_motion_version_id?: string | null
           telegram_publish_error?: string | null
           telegram_published_at?: string | null
           telegram_static_file_id?: string | null
@@ -1424,6 +1427,13 @@ export type Database = {
             columns: ["pack_id"]
             isOneToOne: false
             referencedRelation: "sticker_packs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stickers_telegram_motion_version_id_fkey"
+            columns: ["telegram_motion_version_id"]
+            isOneToOne: false
+            referencedRelation: "sticker_motion_versions"
             referencedColumns: ["id"]
           },
         ]

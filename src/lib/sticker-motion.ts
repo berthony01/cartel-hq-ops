@@ -42,6 +42,9 @@ export type StickerMotionState = {
   releaseVariant: ReleaseVariant;
   /** Durable `stickers.image_asset_id` — the authoritative Static Current. */
   currentStaticAssetId: string | null;
+  /** Durable `stickers.telegram_motion_version_id` — the motion version currently released. */
+  releasedMotionVersionId: string | null;
+
   /** Newest motion version first. */
   versions: StickerMotionVersion[];
 };
@@ -68,7 +71,7 @@ export async function loadStickerMotionState(
 
   const { data: stickerRows, error: stickerError } = await supabase
     .from("stickers")
-    .select("id,current_motion_version_id,release_variant,image_asset_id")
+    .select("id,current_motion_version_id,release_variant,image_asset_id,telegram_motion_version_id")
     .in("id", ids);
   if (stickerError) throw stickerError;
 
@@ -77,9 +80,11 @@ export async function loadStickerMotionState(
       currentMotionVersionId: row.current_motion_version_id ?? null,
       releaseVariant: asReleaseVariant(row.release_variant ?? null),
       currentStaticAssetId: row.image_asset_id ?? null,
+      releasedMotionVersionId: row.telegram_motion_version_id ?? null,
       versions: [],
     };
   }
+
 
   const { data: motionRows, error: motionError } = await supabase
     .from("sticker_motion_versions")

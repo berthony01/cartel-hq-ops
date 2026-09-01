@@ -617,6 +617,9 @@ Deno.serve(async (req: Request) => {
       const expectedOldMotionVersionId = String(sticker.current_motion_version_id);
       const expectedOldFileId = oldFileId;
       const expectedOldVariant = sticker.release_variant ? String(sticker.release_variant) : null;
+      const expectedOldReleasedMotionVersionId = sticker.telegram_motion_version_id
+        ? String(sticker.telegram_motion_version_id)
+        : null;
 
       const existingSet = await maybeGetStickerSet(TELEGRAM_BOT_TOKEN, setName);
       const setStickers = Array.isArray(existingSet?.stickers) ? existingSet.stickers : [];
@@ -624,14 +627,11 @@ Deno.serve(async (req: Request) => {
         return respond({ error: "TELEGRAM_STATE_MISMATCH", message: "CARTEL HQ could not confirm this sticker inside its Telegram set. Refresh the Telegram status before releasing the motion." }, 409);
       }
 
-      // Idempotency: this exact motion file is already the live Telegram sticker.
-      if (
-        expectedOldVariant === "motion" &&
-        motionMetadata["telegram_accepted"] === true &&
-        String(motionMetadata["telegram_file_id"] ?? "") === oldFileId
-      ) {
+      // Idempotency: this exact motion version is already the live Telegram release.
+      if (expectedOldVariant === "motion" && expectedOldReleasedMotionVersionId === motionVersionId) {
         return respond({ status: "unchanged", releaseVariant: "motion", telegramReplaced: false, stickerId, motionVersionId, setName, setUrl: pack.telegram_set_url ?? undefined, bot });
       }
+
 
       const { data: connection } = await admin.from("telegram_connections").select("*").eq("user_id", user.id).maybeSingle();
       if (!connection?.telegram_user_id) return respond({ error: "OWNER_ID_REQUIRED", message: "Telegram owner user ID is required before releasing a motion sticker." }, 400);
@@ -658,7 +658,7 @@ Deno.serve(async (req: Request) => {
       }
 
       // Last check before the only destructive Telegram call.
-      const { data: recheckSticker } = await admin.from("stickers").select("image_asset_id,telegram_file_id,current_motion_version_id,release_variant").eq("id", stickerId).maybeSingle();
+      const { data: recheckSticker } = await admin.from("stickers").select("image_asset_id,telegram_file_id,current_motion_version_id,release_variant,telegram_motion_version_id").eq("id", stickerId).maybeSingle();
       const { data: recheckJobs } = await admin.from("ai_jobs").select("id").eq("sticker_id", stickerId).in("status", ["queued", "running"]).limit(1);
       if (
         !recheckSticker ||
@@ -666,8 +666,10 @@ Deno.serve(async (req: Request) => {
         (recheckSticker.image_asset_id ? String(recheckSticker.image_asset_id) : null) !== expectedOldAssetId ||
         (recheckSticker.telegram_file_id ? String(recheckSticker.telegram_file_id) : null) !== expectedOldFileId ||
         (recheckSticker.current_motion_version_id ? String(recheckSticker.current_motion_version_id) : null) !== expectedOldMotionVersionId ||
-        (recheckSticker.release_variant ? String(recheckSticker.release_variant) : null) !== expectedOldVariant
+        (recheckSticker.release_variant ? String(recheckSticker.release_variant) : null) !== expectedOldVariant ||
+        (recheckSticker.telegram_motion_version_id ? String(recheckSticker.telegram_motion_version_id) : null) !== expectedOldReleasedMotionVersionId
       ) {
+
         return respond({ error: "RELEASE_STATE_CHANGED", message: "This sticker changed while the motion release was being prepared. Nothing was changed on Telegram. Refresh this pack and try again." }, 409);
       }
 
@@ -683,6 +685,7 @@ Deno.serve(async (req: Request) => {
       const motionPatch: Record<string, unknown> = {
         telegram_file_id: newFileId,
         telegram_motion_file_id: newFileId,
+        telegram_motion_version_id: motionVersionId,
         release_variant: "motion",
         status: "published",
         telegram_publish_error: null,
@@ -695,7 +698,9 @@ Deno.serve(async (req: Request) => {
       }
       let guardedUpdate = admin.from("stickers").update(motionPatch).eq("id", stickerId).eq("image_asset_id", expectedOldAssetId).eq("current_motion_version_id", expectedOldMotionVersionId).eq("telegram_file_id", expectedOldFileId);
       guardedUpdate = expectedOldVariant === null ? guardedUpdate.is("release_variant", null) : guardedUpdate.eq("release_variant", expectedOldVariant);
+      guardedUpdate = expectedOldReleasedMotionVersionId === null ? guardedUpdate.is("telegram_motion_version_id", null) : guardedUpdate.eq("telegram_motion_version_id", expectedOldReleasedMotionVersionId);
       const { data: updatedRow, error: updateError } = await guardedUpdate.select("id").maybeSingle();
+
       if (updateError || !updatedRow) {
         const dbReason = updateError ? updateError.message : "guarded update matched zero rows";
         try {

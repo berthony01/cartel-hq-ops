@@ -176,13 +176,16 @@ export function MotionStudioPanel({
     telegramBusy || telegramProviderBlocked || busy || approvingVersionId !== null;
 
   // ---- Phase C3 motion release (real Telegram replacement, no provider work)
-  const motionIsLive = state?.releaseVariant === "motion";
+  const anyMotionIsLive = state?.releaseVariant === "motion";
+  const currentMotionIsLive =
+    anyMotionIsLive && !!current && state?.releasedMotionVersionId === current.id;
   const canShowRelease =
     !!current &&
     currentIsTelegramReady &&
     currentFromCurrentStatic &&
     telegramPublished &&
-    !motionIsLive;
+    !currentMotionIsLive;
+
   const releaseDisabled =
     releasingMotion || busy || telegramBusy || approvingVersionId !== null;
 
@@ -221,9 +224,12 @@ export function MotionStudioPanel({
       <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
         Animate the approved static without replacing or damaging it. Motion keeps its own version
         history.{" "}
-        {motionIsLive
+        {currentMotionIsLive
           ? "The Current Motion is the live Telegram release for this sticker."
-          : "It stays separate from Telegram until you explicitly release motion."}
+          : anyMotionIsLive
+            ? "A different Motion version is the live Telegram release. This Current Motion stays separate until you explicitly release it."
+            : "It stays separate from Telegram until you explicitly release motion."}
+
       </p>
 
 
@@ -358,7 +364,7 @@ export function MotionStudioPanel({
           <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Telegram preparation
           </p>
-          {motionIsLive ? (
+          {currentMotionIsLive ? (
             <StatusBadge tone="green">Motion live on Telegram</StatusBadge>
           ) : currentIsTelegramReady ? (
             <StatusBadge tone="green">Telegram-ready</StatusBadge>
@@ -371,11 +377,16 @@ export function MotionStudioPanel({
             Motion.
           </p>
         ) : currentIsTelegramReady ? (
-          motionIsLive ? (
+          currentMotionIsLive ? (
             <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
               Version {current.versionNumber} is the live Telegram release for this sticker. Its
               Telegram-formatted derivative was accepted by Telegram and replaced this sticker in
               the existing set.
+            </p>
+          ) : anyMotionIsLive ? (
+            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              A different Motion version is currently live on Telegram for this sticker. Version{" "}
+              {current.versionNumber} is prepared and can replace it when you release it explicitly.
             </p>
           ) : (
             <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
@@ -384,6 +395,7 @@ export function MotionStudioPanel({
               explicitly.
             </p>
           )
+
         ) : !currentFromCurrentStatic ? (
 
           <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
@@ -453,14 +465,15 @@ export function MotionStudioPanel({
               already-prepared file. No new provider work starts.
             </p>
           </>
-        ) : current && currentIsTelegramReady && !motionIsLive && !telegramPublished ? (
+        ) : current && currentIsTelegramReady && !currentMotionIsLive && !telegramPublished ? (
           <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
             Publish the static sticker pack in Step 5 first. Releasing motion replaces an existing
             live Telegram sticker, so there must already be one to replace.
           </p>
         ) : null}
 
-        {releaseError && !motionIsLive ? (
+        {releaseError && !currentMotionIsLive ? (
+
           <p className="mt-2 text-[11px] text-signal">{releaseError}</p>
         ) : null}
       </div>
