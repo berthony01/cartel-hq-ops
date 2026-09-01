@@ -220,8 +220,12 @@ export function MotionStudioPanel({
 
       <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
         Animate the approved static without replacing or damaging it. Motion keeps its own version
-        history and only becomes the Telegram release after Motion Quality &amp; Release.
+        history.{" "}
+        {motionIsLive
+          ? "The Current Motion is the live Telegram release for this sticker."
+          : "It stays separate from Telegram until you explicitly release motion."}
       </p>
+
 
       <dl className="mt-2 space-y-0.5 text-[10px] text-muted-foreground">
         {error ? (
