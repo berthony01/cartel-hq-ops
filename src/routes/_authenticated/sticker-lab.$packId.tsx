@@ -326,9 +326,9 @@ function PackManagerPage() {
     {
       label: "Stickers",
       value: `${readyCount}/${stickers.length} ready`,
-
       hint: "Ready stickers are the ones Quality & Release can publish.",
     },
+
     {
       label: "Version history",
       value:
