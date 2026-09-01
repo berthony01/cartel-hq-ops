@@ -610,11 +610,58 @@ function StickerLabBuilder() {
    */
   const motionStickerKey = [...savedStickerIds].sort().join(",");
   const motionQuery = useQuery({
-    queryKey: ["sticker-motion", draft?.packId ?? "", motionStickerKey],
+    // `motionReadySignal` bumps when a motion clip lands so the durable version
+    // appears without a manual refresh.
+    queryKey: ["sticker-motion", draft?.packId ?? "", motionStickerKey, motionReadySignal],
     enabled: !!draft && step === 4 && savedStickerIds.length > 0,
     queryFn: () => loadStickerMotionState(savedStickerIds),
   });
   const motionBySticker = motionQuery.data ?? {};
+
+  /**
+   * Free, non-billable motion provider probe. Creates no provider task. A probe
+   * failure leaves provider status UNKNOWN — it never claims "not configured".
+   */
+  const motionConfigQuery = useQuery({
+    queryKey: ["sticker-motion-config"],
+    enabled: step === 4,
+    staleTime: 60_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    queryFn: fetchStickerMotionAiConfig,
+  });
+
+  /**
+   * Non-billable Current Motion approval. Sets only
+   * `stickers.current_motion_version_id` server-side; the browser never writes
+   * `release_variant` or any Telegram state.
+   */
+  const approveCurrentMotion = useCallback(
+    async (input: { stickerId: string; motionVersionId: string }) => {
+      const id = draft?.packId;
+      if (!workspaceId || !id) return;
+      setMotionApproveError(null);
+      setApprovingMotionVersionId(input.motionVersionId);
+      try {
+        await setCurrentStickerMotion({
+          workspaceId,
+          packId: id,
+          stickerId: input.stickerId,
+          motionVersionId: input.motionVersionId,
+        });
+        await motionQuery.refetch();
+      } catch (err) {
+        setMotionApproveError(
+          err instanceof Error ? err.message : "This motion version could not be approved.",
+        );
+      } finally {
+        setApprovingMotionVersionId(null);
+      }
+    },
+    [workspaceId, draft?.packId, motionQuery],
+  );
+
+
 
 
 
