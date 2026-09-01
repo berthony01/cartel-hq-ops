@@ -4,10 +4,11 @@ import type { MotionMode } from "@/lib/sticker-motion";
 /**
  * Thin client for the external Supabase Edge Function `sticker-motion-ai`.
  *
- * Phase B1 backend contract only — nothing in the UI calls the billable
- * `startStickerMotionGeneration` yet. The function owns the Kie API key, the
+ * `startStickerMotionGeneration` is BILLABLE and is only ever reached from the
+ * Motion Studio confirmation dialog. The function owns the Kie API key, the
  * prompt compiler, the Quick Motion preset allowlist and all privileged writes;
  * no secret and no prompt text is ever authored client-side.
+
  *
  * Motion generation is REVIEW-ONLY: it never changes the static current image,
  * `release_variant`, the current motion pointer, Telegram state or Sticker
@@ -29,8 +30,21 @@ export const STICKER_MOTION_PRESETS = [
 
 export type StickerMotionPreset = (typeof STICKER_MOTION_PRESETS)[number];
 
+/** Human labels for the eight server presets. Display only — the key is sent. */
+export const MOTION_PRESET_LABELS: Record<StickerMotionPreset, string> = {
+  blink: "Blink",
+  head_nod: "Head nod",
+  eye_glow: "Eye glow",
+  money_rain: "Money rain",
+  angry_shake: "Angry shake",
+  laugh: "Laugh",
+  bounce: "Bounce",
+  raise_cigar: "Raise cigar",
+};
+
 /** Server-enforced cap on a Custom Motion instruction. */
 export const MAX_MOTION_INSTRUCTION_LENGTH = 500;
+
 
 export type StickerMotionAiConfig = {
   configured: boolean;
@@ -144,4 +158,30 @@ export function startStickerMotionGeneration(params: {
 /** Polls an existing motion job. Read-only against the provider. */
 export function syncStickerMotionJob(aiJobId: string): Promise<StickerMotionSyncResult> {
   return invoke<StickerMotionSyncResult>({ action: "sync", aiJobId });
+}
+
+export type StickerMotionSetCurrentResult = {
+  alreadyCurrent?: boolean;
+  currentMotionVersionId: string | null;
+  /** Echoed only — this action never changes it. */
+  releaseVariant: string;
+  telegramChanged: boolean;
+  billable: boolean;
+};
+
+/**
+ * NON-BILLABLE. Approves an existing motion version as Current Motion by
+ * setting `stickers.current_motion_version_id` only. It creates no provider
+ * task, and never changes `release_variant`, the static current image, sticker
+ * or pack status, Telegram state or Sticker Drops. The server rejects a take
+ * whose source static image is no longer the sticker's current static image
+ * with `MOTION_SOURCE_STALE`.
+ */
+export function setCurrentStickerMotion(params: {
+  workspaceId: string;
+  packId: string;
+  stickerId: string;
+  motionVersionId: string;
+}): Promise<StickerMotionSetCurrentResult> {
+  return invoke<StickerMotionSetCurrentResult>({ action: "set_current", ...params });
 }

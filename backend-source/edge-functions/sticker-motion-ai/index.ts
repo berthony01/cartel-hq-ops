@@ -370,9 +370,99 @@ Deno.serve(async (req: Request) => {
   if (action === "config") {
     return respond({ configured: Boolean(KIE_API_KEY), model: MODEL, durationSeconds: 5, telegramReady: false });
   }
+
+  /* ------------------------------------------------- non-billable approval --
+   * Phase B2. Sets `stickers.current_motion_version_id` and NOTHING else. It
+   * never touches `release_variant`, `image_asset_id`, sticker/pack status,
+   * Telegram fields or Sticker Drops, and it never calls a provider.
+   * -------------------------------------------------------------------------*/
+  if (action === "set_current") {
+    const workspaceId = String(body.workspaceId ?? "");
+    const packId = String(body.packId ?? "");
+    const stickerId = String(body.stickerId ?? "");
+    const motionVersionId = String(body.motionVersionId ?? "");
+    if (!workspaceId || !packId || !stickerId || !motionVersionId) {
+      return respond({ error: "INVALID_INPUT" }, 400);
+    }
+    if (!(await isMember(workspaceId))) return respond({ error: "FORBIDDEN" }, 403);
+
+    const { data: pack } = await admin
+      .from("sticker_packs").select("id,workspace_id").eq("id", packId).maybeSingle();
+    if (!pack || pack.workspace_id !== workspaceId) return respond({ error: "PACK_NOT_FOUND" }, 404);
+
+    const { data: sticker } = await admin
+      .from("stickers")
+      .select("id,pack_id,image_asset_id,current_motion_version_id,release_variant")
+      .eq("id", stickerId).maybeSingle();
+    if (!sticker || sticker.pack_id !== packId) return respond({ error: "STICKER_NOT_FOUND" }, 404);
+    if (!sticker.image_asset_id) {
+      return respond({ error: "MOTION_SOURCE_STALE", message: "This sticker has no current static image, so a motion take cannot be approved against it." }, 409);
+    }
+
+    const { data: version } = await admin
+      .from("sticker_motion_versions")
+      .select("id,workspace_id,pack_id,sticker_id,motion_asset_id,source_static_asset_id")
+      .eq("id", motionVersionId).maybeSingle();
+    if (
+      !version ||
+      version.workspace_id !== workspaceId ||
+      version.pack_id !== packId ||
+      version.sticker_id !== stickerId
+    ) {
+      return respond({ error: "MOTION_VERSION_NOT_FOUND" }, 404);
+    }
+    if (!version.motion_asset_id) {
+      return respond({ error: "MOTION_ASSET_MISSING", message: "This motion version has no stored clip." }, 409);
+    }
+
+    const { data: motionAsset } = await admin
+      .from("media_assets").select("id,workspace_id,asset_type")
+      .eq("id", version.motion_asset_id).maybeSingle();
+    if (!motionAsset || motionAsset.workspace_id !== workspaceId || motionAsset.asset_type !== "generated_motion") {
+      return respond({ error: "MOTION_ASSET_MISSING", message: "The stored clip for this motion version is not available." }, 409);
+    }
+
+    // Lineage: a motion take may only become Current Motion while it still
+    // matches the sticker's CURRENT static image.
+    if (!version.source_static_asset_id || version.source_static_asset_id !== sticker.image_asset_id) {
+      return respond({ error: "MOTION_SOURCE_STALE", message: "This motion was generated from an earlier static version. Generate motion from the current static image before approving it." }, 409);
+    }
+
+    if (sticker.current_motion_version_id === motionVersionId) {
+      return respond({
+        alreadyCurrent: true, currentMotionVersionId: motionVersionId,
+        releaseVariant: sticker.release_variant ?? "static", telegramChanged: false, billable: false,
+      });
+    }
+
+    // Guarded on the exact static image so a concurrent static change cannot be
+    // silently overwritten by this approval.
+    const { data: updated, error: updateError } = await admin
+      .from("stickers")
+      .update({ current_motion_version_id: motionVersionId })
+      .eq("id", stickerId)
+      .eq("image_asset_id", sticker.image_asset_id)
+      .select("id,current_motion_version_id,release_variant");
+    if (updateError) {
+      return respond({ error: "MOTION_SET_CURRENT_FAILED", message: "Could not approve this motion version." }, 500);
+    }
+    if (!updated || updated.length === 0) {
+      return respond({ error: "MOTION_SOURCE_STALE", message: "The current static image changed while approving. Re-check Motion Studio before approving again." }, 409);
+    }
+
+    return respond({
+      alreadyCurrent: false,
+      currentMotionVersionId: updated[0].current_motion_version_id ?? motionVersionId,
+      releaseVariant: updated[0].release_variant ?? "static",
+      telegramChanged: false,
+      billable: false,
+    });
+  }
+
   if (!KIE_API_KEY) {
     return respond({ error: "KIE_NOT_CONFIGURED", message: "KIE_API_KEY is not configured in Supabase Edge Function secrets." }, 503);
   }
+
 
   const failJob = async (job: Record<string, unknown>, message: string, code = "PROVIDER_FAILED") => {
     await admin.from("ai_jobs").update({

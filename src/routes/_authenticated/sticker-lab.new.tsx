@@ -119,7 +119,14 @@ import {
 } from "@/components/sticker-lab/BuilderPrimitives";
 import { StepGuide } from "@/components/sticker-lab/StickerLabJourney";
 import { MotionStudioPanel } from "@/components/sticker-lab/MotionStudioPanel";
-import { loadStickerMotionState } from "@/lib/sticker-motion";
+import { loadStickerMotionState, type MotionMode } from "@/lib/sticker-motion";
+import { useStickerMotionGenerationRuntime } from "@/hooks/useStickerMotionGenerationRuntime";
+import {
+  fetchStickerMotionAiConfig,
+  setCurrentStickerMotion,
+  type StickerMotionPreset,
+} from "@/lib/sticker-motion-ai";
+
 import { Checkbox } from "@/components/ui/checkbox";
 
 
@@ -386,6 +393,24 @@ function StickerLabBuilder() {
     label: string;
   } | null>(null);
 
+  /**
+   * Phase B2 — motion generation runtime. Another fully separate store: motion
+   * is review-only, never touches the static current image, sticker/pack status,
+   * `release_variant` or Telegram, and the billable `startMotion` is only
+   * reachable from the Motion Studio confirmation dialog.
+   */
+  const {
+    motionReadySignal,
+    startMotion,
+    recoverMotion,
+    motionRunFor,
+  } = useStickerMotionGenerationRuntime({ workspaceId });
+  /** Motion version currently being approved as Current Motion (non-billable). */
+  const [approvingMotionVersionId, setApprovingMotionVersionId] = useState<string | null>(null);
+  const [motionApproveError, setMotionApproveError] = useState<string | null>(null);
+
+
+
 
   const [confirmRemaining, setConfirmRemaining] = useState(false);
   /**
@@ -585,11 +610,58 @@ function StickerLabBuilder() {
    */
   const motionStickerKey = [...savedStickerIds].sort().join(",");
   const motionQuery = useQuery({
-    queryKey: ["sticker-motion", draft?.packId ?? "", motionStickerKey],
+    // `motionReadySignal` bumps when a motion clip lands so the durable version
+    // appears without a manual refresh.
+    queryKey: ["sticker-motion", draft?.packId ?? "", motionStickerKey, motionReadySignal],
     enabled: !!draft && step === 4 && savedStickerIds.length > 0,
     queryFn: () => loadStickerMotionState(savedStickerIds),
   });
   const motionBySticker = motionQuery.data ?? {};
+
+  /**
+   * Free, non-billable motion provider probe. Creates no provider task. A probe
+   * failure leaves provider status UNKNOWN — it never claims "not configured".
+   */
+  const motionConfigQuery = useQuery({
+    queryKey: ["sticker-motion-config"],
+    enabled: step === 4,
+    staleTime: 60_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    queryFn: fetchStickerMotionAiConfig,
+  });
+
+  /**
+   * Non-billable Current Motion approval. Sets only
+   * `stickers.current_motion_version_id` server-side; the browser never writes
+   * `release_variant` or any Telegram state.
+   */
+  const approveCurrentMotion = useCallback(
+    async (input: { stickerId: string; motionVersionId: string }) => {
+      const id = draft?.packId;
+      if (!workspaceId || !id) return;
+      setMotionApproveError(null);
+      setApprovingMotionVersionId(input.motionVersionId);
+      try {
+        await setCurrentStickerMotion({
+          workspaceId,
+          packId: id,
+          stickerId: input.stickerId,
+          motionVersionId: input.motionVersionId,
+        });
+        await motionQuery.refetch();
+      } catch (err) {
+        setMotionApproveError(
+          err instanceof Error ? err.message : "This motion version could not be approved.",
+        );
+      } finally {
+        setApprovingMotionVersionId(null);
+      }
+    },
+    [workspaceId, draft?.packId, motionQuery],
+  );
+
+
 
 
 
@@ -612,7 +684,11 @@ function StickerLabBuilder() {
     // Variation recovery is read-only for the same reason: it inspects existing
     // `ai_jobs` rows and never starts a new billable round.
     void recoverVariations(packId, stickerIds);
-  }, [candidateRecoveryKey, recoverCandidates, recoverVariations]);
+    // Motion recovery is read-only too: it resumes an existing motion job and
+    // can never call `start`, so it never creates provider work.
+    void recoverMotion(packId, stickerIds);
+  }, [candidateRecoveryKey, recoverCandidates, recoverVariations, recoverMotion]);
+
 
   /**
    * Phase 4B restore state. Declared with the other top-level hooks, ABOVE every
@@ -1162,8 +1238,14 @@ function StickerLabBuilder() {
       void recoverCandidates(id, savedStickerIds, { force: true });
       // Same contract for variation rounds: reconcile only, never re-run.
       void recoverVariations(id, savedStickerIds, { force: true });
+      // Same contract for motion: reconcile the existing job only, never start
+      // provider work, then re-read durable motion history.
+      void recoverMotion(id, savedStickerIds, { force: true });
+      void motionQuery.refetch();
     }
+    void motionConfigQuery.refetch();
   };
+
 
   /* ---------------- Phase 4B: set current / restore version ---------------- */
 
@@ -3660,10 +3742,14 @@ function StickerLabBuilder() {
                     </div>
                   ) : null}
 
-                  {/* Motion Studio — read-only surface attached to the approved
-                      static. No generation, provider or Telegram behaviour. */}
+                  {/* Motion Studio — review-only motion attached to the approved
+                      static. Generation is billable and gated behind an explicit
+                      confirmation inside the panel; approval is non-billable and
+                      never touches release_variant or Telegram. */}
                   {stickerId && preview ? (
                     <MotionStudioPanel
+                      stickerId={stickerId}
+                      stickerLabel={c.label}
                       state={motionBySticker[stickerId]}
                       loading={motionQuery.isPending || motionQuery.isFetching}
                       error={
@@ -3672,8 +3758,26 @@ function StickerLabBuilder() {
                           !motionQuery.isFetching &&
                           motionBySticker[stickerId] === undefined)
                       }
+                      run={motionRunFor(stickerId)}
+                      config={motionConfigQuery.data}
+                      configLoading={motionConfigQuery.isPending || motionConfigQuery.isFetching}
+                      configError={motionConfigQuery.isError}
+                      approvingVersionId={approvingMotionVersionId}
+                      approveError={motionApproveError}
+                      onGenerate={(input: {
+                        stickerId: string;
+                        motionMode: MotionMode;
+                        motionPreset?: StickerMotionPreset;
+                        motionInstruction?: string;
+                      }) => {
+                        const id = draft.packId;
+                        if (!id) return;
+                        void startMotion({ packId: id, ...input });
+                      }}
+                      onSetCurrentMotion={(input) => void approveCurrentMotion(input)}
                     />
                   ) : null}
+
 
 
 
