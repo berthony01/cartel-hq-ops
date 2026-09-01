@@ -488,17 +488,19 @@ Deno.serve(async (req: Request) => {
       // Last check before the only destructive Telegram call. Preparation and
       // upload take time, so re-confirm nothing changed underneath us. An unused
       // uploaded file is strictly safer than mutating the live set on stale state.
-      const { data: recheckSticker } = await admin.from("stickers").select("image_asset_id,telegram_file_id,release_variant").eq("id", stickerId).maybeSingle();
+      const { data: recheckSticker } = await admin.from("stickers").select("image_asset_id,telegram_file_id,release_variant,telegram_motion_version_id").eq("id", stickerId).maybeSingle();
       const { data: recheckJobs } = await admin.from("ai_jobs").select("id").eq("sticker_id", stickerId).in("status", ["queued", "running"]).limit(1);
       const recheckAssetId = recheckSticker?.image_asset_id ? String(recheckSticker.image_asset_id) : null;
       const recheckFileId = recheckSticker?.telegram_file_id ? String(recheckSticker.telegram_file_id) : null;
       const recheckVariant = recheckSticker?.release_variant ? String(recheckSticker.release_variant) : null;
+      const recheckReleasedMotionVersionId = recheckSticker?.telegram_motion_version_id ? String(recheckSticker.telegram_motion_version_id) : null;
       if (
         !recheckSticker ||
         (recheckJobs ?? []).length ||
         recheckAssetId !== expectedOldAssetId ||
         recheckFileId !== expectedOldFileId ||
-        recheckVariant !== expectedOldVariant
+        recheckVariant !== expectedOldVariant ||
+        recheckReleasedMotionVersionId !== expectedOldReleasedMotionVersionId
       ) {
         return respond({ error: "RESTORE_STATE_CHANGED", message: "This sticker changed while the restore was being prepared. Nothing was changed on Telegram. Refresh this pack and try the restore again." }, 409);
       }
