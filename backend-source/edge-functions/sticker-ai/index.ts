@@ -656,7 +656,6 @@ Deno.serve(async (req: Request) => {
       }
       return respond({ aiJobId: job.id, status: "running", model: MODEL, ...(isCandidate ? { mode: "candidate" } : {}) });
 
-      return respond({ aiJobId: job.id, status: "running", model: MODEL });
     }
 
     if (action === "sync") {
