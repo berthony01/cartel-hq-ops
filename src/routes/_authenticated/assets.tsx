@@ -286,49 +286,75 @@ function AssetsPage() {
               )
             ) : (
               <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5 [&>*]:min-w-0">
-                {assets.map((asset) => (
-                  <li key={asset.id} className="cartel-panel rise-in rounded-lg p-2.5 sm:p-3">
-                    <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md border border-border bg-background/40">
-                      {urls[asset.storage_path] ? (
-                        <img
-                          src={urls[asset.storage_path]}
-                          alt={`${ASSET_TYPE_LABELS[asset.asset_type as AssetType] ?? asset.asset_type} asset`}
-                          className="max-h-full max-w-full object-contain"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground">Loading preview…</span>
-                      )}
-                    </div>
-                    <p className="mt-2 truncate text-[11px] uppercase tracking-wider text-gold">
-                      {ASSET_TYPE_LABELS[asset.asset_type as AssetType] ?? asset.asset_type}
-                    </p>
-                    <p className="truncate text-[11px] text-muted-foreground">
-                      {asset.width && asset.height ? `${asset.width}×${asset.height} · ` : ""}
-                      {formatBytes(asset.file_size_bytes)}
-                    </p>
-                    <div className="mt-2 flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="min-h-10 flex-1 text-xs"
-                        onClick={() => void download(asset)}
-                      >
-                        <Download className="size-3.5" aria-hidden="true" />
-                        Open
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="min-h-10 min-w-10 text-signal hover:text-signal"
-                        aria-label="Delete asset"
-                        onClick={() => setPendingDelete(asset)}
-                      >
-                        <Trash2 className="size-4" aria-hidden="true" />
-                      </Button>
-                    </div>
-                  </li>
-                ))}
+                {assets.map((asset) => {
+                  const label = assetTypeLabel(asset.asset_type);
+                  const managed = isManagedAsset(asset.asset_type);
+                  const isVideo = (asset.mime_type ?? "").startsWith("video/");
+                  return (
+                    <li key={asset.id} className="cartel-panel rise-in rounded-lg p-2.5 sm:p-3">
+                      <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md border border-border bg-background/40">
+                        {urls[asset.storage_path] ? (
+                          isVideo ? (
+                            <video
+                              src={urls[asset.storage_path]}
+                              controls
+                              muted
+                              loop
+                              playsInline
+                              preload="metadata"
+                              className="max-h-full max-w-full object-contain"
+                            />
+                          ) : (
+                            <img
+                              src={urls[asset.storage_path]}
+                              alt={`${label} asset`}
+                              className="max-h-full max-w-full object-contain"
+                              loading="lazy"
+                            />
+                          )
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">
+                            Loading preview…
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-2 truncate text-[11px] uppercase tracking-wider text-gold">
+                        {label}
+                      </p>
+                      <p className="truncate text-[11px] text-muted-foreground">
+                        {asset.width && asset.height ? `${asset.width}×${asset.height} · ` : ""}
+                        {formatBytes(asset.file_size_bytes)}
+                      </p>
+                      {managed ? (
+                        <p className="mt-1 truncate text-[10px] text-muted-foreground">
+                          Managed by Sticker Lab
+                        </p>
+                      ) : null}
+                      <div className="mt-2 flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="min-h-10 flex-1 text-xs"
+                          onClick={() => void download(asset)}
+                        >
+                          <Download className="size-3.5" aria-hidden="true" />
+                          Open
+                        </Button>
+                        {managed ? null : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="min-h-10 min-w-10 text-signal hover:text-signal"
+                            aria-label="Delete asset"
+                            onClick={() => setPendingDelete(asset)}
+                          >
+                            <Trash2 className="size-4" aria-hidden="true" />
+                          </Button>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </Section>
