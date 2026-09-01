@@ -3700,7 +3700,8 @@ function StickerLabBuilder() {
                             !configured ||
                             saving ||
                             !stickerId ||
-                            isCandidateBusy(candStage) ||
+                            candidateBusy ||
+                            variationBusy ||
                             restoringStickerId !== null
                           }
                           onClick={() =>
@@ -3725,7 +3726,7 @@ function StickerLabBuilder() {
                         size="sm"
                         variant={preview ? "outline" : "default"}
                         className="min-h-10 flex-1"
-                        disabled={!configured || busy(stage) || saving}
+                        disabled={!configured || busy(stage) || saving || variationBusy}
                         onClick={() => void generateOne(c.id)}
                       >
                         {busy(stage) ? (
