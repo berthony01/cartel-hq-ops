@@ -106,7 +106,9 @@ export function MotionStudioPanel({
   onGenerate,
   onSetCurrentMotion,
   onPrepareTelegram,
+  onRetryNormalization,
   onReleaseMotion,
+
 }: {
   stickerId: string;
   stickerLabel: string;
