@@ -1352,6 +1352,126 @@ function StickerLabBuilder() {
     if (lifecycleMode === "retry") void doDistribute(failedTargetIds);
   };
 
+  /* -------- Quality & Release orientation (presentation-derived, no new queries) -------- */
+  const totalStickers = draft.concepts.length;
+  const qualityPathState = checksRunning ? "Checking" : exportReady ? "Ready" : "Needs review";
+  const telegramPathState = allPublished
+    ? "Live"
+    : partiallyPublished || telegramSetExists
+      ? "Partly published"
+      : "Not published";
+  const communityPathState =
+    telegramGroup.connectedGroupCount === 0
+      ? "No community"
+      : selectedGroupIds.length === 0
+        ? "Select targets"
+        : !groupsSelectedAndReady
+          ? "Needs setup"
+          : `${selectedGroupIds.length} selected`;
+  const dropsPathState = dropStatusQuery.isPending
+    ? "Checking"
+    : dropStatusQuery.isError
+      ? "Unavailable"
+      : dropKillSwitch && packSchedules.length > 0
+        ? "Emergency pause"
+        : packSchedules.length === 0
+          ? "Not configured"
+          : "Configured";
+  const releasePath: { label: string; state: string }[] = [
+    { label: "1 Quality checks", state: qualityPathState },
+    { label: "2 Export", state: "Optional" },
+    { label: "3 Telegram pack", state: telegramPathState },
+    { label: "4 Communities", state: communityPathState },
+    { label: "5 Sticker Drops", state: dropsPathState },
+  ];
+
+  const releaseAdvice: {
+    title: string;
+    body: string;
+    cta: null | "sticker-studio" | "telegram" | "drops" | "lifecycle";
+  } = checksRunning
+    ? {
+        title: "Quality checks are running",
+        body: "Transparency and Telegram cutout checks are still finishing. The next step appears once they complete.",
+        cta: null,
+      }
+    : !exportReady
+      ? {
+          title: "Finish quality review",
+          body:
+            attentionCount > 0
+              ? `${attentionCount} sticker${attentionCount === 1 ? "" : "s"} need attention. Fix or regenerate them in Sticker Studio, then come back.`
+              : `${exportableCount} of ${totalStickers} stickers pass every check. Finish the remaining ones in Sticker Studio before release.`,
+          cta: "sticker-studio",
+        }
+      : !telegram.botConfigured || !telegram.ownerConnected
+        ? {
+            title: "Finish Telegram setup",
+            body: "Telegram is not fully connected yet, so this pack cannot be published. Complete setup in Community Command.",
+            cta: "telegram",
+          }
+        : telegramGroup.connectedGroupCount === 0
+          ? {
+              title: "Connect a community",
+              body: "Connect at least one Telegram community in Community Command to release this pack.",
+              cta: "telegram",
+            }
+          : selectedGroupIds.length === 0
+            ? {
+                title: "Choose community targets",
+                body: "Select at least one connected community below to receive this pack.",
+                cta: null,
+              }
+            : !groupsSelectedAndReady
+              ? {
+                  title: "Fix community setup",
+                  body: "One of the selected communities is not ready. Review its setup in Community Command.",
+                  cta: "telegram",
+                }
+              : lifecycleMode === "attention"
+                ? {
+                    title: "Finish quality review",
+                    body: "Some stickers are still not published because they have not passed review. Finish them in Sticker Studio.",
+                    cta: "sticker-studio",
+                  }
+                : lifecycleMode !== "current"
+                  ? {
+                      title: "Release this pack",
+                      body: `The recommended action is: ${lifecycleLabel}.`,
+                      cta: "lifecycle",
+                    }
+                  : dropStatusQuery.isPending
+                    ? {
+                        title: "Checking Sticker Drops",
+                        body: "Sticker Drops status is still loading for this pack.",
+                        cta: null,
+                      }
+                    : dropStatusQuery.isError
+                      ? {
+                          title: "Sticker Drops status unavailable",
+                          body: "Sticker Drops status could not be loaded right now. Open Sticker Drops to inspect it safely.",
+                          cta: "drops",
+                        }
+                      : dropKillSwitch && packSchedules.length > 0
+                        ? {
+                            title: "Sticker Drops emergency pause",
+                            body: "Automation is paused by the emergency stop. Review it in Sticker Drops before relying on scheduled posts.",
+                            cta: "drops",
+                          }
+                        : packSchedules.length === 0
+                          ? {
+                              title: "Set up Sticker Drops",
+                              body: "Release is complete. Schedule Sticker Drops so your community keeps seeing this pack.",
+                              cta: "drops",
+                            }
+                          : {
+                              title: "Release complete",
+                              body: "This pack is published, delivered and has Sticker Drops configured. Manage them any time.",
+                              cta: "drops",
+                            };
+
+
+
   const shortNamePreview = packId
     ? previewShortName(draft.packName, packId, telegram.botUsername)
     : null;
