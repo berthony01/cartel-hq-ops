@@ -120,7 +120,18 @@ import {
 } from "@/components/sticker-lab/BuilderPrimitives";
 import { StepGuide } from "@/components/sticker-lab/StickerLabJourney";
 import { MotionStudioPanel } from "@/components/sticker-lab/MotionStudioPanel";
-import { loadStickerMotionState, type MotionMode } from "@/lib/sticker-motion";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  loadStickerMotionState,
+  currentMotionVersion,
+  type MotionMode,
+} from "@/lib/sticker-motion";
 import { useStickerMotionGenerationRuntime } from "@/hooks/useStickerMotionGenerationRuntime";
 import {
   fetchStickerMotionAiConfig,
