@@ -232,7 +232,26 @@ function PackManagerPage() {
         </Button>
       ),
     };
+  } else if (distributionQuery.isPending) {
+    nextStep = {
+      title: "Checking community delivery…",
+      body: "Waiting for community delivery state before recommending the next step.",
+      action: null,
+    };
+  } else if (distributionQuery.isError) {
+    nextStep = {
+      title: "Community delivery status unavailable",
+      body: "Community delivery state could not be loaded right now. Open Quality & Release to inspect or retry by normal page behavior.",
+      action: (
+        <Button asChild className="min-h-11">
+          <Link to="/sticker-lab/new" search={{ pack: pack.id, step: 5 }}>
+            Open Quality &amp; Release
+          </Link>
+        </Button>
+      ),
+    };
   } else if (deliveredTargets === 0) {
+
     nextStep = {
       title: "Send to communities",
       body:
