@@ -112,6 +112,10 @@ export function useStickerVariationRuntime(params: {
   /** Bumped whenever a take finishes so Version History can refetch. */
   const [variationReadySignal, setVariationReadySignal] = useState(0);
 
+  /** Latest rounds snapshot for callbacks that must not re-create on state change. */
+  const roundsRef = useRef<Record<string, VariationRound>>({});
+  roundsRef.current = rounds;
+
   const aliveRef = useRef(true);
   /** Sticker ids running a round in THIS tab — one round per sticker. */
   const runningRef = useRef<Set<string>>(new Set());
@@ -508,6 +512,7 @@ export function useStickerVariationRuntime(params: {
     variationReadySignal,
     startVariationRound,
     cancelVariationRound,
+    retryVariationBackground,
     recoverVariations,
     clearVariationState,
     variationRoundFor: (stickerId: string | null | undefined): VariationRound =>
