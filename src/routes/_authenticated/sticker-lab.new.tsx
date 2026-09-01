@@ -1291,9 +1291,14 @@ function StickerLabBuilder() {
       // Same contract for motion: reconcile the existing job only, never start
       // provider work, then re-read durable motion history.
       void recoverMotion(id, savedStickerIds, { force: true });
+      // Same contract for Telegram preparation: reconcile the existing prep job
+      // only, never start provider work.
+      void recoverTelegramPrepare(id, savedStickerIds, { force: true });
       void motionQuery.refetch();
     }
     void motionConfigQuery.refetch();
+    void telegramMotionConfigQuery.refetch();
+
   };
 
 
