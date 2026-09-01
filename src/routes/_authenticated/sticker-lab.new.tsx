@@ -3753,7 +3753,16 @@ function StickerLabBuilder() {
                   {/* A/B/C variations — review only. The current image, sticker
                       status and any live Telegram set are never touched. */}
                   {stickerId && preview ? (
-                    <div className="mt-3 rounded-md border border-border bg-background/40 p-2.5">
+                    <details className="mt-3 rounded-md border border-border bg-background/40">
+                      {/* Collapsed by default. Expanding is presentation only —
+                          no provider call is attached to this summary. */}
+                      <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 p-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        <span className="truncate">A/B/C Variations</span>
+                        <StatusBadge tone={variationSummary.tone}>
+                          {variationSummary.label}
+                        </StatusBadge>
+                      </summary>
+                    <div className="border-t border-border p-2.5">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                           A/B/C variations
