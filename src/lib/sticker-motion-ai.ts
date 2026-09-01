@@ -4,10 +4,11 @@ import type { MotionMode } from "@/lib/sticker-motion";
 /**
  * Thin client for the external Supabase Edge Function `sticker-motion-ai`.
  *
- * Phase B1 backend contract only — nothing in the UI calls the billable
- * `startStickerMotionGeneration` yet. The function owns the Kie API key, the
+ * `startStickerMotionGeneration` is BILLABLE and is only ever reached from the
+ * Motion Studio confirmation dialog. The function owns the Kie API key, the
  * prompt compiler, the Quick Motion preset allowlist and all privileged writes;
  * no secret and no prompt text is ever authored client-side.
+
  *
  * Motion generation is REVIEW-ONLY: it never changes the static current image,
  * `release_variant`, the current motion pointer, Telegram state or Sticker
