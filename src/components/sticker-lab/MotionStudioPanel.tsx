@@ -401,9 +401,9 @@ export function MotionStudioPanel({
         ) : currentIsTelegramReady ? (
           currentMotionIsLive ? (
             <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-              Version {current.versionNumber} is the live Telegram release for this sticker. Its
-              Telegram-formatted derivative was accepted by Telegram and replaced this sticker in
-              the existing set.
+              Version {current.versionNumber} is live in the Telegram sticker pack for this
+              sticker. Its Telegram-formatted derivative replaced this sticker inside the existing
+              sticker pack. It is not automatically posted as a message to any community.
             </p>
           ) : anyMotionIsLive ? (
             <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
@@ -510,7 +510,7 @@ export function MotionStudioPanel({
               {releasingMotion ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
               ) : null}
-              {releasingMotion ? "Releasing motion…" : "Release motion to Telegram"}
+              {releasingMotion ? "Releasing motion…" : "Release motion to sticker pack"}
             </Button>
             <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
               This replaces this one sticker in place in the existing Telegram set using the
@@ -570,29 +570,40 @@ export function MotionStudioPanel({
                     </p>
                   ) : null}
 
-                  <div className="mt-1.5">
-                    {version.previewUrl ? (
-                      <video
-                        src={version.previewUrl}
-                        controls
-                        muted
-                        loop
-                        playsInline
-                        className="max-h-40 w-full rounded bg-black/40 object-contain"
-                      />
-                    ) : (
-                      <p className="text-[10px] text-muted-foreground">Preview unavailable</p>
-                    )}
-                  </div>
-
-                  {version.mimeType || version.fileSizeBytes != null ? (
-                    <p className="mt-1 text-[10px] text-muted-foreground">
-                      {version.mimeType ?? "Unknown format"}
-                      {version.fileSizeBytes != null
-                        ? ` · ${formatBytes(version.fileSizeBytes)}`
-                        : ""}
-                    </p>
-                  ) : null}
+                  {(() => {
+                    const usingTelegram = !!version.telegramPreviewUrl;
+                    const src = version.telegramPreviewUrl ?? version.previewUrl;
+                    const mime = usingTelegram ? version.telegramMimeType : version.mimeType;
+                    const size = usingTelegram
+                      ? version.telegramFileSizeBytes
+                      : version.fileSizeBytes;
+                    return (
+                      <>
+                        <div className="mt-1.5">
+                          {src ? (
+                            <video
+                              src={src}
+                              controls
+                              muted
+                              loop
+                              playsInline
+                              preload="metadata"
+                              className="max-h-40 w-full rounded bg-black/40 object-contain"
+                            />
+                          ) : (
+                            <p className="text-[10px] text-muted-foreground">Preview unavailable</p>
+                          )}
+                        </div>
+                        {src ? (
+                          <p className="mt-1 text-[10px] text-muted-foreground">
+                            {usingTelegram ? "Telegram-ready derivative" : "Creative source"}
+                            {mime ? ` · ${mime}` : ""}
+                            {size != null ? ` · ${formatBytes(size)}` : ""}
+                          </p>
+                        ) : null}
+                      </>
+                    );
+                  })()}
 
                   {!fromCurrentStatic ? (
                     <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
@@ -787,7 +798,9 @@ export function MotionStudioPanel({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Release motion for {stickerLabel} to Telegram?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Release motion for {stickerLabel} to the Telegram sticker pack?
+            </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2 text-left">
                 <p>This makes a real change on Telegram. Before you confirm:</p>
@@ -818,7 +831,7 @@ export function MotionStudioPanel({
                 if (current) onReleaseMotion({ stickerId, motionVersionId: current.id });
               }}
             >
-              Release motion to Telegram
+              Release motion to sticker pack
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
