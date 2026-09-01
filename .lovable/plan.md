@@ -84,22 +84,19 @@ In Step 4 (Sticker Studio), on a Telegram-locked card:
 - On success the candidate appears as a new **Candidate** badged row in the existing Version history panel with a side-by-side thumbnail against the current image.
 - `Set as live` on that row calls the existing published path — `confirmTelegramRestore` → `telegram-stickers` `replace_version` — with no new mutation. For a non-published sticker the existing `set_sticker_current_version` path still applies.
 - Reject is simply "do nothing"; the candidate stays in history. Requirement 7.
-- Refresh recovery (requirement F): completed candidates reappear because they are durable `sticker_versions` rows. An *in-flight* candidate can be recognised without a new provider task because the job row has `input_json.mode = 'candidate'`; on refresh the separate candidate map simply resumes polling.
+- Refresh recovery (requirement F): completed candidates reappear because they are durable `sticker_versions` rows. An *in-flight* candidate can be recognised without a new provider task by reading the existing active `sticker_generate` job with `mode = 'candidate'` and resuming polling with `syncStickerJob` — no additional Kie call, so economics stay at 2 tasks (requirement H).
 
-## 7. Files that would change under this plan
+## 7. Blockers and recommended phasing — split into 4D.1 / 4D.2
 
-- `supabase/migrations/202608..._sticker_candidate_generation.sql` — widen `sticker_versions_origin_check` only.
-- `backend-source/edge-functions/sticker-ai/index.ts` — new `start_candidate` action and candidate-aware branches in `remove_background` / `failSticker`.
-- `src/lib/sticker-ai.ts` — `startStickerCandidate()`.
-- `src/hooks/useStickerGenerationRuntime.ts` — candidate state maps + `loadExisting` filtering.
-- `src/lib/sticker-packs.ts` — select `input_json` in `loadLatestJobs`.
-- `src/lib/sticker-versions.ts` — expose `origin`.
-- `src/routes/_authenticated/sticker-lab.new.tsx` — candidate UI.
+There is no hard blocker, but two independent risk surfaces argue against one atomic phase:
 
-## 8. STOP conditions / what would block implementation
+- **4D.1 — backend + durable candidate record (higher risk).** Origin CHECK migration; `start_candidate`; candidate-aware status/pointer suppression; candidate version insert; `loadLatestJobs`/`loadExisting` mode filtering so existing reconciliation cannot regress. This is where a mistake can corrupt a *live published* sticker, and it must be verified against the live database and a real Telegram set before any UI encourages use.
+- **4D.2 — candidate UI + approval wiring (presentation).** Candidate button, cost dialog, candidate stage rendering, history badge, side-by-side compare, reuse of the existing restore/replace handlers.
 
-- If `sticker_versions.origin` is not actually constrained to `['generation','backfill']` in the live project, the migration assumption is wrong and must be re-validated.
-- If `ai_jobs.input_json` is not readable by the authenticated client through `loadLatestJobs`, the client partition strategy changes.
-- If `telegram-stickers` `replace_version` does not accept a `generated_sticker` asset whose `transparency_valid` flag is true, the approval path is blocked and that function must be fixed first.
+Secondary reasons for the split: `loadExisting` mode filtering touches the reconciliation logic every existing Sticker Studio state depends on, so it wants its own verification pass; and the `sticker-ai` Edge Function redeploy (currently v7) plus the migration are separate external-system mutations that should each be confirmed against `ocoinbnjgstkmnwwvnhi` before UI lands.
 
-No changes made. STOP.
+One more thing to decide before 4D.1: while a candidate job is `queued`/`running`, **all** restores for that sticker are blocked by the existing `active_generation` guards. That is safe and I recommend keeping it, but the UI copy in 4D.2 must say so rather than surfacing a confusing rejection.
+
+## Status
+
+Report only. No implementation performed, nothing published, no database or Edge Function changes made.
