@@ -658,7 +658,7 @@ Deno.serve(async (req: Request) => {
       }
 
       // Last check before the only destructive Telegram call.
-      const { data: recheckSticker } = await admin.from("stickers").select("image_asset_id,telegram_file_id,current_motion_version_id,release_variant").eq("id", stickerId).maybeSingle();
+      const { data: recheckSticker } = await admin.from("stickers").select("image_asset_id,telegram_file_id,current_motion_version_id,release_variant,telegram_motion_version_id").eq("id", stickerId).maybeSingle();
       const { data: recheckJobs } = await admin.from("ai_jobs").select("id").eq("sticker_id", stickerId).in("status", ["queued", "running"]).limit(1);
       if (
         !recheckSticker ||
@@ -666,8 +666,10 @@ Deno.serve(async (req: Request) => {
         (recheckSticker.image_asset_id ? String(recheckSticker.image_asset_id) : null) !== expectedOldAssetId ||
         (recheckSticker.telegram_file_id ? String(recheckSticker.telegram_file_id) : null) !== expectedOldFileId ||
         (recheckSticker.current_motion_version_id ? String(recheckSticker.current_motion_version_id) : null) !== expectedOldMotionVersionId ||
-        (recheckSticker.release_variant ? String(recheckSticker.release_variant) : null) !== expectedOldVariant
+        (recheckSticker.release_variant ? String(recheckSticker.release_variant) : null) !== expectedOldVariant ||
+        (recheckSticker.telegram_motion_version_id ? String(recheckSticker.telegram_motion_version_id) : null) !== expectedOldReleasedMotionVersionId
       ) {
+
         return respond({ error: "RELEASE_STATE_CHANGED", message: "This sticker changed while the motion release was being prepared. Nothing was changed on Telegram. Refresh this pack and try again." }, 409);
       }
 
