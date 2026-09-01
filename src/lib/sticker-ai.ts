@@ -19,6 +19,8 @@ export type StickerAiStartResult = {
   aiJobId: string;
   status: StickerAiStatus;
   model: string;
+  /** Present only for Phase 4D candidate generation. */
+  mode?: "candidate";
 };
 
 export type StickerAiSyncResult = {
@@ -28,7 +30,12 @@ export type StickerAiSyncResult = {
   assetId?: string | null;
   transparencyValid?: boolean;
   error?: string | null;
+  /** Present only for Phase 4D candidate generation. */
+  mode?: "candidate";
+  /** `sticker_versions.id` of the durable candidate record, when finished. */
+  versionId?: string | null;
 };
+
 
 async function invoke<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke("sticker-ai", { body });
@@ -100,7 +107,31 @@ export function startStickerGeneration(params: {
   });
 }
 
+/**
+ * Phase 4D — creates ONE candidate generation task for a sticker that is
+ * already connected to Telegram. The live sticker, its current image and the
+ * published Telegram set are never touched; the result lands in version
+ * history only. Billable: only ever call from an explicit confirmed action.
+ */
+export function startStickerCandidateGeneration(params: {
+  workspaceId: string;
+  packId: string;
+  stickerId: string;
+  referenceAssetIds?: string[];
+}): Promise<StickerAiStartResult> {
+  return invoke<StickerAiStartResult>({
+    action: "start_candidate",
+    workspaceId: params.workspaceId,
+    packId: params.packId,
+    stickerId: params.stickerId,
+    ...(params.referenceAssetIds?.length
+      ? { referenceAssetIds: params.referenceAssetIds }
+      : {}),
+  });
+}
+
 /** Polls an existing job. Read-only against the provider. */
 export function syncStickerJob(aiJobId: string): Promise<StickerAiSyncResult> {
   return invoke<StickerAiSyncResult>({ action: "sync", aiJobId });
 }
+

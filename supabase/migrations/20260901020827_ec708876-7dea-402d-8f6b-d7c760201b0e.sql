@@ -1,0 +1,2 @@
+ALTER TABLE public.sticker_versions DROP CONSTRAINT sticker_versions_origin_check;
+ALTER TABLE public.sticker_versions ADD CONSTRAINT sticker_versions_origin_check CHECK (origin = ANY (ARRAY['generation'::text, 'backfill'::text, 'candidate_generation'::text]));

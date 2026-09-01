@@ -415,17 +415,28 @@ Deno.serve(async (req: Request) => {
     return respond({ error: "KIE_NOT_CONFIGURED", message: "KIE_API_KEY is not configured in Supabase Edge Function secrets." }, 503);
   }
 
+  /**
+   * Phase 4D.1 — a candidate job produces a NEW image for review only. It must
+   * never write sticker or pack status, and never move the current pointer.
+   */
+  const isCandidateJob = (job: Record<string, unknown>) => {
+    const input = (job.input_json && typeof job.input_json === "object" ? job.input_json : {}) as Record<string, unknown>;
+    return input.mode === "candidate";
+  };
+
   const failSticker = async (job: Record<string, unknown>, message: string, code = "PROVIDER_FAILED") => {
     await admin.from("ai_jobs").update({
       status: "failed", error_code: code, error_message: message.slice(0, 500), completed_at: new Date().toISOString(),
     }).eq("id", String(job.id));
-    if (job.sticker_id) {
+    const candidate = isCandidateJob(job);
+    if (job.sticker_id && !candidate) {
       const input = (job.input_json && typeof job.input_json === "object" ? job.input_json : {}) as Record<string, unknown>;
       const prior = typeof input.prior_image_asset_id === "string" ? input.prior_image_asset_id : null;
       await admin.from("stickers").update({ status: prior ? "ready" : "failed" }).eq("id", String(job.sticker_id));
     }
-    return respond({ aiJobId: job.id, jobType: job.job_type, status: "failed", error: message });
+    return respond({ aiJobId: job.id, jobType: job.job_type, status: "failed", error: message, ...(candidate ? { mode: "candidate" } : {}) });
   };
+
 
   const logCredits = async (job: Record<string, unknown>, credits: number | null) => {
     if (credits == null) return;
@@ -438,7 +449,12 @@ Deno.serve(async (req: Request) => {
   };
 
   try {
-    if (action === "start") {
+    if (action === "start" || action === "start_candidate") {
+      // Phase 4D.1 — `start_candidate` shares the ENTIRE generation setup below
+      // (prompt compiler, Brand Kit, Character Lock, Creative Direction,
+      // reference precedence, model, 1:1 request, background-removal child).
+      // Only the published guard, the status writes and the finalization differ.
+      const isCandidate = action === "start_candidate";
       const workspaceId = String(body.workspaceId ?? "");
       const packId = String(body.packId ?? "");
       const stickerId = String(body.stickerId ?? "");
@@ -455,15 +471,25 @@ Deno.serve(async (req: Request) => {
       // any reference resolution, signed URL, job lookup/insert or Kie call,
       // so nothing is written and nothing is charged on this path. Status is
       // deliberately not used: generation overwrites it.
-      if (
+      const hasTelegramFootprint =
         (sticker as Record<string, unknown>).telegram_file_id != null ||
-        (sticker as Record<string, unknown>).telegram_published_at != null
-      ) {
+        (sticker as Record<string, unknown>).telegram_published_at != null;
+      if (!isCandidate && hasTelegramFootprint) {
         return respond({
           error: "STICKER_PUBLISHED",
           message: "This sticker is already connected to Telegram. Regeneration is blocked to keep the live Telegram set synchronized with CARTEL HQ.",
         }, 409);
       }
+      // Phase 4D.1 — the mirror guard. Candidate generation exists only for
+      // stickers that are already connected to Telegram; everything else uses
+      // the ordinary Regenerate path. Also runs before any billable work.
+      if (isCandidate && !hasTelegramFootprint) {
+        return respond({
+          error: "CANDIDATE_REQUIRES_PUBLISHED",
+          message: "This sticker is not connected to Telegram, so use the ordinary Regenerate action instead. No provider task was started.",
+        }, 409);
+      }
+
 
 
       const blueprint = parseBlueprint((pack as Record<string, unknown>).creative_blueprint);
@@ -532,9 +558,11 @@ Deno.serve(async (req: Request) => {
 
       // Duplicate-generation protection: an already queued/running generation for
       // this sticker is authoritative. Return it instead of billing a second task.
+      // The DB partial unique index on active `sticker_generate` per sticker is
+      // the real guarantee; candidate and ordinary jobs deliberately share it.
       const findActiveGeneration = async () => {
         const { data } = await admin.from("ai_jobs")
-          .select("id,status")
+          .select("id,status,input_json")
           .eq("sticker_id", stickerId)
           .eq("job_type", "sticker_generate")
           .in("status", ["queued", "running"])
@@ -543,10 +571,23 @@ Deno.serve(async (req: Request) => {
           .maybeSingle();
         return data ?? null;
       };
+      /** Reuse only a same-mode active job; a different mode fails closed. */
+      const resolveActive = (active: { id: string; status: string; input_json: unknown } | null) => {
+        if (!active) return null;
+        const activeIsCandidate = isCandidateJob(active as unknown as Record<string, unknown>);
+        if (activeIsCandidate !== isCandidate) {
+          return respond({
+            error: "ACTIVE_JOB_CONFLICT",
+            message: activeIsCandidate
+              ? "A candidate image is already being generated for this sticker. Wait for it to finish."
+              : "This sticker is already generating. Wait for it to finish before starting a candidate.",
+          }, 409);
+        }
+        return respond({ aiJobId: active.id, status: active.status === "queued" ? "queued" : "running", model: MODEL, ...(isCandidate ? { mode: "candidate" } : {}) });
+      };
       const activeExisting = await findActiveGeneration();
-      if (activeExisting) {
-        return respond({ aiJobId: activeExisting.id, status: activeExisting.status === "queued" ? "queued" : "running", model: MODEL });
-      }
+      const activeResponse = resolveActive(activeExisting);
+      if (activeResponse) return activeResponse;
 
       const { data: job, error: jobError } = await admin.from("ai_jobs").insert({
         workspace_id: workspaceId, user_id: user.id, pack_id: packId, sticker_id: stickerId,
@@ -557,15 +598,14 @@ Deno.serve(async (req: Request) => {
           reference_source: referenceSource,
           character_lock_applied: characterLockApplied,
           creative_direction_applied: creativeDirectionApplied,
+          ...(isCandidate ? { mode: "candidate" } : {}),
         },
       }).select("*").single();
       if (jobError || !job) {
         // Race: another request won the unique active-generation guard.
         if ((jobError as { code?: string } | null)?.code === "23505") {
-          const raced = await findActiveGeneration();
-          if (raced) {
-            return respond({ aiJobId: raced.id, status: raced.status === "queued" ? "queued" : "running", model: MODEL });
-          }
+          const racedResponse = resolveActive(await findActiveGeneration());
+          if (racedResponse) return racedResponse;
         }
         return respond({ error: "JOB_CREATE_FAILED" }, 500);
       }
@@ -579,8 +619,13 @@ Deno.serve(async (req: Request) => {
       if (!create.ok || !taskId) return await failSticker(job, create.ok ? "Kie.ai returned no task ID." : create.message, "PROVIDER_START_FAILED");
 
       await admin.from("ai_jobs").update({ status: "running", provider_task_id: taskId }).eq("id", job.id);
-      await admin.from("stickers").update({ status: "generating" }).eq("id", stickerId);
-      await admin.from("sticker_packs").update({ status: "generating" }).eq("id", packId);
+      // Candidate generation leaves the live sticker and its pack completely alone.
+      if (!isCandidate) {
+        await admin.from("stickers").update({ status: "generating" }).eq("id", stickerId);
+        await admin.from("sticker_packs").update({ status: "generating" }).eq("id", packId);
+      }
+      return respond({ aiJobId: job.id, status: "running", model: MODEL, ...(isCandidate ? { mode: "candidate" } : {}) });
+
       return respond({ aiJobId: job.id, status: "running", model: MODEL });
     }
 
@@ -591,11 +636,13 @@ Deno.serve(async (req: Request) => {
       if (!job) return respond({ error: "JOB_NOT_FOUND" }, 404);
       if (!(await isMember(job.workspace_id))) return respond({ error: "FORBIDDEN" }, 403);
 
-      if (job.status === "failed") return respond({ aiJobId: job.id, jobType: job.job_type, status: "failed", error: job.error_message });
+      const jobIsCandidate = isCandidateJob(job as Record<string, unknown>);
+      if (job.status === "failed") return respond({ aiJobId: job.id, jobType: job.job_type, status: "failed", error: job.error_message, ...(jobIsCandidate ? { mode: "candidate" } : {}) });
       if (job.status === "succeeded") {
         const output = (job.output_json ?? {}) as Record<string, unknown>;
-        return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", childJobId: output.child_job_id ?? null, assetId: output.asset_id ?? null, transparencyValid: output.transparency_valid ?? null });
+        return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", childJobId: output.child_job_id ?? null, assetId: output.asset_id ?? null, transparencyValid: output.transparency_valid ?? null, versionId: output.version_id ?? null, ...(jobIsCandidate ? { mode: "candidate" } : {}) });
       }
+
       if (!job.provider_task_id) return respond({ aiJobId: job.id, jobType: job.job_type, status: job.status });
 
       const query = await kieRequest(`/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(job.provider_task_id)}`, KIE_API_KEY, { method: "GET" });
@@ -628,7 +675,7 @@ Deno.serve(async (req: Request) => {
           const { data: child, error: childError } = await admin.from("ai_jobs").insert({
             workspace_id: job.workspace_id, user_id: job.user_id, pack_id: job.pack_id, sticker_id: job.sticker_id,
             job_type: "remove_background", provider: "kie", provider_model: BG_MODEL, status: "queued",
-            input_json: { parent_job_id: job.id, prior_image_asset_id: priorAssetId, model: BG_MODEL },
+            input_json: { parent_job_id: job.id, prior_image_asset_id: priorAssetId, model: BG_MODEL, ...(jobIsCandidate ? { mode: "candidate" } : {}) },
           }).select("*").single();
           if (childError || !child) {
             // Race: a concurrent poller already created the child. Reuse it and
@@ -653,8 +700,12 @@ Deno.serve(async (req: Request) => {
           const bgTaskId = bgCreate.ok ? String(bgCreate.data.taskId ?? bgCreate.data.task_id ?? "") : "";
           if (!bgCreate.ok || !bgTaskId) {
             await admin.from("ai_jobs").update({ status: "failed", error_code: "BACKGROUND_START_FAILED", error_message: bgCreate.ok ? "Kie.ai returned no background-removal task ID." : bgCreate.message, completed_at: new Date().toISOString() }).eq("id", childJobId);
-            const prior = typeof priorAssetId === "string" ? priorAssetId : null;
-            await admin.from("stickers").update({ status: prior ? "ready" : "failed" }).eq("id", job.sticker_id);
+            // A failed candidate must never demote the live sticker.
+            if (!jobIsCandidate) {
+              const prior = typeof priorAssetId === "string" ? priorAssetId : null;
+              await admin.from("stickers").update({ status: prior ? "ready" : "failed" }).eq("id", job.sticker_id);
+            }
+
           } else {
             await admin.from("ai_jobs").update({ status: "running", provider_task_id: bgTaskId }).eq("id", childJobId);
           }
@@ -691,9 +742,16 @@ Deno.serve(async (req: Request) => {
         }
         if (!transparent || !finalPng) return await failSticker(job, "Transparency validation failed: the processed image does not contain real transparent pixels.", "TRANSPARENCY_FAILED");
 
-        const path = `${job.workspace_id}/generated_sticker/${crypto.randomUUID()}.png`;
+        // Candidate finalization must be idempotent across concurrent pollers,
+        // so its object path is DERIVED from the background job id. A retry then
+        // collides on the unique storage path / unique media_assets row instead
+        // of creating a second logical candidate. Ordinary generation keeps its
+        // existing random path and behaviour untouched.
+        const path = jobIsCandidate
+          ? `${job.workspace_id}/generated_sticker/candidate-${job.id}.png`
+          : `${job.workspace_id}/generated_sticker/${crypto.randomUUID()}.png`;
         const { error: uploadError } = await admin.storage.from(BUCKET).upload(path, finalPng, { contentType: "image/png", upsert: false });
-        if (uploadError) return await failSticker(job, "Could not save the finished sticker image.", "STORAGE_UPLOAD_FAILED");
+        if (uploadError && !jobIsCandidate) return await failSticker(job, "Could not save the finished sticker image.", "STORAGE_UPLOAD_FAILED");
 
         const parentJobId = job.input_json && typeof job.input_json === "object" ? (job.input_json as Record<string, unknown>).parent_job_id : null;
         let parentTaskId: string | null = null;
@@ -704,18 +762,65 @@ Deno.serve(async (req: Request) => {
           parentModel = parent?.provider_model ?? null;
         }
 
-        const { data: asset, error: assetError } = await admin.from("media_assets").insert({
-          workspace_id: job.workspace_id, uploaded_by: job.user_id, storage_path: path, asset_type: "generated_sticker",
-          mime_type: "image/png", width, height, file_size_bytes: finalPng.byteLength, transparency_valid: true,
-          metadata: { source: "kie", generation_model: parentModel, generation_task_id: parentTaskId, background_model: job.provider_model, background_task_id: job.provider_task_id, generation_job_id: parentJobId, background_job_id: job.id },
-        }).select("id").single();
-        if (assetError || !asset) {
-          await admin.storage.from(BUCKET).remove([path]);
-          return await failSticker(job, "Could not record the finished sticker asset.", "ASSET_RECORD_FAILED");
+        // A losing candidate poller reuses the asset the winner already recorded.
+        let assetId: string | null = null;
+        if (jobIsCandidate) {
+          const { data: existingAsset } = await admin.from("media_assets").select("id").eq("workspace_id", job.workspace_id).eq("storage_path", path).maybeSingle();
+          assetId = existingAsset?.id ?? null;
+        }
+        if (!assetId) {
+          const { data: asset, error: assetError } = await admin.from("media_assets").insert({
+            workspace_id: job.workspace_id, uploaded_by: job.user_id, storage_path: path, asset_type: "generated_sticker",
+            mime_type: "image/png", width, height, file_size_bytes: finalPng.byteLength, transparency_valid: true,
+            metadata: { source: "kie", generation_model: parentModel, generation_task_id: parentTaskId, background_model: job.provider_model, background_task_id: job.provider_task_id, generation_job_id: parentJobId, background_job_id: job.id, ...(jobIsCandidate ? { candidate: true } : {}) },
+          }).select("id").single();
+          if (assetError || !asset) {
+            if (jobIsCandidate) {
+              // Recover a concurrently inserted candidate asset before failing.
+              const { data: racedAsset } = await admin.from("media_assets").select("id").eq("workspace_id", job.workspace_id).eq("storage_path", path).maybeSingle();
+              assetId = racedAsset?.id ?? null;
+            }
+            if (!assetId) {
+              if (!jobIsCandidate) await admin.storage.from(BUCKET).remove([path]);
+              return await failSticker(job, "Could not record the finished sticker asset.", "ASSET_RECORD_FAILED");
+            }
+          } else {
+            assetId = asset.id;
+          }
         }
 
-        await admin.from("stickers").update({ image_asset_id: asset.id, status: "ready" }).eq("id", job.sticker_id);
-        await admin.from("ai_jobs").update({ status: "succeeded", completed_at: new Date().toISOString(), output_json: { asset_id: asset.id, storage_path: path, transparency_valid: true, width, height } }).eq("id", job.id);
+        if (jobIsCandidate) {
+          // Durable candidate record ONLY. The current pointer, sticker status,
+          // Telegram fields and pack status are deliberately never written here.
+          let versionId: string | null = null;
+          const readVersion = async () => {
+            const { data } = await admin.from("sticker_versions").select("id").eq("sticker_id", job.sticker_id).eq("asset_id", assetId).maybeSingle();
+            return data?.id ?? null;
+          };
+          versionId = await readVersion();
+          for (let attempt = 0; attempt < 3 && !versionId; attempt++) {
+            const { data: maxRow } = await admin.from("sticker_versions").select("version_number").eq("sticker_id", job.sticker_id).order("version_number", { ascending: false }).limit(1).maybeSingle();
+            const nextVersion = (maxRow?.version_number ?? 0) + 1;
+            const { data: inserted, error: versionError } = await admin.from("sticker_versions").insert({
+              workspace_id: job.workspace_id, pack_id: job.pack_id, sticker_id: job.sticker_id,
+              asset_id: assetId, version_number: nextVersion, origin: "candidate_generation",
+            }).select("id").maybeSingle();
+            if (!versionError && inserted) { versionId = inserted.id; break; }
+            // Unique conflict on (sticker_id, asset_id) or (sticker_id, version_number):
+            // re-read and reuse rather than creating a second logical candidate.
+            versionId = await readVersion();
+          }
+          if (!versionId) {
+            return await failSticker(job, "The candidate image was created but could not be recorded in version history.", "CANDIDATE_VERSION_FAILED");
+          }
+
+          await admin.from("ai_jobs").update({ status: "succeeded", completed_at: new Date().toISOString(), output_json: { asset_id: assetId, storage_path: path, transparency_valid: true, width, height, mode: "candidate", version_id: versionId } }).eq("id", job.id);
+          await logCredits(job, credits);
+          return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", assetId, transparencyValid: true, stage: "candidate_ready", mode: "candidate", versionId });
+        }
+
+        await admin.from("stickers").update({ image_asset_id: assetId, status: "ready" }).eq("id", job.sticker_id);
+        await admin.from("ai_jobs").update({ status: "succeeded", completed_at: new Date().toISOString(), output_json: { asset_id: assetId, storage_path: path, transparency_valid: true, width, height } }).eq("id", job.id);
         await logCredits(job, credits);
 
         if (job.pack_id) {
@@ -725,7 +830,8 @@ Deno.serve(async (req: Request) => {
           await admin.from("sticker_packs").update({ status: allReady ? "review" : "draft" }).eq("id", job.pack_id);
         }
 
-        return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", assetId: asset.id, transparencyValid: true, stage: "ready" });
+        return respond({ aiJobId: job.id, jobType: job.job_type, status: "succeeded", assetId, transparencyValid: true, stage: "ready" });
+
       }
 
       return respond({ aiJobId: job.id, jobType: job.job_type, status: job.status });

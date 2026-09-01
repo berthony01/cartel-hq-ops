@@ -100,6 +100,12 @@ export function useStickerGenerationRuntime(params: {
     } catch {
       /* keep whatever resolved; states below degrade safely */
     }
+    // Phase 4D — candidate jobs deliberately never change the current image, so
+    // they must not drive current-image stage, failure or attempt state here.
+    for (const key of Object.keys(jobs)) {
+      jobs[key] = (jobs[key] ?? []).filter((job) => !job.is_candidate);
+    }
+
     const paths = Object.values(assets).map((a) => a.storage_path);
     const urls = await signedUrlMap(paths);
     if (!aliveRef.current) return;
