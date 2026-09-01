@@ -100,9 +100,13 @@ export function MotionStudioPanel({
   telegramConfig,
   telegramConfigLoading,
   telegramConfigError,
+  telegramPublished,
+  releasingMotion,
+  releaseError,
   onGenerate,
   onSetCurrentMotion,
   onPrepareTelegram,
+  onReleaseMotion,
 }: {
   stickerId: string;
   stickerLabel: string;
@@ -120,6 +124,10 @@ export function MotionStudioPanel({
   telegramConfig: StickerMotionTelegramConfig | undefined;
   telegramConfigLoading: boolean;
   telegramConfigError: boolean;
+  /** Durable Telegram footprint for THIS sticker (already live in a set). */
+  telegramPublished: boolean;
+  releasingMotion: boolean;
+  releaseError: string | null;
   /** BILLABLE — only ever called from the confirmation dialog below. */
   onGenerate: (input: {
     stickerId: string;
@@ -131,6 +139,8 @@ export function MotionStudioPanel({
   onSetCurrentMotion: (input: { stickerId: string; motionVersionId: string }) => void;
   /** MAY BE BILLABLE — only ever called from the Telegram confirmation dialog. */
   onPrepareTelegram: (input: { stickerId: string; motionVersionId: string }) => void;
+  /** REAL Telegram change — only ever called from the release confirmation dialog. */
+  onReleaseMotion: (input: { stickerId: string; motionVersionId: string }) => void;
 }) {
 
   const [mode, setMode] = useState<MotionMode>("quick");
@@ -139,6 +149,8 @@ export function MotionStudioPanel({
   const [confirmGenerate, setConfirmGenerate] = useState(false);
   const [approveTarget, setApproveTarget] = useState<StickerMotionVersion | null>(null);
   const [confirmTelegramPrep, setConfirmTelegramPrep] = useState(false);
+  const [confirmMotionRelease, setConfirmMotionRelease] = useState(false);
+
 
   const current = currentMotionVersion(state);
   const known = !error && !loading && !!state;
