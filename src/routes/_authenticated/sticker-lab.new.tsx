@@ -126,6 +126,9 @@ import {
   setCurrentStickerMotion,
   type StickerMotionPreset,
 } from "@/lib/sticker-motion-ai";
+import { useStickerMotionTelegramRuntime } from "@/hooks/useStickerMotionTelegramRuntime";
+import { fetchStickerMotionTelegramConfig } from "@/lib/sticker-motion-telegram";
+
 
 import { Checkbox } from "@/components/ui/checkbox";
 
