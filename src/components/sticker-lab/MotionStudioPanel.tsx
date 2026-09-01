@@ -427,7 +427,40 @@ export function MotionStudioPanel({
             {telegramRun.failure.title}. {telegramRun.failure.body}
           </p>
         ) : null}
+
+        {/* -------------------- Phase C3 explicit motion release to Telegram */}
+        {canShowRelease ? (
+          <>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-2 min-h-10 w-full text-[11px]"
+              disabled={releaseDisabled}
+              onClick={() => setConfirmMotionRelease(true)}
+            >
+              {releasingMotion ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              {releasingMotion ? "Releasing motion…" : "Release motion to Telegram"}
+            </Button>
+            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              This replaces this one sticker in place in the existing Telegram set using the
+              already-prepared file. No new provider work starts.
+            </p>
+          </>
+        ) : current && currentIsTelegramReady && !motionIsLive && !telegramPublished ? (
+          <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+            Publish the static sticker pack in Step 5 first. Releasing motion replaces an existing
+            live Telegram sticker, so there must already be one to replace.
+          </p>
+        ) : null}
+
+        {releaseError && !motionIsLive ? (
+          <p className="mt-2 text-[11px] text-signal">{releaseError}</p>
+        ) : null}
       </div>
+
 
 
       {/* -------------------------------------------------- motion history */}
