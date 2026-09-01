@@ -224,9 +224,12 @@ export function MotionStudioPanel({
       <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
         Animate the approved static without replacing or damaging it. Motion keeps its own version
         history.{" "}
-        {motionIsLive
+        {currentMotionIsLive
           ? "The Current Motion is the live Telegram release for this sticker."
-          : "It stays separate from Telegram until you explicitly release motion."}
+          : anyMotionIsLive
+            ? "A different Motion version is the live Telegram release. This Current Motion stays separate until you explicitly release it."
+            : "It stays separate from Telegram until you explicitly release motion."}
+
       </p>
 
 
