@@ -1243,9 +1243,9 @@ function StickerLabBuilder() {
       void recoverMotion(id, savedStickerIds, { force: true });
       void motionQuery.refetch();
     }
-
-    }
+    void motionConfigQuery.refetch();
   };
+
 
   /* ---------------- Phase 4B: set current / restore version ---------------- */
 
