@@ -19,6 +19,7 @@ import {
 } from "@/lib/sticker-concepts";
 import {
   isCandidateVersionOrigin,
+  isVariationVersionOrigin,
   loadStickerVersions,
   setCurrentStickerVersion,
   type SetCurrentVersionStatus,
@@ -37,6 +38,11 @@ import {
   isCandidateBusy,
   usePublishedStickerCandidateRuntime,
 } from "@/hooks/usePublishedStickerCandidateRuntime";
+import {
+  VARIATION_STAGE_LABEL,
+  isVariationBusy,
+  useStickerVariationRuntime,
+} from "@/hooks/useStickerVariationRuntime";
 
 import {
   hydrateDraftFromPack,
