@@ -654,19 +654,37 @@ Deno.serve(async (req: Request) => {
         return data ?? null;
       };
       const findActiveGeneration = () => findActiveJob("sticker_generate");
-      const crossModeConflict = (activeIsCandidate: boolean) =>
+      const MODE_NOUN: Record<JobMode, string> = {
+        current: "a regeneration",
+        candidate: "a candidate image",
+        variation: "an A/B/C variation",
+      };
+      const crossModeConflict = (activeMode: JobMode) =>
         respond({
           error: "ACTIVE_JOB_CONFLICT",
-          message: activeIsCandidate
-            ? "A candidate image is already being generated for this sticker. Wait for it to finish."
-            : "This sticker is already generating. Wait for it to finish before starting a candidate.",
+          message: `This sticker is already running ${MODE_NOUN[activeMode]}. Wait for it to finish before starting another task.`,
         }, 409);
+      const modeExtras = () =>
+        reviewOnly
+          ? { mode: requestMode, ...(isVariation ? { variationGroupId, variationLabel } : {}) }
+          : {};
+      /**
+       * Variations must additionally match group AND label, so A/B/C can never
+       * silently reuse each other's in-flight pipeline. Anything else fails closed.
+       */
+      const sameVariationIdentity = (job: Record<string, unknown>) => {
+        const meta = variationMetaOf(job);
+        return meta.groupId === variationGroupId && meta.label === variationLabel;
+      };
       /** Reuse only a same-mode active parent job; a different mode fails closed. */
       const resolveActive = (active: { id: string; status: string; input_json: unknown } | null) => {
         if (!active) return null;
-        const activeIsCandidate = isCandidateJob(active as unknown as Record<string, unknown>);
-        if (activeIsCandidate !== isCandidate) return crossModeConflict(activeIsCandidate);
-        return respond({ aiJobId: active.id, status: active.status === "queued" ? "queued" : "running", model: MODEL, ...(isCandidate ? { mode: "candidate" } : {}) });
+        const activeMode = jobModeOf(active as unknown as Record<string, unknown>);
+        if (activeMode !== requestMode) return crossModeConflict(activeMode);
+        if (isVariation && !sameVariationIdentity(active as unknown as Record<string, unknown>)) {
+          return crossModeConflict(activeMode);
+        }
+        return respond({ aiJobId: active.id, status: active.status === "queued" ? "queued" : "running", model: MODEL, ...modeExtras() });
       };
       /**
        * Background phase: the parent already succeeded, so the unique active
@@ -676,14 +694,17 @@ Deno.serve(async (req: Request) => {
       const resolveActiveBackground = async () => {
         const child = await findActiveJob("remove_background");
         if (!child) return null;
-        const childIsCandidate = isCandidateJob(child as unknown as Record<string, unknown>);
-        if (childIsCandidate !== isCandidate) return crossModeConflict(childIsCandidate);
+        const childMode = jobModeOf(child as unknown as Record<string, unknown>);
+        if (childMode !== requestMode) return crossModeConflict(childMode);
+        if (isVariation && !sameVariationIdentity(child as unknown as Record<string, unknown>)) {
+          return crossModeConflict(childMode);
+        }
         const childInput = (child.input_json && typeof child.input_json === "object" ? child.input_json : {}) as Record<string, unknown>;
         const parentJobId = typeof childInput.parent_job_id === "string" ? childInput.parent_job_id : null;
         if (parentJobId) {
           const { data: parent } = await admin.from("ai_jobs").select("id").eq("id", parentJobId).maybeSingle();
           // Existing polling semantics are parent-driven; hand back the parent id.
-          if (parent) return respond({ aiJobId: parent.id, status: "running", model: MODEL, ...(isCandidate ? { mode: "candidate" } : {}) });
+          if (parent) return respond({ aiJobId: parent.id, status: "running", model: MODEL, ...modeExtras() });
         }
         // Fail closed rather than returning a child id as if it were a parent.
         return respond({
