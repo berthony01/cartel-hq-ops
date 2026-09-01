@@ -2933,7 +2933,7 @@ function StickerLabBuilder() {
       {step === 4 ? (
         <StepCard
           title="Sticker Studio"
-          hint="Generate one test sticker, pick specific stickers, or generate all remaining. Each generated sticker runs image generation, background removal and a server-side transparency check. Successful generations are kept in Version History, and anything marked “Live on Telegram” is protected from accidental regeneration."
+          hint="Generate one test sticker, pick specific stickers, or generate all remaining. Each generated sticker runs image generation, background removal and a server-side transparency check. Successful generations are kept in Version History. Anything marked “Live on Telegram” cannot be regenerated — it uses Candidate → Review → Replace instead, so the live sticker keeps working until you approve a replacement."
           action={
             <Button
               type="button"
@@ -3551,6 +3551,52 @@ function StickerLabBuilder() {
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction onClick={() => void generateSelected()}>
                   Generate {selectedCount * 2} tasks
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Phase 4D.2 — the ONLY path that can call start_candidate. */}
+          <AlertDialog
+            open={!!candidateConfirm}
+            onOpenChange={(open) => {
+              if (!open) setCandidateConfirm(null);
+            }}
+          >
+            <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  Generate a candidate for {candidateConfirm?.label}?
+                </AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p>
+                      This uses exactly <strong>2 Kie provider tasks</strong> — image generation
+                      plus background removal — and consumes Kie credits on your account.
+                    </p>
+                    <p>
+                      Your current CARTEL HQ image and the live Telegram sticker stay exactly as
+                      they are while the candidate runs.
+                    </p>
+                    <p>
+                      On success the candidate appears in Version history for review. Nothing is
+                      replaced automatically, and there are no automatic retries.
+                    </p>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    const target = candidateConfirm;
+                    setCandidateConfirm(null);
+                    if (target && draft.packId) {
+                      void startCandidate(draft.packId, target.stickerId);
+                    }
+                  }}
+                >
+                  Generate candidate (2 tasks)
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
