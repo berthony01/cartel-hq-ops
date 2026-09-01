@@ -42,6 +42,9 @@ export type StickerMotionState = {
   releaseVariant: ReleaseVariant;
   /** Durable `stickers.image_asset_id` — the authoritative Static Current. */
   currentStaticAssetId: string | null;
+  /** Durable `stickers.telegram_motion_version_id` — the motion version currently released. */
+  releasedMotionVersionId: string | null;
+
   /** Newest motion version first. */
   versions: StickerMotionVersion[];
 };
