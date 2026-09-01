@@ -833,7 +833,11 @@ Deno.serve(async (req: Request) => {
           const { data: child, error: childError } = await admin.from("ai_jobs").insert({
             workspace_id: job.workspace_id, user_id: job.user_id, pack_id: job.pack_id, sticker_id: job.sticker_id,
             job_type: "remove_background", provider: "kie", provider_model: BG_MODEL, status: "queued",
-            input_json: { parent_job_id: job.id, prior_image_asset_id: priorAssetId, model: BG_MODEL, ...(jobIsCandidate ? { mode: "candidate" } : {}) },
+            input_json: {
+              parent_job_id: job.id, prior_image_asset_id: priorAssetId, model: BG_MODEL,
+              ...(jobIsReviewOnly ? { mode: jobMode } : {}),
+              ...(jobIsVariation ? { variation_group_id: jobVariationMeta.groupId, variation_label: jobVariationMeta.label } : {}),
+            },
           }).select("*").single();
           if (childError || !child) {
             // Race: a concurrent poller already created the child. Reuse it and
