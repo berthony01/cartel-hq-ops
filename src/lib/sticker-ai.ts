@@ -148,6 +148,29 @@ export function syncStickerJob(aiJobId: string): Promise<StickerAiSyncResult> {
   return invoke<StickerAiSyncResult>({ action: "sync", aiJobId });
 }
 
+/** Result of a review-only background-removal retry. */
+export type StickerAiRetryBackgroundResult = StickerAiStartResult & {
+  retryKind?: "background_only";
+  error?: string;
+};
+
+/**
+ * Recovery R1 — retries ONLY the background-removal step of a failed
+ * review-only take, reusing the image the provider already generated. Starts
+ * exactly one background-removal task and never generates a new image.
+ * Billable: only ever call from an explicit confirmed user action.
+ */
+export function retryReviewBackgroundGeneration(params: {
+  workspaceId: string;
+  backgroundJobId: string;
+}): Promise<StickerAiRetryBackgroundResult> {
+  return invoke<StickerAiRetryBackgroundResult>({
+    action: "retry_review_background",
+    workspaceId: params.workspaceId,
+    backgroundJobId: params.backgroundJobId,
+  });
+}
+
 
 /**
  * A/B/C Variations — creates ONE review-only alternate take for a sticker that
