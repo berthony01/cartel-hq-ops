@@ -42,11 +42,13 @@ const TG = {
 } as const;
 
 /**
- * Fixed, server-owned normalization command. Never client-provided.
+ * Fixed, server-owned normalization arguments. Never client-provided.
+ * The CloudConvert task already declares `command: "ffmpeg"`, so these
+ * arguments MUST NOT begin with another literal `ffmpeg`.
  * Task name `import-motion` fixes the input path.
  */
-const FFMPEG_COMMAND =
-  `ffmpeg -c:v libvpx-vp9 -i /input/import-motion/motion-alpha.webm -an ` +
+const FFMPEG_ARGUMENTS =
+  `-c:v libvpx-vp9 -i /input/import-motion/motion-alpha.webm -an ` +
   `-vf "setpts=0.55*PTS,fps=30,scale='if(gte(iw,ih),512,-2)':'if(gte(iw,ih),-2,512)':flags=lanczos,format=yuva420p" ` +
   `-t 2.9 -c:v libvpx-vp9 -pix_fmt yuva420p -auto-alt-ref 0 -row-mt 1 -deadline good -cpu-used 2 ` +
   `-b:v 300k -maxrate 350k -bufsize 700k /output/telegram-motion.webm`;
@@ -87,6 +89,39 @@ function num(value: unknown): number | null {
   }
   return null;
 }
+/**
+ * Duration is reported inconsistently by ExifTool: a raw number, `2.90 s`,
+ * or a clock string such as `0:00:02.900`. Never fabricate — return null
+ * when the value is not provable.
+ */
+function parseDurationSeconds(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  if (!text) return null;
+  const clock = text.match(/(\d+):([0-5]?\d):([0-5]?\d(?:\.\d+)?)/);
+  if (clock) {
+    const h = Number(clock[1]);
+    const m = Number(clock[2]);
+    const s = Number(clock[3]);
+    if ([h, m, s].every((v) => Number.isFinite(v))) return h * 3600 + m * 60 + s;
+    return null;
+  }
+  const mmss = text.match(/^(\d+):([0-5]?\d(?:\.\d+)?)$/);
+  if (mmss) {
+    const m = Number(mmss[1]);
+    const s = Number(mmss[2]);
+    if (Number.isFinite(m) && Number.isFinite(s)) return m * 60 + s;
+    return null;
+  }
+  const decimal = text.match(/-?\d+(?:\.\d+)?/);
+  if (decimal) {
+    const parsed = Number(decimal[0]);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
 
 /** Case-insensitive deep lookup across defensive metadata key naming. */
 function findKey(source: unknown, keys: string[], depth = 0): unknown {
@@ -311,12 +346,19 @@ Deno.serve(async (req: Request) => {
         return respond({ error: "MOTION_ASSET_MISSING", message: "The stored clip for this motion version is not available." }, 409);
       }
 
-      // Already prepared — never re-pay.
+      // Already prepared — never re-pay. Reuse requires durable proof that the
+      // stored asset is a validated Telegram product OF THIS motion version.
+      // A weak asset_type match is not sufficient. If proof is missing we fall
+      // through to normal preparation WITHOUT clearing the existing pointer.
       if (version.telegram_asset_id) {
         const { data: existing } = await admin
-          .from("media_assets").select("id,workspace_id,asset_type")
+          .from("media_assets").select("id,workspace_id,asset_type,metadata")
           .eq("id", version.telegram_asset_id).maybeSingle();
-        if (existing && existing.workspace_id === workspaceId && existing.asset_type === "telegram_motion") {
+        const existingMeta = asObject(existing?.metadata);
+        const provenReady =
+          existingMeta.telegram_ready === true &&
+          str(existingMeta.source_motion_version_id) === motionVersionId;
+        if (existing && existing.workspace_id === workspaceId && existing.asset_type === "telegram_motion" && provenReady) {
           return respond({
             status: "ready", stage: "telegram_source_ready", reused: true, billable: false,
             telegramMotionAssetId: existing.id, motionVersionId, telegramReady: true,
@@ -324,6 +366,7 @@ Deno.serve(async (req: Request) => {
           });
         }
       }
+
 
       if (!FAL_KEY || !CLOUDCONVERT_API_KEY) {
         return respond({
@@ -490,7 +533,7 @@ Deno.serve(async (req: Request) => {
 
         const responseUrl = str(output.fal_response_url)
           ?? str(status.payload.response_url)
-          ?? (requestId ? `${FAL_QUEUE_BASE}/requests/${requestId}` : null);
+          ?? (requestId ? `${FAL_QUEUE_BASE}/requests/${requestId}/response` : null);
         if (!responseUrl) {
           return await failJob(job.id, "Background removal produced no retrievable result.", "FAL_FAILED");
         }
@@ -529,7 +572,9 @@ Deno.serve(async (req: Request) => {
         // NEVER create a second CloudConvert job automatically. Try to confirm
         // an already-created job by its deterministic tag first.
         const tag = `cartelhq-motion-telegram-${job.id}`;
-        const lookup = await ccFetch(`/jobs?filter[tag]=${encodeURIComponent(tag)}&include=tasks`, CLOUDCONVERT_API_KEY, { method: "GET" });
+        // List lookup only — `include=tasks` is not supported on the list call.
+        // Once the job id is persisted, normal /jobs/{id}?include=tasks polling loads tasks.
+        const lookup = await ccFetch(`/jobs?filter[tag]=${encodeURIComponent(tag)}`, CLOUDCONVERT_API_KEY, { method: "GET" });
         const list = lookup.ok && Array.isArray(lookup.payload.data) ? (lookup.payload.data as unknown[]) : [];
         const found = list.map(asObject).find((entry) => str(entry.id));
         if (found) {
@@ -586,25 +631,36 @@ Deno.serve(async (req: Request) => {
           return await failJob(job.id, "The normalized Telegram clip was empty.", "TELEGRAM_DOWNLOAD_FAILED");
         }
 
-        /* ----------------------------------------------- validation ------- */
+        /* ----------------------------------------------- validation -------
+         * Fail closed: core Telegram-relevant properties MUST be provable from
+         * CloudConvert metadata. Missing evidence is a validation failure, never
+         * an assumption, and values are never fabricated. */
         const metadata = asObject(asObject(metaTask?.result).metadata);
         const width = num(findKey(metadata, ["ImageWidth", "width", "VideoWidth", "SourceImageWidth"]));
         const height = num(findKey(metadata, ["ImageHeight", "height", "VideoHeight", "SourceImageHeight"]));
-        const duration = num(findKey(metadata, ["Duration", "duration", "MediaDuration"]));
+        const duration = parseDurationSeconds(findKey(metadata, ["Duration", "duration", "MediaDuration"]));
         const fps = num(findKey(metadata, ["VideoFrameRate", "frame_rate", "FrameRate", "fps"]));
         const codecRaw = str(findKey(metadata, ["VideoCodec", "codec", "CompressorID", "CodecID", "VideoCodecID"]) as string | undefined);
         const audioCodec = findKey(metadata, ["AudioCodec", "audio_codec", "AudioFormat"]);
+        const audioStream = findKey(metadata, ["AudioChannels", "AudioSampleRate", "AudioBitrate"]);
         const alphaRaw = findKey(metadata, ["AlphaMode", "alpha_mode", "HasAlpha", "alpha"]);
+        const containerRaw = str(findKey(metadata, ["MIMEType", "mime_type", "FileType", "FileTypeExtension", "Format"]) as string | undefined);
 
         const failures: string[] = [];
+
+        // Byte size is always provable from the actual download.
         if (bytes.byteLength > TG.maxBytes) failures.push(`file size ${bytes.byteLength} exceeds ${TG.maxBytes} bytes`);
+
+        if (width == null) failures.push("width unavailable");
+        if (height == null) failures.push("height unavailable");
+        if (duration == null) failures.push("duration unavailable");
+        if (fps == null) failures.push("fps unavailable");
+        if (!codecRaw) failures.push("codec unavailable");
+
         if (duration != null && duration > TG.maxDurationSeconds + 0.001) failures.push(`duration ${duration}s exceeds ${TG.maxDurationSeconds}s`);
         if (fps != null && fps > TG.maxFps + 0.5) failures.push(`frame rate ${fps} exceeds ${TG.maxFps}`);
         if (codecRaw && !codecRaw.toLowerCase().includes("vp9") && !codecRaw.toLowerCase().includes("vp09")) {
           failures.push(`codec ${codecRaw} is not VP9`);
-        }
-        if (typeof audioCodec === "string" && audioCodec.trim() && audioCodec.toLowerCase() !== "none") {
-          failures.push("an audio stream is present");
         }
         if (width != null && height != null) {
           const longest = Math.max(width, height);
@@ -612,6 +668,21 @@ Deno.serve(async (req: Request) => {
           if (longest !== TG.maxDimension || shortest > TG.maxDimension) {
             failures.push(`dimensions ${width}x${height} do not satisfy longest-side ${TG.maxDimension}`);
           }
+        }
+
+        // Audio: explicit evidence of an audio stream fails. Absent evidence is
+        // encoder-enforced by the fixed `-an` command; never fabricate a codec.
+        let audioEvidence: string;
+        const explicitAudioCodec =
+          typeof audioCodec === "string" && audioCodec.trim() && !["none", "no", "false", "0"].includes(audioCodec.trim().toLowerCase())
+            ? audioCodec.trim()
+            : null;
+        const explicitAudioStream = num(audioStream);
+        if (explicitAudioCodec || (explicitAudioStream != null && explicitAudioStream > 0)) {
+          audioEvidence = "present";
+          failures.push("an audio stream is present");
+        } else {
+          audioEvidence = "encoder-enforced";
         }
 
         // Alpha is fail-closed only when metadata EXPLICITLY reports no alpha.
@@ -626,12 +697,31 @@ Deno.serve(async (req: Request) => {
           alphaEvidence = "encoder-enforced";
         }
 
+        // Container: explicit non-WEBM fails; unavailable is encoder-enforced by
+        // the fixed `/output/telegram-motion.webm` output path.
+        let containerEvidence: string;
+        if (containerRaw) {
+          const c = containerRaw.toLowerCase();
+          if (c.includes("webm")) {
+            containerEvidence = "reported";
+          } else {
+            containerEvidence = "mismatch";
+            failures.push(`container ${containerRaw} is not WEBM`);
+          }
+        } else {
+          containerEvidence = "encoder-enforced";
+        }
+
         const validation = {
           bytes: bytes.byteLength,
           max_bytes: TG.maxBytes,
           width, height, duration_seconds: duration, fps,
-          codec: codecRaw, audio: typeof audioCodec === "string" ? audioCodec : null,
+          codec: codecRaw,
+          audio: explicitAudioCodec,
+          audio_evidence: audioEvidence,
           alpha: alphaEvidence,
+          container: containerRaw,
+          container_evidence: containerEvidence,
           mime_type: TG.mimeType,
           normalize_contract_version: NORMALIZE_CONTRACT_VERSION,
           telegram_accepted: false,
@@ -650,6 +740,26 @@ Deno.serve(async (req: Request) => {
         if (!motionVersionId || !motionAssetId || !sourceStaticAssetId) {
           return await failJob(job.id, "The preparation job is missing its motion linkage.", "PREP_INTERRUPTED");
         }
+
+        // Staleness guard: the sticker must still point at the exact motion
+        // version and static image this paid preparation was based on. If it
+        // moved, we do NOT link — and we never switch release state or delete
+        // the source/derivative.
+        const { data: liveSticker } = await admin
+          .from("stickers").select("id,image_asset_id,current_motion_version_id")
+          .eq("id", job.sticker_id).maybeSingle();
+        if (
+          !liveSticker ||
+          liveSticker.current_motion_version_id !== motionVersionId ||
+          liveSticker.image_asset_id !== sourceStaticAssetId
+        ) {
+          return await failJob(
+            job.id,
+            "The sticker's current motion or static image changed during preparation, so the Telegram clip was not linked.",
+            "MOTION_SOURCE_STALE",
+          );
+        }
+
 
         const path = `${job.workspace_id}/telegram_motion/motion-${motionVersionId}-${job.id}.webm`;
         const findAsset = async () => {
@@ -751,7 +861,7 @@ Deno.serve(async (req: Request) => {
                 input: "import-motion",
                 engine: "ffmpeg",
                 command: "ffmpeg",
-                arguments: FFMPEG_COMMAND,
+                arguments: FFMPEG_ARGUMENTS,
               },
               "metadata-motion": { operation: "metadata", input: "normalize-motion" },
               "export-motion": { operation: "export/url", input: "normalize-motion" },
