@@ -393,6 +393,24 @@ function StickerLabBuilder() {
     label: string;
   } | null>(null);
 
+  /**
+   * Phase B2 — motion generation runtime. Another fully separate store: motion
+   * is review-only, never touches the static current image, sticker/pack status,
+   * `release_variant` or Telegram, and the billable `startMotion` is only
+   * reachable from the Motion Studio confirmation dialog.
+   */
+  const {
+    motionReadySignal,
+    startMotion,
+    recoverMotion,
+    motionRunFor,
+  } = useStickerMotionGenerationRuntime({ workspaceId });
+  /** Motion version currently being approved as Current Motion (non-billable). */
+  const [approvingMotionVersionId, setApprovingMotionVersionId] = useState<string | null>(null);
+  const [motionApproveError, setMotionApproveError] = useState<string | null>(null);
+
+
+
 
   const [confirmRemaining, setConfirmRemaining] = useState(false);
   /**
