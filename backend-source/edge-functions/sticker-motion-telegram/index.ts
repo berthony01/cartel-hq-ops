@@ -42,11 +42,13 @@ const TG = {
 } as const;
 
 /**
- * Fixed, server-owned normalization command. Never client-provided.
+ * Fixed, server-owned normalization arguments. Never client-provided.
+ * The CloudConvert task already declares `command: "ffmpeg"`, so these
+ * arguments MUST NOT begin with another literal `ffmpeg`.
  * Task name `import-motion` fixes the input path.
  */
-const FFMPEG_COMMAND =
-  `ffmpeg -c:v libvpx-vp9 -i /input/import-motion/motion-alpha.webm -an ` +
+const FFMPEG_ARGUMENTS =
+  `-c:v libvpx-vp9 -i /input/import-motion/motion-alpha.webm -an ` +
   `-vf "setpts=0.55*PTS,fps=30,scale='if(gte(iw,ih),512,-2)':'if(gte(iw,ih),-2,512)':flags=lanczos,format=yuva420p" ` +
   `-t 2.9 -c:v libvpx-vp9 -pix_fmt yuva420p -auto-alt-ref 0 -row-mt 1 -deadline good -cpu-used 2 ` +
   `-b:v 300k -maxrate 350k -bufsize 700k /output/telegram-motion.webm`;
