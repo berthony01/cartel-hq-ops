@@ -497,16 +497,38 @@ Deno.serve(async (req: Request) => {
   };
 
   try {
-    if (action === "start" || action === "start_candidate") {
-      // Phase 4D.1 — `start_candidate` shares the ENTIRE generation setup below
-      // (prompt compiler, Brand Kit, Character Lock, Creative Direction,
-      // reference precedence, model, 1:1 request, background-removal child).
-      // Only the published guard, the status writes and the finalization differ.
-      const isCandidate = action === "start_candidate";
+    if (action === "start" || action === "start_candidate" || action === "start_variation") {
+      // Phase 4D.1 / A-B-C Variations — the review-only actions share the ENTIRE
+      // generation setup below (prompt compiler, Brand Kit, Character Lock,
+      // Creative Direction, reference precedence, model, 1:1 request,
+      // background-removal child). Only the entry guard, the status writes and
+      // the finalization differ.
+      const requestMode: JobMode =
+        action === "start_candidate"
+          ? "candidate"
+          : action === "start_variation"
+            ? "variation"
+            : "current";
+      const isCandidate = requestMode === "candidate";
+      const isVariation = requestMode === "variation";
+      const reviewOnly = isReviewOnlyMode(requestMode);
       const workspaceId = String(body.workspaceId ?? "");
       const packId = String(body.packId ?? "");
       const stickerId = String(body.stickerId ?? "");
       if (!workspaceId || !packId || !stickerId) return respond({ error: "INVALID_INPUT" }, 400);
+      // Variation identity is validated before any lookup, job row or Kie call.
+      const variationGroupId = isVariation ? String(body.variationGroupId ?? "") : null;
+      const rawLabel = isVariation ? String(body.variationLabel ?? "").trim().toUpperCase() : "";
+      const variationLabel = isVariation ? (rawLabel as "A" | "B" | "C") : null;
+      if (isVariation) {
+        const uuidShape = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!variationGroupId || !uuidShape.test(variationGroupId)) {
+          return respond({ error: "INVALID_VARIATION_GROUP", message: "The variation group id is not valid." }, 400);
+        }
+        if (!["A", "B", "C"].includes(rawLabel)) {
+          return respond({ error: "INVALID_VARIATION_LABEL", message: "Variation label must be A, B or C." }, 400);
+        }
+      }
       if (!(await isMember(workspaceId))) return respond({ error: "FORBIDDEN" }, 403);
 
       const { data: pack } = await admin.from("sticker_packs").select("*").eq("id", packId).eq("workspace_id", workspaceId).maybeSingle();
@@ -522,7 +544,7 @@ Deno.serve(async (req: Request) => {
       const hasTelegramFootprint =
         (sticker as Record<string, unknown>).telegram_file_id != null ||
         (sticker as Record<string, unknown>).telegram_published_at != null;
-      if (!isCandidate && hasTelegramFootprint) {
+      if (requestMode === "current" && hasTelegramFootprint) {
         return respond({
           error: "STICKER_PUBLISHED",
           message: "This sticker is already connected to Telegram. Regeneration is blocked to keep the live Telegram set synchronized with CARTEL HQ.",
@@ -535,6 +557,15 @@ Deno.serve(async (req: Request) => {
         return respond({
           error: "CANDIDATE_REQUIRES_PUBLISHED",
           message: "This sticker is not connected to Telegram, so use the ordinary Regenerate action instead. No provider task was started.",
+        }, 409);
+      }
+      // A/B/C variations are alternates OF an existing current image. Published
+      // or unpublished is irrelevant, but there must be something to vary from.
+      // Fails before any provider task or job row, so nothing is charged.
+      if (isVariation && (sticker as Record<string, unknown>).image_asset_id == null) {
+        return respond({
+          error: "VARIATION_REQUIRES_CURRENT",
+          message: "Generate this sticker first. A/B/C variations are alternates of an existing sticker image. No provider task was started.",
         }, 409);
       }
 
