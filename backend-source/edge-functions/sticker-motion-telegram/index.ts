@@ -593,7 +593,7 @@ Deno.serve(async (req: Request) => {
         if (!ccJobId) {
           return await failJob(job.id, "The normalization job reference is missing. Start preparation again explicitly.", "PREP_INTERRUPTED");
         }
-        const query = await ccFetch(`/jobs/${encodeURIComponent(ccJobId)}?include=tasks`, CLOUDCONVERT_API_KEY, { method: "GET" });
+        const query = await ccFetch(`/jobs/${encodeURIComponent(ccJobId)}`, CLOUDCONVERT_API_KEY, { method: "GET" });
         if (!query.ok) {
           return respond({ aiJobId: job.id, jobType: JOB_TYPE, status: "running", stage: "telegram_normalizing", providerMessage: query.message });
         }
