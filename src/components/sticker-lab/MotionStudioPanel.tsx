@@ -149,7 +149,9 @@ export function MotionStudioPanel({
   const [confirmGenerate, setConfirmGenerate] = useState(false);
   const [approveTarget, setApproveTarget] = useState<StickerMotionVersion | null>(null);
   const [confirmTelegramPrep, setConfirmTelegramPrep] = useState(false);
+  const [confirmNormalizationRetry, setConfirmNormalizationRetry] = useState(false);
   const [confirmMotionRelease, setConfirmMotionRelease] = useState(false);
+
 
 
   const current = currentMotionVersion(state);
