@@ -507,7 +507,9 @@ export function MotionStudioPanel({
                   <li>Current Motion will not change automatically</li>
                   <li>Telegram will not change</li>
                   <li>
-                    The result is NOT Telegram-ready yet — Telegram preparation is Phase C
+                    The result is NOT Telegram-ready yet — Telegram preparation becomes available
+                    after you approve a Current Motion
+
                   </li>
                 </ul>
               </div>
