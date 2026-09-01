@@ -49,6 +49,25 @@ const POLL_MAX_MS = 15_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Exact candidate safety sentence — must appear at most once per failure. */
+const SAFETY_SENTENCE = "Your live Telegram sticker was not changed.";
+
+/**
+ * Ensures a candidate failure body contains the safety sentence exactly once.
+ * Candidate work never mutates the live sticker, so this claim is always true.
+ */
+const withSafetySentence = (failure: ProviderFailure): ProviderFailure => {
+  const body = (failure.body ?? "").trim();
+  if (body.includes(SAFETY_SENTENCE)) {
+    // Already present: strip any accidental repeats beyond the first.
+    const first = body.indexOf(SAFETY_SENTENCE) + SAFETY_SENTENCE.length;
+    const head = body.slice(0, first);
+    const tail = body.slice(first).split(SAFETY_SENTENCE).join("").replace(/\s+/g, " ").trim();
+    return { ...failure, body: tail ? `${head} ${tail}` : head };
+  }
+  return { ...failure, body: body ? `${body} ${SAFETY_SENTENCE}` : SAFETY_SENTENCE };
+};
+
 export function usePublishedStickerCandidateRuntime(params: {
   workspaceId: string | null | undefined;
   referenceAssetIds: string[];
@@ -109,7 +128,7 @@ export function usePublishedStickerCandidateRuntime(params: {
             setStage(stickerId, "failed");
             setCandidateFailures((f) => ({
               ...f,
-              [stickerId]: classifyProviderError(res.error, res.stage),
+              [stickerId]: withSafetySentence(classifyProviderError(res.error, res.stage)),
             }));
             return;
           }
@@ -134,20 +153,22 @@ export function usePublishedStickerCandidateRuntime(params: {
         setStage(stickerId, "timeout");
         setCandidateFailures((f) => ({
           ...f,
-          [stickerId]: {
+          [stickerId]: withSafetySentence({
             kind: "service",
             title: "Candidate still running after 15 minutes",
             body: "The candidate is taking unusually long. Your live Telegram sticker was not changed. Use “Refresh status” later before starting another candidate so you do not pay twice.",
             raw: null,
-          },
+          }),
         }));
       } catch (err) {
         if (!aliveRef.current) return;
         setStage(stickerId, "failed");
         setCandidateFailures((f) => ({
           ...f,
-          [stickerId]: classifyProviderError(
-            err instanceof Error ? err.message : "The candidate could not be checked.",
+          [stickerId]: withSafetySentence(
+            classifyProviderError(
+              err instanceof Error ? err.message : "The candidate could not be checked.",
+            ),
           ),
         }));
       } finally {
@@ -181,10 +202,7 @@ export function usePublishedStickerCandidateRuntime(params: {
         setStage(stickerId, "failed");
         setCandidateFailures((f) => ({
           ...f,
-          [stickerId]: {
-            ...classifyProviderError(message),
-            body: `${classifyProviderError(message).body} Your live Telegram sticker was not changed.`,
-          },
+          [stickerId]: withSafetySentence(classifyProviderError(message)),
         }));
         return;
       }
@@ -192,12 +210,12 @@ export function usePublishedStickerCandidateRuntime(params: {
         setStage(stickerId, "failed");
         setCandidateFailures((f) => ({
           ...f,
-          [stickerId]: {
+          [stickerId]: withSafetySentence({
             kind: "service",
             title: "Candidate could not be started",
             body: "The generation service did not return a job id. Your live Telegram sticker was not changed.",
             raw: null,
-          },
+          }),
         }));
         return;
       }
@@ -212,18 +230,21 @@ export function usePublishedStickerCandidateRuntime(params: {
    * so it can never create a provider task or spend credits.
    */
   const recoverCandidates = useCallback(
-    async (packId: string, stickerIds: string[]) => {
+    async (packId: string, stickerIds: string[], options?: { force?: boolean }) => {
+      const force = options?.force === true;
       const ids = Array.from(new Set(stickerIds.filter(Boolean)));
       if (ids.length === 0) return;
       const recoveryKey = `${packId}:${ids.slice().sort().join(",")}`;
-      if (recoveredRef.current.has(recoveryKey)) return;
+      // Explicit "Refresh status" bypasses ONLY the one-time key guard. The
+      // automatic Step 4 recovery keeps its one-time behaviour.
+      if (!force && recoveredRef.current.has(recoveryKey)) return;
       recoveredRef.current.add(recoveryKey);
 
       let jobs: Record<string, AiJobRow[]> = {};
       try {
         jobs = await loadLatestJobs(ids);
       } catch {
-        recoveredRef.current.delete(recoveryKey);
+        if (!force) recoveredRef.current.delete(recoveryKey);
         return;
       }
       if (!aliveRef.current) return;
@@ -246,12 +267,22 @@ export function usePublishedStickerCandidateRuntime(params: {
           continue;
         }
         const latest = candidates[0];
+        if (force && latest && latest.status !== "failed") {
+          // Nothing is running and the newest candidate job did not fail: any
+          // lingering timeout/failed badge is stale. Version History refetch is
+          // the durable way a finished candidate appears — never inferred here.
+          setCandidateStages((s) => (s[stickerId] ? { ...s, [stickerId]: "idle" } : s));
+          setCandidateFailures((f) => ({ ...f, [stickerId]: undefined }));
+          continue;
+        }
         if (latest && latest.status === "failed") {
           // Candidate-only failure: current/live state is untouched.
           setStage(stickerId, "failed");
           setCandidateFailures((f) => ({
             ...f,
-            [stickerId]: classifyProviderError(latest.error_message, latest.job_type),
+            [stickerId]: withSafetySentence(
+              classifyProviderError(latest.error_message, latest.job_type),
+            ),
           }));
         }
       }
