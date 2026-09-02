@@ -13,6 +13,23 @@ const TELEGRAM_TIMEOUT_MS = 10_000;
 async function telegramJson(token: string, method: string, body: Record<string, unknown> = {}) { let res: Response; try { res = await fetch(`${TG_BASE}/bot${token}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS) }); } catch { throw new Error("Could not reach Telegram. Try again shortly."); } const payload = await res.json().catch(() => null) as any; if (!res.ok || !payload?.ok) throw new Error(String(payload?.description ?? `Telegram request failed (${res.status}).`)); return payload.result; }
 function firstEmoji(value: unknown) { return Array.isArray(value) && typeof value[0] === "string" ? value[0] : ""; }
 
+/* C7.2 — Official Community Broadcast branding (`telegram_photo_v1`). */
+const ASSETS_BUCKET = "workspace-assets";
+const BRANDED_TEMPLATE_VERSION = "telegram_photo_v1";
+/** Telegram's hard photo-caption limit. */
+const BRANDED_CAPTION_MAX = 1024;
+/**
+ * Deterministic caption assembly. The browser renders the same preview from the
+ * same inputs, but this server copy is the only one that is ever posted.
+ */
+function buildBrandedCaption(projectName: string, ticker: string | null, message: string): string {
+  const name = projectName.trim();
+  const tick = (ticker ?? "").trim();
+  const header = tick ? `${name} · $${tick.replace(/^\$+/, "")}` : name;
+  return `${header}\nOFFICIAL PROJECT UPDATE\n\n${message.trim()}`;
+}
+
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return respond({ error: "METHOD_NOT_ALLOWED" }, 405);
