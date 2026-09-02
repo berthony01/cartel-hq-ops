@@ -434,8 +434,10 @@ function TelegramPage() {
       <p className="flex items-center gap-2 text-[11px] leading-relaxed text-muted-foreground">
         <Radio className="size-3.5 shrink-0" aria-hidden="true" />
         <span>
-          Broadcasts, Audience and History are being added in later controlled phases. They are
-          placeholders today and cannot send or expose anything.
+          Audience and History are being added in later controlled phases. They are placeholders
+          today and cannot send or expose anything. Broadcasts currently sends private watcher
+          updates only — it cannot post to a community group.
+
         </span>
       </p>
     </div>
