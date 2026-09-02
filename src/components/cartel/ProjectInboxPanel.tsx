@@ -302,17 +302,18 @@ export function ProjectInboxPanel({
 
   const replyMutation = useMutation({
     mutationFn: (vars: { conversationId: string; body: string; requestId: string }) =>
-      createProjectInboxTeamReply(
+      sendProjectInboxTeamReply(
         workspaceId!,
         vars.conversationId,
         vars.body,
         vars.requestId,
       ),
     onSuccess: (result, vars) => {
-      // Only clear the composer and mint a NEW request id after the server
-      // confirmed acceptance — otherwise the same text could be queued twice.
+      // Only clear the composer and release the frozen attempt after the
+      // server confirmed acceptance — otherwise the same text could be queued
+      // twice.
       setReplyBody("");
-      setReplyRequestId(crypto.randomUUID());
+      setPendingAttempt(null);
       void queryClient.invalidateQueries({
         queryKey: projectInboxKeys.messages(workspaceId, vars.conversationId),
       });
@@ -326,17 +327,24 @@ export function ProjectInboxPanel({
         queryKey: projectInboxKeys.summary(workspaceId),
       });
       toast.success(
-        result.replayed
+        result.idempotent_replay
           ? "This reply was already queued — it was not sent twice."
           : "Reply queued for delivery.",
       );
     },
+    // The frozen attempt is deliberately KEPT on error: the server may already
+    // have accepted it, so retrying must reuse the same request id and text.
     onError: (error) => toast.error(errorMessage(error)),
   });
 
   const ackMutation = useMutation({
-    mutationFn: (vars: { deliveryId: string }) =>
-      acknowledgeProjectInboxDelivery(workspaceId!, vars.deliveryId),
+    mutationFn: (vars: { messageId: string }) =>
+      acknowledgeProjectInboxDeliveryUncertainty(
+        workspaceId!,
+        selectedConversationId!,
+        vars.messageId,
+      ),
+
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: projectInboxKeys.messages(workspaceId, selectedConversationId),
