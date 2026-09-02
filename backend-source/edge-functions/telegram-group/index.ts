@@ -470,10 +470,83 @@ Deno.serve(async (req: Request) => {
       if (!messageText) return respond({ error: "INVALID_MESSAGE", message: "Enter an announcement message." }, 400);
       if (messageText.length > 3500) return respond({ error: "INVALID_MESSAGE", message: "Announcements are limited to 3500 characters." }, 400);
 
+      /**
+       * C7.2 — optional branded delivery. The plain-text path stays the default
+       * and is completely unchanged when `branded` is not explicitly true.
+       *
+       * Branding is NEVER taken from the request. The request only carries the
+       * identity the operator actually reviewed; the server re-reads the saved
+       * Project Profile and refuses to post when the two disagree.
+       */
+      const branded = body.branded === true;
+      const reviewed = (body.reviewedBranding ?? {}) as Record<string, unknown>;
+      const reviewedProjectName = typeof reviewed.projectName === "string" ? reviewed.projectName.trim() : "";
+      const reviewedTicker = typeof reviewed.ticker === "string" ? reviewed.ticker.trim() : "";
+      const reviewedLogoAssetId = typeof reviewed.logoAssetId === "string" ? reviewed.logoAssetId.trim() : "";
+
+      let brandingSnapshot:
+        | { projectName: string; ticker: string | null; logoAssetId: string; storagePath: string; mimeType: string }
+        | null = null;
+      let deliveryKind: "TEXT" | "BRANDED_PHOTO" = "TEXT";
+      let deliveredText = messageText;
+
+      if (branded) {
+        const { data: profileRow, error: profileError } = await admin.from("project_profiles")
+          .select("project_name,ticker,logo_asset_id").eq("workspace_id", workspaceId).maybeSingle();
+        if (profileError) throw profileError;
+        if (!profileRow) {
+          return respond({ error: "BRANDING_UNAVAILABLE", message: "Save a Project Profile before posting a branded broadcast." }, 400);
+        }
+        const currentProjectName = String(profileRow.project_name ?? "").trim();
+        const currentTicker = String(profileRow.ticker ?? "").trim();
+        const currentLogoAssetId = String(profileRow.logo_asset_id ?? "").trim();
+        if (!currentProjectName || !currentLogoAssetId) {
+          return respond({ error: "BRANDING_UNAVAILABLE", message: "Add a project name and select a project logo before posting a branded broadcast." }, 400);
+        }
+        if (
+          reviewedProjectName !== currentProjectName ||
+          reviewedTicker !== currentTicker ||
+          reviewedLogoAssetId !== currentLogoAssetId
+        ) {
+          return respond({
+            error: "BRANDING_DRIFT",
+            message: "The project branding changed since you reviewed this broadcast. Review it again before posting.",
+          }, 409);
+        }
+
+        const { data: assetRow, error: assetError } = await admin.from("media_assets")
+          .select("id,workspace_id,storage_path,mime_type")
+          .eq("id", currentLogoAssetId).eq("workspace_id", workspaceId).maybeSingle();
+        if (assetError) throw assetError;
+        if (!assetRow || !assetRow.storage_path) {
+          return respond({ error: "BRANDING_UNAVAILABLE", message: "The selected project logo is no longer available. Choose a logo in Project Profile." }, 400);
+        }
+        const mimeType = String(assetRow.mime_type ?? "").toLowerCase();
+        if (mimeType !== "image/png" && mimeType !== "image/jpeg") {
+          return respond({ error: "BRANDING_LOGO_UNSUPPORTED", message: "Branded broadcasts need a PNG or JPEG project logo. Upload one in Project Profile." }, 400);
+        }
+
+        deliveryKind = "BRANDED_PHOTO";
+        deliveredText = buildBrandedCaption(currentProjectName, currentTicker || null, messageText);
+        if (deliveredText.length > BRANDED_CAPTION_MAX) {
+          return respond({
+            error: "INVALID_MESSAGE",
+            message: `Branded broadcasts are limited to ${BRANDED_CAPTION_MAX} characters including the branding header. Shorten the message or post it as plain text.`,
+          }, 400);
+        }
+        brandingSnapshot = {
+          projectName: currentProjectName,
+          ticker: currentTicker || null,
+          logoAssetId: currentLogoAssetId,
+          storagePath: String(assetRow.storage_path),
+          mimeType,
+        };
+      }
+
       const rawGroup = await getGroup();
       if (!rawGroup) return respond({ error: "GROUP_NOT_FOUND", message: "That Telegram community is no longer connected." }, 404);
 
-      const ledgerSelect = "id,status,telegram_message_id,message_text,group_title,group_connection_id,telegram_chat_id,last_error,requested_at,sent_at";
+      const ledgerSelect = "id,status,telegram_message_id,message_text,group_title,group_connection_id,telegram_chat_id,last_error,requested_at,sent_at,delivery_kind,delivered_text_snapshot,branding_project_name,branding_ticker,branding_logo_asset_id";
       const outcomeMessage = (status: string, title: string) =>
         status === "SENT"
           ? `Announcement posted to ${title}.`
