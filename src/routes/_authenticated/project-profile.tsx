@@ -112,6 +112,8 @@ const STATUS_TONE: Record<DiscoveryStatus, "gold" | "green" | "muted"> = {
 function ProjectProfilePage() {
   const { workspaceId, workspace, loading: workspaceLoading } = useWorkspace();
   const queryClient = useQueryClient();
+  const { user } = useSession();
+  const userId = user?.id ?? null;
   const [form, setForm] = useState<Form>(EMPTY_FORM);
   const prefilledFor = useRef<string | null>(null);
   const [slugTouched, setSlugTouched] = useState(false);
