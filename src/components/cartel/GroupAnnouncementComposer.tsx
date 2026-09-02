@@ -713,14 +713,24 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
               Post this official broadcast to {snapshot?.groupTitle ?? "this community"}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Everyone in the community can see it. It is posted as plain text by
-              @PepeCartelHQBot for official project/team communications and does not replace normal
-              everyday conversation. No watcher DM is sent.
+              Everyone in the community can see it. It is posted by @PepeCartelHQBot
+              {snapshot?.branding
+                ? " as your project logo with an unformatted caption"
+                : " as plain text"}{" "}
+              for official project/team communications and does not replace normal everyday
+              conversation. No watcher DM is sent.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="max-h-48 overflow-y-auto rounded-md border border-border/60 bg-background/40 p-3">
+            {snapshot?.branding && snapshot.brandingLogoUrl ? (
+              <img
+                src={snapshot.brandingLogoUrl}
+                alt="Project logo used for this branded broadcast"
+                className="mb-2 size-16 rounded-md border border-border/60 object-contain"
+              />
+            ) : null}
             <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground [overflow-wrap:anywhere]">
-              {snapshot?.message ?? ""}
+              {snapshot?.deliveredText ?? snapshot?.message ?? ""}
             </p>
           </div>
           <AlertDialogFooter>
