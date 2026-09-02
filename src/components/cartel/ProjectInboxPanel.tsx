@@ -356,7 +356,18 @@ export function ProjectInboxPanel({
 
 
 
+  // ---------------------------------------------------- delivery safety gates
+  // A new reply may only be composed when this thread has no reply still in
+  // flight and no UNCERTAIN reply awaiting an explicit operator decision.
+  const hasInFlightReply = messages.some(
+    (m) => m.delivery_status != null && DELIVERY_IN_FLIGHT.has(m.delivery_status),
+  );
+  const hasUnacknowledgedUncertainReply = messages.some(
+    (m) => m.delivery_status === "ambiguous" && !m.delivery_uncertainty_acknowledged_at,
+  );
+
   // ------------------------------------------------------------ derived state
+
   const settingsChecking = !!workspaceId && settingsQuery.isPending;
   const settingsUnavailable = settingsQuery.isError;
   const repliesOn = settings?.replies_enabled === true;
