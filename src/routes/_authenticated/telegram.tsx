@@ -5,7 +5,6 @@ import {
   Clock3,
   Megaphone,
   Radio,
-  Users,
 } from "lucide-react";
 
 import { PageHeader } from "@/components/cartel/PageHeader";
@@ -13,6 +12,7 @@ import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
 import { BroadcastsPanel } from "@/components/cartel/BroadcastsPanel";
+import { AudiencePanel } from "@/components/cartel/AudiencePanel";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWorkspace } from "@/lib/workspace-context";
