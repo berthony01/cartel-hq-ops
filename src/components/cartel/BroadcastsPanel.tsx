@@ -493,7 +493,7 @@ export function BroadcastsPanel({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Short headline for this update"
-              disabled={!canManage}
+              disabled={inputsDisabled}
             />
             <p className="mt-1 text-right text-xs text-muted-foreground">
               {title.length}/{WATCHER_UPDATE_TITLE_MAX}
@@ -508,7 +508,7 @@ export function BroadcastsPanel({
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder="What do your watchers need to know?"
-              disabled={!canManage}
+              disabled={inputsDisabled}
             />
             <p className="mt-1 text-right text-xs text-muted-foreground">
               {body.length}/{WATCHER_UPDATE_BODY_MAX}
