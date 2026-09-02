@@ -493,6 +493,8 @@ export function sendGroupAnnouncement(params: {
   message: string;
   clientRequestId: string;
   branding?: ReviewedBroadcastBranding | null;
+  /** Optional Launch Watch inline button. The server resolves the deep link. */
+  ctaLaunchId?: string | null;
 }): Promise<GroupAnnouncementResult> {
   return invoke<GroupAnnouncementResult>({
     action: "send_group_announcement",
@@ -500,6 +502,9 @@ export function sendGroupAnnouncement(params: {
     groupConnectionId: params.groupConnectionId,
     message: params.message,
     clientRequestId: params.clientRequestId,
+    ...(params.ctaLaunchId
+      ? { ctaEnabled: true, ctaLaunchId: params.ctaLaunchId }
+      : { ctaEnabled: false }),
     ...(params.branding
       ? {
           brandingEnabled: true,
@@ -509,6 +514,21 @@ export function sendGroupAnnouncement(params: {
           reviewedTemplateVersion: params.branding.templateVersion,
         }
       : { brandingEnabled: false }),
+  });
+}
+
+/**
+ * Server-validated eligible launches for the Official Community Broadcast CTA.
+ * Token-free by construction — the browser never receives `launch_watch_token`.
+ */
+export function fetchBroadcastLaunchOptions(params: {
+  workspaceId: string;
+  groupConnectionId: string;
+}): Promise<{ options: LaunchWatchCtaOption[] }> {
+  return invoke<{ options: LaunchWatchCtaOption[] }>({
+    action: "broadcast_launch_options",
+    workspaceId: params.workspaceId,
+    groupConnectionId: params.groupConnectionId,
   });
 }
 
