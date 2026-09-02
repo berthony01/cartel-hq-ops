@@ -86,6 +86,54 @@ Deno.serve(async (req: Request) => {
     return group?.bot_is_admin === false && (last === "left" || last === "kicked") ? last : null;
   };
 
+  /**
+   * Launch Watch CTA eligibility — ONE shared definition for both the welcome
+   * card (Phase 5.1/5.2) and the Official Community Broadcast CTA. The private
+   * `launch_watch_token` is read here and used ONLY to build a Telegram deep
+   * link server-side; it is never returned to the browser.
+   */
+  const LW_OPEN_STATUSES = ["WATCHLIST_OPEN", "LAUNCH_APPROACHING", "CONTRACT_PENDING", "OFFICIAL_CONTRACT_REGISTERED"];
+  const LW_TOKEN_PATTERN = /^[0-9a-f]{24}$/;
+  const isHttpUrl = (value: unknown) => {
+    if (typeof value !== "string" || !value.trim()) return false;
+    try { const u = new URL(value.trim()); return u.protocol === "https:" || u.protocol === "http:"; } catch { return false; }
+  };
+  const loadEligibleLaunchRows = async (launchId?: string) => {
+    let query = admin.from("launches")
+      .select("id,token_name,ticker,chain,status,launch_watch_token,project_profile_id,project_profiles(workspace_id,project_name,discovery_status,website_url,telegram_url,x_url)")
+      .eq("workspace_id", workspaceId)
+      .in("status", LW_OPEN_STATUSES);
+    if (launchId) query = query.eq("id", launchId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data ?? []).filter((row: any) => {
+      const profile = Array.isArray(row?.project_profiles) ? row.project_profiles[0] : row?.project_profiles;
+      // The Project Profile must belong to the SAME workspace as the launch.
+      return String(profile?.workspace_id ?? "") === String(workspaceId)
+        && profile?.discovery_status === "published"
+        && LW_TOKEN_PATTERN.test(String(row?.launch_watch_token ?? ""));
+    });
+  };
+  /** Safe browser-facing option shape. Never includes the Launch Watch token. */
+  const toOption = (row: any) => {
+    const profile = Array.isArray(row?.project_profiles) ? row.project_profiles[0] : row?.project_profiles;
+    return {
+      launchId: String(row.id),
+      projectName: String(profile?.project_name ?? "Project"),
+      tokenName: String(row.token_name ?? ""),
+      ticker: String(row.ticker ?? ""),
+      chain: String(row.chain ?? ""),
+      status: String(row.status ?? ""),
+      hasWebsite: isHttpUrl(profile?.website_url),
+      hasTelegram: isHttpUrl(profile?.telegram_url),
+      hasX: isHttpUrl(profile?.x_url),
+    };
+  };
+  /** The one canonical Launch Watch deep link. Token stays server-side. */
+  const launchWatchDeepLink = (row: any) => `https://t.me/PepeCartelHQBot?start=lw_${String(row.launch_watch_token)}`;
+
+
+
   const verifyGroup = async (group: any) => {
     if (!group) throw new Error("Connect a Telegram group before publishing.");
     const removedStatus = storedRemovedStatus(group);
