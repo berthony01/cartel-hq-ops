@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Megaphone, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -72,6 +72,7 @@ export function BroadcastsPanel({
     enabled: !!workspaceId,
     queryFn: () => getLaunchAccess(workspaceId!, workspace?.owner_id ?? null),
   });
+  const accessKnown = accessQuery.isSuccess;
   const canManage = accessQuery.data?.canManage ?? false;
 
   // The URL param is only honoured when it names a launch in THIS workspace
@@ -115,9 +116,35 @@ export function BroadcastsPanel({
     null,
   );
   const [confirmOpen, setConfirmOpen] = useState(false);
-  // Count captured from a fresh, successful stats refetch at confirmation time.
-  const [confirmCount, setConfirmCount] = useState<number | null>(null);
   const [preparing, setPreparing] = useState(false);
+
+  /**
+   * The exact reviewed send. Captured only after a fresh, successful stats
+   * refetch that still matches the operator's current selection and draft.
+   * The dialog renders from this and the mutation submits this — nothing in the
+   * confirm/send path reads live render state.
+   */
+  type ConfirmSnapshot = {
+    launchId: string;
+    launchLabel: string;
+    statusLabel: string;
+    rawTitle: string;
+    rawBody: string;
+    sendTitle: string | null;
+    sendBody: string;
+    eligibleCount: number;
+    clientRequestId: string;
+  };
+  const [confirmSnapshot, setConfirmSnapshot] = useState<ConfirmSnapshot | null>(null);
+
+  // Latest-render mirror, used only to detect drift across an await.
+  const latestRef = useRef({
+    launchId: null as string | null,
+    title: "",
+    body: "",
+    canManage: false,
+    status: null as ReturnType<typeof toLaunchStatus> | null,
+  });
 
   function resetComposer() {
     setTitle("");
@@ -125,8 +152,9 @@ export function BroadcastsPanel({
     setRequestId(null);
     setAttemptedDraft(null);
     setConfirmOpen(false);
-    setConfirmCount(null);
+    setConfirmSnapshot(null);
   }
+
 
   useEffect(() => {
     resetComposer();
