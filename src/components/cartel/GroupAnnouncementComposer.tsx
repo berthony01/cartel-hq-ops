@@ -400,7 +400,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
                 ? (brandingUnavailableReason ??
                   "Branded posting is unavailable for this project right now.")
                 : brandedOverLimit
-                  ? `Branded broadcasts are limited to ${GROUP_BRANDED_CAPTION_MAX} characters including the branding header. Shorten the message or turn branding off.`
+                  ? `Branded broadcasts are limited to ${GROUP_BRANDED_CAPTION_MAX} characters including the branding header and footer. Shorten the message or turn branding off.`
                   : null;
 
   const sendDisabled =
