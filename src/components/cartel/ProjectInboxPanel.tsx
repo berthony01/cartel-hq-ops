@@ -1125,6 +1125,70 @@ export function ProjectInboxPanel({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* --------------------------------------- uncertainty acknowledgement */}
+      <AlertDialog
+        open={ackDialogMessageId !== null}
+        onOpenChange={(open) => {
+          if (!open) setAckDialogMessageId(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Acknowledge this uncertain delivery?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Telegram MAY already have delivered this reply to the member. Acknowledging does not
+              mark it sent, does not mark it failed and does not resend anything — it only records
+              that you reviewed the uncertainty so you can deliberately send another reply.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-11">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="min-h-11"
+              onClick={() => {
+                if (ackDialogMessageId) {
+                  ackMutation.mutate({ messageId: ackDialogMessageId });
+                }
+                setAckDialogMessageId(null);
+              }}
+            >
+              Acknowledge uncertainty
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ------------------------------------------- abandon local retry */}
+      <AlertDialog open={abandonDialogOpen} onOpenChange={setAbandonDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Abandon this local retry?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The server may already have accepted your previous attempt. Abandoning sends nothing
+              and cancels nothing — it only lets you start a new draft. If the earlier reply was
+              accepted, it stays queued and still blocks a new send until it settles.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-11">Keep retry</AlertDialogCancel>
+            <AlertDialogAction
+              className="min-h-11"
+              onClick={() => {
+                setPendingAttempt(null);
+                setReplyBody("");
+                setAbandonDialogOpen(false);
+                void queryClient.invalidateQueries({
+                  queryKey: projectInboxKeys.messages(workspaceId, selectedConversationId),
+                });
+              }}
+            >
+              Abandon local retry
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+
   );
 }
