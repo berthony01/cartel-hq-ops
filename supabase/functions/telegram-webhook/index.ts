@@ -1639,7 +1639,208 @@ Deno.serve(async (req: Request) => {
         _body: text,
       });
       if (captureError) throw captureError;
+      return json({ ok: true });
     }
+
+    /**
+     * C7.3E — member-initiated Project Inbox capture.
+     *
+     * Runs strictly AFTER every command, deep link, linking and callback
+     * branch, and strictly AFTER the C7.3B/D reply-to routing above, which
+     * returns before this point whenever a reply target is present. This
+     * handler therefore only ever sees a plain, unthreaded, private text DM.
+     * It never sends a Telegram message and never guesses a project.
+     */
+    const bareDmCapturable =
+      chat?.type === "private" &&
+      from?.is_bot !== true &&
+      !Number.isSafeInteger(inboundReplyToId) &&
+      Number.isSafeInteger(inboundUpdateId) && inboundUpdateId > 0 &&
+      Number.isSafeInteger(inboundMessageId) && inboundMessageId > 0 &&
+      Number.isSafeInteger(inboundSenderId) && inboundSenderId > 0 &&
+      Number.isSafeInteger(inboundChatId) && inboundChatId === inboundSenderId &&
+      text.length >= 1 && text.length <= 4096;
+
+    if (bareDmCapturable) {
+      // 1. Candidate workspaces from EXISTING server-side evidence only.
+      const candidates = new Set<string>();
+      const blockedWorkspaces = new Set<string>();
+
+      const { data: contactRows, error: contactRowsError } = await admin
+        .from("project_inbox_contacts")
+        .select("workspace_id,status")
+        .eq("telegram_user_id", inboundSenderId);
+      if (contactRowsError) throw contactRowsError;
+      for (const row of contactRows ?? []) {
+        if (row.status === "ACTIVE") candidates.add(String(row.workspace_id));
+        // A BLOCKED contact excludes that workspace from direct-DM routing,
+        // even when launch watch evidence also exists.
+        if (row.status === "BLOCKED") blockedWorkspaces.add(String(row.workspace_id));
+      }
+
+      // Launch watch evidence, gated on an existing Telegram contact record.
+      const { data: betaContact, error: betaContactError } = await admin
+        .from("telegram_beta_contacts")
+        .select("id")
+        .eq("telegram_user_id", String(inboundSenderId))
+        .limit(1)
+        .maybeSingle();
+      if (betaContactError) throw betaContactError;
+      if (betaContact) {
+        const { data: watchRows, error: watchRowsError } = await admin
+          .from("launch_watch_subscriptions")
+          .select("launches!inner(workspace_id)")
+          .eq("telegram_user_id", inboundSenderId)
+          .eq("is_active", true);
+        if (watchRowsError) throw watchRowsError;
+        for (const row of watchRows ?? []) {
+          const ws = (row as any)?.launches?.workspace_id;
+          if (ws) candidates.add(String(ws));
+        }
+      }
+
+      for (const ws of blockedWorkspaces) candidates.delete(ws);
+      if (candidates.size === 0) return json({ ok: true });
+
+      // 2. Only workspaces that explicitly allow new member conversations.
+      const { data: settingsRows, error: settingsError } = await admin
+        .from("project_inbox_settings")
+        .select("workspace_id,new_conversations_enabled")
+        .in("workspace_id", Array.from(candidates));
+      if (settingsError) throw settingsError;
+      const qualifying = (settingsRows ?? [])
+        .filter((r: any) => r.new_conversations_enabled === true)
+        .map((r: any) => String(r.workspace_id));
+
+      // 0 or >1 qualifying workspaces: never guess, never persist anything.
+      if (qualifying.length !== 1) return json({ ok: true });
+      const workspaceId = qualifying[0];
+
+      // 3. Atomic inbound dedupe. A duplicate delivery persists nothing new.
+      const { data: inboundInserted, error: inboundError } = await admin
+        .from("telegram_inbound_updates")
+        .upsert(
+          {
+            telegram_update_id: inboundUpdateId,
+            update_kind: "MESSAGE",
+            telegram_chat_id: inboundChatId,
+            telegram_message_id: inboundMessageId,
+            telegram_user_id: inboundSenderId,
+            status: "RECEIVED",
+          },
+          { onConflict: "telegram_update_id", ignoreDuplicates: true },
+        )
+        .select("telegram_update_id");
+      if (inboundError) throw inboundError;
+      if (!inboundInserted || inboundInserted.length === 0) return json({ ok: true });
+
+      const failInbound = async (reason: string) => {
+        await admin
+          .from("telegram_inbound_updates")
+          .update({ status: "IGNORED", processed_at: new Date().toISOString(), last_error: reason })
+          .eq("telegram_update_id", inboundUpdateId);
+        return json({ ok: true });
+      };
+
+      // 4. Workspace-scoped contact. Never reactivates a BLOCKED contact.
+      const loadContact = async () => {
+        const { data, error } = await admin
+          .from("project_inbox_contacts")
+          .select("id,status")
+          .eq("workspace_id", workspaceId)
+          .eq("telegram_user_id", inboundSenderId)
+          .maybeSingle();
+        if (error) throw error;
+        return data ?? null;
+      };
+      let contact = await loadContact();
+      if (!contact) {
+        const { error: insertContactError } = await admin
+          .from("project_inbox_contacts")
+          .upsert(
+            { workspace_id: workspaceId, telegram_user_id: inboundSenderId },
+            { onConflict: "workspace_id,telegram_user_id", ignoreDuplicates: true },
+          );
+        if (insertContactError) throw insertContactError;
+        contact = await loadContact();
+      }
+      if (!contact) return await failInbound("contact_unavailable");
+      if (contact.status !== "ACTIVE") return await failInbound("contact_blocked");
+
+      // 5. Continue the existing unresolved MEMBER_INITIATED thread, else open one.
+      const UNRESOLVED = ["OPEN", "WAITING_ON_TEAM", "WAITING_ON_MEMBER"];
+      const loadConversation = async () => {
+        const { data, error } = await admin
+          .from("project_conversations")
+          .select("id")
+          .eq("workspace_id", workspaceId)
+          .eq("contact_id", contact.id)
+          .eq("origin_type", "MEMBER_INITIATED")
+          .in("status", UNRESOLVED)
+          .maybeSingle();
+        if (error) throw error;
+        return data ?? null;
+      };
+      let conversation = await loadConversation();
+      if (!conversation) {
+        const { data: created, error: createError } = await admin
+          .from("project_conversations")
+          .insert({
+            workspace_id: workspaceId,
+            contact_id: contact.id,
+            origin_type: "MEMBER_INITIATED",
+            category: "GENERAL",
+            priority: "NORMAL",
+            status: "WAITING_ON_TEAM",
+          })
+          .select("id")
+          .maybeSingle();
+        if (createError) {
+          // Concurrent inbound update won the partial unique index: re-read
+          // the winning conversation instead of failing or creating another.
+          if ((createError as any)?.code !== "23505") throw createError;
+          conversation = await loadConversation();
+        } else {
+          conversation = created ?? null;
+        }
+      }
+      if (!conversation) return await failInbound("conversation_unavailable");
+
+      // 6. Exactly one MEMBER/TELEGRAM message. Message-level unique indexes on
+      //    telegram_update_id and (chat_id, message_id) are the final duplicate
+      //    guard; the conversation state trigger updates last_message_at/status.
+      const { data: insertedMessage, error: messageError } = await admin
+        .from("project_conversation_messages")
+        .insert({
+          conversation_id: conversation.id,
+          author_type: "MEMBER",
+          channel: "TELEGRAM",
+          team_user_id: null,
+          body: text,
+          telegram_update_id: inboundUpdateId,
+          telegram_chat_id: inboundChatId,
+          telegram_message_id: inboundMessageId,
+          telegram_reply_to_message_id: null,
+        })
+        .select("id")
+        .maybeSingle();
+      if (messageError) {
+        if ((messageError as any)?.code === "23505") return await failInbound("duplicate_message");
+        throw messageError;
+      }
+
+      await admin
+        .from("telegram_inbound_updates")
+        .update({
+          status: "PROCESSED",
+          processed_at: new Date().toISOString(),
+          conversation_message_id: insertedMessage?.id ?? null,
+        })
+        .eq("telegram_update_id", inboundUpdateId);
+
+      return json({ ok: true });
+    }
+
 
     return json({ ok: true });
   } catch (err) {
