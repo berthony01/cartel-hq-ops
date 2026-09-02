@@ -1746,7 +1746,15 @@ export type Database = {
       }
       telegram_group_announcements: {
         Row: {
+          branding_logo_asset_id: string | null
+          branding_logo_mime_type: string | null
+          branding_logo_storage_path: string | null
+          branding_project_name: string | null
+          branding_template_version: string | null
+          branding_ticker: string | null
           client_request_id: string
+          delivered_text_snapshot: string
+          delivery_kind: string
           group_connection_id: string | null
           group_title: string
           id: string
@@ -1762,7 +1770,15 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          branding_logo_asset_id?: string | null
+          branding_logo_mime_type?: string | null
+          branding_logo_storage_path?: string | null
+          branding_project_name?: string | null
+          branding_template_version?: string | null
+          branding_ticker?: string | null
           client_request_id: string
+          delivered_text_snapshot: string
+          delivery_kind?: string
           group_connection_id?: string | null
           group_title: string
           id?: string
@@ -1778,7 +1794,15 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          branding_logo_asset_id?: string | null
+          branding_logo_mime_type?: string | null
+          branding_logo_storage_path?: string | null
+          branding_project_name?: string | null
+          branding_template_version?: string | null
+          branding_ticker?: string | null
           client_request_id?: string
+          delivered_text_snapshot?: string
+          delivery_kind?: string
           group_connection_id?: string | null
           group_title?: string
           id?: string
@@ -1794,6 +1818,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "telegram_group_announcements_branding_logo_asset_id_fkey"
+            columns: ["branding_logo_asset_id"]
+            isOneToOne: false
+            referencedRelation: "media_assets"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "telegram_group_announcements_group_connection_id_fkey"
             columns: ["group_connection_id"]
