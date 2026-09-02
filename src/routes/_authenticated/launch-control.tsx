@@ -72,7 +72,9 @@ import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
+import { ScheduleChangeSummary } from "@/components/cartel/ScheduleChangeSummary";
 import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
+
 import { launchReadinessQueryKey } from "@/lib/launch-readiness";
 
 import { StickyActionBar } from "@/components/cartel/StickyActionBar";
