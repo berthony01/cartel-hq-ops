@@ -280,6 +280,54 @@ export function ProjectInboxPanel({
     onError: (error) => toast.error(errorMessage(error)),
   });
 
+  const replyMutation = useMutation({
+    mutationFn: (vars: { conversationId: string; body: string; requestId: string }) =>
+      createProjectInboxTeamReply(
+        workspaceId!,
+        vars.conversationId,
+        vars.body,
+        vars.requestId,
+      ),
+    onSuccess: (result, vars) => {
+      // Only clear the composer and mint a NEW request id after the server
+      // confirmed acceptance — otherwise the same text could be queued twice.
+      setReplyBody("");
+      setReplyRequestId(crypto.randomUUID());
+      void queryClient.invalidateQueries({
+        queryKey: projectInboxKeys.messages(workspaceId, vars.conversationId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: projectInboxKeys.conversation(workspaceId, vars.conversationId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: projectInboxKeys.conversationsRoot(workspaceId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: projectInboxKeys.summary(workspaceId),
+      });
+      toast.success(
+        result.replayed
+          ? "This reply was already queued — it was not sent twice."
+          : "Reply queued for delivery.",
+      );
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const ackMutation = useMutation({
+    mutationFn: (vars: { deliveryId: string }) =>
+      acknowledgeProjectInboxDelivery(workspaceId!, vars.deliveryId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: projectInboxKeys.messages(workspaceId, selectedConversationId),
+      });
+      toast.success("Marked as reviewed. Nothing was resent.");
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+
+
   // ------------------------------------------------------------ derived state
   const settingsChecking = !!workspaceId && settingsQuery.isPending;
   const settingsUnavailable = settingsQuery.isError;
