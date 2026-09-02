@@ -353,7 +353,7 @@ export function BroadcastsPanel({
           </div>
         ) : (
           <>
-            <dl className="grid grid-cols-3 gap-x-4 gap-y-2 text-xs">
+            <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-xs min-[420px]:grid-cols-2 sm:grid-cols-3">
               <div className="min-w-0">
                 <dt className="text-muted-foreground">Active watchers</dt>
                 <dd className="font-mono text-sm text-foreground">
