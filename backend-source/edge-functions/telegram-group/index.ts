@@ -648,12 +648,14 @@ Deno.serve(async (req: Request) => {
         }
         const w = typeof assetRow.width === "number" ? assetRow.width : null;
         const h = typeof assetRow.height === "number" ? assetRow.height : null;
-        if (w !== null && h !== null) {
-          const ratio = Math.max(w, h) / Math.max(1, Math.min(w, h));
-          if (w <= 0 || h <= 0 || w + h > 10000 || ratio > 20) {
-            return respond({ error: "BRANDING_LOGO_UNSUPPORTED", message: "Telegram cannot post this logo's dimensions. Upload a more standard PNG or JPEG logo in Project Profile." }, 400);
-          }
+        const dimsBad =
+          (w !== null && w <= 0) ||
+          (h !== null && h <= 0) ||
+          (w !== null && h !== null && (w + h > 10000 || Math.max(w, h) / Math.max(1, Math.min(w, h)) > 20));
+        if (dimsBad) {
+          return respond({ error: "BRANDING_LOGO_UNSUPPORTED", message: "Telegram cannot post this logo's dimensions. Upload a more standard PNG or JPEG logo in Project Profile." }, 400);
         }
+
 
         deliveredText = buildBrandedCaption(currentProjectName, currentTicker || null, messageText);
         if (deliveredText.length > BRANDED_CAPTION_MAX) {
