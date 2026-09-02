@@ -1753,6 +1753,13 @@ export type Database = {
           branding_template_version: string | null
           branding_ticker: string | null
           client_request_id: string
+          cta_chain: string | null
+          cta_enabled: boolean
+          cta_launch_id: string | null
+          cta_launch_status: string | null
+          cta_project_name: string | null
+          cta_ticker: string | null
+          cta_token_name: string | null
           delivered_text_snapshot: string
           delivery_kind: string
           group_connection_id: string | null
@@ -1777,6 +1784,13 @@ export type Database = {
           branding_template_version?: string | null
           branding_ticker?: string | null
           client_request_id: string
+          cta_chain?: string | null
+          cta_enabled?: boolean
+          cta_launch_id?: string | null
+          cta_launch_status?: string | null
+          cta_project_name?: string | null
+          cta_ticker?: string | null
+          cta_token_name?: string | null
           delivered_text_snapshot: string
           delivery_kind?: string
           group_connection_id?: string | null
@@ -1801,6 +1815,13 @@ export type Database = {
           branding_template_version?: string | null
           branding_ticker?: string | null
           client_request_id?: string
+          cta_chain?: string | null
+          cta_enabled?: boolean
+          cta_launch_id?: string | null
+          cta_launch_status?: string | null
+          cta_project_name?: string | null
+          cta_ticker?: string | null
+          cta_token_name?: string | null
           delivered_text_snapshot?: string
           delivery_kind?: string
           group_connection_id?: string | null
