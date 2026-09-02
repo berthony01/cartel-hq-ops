@@ -220,19 +220,20 @@ export function ProjectInboxPanel({
       (query.state.data ?? []).some(
         (m) => m.delivery_status != null && DELIVERY_IN_FLIGHT.has(m.delivery_status),
       )
-        ? 10_000
+        ? 3_000
         : false,
   });
 
   const messages = useMemo(() => messagesQuery.data ?? [], [messagesQuery.data]);
 
   // A draft belongs to exactly one thread in one workspace. Switching either
-  // clears it and mints a fresh request id, so a draft can never be submitted
+  // clears the draft and any frozen attempt, so a draft can never be submitted
   // against a different conversation.
   useEffect(() => {
     setReplyBody("");
-    setReplyRequestId(crypto.randomUUID());
+    setPendingAttempt(null);
   }, [workspaceId, selectedConversationId]);
+
 
 
 
