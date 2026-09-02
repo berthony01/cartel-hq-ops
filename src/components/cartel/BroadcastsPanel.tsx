@@ -1120,7 +1120,13 @@ export function BroadcastsPanel({
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={dismissConfirmOpen} onOpenChange={setDismissConfirmOpen}>
+      <AlertDialog
+        open={dismissConfirmOpen}
+        onOpenChange={(open) => {
+          setDismissConfirmOpen(open);
+          if (!open) setDismissSnapshot(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Dismiss this schedule change?</AlertDialogTitle>
@@ -1129,14 +1135,25 @@ export function BroadcastsPanel({
               watchers will not be told that the schedule moved.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {dismissSnapshot ? (
+            <div className="space-y-2 rounded-md border border-border bg-muted/40 p-3 text-sm">
+              <p className="font-medium">{dismissSnapshot.launchLabel}</p>
+              <p className="text-muted-foreground">
+                <span className="text-foreground">Previous:</span> {dismissSnapshot.previous}
+              </p>
+              <p className="text-muted-foreground">
+                <span className="text-foreground">New:</span> {dismissSnapshot.current}
+              </p>
+            </div>
+          ) : null}
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              disabled={dismissMutation.isPending || !pendingComm}
+              disabled={dismissMutation.isPending || !dismissSnapshot}
               onClick={(e) => {
                 e.preventDefault();
-                if (!pendingComm) return;
-                dismissMutation.mutate(pendingComm.id);
+                if (!dismissSnapshot) return;
+                dismissMutation.mutate(dismissSnapshot);
               }}
             >
               Dismiss
@@ -1144,6 +1161,7 @@ export function BroadcastsPanel({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
     </div>
 
   );
