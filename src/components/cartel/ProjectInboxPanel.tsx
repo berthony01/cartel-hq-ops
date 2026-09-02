@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog,
@@ -35,6 +36,7 @@ import {
   projectInboxKeys,
   sendProjectInboxTeamReply,
   setProjectInboxConversationBlocked,
+  setProjectInboxNewConversationsEnabled,
   setProjectInboxRepliesEnabled,
   updateProjectConversationStatus,
   type ConversationStatus,
@@ -55,7 +57,7 @@ import {
  *
  * Deliberately NOT here (not live yet): assignment controls,
  * notification/team-preference controls, unread counts, arbitrary
- * new-conversation DM capture, and History integration.
+ * and History integration.
  */
 
 const REPLY_MAX = 3500;
@@ -257,6 +259,26 @@ export function ProjectInboxPanel({
     onError: (error) => toast.error(errorMessage(error)),
   });
 
+  // C7.3E — flips ONLY `new_conversations_enabled`; `replies_enabled` is
+  // passed through unchanged from the last server-returned settings row.
+  const newConversationsMutation = useMutation({
+    mutationFn: (next: boolean) =>
+      setProjectInboxNewConversationsEnabled(
+        workspaceId!,
+        next,
+        settings?.replies_enabled ?? false,
+      ),
+    onSuccess: (row) => {
+      queryClient.setQueryData(projectInboxKeys.settings(workspaceId), row);
+      toast.success(
+        row.new_conversations_enabled
+          ? "New member conversations are on."
+          : "New member conversations are off.",
+      );
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
   const statusMutation = useMutation({
     mutationFn: (vars: { conversationId: string; status: ConversationStatus }) =>
       updateProjectConversationStatus(vars.conversationId, vars.status),
@@ -371,6 +393,7 @@ export function ProjectInboxPanel({
   const settingsChecking = !!workspaceId && settingsQuery.isPending;
   const settingsUnavailable = settingsQuery.isError;
   const repliesOn = settings?.replies_enabled === true;
+  const newConversationsOn = settings?.new_conversations_enabled === true;
 
   const headerTone = settingsChecking
     ? "muted"
@@ -426,8 +449,9 @@ export function ProjectInboxPanel({
                 Only an explicit private reply to a known official Launch Watch bot message can
                 enter this Inbox. Arbitrary bot DMs, commands and group messages are never
                 captured. Your team sees an opaque Member reference — never the subscriber&apos;s
-                Telegram user id or username. Starting new conversations from arbitrary bot DMs is
-                not enabled here yet.
+                Telegram user id or username. A direct Telegram DM can only start a new thread
+                when new member conversations are allowed below and the bot can safely identify
+                exactly one project for that member.
               </span>
             </p>
           </div>
@@ -472,6 +496,31 @@ export function ProjectInboxPanel({
               {repliesMutation.isPending ? (
                 <span className="text-xs text-muted-foreground">Saving…</span>
               ) : null}
+            </div>
+          ) : null}
+
+          {settings ? (
+            <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border/60 bg-background/40 p-3">
+              <div className="min-w-0 space-y-1">
+                <label
+                  htmlFor="inbox-new-conversations"
+                  className="block text-xs font-medium text-foreground"
+                >
+                  Allow new member conversations
+                </label>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  When this is on, a direct Telegram DM to the bot can start a new Project Inbox
+                  thread — but only when the bot can safely identify exactly one project for that
+                  member. If more than one project could match, nothing is captured.
+                </p>
+              </div>
+              <Switch
+                id="inbox-new-conversations"
+                checked={newConversationsOn}
+                disabled={newConversationsMutation.isPending}
+                onCheckedChange={(next) => newConversationsMutation.mutate(next === true)}
+                aria-label="Allow new member conversations"
+              />
             </div>
           ) : null}
         </div>
