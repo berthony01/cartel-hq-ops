@@ -1,11 +1,14 @@
 import { useCallback } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
+  CalendarClock,
   Clock3,
   Megaphone,
   Radio,
 } from "lucide-react";
+
 
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
@@ -16,6 +19,11 @@ import { AudiencePanel } from "@/components/cartel/AudiencePanel";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWorkspace } from "@/lib/workspace-context";
+import {
+  listPendingScheduleCommunications,
+  workspaceScheduleCommunicationsQueryKey,
+} from "@/lib/launch-control";
+
 
 import { useTelegramSetup } from "@/components/cartel/TelegramConnectionCard";
 import {
@@ -160,6 +168,13 @@ function TelegramPage() {
     [navigate],
   );
 
+  // C6 — workspace-wide unnotified schedule changes (RLS-scoped, metadata only).
+  const pendingScheduleQuery = useQuery({
+    queryKey: workspaceScheduleCommunicationsQueryKey(workspaceId ?? null),
+    enabled: !!workspaceId,
+    queryFn: () => listPendingScheduleCommunications(workspaceId!),
+  });
+  const pendingSchedule = pendingScheduleQuery.data ?? [];
 
 
 
@@ -261,6 +276,57 @@ function TelegramPage() {
         {/* ---------------------------------------------------------------- */}
         <TabsContent value="overview" className="mt-0 flex min-w-0 flex-col gap-4 sm:gap-6">
           <LaunchReadinessCallout workspaceId={workspaceId} />
+
+          {/* C6 — unnotified schedule changes need an explicit operator decision. */}
+          {pendingScheduleQuery.isError ? (
+            <Section variant="surface" title="Schedule changes">
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Pending schedule-change decisions could not be loaded. This is not a confirmation
+                that there are none.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2 min-h-11"
+                onClick={() => void pendingScheduleQuery.refetch()}
+              >
+                Retry
+              </Button>
+            </Section>
+          ) : pendingSchedule.length > 0 ? (
+            <Section
+              variant="surface"
+              title="Schedule changed"
+              leading={<CalendarClock className="size-4" aria-hidden="true" />}
+              description={
+                pendingSchedule.length === 1
+                  ? "One launch schedule changed and its watchers have not been notified."
+                  : `${pendingSchedule.length} launch schedules changed and their watchers have not been notified.`
+              }
+              actions={<StatusBadge tone="gold">Decision needed</StatusBadge>}
+            >
+              <Button
+                size="sm"
+                className="min-h-11"
+                onClick={() =>
+                  pendingSchedule.length === 1
+                    ? setLaunch(pendingSchedule[0]!.launch_id)
+                    : setTab("broadcasts")
+                }
+              >
+                {pendingSchedule.length === 1
+                  ? "Review in Broadcasts"
+                  : "Open Broadcasts to decide"}
+              </Button>
+              {pendingSchedule.length > 1 ? (
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  Select each affected launch in Broadcasts to notify watchers or dismiss the
+                  change.
+                </p>
+              ) : null}
+            </Section>
+          ) : null}
+
 
           <Section
             variant="hero"

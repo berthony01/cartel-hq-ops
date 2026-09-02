@@ -303,6 +303,8 @@ export type Database = {
           launch_id: string
           resolved_at: string | null
           resolved_by: string | null
+          sent_client_request_id: string | null
+          sent_event_id: string | null
           status: string
           updated_at: string
           workspace_id: string
@@ -324,6 +326,8 @@ export type Database = {
           launch_id: string
           resolved_at?: string | null
           resolved_by?: string | null
+          sent_client_request_id?: string | null
+          sent_event_id?: string | null
           status?: string
           updated_at?: string
           workspace_id: string
@@ -345,6 +349,8 @@ export type Database = {
           launch_id?: string
           resolved_at?: string | null
           resolved_by?: string | null
+          sent_client_request_id?: string | null
+          sent_event_id?: string | null
           status?: string
           updated_at?: string
           workspace_id?: string
@@ -369,6 +375,13 @@ export type Database = {
             columns: ["resolved_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_schedule_communications_sent_event_id_fkey"
+            columns: ["sent_event_id"]
+            isOneToOne: false
+            referencedRelation: "launch_events"
             referencedColumns: ["id"]
           },
           {
@@ -2090,6 +2103,8 @@ export type Database = {
           launch_id: string
           resolved_at: string | null
           resolved_by: string | null
+          sent_client_request_id: string | null
+          sent_event_id: string | null
           status: string
           updated_at: string
           workspace_id: string
@@ -2104,6 +2119,10 @@ export type Database = {
       enqueue_due_launch_reminder_events: {
         Args: { _now?: string }
         Returns: number
+      }
+      format_launch_schedule_snapshot: {
+        Args: { _at: string; _tz: string; _we: string; _ws: string }
+        Returns: string
       }
       get_cartel_network_launch: {
         Args: { _slug: string }
@@ -2505,6 +2524,10 @@ export type Database = {
           verification_status: string
           verified_at: string
         }[]
+      }
+      send_launch_schedule_communication: {
+        Args: { _client_request_id: string; _id: string; _note?: string }
+        Returns: string
       }
       set_launch_contract_address: {
         Args: { _contract_address: string; _launch_id: string }

@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   Bell,
+
   Check,
   Copy,
   ExternalLink,
@@ -35,6 +37,10 @@ import {
   getLaunchWatcherUpdateStats,
   listLaunchWatcherUpdates,
   canSendWatcherUpdate,
+  getPendingScheduleCommunication,
+  scheduleCommunicationQueryKey,
+  workspaceScheduleCommunicationsQueryKey,
+
 
 
   isLaunchWatchClosedStatus,
@@ -68,7 +74,9 @@ import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
+import { ScheduleChangeSummary } from "@/components/cartel/ScheduleChangeSummary";
 import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
+
 import { launchReadinessQueryKey } from "@/lib/launch-readiness";
 
 import { StickyActionBar } from "@/components/cartel/StickyActionBar";
@@ -365,7 +373,13 @@ function LaunchControlPage() {
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["launches", workspaceId] });
     void queryClient.invalidateQueries({ queryKey: launchReadinessQueryKey(workspaceId) });
+    // C6: a saved schedule edit may create/refresh a pending communication.
+    void queryClient.invalidateQueries({ queryKey: ["launch-schedule-communication"] });
+    void queryClient.invalidateQueries({
+      queryKey: workspaceScheduleCommunicationsQueryKey(workspaceId),
+    });
   };
+
 
 
   // ---- create -------------------------------------------------------------
@@ -605,6 +619,18 @@ function LaunchControlPage() {
   // Composing and sending watcher updates moved to Community Command →
   // Broadcasts (C2). Launch Control keeps the read-only audience counts and
   // recent outcomes only, so exactly one send composer exists.
+
+  // ---- C6: pending schedule-change communication ---------------------------
+
+  // Read-only here. The canonical review/notify/dismiss composer lives in
+  // Community Command → Broadcasts, so Launch Control only warns and links.
+  const scheduleCommQuery = useQuery({
+    queryKey: scheduleCommunicationQueryKey(selected?.id ?? null),
+    enabled: !!selected?.id,
+    queryFn: () => getPendingScheduleCommunication(selected!.id),
+  });
+  const pendingScheduleComm = scheduleCommQuery.data ?? null;
+
 
 
   // ---- countdown + reminder readiness (saved launch fields only) -----------
@@ -1224,7 +1250,49 @@ function LaunchControlPage() {
                           : `Times are entered and displayed in this device's timezone (${tz}) and stored as absolute timestamps. There is no arbitrary timezone conversion in this phase.`
                       }
                     >
+                      {scheduleCommQuery.isError ? (
+                        <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+                          Could not check whether this launch has an unnotified schedule change.
+                          <button
+                            type="button"
+                            className="ml-2 underline underline-offset-2"
+                            onClick={() => void scheduleCommQuery.refetch()}
+                          >
+                            Retry
+                          </button>
+                        </div>
+                      ) : null}
+                      {pendingScheduleComm ? (
+                        <div className="mb-4 rounded-lg border border-primary/40 bg-primary/10 p-4">
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-primary" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-foreground">
+                                Schedule changed · Watchers have not been notified.
+                              </p>
+                              <div className="mt-3">
+                                <ScheduleChangeSummary row={pendingScheduleComm} />
+                              </div>
+                              <Button asChild size="sm" className="mt-4 min-h-11">
+                                <Link
+                                  to="/telegram"
+                                  search={{ tab: "broadcasts", launch: selected.id }}
+                                >
+                                  Review &amp; notify in Community Command
+                                </Link>
+                              </Button>
+                              {readOnly ? (
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                  You have read-only access. An owner or admin decides whether to
+                                  notify watchers.
+                                </p>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
                       <div className="grid gap-3 sm:grid-cols-2">
+
                         <div className="min-w-0">
                           <Label htmlFor="schedule-mode">Schedule mode</Label>
                           <Select
