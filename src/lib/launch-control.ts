@@ -507,6 +507,61 @@ export async function createLaunchWatcherUpdate(
   return String(data ?? "");
 }
 
+// ---------------------------------------------------------------------------
+// C3 — Audience dashboard (aggregate-only surface).
+//
+// `get_launch_audience_summary` returns counts only. No Telegram identity,
+// subscription id, message body or per-recipient row ever reaches the browser.
+// The six `last_*` / `never_contacted_watchers` buckets are mutually exclusive
+// over ACTIVE watchers and sum to `active_watchers`; they describe each active
+// watcher's most recent delivery record, never permanent reachability.
+// ---------------------------------------------------------------------------
+
+export type LaunchAudienceSummary = {
+  active_watchers: number;
+  total_watchers: number;
+  updates_enabled_watchers: number;
+  updates_muted_watchers: number;
+  reminders_enabled_watchers: number;
+  reminders_muted_watchers: number;
+  last_sent_watchers: number;
+  last_failed_watchers: number;
+  last_ambiguous_watchers: number;
+  last_inflight_watchers: number;
+  last_skipped_watchers: number;
+  never_contacted_watchers: number;
+  last_delivery_at: string | null;
+};
+
+export async function getLaunchAudienceSummary(
+  launchId: string,
+): Promise<LaunchAudienceSummary> {
+  const { data, error } = await (supabase as unknown as RpcClient).rpc(
+    "get_launch_audience_summary",
+    { _launch_id: launchId },
+  );
+  if (error) rethrow(error);
+  const row = (Array.isArray(data) ? data[0] : null) as Record<string, unknown> | null;
+  const lastDeliveryAt = row?.["last_delivery_at"];
+  return {
+    active_watchers: Number(row?.["active_watchers"] ?? 0),
+    total_watchers: Number(row?.["total_watchers"] ?? 0),
+    updates_enabled_watchers: Number(row?.["updates_enabled_watchers"] ?? 0),
+    updates_muted_watchers: Number(row?.["updates_muted_watchers"] ?? 0),
+    reminders_enabled_watchers: Number(row?.["reminders_enabled_watchers"] ?? 0),
+    reminders_muted_watchers: Number(row?.["reminders_muted_watchers"] ?? 0),
+    last_sent_watchers: Number(row?.["last_sent_watchers"] ?? 0),
+    last_failed_watchers: Number(row?.["last_failed_watchers"] ?? 0),
+    last_ambiguous_watchers: Number(row?.["last_ambiguous_watchers"] ?? 0),
+    last_inflight_watchers: Number(row?.["last_inflight_watchers"] ?? 0),
+    last_skipped_watchers: Number(row?.["last_skipped_watchers"] ?? 0),
+    never_contacted_watchers: Number(row?.["never_contacted_watchers"] ?? 0),
+    last_delivery_at: typeof lastDeliveryAt === "string" ? lastDeliveryAt : null,
+  };
+}
+
+
+
 
 // ---------------------------------------------------------------------------
 // Launch management permission (UI hint only).
