@@ -435,6 +435,7 @@ export function BroadcastsPanel({
     setScheduleRequestId(null);
     setAttemptedSchedule(null);
     setScheduleSnapshot(null);
+    setDismissSnapshot(null);
     setScheduleConfirmOpen(false);
     setDismissConfirmOpen(false);
   }, [selected?.id, pendingComm?.id]);
@@ -456,6 +457,8 @@ export function BroadcastsPanel({
         communicationId: snapshot.communicationId,
         clientRequestId: snapshot.clientRequestId,
         note: snapshot.note.trim() ? snapshot.note.trim() : null,
+        // Only the frozen reviewed values are submitted, never live state.
+        ...snapshot.expected,
       }),
     onMutate: (snapshot) =>
       setAttemptedSchedule({ note: snapshot.note, identity: snapshot.identity }),
@@ -477,16 +480,24 @@ export function BroadcastsPanel({
   });
 
   const dismissMutation = useMutation({
-    mutationFn: async (communicationId: string) =>
-      dismissLaunchScheduleCommunication(communicationId),
-    onSuccess: () => {
+    mutationFn: async (snapshot: DismissSnapshot) =>
+      dismissLaunchScheduleCommunication({
+        communicationId: snapshot.communicationId,
+        ...snapshot.expected,
+      }),
+    onSuccess: (_void, snapshot) => {
       toast.success("Schedule change dismissed. No watcher message was created.");
       setDismissConfirmOpen(false);
-      refreshAfterScheduleDecision(selected?.id ?? null);
+      setDismissSnapshot(null);
+      refreshAfterScheduleDecision(snapshot.launchId);
     },
-    onError: (err: unknown) =>
-      toast.error(err instanceof Error ? err.message : "Could not dismiss this schedule change."),
+    onError: (err: unknown) => {
+      setDismissSnapshot(null);
+      setDismissConfirmOpen(false);
+      toast.error(err instanceof Error ? err.message : "Could not dismiss this schedule change.");
+    },
   });
+
 
   function refreshAfterScheduleDecision(launchId: string | null) {
     void queryClient.invalidateQueries({ queryKey: scheduleCommunicationQueryKey(launchId) });
