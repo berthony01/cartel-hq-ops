@@ -789,6 +789,23 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
               conversation. No watcher DM is sent.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="min-w-0 space-y-1 rounded-md border border-border/60 bg-background/30 p-3 text-xs">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span className="uppercase tracking-[0.12em] text-muted-foreground">Delivery</span>
+              <span className="min-w-0 font-medium text-foreground [overflow-wrap:anywhere]">
+                {snapshot?.branding ? "Branded project post" : "Plain text"}
+              </span>
+            </div>
+            {snapshot?.branding ? (
+              <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <span className="uppercase tracking-[0.12em] text-muted-foreground">Project</span>
+                <span className="min-w-0 font-medium text-foreground [overflow-wrap:anywhere]">
+                  {snapshot.branding.projectName}
+                  {snapshot.branding.ticker ? ` · ${snapshot.branding.ticker}` : ""}
+                </span>
+              </div>
+            ) : null}
+          </div>
           <div className="max-h-48 overflow-y-auto rounded-md border border-border/60 bg-background/40 p-3">
             {snapshot?.branding && snapshot.brandingLogoUrl ? (
               <img
@@ -801,6 +818,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
               {snapshot?.deliveredText ?? snapshot?.message ?? ""}
             </p>
           </div>
+
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
