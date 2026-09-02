@@ -256,9 +256,27 @@ Deno.serve(async (req: Request) => {
           continue;
         }
         if (nowMs - scheduledMs > REMINDER_STALE_MS) {
-          await skip(deliveryId, "stale_reminder");
-          continue;
+          // Catch-up reminders exist because a launch was moved earlier after
+          // the exact reminder boundary had already passed. The flag alone is
+          // never trusted: the CURRENT launch anchor must still sit inside the
+          // window this reminder type represents. Schedule-drift validation
+          // above already ran, so old-schedule events can never reach here.
+          const payloadObject =
+            claim.payload && typeof claim.payload === "object"
+              ? (claim.payload as Record<string, unknown>)
+              : {};
+          const isCatchUp = payloadObject["catch_up"] === true;
+          const msToLaunch = anchorMs - nowMs;
+          const windowValid = eventType === "REMINDER_24H"
+            ? msToLaunch > REMINDER_OFFSET_MS["REMINDER_1H"]! &&
+              msToLaunch <= REMINDER_OFFSET_MS["REMINDER_24H"]!
+            : msToLaunch > 0 && msToLaunch <= REMINDER_OFFSET_MS["REMINDER_1H"]!;
+          if (!isCatchUp || !windowValid) {
+            await skip(deliveryId, "stale_reminder");
+            continue;
+          }
         }
+
       }
 
       // ---- Build the message ---------------------------------------------
