@@ -442,20 +442,16 @@ export function BroadcastsPanel({
           <Button
             className="min-h-11"
             disabled={sendDisabled}
-            onClick={() => {
-              // Mint the idempotency id BEFORE confirmation so a retry of the
-              // same confirmed attempt reuses it.
-              setRequestId((current) => current ?? crypto.randomUUID());
-              setConfirmOpen(true);
-            }}
+            onClick={() => void prepareConfirmation()}
           >
-            {mutation.isPending ? (
+            {mutation.isPending || preparing ? (
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
             ) : (
               <Megaphone className="size-4" aria-hidden="true" />
             )}
             Send watcher update
           </Button>
+
 
           {blockReason ? (
             <p className="text-xs leading-relaxed text-muted-foreground">{blockReason}</p>
