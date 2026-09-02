@@ -3089,7 +3089,7 @@ export type Database = {
         }[]
       }
       get_project_inbox_conversation: {
-        Args: { _conversation_id: string }
+        Args: { _conversation_id: string; _workspace_id: string }
         Returns: {
           assigned_display_name: string
           assigned_to: string
@@ -3325,7 +3325,11 @@ export type Database = {
         }[]
       }
       set_project_inbox_conversation_contact_blocked: {
-        Args: { _blocked: boolean; _conversation_id: string }
+        Args: {
+          _blocked: boolean
+          _conversation_id: string
+          _workspace_id: string
+        }
         Returns: {
           blocked_at: string
           contact_status: string
