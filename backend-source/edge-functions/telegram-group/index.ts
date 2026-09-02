@@ -676,18 +676,69 @@ Deno.serve(async (req: Request) => {
       }
 
       /**
+       * C7.2 — for a branded post the logo bytes are fetched BEFORE the single
+       * Telegram call. A download failure is a definite no-send: nothing is
+       * posted and no plain-text fallback is silently substituted.
+       */
+      let logoBytes: Blob | null = null;
+      if (brandingSnapshot) {
+        try {
+          const { data: fileData, error: fileError } = await admin.storage
+            .from(ASSETS_BUCKET).download(brandingSnapshot.storagePath);
+          if (fileError || !fileData) throw new Error(fileError?.message ?? "Logo download returned no data.");
+          logoBytes = fileData;
+        } catch (e) {
+          const reason = `Could not read the project logo: ${e instanceof Error ? e.message : "unknown error"}`;
+          await markFailed(reason);
+          return ledgerResponse({
+            id: announcementId,
+            status: "FAILED",
+            telegram_message_id: null,
+            group_title: group.title ?? rawGroup.title,
+            group_connection_id: rawGroup.id,
+            last_error: reason,
+            sent_at: null,
+            delivery_kind: deliveryKind,
+            delivered_text_snapshot: deliveredText,
+          }, false);
+        }
+      }
+
+      /**
        * Plain text only: no parse_mode, so operator text is never re-interpreted
-       * as markup. Outcome is classified into definite failure vs transport
+       * as markup — the branded path posts the same unformatted words as a photo
+       * caption. Outcome is classified into definite failure vs transport
        * uncertainty — an uncertain send is NEVER retried automatically.
+       *
+       * Exactly ONE Telegram transport call is made per claimed ledger row.
        */
       let outcome: "SENT" | "FAILED" | "AMBIGUOUS" = "AMBIGUOUS";
       let telegramMessageId: number | null = null;
       let lastError: string | null = null;
       try {
-        const res = await fetch(`${TG_BASE}/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: String(group.telegram_chat_id), text: messageText, disable_web_page_preview: true }),
+        let endpoint: string;
+        let init: RequestInit;
+        if (logoBytes) {
+          const form = new FormData();
+          form.append("chat_id", String(group.telegram_chat_id));
+          form.append("caption", deliveredText);
+          form.append(
+            "photo",
+            logoBytes,
+            brandingSnapshot?.mimeType === "image/jpeg" ? "logo.jpg" : "logo.png",
+          );
+          endpoint = "sendPhoto";
+          init = { method: "POST", body: form };
+        } else {
+          endpoint = "sendMessage";
+          init = {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: String(group.telegram_chat_id), text: deliveredText, disable_web_page_preview: true }),
+          };
+        }
+        const res = await fetch(`${TG_BASE}/bot${TELEGRAM_BOT_TOKEN}/${endpoint}`, {
+          ...init,
           signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
         });
         const payload = await res.json().catch(() => null) as any;
