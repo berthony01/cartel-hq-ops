@@ -516,7 +516,7 @@ function TelegramPage() {
             title="History"
             summary="What was communicated, where it landed, and what the automations did. Not available yet."
             points={[
-              "Messages: watcher updates, launch notifications and community announcements, with aggregate delivery outcomes.",
+              "Messages: watcher updates, launch notifications and community broadcasts, with aggregate delivery outcomes.",
               "Activity: onboarding welcomes, Launch Watch cards and Sticker Drops, kept separate so the log stays readable.",
               "Outcomes reported honestly — an uncertain Telegram result will never be shown as delivered.",
             ]}
@@ -530,7 +530,7 @@ function TelegramPage() {
         <span>
           History is being added in a later controlled phase. It is a placeholder today and cannot
           send or expose anything. Broadcasts sends private watcher updates, and can post one
-          plain-text announcement into a connected community you select.
+          official project message into a connected community you select.
 
         </span>
       </p>

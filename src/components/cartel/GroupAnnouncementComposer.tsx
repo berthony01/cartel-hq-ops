@@ -37,7 +37,7 @@ import {
 import type { GroupReadiness, TelegramGroupSetup } from "@/components/cartel/TelegramGroupCard";
 
 /**
- * Community Command → Broadcasts → Telegram community (C7).
+ * Community Command → Broadcasts → Official Community Broadcast (C7).
  *
  * Posts ONE plain-text announcement to ONE connected community. Every rule that
  * matters — owner/admin authorization, live bot verification, exact
