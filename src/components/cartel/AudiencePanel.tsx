@@ -188,6 +188,24 @@ export function AudiencePanel({
   const bucketTotal = deliveryBuckets.reduce((sum, b) => sum + b.value, 0);
   const bucketsConsistent = !summary || bucketTotal === summary.active_watchers;
 
+  // ---- Launch list error ------------------------------------------------------
+  if (launchesQuery.isError) {
+    return (
+      <Section
+        variant="primary"
+        title="Audience"
+        description="Aggregate Launch Watch audience information only."
+        leading={<Users className="size-4" aria-hidden="true" />}
+      >
+        <InlineError
+          message="Your launches could not be loaded right now."
+          onRetry={() => void launchesQuery.refetch()}
+          retrying={launchesQuery.isFetching}
+        />
+      </Section>
+    );
+  }
+
   // ---- No launch at all -----------------------------------------------------
   if (!launchesQuery.isPending && launches.length === 0) {
     return (
