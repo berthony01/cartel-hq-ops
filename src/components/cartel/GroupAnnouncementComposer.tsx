@@ -365,12 +365,20 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
    */
   async function prepareConfirmation() {
     if (sendDisabled || !group || !workspaceId) return;
-    const clicked = { groupConnectionId: group.id, message: trimmed };
+    const clicked = {
+      groupConnectionId: group.id,
+      message: trimmed,
+      branded,
+      branding: brandingIdentity,
+      brandingKey,
+    };
     setPreparing(true);
     try {
-      const [accessResult, liveResult] = await Promise.allSettled([
+      const [accessResult, liveResult, profileResult, logosResult] = await Promise.allSettled([
         accessQuery.refetch(),
         fetchTelegramGroupStatus({ workspaceId, groupConnectionId: clicked.groupConnectionId }),
+        profileQuery.refetch(),
+        logosQuery.refetch(),
       ]);
       if (
         accessResult.status !== "fulfilled" ||
@@ -397,10 +405,45 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         );
         return;
       }
+      /**
+       * Branded posting is reviewed against freshly re-read Project Profile
+       * identity. Any disagreement stops here; the server performs the same
+       * check again and is the authority.
+       */
+      if (clicked.branded) {
+        if (
+          profileResult.status !== "fulfilled" ||
+          profileResult.value.isError ||
+          logosResult.status !== "fulfilled" ||
+          logosResult.value.isError
+        ) {
+          toast.error("Could not confirm your project branding. Nothing was posted.");
+          return;
+        }
+        const freshProfile = profileResult.value.data ?? null;
+        const freshLogo = freshProfile?.logo_asset_id
+          ? ((logosResult.value.data ?? []).find((a) => a.id === freshProfile.logo_asset_id) ?? null)
+          : null;
+        const freshMime = (freshLogo?.mime_type ?? "").toLowerCase();
+        const freshKey =
+          freshProfile?.project_name?.trim() &&
+          freshLogo &&
+          (freshMime === "image/png" || freshMime === "image/jpeg")
+            ? `${freshProfile.project_name.trim()}\u0000${(freshProfile.ticker ?? "").trim()}\u0000${freshLogo.id}`
+            : "";
+        if (!freshKey || freshKey !== clicked.brandingKey) {
+          toast.error(
+            "Your project branding changed while this broadcast was loading. Review it again — nothing was posted.",
+          );
+          return;
+        }
+      }
       // Drift across the await, measured against the LATEST state, not a closure.
       if (
         latestRef.current.groupConnectionId !== clicked.groupConnectionId ||
-        latestRef.current.message !== clicked.message
+        latestRef.current.message !== clicked.message ||
+        latestRef.current.branded !== clicked.branded ||
+        latestRef.current.brandingKey !== clicked.brandingKey
       ) {
         toast.error("The official broadcast changed while it was loading. Nothing was posted.");
         return;
@@ -408,14 +451,25 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
       const id =
         attempt &&
         attempt.groupConnectionId === clicked.groupConnectionId &&
-        attempt.message === clicked.message
+        attempt.message === clicked.message &&
+        attempt.branded === clicked.branded
           ? attempt.clientRequestId
           : newRequestId();
+      const brandingForSend = clicked.branded ? clicked.branding : null;
       setSnapshot({
         groupConnectionId: clicked.groupConnectionId,
         groupTitle: live.group?.title ?? group.title,
         message: clicked.message,
         clientRequestId: id,
+        deliveredText: brandingForSend
+          ? buildBrandedBroadcastCaption(
+              brandingForSend.projectName,
+              brandingForSend.ticker || null,
+              clicked.message,
+            )
+          : clicked.message,
+        branding: brandingForSend,
+        brandingLogoUrl: brandingForSend ? logoPreviewUrl : null,
       });
       setConfirmOpen(true);
     } finally {
