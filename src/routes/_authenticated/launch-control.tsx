@@ -365,7 +365,13 @@ function LaunchControlPage() {
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["launches", workspaceId] });
     void queryClient.invalidateQueries({ queryKey: launchReadinessQueryKey(workspaceId) });
+    // C6: a saved schedule edit may create/refresh a pending communication.
+    void queryClient.invalidateQueries({ queryKey: ["launch-schedule-communication"] });
+    void queryClient.invalidateQueries({
+      queryKey: workspaceScheduleCommunicationsQueryKey(workspaceId),
+    });
   };
+
 
 
   // ---- create -------------------------------------------------------------
