@@ -11,37 +11,38 @@ import { createClient } from "npm:@supabase/supabase-js@2";
  * Design rules:
  *  - Invoked by a scheduler with a dedicated custom secret header
  *    (verify_jwt=false). The secret is only ever compared inside the database.
- *  - It sends the FROZEN body snapshot captured when the operator pressed
- *    send. Live message text is never re-read, so an edited row can never
- *    change what a member already received.
+ *  - It sends the FROZEN `delivered_text_snapshot` captured when the operator
+ *    pressed send. Live message text is never re-read, so an edited row can
+ *    never change what a member already received.
+ *  - Authorization, contact identity and message identity are revalidated
+ *    against CURRENT state immediately before Telegram is contacted. Any
+ *    mismatch is a definite failure with no send attempt.
  *  - Deliveries are processed strictly one at a time. The claim RPC already
  *    refuses to hand out a reply while an earlier reply in the same
  *    conversation is unresolved, so ordering is preserved.
- *  - Outcomes are explicit: sent / retry / failed / ambiguous. A network or
- *    timeout failure is AMBIGUOUS, never retried, because Telegram may have
- *    already delivered it. Only the operator resolves ambiguity.
- *  - It never reads or writes conversation status directly; the finalize RPC
- *    owns that transition.
+ *  - Outcomes are explicit: sent / retry / failed / ambiguous. A network,
+ *    timeout or unparseable response is AMBIGUOUS, never retried, because
+ *    Telegram may already have delivered it. Only the operator resolves it.
+ *  - It never writes conversation status directly; the finalize RPC owns it.
  */
 
 const TG_BASE = "https://api.telegram.org";
 const CLAIM_LIMIT = 25;
 const SEND_TIMEOUT_MS = 10_000;
-const MAX_ATTEMPTS = 5;
-const BACKOFF_SECONDS = [60, 300, 900, 3600];
+const MAX_ATTEMPTS = 3;
+const BACKOFF_SECONDS = [60, 300, 900];
 const MAX_RETRY_AFTER_SECONDS = 3600;
+const MAX_DELIVERED_TEXT = 4096;
 
 type ClaimedDelivery = {
   delivery_id: string;
   conversation_id: string;
   message_id: string;
+  telegram_user_id: number | string;
+  delivered_text_snapshot: string;
+  attempt_count: number;
   workspace_id: string;
   team_user_id: string;
-  telegram_user_id: number | string;
-  body_snapshot: string;
-  attempt_count: number;
-  contact_blocked: boolean;
-  replies_enabled: boolean;
 };
 
 function json(body: Record<string, unknown>, status = 200) {
@@ -51,8 +52,22 @@ function json(body: Record<string, unknown>, status = 200) {
   });
 }
 
+type SendResult =
+  | {
+      parsed: true;
+      httpStatus: number;
+      ok: boolean;
+      messageId: number;
+      retryAfter: number;
+    }
+  | { parsed: false };
+
 /** Sends one plain-text DM. Raw Telegram bodies are never returned upstream. */
-async function sendMessage(token: string, chatId: string, text: string) {
+async function sendMessage(
+  token: string,
+  chatId: string,
+  text: string,
+): Promise<SendResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
   try {
@@ -67,12 +82,19 @@ async function sendMessage(token: string, chatId: string, text: string) {
       signal: controller.signal,
     });
     let payload: any = null;
-    try { payload = await response.json(); } catch { payload = null; }
+    try {
+      payload = await response.json();
+    } catch {
+      return { parsed: false };
+    }
+    if (payload == null || typeof payload !== "object" || typeof payload.ok !== "boolean") {
+      return { parsed: false };
+    }
     return {
+      parsed: true,
       httpStatus: response.status,
-      ok: payload?.ok === true,
+      ok: payload.ok === true,
       messageId: Number(payload?.result?.message_id) || 0,
-      description: typeof payload?.description === "string" ? payload.description : "",
       retryAfter: Number(payload?.parameters?.retry_after) || 0,
     };
   } finally {
@@ -90,8 +112,8 @@ Deno.serve(async (request) => {
     return json({ error: "NOT_CONFIGURED" }, 500);
   }
 
-  const providedSecret = request.headers.get("x-cartel-inbox-delivery-scheduler-secret") ?? "";
-  if (!providedSecret) return json({ error: "UNAUTHORIZED" }, 401);
+  const providedSecret = request.headers.get("x-cartel-inbox-scheduler-secret") ?? "";
+  if (!providedSecret) return json({ error: "FORBIDDEN" }, 403);
 
   const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -101,7 +123,7 @@ Deno.serve(async (request) => {
     "project_inbox_delivery_scheduler_secret_matches",
     { p_secret: providedSecret },
   );
-  if (secretError || secretOk !== true) return json({ error: "UNAUTHORIZED" }, 401);
+  if (secretError || secretOk !== true) return json({ error: "FORBIDDEN" }, 403);
 
   // Stale claims become ambiguous BEFORE new work is claimed, so an
   // interrupted run never leaves a reply stuck in `processing`.
@@ -135,50 +157,160 @@ Deno.serve(async (request) => {
       | { kind: "retry"; seconds: number; errorClass: string; message: string }
       | { kind: "failed"; errorClass: string; message: string }
       | { kind: "ambiguous"; errorClass: string; message: string };
-    let desired: Desired;
+    let desired: Desired | null = null;
 
-    // Authorization is revalidated at delivery time, not only at send time.
-    if (delivery.contact_blocked) {
+    const text = delivery.delivered_text_snapshot ?? "";
+    if (text.trim().length === 0 || text.length > MAX_DELIVERED_TEXT) {
       desired = {
         kind: "failed",
-        errorClass: "contact_blocked",
-        message: "The member was blocked before this reply was delivered.",
+        errorClass: "invalid_snapshot",
+        message: "The frozen reply text is missing or invalid.",
       };
-    } else if (!delivery.replies_enabled) {
-      desired = {
-        kind: "failed",
-        errorClass: "replies_disabled",
-        message: "Reply capture was turned off before this reply was delivered.",
-      };
-    } else {
+    }
+
+    // ------------------------------------------------ revalidate CURRENT state
+    if (desired === null) {
+      try {
+        const [operatorRes, conversationRes, contactRes, messageRes] = await Promise.all([
+          admin.rpc("is_workspace_operator", {
+            _workspace_id: delivery.workspace_id,
+            _user_id: delivery.team_user_id,
+          }),
+          admin
+            .from("project_conversations")
+            .select("id, contact_id, workspace_id")
+            .eq("id", delivery.conversation_id)
+            .eq("workspace_id", delivery.workspace_id)
+            .maybeSingle(),
+          admin
+            .from("project_inbox_contacts")
+            .select("id, workspace_id, status, telegram_user_id")
+            .eq("workspace_id", delivery.workspace_id)
+            .eq("telegram_user_id", delivery.telegram_user_id)
+            .maybeSingle(),
+          admin
+            .from("project_conversation_messages")
+            .select("id, conversation_id, author_type, channel, team_user_id")
+            .eq("id", delivery.message_id)
+            .maybeSingle(),
+        ]);
+
+        const dbError =
+          operatorRes.error || conversationRes.error || contactRes.error || messageRes.error;
+        if (dbError) throw dbError;
+
+        const conversation = conversationRes.data as
+          | { id: string; contact_id: string; workspace_id: string }
+          | null;
+        const contact = contactRes.data as
+          | { id: string; workspace_id: string; status: string; telegram_user_id: number | string }
+          | null;
+        const message = messageRes.data as
+          | {
+              id: string;
+              conversation_id: string;
+              author_type: string;
+              channel: string;
+              team_user_id: string | null;
+            }
+          | null;
+
+        if (operatorRes.data !== true) {
+          desired = {
+            kind: "failed",
+            errorClass: "operator_revoked",
+            message: "The sending operator no longer has permission in this workspace.",
+          };
+        } else if (!conversation) {
+          desired = {
+            kind: "failed",
+            errorClass: "conversation_missing",
+            message: "The conversation no longer exists in this workspace.",
+          };
+        } else if (
+          !contact ||
+          contact.status !== "ACTIVE" ||
+          contact.id !== conversation.contact_id ||
+          String(contact.telegram_user_id) !== String(delivery.telegram_user_id)
+        ) {
+          desired = {
+            kind: "failed",
+            errorClass: "contact_unavailable",
+            message: "The member is blocked, missing or no longer matches this conversation.",
+          };
+        } else if (
+          !message ||
+          message.conversation_id !== delivery.conversation_id ||
+          message.author_type !== "TEAM" ||
+          message.channel !== "WEB" ||
+          message.team_user_id !== delivery.team_user_id
+        ) {
+          desired = {
+            kind: "failed",
+            errorClass: "message_mismatch",
+            message: "The queued reply no longer matches its conversation message.",
+          };
+        }
+      } catch (_e) {
+        // Transient database problem BEFORE any Telegram contact: nothing was
+        // sent, so a bounded retry is safe while attempts remain.
+        desired =
+          attempt < MAX_ATTEMPTS
+            ? {
+                kind: "retry",
+                seconds: backoff,
+                errorClass: "revalidation_unavailable",
+                message: "Delivery pre-checks could not be completed.",
+              }
+            : {
+                kind: "failed",
+                errorClass: "revalidation_unavailable",
+                message: "Delivery pre-checks kept failing.",
+              };
+      }
+    }
+
+    // ------------------------------------------------------------ send attempt
+    if (desired === null) {
       try {
         const result = await sendMessage(
           TELEGRAM_BOT_TOKEN,
           String(delivery.telegram_user_id),
-          delivery.body_snapshot,
+          text,
         );
 
-        if (result.ok && result.messageId > 0) {
+        if (!result.parsed) {
+          desired = {
+            kind: "ambiguous",
+            errorClass: "unparseable_response",
+            message: "Telegram returned an unreadable response; delivery is unconfirmed.",
+          };
+        } else if (result.ok && result.messageId > 0) {
           desired = { kind: "sent", telegramMessageId: result.messageId };
         } else if (result.ok) {
-          // Accepted but unusable confirmation: do not claim delivery.
           desired = {
             kind: "ambiguous",
             errorClass: "unconfirmed_send",
             message: "Telegram accepted the send without a usable confirmation.",
           };
         } else if (result.httpStatus === 429) {
-          const wait = Math.min(Math.max(result.retryAfter || backoff, 1), MAX_RETRY_AFTER_SECONDS);
-          desired = attempt >= MAX_ATTEMPTS
-            ? { kind: "failed", errorClass: "rate_limited", message: "Telegram rate limit persisted across attempts." }
-            : { kind: "retry", seconds: wait, errorClass: "rate_limited", message: "Telegram rate limited this reply." };
-        } else if (result.httpStatus >= 500) {
-          // A 5xx may or may not have been applied — never blindly resend.
-          desired = {
-            kind: "ambiguous",
-            errorClass: "telegram_server_error",
-            message: "Telegram returned a server error; delivery is unconfirmed.",
-          };
+          const wait = Math.min(
+            Math.max((result.retryAfter || backoff) + 5, 5),
+            MAX_RETRY_AFTER_SECONDS,
+          );
+          desired =
+            attempt >= MAX_ATTEMPTS
+              ? {
+                  kind: "failed",
+                  errorClass: "rate_limited",
+                  message: "Telegram rate limit persisted across attempts.",
+                }
+              : {
+                  kind: "retry",
+                  seconds: wait,
+                  errorClass: "rate_limited",
+                  message: "Telegram rate limited this reply.",
+                };
         } else {
           desired = {
             kind: "failed",
@@ -199,13 +331,17 @@ Deno.serve(async (request) => {
     // Persist exactly that outcome, once, through the single finalize RPC.
     // A failure here leaves the row in `processing`, which the next run's
     // stale maintenance converts to ambiguous — never to a silent resend.
+    const nextAttemptAt =
+      desired.kind === "retry"
+        ? new Date(Date.now() + desired.seconds * 1000).toISOString()
+        : null;
     const { error: finalizeError } = await admin.rpc("finalize_project_inbox_delivery", {
       _delivery_id: delivery.delivery_id,
       _outcome: desired.kind,
       _telegram_message_id: desired.kind === "sent" ? desired.telegramMessageId : null,
+      _next_attempt_at: nextAttemptAt,
       _error_class: desired.kind === "sent" ? null : desired.errorClass,
       _last_error: desired.kind === "sent" ? null : desired.message,
-      _retry_after_seconds: desired.kind === "retry" ? desired.seconds : null,
     });
     if (finalizeError) {
       console.error("[project-inbox-delivery] finalize failed");
