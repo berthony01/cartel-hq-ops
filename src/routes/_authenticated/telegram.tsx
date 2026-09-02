@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowRight,
@@ -335,7 +336,7 @@ function TelegramPage() {
 
         {/* ---------------------------------------------------------------- */}
         <TabsContent value="broadcasts" className="mt-0 min-w-0">
-          <BroadcastsPanel initialLaunchId={search.launch ?? null} />
+          <BroadcastsPanel selectedLaunchId={search.launch ?? null} onLaunchChange={setLaunch} />
         </TabsContent>
 
 
