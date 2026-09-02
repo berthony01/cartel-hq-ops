@@ -216,6 +216,15 @@ export function ProjectInboxPanel({
 
   const messages = useMemo(() => messagesQuery.data ?? [], [messagesQuery.data]);
 
+  // A draft belongs to exactly one thread in one workspace. Switching either
+  // clears it and mints a fresh request id, so a draft can never be submitted
+  // against a different conversation.
+  useEffect(() => {
+    setReplyBody("");
+    setReplyRequestId(crypto.randomUUID());
+  }, [workspaceId, selectedConversationId]);
+
+
 
 
   // --------------------------------------------------------------- mutations
