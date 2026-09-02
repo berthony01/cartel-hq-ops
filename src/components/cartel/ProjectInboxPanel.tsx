@@ -748,13 +748,13 @@ export function ProjectInboxPanel({
                     <p className="p-1 text-xs leading-relaxed text-muted-foreground">
                       Loading messages…
                     </p>
-                  ) : (messagesQuery.data ?? []).length === 0 ? (
+                  ) : messages.length === 0 ? (
                     <p className="rounded-md border border-dashed border-border/70 bg-background/40 p-3 text-xs leading-relaxed text-muted-foreground">
                       No messages are available in this conversation.
                     </p>
                   ) : (
                     <ol className="flex flex-col gap-2" aria-label="Conversation messages">
-                      {(messagesQuery.data ?? []).map((m) => {
+                      {messages.map((m) => {
                         const isMember = m.author_type === "MEMBER";
                         const isSystem = m.author_type === "SYSTEM";
                         const authorLabel = isMember
@@ -768,6 +768,10 @@ export function ProjectInboxPanel({
                             : m.channel === "WEB"
                               ? "Web"
                               : "System";
+                        const needsAck =
+                          !!m.delivery_id &&
+                          (m.delivery_status === "ambiguous" || m.delivery_status === "failed") &&
+                          !m.delivery_acknowledged_at;
                         return (
                           <li
                             key={m.message_id}
@@ -791,13 +795,106 @@ export function ProjectInboxPanel({
                             <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-foreground [overflow-wrap:anywhere]">
                               {m.body}
                             </p>
+                            {m.delivery_status ? (
+                              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                <StatusBadge tone={deliveryTone(m.delivery_status)}>
+                                  {deliveryStatusLabel(m.delivery_status)}
+                                </StatusBadge>
+                                {m.delivery_acknowledged_at ? (
+                                  <StatusBadge tone="muted">Reviewed</StatusBadge>
+                                ) : null}
+                              </div>
+                            ) : null}
+                            {m.delivery_status === "ambiguous" ? (
+                              <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                                We could not confirm this reply reached the member. It may have
+                                been delivered. It will not be resent automatically — resending is
+                                your decision.
+                              </p>
+                            ) : null}
+                            {m.delivery_status === "failed" ? (
+                              <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                                This reply was not delivered. Nothing was sent to the member.
+                              </p>
+                            ) : null}
+                            {needsAck ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-2 min-h-11 text-xs"
+                                disabled={ackMutation.isPending}
+                                onClick={() =>
+                                  ackMutation.mutate({ deliveryId: m.delivery_id! })
+                                }
+                              >
+                                Mark as reviewed
+                              </Button>
+                            ) : null}
                           </li>
                         );
                       })}
                     </ol>
                   )}
+
+                  {/* -------------------------------------------- reply composer */}
+                  <div className="rounded-md border border-border/60 bg-background/40 p-3">
+                    <label
+                      htmlFor="inbox-reply-body"
+                      className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground"
+                    >
+                      Reply to this member
+                    </label>
+                    <Textarea
+                      id="inbox-reply-body"
+                      value={replyBody}
+                      onChange={(event) => setReplyBody(event.target.value.slice(0, 4096))}
+                      rows={4}
+                      maxLength={4096}
+                      className="mt-2"
+                      placeholder="Write your reply. It is sent as a plain private message from your official bot."
+                      disabled={
+                        !repliesOn ||
+                        detail.contact_status === "BLOCKED" ||
+                        replyMutation.isPending
+                      }
+                    />
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="min-h-11"
+                        disabled={
+                          !repliesOn ||
+                          detail.contact_status === "BLOCKED" ||
+                          replyMutation.isPending ||
+                          replyBody.trim().length === 0
+                        }
+                        onClick={() =>
+                          replyMutation.mutate({
+                            conversationId: detail.conversation_id,
+                            body: replyBody.trim(),
+                            requestId: replyRequestId,
+                          })
+                        }
+                      >
+                        {replyMutation.isPending ? "Queueing…" : "Send reply"}
+                      </Button>
+                      <span className="text-[11px] text-muted-foreground">
+                        {replyBody.trim().length}/4096
+                      </span>
+                    </div>
+                    <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                      {detail.contact_status === "BLOCKED"
+                        ? "This member is blocked, so replies cannot be sent."
+                        : !repliesOn
+                          ? "Reply capture is off, so replies cannot be sent."
+                          : "Sending queues the reply for delivery — it is not delivered instantly, and delivery is confirmed above. Delivery runs on a background worker that is not enabled yet, so replies stay queued for now."}
+                    </p>
+                  </div>
                 </>
               )}
+
             </Section>
           </div>
         ) : (
