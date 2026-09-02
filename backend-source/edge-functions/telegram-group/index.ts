@@ -547,9 +547,7 @@ Deno.serve(async (req: Request) => {
        * match this target, so reuse is rejected instead of guessed.
        *
        * C7.2 — the delivery kind, the branding identity that was reviewed, and
-       * the exact delivered caption are all part of that intent. A stored branded
-       * row whose logo asset id was later NULLed by asset deletion can no longer
-       * be proven to match, so it is rejected rather than guessed. Never resend.
+       * the exact delivered caption are all part of that intent.
        */
       const sameIntent = (row: any) => {
         if (String(row?.message_text ?? "") !== messageText) return false;
@@ -562,10 +560,19 @@ Deno.serve(async (req: Request) => {
         if (String(row?.branding_template_version ?? "") !== reviewedTemplateVersion) return false;
         if (String(row?.branding_project_name ?? "") !== reviewedProjectName) return false;
         if (String(row?.branding_ticker ?? "") !== reviewedTicker) return false;
-        if (!row?.branding_logo_asset_id) return false;
-        if (String(row.branding_logo_asset_id) !== reviewedLogoAssetId) return false;
+        /*
+         * Fail-safe: `branding_logo_asset_id` is `ON DELETE SET NULL`, so an
+         * already-recorded branded broadcast can end up with a NULL logo FK while
+         * its immutable branding snapshots stay intact. A NULL stored id therefore
+         * means "the historical asset may have been deleted", not "different
+         * intent": the reused request id is resolved toward the recorded outcome
+         * (no current media/profile validation, no send) rather than risking a
+         * duplicate Telegram post. A non-null id that differs is still a conflict.
+         */
+        if (row?.branding_logo_asset_id && String(row.branding_logo_asset_id) !== reviewedLogoAssetId) return false;
         return String(row?.delivered_text_snapshot ?? "") === reviewedCaption;
       };
+
       const conflictResponse = () => respond({
         error: "IDEMPOTENCY_CONFLICT",
         message: "This broadcast id was already used for a different community, message, or branding. Start a new official broadcast.",
@@ -641,12 +648,14 @@ Deno.serve(async (req: Request) => {
         }
         const w = typeof assetRow.width === "number" ? assetRow.width : null;
         const h = typeof assetRow.height === "number" ? assetRow.height : null;
-        if (w !== null && h !== null) {
-          const ratio = Math.max(w, h) / Math.max(1, Math.min(w, h));
-          if (w <= 0 || h <= 0 || w + h > 10000 || ratio > 20) {
-            return respond({ error: "BRANDING_LOGO_UNSUPPORTED", message: "Telegram cannot post this logo's dimensions. Upload a more standard PNG or JPEG logo in Project Profile." }, 400);
-          }
+        const dimsBad =
+          (w !== null && w <= 0) ||
+          (h !== null && h <= 0) ||
+          (w !== null && h !== null && (w + h > 10000 || Math.max(w, h) / Math.max(1, Math.min(w, h)) > 20));
+        if (dimsBad) {
+          return respond({ error: "BRANDING_LOGO_UNSUPPORTED", message: "Telegram cannot post this logo's dimensions. Upload a more standard PNG or JPEG logo in Project Profile." }, 400);
         }
+
 
         deliveredText = buildBrandedCaption(currentProjectName, currentTicker || null, messageText);
         if (deliveredText.length > BRANDED_CAPTION_MAX) {

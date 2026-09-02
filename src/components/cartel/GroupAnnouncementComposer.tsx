@@ -124,12 +124,14 @@ function logoCompatibilityReason(asset: MediaAsset | null): string | null {
   }
   const w = typeof asset.width === "number" ? asset.width : null;
   const h = typeof asset.height === "number" ? asset.height : null;
-  if (w !== null && h !== null) {
-    const ratio = Math.max(w, h) / Math.max(1, Math.min(w, h));
-    if (w <= 0 || h <= 0 || w + h > 10000 || ratio > 20) {
-      return "Telegram cannot post this logo's dimensions. Upload a more standard PNG or JPEG logo in Project Profile.";
-    }
+  const dimsBad =
+    (w !== null && w <= 0) ||
+    (h !== null && h <= 0) ||
+    (w !== null && h !== null && (w + h > 10000 || Math.max(w, h) / Math.max(1, Math.min(w, h)) > 20));
+  if (dimsBad) {
+    return "Telegram cannot post this logo's dimensions. Upload a more standard PNG or JPEG logo in Project Profile.";
   }
+
   return null;
 }
 
@@ -398,7 +400,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
                 ? (brandingUnavailableReason ??
                   "Branded posting is unavailable for this project right now.")
                 : brandedOverLimit
-                  ? `Branded broadcasts are limited to ${GROUP_BRANDED_CAPTION_MAX} characters including the branding header. Shorten the message or turn branding off.`
+                  ? `Branded broadcasts are limited to ${GROUP_BRANDED_CAPTION_MAX} characters including the branding header and footer. Shorten the message or turn branding off.`
                   : null;
 
   const sendDisabled =
@@ -630,8 +632,9 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
               ) : branded ? (
                 <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                   Branded posts are limited to {GROUP_BRANDED_CAPTION_MAX} characters including the
-                  branding header. The branding is re-checked against your saved Project Profile
-                  before anything is posted.
+                  branding header and footer. The branding is re-checked against your saved Project
+                  Profile before anything is posted.
+
                 </p>
               ) : null}
               <p className="mt-2 border-t border-border/60 pt-2 text-xs leading-relaxed text-muted-foreground">
@@ -786,6 +789,23 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
               conversation. No watcher DM is sent.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="min-w-0 space-y-1 rounded-md border border-border/60 bg-background/30 p-3 text-xs">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span className="uppercase tracking-[0.12em] text-muted-foreground">Delivery</span>
+              <span className="min-w-0 font-medium text-foreground [overflow-wrap:anywhere]">
+                {snapshot?.branding ? "Branded project post" : "Plain text"}
+              </span>
+            </div>
+            {snapshot?.branding ? (
+              <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <span className="uppercase tracking-[0.12em] text-muted-foreground">Project</span>
+                <span className="min-w-0 font-medium text-foreground [overflow-wrap:anywhere]">
+                  {snapshot.branding.projectName}
+                  {snapshot.branding.ticker ? ` · ${snapshot.branding.ticker}` : ""}
+                </span>
+              </div>
+            ) : null}
+          </div>
           <div className="max-h-48 overflow-y-auto rounded-md border border-border/60 bg-background/40 p-3">
             {snapshot?.branding && snapshot.brandingLogoUrl ? (
               <img
@@ -798,6 +818,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
               {snapshot?.deliveredText ?? snapshot?.message ?? ""}
             </p>
           </div>
+
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction

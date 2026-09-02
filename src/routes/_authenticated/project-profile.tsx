@@ -312,12 +312,16 @@ function ProjectProfilePage() {
     }
     const w = typeof selectedLogo.width === "number" ? selectedLogo.width : null;
     const h = typeof selectedLogo.height === "number" ? selectedLogo.height : null;
-    if (w !== null && h !== null) {
-      const ratio = Math.max(w, h) / Math.max(1, Math.min(w, h));
-      if (w <= 0 || h <= 0 || w + h > 10000 || ratio > 20) {
-        return "Telegram cannot post this logo's dimensions, so branded community broadcasts cannot use it. Upload a more standard PNG or JPEG logo.";
-      }
+    const dimsBad =
+      (w !== null && w <= 0) ||
+      (h !== null && h <= 0) ||
+      (w !== null &&
+        h !== null &&
+        (w + h > 10000 || Math.max(w, h) / Math.max(1, Math.min(w, h)) > 20));
+    if (dimsBad) {
+      return "Telegram cannot post this logo's dimensions, so branded community broadcasts cannot use it. Upload a more standard PNG or JPEG logo.";
     }
+
     return null;
   })();
   const logoSelectionUnsaved = (form.logo_asset_id || "") !== (profile?.logo_asset_id ?? "");
@@ -675,7 +679,7 @@ function ProjectProfilePage() {
             <Section
               variant="surface"
               title="Project logo"
-              description="Upload a logo or choose one already stored in this project. Branded community broadcasts use PNG or JPEG logos."
+              description="Upload a logo or choose one already stored in this project. Branded Telegram broadcasts require a PNG or JPEG logo no larger than 10MB."
             >
               <div className="space-y-4">
                 <div className="max-w-sm">
@@ -692,9 +696,10 @@ function ProjectProfilePage() {
                     }}
                   />
                   <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                    Uploading only selects the logo here. It is not part of your project identity —
-                    and branded community broadcasts will not use it — until you save this profile.
+                    Uploading only selects the logo here. It is not part of your project identity,
+                    and branded community broadcasts will not use it, until you save this profile.
                   </p>
+
                 </div>
                 {logos.length === 0 ? (
                   <EmptyState
