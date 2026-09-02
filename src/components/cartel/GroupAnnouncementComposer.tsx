@@ -124,7 +124,75 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
   const group = groups.find((g) => g.id === resolvedGroupId) ?? null;
   const readiness = resolvedGroupId ? (setup.readinessById[resolvedGroupId] ?? null) : null;
 
+  /**
+   * C7.2 — saved Project Profile identity. Read-only here: the server re-reads
+   * the same rows and refuses to post if they no longer match what was reviewed.
+   */
+  const profileQuery = useQuery({
+    queryKey: ["project-profile", workspaceId],
+    enabled: !!workspaceId,
+    queryFn: () => getProjectProfile(workspaceId!),
+  });
+  const logosQuery = useQuery({
+    queryKey: ["project-profile-logos", workspaceId],
+    enabled: !!workspaceId,
+    queryFn: async () => {
+      const all = await listWorkspaceAssets(workspaceId!);
+      return all.filter((a) => a.asset_type === "logo");
+    },
+  });
+
+  const profile = profileQuery.data ?? null;
+  const logoAsset =
+    profile?.logo_asset_id
+      ? ((logosQuery.data ?? []).find((a) => a.id === profile.logo_asset_id) ?? null)
+      : null;
+  const logoMime = (logoAsset?.mime_type ?? "").toLowerCase();
+  const logoSupported = logoMime === "image/png" || logoMime === "image/jpeg";
+  const brandingReady = !!profile?.project_name?.trim() && !!logoAsset && logoSupported;
+
+  const brandingIdentity: ReviewedBroadcastBranding | null =
+    brandingReady && profile && logoAsset
+      ? {
+          projectName: profile.project_name.trim(),
+          ticker: (profile.ticker ?? "").trim(),
+          logoAssetId: logoAsset.id,
+        }
+      : null;
+
+  const brandingUnavailableReason = profileQuery.isPending || logosQuery.isPending
+    ? "Checking your project branding…"
+    : profileQuery.isError || logosQuery.isError
+      ? "Could not read your project branding, so branded posting is unavailable."
+      : !profile
+        ? "Save a Project Profile to post branded broadcasts."
+        : !profile.project_name?.trim()
+          ? "Add a project name in Project Profile to post branded broadcasts."
+          : !logoAsset
+            ? "Select a project logo in Project Profile to post branded broadcasts."
+            : !logoSupported
+              ? "Branded broadcasts need a PNG or JPEG project logo. Upload one in Project Profile."
+              : null;
+
   const [message, setMessage] = useState("");
+  const [brandedRequested, setBrandedRequested] = useState(false);
+  const branded = brandedRequested && brandingReady;
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (!branded || !logoAsset) {
+      setLogoPreviewUrl(null);
+      return;
+    }
+    void signedUrl(logoAsset.storage_path, 300).then((url) => {
+      if (active) setLogoPreviewUrl(url);
+    });
+    return () => {
+      active = false;
+    };
+  }, [branded, logoAsset]);
+
   /**
    * ONE client request id per exact intended announcement (target + text). It
    * survives only an uncertain attempt, so an identical retry stays idempotent
@@ -139,16 +207,42 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
 
   const trimmed = message.trim();
 
+  /** Local preview of the exact text the server will post. */
+  const previewText =
+    branded && brandingIdentity
+      ? buildBrandedBroadcastCaption(
+          brandingIdentity.projectName,
+          brandingIdentity.ticker || null,
+          trimmed,
+        )
+      : trimmed;
+  const brandedOverLimit = branded && previewText.length > BRANDED_BROADCAST_CAPTION_MAX;
+
   /**
    * Latest committed selection + draft, readable across an await. Preparation
    * compares against this ref rather than its own captured closure values, so a
    * reviewed announcement can never differ from the submitted one.
    */
-  const latestRef = useRef<{ groupConnectionId: string | null; message: string }>({
+  const latestRef = useRef<{
+    groupConnectionId: string | null;
+    message: string;
+    branded: boolean;
+    brandingKey: string;
+  }>({
     groupConnectionId: resolvedGroupId,
     message: trimmed,
+    branded,
+    brandingKey: "",
   });
-  latestRef.current = { groupConnectionId: resolvedGroupId, message: trimmed };
+  const brandingKey = brandingIdentity
+    ? `${brandingIdentity.projectName}\u0000${brandingIdentity.ticker}\u0000${brandingIdentity.logoAssetId}`
+    : "";
+  latestRef.current = {
+    groupConnectionId: resolvedGroupId,
+    message: trimmed,
+    branded,
+    brandingKey,
+  };
 
   function resetComposer() {
     setMessage("");
@@ -166,11 +260,15 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
   // Editing away from a submitted intent retires that request id and outcome.
   useEffect(() => {
     if (!attempt) return;
-    if (attempt.message !== trimmed || attempt.groupConnectionId !== resolvedGroupId) {
+    if (
+      attempt.message !== trimmed ||
+      attempt.groupConnectionId !== resolvedGroupId ||
+      attempt.branded !== branded
+    ) {
       setAttempt(null);
       setOutcome(null);
     }
-  }, [attempt, trimmed, resolvedGroupId]);
+  }, [attempt, trimmed, resolvedGroupId, branded]);
 
   /** Shared community state is page-level; ask it to refresh, never re-own it. */
   function refreshSharedCommunityState(id?: string | null) {
