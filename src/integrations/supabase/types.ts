@@ -285,6 +285,101 @@ export type Database = {
           },
         ]
       }
+      launch_schedule_communications: {
+        Row: {
+          baseline_launch_at: string | null
+          baseline_timezone: string
+          baseline_window_end: string | null
+          baseline_window_start: string | null
+          change_count: number
+          created_at: string
+          current_launch_at: string | null
+          current_timezone: string
+          current_window_end: string | null
+          current_window_start: string | null
+          detected_at: string
+          detected_by: string | null
+          id: string
+          launch_id: string
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          baseline_launch_at?: string | null
+          baseline_timezone: string
+          baseline_window_end?: string | null
+          baseline_window_start?: string | null
+          change_count?: number
+          created_at?: string
+          current_launch_at?: string | null
+          current_timezone: string
+          current_window_end?: string | null
+          current_window_start?: string | null
+          detected_at?: string
+          detected_by?: string | null
+          id?: string
+          launch_id: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          baseline_launch_at?: string | null
+          baseline_timezone?: string
+          baseline_window_end?: string | null
+          baseline_window_start?: string | null
+          change_count?: number
+          created_at?: string
+          current_launch_at?: string | null
+          current_timezone?: string
+          current_window_end?: string | null
+          current_window_start?: string | null
+          detected_at?: string
+          detected_by?: string | null
+          id?: string
+          launch_id?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launch_schedule_communications_detected_by_fkey"
+            columns: ["detected_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_schedule_communications_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_schedule_communications_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_schedule_communications_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       launch_watch_subscriptions: {
         Row: {
           confirmation_attempt_count: number
@@ -1975,6 +2070,36 @@ export type Database = {
       delete_sticker_pack_if_eligible: {
         Args: { _pack_id: string }
         Returns: Json
+      }
+      dismiss_launch_schedule_communication: {
+        Args: { _id: string }
+        Returns: {
+          baseline_launch_at: string | null
+          baseline_timezone: string
+          baseline_window_end: string | null
+          baseline_window_start: string | null
+          change_count: number
+          created_at: string
+          current_launch_at: string | null
+          current_timezone: string
+          current_window_end: string | null
+          current_window_start: string | null
+          detected_at: string
+          detected_by: string | null
+          id: string
+          launch_id: string
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_schedule_communications"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       enqueue_due_launch_reminder_events: {
         Args: { _now?: string }
