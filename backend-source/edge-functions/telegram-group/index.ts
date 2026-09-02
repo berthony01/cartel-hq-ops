@@ -548,12 +548,11 @@ Deno.serve(async (req: Request) => {
 
       /** Records a definite no-send against the claimed ledger row. */
       const markFailed = async (reason: string) => {
-        try {
-          await admin.from("telegram_group_announcements")
-            .update({ status: "FAILED", last_error: reason.slice(0, 1000) })
-            .eq("id", announcementId).eq("status", "SENDING");
-        } catch (e) {
-          console.error("[telegram-group] announcement failure record", e instanceof Error ? e.message : "unknown");
+        const { error } = await admin.from("telegram_group_announcements")
+          .update({ status: "FAILED", last_error: reason.slice(0, 1000) })
+          .eq("id", announcementId).eq("status", "SENDING");
+        if (error) {
+          console.error("[telegram-group] announcement failure record", error.message);
         }
       };
 
