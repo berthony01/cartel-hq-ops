@@ -77,7 +77,7 @@ function unreadyReason(readiness: GroupReadiness): string | null {
     return "@PepeCartelHQBot is no longer in this community. Re-add the bot as an administrator, then re-check it in Communities.";
   }
   if (!readiness.supportedChatType) {
-    return "This connected chat is not a supported Telegram group, so an announcement cannot be posted to it.";
+    return "This connected chat is not a supported Telegram group, so an official broadcast cannot be posted to it.";
   }
   if (!readiness.botAdmin) {
     return "@PepeCartelHQBot is not an administrator in this community. Promote the bot, then re-check it in Communities.";
@@ -211,7 +211,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
     },
     onError: (err: unknown) => {
       setSnapshot(null);
-      toast.error(err instanceof Error ? err.message : "Could not post the announcement.");
+      toast.error(err instanceof Error ? err.message : "Could not post the official broadcast.");
     },
   });
 
@@ -281,7 +281,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         latestRef.current.groupConnectionId !== clicked.groupConnectionId ||
         latestRef.current.message !== clicked.message
       ) {
-        toast.error("The announcement changed while it was loading. Nothing was posted.");
+        toast.error("The official broadcast changed while it was loading. Nothing was posted.");
         return;
       }
       const id =
