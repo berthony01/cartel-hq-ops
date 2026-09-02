@@ -34,10 +34,8 @@ import {
   getLaunchWatchConfirmationSummary,
   getLaunchWatcherUpdateStats,
   listLaunchWatcherUpdates,
-  createLaunchWatcherUpdate,
   canSendWatcherUpdate,
-  WATCHER_UPDATE_TITLE_MAX,
-  WATCHER_UPDATE_BODY_MAX,
+
 
   isLaunchWatchClosedStatus,
   isLaunchWatchOpenStatus,
@@ -604,46 +602,10 @@ function LaunchControlPage() {
   });
   const watcherUpdates = watcherUpdateHistoryQuery.data ?? [];
 
-  const [updateTitle, setUpdateTitle] = useState("");
-  const [updateBody, setUpdateBody] = useState("");
-  // ONE client request id per confirmed send attempt. It survives errors so a
-  // retry is idempotent server-side, and is only cleared on definite success.
-  const [updateRequestId, setUpdateRequestId] = useState<string | null>(null);
-  const [confirmUpdateSend, setConfirmUpdateSend] = useState(false);
+  // Composing and sending watcher updates moved to Community Command →
+  // Broadcasts (C2). Launch Control keeps the read-only audience counts and
+  // recent outcomes only, so exactly one send composer exists.
 
-  useEffect(() => {
-    setUpdateTitle("");
-    setUpdateBody("");
-    setUpdateRequestId(null);
-    setConfirmUpdateSend(false);
-  }, [selected?.id]);
-
-  const watcherUpdateMutation = useMutation({
-    mutationFn: async () => {
-      if (!selected) throw new Error("No launch selected.");
-      // The id is minted before the confirmation dialog opens, so a retry of
-      // the same confirmed attempt reuses it and stays server-side idempotent.
-      const requestId = updateRequestId;
-      if (!requestId) throw new Error("Confirm the send again to continue.");
-      return createLaunchWatcherUpdate({
-        launchId: selected.id,
-        clientRequestId: requestId,
-        title: updateTitle.trim() ? updateTitle.trim() : null,
-        body: updateBody,
-      });
-    },
-    onSuccess: () => {
-      toast.success("Watcher update queued for delivery");
-      setUpdateTitle("");
-      setUpdateBody("");
-      setUpdateRequestId(null);
-      void watcherUpdateStatsQuery.refetch();
-      void watcherUpdateHistoryQuery.refetch();
-      void notificationSummaryQuery.refetch();
-    },
-    onError: (err: unknown) =>
-      toast.error(err instanceof Error ? err.message : "Could not send the watcher update."),
-  });
 
   // ---- countdown + reminder readiness (saved launch fields only) -----------
   const nowMs = useClientNow(30_000);
@@ -1725,80 +1687,29 @@ function LaunchControlPage() {
                       </div>
 
                       {canManage ? (
-                        canSendWatcherUpdate(status) ? (
-                          <div className="space-y-3">
-                            <div className="min-w-0">
-                              <Label htmlFor="watcher-update-title">Title (optional)</Label>
-                              <Input
-                                id="watcher-update-title"
-                                maxLength={WATCHER_UPDATE_TITLE_MAX}
-                                value={updateTitle}
-                                onChange={(e) => setUpdateTitle(e.target.value)}
-                                placeholder="Short headline for this update"
-                              />
-                              <p className="mt-1 text-right text-xs text-muted-foreground">
-                                {updateTitle.length}/{WATCHER_UPDATE_TITLE_MAX}
-                              </p>
-                            </div>
-                            <div className="min-w-0">
-                              <Label htmlFor="watcher-update-body">Update text</Label>
-                              <Textarea
-                                id="watcher-update-body"
-                                rows={5}
-                                maxLength={WATCHER_UPDATE_BODY_MAX}
-                                value={updateBody}
-                                onChange={(e) => setUpdateBody(e.target.value)}
-                                placeholder="What do your watchers need to know?"
-                              />
-                              <p className="mt-1 text-right text-xs text-muted-foreground">
-                                {updateBody.length}/{WATCHER_UPDATE_BODY_MAX}
-                              </p>
-                            </div>
-                            <Button
-                              className="min-h-11"
-                              disabled={
-                                watcherUpdateMutation.isPending ||
-                                !updateBody.trim() ||
-                                !watcherUpdateStats ||
-                                watcherUpdateStats.updates_enabled_watchers < 1
-                              }
-                              onClick={() => {
-                                const id = updateRequestId ?? crypto.randomUUID();
-                                setUpdateRequestId(id);
-                                setConfirmUpdateSend(true);
-                              }}
+                        <div className="space-y-2">
+                          <Button className="min-h-11" asChild>
+                            <Link
+                              to="/telegram"
+                              search={{ tab: "broadcasts", launch: selected!.id }}
                             >
-                              {watcherUpdateMutation.isPending ? (
-                                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                              ) : (
-                                <Megaphone className="size-4" aria-hidden="true" />
-                              )}
-                              Send watcher update
-                            </Button>
-                            {watcherUpdateStats &&
-                            watcherUpdateStats.updates_enabled_watchers < 1 ? (
-                              <p className="text-xs leading-relaxed text-muted-foreground">
-                                No active watcher currently allows Project Updates, so there is
-                                nobody to send this update to yet.
-                              </p>
-                            ) : null}
-                            <p className="text-xs leading-relaxed text-muted-foreground">
-                              Updates send immediately when confirmed. There is no scheduling and no
-                              media attachment in this phase — text only.
-                            </p>
-                          </div>
-                        ) : (
+                              <Megaphone className="size-4" aria-hidden="true" />
+                              Send update in Community Command
+                            </Link>
+                          </Button>
                           <p className="text-xs leading-relaxed text-muted-foreground">
-                            Watcher updates can be sent from Watchlist open through Live. This
-                            launch is currently {LAUNCH_STATUS_LABELS[status]}.
+                            {canSendWatcherUpdate(status)
+                              ? "Composing and sending watcher updates now lives in Community Command → Broadcasts, with this launch preselected."
+                              : `Watcher updates can be sent from Watchlist open through Live. This launch is currently ${LAUNCH_STATUS_LABELS[status]}.`}
                           </p>
-                        )
+                        </div>
                       ) : (
                         <p className="text-xs leading-relaxed text-muted-foreground">
                           Only project owners and admins can send watcher updates. You can view the
                           audience counts and update history.
                         </p>
                       )}
+
 
                       <div className="rounded-md border border-border/60 bg-background/30 p-3">
                         <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
@@ -2115,41 +2026,8 @@ function LaunchControlPage() {
         <StickyActionBar desktop="hidden" end={saveButton} />
       ) : null}
 
-      <AlertDialog
-        open={confirmUpdateSend}
-        onOpenChange={(open) => {
-          setConfirmUpdateSend(open);
-          // Explicit cancel before any send attempt: the next confirmation
-          // starts a fresh idempotency id.
-          if (!open && !watcherUpdateMutation.isPending) setUpdateRequestId(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Send this update privately to {watcherUpdateStats?.updates_enabled_watchers ?? 0}{" "}
-              watcher(s)?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              This creates one private bot message per eligible watcher and does not post to your
-              community group.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={watcherUpdateMutation.isPending}
-              onClick={(e) => {
-                e.preventDefault();
-                watcherUpdateMutation.mutate();
-                setConfirmUpdateSend(false);
-              }}
-            >
-              Send watcher update
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+
+
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>

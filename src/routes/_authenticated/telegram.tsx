@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowRight,
   Clock3,
@@ -12,6 +11,7 @@ import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
+import { BroadcastsPanel } from "@/components/cartel/BroadcastsPanel";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWorkspace } from "@/lib/workspace-context";
@@ -22,7 +22,36 @@ import {
   useTelegramGroupSetup,
 } from "@/components/cartel/TelegramGroupCard";
 
+const TAB_KEYS = ["overview", "broadcasts", "audience", "communities", "history"] as const;
+type TabKey = (typeof TAB_KEYS)[number];
+
+/**
+ * Both params are optional so every existing `to="/telegram"` link keeps
+ * working. Anything invalid or missing resolves to the Overview tab and no
+ * preselected launch.
+ */
+type TelegramSearch = { tab?: TabKey; launch?: string };
+
+function validateTelegramSearch(search: Record<string, unknown>): TelegramSearch {
+  const rawTab = search["tab"];
+  const tab = (TAB_KEYS as readonly string[]).includes(String(rawTab))
+    ? (String(rawTab) as TabKey)
+    : undefined;
+  const rawLaunch = search["launch"];
+  const launch =
+    typeof rawLaunch === "string" && rawLaunch.trim().length > 0 && rawLaunch.length <= 100
+      ? rawLaunch.trim()
+      : undefined;
+  const next: TelegramSearch = {};
+  if (tab && tab !== "overview") next.tab = tab;
+  if (launch) next.launch = launch;
+  return next;
+}
+
+
+
 export const Route = createFileRoute("/_authenticated/telegram")({
+  validateSearch: validateTelegramSearch,
   head: () => ({
     meta: [
       { title: "Community Command — CARTEL HQ" },
@@ -44,7 +73,7 @@ export const Route = createFileRoute("/_authenticated/telegram")({
   component: TelegramPage,
 });
 
-type TabKey = "overview" | "broadcasts" | "audience" | "communities" | "history";
+
 
 const TABS: Array<{ value: TabKey; label: string; shortLabel: string }> = [
   { value: "overview", label: "Overview", shortLabel: "Overview" },
@@ -101,7 +130,15 @@ function TelegramPage() {
   const setup = useTelegramSetup();
   const groupSetup = useTelegramGroupSetup();
   const { workspaceId } = useWorkspace();
-  const [tab, setTab] = useState<TabKey>("overview");
+  const search = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
+  const tab = search.tab ?? "overview";
+  const setTab = (next: TabKey) =>
+    void navigate({
+      search: (prev: TelegramSearch) => ({ ...prev, tab: next }),
+      replace: true,
+    });
+
 
   const groupCount = groupSetup.connectedGroupCount;
   const readyCount = groupSetup.readiness.filter((r) => r.ready).length;
@@ -286,19 +323,9 @@ function TelegramPage() {
 
         {/* ---------------------------------------------------------------- */}
         <TabsContent value="broadcasts" className="mt-0 min-w-0">
-          <ComingSoonPanel
-            icon={Megaphone}
-            title="Broadcasts"
-            summary="One composer for everything you send on purpose. Not available yet."
-            points={[
-              "Project updates sent privately to Launch Watch watchers, consolidated here from Launch Control.",
-              "Announcements posted into a connected Telegram community.",
-              "Telegram preview and the exact eligible recipient count before anything is sent.",
-              "Explicit confirmation before any send, with opt-outs always respected.",
-            ]}
-            footnote="Until this ships, watcher updates continue to be sent from Launch Control. Nothing on this screen sends a message."
-          />
+          <BroadcastsPanel initialLaunchId={search.launch ?? null} />
         </TabsContent>
+
 
         {/* ---------------------------------------------------------------- */}
         <TabsContent value="audience" className="mt-0 min-w-0">
@@ -415,8 +442,10 @@ function TelegramPage() {
       <p className="flex items-center gap-2 text-[11px] leading-relaxed text-muted-foreground">
         <Radio className="size-3.5 shrink-0" aria-hidden="true" />
         <span>
-          Broadcasts, Audience and History are being added in later controlled phases. They are
-          placeholders today and cannot send or expose anything.
+          Audience and History are being added in later controlled phases. They are placeholders
+          today and cannot send or expose anything. Broadcasts currently sends private watcher
+          updates only — it cannot post to a community group.
+
         </span>
       </p>
     </div>
