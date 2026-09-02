@@ -191,7 +191,10 @@ function TelegramPage() {
   const clearInboxConversation = useCallback(
     () =>
       void navigate({
-        search: (prev: TelegramSearch) => ({ ...prev, tab: "inbox", conversation: undefined }),
+        search: (prev: TelegramSearch) => {
+          const { conversation: _dropped, ...rest } = prev;
+          return { ...rest, tab: "inbox" as const };
+        },
         replace: true,
       }),
     [navigate],
