@@ -665,6 +665,10 @@ function ProjectProfilePage() {
                       });
                     }}
                   />
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                    Uploading only selects the logo here. It is not part of your project identity —
+                    and branded community broadcasts will not use it — until you save this profile.
+                  </p>
                 </div>
                 {logos.length === 0 ? (
                   <EmptyState
@@ -694,13 +698,15 @@ function ProjectProfilePage() {
                         ))}
                       </SelectContent>
                     </Select>
-                    {selectedLogo &&
-                    !["image/png", "image/jpeg"].includes(
-                      (selectedLogo.mime_type ?? "").toLowerCase(),
-                    ) ? (
+                    {selectedLogoIssue ? (
                       <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                        This logo is not a PNG or JPEG, so branded community broadcasts cannot use
-                        it. Upload a PNG or JPEG version to enable branded posting.
+                        {selectedLogoIssue}
+                      </p>
+                    ) : null}
+                    {logoSelectionUnsaved ? (
+                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                        This logo selection is not saved yet. Save this profile to use it for
+                        branded community broadcasts.
                       </p>
                     ) : null}
                   </div>
