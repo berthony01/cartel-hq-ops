@@ -685,16 +685,47 @@ export async function listPendingScheduleCommunications(
   return data ?? [];
 }
 
-export type SendScheduleCommunicationInput = {
+/**
+ * The exact reviewed decision. `expected*` is the frozen snapshot the operator
+ * actually saw; the server refuses the decision if the PENDING row moved on,
+ * so reviewed == submitted is enforced server-side, not by the browser.
+ */
+export type ExpectedScheduleSnapshot = {
+  expectedChangeCount: number;
+  expectedCurrentLaunchAt: string | null;
+  expectedCurrentWindowStart: string | null;
+  expectedCurrentWindowEnd: string | null;
+  expectedCurrentTimezone: string;
+};
+
+export type SendScheduleCommunicationInput = ExpectedScheduleSnapshot & {
   communicationId: string;
   clientRequestId: string;
   note: string | null;
 };
 
+export type DismissScheduleCommunicationInput = ExpectedScheduleSnapshot & {
+  communicationId: string;
+};
+
+/** Captures the expected snapshot from a freshly read PENDING row. */
+export function expectedScheduleSnapshot(
+  row: LaunchScheduleCommunication,
+): ExpectedScheduleSnapshot {
+  return {
+    expectedChangeCount: row.change_count,
+    expectedCurrentLaunchAt: row.current_launch_at,
+    expectedCurrentWindowStart: row.current_window_start,
+    expectedCurrentWindowEnd: row.current_window_end,
+    expectedCurrentTimezone: row.current_timezone,
+  };
+}
+
 /**
  * Atomic + idempotent server-side. The factual Previous/New schedule text is
  * composed by the RPC; `note` is the operator's optional explanation only.
- * Repeating the same clientRequestId returns the original event id.
+ * Repeating the same clientRequestId returns the original event id. A PENDING
+ * row that no longer matches the reviewed snapshot is rejected.
  */
 export async function sendLaunchScheduleCommunication(
   input: SendScheduleCommunicationInput,
@@ -704,6 +735,11 @@ export async function sendLaunchScheduleCommunication(
     {
       _id: input.communicationId,
       _client_request_id: input.clientRequestId,
+      _expected_change_count: input.expectedChangeCount,
+      _expected_current_launch_at: input.expectedCurrentLaunchAt,
+      _expected_current_window_start: input.expectedCurrentWindowStart,
+      _expected_current_window_end: input.expectedCurrentWindowEnd,
+      _expected_current_timezone: input.expectedCurrentTimezone,
       _note: input.note,
     },
   );
@@ -711,12 +747,20 @@ export async function sendLaunchScheduleCommunication(
   return String(data ?? "");
 }
 
+/** Conditional dismiss: rejected if the PENDING row changed after review. */
 export async function dismissLaunchScheduleCommunication(
-  communicationId: string,
+  input: DismissScheduleCommunicationInput,
 ): Promise<void> {
   const { error } = await (supabase as unknown as RpcClient).rpc(
     "dismiss_launch_schedule_communication",
-    { _id: communicationId },
+    {
+      _id: input.communicationId,
+      _expected_change_count: input.expectedChangeCount,
+      _expected_current_launch_at: input.expectedCurrentLaunchAt,
+      _expected_current_window_start: input.expectedCurrentWindowStart,
+      _expected_current_window_end: input.expectedCurrentWindowEnd,
+      _expected_current_timezone: input.expectedCurrentTimezone,
+    },
   );
   if (error) rethrow(error);
 }
