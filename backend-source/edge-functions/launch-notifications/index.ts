@@ -190,6 +190,14 @@ Deno.serve(async (req: Request) => {
         continue;
       }
 
+      // Presentation-only flag. It is never trusted for staleness bypass;
+      // current-schedule drift and window validation remain authoritative.
+      const payloadObject =
+        claim.payload && typeof claim.payload === "object"
+          ? (claim.payload as Record<string, unknown>)
+          : {};
+      const isCatchUpReminder = isReminder && payloadObject["catch_up"] === true;
+
       const { data: launch, error: launchError } = await admin
         .from("launches")
         .select(
@@ -261,11 +269,7 @@ Deno.serve(async (req: Request) => {
           // never trusted: the CURRENT launch anchor must still sit inside the
           // window this reminder type represents. Schedule-drift validation
           // above already ran, so old-schedule events can never reach here.
-          const payloadObject =
-            claim.payload && typeof claim.payload === "object"
-              ? (claim.payload as Record<string, unknown>)
-              : {};
-          const isCatchUp = payloadObject["catch_up"] === true;
+          const isCatchUp = isCatchUpReminder;
           const msToLaunch = anchorMs - nowMs;
           const windowValid = eventType === "REMINDER_24H"
             ? msToLaunch > REMINDER_OFFSET_MS["REMINDER_1H"]! &&
@@ -306,10 +310,14 @@ Deno.serve(async (req: Request) => {
 
       let text: string;
       if (isReminder) {
-        const window = eventType === "REMINDER_24H" ? "~24 hours" : "~1 hour";
+        const is24H = eventType === "REMINDER_24H";
+        const windowPhrase = is24H ? "24 hours" : "1 hour";
+        const lead = isCatchUpReminder
+          ? `The launch is now <b>less than ${windowPhrase}</b> away from the ${launch.launch_at ? "announced launch time" : "launch window start"}.`
+          : `About <b>~${windowPhrase}</b> until the ${launch.launch_at ? "announced launch time" : "launch window start"}.`;
         text =
           `<b>⏳ LAUNCH COUNTDOWN</b>\n\n${identity}\n\n` +
-          `About <b>${window}</b> until the ${launch.launch_at ? "announced launch time" : "launch window start"}.` +
+          lead +
           `${timingLine}${linksBlock}\n\n${REMINDER_DISCLAIMER}`;
       } else if (eventType === "OFFICIAL_CONTRACT_REGISTERED") {
         text =
