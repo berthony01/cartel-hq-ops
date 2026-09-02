@@ -133,6 +133,12 @@ export function ProjectInboxPanel({
   const [settingsDialog, setSettingsDialog] = useState<"enable" | "disable" | null>(null);
   const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
   const [blockDialog, setBlockDialog] = useState<"block" | "unblock" | null>(null);
+  const [replyBody, setReplyBody] = useState("");
+  // One stable client request id per composed reply. It is regenerated only
+  // after the server accepts the reply, so retries of the SAME text — double
+  // click, reconnect, refetch — resolve to the original message server-side.
+  const [replyRequestId, setReplyRequestId] = useState(() => crypto.randomUUID());
+
 
   // Clear any selected conversation when the ACTIVE workspace actually
   // CHANGES after mount (previous non-null workspace id -> different id), so
