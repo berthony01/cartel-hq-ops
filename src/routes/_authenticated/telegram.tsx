@@ -168,6 +168,13 @@ function TelegramPage() {
     [navigate],
   );
 
+  // C6 — workspace-wide unnotified schedule changes (RLS-scoped, metadata only).
+  const pendingScheduleQuery = useQuery({
+    queryKey: workspaceScheduleCommunicationsQueryKey(workspaceId ?? null),
+    enabled: !!workspaceId,
+    queryFn: () => listPendingScheduleCommunications(workspaceId!),
+  });
+  const pendingSchedule = pendingScheduleQuery.data ?? [];
 
 
 
