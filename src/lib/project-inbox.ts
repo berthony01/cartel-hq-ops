@@ -229,10 +229,12 @@ export async function listProjectInboxConversations(
   status: ConversationStatus | null,
   limit = 100,
 ): Promise<ProjectInboxConversationListItem[]> {
+  // Omitting `_status` entirely lets the SQL default (NULL = all statuses)
+  // apply; explicit `undefined` is rejected under exactOptionalPropertyTypes.
   const { data, error } = await supabase.rpc("list_project_inbox_conversations", {
     _workspace_id: workspaceId,
-    _status: status ?? undefined,
     _limit: Math.min(Math.max(limit, 1), 100),
+    ...(status ? { _status: status } : {}),
   });
   if (error) throw error;
   return manyRows<ProjectInboxConversationListItem>(data);
