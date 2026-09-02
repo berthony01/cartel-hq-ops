@@ -43,6 +43,7 @@ function validateTelegramSearch(search: Record<string, unknown>): TelegramSearch
 
 
 export const Route = createFileRoute("/_authenticated/telegram")({
+  validateSearch: validateTelegramSearch,
   head: () => ({
     meta: [
       { title: "Community Command — CARTEL HQ" },
@@ -64,7 +65,7 @@ export const Route = createFileRoute("/_authenticated/telegram")({
   component: TelegramPage,
 });
 
-type TabKey = "overview" | "broadcasts" | "audience" | "communities" | "history";
+
 
 const TABS: Array<{ value: TabKey; label: string; shortLabel: string }> = [
   { value: "overview", label: "Overview", shortLabel: "Overview" },
