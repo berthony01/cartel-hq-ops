@@ -354,3 +354,47 @@ export async function setProjectInboxConversationBlocked(
   if (error) throw error;
   return oneRow<ProjectInboxConversationBlockResult>(data, "Member block update");
 }
+
+/**
+ * C7.3D D1 — writes ONE outbound team reply and queues it durably.
+ *
+ * Workspace-bound and idempotent: the server authorizes the ACTIVE workspace
+ * first, refuses blocked members and disabled reply capture, and returns the
+ * ORIGINAL message when the same `clientRequestId` is submitted again, so a
+ * double click, retry or reconnect can never send twice.
+ *
+ * Returning successfully means the reply was durably QUEUED — not that
+ * Telegram has delivered it. Delivery state arrives through
+ * `listProjectConversationMessages`.
+ */
+export async function createProjectInboxTeamReply(
+  workspaceId: string,
+  conversationId: string,
+  body: string,
+  clientRequestId: string,
+): Promise<ProjectInboxTeamReplyResult> {
+  const { data, error } = await supabase.rpc("create_project_inbox_team_reply", {
+    _workspace_id: workspaceId,
+    _conversation_id: conversationId,
+    _body: body,
+    _client_request_id: clientRequestId,
+  });
+  if (error) throw error;
+  return oneRow<ProjectInboxTeamReplyResult>(data, "Team reply");
+}
+
+/**
+ * Acknowledges an uncertain or failed delivery. This is a bookkeeping action
+ * only: it NEVER resends anything to the member.
+ */
+export async function acknowledgeProjectInboxDelivery(
+  workspaceId: string,
+  deliveryId: string,
+): Promise<ProjectInboxDeliveryAckResult> {
+  const { data, error } = await supabase.rpc("acknowledge_project_inbox_delivery", {
+    _workspace_id: workspaceId,
+    _delivery_id: deliveryId,
+  });
+  if (error) throw error;
+  return oneRow<ProjectInboxDeliveryAckResult>(data, "Delivery acknowledgement");
+}
