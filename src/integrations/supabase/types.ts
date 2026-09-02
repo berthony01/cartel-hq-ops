@@ -2139,6 +2139,24 @@ export type Database = {
           watchlist_opened_at: string
         }[]
       }
+      get_launch_audience_summary: {
+        Args: { _launch_id: string }
+        Returns: {
+          active_watchers: number
+          last_ambiguous_watchers: number
+          last_delivery_at: string
+          last_failed_watchers: number
+          last_inflight_watchers: number
+          last_sent_watchers: number
+          last_skipped_watchers: number
+          never_contacted_watchers: number
+          reminders_enabled_watchers: number
+          reminders_muted_watchers: number
+          total_watchers: number
+          updates_enabled_watchers: number
+          updates_muted_watchers: number
+        }[]
+      }
       get_launch_notification_summary: {
         Args: { _launch_id: string }
         Returns: {
