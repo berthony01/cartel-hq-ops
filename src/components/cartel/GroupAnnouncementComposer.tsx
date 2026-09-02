@@ -730,6 +730,66 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
               </p>
             </div>
 
+            <div className="min-w-0 rounded-md border border-border/60 bg-background/30 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Label htmlFor="group-announcement-cta">Include Launch Watch CTA</Label>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    Telegram shows a 🔔 Watch this launch button below this official broadcast.
+                    Tapping it opens @PepeCartelHQBot privately so that member can opt in. Nobody is
+                    subscribed automatically.
+                  </p>
+                </div>
+                <Switch
+                  id="group-announcement-cta"
+                  checked={ctaRequested}
+                  disabled={busy || !canManage || ctaOptions.length === 0}
+                  onCheckedChange={(checked) => {
+                    setCtaRequested(checked);
+                    if (!checked) setCtaLaunchId(null);
+                    else if (!ctaLaunchId && ctaOptions.length === 1) {
+                      setCtaLaunchId(ctaOptions[0]!.launchId);
+                    }
+                  }}
+                />
+              </div>
+              {ctaRequested && ctaOptions.length > 0 ? (
+                <div className="mt-3 min-w-0 space-y-2">
+                  <Label htmlFor="group-announcement-cta-launch">Launch</Label>
+                  <Select
+                    value={ctaLaunchId ?? ""}
+                    disabled={busy || !canManage}
+                    onValueChange={(value) => setCtaLaunchId(value)}
+                  >
+                    <SelectTrigger id="group-announcement-cta-launch" className="min-h-11 w-full">
+                      <SelectValue placeholder="Select an eligible launch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ctaOptions.map((o) => (
+                        <SelectItem key={o.launchId} value={o.launchId}>
+                          {o.projectName} · {o.tokenName}
+                          {o.ticker ? ` (${o.ticker})` : ""} · {o.chain} · {o.status}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+              {ctaUnavailableReason ? (
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  {ctaUnavailableReason}{" "}
+                  <Link to="/launch-control" className="underline underline-offset-2">
+                    Open Launch Control
+                  </Link>
+                </p>
+              ) : (
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  The button is a Telegram inline button, so it does not use any of your message
+                  characters. The launch is re-checked before anything is posted.
+                </p>
+              )}
+            </div>
+
             {trimmed ? (
               <div className="min-w-0 rounded-md border border-border/60 bg-background/30 p-3">
                 <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
@@ -751,6 +811,17 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
                   >
                     {previewText.length}/{GROUP_BRANDED_CAPTION_MAX}
                   </p>
+                ) : null}
+                {ctaActive && ctaSelected ? (
+                  <div className="mt-2 min-w-0 rounded-md border border-border/60 bg-background/50 p-2">
+                    <p className="text-xs font-medium text-foreground">🔔 Watch this launch</p>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+                      Button shown below this message for {ctaSelected.projectName} ·{" "}
+                      {ctaSelected.tokenName}
+                      {ctaSelected.ticker ? ` (${ctaSelected.ticker})` : ""} · {ctaSelected.chain} ·{" "}
+                      {ctaSelected.status}
+                    </p>
+                  </div>
                 ) : null}
                 <p className="mt-2 border-t border-border/60 pt-2 text-xs leading-relaxed text-muted-foreground">
                   {branded
@@ -891,6 +962,24 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
                 </span>
               </div>
             ) : null}
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span className="uppercase tracking-[0.12em] text-muted-foreground">
+                Launch Watch CTA
+              </span>
+              <span className="min-w-0 font-medium text-foreground [overflow-wrap:anywhere]">
+                {snapshot?.cta ? "Included" : "Not included"}
+              </span>
+            </div>
+            {snapshot?.cta ? (
+              <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <span className="uppercase tracking-[0.12em] text-muted-foreground">Launch</span>
+                <span className="min-w-0 font-medium text-foreground [overflow-wrap:anywhere]">
+                  {snapshot.cta.projectName} · {snapshot.cta.tokenName}
+                  {snapshot.cta.ticker ? ` (${snapshot.cta.ticker})` : ""} · {snapshot.cta.chain} ·{" "}
+                  {snapshot.cta.status}
+                </span>
+              </div>
+            ) : null}
           </div>
           <div className="max-h-48 overflow-y-auto rounded-md border border-border/60 bg-background/40 p-3">
             {snapshot?.branding && snapshot.brandingLogoUrl ? (
@@ -903,6 +992,14 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
             <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground [overflow-wrap:anywhere]">
               {snapshot?.deliveredText ?? snapshot?.message ?? ""}
             </p>
+            {snapshot?.cta ? (
+              <div className="mt-2 rounded-md border border-border/60 bg-background/60 p-2 text-center">
+                <p className="text-xs font-medium text-foreground">🔔 Watch this launch</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  This button will appear below the Telegram message.
+                </p>
+              </div>
+            ) : null}
           </div>
 
           <AlertDialogFooter>
