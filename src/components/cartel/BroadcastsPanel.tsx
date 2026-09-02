@@ -695,7 +695,7 @@ export function BroadcastsPanel({
       <Section
         variant="hero"
         title="Broadcasts"
-        description="Send a private project update to Launch Watch watchers, or post one plain-text announcement into a connected Telegram community."
+        description="Send a private project update to Launch Watch watchers, or post an official project message into a connected Telegram community."
         leading={<Megaphone className="size-4" aria-hidden="true" />}
         actions={<StatusBadge tone="green">Live</StatusBadge>}
       >
@@ -738,15 +738,16 @@ export function BroadcastsPanel({
             >
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
-                  Telegram community
+                  Official Community Broadcast
                 </p>
                 <StatusBadge tone={channel === "community" ? "green" : "muted"}>
                   {channel === "community" ? "Selected" : "Available"}
                 </StatusBadge>
               </div>
               <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                One public plain-text announcement posted into a connected community group. No
-                watcher DM is sent.
+                One official project message posted into a connected community group. This is for
+                official project/team communications and does not replace normal everyday Telegram
+                conversation. No watcher DM is sent.
               </p>
             </button>
           </li>

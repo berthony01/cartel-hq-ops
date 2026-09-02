@@ -37,7 +37,7 @@ import {
 import type { GroupReadiness, TelegramGroupSetup } from "@/components/cartel/TelegramGroupCard";
 
 /**
- * Community Command → Broadcasts → Telegram community (C7).
+ * Community Command → Broadcasts → Official Community Broadcast (C7).
  *
  * Posts ONE plain-text announcement to ONE connected community. Every rule that
  * matters — owner/admin authorization, live bot verification, exact
@@ -196,7 +196,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         // never be posted twice. The truthful outcome card stays visible.
         setAttempt(null);
         setMessage("");
-        toast.success(result.message ?? "Announcement posted.");
+        toast.success(result.message ?? `Official broadcast posted to ${snap.groupTitle}.`);
         return;
       }
       if (result.status === "FAILED") {
@@ -224,13 +224,13 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
     : accessQuery.isError
       ? "Could not verify your permissions, so posting is blocked."
       : !canManage
-        ? "Only workspace owners and admins can post community announcements."
+        ? "Only workspace owners and admins can post official community broadcasts."
         : groups.length === 0
-          ? "Connect a Telegram community before posting an announcement."
+          ? "Connect a Telegram community before posting an official broadcast."
           : readinessBlock
             ? readinessBlock
             : outcome?.status === "AMBIGUOUS"
-              ? "This announcement's delivery is unconfirmed. Check the community in Telegram before writing a new one."
+              ? "This broadcast's delivery is unconfirmed. Check the community in Telegram before writing a new one."
               : null;
 
   const sendDisabled =
@@ -306,15 +306,15 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
     <>
       <Section
         variant="surface"
-        title="Community announcement"
+        title="Official Community Broadcast"
         leading={<Send className="size-4" aria-hidden="true" />}
-        description="Posts one plain-text message from @PepeCartelHQBot into the selected connected community."
+        description="Post an official project message to a connected Telegram community through @PepeCartelHQBot."
       >
         {groups.length === 0 ? (
           <div className="min-w-0 space-y-3">
             <p className="text-xs leading-relaxed text-muted-foreground">
               No Telegram community is connected to this workspace yet. Connect one in Communities
-              first.
+              before posting official broadcasts.
             </p>
             <Button asChild variant="outline" className="min-h-11">
               <Link to="/telegram" search={{ tab: "communities" }}>
@@ -346,7 +346,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
               {readiness ? (
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   {readiness.ready
-                    ? "@PepeCartelHQBot is an administrator in this community. It is re-checked live before anything is posted."
+                    ? "@PepeCartelHQBot is an administrator in this community. It is re-checked live before any official broadcast is posted."
                     : (unreadyReason(readiness) ??
                       "This community has not been verified as ready.")}
                 </p>
@@ -354,14 +354,14 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
             </div>
 
             <div className="min-w-0">
-              <Label htmlFor="group-announcement-message">Announcement</Label>
+              <Label htmlFor="group-announcement-message">Official broadcast</Label>
               <Textarea
                 id="group-announcement-message"
                 rows={6}
                 maxLength={GROUP_ANNOUNCEMENT_MAX}
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="What should this community see?"
+                placeholder="What official message should this community see?"
                 disabled={busy || !canManage}
               />
               <p className="mt-1 text-right text-xs text-muted-foreground">
@@ -372,7 +372,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
             {trimmed ? (
               <div className="min-w-0 rounded-md border border-border/60 bg-background/30 p-3">
                 <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                  Group message preview
+                  Community broadcast preview
                 </p>
                 <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
                   {message}
@@ -395,7 +395,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
                 ) : (
                   <Send className="size-4" aria-hidden="true" />
                 )}
-                Post announcement
+                Post Official Broadcast
               </Button>
               {outcome ? (
                 <Button
@@ -404,7 +404,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
                   disabled={busy}
                   onClick={resetComposer}
                 >
-                  New announcement
+                  New broadcast
                 </Button>
               ) : null}
             </div>
@@ -441,20 +441,20 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
                 <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                   {outcome.message ??
                     (outcome.status === "SENT"
-                      ? "Announcement posted."
-                      : "The announcement outcome was recorded.")}
+                      ? "Official broadcast posted."
+                      : "The broadcast outcome was recorded.")}
                 </p>
                 {outcome.status === "AMBIGUOUS" ? (
                   <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                     Do not assume this was delivered. CARTEL HQ will not resend it automatically.
-                    Open the community in Telegram to check whether the message arrived before
-                    writing a new announcement.
+                    Open the community in Telegram to check whether the official broadcast arrived
+                    before writing a new one.
                   </p>
                 ) : null}
                 {outcome.status === "FAILED" ? (
                   <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                     Nothing was posted. Your text is still here — fix it and post again as a new
-                    announcement.
+                    official broadcast.
                   </p>
                 ) : null}
                 {outcome.technical ? (
@@ -469,8 +469,8 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
               <p className="text-xs leading-relaxed text-muted-foreground">{blockReason}</p>
             ) : null}
             <p className="text-xs leading-relaxed text-muted-foreground">
-              This posts publicly in the community. It is not a Launch Watch watcher DM and it does
-              not create or change any launch notification.
+              This posts an official project message publicly in the community. It is not a Launch
+              Watch watcher DM and it does not create or change any launch notification.
             </p>
           </div>
         )}
@@ -486,11 +486,12 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Post this announcement to {snapshot?.groupTitle ?? "this community"}?
+              Post this official broadcast to {snapshot?.groupTitle ?? "this community"}?
             </AlertDialogTitle>
             <AlertDialogDescription>
               Everyone in the community can see it. It is posted as plain text by
-              @PepeCartelHQBot and no watcher DM is sent.
+              @PepeCartelHQBot for official project/team communications and does not replace normal
+              everyday conversation. No watcher DM is sent.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="max-h-48 overflow-y-auto rounded-md border border-border/60 bg-background/40 p-3">
@@ -509,7 +510,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
                 setConfirmOpen(false);
               }}
             >
-              Post announcement
+              Post Official Broadcast
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
