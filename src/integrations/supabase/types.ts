@@ -978,67 +978,70 @@ export type Database = {
       }
       project_inbox_deliveries: {
         Row: {
-          acknowledged_at: string | null
-          acknowledged_by: string | null
           attempt_count: number
-          body_snapshot: string
           claimed_at: string | null
           conversation_id: string
           created_at: string
+          delivered_text_snapshot: string | null
           error_class: string | null
           id: string
           last_error: string | null
           message_id: string
           next_attempt_at: string
+          project_name_snapshot: string | null
           sent_at: string | null
           status: string
-          team_user_id: string
           telegram_message_id: number | null
           telegram_user_id: number
+          template_version: string | null
+          ticker_snapshot: string | null
+          uncertainty_acknowledged_at: string | null
+          uncertainty_acknowledged_by: string | null
           updated_at: string
-          workspace_id: string
         }
         Insert: {
-          acknowledged_at?: string | null
-          acknowledged_by?: string | null
           attempt_count?: number
-          body_snapshot: string
           claimed_at?: string | null
           conversation_id: string
           created_at?: string
+          delivered_text_snapshot?: string | null
           error_class?: string | null
           id?: string
           last_error?: string | null
           message_id: string
           next_attempt_at?: string
+          project_name_snapshot?: string | null
           sent_at?: string | null
           status?: string
-          team_user_id: string
           telegram_message_id?: number | null
           telegram_user_id: number
+          template_version?: string | null
+          ticker_snapshot?: string | null
+          uncertainty_acknowledged_at?: string | null
+          uncertainty_acknowledged_by?: string | null
           updated_at?: string
-          workspace_id: string
         }
         Update: {
-          acknowledged_at?: string | null
-          acknowledged_by?: string | null
           attempt_count?: number
-          body_snapshot?: string
           claimed_at?: string | null
           conversation_id?: string
           created_at?: string
+          delivered_text_snapshot?: string | null
           error_class?: string | null
           id?: string
           last_error?: string | null
           message_id?: string
           next_attempt_at?: string
+          project_name_snapshot?: string | null
           sent_at?: string | null
           status?: string
-          team_user_id?: string
           telegram_message_id?: number | null
           telegram_user_id?: number
+          template_version?: string | null
+          ticker_snapshot?: string | null
+          uncertainty_acknowledged_at?: string | null
+          uncertainty_acknowledged_by?: string | null
           updated_at?: string
-          workspace_id?: string
         }
         Relationships: [
           {
@@ -2662,12 +2665,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      acknowledge_project_inbox_delivery: {
-        Args: { _delivery_id: string; _workspace_id: string }
+      acknowledge_project_inbox_delivery_uncertainty: {
+        Args: {
+          _conversation_id: string
+          _message_id: string
+          _workspace_id: string
+        }
         Returns: {
-          acknowledged_at: string
-          delivery_id: string
-          status: string
+          delivery_status: string
+          message_id: string
+          uncertainty_acknowledged_at: string
         }[]
       }
       archive_sticker_pack: { Args: { _pack_id: string }; Returns: Json }
@@ -2709,12 +2716,10 @@ export type Database = {
         Args: { _limit?: number }
         Returns: {
           attempt_count: number
-          body_snapshot: string
-          contact_blocked: boolean
           conversation_id: string
+          delivered_text_snapshot: string
           delivery_id: string
           message_id: string
-          replies_enabled: boolean
           team_user_id: string
           telegram_user_id: number
           workspace_id: string
@@ -2747,10 +2752,11 @@ export type Database = {
           _workspace_id: string
         }
         Returns: {
-          delivery_id: string
+          conversation_status: string
+          created_at: string
           delivery_status: string
+          idempotent_replay: boolean
           message_id: string
-          replayed: boolean
         }[]
       }
       delete_sticker_pack_if_eligible: {
@@ -2805,11 +2811,16 @@ export type Database = {
           _delivery_id: string
           _error_class?: string
           _last_error?: string
+          _next_attempt_at?: string
           _outcome: string
-          _retry_after_seconds?: number
           _telegram_message_id?: number
         }
-        Returns: string
+        Returns: {
+          delivery_id: string
+          next_attempt_at: string
+          sent_at: string
+          status: string
+        }[]
       }
       format_launch_schedule_snapshot: {
         Args: { _at: string; _tz: string; _we: string; _ws: string }
@@ -3241,10 +3252,9 @@ export type Database = {
           body: string
           channel: string
           created_at: string
-          delivery_acknowledged_at: string
-          delivery_error_class: string
-          delivery_id: string
+          delivery_sent_at: string
           delivery_status: string
+          delivery_uncertainty_acknowledged_at: string
           message_id: string
           reply_to_message_id: string
           team_display_name: string

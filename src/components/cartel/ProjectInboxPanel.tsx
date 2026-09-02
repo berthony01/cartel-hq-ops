@@ -22,11 +22,10 @@ import { cn } from "@/lib/utils";
 import {
   CONVERSATION_STATUSES,
   CONVERSATION_STATUS_LABELS,
-  acknowledgeProjectInboxDelivery,
+  acknowledgeProjectInboxDeliveryUncertainty,
   conversationCategoryLabel,
   conversationOriginLabel,
   conversationStatusLabel,
-  createProjectInboxTeamReply,
   deliveryStatusLabel,
   getProjectInboxConversation,
   getProjectInboxSettings,
@@ -34,11 +33,13 @@ import {
   listProjectConversationMessages,
   listProjectInboxConversations,
   projectInboxKeys,
+  sendProjectInboxTeamReply,
   setProjectInboxConversationBlocked,
   setProjectInboxRepliesEnabled,
   updateProjectConversationStatus,
   type ConversationStatus,
 } from "@/lib/project-inbox";
+
 
 /**
  * C7.3C/C7.3D — Project Inbox panel inside Community Command.
@@ -57,7 +58,9 @@ import {
  * new-conversation DM capture, and History integration.
  */
 
+const REPLY_MAX = 3500;
 const DELIVERY_IN_FLIGHT = new Set(["pending", "processing", "retry"]);
+
 
 function deliveryTone(status: string | null): "gold" | "green" | "red" | "muted" {
   switch (status) {
@@ -134,10 +137,17 @@ export function ProjectInboxPanel({
   const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
   const [blockDialog, setBlockDialog] = useState<"block" | "unblock" | null>(null);
   const [replyBody, setReplyBody] = useState("");
-  // One stable client request id per composed reply. It is regenerated only
-  // after the server accepts the reply, so retries of the SAME text — double
-  // click, reconnect, refetch — resolve to the original message server-side.
-  const [replyRequestId, setReplyRequestId] = useState(() => crypto.randomUUID());
+  // A send attempt freezes its request id AND the exact text submitted. If the
+  // RPC result is uncertain (network error, timeout) the SAME id and text are
+  // reused on retry, so the server resolves it to the original message instead
+  // of queueing a second reply. A new id is minted only after acceptance or an
+  // explicit, warned abandonment.
+  const [pendingAttempt, setPendingAttempt] = useState<
+    { requestId: string; attemptedBody: string } | null
+  >(null);
+  const [abandonDialogOpen, setAbandonDialogOpen] = useState(false);
+  const [ackDialogMessageId, setAckDialogMessageId] = useState<string | null>(null);
+
 
 
   // Clear any selected conversation when the ACTIVE workspace actually
@@ -210,19 +220,20 @@ export function ProjectInboxPanel({
       (query.state.data ?? []).some(
         (m) => m.delivery_status != null && DELIVERY_IN_FLIGHT.has(m.delivery_status),
       )
-        ? 10_000
+        ? 3_000
         : false,
   });
 
   const messages = useMemo(() => messagesQuery.data ?? [], [messagesQuery.data]);
 
   // A draft belongs to exactly one thread in one workspace. Switching either
-  // clears it and mints a fresh request id, so a draft can never be submitted
+  // clears the draft and any frozen attempt, so a draft can never be submitted
   // against a different conversation.
   useEffect(() => {
     setReplyBody("");
-    setReplyRequestId(crypto.randomUUID());
+    setPendingAttempt(null);
   }, [workspaceId, selectedConversationId]);
+
 
 
 
@@ -291,17 +302,18 @@ export function ProjectInboxPanel({
 
   const replyMutation = useMutation({
     mutationFn: (vars: { conversationId: string; body: string; requestId: string }) =>
-      createProjectInboxTeamReply(
+      sendProjectInboxTeamReply(
         workspaceId!,
         vars.conversationId,
         vars.body,
         vars.requestId,
       ),
     onSuccess: (result, vars) => {
-      // Only clear the composer and mint a NEW request id after the server
-      // confirmed acceptance — otherwise the same text could be queued twice.
+      // Only clear the composer and release the frozen attempt after the
+      // server confirmed acceptance — otherwise the same text could be queued
+      // twice.
       setReplyBody("");
-      setReplyRequestId(crypto.randomUUID());
+      setPendingAttempt(null);
       void queryClient.invalidateQueries({
         queryKey: projectInboxKeys.messages(workspaceId, vars.conversationId),
       });
@@ -315,29 +327,47 @@ export function ProjectInboxPanel({
         queryKey: projectInboxKeys.summary(workspaceId),
       });
       toast.success(
-        result.replayed
+        result.idempotent_replay
           ? "This reply was already queued — it was not sent twice."
           : "Reply queued for delivery.",
       );
     },
+    // The frozen attempt is deliberately KEPT on error: the server may already
+    // have accepted it, so retrying must reuse the same request id and text.
     onError: (error) => toast.error(errorMessage(error)),
   });
 
   const ackMutation = useMutation({
-    mutationFn: (vars: { deliveryId: string }) =>
-      acknowledgeProjectInboxDelivery(workspaceId!, vars.deliveryId),
+    mutationFn: (vars: { messageId: string }) =>
+      acknowledgeProjectInboxDeliveryUncertainty(
+        workspaceId!,
+        selectedConversationId!,
+        vars.messageId,
+      ),
+
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: projectInboxKeys.messages(workspaceId, selectedConversationId),
       });
-      toast.success("Marked as reviewed. Nothing was resent.");
+      toast.success("Uncertainty acknowledged. Nothing was resent.");
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
 
 
 
+  // ---------------------------------------------------- delivery safety gates
+  // A new reply may only be composed when this thread has no reply still in
+  // flight and no UNCERTAIN reply awaiting an explicit operator decision.
+  const hasInFlightReply = messages.some(
+    (m) => m.delivery_status != null && DELIVERY_IN_FLIGHT.has(m.delivery_status),
+  );
+  const hasUnacknowledgedUncertainReply = messages.some(
+    (m) => m.delivery_status === "ambiguous" && !m.delivery_uncertainty_acknowledged_at,
+  );
+
   // ------------------------------------------------------------ derived state
+
   const settingsChecking = !!workspaceId && settingsQuery.isPending;
   const settingsUnavailable = settingsQuery.isError;
   const repliesOn = settings?.replies_enabled === true;
@@ -777,10 +807,9 @@ export function ProjectInboxPanel({
                             : m.channel === "WEB"
                               ? "Web"
                               : "System";
-                        const needsAck =
-                          !!m.delivery_id &&
-                          (m.delivery_status === "ambiguous" || m.delivery_status === "failed") &&
-                          !m.delivery_acknowledged_at;
+                        const isUncertain = m.delivery_status === "ambiguous";
+                        const uncertainUnacked =
+                          isUncertain && !m.delivery_uncertainty_acknowledged_at;
                         return (
                           <li
                             key={m.message_id}
@@ -807,37 +836,34 @@ export function ProjectInboxPanel({
                             {m.delivery_status ? (
                               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                                 <StatusBadge tone={deliveryTone(m.delivery_status)}>
-                                  {deliveryStatusLabel(m.delivery_status)}
+                                  {isUncertain && m.delivery_uncertainty_acknowledged_at
+                                    ? "Delivery uncertain · acknowledged"
+                                    : deliveryStatusLabel(m.delivery_status)}
                                 </StatusBadge>
-                                {m.delivery_acknowledged_at ? (
-                                  <StatusBadge tone="muted">Reviewed</StatusBadge>
-                                ) : null}
                               </div>
                             ) : null}
-                            {m.delivery_status === "ambiguous" ? (
+                            {isUncertain ? (
                               <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                                We could not confirm this reply reached the member. It may have
-                                been delivered. It will not be resent automatically — resending is
-                                your decision.
+                                We could not confirm this reply reached the member. Telegram may
+                                already have delivered it. It will not be resent automatically —
+                                resending is your decision.
                               </p>
                             ) : null}
                             {m.delivery_status === "failed" ? (
                               <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                                This reply was not delivered. Nothing was sent to the member.
+                                This reply was not sent. Nothing reached the member.
                               </p>
                             ) : null}
-                            {needsAck ? (
+                            {uncertainUnacked ? (
                               <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
                                 className="mt-2 min-h-11 text-xs"
                                 disabled={ackMutation.isPending}
-                                onClick={() =>
-                                  ackMutation.mutate({ deliveryId: m.delivery_id! })
-                                }
+                                onClick={() => setAckDialogMessageId(m.message_id)}
                               >
-                                Mark as reviewed
+                                Acknowledge uncertainty
                               </Button>
                             ) : null}
                           </li>
@@ -847,60 +873,123 @@ export function ProjectInboxPanel({
                   )}
 
                   {/* -------------------------------------------- reply composer */}
-                  <div className="rounded-md border border-border/60 bg-background/40 p-3">
-                    <label
-                      htmlFor="inbox-reply-body"
-                      className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground"
-                    >
-                      Reply to this member
-                    </label>
-                    <Textarea
-                      id="inbox-reply-body"
-                      value={replyBody}
-                      onChange={(event) => setReplyBody(event.target.value.slice(0, 4096))}
-                      rows={4}
-                      maxLength={4096}
-                      className="mt-2"
-                      placeholder="Write your reply. It is sent as a plain private message from your official bot."
-                      disabled={
-                        !repliesOn ||
-                        detail.contact_status === "BLOCKED" ||
-                        replyMutation.isPending
-                      }
-                    />
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="min-h-11"
-                        disabled={
-                          !repliesOn ||
-                          detail.contact_status === "BLOCKED" ||
-                          replyMutation.isPending ||
-                          replyBody.trim().length === 0
-                        }
-                        onClick={() =>
-                          replyMutation.mutate({
-                            conversationId: detail.conversation_id,
-                            body: replyBody.trim(),
-                            requestId: replyRequestId,
-                          })
-                        }
-                      >
-                        {replyMutation.isPending ? "Queueing…" : "Send reply"}
-                      </Button>
-                      <span className="text-[11px] text-muted-foreground">
-                        {replyBody.trim().length}/4096
-                      </span>
-                    </div>
-                    <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-                      {detail.contact_status === "BLOCKED"
-                        ? "This member is blocked, so replies cannot be sent."
-                        : !repliesOn
-                          ? "Reply capture is off, so replies cannot be sent."
-                          : "Sending queues the reply for delivery — it is not delivered instantly, and delivery is confirmed above. Delivery runs on a background worker that is not enabled yet, so replies stay queued for now."}
-                    </p>
-                  </div>
+                  {(() => {
+                    const isBlocked = detail.contact_status === "BLOCKED";
+                    const isResolved = detail.status === "RESOLVED";
+                    const attemptFrozen = pendingAttempt !== null;
+                    const composerDisabled =
+                      isBlocked ||
+                      isResolved ||
+                      hasInFlightReply ||
+                      hasUnacknowledgedUncertainReply ||
+                      replyMutation.isPending ||
+                      attemptFrozen;
+                    const value = attemptFrozen ? pendingAttempt.attemptedBody : replyBody;
+                    const trimmed = value.trim();
+                    return (
+                      <div className="rounded-md border border-border/60 bg-background/40 p-3">
+                        <label
+                          htmlFor="inbox-reply-body"
+                          className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground"
+                        >
+                          Reply to this member
+                        </label>
+                        <Textarea
+                          id="inbox-reply-body"
+                          value={value}
+                          onChange={(event) =>
+                            setReplyBody(event.target.value.slice(0, REPLY_MAX))
+                          }
+                          rows={4}
+                          maxLength={REPLY_MAX}
+                          className="mt-2"
+                          placeholder="Write your reply. It is sent as a plain private Telegram message from your official bot."
+                          disabled={composerDisabled}
+                        />
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="min-h-11"
+                            disabled={composerDisabled || trimmed.length === 0}
+                            onClick={() => {
+                              const requestId = crypto.randomUUID();
+                              const attemptedBody = trimmed;
+                              setPendingAttempt({ requestId, attemptedBody });
+                              replyMutation.mutate({
+                                conversationId: detail.conversation_id,
+                                body: attemptedBody,
+                                requestId,
+                              });
+                            }}
+                          >
+                            {replyMutation.isPending ? "Sending…" : "Send through bot"}
+                          </Button>
+                          <span className="text-[11px] text-muted-foreground">
+                            {value.length}/{REPLY_MAX}
+                          </span>
+                        </div>
+
+                        {attemptFrozen && !replyMutation.isPending ? (
+                          <div className="mt-2 rounded-md border border-red/40 bg-red/5 p-2.5">
+                            <p className="text-[11px] leading-relaxed text-foreground">
+                              We could not confirm whether the server accepted this reply. It may
+                              already be queued. Retry sends the SAME reply with the same request
+                              id, so it can never be queued twice.
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="min-h-11"
+                                onClick={() =>
+                                  replyMutation.mutate({
+                                    conversationId: detail.conversation_id,
+                                    body: pendingAttempt.attemptedBody,
+                                    requestId: pendingAttempt.requestId,
+                                  })
+                                }
+                              >
+                                Retry this reply
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="min-h-11"
+                                onClick={() => setAbandonDialogOpen(true)}
+                              >
+                                Abandon local retry
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                          {isBlocked
+                            ? "This member is blocked, so replies cannot be sent."
+                            : isResolved
+                              ? "This conversation is resolved. Reopen it above before replying."
+                              : hasInFlightReply
+                                ? "Reply is being delivered…"
+                                : hasUnacknowledgedUncertainReply
+                                  ? "Delivery uncertain — acknowledge the uncertain reply above before sending another."
+                                  : "Your reply is delivered privately on Telegram from @PepeCartelHQBot. Cartel HQ prefixes it with your saved Project Profile name and ticker and the line OFFICIAL PROJECT RESPONSE, and adds an official-response footer. Plain text only."}
+                        </p>
+                        {!repliesOn ? (
+                          <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                            Reply capture is off, so NEW inbound replies from members are not being
+                            captured. You can still reply in this conversation.
+                          </p>
+                        ) : null}
+                        <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                          Delivery activation is still pending, so a queued reply has not reached
+                          the member yet. Each reply shows its own delivery state above.
+                        </p>
+                      </div>
+                    );
+                  })()}
+
                 </>
               )}
 
@@ -1036,6 +1125,70 @@ export function ProjectInboxPanel({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* --------------------------------------- uncertainty acknowledgement */}
+      <AlertDialog
+        open={ackDialogMessageId !== null}
+        onOpenChange={(open) => {
+          if (!open) setAckDialogMessageId(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Acknowledge this uncertain delivery?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Telegram MAY already have delivered this reply to the member. Acknowledging does not
+              mark it sent, does not mark it failed and does not resend anything — it only records
+              that you reviewed the uncertainty so you can deliberately send another reply.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-11">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="min-h-11"
+              onClick={() => {
+                if (ackDialogMessageId) {
+                  ackMutation.mutate({ messageId: ackDialogMessageId });
+                }
+                setAckDialogMessageId(null);
+              }}
+            >
+              Acknowledge uncertainty
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ------------------------------------------- abandon local retry */}
+      <AlertDialog open={abandonDialogOpen} onOpenChange={setAbandonDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Abandon this local retry?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The server may already have accepted your previous attempt. Abandoning sends nothing
+              and cancels nothing — it only lets you start a new draft. If the earlier reply was
+              accepted, it stays queued and still blocks a new send until it settles.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-11">Keep retry</AlertDialogCancel>
+            <AlertDialogAction
+              className="min-h-11"
+              onClick={() => {
+                setPendingAttempt(null);
+                setReplyBody("");
+                setAbandonDialogOpen(false);
+                void queryClient.invalidateQueries({
+                  queryKey: projectInboxKeys.messages(workspaceId, selectedConversationId),
+                });
+              }}
+            >
+              Abandon local retry
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+
   );
 }
