@@ -364,26 +364,35 @@ export function AudiencePanel({
             description="One bucket per active watcher, based on their most recent delivery record."
             leading={<Send className="size-4" aria-hidden="true" />}
           >
-            <MetricList
-              loading={audienceLoading}
-              items={deliveryBuckets}
-              className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:grid-cols-3"
-            />
-            <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-              Based on each active watcher’s most recent delivery record. These counts describe the
-              latest known state, not permanent reachability.
-            </p>
-            {!audienceLoading && lastDeliveryLabel ? (
-              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-                Latest delivery activity: {lastDeliveryLabel}
+            {summary && summary.total_watchers > 0 && summary.active_watchers === 0 && !audienceLoading ? (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                There are no active watchers right now, so there is no active delivery-state
+                distribution to report.
               </p>
-            ) : null}
-            {!audienceLoading && summary && !bucketsConsistent ? (
-              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                These buckets currently total {bucketTotal.toLocaleString()} against{" "}
-                {summary.active_watchers.toLocaleString()} active watchers. Refresh in a moment.
-              </p>
-            ) : null}
+            ) : (
+              <>
+                <MetricList
+                  loading={audienceLoading}
+                  items={deliveryBuckets}
+                  className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:grid-cols-3"
+                />
+                <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+                  Based on each active watcher’s most recent delivery record. These counts describe
+                  the latest known state, not permanent reachability.
+                </p>
+                {!audienceLoading && lastDeliveryLabel ? (
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+                    Latest delivery activity: {lastDeliveryLabel}
+                  </p>
+                ) : null}
+                {!audienceLoading && summary && !bucketsConsistent ? (
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                    These buckets currently total {bucketTotal.toLocaleString()} against{" "}
+                    {summary.active_watchers.toLocaleString()} active watchers. Refresh in a moment.
+                  </p>
+                ) : null}
+              </>
+            )}
           </Section>
         </>
       )}
