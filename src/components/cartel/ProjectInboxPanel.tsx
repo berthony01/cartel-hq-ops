@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Inbox as InboxIcon, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
@@ -106,6 +106,23 @@ export function ProjectInboxPanel({
   const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
   const [blockDialog, setBlockDialog] = useState<"block" | "unblock" | null>(null);
 
+  // Clear any selected conversation when the ACTIVE workspace actually
+  // CHANGES after mount (previous non-null workspace id -> different id), so
+  // a workspace-A thread never stays visibly selected after switching to B.
+  // The ref starts null, so an initial valid deep link is NEVER cleared just
+  // because the component mounted; an initial wrong-workspace deep link still
+  // fails closed server-side through the workspace-bound detail RPC.
+  const prevWorkspaceIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevWorkspaceIdRef.current;
+    if (prev && workspaceId && workspaceId !== prev) {
+      onConversationClear();
+    }
+    if (workspaceId) {
+      prevWorkspaceIdRef.current = workspaceId;
+    }
+  }, [workspaceId, onConversationClear]);
+
   // ------------------------------------------------------------------ queries
   const settingsQuery = useQuery({
     queryKey: projectInboxKeys.settings(workspaceId),
@@ -129,16 +146,29 @@ export function ProjectInboxPanel({
 
   // Detail loads by id even when the conversation is not in the currently
   // filtered list, so deep links and filter changes never break selection.
+  // The RPC is workspace-bound: the ACTIVE workspace id is part of the query
+  // key and the call, so a stale selection from another workspace fails
+  // closed server-side instead of rendering.
   const detailQuery = useQuery({
-    queryKey: projectInboxKeys.conversation(selectedConversationId),
-    enabled: !!selectedConversationId,
-    queryFn: () => getProjectInboxConversation(selectedConversationId!),
+    queryKey: projectInboxKeys.conversation(workspaceId, selectedConversationId),
+    enabled: !!workspaceId && !!selectedConversationId,
+    queryFn: () => getProjectInboxConversation(workspaceId!, selectedConversationId!),
   });
   const detail = detailQuery.data ?? null;
 
+  // Messages may run ONLY after the workspace-bound detail RPC confirmed the
+  // selected conversation belongs to the ACTIVE workspace. This prevents the
+  // one-arg C7.3A message-list RPC from ever being called for a stale or
+  // wrong-workspace conversation id.
+  const detailConfirmedForSelection =
+    !!workspaceId &&
+    !!selectedConversationId &&
+    detailQuery.isSuccess &&
+    detailQuery.data?.conversation_id === selectedConversationId;
+
   const messagesQuery = useQuery({
-    queryKey: projectInboxKeys.messages(selectedConversationId),
-    enabled: !!selectedConversationId,
+    queryKey: projectInboxKeys.messages(workspaceId, selectedConversationId),
+    enabled: detailConfirmedForSelection,
     queryFn: () => listProjectConversationMessages(selectedConversationId!, 200),
   });
 
@@ -168,7 +198,7 @@ export function ProjectInboxPanel({
       // Internal Inbox state only — nothing is sent to Telegram. Messages are
       // not invalidated because a status change adds no message row.
       void queryClient.invalidateQueries({
-        queryKey: projectInboxKeys.conversation(vars.conversationId),
+        queryKey: projectInboxKeys.conversation(workspaceId, vars.conversationId),
       });
       void queryClient.invalidateQueries({
         queryKey: projectInboxKeys.conversationsRoot(workspaceId),
@@ -182,10 +212,12 @@ export function ProjectInboxPanel({
 
   const blockMutation = useMutation({
     mutationFn: (vars: { conversationId: string; blocked: boolean }) =>
-      setProjectInboxConversationBlocked(vars.conversationId, vars.blocked),
+      // Workspace-bound: the server authorizes the ACTIVE workspace first and
+      // the conversation must belong to it, otherwise it fails closed.
+      setProjectInboxConversationBlocked(workspaceId!, vars.conversationId, vars.blocked),
     onSuccess: (row, vars) => {
       void queryClient.invalidateQueries({
-        queryKey: projectInboxKeys.conversation(vars.conversationId),
+        queryKey: projectInboxKeys.conversation(workspaceId, vars.conversationId),
       });
       void queryClient.invalidateQueries({
         queryKey: projectInboxKeys.conversationsRoot(workspaceId),
