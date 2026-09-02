@@ -27,17 +27,27 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useWorkspace } from "@/lib/workspace-context";
+import { ScheduleChangeSummary } from "@/components/cartel/ScheduleChangeSummary";
 import {
   LAUNCH_STATUS_LABELS,
+  SCHEDULE_NOTE_MAX,
   WATCHER_UPDATE_BODY_MAX,
   WATCHER_UPDATE_TITLE_MAX,
   canSendWatcherUpdate,
   createLaunchWatcherUpdate,
+  dismissLaunchScheduleCommunication,
   getLaunchAccess,
   getLaunchWatcherUpdateStats,
+  getPendingScheduleCommunication,
   listLaunches,
+  scheduleCommunicationQueryKey,
+  scheduleSnapshotPair,
+  sendLaunchScheduleCommunication,
   toLaunchStatus,
+  workspaceScheduleCommunicationsQueryKey,
+  type LaunchScheduleCommunication,
 } from "@/lib/launch-control";
+
 
 /**
  * Community Command → Broadcasts (C2).
