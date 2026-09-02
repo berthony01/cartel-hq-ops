@@ -560,7 +560,168 @@ export async function getLaunchAudienceSummary(
   };
 }
 
+// ---------------------------------------------------------------------------
+// C5/C6 — Launch schedule change communications.
+//
+// `launch_schedule_communications` rows are detected server-side by the C5
+// trigger and are read-only for the browser (member SELECT via RLS). The only
+// mutations are the two operator RPCs below. Rows carry schedule metadata
+// only — never watcher identities.
+// ---------------------------------------------------------------------------
 
+export type LaunchScheduleCommunication =
+  Database["public"]["Tables"]["launch_schedule_communications"]["Row"];
+
+/** Conservative maximum for the operator's optional explanation (server-enforced). */
+export const SCHEDULE_NOTE_MAX = 800;
+
+/**
+ * Formats one stored schedule snapshot in ITS OWN timezone. Never claims the
+ * device timezone: the zone is always printed. An unusable stored timezone
+ * degrades to a clearly labelled UTC rendering rather than inventing a time.
+ */
+export function formatScheduleSnapshot(
+  at: string | null,
+  windowStart: string | null,
+  windowEnd: string | null,
+  timezone: string | null,
+): string {
+  const zone = safeTimeZone(timezone);
+  const one = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: zone,
+      }).format(date);
+    } catch {
+      return null;
+    }
+  };
+  const label = (text: string) => `${text} (${zone})`;
+
+  if (at) {
+    const formatted = one(at);
+    return formatted ? label(formatted) : "Not set";
+  }
+  if (windowStart && windowEnd) {
+    const a = one(windowStart);
+    const b = one(windowEnd);
+    return a && b ? label(`Between ${a} and ${b}`) : "Not set";
+  }
+  if (windowStart) {
+    const a = one(windowStart);
+    return a ? label(`From ${a}`) : "Not set";
+  }
+  if (windowEnd) {
+    const b = one(windowEnd);
+    return b ? label(`By ${b}`) : "Not set";
+  }
+  return "Not set";
+}
+
+function safeTimeZone(timezone: string | null): string {
+  const candidate = (timezone ?? "").trim();
+  if (!candidate) return "UTC";
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: candidate }).format(new Date());
+    return candidate;
+  } catch {
+    return "UTC";
+  }
+}
+
+export function scheduleSnapshotPair(row: LaunchScheduleCommunication): {
+  previous: string;
+  current: string;
+} {
+  return {
+    previous: formatScheduleSnapshot(
+      row.baseline_launch_at,
+      row.baseline_window_start,
+      row.baseline_window_end,
+      row.baseline_timezone,
+    ),
+    current: formatScheduleSnapshot(
+      row.current_launch_at,
+      row.current_window_start,
+      row.current_window_end,
+      row.current_timezone,
+    ),
+  };
+}
+
+/** The single unresolved schedule-change decision for a launch, if any. */
+export async function getPendingScheduleCommunication(
+  launchId: string,
+): Promise<LaunchScheduleCommunication | null> {
+  const { data, error } = await supabase
+    .from("launch_schedule_communications")
+    .select("*")
+    .eq("launch_id", launchId)
+    .eq("status", "PENDING")
+    .maybeSingle();
+  if (error) rethrow(error);
+  return data ?? null;
+}
+
+/** Every unresolved decision in the workspace (RLS-scoped). */
+export async function listPendingScheduleCommunications(
+  workspaceId: string,
+): Promise<LaunchScheduleCommunication[]> {
+  const { data, error } = await supabase
+    .from("launch_schedule_communications")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .eq("status", "PENDING")
+    .order("detected_at", { ascending: false });
+  if (error) rethrow(error);
+  return data ?? [];
+}
+
+export type SendScheduleCommunicationInput = {
+  communicationId: string;
+  clientRequestId: string;
+  note: string | null;
+};
+
+/**
+ * Atomic + idempotent server-side. The factual Previous/New schedule text is
+ * composed by the RPC; `note` is the operator's optional explanation only.
+ * Repeating the same clientRequestId returns the original event id.
+ */
+export async function sendLaunchScheduleCommunication(
+  input: SendScheduleCommunicationInput,
+): Promise<string> {
+  const { data, error } = await (supabase as unknown as RpcClient).rpc(
+    "send_launch_schedule_communication",
+    {
+      _id: input.communicationId,
+      _client_request_id: input.clientRequestId,
+      _note: input.note,
+    },
+  );
+  if (error) rethrow(error);
+  return String(data ?? "");
+}
+
+export async function dismissLaunchScheduleCommunication(
+  communicationId: string,
+): Promise<void> {
+  const { error } = await (supabase as unknown as RpcClient).rpc(
+    "dismiss_launch_schedule_communication",
+    { _id: communicationId },
+  );
+  if (error) rethrow(error);
+}
+
+export const scheduleCommunicationQueryKey = (launchId: string | null) =>
+  ["launch-schedule-communication", launchId] as const;
+
+export const workspaceScheduleCommunicationsQueryKey = (workspaceId: string | null) =>
+  ["workspace-schedule-communications", workspaceId] as const;
 
 
 // ---------------------------------------------------------------------------
