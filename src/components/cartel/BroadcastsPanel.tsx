@@ -401,6 +401,7 @@ export function BroadcastsPanel({
             <Label htmlFor="broadcast-launch">Selected launch</Label>
             <Select
               value={resolvedId ?? ""}
+              disabled={composerLocked}
               onValueChange={(value) => onLaunchChange(value)}
             >
               <SelectTrigger id="broadcast-launch" className="min-h-11 w-full">
