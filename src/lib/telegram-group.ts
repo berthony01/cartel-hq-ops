@@ -407,40 +407,51 @@ export function sendCommunityWelcomeTest(params: {
 /** Server-enforced plain-text announcement limit. */
 export const GROUP_ANNOUNCEMENT_MAX = 3500;
 
-/**
- * Outcome vocabulary, never collapsed:
- * - `SENT` Telegram confirmed a message id.
- * - `FAILED` Telegram definitively rejected it — nothing was delivered.
- * - `AMBIGUOUS` transport uncertainty — delivery unknown, never auto-resent.
- */
-export type GroupAnnouncementStatus = "SENT" | "FAILED" | "AMBIGUOUS";
+/* ------------------------------------------------------------------ */
+/* C7.2 — Official Broadcast branding                                  */
+/* ------------------------------------------------------------------ */
 
-export type GroupAnnouncementResult = {
-  status?: GroupAnnouncementStatus;
-  /** True when this exact request id was already recorded — nothing was re-sent. */
-  duplicate?: boolean;
-  announcementId?: string;
-  groupConnectionId?: string;
-  groupTitle?: string;
-  messageId?: number | null;
-  sentAt?: string | null;
-  /** Recoverable: the bot was removed from the community. */
-  reconnectRequired?: boolean;
-  connectionState?: string;
-  message?: string;
-  technical?: string | null;
+/** Telegram's hard photo-caption limit; enforced again server-side. */
+export const BRANDED_BROADCAST_CAPTION_MAX = 1024;
+export const BRANDED_BROADCAST_TEMPLATE_VERSION = "telegram_photo_v1";
+
+/**
+ * `telegram_photo_v1` caption assembly, byte-identical to the server copy in
+ * the `telegram-group` function. This is preview only — the server rebuilds the
+ * caption from the saved Project Profile and posts only its own result.
+ */
+export function buildBrandedBroadcastCaption(
+  projectName: string,
+  ticker: string | null,
+  message: string,
+): string {
+  const name = projectName.trim();
+  const tick = (ticker ?? "").trim();
+  const header = tick ? `${name} · $${tick.replace(/^\$+/, "")}` : name;
+  return `${header}\nOFFICIAL PROJECT UPDATE\n\n${message.trim()}`;
+}
+
+/** The Project Profile identity the operator actually reviewed before posting. */
+export type ReviewedBroadcastBranding = {
+  projectName: string;
+  ticker: string;
+  logoAssetId: string;
 };
 
 /**
- * Posts ONE plain-text announcement to ONE connected community.
- * `clientRequestId` must stay stable for one intended announcement: the server
+ * Posts ONE official broadcast to ONE connected community.
+ * `clientRequestId` must stay stable for one intended broadcast: the server
  * ledger is keyed on `(workspace, clientRequestId)` and never posts it twice.
+ *
+ * When `branding` is supplied the server re-reads the saved Project Profile and
+ * refuses to post if it no longer matches the reviewed identity.
  */
 export function sendGroupAnnouncement(params: {
   workspaceId: string;
   groupConnectionId: string;
   message: string;
   clientRequestId: string;
+  branding?: ReviewedBroadcastBranding | null;
 }): Promise<GroupAnnouncementResult> {
   return invoke<GroupAnnouncementResult>({
     action: "send_group_announcement",
@@ -448,6 +459,9 @@ export function sendGroupAnnouncement(params: {
     groupConnectionId: params.groupConnectionId,
     message: params.message,
     clientRequestId: params.clientRequestId,
+    ...(params.branding
+      ? { branded: true, reviewedBranding: params.branding }
+      : {}),
   });
 }
 
