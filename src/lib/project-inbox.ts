@@ -136,11 +136,11 @@ export const DELIVERY_STATUSES = [
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 
 export const DELIVERY_STATUS_LABELS: Record<DeliveryStatus, string> = {
-  pending: "Queued",
+  pending: "Sending",
   processing: "Sending",
-  retry: "Retrying",
-  sent: "Delivered",
-  failed: "Not delivered",
+  retry: "Sending",
+  sent: "Sent via Telegram",
+  failed: "Not sent",
   ambiguous: "Delivery uncertain",
 };
 
@@ -157,10 +157,9 @@ export type ProjectConversationMessage = {
   team_display_name: string | null;
   created_at: string;
   reply_to_message_id: string | null;
-  delivery_id: string | null;
   delivery_status: string | null;
-  delivery_error_class: string | null;
-  delivery_acknowledged_at: string | null;
+  delivery_sent_at: string | null;
+  delivery_uncertainty_acknowledged_at: string | null;
 };
 
 export type ProjectConversationStatusResult = {
@@ -179,17 +178,19 @@ export type ProjectInboxConversationBlockResult = {
 
 export type ProjectInboxTeamReplyResult = {
   message_id: string;
-  delivery_id: string | null;
   delivery_status: string | null;
+  created_at: string;
+  conversation_status: string;
   /** True when this exact client request was already accepted earlier. */
-  replayed: boolean;
+  idempotent_replay: boolean;
 };
 
-export type ProjectInboxDeliveryAckResult = {
-  delivery_id: string;
-  status: string;
-  acknowledged_at: string | null;
+export type ProjectInboxDeliveryUncertaintyAckResult = {
+  message_id: string;
+  delivery_status: string;
+  uncertainty_acknowledged_at: string | null;
 };
+
 
 
 // ---------------------------------------------------------------------------
