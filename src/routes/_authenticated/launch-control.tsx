@@ -1725,80 +1725,29 @@ function LaunchControlPage() {
                       </div>
 
                       {canManage ? (
-                        canSendWatcherUpdate(status) ? (
-                          <div className="space-y-3">
-                            <div className="min-w-0">
-                              <Label htmlFor="watcher-update-title">Title (optional)</Label>
-                              <Input
-                                id="watcher-update-title"
-                                maxLength={WATCHER_UPDATE_TITLE_MAX}
-                                value={updateTitle}
-                                onChange={(e) => setUpdateTitle(e.target.value)}
-                                placeholder="Short headline for this update"
-                              />
-                              <p className="mt-1 text-right text-xs text-muted-foreground">
-                                {updateTitle.length}/{WATCHER_UPDATE_TITLE_MAX}
-                              </p>
-                            </div>
-                            <div className="min-w-0">
-                              <Label htmlFor="watcher-update-body">Update text</Label>
-                              <Textarea
-                                id="watcher-update-body"
-                                rows={5}
-                                maxLength={WATCHER_UPDATE_BODY_MAX}
-                                value={updateBody}
-                                onChange={(e) => setUpdateBody(e.target.value)}
-                                placeholder="What do your watchers need to know?"
-                              />
-                              <p className="mt-1 text-right text-xs text-muted-foreground">
-                                {updateBody.length}/{WATCHER_UPDATE_BODY_MAX}
-                              </p>
-                            </div>
-                            <Button
-                              className="min-h-11"
-                              disabled={
-                                watcherUpdateMutation.isPending ||
-                                !updateBody.trim() ||
-                                !watcherUpdateStats ||
-                                watcherUpdateStats.updates_enabled_watchers < 1
-                              }
-                              onClick={() => {
-                                const id = updateRequestId ?? crypto.randomUUID();
-                                setUpdateRequestId(id);
-                                setConfirmUpdateSend(true);
-                              }}
+                        <div className="space-y-2">
+                          <Button className="min-h-11" asChild>
+                            <Link
+                              to="/telegram"
+                              search={{ tab: "broadcasts", launch: selected!.id }}
                             >
-                              {watcherUpdateMutation.isPending ? (
-                                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                              ) : (
-                                <Megaphone className="size-4" aria-hidden="true" />
-                              )}
-                              Send watcher update
-                            </Button>
-                            {watcherUpdateStats &&
-                            watcherUpdateStats.updates_enabled_watchers < 1 ? (
-                              <p className="text-xs leading-relaxed text-muted-foreground">
-                                No active watcher currently allows Project Updates, so there is
-                                nobody to send this update to yet.
-                              </p>
-                            ) : null}
-                            <p className="text-xs leading-relaxed text-muted-foreground">
-                              Updates send immediately when confirmed. There is no scheduling and no
-                              media attachment in this phase — text only.
-                            </p>
-                          </div>
-                        ) : (
+                              <Megaphone className="size-4" aria-hidden="true" />
+                              Send update in Community Command
+                            </Link>
+                          </Button>
                           <p className="text-xs leading-relaxed text-muted-foreground">
-                            Watcher updates can be sent from Watchlist open through Live. This
-                            launch is currently {LAUNCH_STATUS_LABELS[status]}.
+                            {canSendWatcherUpdate(status)
+                              ? "Composing and sending watcher updates now lives in Community Command → Broadcasts, with this launch preselected."
+                              : `Watcher updates can be sent from Watchlist open through Live. This launch is currently ${LAUNCH_STATUS_LABELS[status]}.`}
                           </p>
-                        )
+                        </div>
                       ) : (
                         <p className="text-xs leading-relaxed text-muted-foreground">
                           Only project owners and admins can send watcher updates. You can view the
                           audience counts and update history.
                         </p>
                       )}
+
 
                       <div className="rounded-md border border-border/60 bg-background/30 p-3">
                         <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
