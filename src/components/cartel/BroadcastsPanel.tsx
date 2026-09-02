@@ -303,7 +303,10 @@ export function BroadcastsPanel({
         ) : (
           <div className="min-w-0 space-y-2">
             <Label htmlFor="broadcast-launch">Selected launch</Label>
-            <Select value={selectedId ?? ""} onValueChange={(value) => setSelectedId(value)}>
+            <Select
+              value={resolvedId ?? ""}
+              onValueChange={(value) => onLaunchChange(value)}
+            >
               <SelectTrigger id="broadcast-launch" className="min-h-11 w-full">
                 <SelectValue placeholder="Select a launch" />
               </SelectTrigger>
