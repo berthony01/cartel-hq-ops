@@ -120,6 +120,35 @@ export type ProjectInboxConversationDetail = {
   assigned_display_name: string | null;
 };
 
+/**
+ * Delivery lifecycle of an outbound TEAM reply. Operational state only — it
+ * carries no Telegram identifier and no raw provider payload.
+ */
+export const DELIVERY_STATUSES = [
+  "pending",
+  "processing",
+  "retry",
+  "sent",
+  "failed",
+  "ambiguous",
+] as const;
+
+export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
+
+export const DELIVERY_STATUS_LABELS: Record<DeliveryStatus, string> = {
+  pending: "Queued",
+  processing: "Sending",
+  retry: "Retrying",
+  sent: "Delivered",
+  failed: "Not delivered",
+  ambiguous: "Delivery uncertain",
+};
+
+export function deliveryStatusLabel(value: string | null): string {
+  if (!value) return "";
+  return (DELIVERY_STATUS_LABELS as Record<string, string>)[value] ?? value;
+}
+
 export type ProjectConversationMessage = {
   message_id: string;
   author_type: string; // MEMBER | TEAM | SYSTEM
@@ -128,6 +157,10 @@ export type ProjectConversationMessage = {
   team_display_name: string | null;
   created_at: string;
   reply_to_message_id: string | null;
+  delivery_id: string | null;
+  delivery_status: string | null;
+  delivery_error_class: string | null;
+  delivery_acknowledged_at: string | null;
 };
 
 export type ProjectConversationStatusResult = {
@@ -143,6 +176,21 @@ export type ProjectInboxConversationBlockResult = {
   contact_status: string;
   blocked_at: string | null;
 };
+
+export type ProjectInboxTeamReplyResult = {
+  message_id: string;
+  delivery_id: string | null;
+  delivery_status: string | null;
+  /** True when this exact client request was already accepted earlier. */
+  replayed: boolean;
+};
+
+export type ProjectInboxDeliveryAckResult = {
+  delivery_id: string;
+  status: string;
+  acknowledged_at: string | null;
+};
+
 
 // ---------------------------------------------------------------------------
 // Query keys
