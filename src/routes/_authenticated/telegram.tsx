@@ -16,6 +16,7 @@ import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
 import { BroadcastsPanel } from "@/components/cartel/BroadcastsPanel";
 import { AudiencePanel } from "@/components/cartel/AudiencePanel";
+import { ProjectInboxPanel } from "@/components/cartel/ProjectInboxPanel";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWorkspace } from "@/lib/workspace-context";
@@ -31,15 +32,18 @@ import {
   useTelegramGroupSetup,
 } from "@/components/cartel/TelegramGroupCard";
 
-const TAB_KEYS = ["overview", "broadcasts", "audience", "communities", "history"] as const;
+const TAB_KEYS = ["overview", "broadcasts", "audience", "inbox", "communities", "history"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
+/** Strict UUID shape for the Inbox `conversation` param; anything else is dropped. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
- * Both params are optional so every existing `to="/telegram"` link keeps
+ * All params are optional so every existing `to="/telegram"` link keeps
  * working. Anything invalid or missing resolves to the Overview tab and no
- * preselected launch.
+ * preselected launch or conversation.
  */
-type TelegramSearch = { tab?: TabKey; launch?: string };
+type TelegramSearch = { tab?: TabKey; launch?: string; conversation?: string };
 
 function validateTelegramSearch(search: Record<string, unknown>): TelegramSearch {
   const rawTab = search["tab"];
@@ -51,9 +55,15 @@ function validateTelegramSearch(search: Record<string, unknown>): TelegramSearch
     typeof rawLaunch === "string" && rawLaunch.trim().length > 0 && rawLaunch.length <= 100
       ? rawLaunch.trim()
       : undefined;
+  const rawConversation = search["conversation"];
+  const conversation =
+    typeof rawConversation === "string" && UUID_PATTERN.test(rawConversation.trim())
+      ? rawConversation.trim()
+      : undefined;
   const next: TelegramSearch = {};
   if (tab && tab !== "overview") next.tab = tab;
   if (launch) next.launch = launch;
+  if (conversation) next.conversation = conversation;
   return next;
 }
 
@@ -88,6 +98,7 @@ const TABS: Array<{ value: TabKey; label: string; shortLabel: string }> = [
   { value: "overview", label: "Overview", shortLabel: "Overview" },
   { value: "broadcasts", label: "Broadcasts", shortLabel: "Broadcasts" },
   { value: "audience", label: "Audience", shortLabel: "Audience" },
+  { value: "inbox", label: "Inbox", shortLabel: "Inbox" },
   { value: "communities", label: "Communities", shortLabel: "Communities" },
   { value: "history", label: "History", shortLabel: "History" },
 ];
@@ -163,6 +174,27 @@ function TelegramPage() {
     (launchId: string) =>
       void navigate({
         search: (prev: TelegramSearch) => ({ ...prev, tab: "audience", launch: launchId }),
+        replace: true,
+      }),
+    [navigate],
+  );
+  // Inbox conversation selection is URL-owned like the Broadcasts launch.
+  // Replace-only so selection changes never pollute back/forward history.
+  const setInboxConversation = useCallback(
+    (conversationId: string) =>
+      void navigate({
+        search: (prev: TelegramSearch) => ({ ...prev, tab: "inbox", conversation: conversationId }),
+        replace: true,
+      }),
+    [navigate],
+  );
+  const clearInboxConversation = useCallback(
+    () =>
+      void navigate({
+        search: (prev: TelegramSearch) => {
+          const { conversation: _dropped, ...rest } = prev;
+          return { ...rest, tab: "inbox" as const };
+        },
         replace: true,
       }),
     [navigate],
@@ -248,7 +280,7 @@ function TelegramPage() {
       <PageHeader
         eyebrow="Community Operations"
         title="Community Command"
-        description="Connection health, onboarding and per-community controls for every Telegram community you have connected."
+        description="Connection health, onboarding, the member Inbox and per-community controls for every Telegram community you have connected."
         status={groupCount > 0 ? "Connected · Live Beta" : "Live Beta"}
       />
 
@@ -427,6 +459,16 @@ function TelegramPage() {
           <AudiencePanel selectedLaunchId={search.launch ?? null} onLaunchChange={setAudienceLaunch} />
         </TabsContent>
 
+        {/* ---------------------------------------------------------------- */}
+        <TabsContent value="inbox" className="mt-0 min-w-0">
+          <ProjectInboxPanel
+            selectedConversationId={search.conversation ?? null}
+            onConversationChange={setInboxConversation}
+            onConversationClear={clearInboxConversation}
+          />
+        </TabsContent>
+
+
 
         {/* ---------------------------------------------------------------- */}
         {/*
@@ -530,8 +572,9 @@ function TelegramPage() {
         <span>
           History is being added in a later controlled phase. It is a placeholder today and cannot
           send or expose anything. Broadcasts sends private watcher updates, and can post one
-          official project message into a connected community you select.
-
+          official project message into a connected community you select. Inbox shows explicit
+          private replies to official Launch Watch bot messages — sending team replies from it is
+          not available yet.
         </span>
       </p>
     </div>

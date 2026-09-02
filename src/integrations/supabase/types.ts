@@ -3088,6 +3088,25 @@ export type Database = {
           x_url: string
         }[]
       }
+      get_project_inbox_conversation: {
+        Args: { _conversation_id: string }
+        Returns: {
+          assigned_display_name: string
+          assigned_to: string
+          category: string
+          contact_status: string
+          conversation_id: string
+          last_message_at: string
+          member_ref: string
+          opened_at: string
+          origin_text_snapshot: string
+          origin_title_snapshot: string
+          origin_type: string
+          priority: string
+          resolved_at: string
+          status: string
+        }[]
+      }
       get_project_inbox_settings: {
         Args: { _workspace_id: string }
         Returns: {
@@ -3303,6 +3322,15 @@ export type Database = {
           contact_id: string
           member_ref: string
           status: string
+        }[]
+      }
+      set_project_inbox_conversation_contact_blocked: {
+        Args: { _blocked: boolean; _conversation_id: string }
+        Returns: {
+          blocked_at: string
+          contact_status: string
+          conversation_id: string
+          member_ref: string
         }[]
       }
       set_project_inbox_settings: {
