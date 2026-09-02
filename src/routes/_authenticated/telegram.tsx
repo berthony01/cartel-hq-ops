@@ -4,7 +4,6 @@ import {
   ArrowRight,
   Clock3,
   Megaphone,
-  MessageSquare,
   Radio,
   Users,
 } from "lucide-react";
@@ -420,10 +419,6 @@ function TelegramPage() {
           placeholders today and cannot send or expose anything.
         </span>
       </p>
-
-      <span className="sr-only">
-        <MessageSquare aria-hidden="true" />
-      </span>
     </div>
   );
 }
