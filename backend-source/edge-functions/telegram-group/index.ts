@@ -610,6 +610,14 @@ Deno.serve(async (req: Request) => {
           client_request_id: clientRequestId,
           message_text: messageText,
           status: "SENDING",
+          delivery_kind: deliveryKind,
+          delivered_text_snapshot: deliveredText,
+          branding_template_version: brandingSnapshot ? BRANDED_TEMPLATE_VERSION : null,
+          branding_project_name: brandingSnapshot?.projectName ?? null,
+          branding_ticker: brandingSnapshot?.ticker ?? null,
+          branding_logo_asset_id: brandingSnapshot?.logoAssetId ?? null,
+          branding_logo_storage_path: brandingSnapshot?.storagePath ?? null,
+          branding_logo_mime_type: brandingSnapshot?.mimeType ?? null,
         }).select(ledgerSelect).maybeSingle();
         if (insertError) {
           // Concurrent duplicate submit — never send twice, and still prove intent.
