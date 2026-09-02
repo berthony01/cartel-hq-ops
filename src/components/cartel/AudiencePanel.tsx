@@ -419,7 +419,7 @@ export function AudiencePanel({
                 { label: "Outcome uncertain", value: confirmation?.ambiguous_count ?? 0 },
                 { label: "Legacy / untracked", value: confirmation?.untracked_count ?? 0 },
               ]}
-              className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:grid-cols-4"
+              className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4"
             />
             <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
               Legacy / untracked opt-ins predate confirmation tracking. Their original outcome
