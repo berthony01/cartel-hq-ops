@@ -124,12 +124,14 @@ function logoCompatibilityReason(asset: MediaAsset | null): string | null {
   }
   const w = typeof asset.width === "number" ? asset.width : null;
   const h = typeof asset.height === "number" ? asset.height : null;
-  if (w !== null && h !== null) {
-    const ratio = Math.max(w, h) / Math.max(1, Math.min(w, h));
-    if (w <= 0 || h <= 0 || w + h > 10000 || ratio > 20) {
-      return "Telegram cannot post this logo's dimensions. Upload a more standard PNG or JPEG logo in Project Profile.";
-    }
+  const dimsBad =
+    (w !== null && w <= 0) ||
+    (h !== null && h <= 0) ||
+    (w !== null && h !== null && (w + h > 10000 || Math.max(w, h) / Math.max(1, Math.min(w, h)) > 20));
+  if (dimsBad) {
+    return "Telegram cannot post this logo's dimensions. Upload a more standard PNG or JPEG logo in Project Profile.";
   }
+
   return null;
 }
 
