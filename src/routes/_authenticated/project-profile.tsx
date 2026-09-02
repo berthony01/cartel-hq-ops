@@ -644,38 +644,63 @@ function ProjectProfilePage() {
             <Section
               variant="surface"
               title="Project logo"
-              description="Choose from logo assets already stored in this project."
+              description="Upload a logo or choose one already stored in this project. Branded community broadcasts use PNG or JPEG logos."
             >
-              {logos.length === 0 ? (
-                <EmptyState
-                  compact
-                  icon={IdCard}
-                  title="No logo assets yet"
-                  description="Upload a logo through Brand Kit or Assets, then return here to select it."
-                />
-              ) : (
+              <div className="space-y-4">
                 <div className="max-w-sm">
-                  <Label htmlFor="logo_asset_id">Logo</Label>
-                  <Select
-                    value={form.logo_asset_id || NO_LOGO}
-                    onValueChange={(value) =>
-                      set({ logo_asset_id: value === NO_LOGO ? "" : value })
-                    }
-                  >
-                    <SelectTrigger id="logo_asset_id" className="mt-2 min-h-11">
-                      <SelectValue placeholder="Select a logo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NO_LOGO}>No logo</SelectItem>
-                      {logos.map((asset, index) => (
-                        <SelectItem key={asset.id} value={asset.id}>
-                          Logo {index + 1} · {asset.width ?? "?"}×{asset.height ?? "?"}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <AssetUploader
+                    workspaceId={workspaceId ?? null}
+                    userId={userId}
+                    assetType="logo"
+                    label="Upload a project logo"
+                    onUploaded={(asset) => {
+                      set({ logo_asset_id: asset.id });
+                      void queryClient.invalidateQueries({
+                        queryKey: ["project-profile-logos", workspaceId],
+                      });
+                    }}
+                  />
                 </div>
-              )}
+                {logos.length === 0 ? (
+                  <EmptyState
+                    compact
+                    icon={IdCard}
+                    title="No logo assets yet"
+                    description="Upload a logo above, or add one through Brand Kit or Assets, then return here to select it."
+                  />
+                ) : (
+                  <div className="max-w-sm">
+                    <Label htmlFor="logo_asset_id">Logo</Label>
+                    <Select
+                      value={form.logo_asset_id || NO_LOGO}
+                      onValueChange={(value) =>
+                        set({ logo_asset_id: value === NO_LOGO ? "" : value })
+                      }
+                    >
+                      <SelectTrigger id="logo_asset_id" className="mt-2 min-h-11">
+                        <SelectValue placeholder="Select a logo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_LOGO}>No logo</SelectItem>
+                        {logos.map((asset, index) => (
+                          <SelectItem key={asset.id} value={asset.id}>
+                            Logo {index + 1} · {asset.width ?? "?"}×{asset.height ?? "?"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {selectedLogo &&
+                    !["image/png", "image/jpeg"].includes(
+                      (selectedLogo.mime_type ?? "").toLowerCase(),
+                    ) ? (
+                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                        This logo is not a PNG or JPEG, so branded community broadcasts cannot use
+                        it. Upload a PNG or JPEG version to enable branded posting.
+                      </p>
+                    ) : null}
+                  </div>
+                )}
+              </div>
             </Section>
 
             <Section
