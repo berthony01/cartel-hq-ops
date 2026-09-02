@@ -1,105 +1,86 @@
-# Phase 1 — Community Command Architectural Audit (read-only)
+# Sticker Lab V2A — Surface + End-to-End Visibility Audit (READ-ONLY)
 
-No files, schema, rows, functions, secrets or settings were changed. Inspection used file reads plus read-only SQL.
+Gate verified: HEAD `87b833607b7d48baf74ffeca12f4ede962fcea00`, working tree clean. No edits, no commands against Kie/Telegram/database.
 
-## A. Executive summary
+Classification used: **A** visible + connected end-to-end, **B** visible but partial/unclear, **C** built but effectively invisible, **D** planned/not built.
 
-Exists today:
-- Telegram community connection, health, onboarding/welcome, Launch Watch CTA card, Sticker Drops scheduling, one-off sticker sends.
-- Launch Watch opt-in via bot deep link, per-watcher preferences (watch on/off, countdowns, project updates), aggregate-only counts in the browser.
-- A durable DM pipeline: `launch_events` -> `launch_notification_deliveries` -> `launch-notifications` worker, with claim/retry/ambiguous semantics.
-- Manual operator DM broadcast ("Watcher Updates") — already live in DB and UI (1 `WATCHER_UPDATE` event exists in production).
+## Where the V2 surfaces actually live
 
-Does not exist today:
-- Any launch date/time change notification (no trigger, no event type).
-- Any custom **group** broadcast composer (group posting is limited to welcome, sticker sends, and Sticker Drops).
-- Scheduled/queued or draft messages, audience segmentation beyond the two preference flags, per-recipient delivery detail UI, or a subscriber management surface.
-- A unified "Community Command" dashboard: messaging is split across `/telegram` (group) and `/launch-control` (DM), with no shared history view.
+Everything V2A is inside one route: `src/routes/_authenticated/sticker-lab.new.tsx` (4,325 lines), rendered as five conditional step blocks (`step === 1..5`, L1726 / L2021 / L2228 / L2754 / L3320). `sticker-lab.index.tsx` is a pack list, `sticker-lab.$packId.tsx` is a read-only pack manager that links back into the builder (`Continue editing` -> `/sticker-lab/new?pack=<id>`, L193-195; `?pack=<id>&step=5` at L182).
 
-## B. Frontend flow map
+Consequence: **all V2 work is only reachable after clicking Create Sticker Pack or Continue editing, then stepping to the right step.** Nothing on the Sticker Lab home page names Blueprint, Concept Studio, Sticker Studio, version history or published safety. That alone explains "I do not see what the recent phases created."
 
-- `src/routes/_authenticated/telegram.tsx` — "Community Command". Connection health tiles only; delegates everything to `TelegramGroupCard`.
-- `src/components/cartel/TelegramGroupCard.tsx` (1181 lines) — per-community rows, readiness, pack assignment/distribution, test send, entry to welcome settings.
-- `src/components/cartel/CommunityWelcomeDialog.tsx` (698 lines) — welcome message, auto-delete, Launch Watch CTA selection + link toggles + CTA lifetime.
-- `src/routes/_authenticated/distribution.tsx` + `StickerDropScheduleDialog.tsx` — recurring sticker posting.
-- `src/routes/_authenticated/launch-control.tsx` (2186 lines) — lifecycle transitions, schedule fields, contract registration, Launch Watch section, and the **Watcher Updates** composer + aggregate history.
-- `src/routes/_authenticated/watchlist.tsx`, `src/lib/watchlist.ts` — the end-user's own watch list (read-only, aggregate/private-safe).
-- Client libs: `src/lib/launch-control.ts`, `src/lib/telegram-group.ts`, `src/lib/telegram-link.ts`, `src/lib/sticker-drops.ts`.
-- Nav (`src/lib/nav.ts`) puts Community Command and Sticker Drops under "Community" and Launch Control under "Command" — the DM channel is therefore not discoverable from Community Command.
+## Capability-by-capability findings
 
-## C. Backend / system-of-record map
+### 1. Creative Blueprint / Character Lock — A (with one B caveat)
+- Character Lock is authored in Brand Kit (`brand-kit.tsx` L485 panel, canonical reference picker L589, persisted via `writeCharacterLock` L220 into `brand_kits.metadata`).
+- Builder Step 1 shows a Character Lock card with status badge, subject/traits/wardrobe/never-change list, a "Set up in Brand Kit" link, and the per-pack opt-in checkbox `Use Brand Kit Character Lock for this pack` (L1909-2016).
+- Creative Direction (purpose, audience, tone, humor, intensity, visual direction, plus a collapsed `Text treatment & pack rules` block) is Step 2, L2112-2222.
+- Generation genuinely consumes it: `backend-source/edge-functions/sticker-ai/index.ts` parses `creative_blueprint` (L104, L469), applies the lock as an identity contract (L258-293), uses canonical references as fallback (L488-500), and records `character_lock_applied` (L558).
+- Caveat (B): it only takes effect **after the pack is saved** (blueprint lives on the pack row), and the Text/pack-rules half is inside a `<details>` most users will never open.
 
-Tables: `telegram_group_connections`, `telegram_community_settings`, `telegram_connections`, `telegram_link_requests`, `telegram_beta_contacts`, `telegram_message_cleanup_jobs`, `launches`, `launch_events`, `launch_watch_subscriptions`, `launch_notification_deliveries`, `sticker_drop_schedules` / `_events` / `_workspace_controls`, `project_profiles`.
+### 2. AI Concept Studio — A, but discoverable only inside Step 3
+- Explicit actions exist: `Suggest unlocked concepts` and `Alternatives for selected (n)` (L2253-2278), gated by a cost/scope `AlertDialog` (L2648-2699) that states tokens-only, no images.
+- Suggestions land in a non-destructive preview panel with per-item `Use this one`, `Use all suggestions`, `Suggest another set`, `Discard` (L2318-2426), plus a second confirm when the pack is already saved (L2701-2748).
+- Per-concept lock/reorder/duplicate/remove/select-for-alternative controls exist (L2514-2586); `Mark concept board ready` at L2594-2630.
+- Connected end-to-end via `src/lib/sticker-concepts.ts` -> Edge Function `sticker-concepts`; a free `config` probe drives the disabled state (`conceptsConfigured`).
+- Persistence: applying only mutates the local draft; concepts persist to the DB on `Save pack to project` (L2632-2646). Correct but easy to misread as "AI results were lost".
 
-Edge functions: `telegram-webhook` (public), `telegram-link`, `telegram-group`, `launch-notifications` (public, secret-header), `telegram-message-cleanup` (public, secret-header), `sticker-drops`, `sticker-drop-config`, `platform-admin`. Config in `supabase/config.toml`.
+### 3. Sticker Studio / batch generation — A
+- Step 4 header "Sticker Studio" (L2755). Toolbar: `Select all ungenerated`, `Clear selection`, `Generate selected (n)` (L2919-2964); per-card `Select for batch` checkbox with disabled reasons in `title` (L3101-3124).
+- `Generate first test sticker` targets `draft.concepts[0]` (L2887-2903); `Generate remaining (n)` (L2904-2912); `Retry failed (n)` (L2865-2873); per-card Generate/Regenerate/Retry (L3144-3160) and per-card PNG download (L3162-3173).
+- Cost gates: both dialogs state 2 Kie tasks per sticker (L3181-3236).
+- Concurrency: `SELECTED_BATCH_CONCURRENCY = 2` (L1509), worker-pool over a shared cursor (L1514-1561) — surfaced honestly in the dialog copy "runs up to 2 stickers at a time".
+- Visibility caveat: the selection toolbar renders only when `configured && selectableIds.length > 0`, so on a fully generated pack the batch surface disappears entirely.
 
-Key DB functions (verified live): `enqueue_launch_lifecycle_notification_events` (trigger `launches_enqueue_notification_events`), `enqueue_launch_event_deliveries`, `enqueue_due_launch_reminder_events`, `claim_launch_notification_deliveries`, `mark_stale_launch_notification_claims`, `create_launch_watcher_update`, `get_launch_watcher_update_stats`, `list_launch_watcher_updates`, `get_launch_watch_summary`, `get_launch_watch_confirmation_summary`, `get_launch_notification_summary`, `transition_launch_status`, `set_launch_contract_address`, `enforce_launch_update_rules`.
+### 4. Version history / variations — B for history, D for variations
+- Visible: a per-card collapsed `<details>` "Version history (n)" with thumbnails, version numbers, `Current` badge and `Set current` (L3031-3097). It renders **only** when `versionsBySticker[stickerId].length > 0`, and only on Step 4.
+- Read path: `src/lib/sticker-versions.ts` (select from `sticker_versions`, signed thumbnails).
+- **No A/B/C variation generation exists anywhere** — no "generate variations" action, no variation column, no provider call for N candidates. Repo grep for variation/variant returns only unrelated Button `variant` props. This is D: history/recovery infrastructure only.
+- Gap worth flagging: **no `insert` into `sticker_versions` exists in this repo** (only reads in `sticker-versions.ts` and `telegram-stickers/index.ts` L396; no SQL migration in `supabase/migrations` creates or populates it). Row creation is happening outside the readable snapshot (external DB trigger or an unsynced function). Unverified from code alone — this needs live inspection before any Phase 5 work depends on it.
 
-Schedulers: `cartel-launch-notifications-runner` (1 min), `cartel-telegram-message-cleanup-runner` (1 min), Sticker Drops runner (5 min).
+### 5. Phase 4B Set Current / Telegram replacement — C (functionally present, practically hidden)
+- The only entry point is the `Set current` button inside the collapsed version-history `<details>` inside a sticker card inside Step 4. Two-stage confirmation exists: DB-only dialog (L3239-3277) then a separate `Replace the live Telegram sticker?` dialog (L3280-3315) wired to `confirmTelegramRestore`, backed by `telegram-stickers` `replace_version`.
+- A user who never expands a card's version history will never learn this exists. Nothing on Step 5, `$packId`, or the pack list mentions restore/replace.
 
-## D. Watcher lifecycle
+### 6. Phase 4C Published Mutation Safety — A visually, C for the server half
+- Visible: card-level `Live on Telegram` disabled button plus explanatory line (L3126-3142), batch checkbox disabled with tooltip reason (L3107-3115), lock-aware toast on first-test (L2892-2897).
+- Invisible by design: the `STICKER_PUBLISHED` HTTP 409 pre-billing guard in `sticker-ai`. Correct — no surface needed, but note there is no place in the UI that tells the user "your account cannot be billed for a published sticker".
 
-1. Token: immutable 24-hex `launches.launch_watch_token` minted only on ANNOUNCED -> WATCHLIST_OPEN (enforced in `enforce_launch_update_rules`).
-2. Opt-in: `https://t.me/PepeCartelHQBot?start=lw_<token>` handled in `telegram-webhook/index.ts` (~line 1519). Requires published profile + open lifecycle status.
-3. Stored identity: only `telegram_user_id` (bigint) + `launch_id`, unique per pair; no username, no app user id. RLS: **zero policies**, all client access denied — browser sees aggregates only.
-4. Preferences: `is_active`, `reminders_enabled`, `updates_enabled`. Inline keyboard callbacks `lw_unwatch_`, `lw_rewatch_`, `ln_reminders_off/on_`, `ln_updates_off/on_`.
-5. Opt-out is soft (`is_active=false`, `unsubscribed_at`), history preserved; rewatch does not backfill past events.
-6. DM reachability: not tracked as a first-class field. It is inferred only from `launch_notification_deliveries.status`/`error_class` (`telegram_rejected`) and from confirmation columns (`confirmation_status`, `confirmation_error_class`) surfaced by `get_launch_watch_confirmation_summary`.
+### 7. Review / Quality Center — B
+Present in Step 5 today: pack readiness header with Ready/In progress/Failed stats (L3326-3366), live progress bar for browser checks (L3368-3400), `Re-check transparency & cutout` and `Refresh status` (L3402-3422), a collapsed `Verification detail` block with the four counters — Backend ready, Backend transparency verified, Browser alpha verified, Telegram cutout verified (L3426-3464), per-sticker verification lines including halo cleanup wording "Outer halo will be removed on export (n px)" (L3548-3561), export gate notice (L3468-3477), per-sticker emoji/keywords (L3592-3623), ZIP/PNG export (L4090-4123), and the long halo explainer under `Advanced details` (L4125-4178).
+Not present: any named "Quality Center" surface, pack-level pass/fail checks beyond counters, per-sticker manual re-check, or side-by-side compare. The richer V2 Quality Center is **D**; the underlying checks are already **A** but buried under two `<details>`.
 
-## E. Launch-update lifecycle — what happens if the date changes
+### 8. Release / Telegram — B (coherent within Step 5, split from everything else)
+One screen contains Community targets with per-group readiness and select-all/clear (L3648-3777), Publish & send card with lifecycle-aware single primary action (`lifecycleMode` publish/update/add/retry/attention, L3992-4019), `Refresh Telegram status`, `Open sticker pack`, `Send test sticker to community` (L4020-4052), per-group delivery state (L3877-3931), per-sticker Telegram status in a `<details>` (L3965-3989), set-naming preview (L3839-3853), and a `Next step — Sticker Drops` card that renders only when `allPublished || packSchedules.length > 0` (L4180+).
+Split points: community connection/onboarding lives in `/telegram`, Sticker Drops scheduling in its own surface, and `$packId` duplicates a read-only view of the same state. So: one coherent publish flow, but discovery of it is spread across three routes.
 
-**Nothing is sent.** `launches_enqueue_notification_events` fires only on `status` change and only for `OFFICIAL_CONTRACT_REGISTERED` and `LIVE`. Schedule columns (`launch_at`, `launch_window_start/end`, `timezone`) have no notification trigger.
+### 9. Pack modes / static vs animated — D
+No pack-mode concept exists. `telegram-stickers/index.ts` L84 hardcodes `sticker_format: "static"`. There is no animated/WEBM/TGS path, no UI toggle, no schema field in the readable snapshot. Nothing inferred.
 
-Secondary effect only: `launch-notifications` revalidates reminders against current schedule and **skips** with `schedule_changed` when the queued reminder drifts >60s from the new anchor; `enqueue_due_launch_reminder_events` then re-derives 24h/1h reminders from the new time inside a 15-minute due window. So a date change silently re-times countdowns and never informs watchers. The only way to tell watchers today is for the operator to hand-write a Watcher Update.
+### 10. Navigation / onboarding — the core defect
+- Sidebar has a single `/sticker-lab` entry (`src/lib/nav.ts` L58); the dashboard links to it twice (`index.tsx` L589, L616).
+- The home page "Workflow" rail renders `FLOW_STEPS` (`sticker-lab.index.tsx` L364) = **V1 labels**: Character Reference, Pack Setup, Sticker Concepts, Generate, Review & Publish (`src/lib/sticker-lab.ts` L173-179).
+- The builder footer renders `BUILDER_STEPS` (L4276) = Character Reference, Pack Setup, Sticker Concepts, **Generation Preview**, Review.
+- The actual step cards are titled **Concept Studio** (L2230) and **Sticker Studio** (L2756).
+So three different vocabularies describe the same five steps, and the two the user sees first are both the older ones. Nothing anywhere says "Blueprint".
 
-## F. Custom messaging capability — exact state
+## Prioritized audit conclusion (no implementation proposed)
 
-- Private DM broadcast: **exists**. `src/routes/_authenticated/launch-control.tsx` "Watcher Updates" -> `createLaunchWatcherUpdate` (`src/lib/launch-control.ts:494`) -> RPC `create_launch_watcher_update` -> `launch_events(event_type='WATCHER_UPDATE', source='operator')` -> fan-out trigger -> worker `WATCHER_UPDATE` branch (`backend-source/edge-functions/launch-notifications/index.ts`). Title <=120, body <=2200, HTML-escaped, idempotent per `client_request_id`, 60s anti-spam + 20/24h cap, row-locked on the launch.
-- Group broadcast: **does not exist**. Group posting is only welcome messages, `send_group_test`, `distribute_pack`, and Sticker Drops.
+P0 — invisibility, not missing functionality:
+1. Terminology drift across `FLOW_STEPS`, `BUILDER_STEPS` and the rendered card titles; the home page still teaches the V1 model.
+2. Phase 4B Set Current / Telegram replacement has no discoverable entry point outside a doubly-collapsed panel.
+3. Creative Blueprint is split across Brand Kit (lock) and Step 1 + Step 2 (opt-in + direction) with no single "Blueprint" surface or summary of what will be applied at generation time.
 
-## G. History and observability
+P1 — truth/verification risk:
+4. `sticker_versions` write path is not evidenced anywhere in this repository; the entire version-history and Set-Current feature depends on it. Requires live inspection of the external project before further phases build on it.
+5. Version history and the Quality Center counters are gated behind conditional rendering (`length > 0`, `configured && selectableIds.length > 0`), so on common pack states the V2 surfaces silently vanish.
 
-- Watcher Updates: `list_launch_watcher_updates` returns title/body/created_at + aggregate pending/sent/failed/ambiguous/skipped counts, rendered in Launch Control. No per-recipient view (by design).
-- Reminder/lifecycle DMs: no history UI at all; only `get_launch_notification_summary` aggregates.
-- Group messages: no history table or UI; `telegram_message_cleanup_jobs` tracks only scheduled deletions.
-- No scheduled/draft messages, no send-time preview archive, no export.
+P2 — genuine gaps, correctly reported as not built:
+6. A/B/C variation generation: **not built** (D).
+7. Named Quality Center with pack-level checks: **not built** (D); underlying checks exist.
+8. Animated/static pack modes: **not built** (D).
 
-## H. Authorization
+No code exists without any entry point except the version-write path in item 4 (external) and the `sticker-ai` 409 guard in item 6 of section 6 (intentionally serverside).
 
-- Watcher update send: `is_workspace_operator` inside SECURITY DEFINER RPC; also requires open lifecycle + published profile.
-- Aggregate reads: `is_workspace_member`.
-- Group actions: JWT-verified `telegram-group` / `sticker-drop-config` with workspace checks; `telegram_group_connections` and `telegram_community_settings` are select-only from the browser.
-- Public functions (`telegram-webhook`, `launch-notifications`, `telegram-message-cleanup`) use `verify_jwt=false` + secret/derived-token checks; queue tables are service-role only.
-- Platform owner surfaces gated by `is_platform_owner` / `has_platform_unrestricted_access` and the `platform-admin` function.
-
-## I. Gaps (ranked)
-
-Critical
-1. No date/time-change notification path — the single highest-value missing watcher signal.
-2. Messaging is architecturally split with no Community Command home; operators cannot see "what did we send, where, to whom, when" in one place.
-
-High
-3. No group broadcast/announcement composer; group and DM channels share no message abstraction.
-4. No unified message history/observability across DM + group + drops.
-5. `updates_enabled` is backfilled FALSE for pre-L2A watchers, so the DM audience is silently smaller than "active watchers" with no operator-facing remediation flow.
-
-Medium
-6. No scheduling/drafts, no audience segmentation beyond two boolean flags, no subscriber management surface.
-7. No explicit DM-reachability field; blocked users are only discoverable by reading delivery error text.
-8. Naming drift: "Community Command" (groups) vs "Watcher Updates" (DMs) vs "Launch Watch" vs "Sticker Drops" — four vocabularies for one communications domain.
-
-Low
-9. Duplicated webhook source (`backend-source/edge-functions/telegram-webhook` and `supabase/functions/telegram-webhook`) kept byte-identical by hand.
-10. `telegram_beta_contacts` is a legacy/parallel contact store not used by the launch pipeline.
-
-## J. Reuse recommendations for Phase 2+
-
-Preserve and build on, do not replace: the `launch_events -> enqueue_launch_event_deliveries -> launch_notification_deliveries -> launch-notifications` queue (claim/skip/retry/ambiguous semantics are the hard-won part); the event-type + payload-JSON extension point (a date-change event is a new `event_type`, not a new pipeline); `create_launch_watcher_update`'s idempotency/anti-spam/lock pattern as the template for any new operator send; `telegram_message_cleanup_jobs` for any timed group post; the aggregate-only RPC pattern for every new count; `TelegramGroupCard` / `CommunityWelcomeDialog` as the per-community control surface a dashboard should embed rather than duplicate.
-
-## K. Could not verify
-
-- Deployed Edge Function versions, their exact deployed source, and live `verify_jwt` values (the deploy tool exposes no read-back; repo source is the only side I can hash).
-- Live cron job definitions/schedules (`cron.job` not inspected in this turn).
-- Actual Telegram-side behaviour (no invocation performed).
-- Whether the deployed `launch-notifications` build contains the `WATCHER_UPDATE` branch — production has 1 `WATCHER_UPDATE` event and 1 delivery row, which is consistent with it, but not proof of delivery.
-- Runtime rendering/UX of any screen (no browser session run).
+Stop point reached. No edits made.
