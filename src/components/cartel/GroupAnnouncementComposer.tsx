@@ -632,8 +632,9 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
               ) : branded ? (
                 <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                   Branded posts are limited to {GROUP_BRANDED_CAPTION_MAX} characters including the
-                  branding header. The branding is re-checked against your saved Project Profile
-                  before anything is posted.
+                  branding header and footer. The branding is re-checked against your saved Project
+                  Profile before anything is posted.
+
                 </p>
               ) : null}
               <p className="mt-2 border-t border-border/60 pt-2 text-xs leading-relaxed text-muted-foreground">
