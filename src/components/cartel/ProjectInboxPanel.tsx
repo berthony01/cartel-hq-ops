@@ -712,8 +712,10 @@ export function ProjectInboxPanel({
                   </div>
                   <p className="text-[11px] leading-relaxed text-muted-foreground">
                     Status is internal Inbox state — changing it does not send anything to the
-                    member on Telegram. Sending team replies from the Inbox is not available yet.
+                    member on Telegram. Replies you send below are delivered separately and show
+                    their own delivery state.
                   </p>
+
 
                   {/* Origin context — NOT a conversation message row. */}
                   {detail.origin_text_snapshot ? (
