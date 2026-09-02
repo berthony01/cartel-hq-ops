@@ -59,9 +59,10 @@ import type { GroupReadiness, TelegramGroupSetup } from "@/components/cartel/Tel
  * Outcomes are never collapsed: a delivery that could not be confirmed
  * (AMBIGUOUS) is reported as uncertain and is NEVER resent automatically.
  *
- * C7.2 — branding is OPTIONAL and OFF by default; plain text stays the default
- * delivery. The branding shown here is a preview of what the server will
- * rebuild from the saved profile, never the source of what gets posted.
+ * Branding defaults ON when valid saved Project Profile branding is available,
+ * but remains optional and can be turned off for a plain-text post. The branding
+ * shown here is a preview of what the server will rebuild from the saved
+ * profile, never the source of what gets posted.
  *
  * Shared community state stays owned by the single page-level
  * `useTelegramGroupSetup()` hook; this component only reads it and asks it to
@@ -338,15 +339,26 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
 
   function resetComposer() {
     setMessage("");
+    resetDraftState();
+    setAttempt(null);
+    setConfirmOpen(false);
+    setSnapshot(null);
+    setOutcome(null);
+  }
+
+  /**
+   * Retire the current draft state without touching the outcome card. Used after
+   * a confirmed SENT so the next broadcast starts fresh while the success card
+   * remains visible.
+   */
+  function resetDraftState() {
     // A genuinely new broadcast recomputes the branding default from readiness.
     setBrandingTouched(false);
     setBrandedRequested(brandingReady);
     setCtaRequested(false);
     setCtaLaunchId(null);
-    setAttempt(null);
     setConfirmOpen(false);
     setSnapshot(null);
-    setOutcome(null);
   }
 
   // Switching community makes this a different intended broadcast.
@@ -417,6 +429,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         // never be posted twice. The truthful outcome card stays visible.
         setAttempt(null);
         setMessage("");
+        resetDraftState();
         toast.success(`Official broadcast posted to ${snap.groupTitle}.`);
         return;
       }
@@ -697,15 +710,19 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
                 <div className="min-w-0">
                   <Label htmlFor="group-announcement-branded">Post with project branding</Label>
                   <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    Adds your saved project logo and identity header from Project Profile. Plain
-                    text stays the default.
+                    Adds your saved project logo and identity header from Project Profile. Uses your
+                    saved Project Profile branding by default when available. You can turn it off for
+                    a plain-text post.
                   </p>
                 </div>
                 <Switch
                   id="group-announcement-branded"
                   checked={brandedRequested}
                   disabled={busy || !canManage || !brandingReady}
-                  onCheckedChange={(checked) => setBrandedRequested(checked)}
+                  onCheckedChange={(checked) => {
+                    setBrandingTouched(true);
+                    setBrandedRequested(checked);
+                  }}
                 />
               </div>
               {brandingUnavailableReason ? (
