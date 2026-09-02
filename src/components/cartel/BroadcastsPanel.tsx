@@ -719,6 +719,111 @@ export function BroadcastsPanel({
         )}
       </Section>
 
+      {/* C6 — schedule change decision, shown only when C5 detected one. */}
+      {selected && scheduleCommQuery.isError ? (
+        <Section variant="surface" title="Launch schedule update">
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Whether this launch has an unnotified schedule change could not be checked. This is not
+            a confirmation that nothing changed.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 min-h-11"
+            onClick={() => void scheduleCommQuery.refetch()}
+          >
+            Retry
+          </Button>
+        </Section>
+      ) : null}
+
+      {selected && pendingComm ? (
+        <Section
+          variant="primary"
+          title="Launch schedule update"
+          description="This launch’s schedule changed. Watchers have not been notified yet."
+          leading={<CalendarClock className="size-4" aria-hidden="true" />}
+          actions={<StatusBadge tone="gold">Decision needed</StatusBadge>}
+        >
+          <div className="rounded-md border border-border/70 bg-background/40 p-3">
+            <ScheduleChangeSummary row={pendingComm} />
+          </div>
+
+          <div className="mt-4 min-w-0 space-y-3">
+            <div className="min-w-0">
+              <Label htmlFor="schedule-note">Optional explanation</Label>
+              <Textarea
+                id="schedule-note"
+                rows={4}
+                maxLength={SCHEDULE_NOTE_MAX}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Why the schedule moved, in your own words (optional)"
+                disabled={!accessKnown || !canManage || scheduleBusy}
+              />
+              <p className="mt-1 text-right text-xs text-muted-foreground">
+                {note.length}/{SCHEDULE_NOTE_MAX}
+              </p>
+            </div>
+
+            <div className="min-w-0 rounded-md border border-border/60 bg-background/30 p-3">
+              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                Watcher message preview
+              </p>
+              <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-foreground [overflow-wrap:anywhere]">
+                {`Previous: ${scheduleSnapshotPair(pendingComm).previous}\nNew: ${scheduleSnapshotPair(pendingComm).current}`}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Automatic schedule facts, written by CARTEL HQ from the recorded change.
+              </p>
+              {note.trim() ? (
+                <>
+                  <p className="mt-3 border-t border-border/60 pt-3 text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                    Your explanation
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+                    {note.trim()}
+                  </p>
+                </>
+              ) : null}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                className="min-h-11"
+                disabled={!!scheduleBlockReason || noteTooLong || scheduleBusy}
+                onClick={() => void prepareScheduleConfirmation()}
+              >
+                {schedulePreparing || scheduleMutation.isPending ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <AlertTriangle className="size-4" aria-hidden="true" />
+                )}
+                Notify watchers
+              </Button>
+              <Button
+                variant="outline"
+                className="min-h-11"
+                disabled={!accessKnown || !canManage || scheduleBusy}
+                onClick={() => setDismissConfirmOpen(true)}
+              >
+                Dismiss without notifying
+              </Button>
+            </div>
+
+            {scheduleBlockReason ? (
+              <p className="text-xs leading-relaxed text-muted-foreground">{scheduleBlockReason}</p>
+            ) : null}
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              The Previous and New schedule text is written by CARTEL HQ from the recorded change,
+              not by you. Notifying sends one private watcher update through the same engine as any
+              other broadcast.
+            </p>
+          </div>
+        </Section>
+      ) : null}
+
+
       <Section
         variant="surface"
         title="Your message"
