@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Megaphone, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -72,6 +72,7 @@ export function BroadcastsPanel({
     enabled: !!workspaceId,
     queryFn: () => getLaunchAccess(workspaceId!, workspace?.owner_id ?? null),
   });
+  const accessKnown = accessQuery.isSuccess;
   const canManage = accessQuery.data?.canManage ?? false;
 
   // The URL param is only honoured when it names a launch in THIS workspace
@@ -115,9 +116,35 @@ export function BroadcastsPanel({
     null,
   );
   const [confirmOpen, setConfirmOpen] = useState(false);
-  // Count captured from a fresh, successful stats refetch at confirmation time.
-  const [confirmCount, setConfirmCount] = useState<number | null>(null);
   const [preparing, setPreparing] = useState(false);
+
+  /**
+   * The exact reviewed send. Captured only after a fresh, successful stats
+   * refetch that still matches the operator's current selection and draft.
+   * The dialog renders from this and the mutation submits this — nothing in the
+   * confirm/send path reads live render state.
+   */
+  type ConfirmSnapshot = {
+    launchId: string;
+    launchLabel: string;
+    statusLabel: string;
+    rawTitle: string;
+    rawBody: string;
+    sendTitle: string | null;
+    sendBody: string;
+    eligibleCount: number;
+    clientRequestId: string;
+  };
+  const [confirmSnapshot, setConfirmSnapshot] = useState<ConfirmSnapshot | null>(null);
+
+  // Latest-render mirror, used only to detect drift across an await.
+  const latestRef = useRef({
+    launchId: null as string | null,
+    title: "",
+    body: "",
+    canManage: false,
+    status: null as ReturnType<typeof toLaunchStatus> | null,
+  });
 
   function resetComposer() {
     setTitle("");
@@ -125,8 +152,9 @@ export function BroadcastsPanel({
     setRequestId(null);
     setAttemptedDraft(null);
     setConfirmOpen(false);
-    setConfirmCount(null);
+    setConfirmSnapshot(null);
   }
+
 
   useEffect(() => {
     resetComposer();
@@ -143,46 +171,64 @@ export function BroadcastsPanel({
   }, [title, body, attemptedDraft]);
 
   const mutation = useMutation({
-    mutationFn: async () => {
-      if (!selected) throw new Error("No launch selected.");
-      if (!requestId) throw new Error("Confirm the send again to continue.");
+    mutationFn: async (snapshot: ConfirmSnapshot) => {
+      if (!snapshot?.launchId || !snapshot.clientRequestId) {
+        throw new Error("Confirm the send again to continue.");
+      }
       return createLaunchWatcherUpdate({
-        launchId: selected.id,
-        clientRequestId: requestId,
-        title: title.trim() ? title.trim() : null,
-        body,
+        launchId: snapshot.launchId,
+        clientRequestId: snapshot.clientRequestId,
+        title: snapshot.sendTitle,
+        body: snapshot.sendBody,
       });
     },
-    onMutate: () => {
-      // Snapshot the exact draft this idempotency id belongs to.
-      setAttemptedDraft({ title, body });
+    onMutate: (snapshot) => {
+      // The confirmed draft — never the possibly-changed live inputs.
+      setAttemptedDraft({ title: snapshot.rawTitle, body: snapshot.rawBody });
     },
-    onSuccess: (eventId) => {
+    onSuccess: (eventId, snapshot) => {
       toast.success(
         eventId
           ? "Update queued for delivery to eligible watchers"
           : "Update recorded",
       );
-      const id = selected?.id ?? null;
-      // Success clears the draft; the NEXT send mints a fresh id.
-      resetComposer();
-      void statsQuery.refetch();
+      const id = snapshot.launchId;
+      if (latestRef.current.launchId === id) {
+        // Success clears the draft; the NEXT send mints a fresh id.
+        resetComposer();
+      } else {
+        // The operator moved to another launch mid-flight: only retire this
+        // send's metadata, never wipe the other launch's draft.
+        setRequestId(null);
+        setAttemptedDraft(null);
+        setConfirmSnapshot(null);
+        setConfirmOpen(false);
+      }
+      void queryClient.invalidateQueries({ queryKey: ["launch-watcher-update-stats", id] });
       void queryClient.invalidateQueries({ queryKey: ["launch-watcher-updates", id] });
       void queryClient.invalidateQueries({ queryKey: ["launch-notification-summary", id] });
     },
-    // The id is deliberately NOT cleared here: an identical retry must be
-    // idempotent against an ambiguous outcome.
-    onError: (err: unknown) =>
-      toast.error(err instanceof Error ? err.message : "Could not send the update."),
+    // The id + attempted draft are deliberately NOT cleared here: an identical
+    // retry must stay idempotent against an ambiguous outcome. Only the stale
+    // confirmation snapshot is dropped, so a retry must re-read the audience.
+    onError: (err: unknown) => {
+      setConfirmSnapshot(null);
+      toast.error(err instanceof Error ? err.message : "Could not send the update.");
+    },
   });
 
   const eligibleCount = stats?.updates_enabled_watchers ?? 0;
   const titleTooLong = title.length > WATCHER_UPDATE_TITLE_MAX;
   const bodyTooLong = body.length > WATCHER_UPDATE_BODY_MAX;
 
-  const blockReason: string | null = !canManage
-    ? "Only project owners and admins can send updates. The audience counts below are read-only for you."
-    : !selected
+  // N1: never claim the operator lacks permission before permission is known.
+  const blockReason: string | null = accessQuery.isPending
+    ? "Checking your permissions…"
+    : accessQuery.isError
+      ? "Could not verify your permissions, so sending is blocked."
+      : !canManage
+        ? "Only project owners and admins can send updates. The audience counts below are read-only for you."
+        : !selected
       ? "Select a launch to send an update."
       : !lifecycleEligible
         ? `Updates can be sent from Watchlist open through Live. This launch is currently ${LAUNCH_STATUS_LABELS[status!]}.`
@@ -202,6 +248,21 @@ export function BroadcastsPanel({
     bodyTooLong ||
     titleTooLong;
 
+  // Race guard: nothing about the intended send may change while a
+  // confirmation is being prepared, reviewed, or submitted.
+  const composerLocked = preparing || confirmOpen || mutation.isPending;
+  const inputsDisabled = !accessKnown || !canManage || composerLocked;
+
+  // Latest-render mirror, read only after an await to detect drift.
+  latestRef.current = {
+    launchId: selected?.id ?? null,
+    title,
+    body,
+    canManage,
+    status,
+  };
+
+
   /**
    * M2: the confirmation must be based on a fresh, successful audience read —
    * never on whatever happened to be cached. Any failure, any zero audience and
@@ -209,19 +270,43 @@ export function BroadcastsPanel({
    */
   async function prepareConfirmation() {
     if (!selected || sendDisabled) return;
+    // Click-time intent, captured BEFORE any await.
+    const clicked = { launchId: selected.id, title, body };
     setPreparing(true);
     try {
       const result = await statsQuery.refetch();
+      const latest = latestRef.current;
+      // B1: anything the operator changed while the audience was refetching
+      // invalidates this confirmation. Reviewed must equal submitted.
+      if (
+        latest.launchId !== clicked.launchId ||
+        latest.title !== clicked.title ||
+        latest.body !== clicked.body
+      ) {
+        toast.error(
+          "Your selection or message changed while the audience was loading. Nothing was sent — review it and send again.",
+        );
+        return;
+      }
       if (result.isError || !result.data) {
         toast.error("Could not confirm the current audience. Nothing was sent.");
         return;
       }
       const fresh = result.data.updates_enabled_watchers;
-      if (!canManage || !canSendWatcherUpdate(toLaunchStatus(selected.status))) {
+      // Re-check permission and lifecycle from the latest render, not the click.
+      const freshLaunch = latest.launchId
+        ? (launchesQuery.data ?? []).find((l) => l.id === latest.launchId)
+        : undefined;
+      const freshStatus = freshLaunch ? toLaunchStatus(freshLaunch.status) : null;
+      if (!latest.canManage || !freshLaunch || !freshStatus || !canSendWatcherUpdate(freshStatus)) {
         toast.error("This launch can no longer receive an update. Nothing was sent.");
         return;
       }
-      if (!body.trim() || bodyTooLong || titleTooLong) {
+      if (!latest.body.trim() || latest.body.length > WATCHER_UPDATE_BODY_MAX) {
+        toast.error("Check the update text before sending.");
+        return;
+      }
+      if (latest.title.length > WATCHER_UPDATE_TITLE_MAX) {
         toast.error("Check the update text before sending.");
         return;
       }
@@ -229,9 +314,20 @@ export function BroadcastsPanel({
         toast.error("No active watcher currently allows project updates. Nothing was sent.");
         return;
       }
-      setConfirmCount(fresh);
-      // Mint (or reuse) the idempotency id for this intended send.
-      setRequestId((current) => current ?? crypto.randomUUID());
+      // Mint (or reuse, for an identical failed retry) the idempotency id.
+      const idForSend = requestId ?? crypto.randomUUID();
+      setRequestId(idForSend);
+      setConfirmSnapshot({
+        launchId: freshLaunch.id,
+        launchLabel: `${freshLaunch.token_name} (${freshLaunch.ticker})`,
+        statusLabel: LAUNCH_STATUS_LABELS[freshStatus],
+        rawTitle: latest.title,
+        rawBody: latest.body,
+        sendTitle: latest.title.trim() ? latest.title.trim() : null,
+        sendBody: latest.body,
+        eligibleCount: fresh,
+        clientRequestId: idForSend,
+      });
       setConfirmOpen(true);
     } finally {
       setPreparing(false);
@@ -305,6 +401,7 @@ export function BroadcastsPanel({
             <Label htmlFor="broadcast-launch">Selected launch</Label>
             <Select
               value={resolvedId ?? ""}
+              disabled={composerLocked}
               onValueChange={(value) => onLaunchChange(value)}
             >
               <SelectTrigger id="broadcast-launch" className="min-h-11 w-full">
@@ -396,7 +493,7 @@ export function BroadcastsPanel({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Short headline for this update"
-              disabled={!canManage}
+              disabled={inputsDisabled}
             />
             <p className="mt-1 text-right text-xs text-muted-foreground">
               {title.length}/{WATCHER_UPDATE_TITLE_MAX}
@@ -411,7 +508,7 @@ export function BroadcastsPanel({
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder="What do your watchers need to know?"
-              disabled={!canManage}
+              disabled={inputsDisabled}
             />
             <p className="mt-1 text-right text-xs text-muted-foreground">
               {body.length}/{WATCHER_UPDATE_BODY_MAX}
@@ -468,7 +565,7 @@ export function BroadcastsPanel({
         open={confirmOpen}
         onOpenChange={(open) => {
           setConfirmOpen(open);
-          if (!open) setConfirmCount(null);
+          if (!open) setConfirmSnapshot(null);
           // Explicit cancel BEFORE any send attempt: the next confirmation
           // starts a fresh idempotency id. After a failed attempt the id is
           // preserved so an identical retry stays idempotent.
@@ -478,37 +575,39 @@ export function BroadcastsPanel({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Send this update to {confirmCount ?? 0} watcher(s)?
+              Send this update to {confirmSnapshot?.eligibleCount ?? 0} watcher(s)?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {selected
-                ? `${selected.token_name} (${selected.ticker}) — ${LAUNCH_STATUS_LABELS[status!]}. `
+              {confirmSnapshot
+                ? `${confirmSnapshot.launchLabel} — ${confirmSnapshot.statusLabel}. `
                 : ""}
               Only active watchers who currently allow project updates will receive it. Nothing is
               posted to your community group.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="max-h-48 overflow-y-auto rounded-md border border-border/60 bg-background/40 p-3">
-            {title.trim() ? (
+            {confirmSnapshot?.sendTitle ? (
               <p className="text-xs font-semibold text-foreground [overflow-wrap:anywhere]">
-                {title.trim()}
+                {confirmSnapshot.sendTitle}
               </p>
             ) : null}
             <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-              {body}
+              {confirmSnapshot?.sendBody ?? ""}
             </p>
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              disabled={mutation.isPending || !confirmCount || confirmCount < 1}
+              disabled={
+                mutation.isPending || !confirmSnapshot || confirmSnapshot.eligibleCount < 1
+              }
               onClick={(e) => {
                 e.preventDefault();
-                mutation.mutate();
+                if (!confirmSnapshot || confirmSnapshot.eligibleCount < 1) return;
+                mutation.mutate(confirmSnapshot);
                 setConfirmOpen(false);
               }}
             >
-
               Send watcher update
             </AlertDialogAction>
           </AlertDialogFooter>
