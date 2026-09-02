@@ -468,14 +468,18 @@ export function BroadcastsPanel({
         open={confirmOpen}
         onOpenChange={(open) => {
           setConfirmOpen(open);
-          // Explicit cancel before any send attempt: next confirmation starts a
-          // fresh idempotency id.
-          if (!open && !mutation.isPending) setRequestId(null);
+          if (!open) setConfirmCount(null);
+          // Explicit cancel BEFORE any send attempt: the next confirmation
+          // starts a fresh idempotency id. After a failed attempt the id is
+          // preserved so an identical retry stays idempotent.
+          if (!open && !mutation.isPending && !attemptedDraft) setRequestId(null);
         }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Send this update to {eligibleCount} watcher(s)?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Send this update to {confirmCount ?? 0} watcher(s)?
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {selected
                 ? `${selected.token_name} (${selected.ticker}) — ${LAUNCH_STATUS_LABELS[status!]}. `
@@ -497,13 +501,14 @@ export function BroadcastsPanel({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              disabled={mutation.isPending}
+              disabled={mutation.isPending || !confirmCount || confirmCount < 1}
               onClick={(e) => {
                 e.preventDefault();
                 mutation.mutate();
                 setConfirmOpen(false);
               }}
             >
+
               Send watcher update
             </AlertDialogAction>
           </AlertDialogFooter>
