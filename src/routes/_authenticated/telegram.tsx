@@ -342,18 +342,9 @@ function TelegramPage() {
 
         {/* ---------------------------------------------------------------- */}
         <TabsContent value="audience" className="mt-0 min-w-0">
-          <ComingSoonPanel
-            icon={Users}
-            title="Audience"
-            summary="Privacy-safe aggregates about who you can reach. Not available yet."
-            points={[
-              "Counts of active watchers, and how many allow project updates or countdown reminders.",
-              "Aggregate reachability derived from past delivery outcomes only.",
-              "Guidance for watchers who have muted a channel, since only they can re-enable it.",
-            ]}
-            footnote="CARTEL HQ will never show Telegram identities, usernames or per-person records here — counts only."
-          />
+          <AudiencePanel selectedLaunchId={search.launch ?? null} onLaunchChange={setAudienceLaunch} />
         </TabsContent>
+
 
         {/* ---------------------------------------------------------------- */}
         {/*
