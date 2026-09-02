@@ -25,21 +25,29 @@ import {
 const TAB_KEYS = ["overview", "broadcasts", "audience", "communities", "history"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
-type TelegramSearch = { tab: TabKey; launch?: string };
+/**
+ * Both params are optional so every existing `to="/telegram"` link keeps
+ * working. Anything invalid or missing resolves to the Overview tab and no
+ * preselected launch.
+ */
+type TelegramSearch = { tab?: TabKey; launch?: string };
 
-/** Invalid or missing values fail safe to the Overview tab and no launch. */
 function validateTelegramSearch(search: Record<string, unknown>): TelegramSearch {
   const rawTab = search["tab"];
   const tab = (TAB_KEYS as readonly string[]).includes(String(rawTab))
     ? (String(rawTab) as TabKey)
-    : "overview";
+    : undefined;
   const rawLaunch = search["launch"];
   const launch =
     typeof rawLaunch === "string" && rawLaunch.trim().length > 0 && rawLaunch.length <= 100
       ? rawLaunch.trim()
       : undefined;
-  return launch ? { tab, launch } : { tab };
+  const next: TelegramSearch = {};
+  if (tab && tab !== "overview") next.tab = tab;
+  if (launch) next.launch = launch;
+  return next;
 }
+
 
 
 export const Route = createFileRoute("/_authenticated/telegram")({
