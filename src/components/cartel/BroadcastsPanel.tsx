@@ -705,7 +705,7 @@ export function BroadcastsPanel({
               type="button"
               aria-pressed={channel === "watcher"}
               onClick={() => setChannel("watcher")}
-              className={`min-w-0 w-full rounded-md border p-3 text-left transition-colors ${
+              className={`min-h-11 min-w-0 w-full rounded-md border p-3 text-left transition-colors ${
                 channel === "watcher"
                   ? "border-primary/70 bg-primary/10"
                   : "border-border/70 bg-background/40 hover:bg-background/60"
@@ -730,7 +730,7 @@ export function BroadcastsPanel({
               type="button"
               aria-pressed={channel === "community"}
               onClick={() => setChannel("community")}
-              className={`min-w-0 w-full rounded-md border p-3 text-left transition-colors ${
+              className={`min-h-11 min-w-0 w-full rounded-md border p-3 text-left transition-colors ${
                 channel === "community"
                   ? "border-primary/70 bg-primary/10"
                   : "border-border/70 bg-background/40 hover:bg-background/60"
