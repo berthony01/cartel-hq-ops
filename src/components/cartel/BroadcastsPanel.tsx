@@ -958,6 +958,88 @@ export function BroadcastsPanel({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog
+        open={scheduleConfirmOpen}
+        onOpenChange={(open) => {
+          setScheduleConfirmOpen(open);
+          if (!open) setScheduleSnapshot(null);
+          // Cancel before any attempt starts a fresh id; after a failed attempt
+          // the id is preserved so an identical retry stays idempotent.
+          if (!open && !scheduleMutation.isPending && !attemptedSchedule) {
+            setScheduleRequestId(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Notify {scheduleSnapshot?.eligibleCount ?? 0} watcher(s) about this schedule change?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {scheduleSnapshot
+                ? `${scheduleSnapshot.launchLabel} — ${scheduleSnapshot.statusLabel}. `
+                : ""}
+              Only active watchers who currently allow project updates will receive it. Nothing is
+              posted to your community group.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-48 overflow-y-auto rounded-md border border-border/60 bg-background/40 p-3">
+            <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground [overflow-wrap:anywhere]">
+              {`Previous: ${scheduleSnapshot?.previous ?? ""}\nNew: ${scheduleSnapshot?.current ?? ""}`}
+            </p>
+            {scheduleSnapshot?.note.trim() ? (
+              <p className="mt-3 whitespace-pre-wrap border-t border-border/60 pt-3 text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+                {scheduleSnapshot.note.trim()}
+              </p>
+            ) : null}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={
+                scheduleMutation.isPending ||
+                !scheduleSnapshot ||
+                scheduleSnapshot.eligibleCount < 1
+              }
+              onClick={(e) => {
+                e.preventDefault();
+                if (!scheduleSnapshot || scheduleSnapshot.eligibleCount < 1) return;
+                scheduleMutation.mutate(scheduleSnapshot);
+                setScheduleConfirmOpen(false);
+              }}
+            >
+              Notify watchers
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={dismissConfirmOpen} onOpenChange={setDismissConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Dismiss this schedule change?</AlertDialogTitle>
+            <AlertDialogDescription>
+              No watcher message will be created. The decision is recorded as dismissed, and
+              watchers will not be told that the schedule moved.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={dismissMutation.isPending || !pendingComm}
+              onClick={(e) => {
+                e.preventDefault();
+                if (!pendingComm) return;
+                dismissMutation.mutate(pendingComm.id);
+              }}
+            >
+              Dismiss
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+
   );
 }
