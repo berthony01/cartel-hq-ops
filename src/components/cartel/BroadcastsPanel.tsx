@@ -270,19 +270,43 @@ export function BroadcastsPanel({
    */
   async function prepareConfirmation() {
     if (!selected || sendDisabled) return;
+    // Click-time intent, captured BEFORE any await.
+    const clicked = { launchId: selected.id, title, body };
     setPreparing(true);
     try {
       const result = await statsQuery.refetch();
+      const latest = latestRef.current;
+      // B1: anything the operator changed while the audience was refetching
+      // invalidates this confirmation. Reviewed must equal submitted.
+      if (
+        latest.launchId !== clicked.launchId ||
+        latest.title !== clicked.title ||
+        latest.body !== clicked.body
+      ) {
+        toast.error(
+          "Your selection or message changed while the audience was loading. Nothing was sent — review it and send again.",
+        );
+        return;
+      }
       if (result.isError || !result.data) {
         toast.error("Could not confirm the current audience. Nothing was sent.");
         return;
       }
       const fresh = result.data.updates_enabled_watchers;
-      if (!canManage || !canSendWatcherUpdate(toLaunchStatus(selected.status))) {
+      // Re-check permission and lifecycle from the latest render, not the click.
+      const freshLaunch = latest.launchId
+        ? (launchesQuery.data ?? []).find((l) => l.id === latest.launchId)
+        : undefined;
+      const freshStatus = freshLaunch ? toLaunchStatus(freshLaunch.status) : null;
+      if (!latest.canManage || !freshLaunch || !freshStatus || !canSendWatcherUpdate(freshStatus)) {
         toast.error("This launch can no longer receive an update. Nothing was sent.");
         return;
       }
-      if (!body.trim() || bodyTooLong || titleTooLong) {
+      if (!latest.body.trim() || latest.body.length > WATCHER_UPDATE_BODY_MAX) {
+        toast.error("Check the update text before sending.");
+        return;
+      }
+      if (latest.title.length > WATCHER_UPDATE_TITLE_MAX) {
         toast.error("Check the update text before sending.");
         return;
       }
@@ -290,9 +314,20 @@ export function BroadcastsPanel({
         toast.error("No active watcher currently allows project updates. Nothing was sent.");
         return;
       }
-      setConfirmCount(fresh);
-      // Mint (or reuse) the idempotency id for this intended send.
-      setRequestId((current) => current ?? crypto.randomUUID());
+      // Mint (or reuse, for an identical failed retry) the idempotency id.
+      const idForSend = requestId ?? crypto.randomUUID();
+      setRequestId(idForSend);
+      setConfirmSnapshot({
+        launchId: freshLaunch.id,
+        launchLabel: `${freshLaunch.token_name} (${freshLaunch.ticker})`,
+        statusLabel: LAUNCH_STATUS_LABELS[freshStatus],
+        rawTitle: latest.title,
+        rawBody: latest.body,
+        sendTitle: latest.title.trim() ? latest.title.trim() : null,
+        sendBody: latest.body,
+        eligibleCount: fresh,
+        clientRequestId: idForSend,
+      });
       setConfirmOpen(true);
     } finally {
       setPreparing(false);
