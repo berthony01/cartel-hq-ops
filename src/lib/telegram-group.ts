@@ -424,6 +424,9 @@ export type GroupAnnouncementResult = {
   groupTitle?: string;
   messageId?: number | null;
   sentAt?: string | null;
+  /** C7.2 — how the broadcast was delivered, and the exact delivered text. */
+  deliveryKind?: "TEXT" | "BRANDED_PHOTO" | (string & {});
+  deliveredText?: string;
   /** Recoverable: the bot was removed from the community. */
   reconnectRequired?: boolean;
   connectionState?: string;
@@ -431,16 +434,51 @@ export type GroupAnnouncementResult = {
   technical?: string | null;
 };
 
+/* ------------------------------------------------------------------ */
+/* C7.2 — Official Broadcast branding                                  */
+/* ------------------------------------------------------------------ */
+
+/** Telegram's hard photo-caption limit; enforced again server-side. */
+export const BRANDED_BROADCAST_CAPTION_MAX = 1024;
+export const BRANDED_BROADCAST_TEMPLATE_VERSION = "telegram_photo_v1";
+
 /**
- * Posts ONE plain-text announcement to ONE connected community.
- * `clientRequestId` must stay stable for one intended announcement: the server
+ * `telegram_photo_v1` caption assembly, byte-identical to the server copy in
+ * the `telegram-group` function. This is preview only — the server rebuilds the
+ * caption from the saved Project Profile and posts only its own result.
+ */
+export function buildBrandedBroadcastCaption(
+  projectName: string,
+  ticker: string | null,
+  message: string,
+): string {
+  const name = projectName.trim();
+  const tick = (ticker ?? "").trim();
+  const header = tick ? `${name} · $${tick.replace(/^\$+/, "")}` : name;
+  return `${header}\nOFFICIAL PROJECT UPDATE\n\n${message.trim()}`;
+}
+
+/** The Project Profile identity the operator actually reviewed before posting. */
+export type ReviewedBroadcastBranding = {
+  projectName: string;
+  ticker: string;
+  logoAssetId: string;
+};
+
+/**
+ * Posts ONE official broadcast to ONE connected community.
+ * `clientRequestId` must stay stable for one intended broadcast: the server
  * ledger is keyed on `(workspace, clientRequestId)` and never posts it twice.
+ *
+ * When `branding` is supplied the server re-reads the saved Project Profile and
+ * refuses to post if it no longer matches the reviewed identity.
  */
 export function sendGroupAnnouncement(params: {
   workspaceId: string;
   groupConnectionId: string;
   message: string;
   clientRequestId: string;
+  branding?: ReviewedBroadcastBranding | null;
 }): Promise<GroupAnnouncementResult> {
   return invoke<GroupAnnouncementResult>({
     action: "send_group_announcement",
@@ -448,6 +486,9 @@ export function sendGroupAnnouncement(params: {
     groupConnectionId: params.groupConnectionId,
     message: params.message,
     clientRequestId: params.clientRequestId,
+    ...(params.branding
+      ? { branded: true, reviewedBranding: params.branding }
+      : {}),
   });
 }
 

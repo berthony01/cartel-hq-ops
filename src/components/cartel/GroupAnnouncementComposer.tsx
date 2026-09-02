@@ -26,27 +26,38 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Switch } from "@/components/ui/switch";
 import { useWorkspace } from "@/lib/workspace-context";
 import { getLaunchAccess } from "@/lib/launch-control";
+import { getProjectProfile } from "@/lib/project-profile";
+import { listWorkspaceAssets, signedUrl } from "@/lib/media";
 import {
+  BRANDED_BROADCAST_CAPTION_MAX,
   GROUP_ANNOUNCEMENT_MAX,
+  buildBrandedBroadcastCaption,
   fetchTelegramGroupStatus,
   sendGroupAnnouncement,
   type GroupAnnouncementResult,
+  type ReviewedBroadcastBranding,
 } from "@/lib/telegram-group";
 import type { GroupReadiness, TelegramGroupSetup } from "@/components/cartel/TelegramGroupCard";
 
 /**
  * Community Command → Broadcasts → Official Community Broadcast (C7).
  *
- * Posts ONE plain-text announcement to ONE connected community. Every rule that
+ * Posts ONE announcement to ONE connected community. Every rule that
  * matters — owner/admin authorization, live bot verification, exact
- * target+message idempotency and the durable announcement ledger — lives in the
- * `telegram-group` Edge Function. This component is presentation, truthful
- * disabling, and correct client-request-id lifecycle only.
+ * target+message idempotency, branding validation against the saved Project
+ * Profile, and the durable announcement ledger — lives in the `telegram-group`
+ * Edge Function. This component is presentation, truthful disabling, and
+ * correct client-request-id lifecycle only.
  *
  * Outcomes are never collapsed: a delivery that could not be confirmed
  * (AMBIGUOUS) is reported as uncertain and is NEVER resent automatically.
+ *
+ * C7.2 — branding is OPTIONAL and OFF by default; plain text stays the default
+ * delivery. The branding shown here is a preview of what the server will
+ * rebuild from the saved profile, never the source of what gets posted.
  *
  * Shared community state stays owned by the single page-level
  * `useTelegramGroupSetup()` hook; this component only reads it and asks it to
@@ -57,6 +68,10 @@ type Snapshot = {
   groupTitle: string;
   message: string;
   clientRequestId: string;
+  /** Exactly what will be posted: plain body, or the branded caption. */
+  deliveredText: string;
+  branding: ReviewedBroadcastBranding | null;
+  brandingLogoUrl: string | null;
 };
 
 /** The exact intent already submitted to the server under `clientRequestId`. */
@@ -64,6 +79,7 @@ type Attempt = {
   groupConnectionId: string;
   message: string;
   clientRequestId: string;
+  branded: boolean;
 };
 
 function newRequestId() {
@@ -108,7 +124,75 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
   const group = groups.find((g) => g.id === resolvedGroupId) ?? null;
   const readiness = resolvedGroupId ? (setup.readinessById[resolvedGroupId] ?? null) : null;
 
+  /**
+   * C7.2 — saved Project Profile identity. Read-only here: the server re-reads
+   * the same rows and refuses to post if they no longer match what was reviewed.
+   */
+  const profileQuery = useQuery({
+    queryKey: ["project-profile", workspaceId],
+    enabled: !!workspaceId,
+    queryFn: () => getProjectProfile(workspaceId!),
+  });
+  const logosQuery = useQuery({
+    queryKey: ["project-profile-logos", workspaceId],
+    enabled: !!workspaceId,
+    queryFn: async () => {
+      const all = await listWorkspaceAssets(workspaceId!);
+      return all.filter((a) => a.asset_type === "logo");
+    },
+  });
+
+  const profile = profileQuery.data ?? null;
+  const logoAsset =
+    profile?.logo_asset_id
+      ? ((logosQuery.data ?? []).find((a) => a.id === profile.logo_asset_id) ?? null)
+      : null;
+  const logoMime = (logoAsset?.mime_type ?? "").toLowerCase();
+  const logoSupported = logoMime === "image/png" || logoMime === "image/jpeg";
+  const brandingReady = !!profile?.project_name?.trim() && !!logoAsset && logoSupported;
+
+  const brandingIdentity: ReviewedBroadcastBranding | null =
+    brandingReady && profile && logoAsset
+      ? {
+          projectName: profile.project_name.trim(),
+          ticker: (profile.ticker ?? "").trim(),
+          logoAssetId: logoAsset.id,
+        }
+      : null;
+
+  const brandingUnavailableReason = profileQuery.isPending || logosQuery.isPending
+    ? "Checking your project branding…"
+    : profileQuery.isError || logosQuery.isError
+      ? "Could not read your project branding, so branded posting is unavailable."
+      : !profile
+        ? "Save a Project Profile to post branded broadcasts."
+        : !profile.project_name?.trim()
+          ? "Add a project name in Project Profile to post branded broadcasts."
+          : !logoAsset
+            ? "Select a project logo in Project Profile to post branded broadcasts."
+            : !logoSupported
+              ? "Branded broadcasts need a PNG or JPEG project logo. Upload one in Project Profile."
+              : null;
+
   const [message, setMessage] = useState("");
+  const [brandedRequested, setBrandedRequested] = useState(false);
+  const branded = brandedRequested && brandingReady;
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (!branded || !logoAsset) {
+      setLogoPreviewUrl(null);
+      return;
+    }
+    void signedUrl(logoAsset.storage_path, 300).then((url) => {
+      if (active) setLogoPreviewUrl(url);
+    });
+    return () => {
+      active = false;
+    };
+  }, [branded, logoAsset]);
+
   /**
    * ONE client request id per exact intended announcement (target + text). It
    * survives only an uncertain attempt, so an identical retry stays idempotent
@@ -123,16 +207,42 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
 
   const trimmed = message.trim();
 
+  /** Local preview of the exact text the server will post. */
+  const previewText =
+    branded && brandingIdentity
+      ? buildBrandedBroadcastCaption(
+          brandingIdentity.projectName,
+          brandingIdentity.ticker || null,
+          trimmed,
+        )
+      : trimmed;
+  const brandedOverLimit = branded && previewText.length > BRANDED_BROADCAST_CAPTION_MAX;
+
   /**
    * Latest committed selection + draft, readable across an await. Preparation
    * compares against this ref rather than its own captured closure values, so a
    * reviewed announcement can never differ from the submitted one.
    */
-  const latestRef = useRef<{ groupConnectionId: string | null; message: string }>({
+  const latestRef = useRef<{
+    groupConnectionId: string | null;
+    message: string;
+    branded: boolean;
+    brandingKey: string;
+  }>({
     groupConnectionId: resolvedGroupId,
     message: trimmed,
+    branded,
+    brandingKey: "",
   });
-  latestRef.current = { groupConnectionId: resolvedGroupId, message: trimmed };
+  const brandingKey = brandingIdentity
+    ? `${brandingIdentity.projectName}\u0000${brandingIdentity.ticker}\u0000${brandingIdentity.logoAssetId}`
+    : "";
+  latestRef.current = {
+    groupConnectionId: resolvedGroupId,
+    message: trimmed,
+    branded,
+    brandingKey,
+  };
 
   function resetComposer() {
     setMessage("");
@@ -150,11 +260,15 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
   // Editing away from a submitted intent retires that request id and outcome.
   useEffect(() => {
     if (!attempt) return;
-    if (attempt.message !== trimmed || attempt.groupConnectionId !== resolvedGroupId) {
+    if (
+      attempt.message !== trimmed ||
+      attempt.groupConnectionId !== resolvedGroupId ||
+      attempt.branded !== branded
+    ) {
       setAttempt(null);
       setOutcome(null);
     }
-  }, [attempt, trimmed, resolvedGroupId]);
+  }, [attempt, trimmed, resolvedGroupId, branded]);
 
   /** Shared community state is page-level; ask it to refresh, never re-own it. */
   function refreshSharedCommunityState(id?: string | null) {
@@ -169,12 +283,14 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         groupConnectionId: snap.groupConnectionId,
         message: snap.message,
         clientRequestId: snap.clientRequestId,
+        branding: snap.branding,
       }),
     onMutate: (snap) => {
       setAttempt({
         groupConnectionId: snap.groupConnectionId,
         message: snap.message,
         clientRequestId: snap.clientRequestId,
+        branded: !!snap.branding,
       });
       setOutcome(null);
     },
@@ -231,7 +347,12 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
             ? readinessBlock
             : outcome?.status === "AMBIGUOUS"
               ? "This broadcast's delivery is unconfirmed. Check the community in Telegram before writing a new one."
-              : null;
+              : brandedRequested && !brandingReady
+                ? (brandingUnavailableReason ??
+                  "Branded posting is unavailable for this project right now.")
+                : brandedOverLimit
+                  ? `Branded broadcasts are limited to ${BRANDED_BROADCAST_CAPTION_MAX} characters including the branding header. Shorten the message or turn branding off.`
+                  : null;
 
   const sendDisabled =
     busy || !workspaceId || !group || !canManage || !trimmed || tooLong || !!blockReason;
@@ -244,12 +365,20 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
    */
   async function prepareConfirmation() {
     if (sendDisabled || !group || !workspaceId) return;
-    const clicked = { groupConnectionId: group.id, message: trimmed };
+    const clicked = {
+      groupConnectionId: group.id,
+      message: trimmed,
+      branded,
+      branding: brandingIdentity,
+      brandingKey,
+    };
     setPreparing(true);
     try {
-      const [accessResult, liveResult] = await Promise.allSettled([
+      const [accessResult, liveResult, profileResult, logosResult] = await Promise.allSettled([
         accessQuery.refetch(),
         fetchTelegramGroupStatus({ workspaceId, groupConnectionId: clicked.groupConnectionId }),
+        profileQuery.refetch(),
+        logosQuery.refetch(),
       ]);
       if (
         accessResult.status !== "fulfilled" ||
@@ -276,10 +405,45 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         );
         return;
       }
+      /**
+       * Branded posting is reviewed against freshly re-read Project Profile
+       * identity. Any disagreement stops here; the server performs the same
+       * check again and is the authority.
+       */
+      if (clicked.branded) {
+        if (
+          profileResult.status !== "fulfilled" ||
+          profileResult.value.isError ||
+          logosResult.status !== "fulfilled" ||
+          logosResult.value.isError
+        ) {
+          toast.error("Could not confirm your project branding. Nothing was posted.");
+          return;
+        }
+        const freshProfile = profileResult.value.data ?? null;
+        const freshLogo = freshProfile?.logo_asset_id
+          ? ((logosResult.value.data ?? []).find((a) => a.id === freshProfile.logo_asset_id) ?? null)
+          : null;
+        const freshMime = (freshLogo?.mime_type ?? "").toLowerCase();
+        const freshKey =
+          freshProfile?.project_name?.trim() &&
+          freshLogo &&
+          (freshMime === "image/png" || freshMime === "image/jpeg")
+            ? `${freshProfile.project_name.trim()}\u0000${(freshProfile.ticker ?? "").trim()}\u0000${freshLogo.id}`
+            : "";
+        if (!freshKey || freshKey !== clicked.brandingKey) {
+          toast.error(
+            "Your project branding changed while this broadcast was loading. Review it again — nothing was posted.",
+          );
+          return;
+        }
+      }
       // Drift across the await, measured against the LATEST state, not a closure.
       if (
         latestRef.current.groupConnectionId !== clicked.groupConnectionId ||
-        latestRef.current.message !== clicked.message
+        latestRef.current.message !== clicked.message ||
+        latestRef.current.branded !== clicked.branded ||
+        latestRef.current.brandingKey !== clicked.brandingKey
       ) {
         toast.error("The official broadcast changed while it was loading. Nothing was posted.");
         return;
@@ -287,14 +451,25 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
       const id =
         attempt &&
         attempt.groupConnectionId === clicked.groupConnectionId &&
-        attempt.message === clicked.message
+        attempt.message === clicked.message &&
+        attempt.branded === clicked.branded
           ? attempt.clientRequestId
           : newRequestId();
+      const brandingForSend = clicked.branded ? clicked.branding : null;
       setSnapshot({
         groupConnectionId: clicked.groupConnectionId,
         groupTitle: live.group?.title ?? group.title,
         message: clicked.message,
         clientRequestId: id,
+        deliveredText: brandingForSend
+          ? buildBrandedBroadcastCaption(
+              brandingForSend.projectName,
+              brandingForSend.ticker || null,
+              clicked.message,
+            )
+          : clicked.message,
+        branding: brandingForSend,
+        brandingLogoUrl: brandingForSend ? logoPreviewUrl : null,
       });
       setConfirmOpen(true);
     } finally {
@@ -369,20 +544,68 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
               </p>
             </div>
 
+            <div className="min-w-0 rounded-md border border-border/60 bg-background/30 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Label htmlFor="group-announcement-branded">Post with project branding</Label>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    Adds your saved project logo and identity header from Project Profile. Plain
+                    text stays the default.
+                  </p>
+                </div>
+                <Switch
+                  id="group-announcement-branded"
+                  checked={brandedRequested}
+                  disabled={busy || !canManage || !brandingReady}
+                  onCheckedChange={(checked) => setBrandedRequested(checked)}
+                />
+              </div>
+              {brandingUnavailableReason ? (
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  {brandingUnavailableReason}{" "}
+                  <Link to="/project-profile" className="underline underline-offset-2">
+                    Open Project Profile
+                  </Link>
+                </p>
+              ) : branded ? (
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  Branded posts are limited to {BRANDED_BROADCAST_CAPTION_MAX} characters including
+                  the branding header. The branding is re-checked against your saved Project Profile
+                  before anything is posted.
+                </p>
+              ) : null}
+            </div>
+
             {trimmed ? (
               <div className="min-w-0 rounded-md border border-border/60 bg-background/30 p-3">
                 <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
                   Community broadcast preview
                 </p>
+                {branded && logoPreviewUrl ? (
+                  <img
+                    src={logoPreviewUrl}
+                    alt="Project logo used for this branded broadcast"
+                    className="mt-2 size-20 rounded-md border border-border/60 object-contain"
+                  />
+                ) : null}
                 <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-                  {message}
+                  {previewText}
                 </p>
+                {branded ? (
+                  <p
+                    className={`mt-1 text-right text-xs ${brandedOverLimit ? "text-destructive" : "text-muted-foreground"}`}
+                  >
+                    {previewText.length}/{BRANDED_BROADCAST_CAPTION_MAX}
+                  </p>
+                ) : null}
                 <p className="mt-2 border-t border-border/60 pt-2 text-xs leading-relaxed text-muted-foreground">
-                  Sent as plain text exactly as written. No formatting is applied and link previews
-                  are turned off.
+                  {branded
+                    ? "Posted as your project logo with this caption. No formatting is applied to your text."
+                    : "Sent as plain text exactly as written. No formatting is applied and link previews are turned off."}
                 </p>
               </div>
             ) : null}
+
 
             <div className="flex flex-wrap items-center gap-2">
               <Button
@@ -490,14 +713,24 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
               Post this official broadcast to {snapshot?.groupTitle ?? "this community"}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Everyone in the community can see it. It is posted as plain text by
-              @PepeCartelHQBot for official project/team communications and does not replace normal
-              everyday conversation. No watcher DM is sent.
+              Everyone in the community can see it. It is posted by @PepeCartelHQBot
+              {snapshot?.branding
+                ? " as your project logo with an unformatted caption"
+                : " as plain text"}{" "}
+              for official project/team communications and does not replace normal everyday
+              conversation. No watcher DM is sent.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="max-h-48 overflow-y-auto rounded-md border border-border/60 bg-background/40 p-3">
+            {snapshot?.branding && snapshot.brandingLogoUrl ? (
+              <img
+                src={snapshot.brandingLogoUrl}
+                alt="Project logo used for this branded broadcast"
+                className="mb-2 size-16 rounded-md border border-border/60 object-contain"
+              />
+            ) : null}
             <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground [overflow-wrap:anywhere]">
-              {snapshot?.message ?? ""}
+              {snapshot?.deliveredText ?? snapshot?.message ?? ""}
             </p>
           </div>
           <AlertDialogFooter>

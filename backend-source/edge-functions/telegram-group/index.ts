@@ -13,6 +13,23 @@ const TELEGRAM_TIMEOUT_MS = 10_000;
 async function telegramJson(token: string, method: string, body: Record<string, unknown> = {}) { let res: Response; try { res = await fetch(`${TG_BASE}/bot${token}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS) }); } catch { throw new Error("Could not reach Telegram. Try again shortly."); } const payload = await res.json().catch(() => null) as any; if (!res.ok || !payload?.ok) throw new Error(String(payload?.description ?? `Telegram request failed (${res.status}).`)); return payload.result; }
 function firstEmoji(value: unknown) { return Array.isArray(value) && typeof value[0] === "string" ? value[0] : ""; }
 
+/* C7.2 — Official Community Broadcast branding (`telegram_photo_v1`). */
+const ASSETS_BUCKET = "workspace-assets";
+const BRANDED_TEMPLATE_VERSION = "telegram_photo_v1";
+/** Telegram's hard photo-caption limit. */
+const BRANDED_CAPTION_MAX = 1024;
+/**
+ * Deterministic caption assembly. The browser renders the same preview from the
+ * same inputs, but this server copy is the only one that is ever posted.
+ */
+function buildBrandedCaption(projectName: string, ticker: string | null, message: string): string {
+  const name = projectName.trim();
+  const tick = (ticker ?? "").trim();
+  const header = tick ? `${name} · $${tick.replace(/^\$+/, "")}` : name;
+  return `${header}\nOFFICIAL PROJECT UPDATE\n\n${message.trim()}`;
+}
+
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return respond({ error: "METHOD_NOT_ALLOWED" }, 405);
@@ -470,10 +487,83 @@ Deno.serve(async (req: Request) => {
       if (!messageText) return respond({ error: "INVALID_MESSAGE", message: "Enter an announcement message." }, 400);
       if (messageText.length > 3500) return respond({ error: "INVALID_MESSAGE", message: "Announcements are limited to 3500 characters." }, 400);
 
+      /**
+       * C7.2 — optional branded delivery. The plain-text path stays the default
+       * and is completely unchanged when `branded` is not explicitly true.
+       *
+       * Branding is NEVER taken from the request. The request only carries the
+       * identity the operator actually reviewed; the server re-reads the saved
+       * Project Profile and refuses to post when the two disagree.
+       */
+      const branded = body.branded === true;
+      const reviewed = (body.reviewedBranding ?? {}) as Record<string, unknown>;
+      const reviewedProjectName = typeof reviewed.projectName === "string" ? reviewed.projectName.trim() : "";
+      const reviewedTicker = typeof reviewed.ticker === "string" ? reviewed.ticker.trim() : "";
+      const reviewedLogoAssetId = typeof reviewed.logoAssetId === "string" ? reviewed.logoAssetId.trim() : "";
+
+      let brandingSnapshot:
+        | { projectName: string; ticker: string | null; logoAssetId: string; storagePath: string; mimeType: string }
+        | null = null;
+      let deliveryKind: "TEXT" | "BRANDED_PHOTO" = "TEXT";
+      let deliveredText = messageText;
+
+      if (branded) {
+        const { data: profileRow, error: profileError } = await admin.from("project_profiles")
+          .select("project_name,ticker,logo_asset_id").eq("workspace_id", workspaceId).maybeSingle();
+        if (profileError) throw profileError;
+        if (!profileRow) {
+          return respond({ error: "BRANDING_UNAVAILABLE", message: "Save a Project Profile before posting a branded broadcast." }, 400);
+        }
+        const currentProjectName = String(profileRow.project_name ?? "").trim();
+        const currentTicker = String(profileRow.ticker ?? "").trim();
+        const currentLogoAssetId = String(profileRow.logo_asset_id ?? "").trim();
+        if (!currentProjectName || !currentLogoAssetId) {
+          return respond({ error: "BRANDING_UNAVAILABLE", message: "Add a project name and select a project logo before posting a branded broadcast." }, 400);
+        }
+        if (
+          reviewedProjectName !== currentProjectName ||
+          reviewedTicker !== currentTicker ||
+          reviewedLogoAssetId !== currentLogoAssetId
+        ) {
+          return respond({
+            error: "BRANDING_DRIFT",
+            message: "The project branding changed since you reviewed this broadcast. Review it again before posting.",
+          }, 409);
+        }
+
+        const { data: assetRow, error: assetError } = await admin.from("media_assets")
+          .select("id,workspace_id,storage_path,mime_type")
+          .eq("id", currentLogoAssetId).eq("workspace_id", workspaceId).maybeSingle();
+        if (assetError) throw assetError;
+        if (!assetRow || !assetRow.storage_path) {
+          return respond({ error: "BRANDING_UNAVAILABLE", message: "The selected project logo is no longer available. Choose a logo in Project Profile." }, 400);
+        }
+        const mimeType = String(assetRow.mime_type ?? "").toLowerCase();
+        if (mimeType !== "image/png" && mimeType !== "image/jpeg") {
+          return respond({ error: "BRANDING_LOGO_UNSUPPORTED", message: "Branded broadcasts need a PNG or JPEG project logo. Upload one in Project Profile." }, 400);
+        }
+
+        deliveryKind = "BRANDED_PHOTO";
+        deliveredText = buildBrandedCaption(currentProjectName, currentTicker || null, messageText);
+        if (deliveredText.length > BRANDED_CAPTION_MAX) {
+          return respond({
+            error: "INVALID_MESSAGE",
+            message: `Branded broadcasts are limited to ${BRANDED_CAPTION_MAX} characters including the branding header. Shorten the message or post it as plain text.`,
+          }, 400);
+        }
+        brandingSnapshot = {
+          projectName: currentProjectName,
+          ticker: currentTicker || null,
+          logoAssetId: currentLogoAssetId,
+          storagePath: String(assetRow.storage_path),
+          mimeType,
+        };
+      }
+
       const rawGroup = await getGroup();
       if (!rawGroup) return respond({ error: "GROUP_NOT_FOUND", message: "That Telegram community is no longer connected." }, 404);
 
-      const ledgerSelect = "id,status,telegram_message_id,message_text,group_title,group_connection_id,telegram_chat_id,last_error,requested_at,sent_at";
+      const ledgerSelect = "id,status,telegram_message_id,message_text,group_title,group_connection_id,telegram_chat_id,last_error,requested_at,sent_at,delivery_kind,delivered_text_snapshot,branding_project_name,branding_ticker,branding_logo_asset_id";
       const outcomeMessage = (status: string, title: string) =>
         status === "SENT"
           ? `Announcement posted to ${title}.`
@@ -491,6 +581,8 @@ Deno.serve(async (req: Request) => {
           messageId: row.telegram_message_id ?? null,
           sentAt: row.sent_at ?? null,
           technical: row.last_error ?? null,
+          deliveryKind: row.delivery_kind ?? deliveryKind,
+          deliveredText: row.delivered_text_snapshot ?? deliveredText,
           message: outcomeMessage(status, String(row.group_title ?? rawGroup.title)),
         });
       };
@@ -498,9 +590,15 @@ Deno.serve(async (req: Request) => {
        * A request id represents ONE exact intent. A stored row whose target
        * connection is NULL (the connection was deleted) can never be proven to
        * match this target, so reuse is rejected instead of guessed.
+       *
+       * C7.2 — the delivery kind and the exact delivered text (plain body or
+       * branded caption) are part of that intent: the same id can never be
+       * reused to post the same words in a different form.
        */
       const sameIntent = (row: any) =>
         String(row?.message_text ?? "") === messageText &&
+        String(row?.delivery_kind ?? "TEXT") === deliveryKind &&
+        String(row?.delivered_text_snapshot ?? "") === deliveredText &&
         !!row?.group_connection_id &&
         String(row.group_connection_id) === String(rawGroup.id);
       const conflictResponse = () => respond({
@@ -529,6 +627,14 @@ Deno.serve(async (req: Request) => {
           client_request_id: clientRequestId,
           message_text: messageText,
           status: "SENDING",
+          delivery_kind: deliveryKind,
+          delivered_text_snapshot: deliveredText,
+          branding_template_version: brandingSnapshot ? BRANDED_TEMPLATE_VERSION : null,
+          branding_project_name: brandingSnapshot?.projectName ?? null,
+          branding_ticker: brandingSnapshot?.ticker ?? null,
+          branding_logo_asset_id: brandingSnapshot?.logoAssetId ?? null,
+          branding_logo_storage_path: brandingSnapshot?.storagePath ?? null,
+          branding_logo_mime_type: brandingSnapshot?.mimeType ?? null,
         }).select(ledgerSelect).maybeSingle();
         if (insertError) {
           // Concurrent duplicate submit — never send twice, and still prove intent.
@@ -587,18 +693,69 @@ Deno.serve(async (req: Request) => {
       }
 
       /**
+       * C7.2 — for a branded post the logo bytes are fetched BEFORE the single
+       * Telegram call. A download failure is a definite no-send: nothing is
+       * posted and no plain-text fallback is silently substituted.
+       */
+      let logoBytes: Blob | null = null;
+      if (brandingSnapshot) {
+        try {
+          const { data: fileData, error: fileError } = await admin.storage
+            .from(ASSETS_BUCKET).download(brandingSnapshot.storagePath);
+          if (fileError || !fileData) throw new Error(fileError?.message ?? "Logo download returned no data.");
+          logoBytes = fileData;
+        } catch (e) {
+          const reason = `Could not read the project logo: ${e instanceof Error ? e.message : "unknown error"}`;
+          await markFailed(reason);
+          return ledgerResponse({
+            id: announcementId,
+            status: "FAILED",
+            telegram_message_id: null,
+            group_title: group.title ?? rawGroup.title,
+            group_connection_id: rawGroup.id,
+            last_error: reason,
+            sent_at: null,
+            delivery_kind: deliveryKind,
+            delivered_text_snapshot: deliveredText,
+          }, false);
+        }
+      }
+
+      /**
        * Plain text only: no parse_mode, so operator text is never re-interpreted
-       * as markup. Outcome is classified into definite failure vs transport
+       * as markup — the branded path posts the same unformatted words as a photo
+       * caption. Outcome is classified into definite failure vs transport
        * uncertainty — an uncertain send is NEVER retried automatically.
+       *
+       * Exactly ONE Telegram transport call is made per claimed ledger row.
        */
       let outcome: "SENT" | "FAILED" | "AMBIGUOUS" = "AMBIGUOUS";
       let telegramMessageId: number | null = null;
       let lastError: string | null = null;
       try {
-        const res = await fetch(`${TG_BASE}/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: String(group.telegram_chat_id), text: messageText, disable_web_page_preview: true }),
+        let endpoint: string;
+        let init: RequestInit;
+        if (logoBytes) {
+          const form = new FormData();
+          form.append("chat_id", String(group.telegram_chat_id));
+          form.append("caption", deliveredText);
+          form.append(
+            "photo",
+            logoBytes,
+            brandingSnapshot?.mimeType === "image/jpeg" ? "logo.jpg" : "logo.png",
+          );
+          endpoint = "sendPhoto";
+          init = { method: "POST", body: form };
+        } else {
+          endpoint = "sendMessage";
+          init = {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: String(group.telegram_chat_id), text: deliveredText, disable_web_page_preview: true }),
+          };
+        }
+        const res = await fetch(`${TG_BASE}/bot${TELEGRAM_BOT_TOKEN}/${endpoint}`, {
+          ...init,
           signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
         });
         const payload = await res.json().catch(() => null) as any;
