@@ -544,20 +544,68 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
               </p>
             </div>
 
+            <div className="min-w-0 rounded-md border border-border/60 bg-background/30 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Label htmlFor="group-announcement-branded">Post with project branding</Label>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    Adds your saved project logo and identity header from Project Profile. Plain
+                    text stays the default.
+                  </p>
+                </div>
+                <Switch
+                  id="group-announcement-branded"
+                  checked={brandedRequested}
+                  disabled={busy || !canManage || !brandingReady}
+                  onCheckedChange={(checked) => setBrandedRequested(checked)}
+                />
+              </div>
+              {brandingUnavailableReason ? (
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  {brandingUnavailableReason}{" "}
+                  <Link to="/project-profile" className="underline underline-offset-2">
+                    Open Project Profile
+                  </Link>
+                </p>
+              ) : branded ? (
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  Branded posts are limited to {BRANDED_BROADCAST_CAPTION_MAX} characters including
+                  the branding header. The branding is re-checked against your saved Project Profile
+                  before anything is posted.
+                </p>
+              ) : null}
+            </div>
+
             {trimmed ? (
               <div className="min-w-0 rounded-md border border-border/60 bg-background/30 p-3">
                 <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
                   Community broadcast preview
                 </p>
+                {branded && logoPreviewUrl ? (
+                  <img
+                    src={logoPreviewUrl}
+                    alt="Project logo used for this branded broadcast"
+                    className="mt-2 size-20 rounded-md border border-border/60 object-contain"
+                  />
+                ) : null}
                 <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-                  {message}
+                  {previewText}
                 </p>
+                {branded ? (
+                  <p
+                    className={`mt-1 text-right text-xs ${brandedOverLimit ? "text-destructive" : "text-muted-foreground"}`}
+                  >
+                    {previewText.length}/{BRANDED_BROADCAST_CAPTION_MAX}
+                  </p>
+                ) : null}
                 <p className="mt-2 border-t border-border/60 pt-2 text-xs leading-relaxed text-muted-foreground">
-                  Sent as plain text exactly as written. No formatting is applied and link previews
-                  are turned off.
+                  {branded
+                    ? "Posted as your project logo with this caption. No formatting is applied to your text."
+                    : "Sent as plain text exactly as written. No formatting is applied and link previews are turned off."}
                 </p>
               </div>
             ) : null}
+
 
             <div className="flex flex-wrap items-center gap-2">
               <Button
