@@ -16,18 +16,21 @@ function firstEmoji(value: unknown) { return Array.isArray(value) && typeof valu
 /* C7.2 — Official Community Broadcast branding (`telegram_photo_v1`). */
 const ASSETS_BUCKET = "workspace-assets";
 const BRANDED_TEMPLATE_VERSION = "telegram_photo_v1";
-/** Telegram's hard photo-caption limit. */
+/** Telegram's hard photo-caption limit, applied to the FULL final caption. */
 const BRANDED_CAPTION_MAX = 1024;
+/** Hard byte ceiling for the logo actually uploaded to Telegram. */
+const BRANDED_LOGO_MAX_BYTES = 10 * 1024 * 1024;
 /**
- * Deterministic caption assembly. The browser renders the same preview from the
- * same inputs, but this server copy is the only one that is ever posted.
+ * Locked V1 caption template. Trim only — the saved ticker is used exactly as
+ * stored (no `$` is added and none is removed). The browser renders the same
+ * preview from the same inputs, but this server copy is the only one ever posted.
  */
 function buildBrandedCaption(projectName: string, ticker: string | null, message: string): string {
   const name = projectName.trim();
   const tick = (ticker ?? "").trim();
-  const header = tick ? `${name} · $${tick.replace(/^\$+/, "")}` : name;
-  return `${header}\nOFFICIAL PROJECT UPDATE\n\n${message.trim()}`;
+  return `${name}${tick ? " · " + tick : ""}\nOFFICIAL PROJECT UPDATE\n\n${message.trim()}\n\nOfficial communication through @PepeCartelHQBot`;
 }
+
 
 
 Deno.serve(async (req: Request) => {
@@ -476,99 +479,51 @@ Deno.serve(async (req: Request) => {
      *   AMBIGUOUS Transport uncertainty — delivery is unknown. Never auto-resent.
      */
     if (action === "send_group_announcement") {
-      if (!canManageCommunity) return respond({ error: "FORBIDDEN", message: "Only workspace owners and admins can post community announcements." }, 403);
+      if (!canManageCommunity) return respond({ error: "FORBIDDEN", message: "Only workspace owners and admins can post official community broadcasts." }, 403);
       if (!groupConnectionId) return respond({ error: "GROUP_REQUIRED", message: "Choose a connected Telegram community." }, 400);
 
       const clientRequestId = String(body.clientRequestId ?? "").trim();
       if (!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(clientRequestId)) {
-        return respond({ error: "INVALID_REQUEST_ID", message: "Invalid announcement request id." }, 400);
+        return respond({ error: "INVALID_REQUEST_ID", message: "Invalid official broadcast request id." }, 400);
       }
       const messageText = typeof body.message === "string" ? body.message.trim() : "";
-      if (!messageText) return respond({ error: "INVALID_MESSAGE", message: "Enter an announcement message." }, 400);
-      if (messageText.length > 3500) return respond({ error: "INVALID_MESSAGE", message: "Announcements are limited to 3500 characters." }, 400);
+      if (!messageText) return respond({ error: "INVALID_MESSAGE", message: "Enter an official broadcast message." }, 400);
+      if (messageText.length > 3500) return respond({ error: "INVALID_MESSAGE", message: "Official broadcasts are limited to 3500 characters." }, 400);
 
       /**
        * C7.2 — optional branded delivery. The plain-text path stays the default
-       * and is completely unchanged when `branded` is not explicitly true.
+       * and is completely unchanged when `brandingEnabled` is not explicitly true.
        *
-       * Branding is NEVER taken from the request. The request only carries the
-       * identity the operator actually reviewed; the server re-reads the saved
-       * Project Profile and refuses to post when the two disagree.
+       * Only the REQUESTED intent is parsed here. The saved Project Profile and
+       * media asset are deliberately NOT read yet: an exact retry of an existing
+       * request id must return its recorded outcome even if the project's saved
+       * branding changed afterwards.
        */
-      const branded = body.branded === true;
-      const reviewed = (body.reviewedBranding ?? {}) as Record<string, unknown>;
-      const reviewedProjectName = typeof reviewed.projectName === "string" ? reviewed.projectName.trim() : "";
-      const reviewedTicker = typeof reviewed.ticker === "string" ? reviewed.ticker.trim() : "";
-      const reviewedLogoAssetId = typeof reviewed.logoAssetId === "string" ? reviewed.logoAssetId.trim() : "";
+      const brandingEnabled = body.brandingEnabled === true;
+      const reviewedProjectName = typeof body.reviewedProjectName === "string" ? body.reviewedProjectName.trim() : "";
+      const reviewedTicker = typeof body.reviewedTicker === "string" ? body.reviewedTicker.trim() : "";
+      const reviewedLogoAssetId = typeof body.reviewedLogoAssetId === "string" ? body.reviewedLogoAssetId.trim() : "";
+      const reviewedTemplateVersion = typeof body.reviewedTemplateVersion === "string" ? body.reviewedTemplateVersion.trim() : "";
 
-      let brandingSnapshot:
-        | { projectName: string; ticker: string | null; logoAssetId: string; storagePath: string; mimeType: string }
-        | null = null;
-      let deliveryKind: "TEXT" | "BRANDED_PHOTO" = "TEXT";
-      let deliveredText = messageText;
-
-      if (branded) {
-        const { data: profileRow, error: profileError } = await admin.from("project_profiles")
-          .select("project_name,ticker,logo_asset_id").eq("workspace_id", workspaceId).maybeSingle();
-        if (profileError) throw profileError;
-        if (!profileRow) {
-          return respond({ error: "BRANDING_UNAVAILABLE", message: "Save a Project Profile before posting a branded broadcast." }, 400);
-        }
-        const currentProjectName = String(profileRow.project_name ?? "").trim();
-        const currentTicker = String(profileRow.ticker ?? "").trim();
-        const currentLogoAssetId = String(profileRow.logo_asset_id ?? "").trim();
-        if (!currentProjectName || !currentLogoAssetId) {
-          return respond({ error: "BRANDING_UNAVAILABLE", message: "Add a project name and select a project logo before posting a branded broadcast." }, 400);
-        }
-        if (
-          reviewedProjectName !== currentProjectName ||
-          reviewedTicker !== currentTicker ||
-          reviewedLogoAssetId !== currentLogoAssetId
-        ) {
-          return respond({
-            error: "BRANDING_DRIFT",
-            message: "The project branding changed since you reviewed this broadcast. Review it again before posting.",
-          }, 409);
-        }
-
-        const { data: assetRow, error: assetError } = await admin.from("media_assets")
-          .select("id,workspace_id,storage_path,mime_type")
-          .eq("id", currentLogoAssetId).eq("workspace_id", workspaceId).maybeSingle();
-        if (assetError) throw assetError;
-        if (!assetRow || !assetRow.storage_path) {
-          return respond({ error: "BRANDING_UNAVAILABLE", message: "The selected project logo is no longer available. Choose a logo in Project Profile." }, 400);
-        }
-        const mimeType = String(assetRow.mime_type ?? "").toLowerCase();
-        if (mimeType !== "image/png" && mimeType !== "image/jpeg") {
-          return respond({ error: "BRANDING_LOGO_UNSUPPORTED", message: "Branded broadcasts need a PNG or JPEG project logo. Upload one in Project Profile." }, 400);
-        }
-
-        deliveryKind = "BRANDED_PHOTO";
-        deliveredText = buildBrandedCaption(currentProjectName, currentTicker || null, messageText);
-        if (deliveredText.length > BRANDED_CAPTION_MAX) {
-          return respond({
-            error: "INVALID_MESSAGE",
-            message: `Branded broadcasts are limited to ${BRANDED_CAPTION_MAX} characters including the branding header. Shorten the message or post it as plain text.`,
-          }, 400);
-        }
-        brandingSnapshot = {
-          projectName: currentProjectName,
-          ticker: currentTicker || null,
-          logoAssetId: currentLogoAssetId,
-          storagePath: String(assetRow.storage_path),
-          mimeType,
-        };
-      }
+      const deliveryKind: "TEXT" | "BRANDED_PHOTO" = brandingEnabled ? "BRANDED_PHOTO" : "TEXT";
+      /** Caption implied by the REVIEWED identity — used only for intent comparison. */
+      const reviewedCaption = brandingEnabled
+        ? buildBrandedCaption(reviewedProjectName, reviewedTicker || null, messageText)
+        : messageText;
 
       const rawGroup = await getGroup();
       if (!rawGroup) return respond({ error: "GROUP_NOT_FOUND", message: "That Telegram community is no longer connected." }, 404);
 
-      const ledgerSelect = "id,status,telegram_message_id,message_text,group_title,group_connection_id,telegram_chat_id,last_error,requested_at,sent_at,delivery_kind,delivered_text_snapshot,branding_project_name,branding_ticker,branding_logo_asset_id";
+      const ledgerSelect = "id,status,telegram_message_id,message_text,group_title,group_connection_id,telegram_chat_id,last_error,requested_at,sent_at,delivery_kind,delivered_text_snapshot,branding_template_version,branding_project_name,branding_ticker,branding_logo_asset_id";
+      let brandingSnapshot:
+        | { projectName: string; ticker: string | null; logoAssetId: string; storagePath: string; mimeType: string }
+        | null = null;
+      let deliveredText = reviewedCaption;
       const outcomeMessage = (status: string, title: string) =>
         status === "SENT"
-          ? `Announcement posted to ${title}.`
+          ? `Official broadcast posted to ${title}.`
           : status === "FAILED"
-            ? `The announcement was not posted to ${title}.`
+            ? `The official broadcast was not posted to ${title}.`
             : `Delivery to ${title} could not be confirmed. Check the community before posting again — CARTEL HQ will not resend this automatically.`;
       const ledgerResponse = (row: any, duplicate: boolean) => {
         const status = row.status === "SENDING" ? "AMBIGUOUS" : row.status;
@@ -591,21 +546,36 @@ Deno.serve(async (req: Request) => {
        * connection is NULL (the connection was deleted) can never be proven to
        * match this target, so reuse is rejected instead of guessed.
        *
-       * C7.2 — the delivery kind and the exact delivered text (plain body or
-       * branded caption) are part of that intent: the same id can never be
-       * reused to post the same words in a different form.
+       * C7.2 — the delivery kind, the branding identity that was reviewed, and
+       * the exact delivered caption are all part of that intent. A stored branded
+       * row whose logo asset id was later NULLed by asset deletion can no longer
+       * be proven to match, so it is rejected rather than guessed. Never resend.
        */
-      const sameIntent = (row: any) =>
-        String(row?.message_text ?? "") === messageText &&
-        String(row?.delivery_kind ?? "TEXT") === deliveryKind &&
-        String(row?.delivered_text_snapshot ?? "") === deliveredText &&
-        !!row?.group_connection_id &&
-        String(row.group_connection_id) === String(rawGroup.id);
+      const sameIntent = (row: any) => {
+        if (String(row?.message_text ?? "") !== messageText) return false;
+        if (!row?.group_connection_id || String(row.group_connection_id) !== String(rawGroup.id)) return false;
+        const storedKind = String(row?.delivery_kind ?? "TEXT");
+        if (storedKind !== deliveryKind) return false;
+        if (deliveryKind === "TEXT") {
+          return String(row?.delivered_text_snapshot ?? "") === messageText;
+        }
+        if (String(row?.branding_template_version ?? "") !== reviewedTemplateVersion) return false;
+        if (String(row?.branding_project_name ?? "") !== reviewedProjectName) return false;
+        if (String(row?.branding_ticker ?? "") !== reviewedTicker) return false;
+        if (!row?.branding_logo_asset_id) return false;
+        if (String(row.branding_logo_asset_id) !== reviewedLogoAssetId) return false;
+        return String(row?.delivered_text_snapshot ?? "") === reviewedCaption;
+      };
       const conflictResponse = () => respond({
         error: "IDEMPOTENCY_CONFLICT",
-        message: "This announcement id was already used for a different community or a different message. Start a new announcement.",
+        message: "This broadcast id was already used for a different community, message, or branding. Start a new official broadcast.",
       }, 409);
 
+      /**
+       * Idempotency resolution happens BEFORE any Project Profile / media asset
+       * read, before live group verification, before any storage download, and
+       * before any Telegram call.
+       */
       const { data: existing } = await admin.from("telegram_group_announcements").select(ledgerSelect)
         .eq("workspace_id", workspaceId).eq("client_request_id", clientRequestId).maybeSingle();
       if (existing) {
@@ -614,6 +584,86 @@ Deno.serve(async (req: Request) => {
         // The same request id never sends a second Telegram message.
         return ledgerResponse(existing, true);
       }
+
+      /**
+       * NEW branded request only. Branding is NEVER taken from the request: the
+       * server re-reads the saved Project Profile and the media asset and refuses
+       * to post when they disagree with what the operator reviewed.
+       */
+      if (brandingEnabled) {
+        if (reviewedTemplateVersion !== BRANDED_TEMPLATE_VERSION) {
+          return respond({ error: "BRANDING_TEMPLATE_UNSUPPORTED", message: "This branded broadcast format is no longer supported. Reload CARTEL HQ and review the broadcast again." }, 400);
+        }
+        if (!reviewedProjectName || !reviewedLogoAssetId) {
+          return respond({ error: "BRANDING_UNAVAILABLE", message: "Add a project name and select a project logo before posting a branded broadcast." }, 400);
+        }
+        const { data: profileRow, error: profileError } = await admin.from("project_profiles")
+          .select("project_name,ticker,logo_asset_id").eq("workspace_id", workspaceId).maybeSingle();
+        if (profileError) throw profileError;
+        if (!profileRow) {
+          return respond({ error: "BRANDING_UNAVAILABLE", message: "Save a Project Profile before posting a branded broadcast." }, 400);
+        }
+        const currentProjectName = String(profileRow.project_name ?? "").trim();
+        const currentTicker = String(profileRow.ticker ?? "").trim();
+        const currentLogoAssetId = String(profileRow.logo_asset_id ?? "").trim();
+        if (!currentProjectName || !currentLogoAssetId) {
+          return respond({ error: "BRANDING_UNAVAILABLE", message: "Add a project name and select a project logo before posting a branded broadcast." }, 400);
+        }
+        if (
+          reviewedProjectName !== currentProjectName ||
+          reviewedTicker !== currentTicker ||
+          reviewedLogoAssetId !== currentLogoAssetId
+        ) {
+          return respond({
+            error: "BRANDING_CHANGED",
+            message: "The project branding changed since you reviewed this broadcast. Review it again before posting.",
+          }, 409);
+        }
+
+        const { data: assetRow, error: assetError } = await admin.from("media_assets")
+          .select("id,workspace_id,asset_type,storage_path,mime_type,file_size_bytes,width,height")
+          .eq("id", currentLogoAssetId).eq("workspace_id", workspaceId).maybeSingle();
+        if (assetError) throw assetError;
+        const storagePath = String(assetRow?.storage_path ?? "").trim();
+        if (!assetRow || !storagePath) {
+          return respond({ error: "BRANDING_UNAVAILABLE", message: "The selected project logo is no longer available. Choose a logo in Project Profile." }, 400);
+        }
+        if (String(assetRow.asset_type ?? "") !== "logo") {
+          return respond({ error: "BRANDING_LOGO_UNSUPPORTED", message: "The selected asset is not a project logo. Choose a logo in Project Profile." }, 400);
+        }
+        const mimeType = String(assetRow.mime_type ?? "").toLowerCase();
+        if (mimeType !== "image/png" && mimeType !== "image/jpeg") {
+          return respond({ error: "BRANDING_LOGO_UNSUPPORTED", message: "Branded broadcasts need a PNG or JPEG project logo. Upload one in Project Profile." }, 400);
+        }
+        const sizeBytes = typeof assetRow.file_size_bytes === "number" ? assetRow.file_size_bytes : null;
+        if (sizeBytes !== null && (sizeBytes <= 0 || sizeBytes > BRANDED_LOGO_MAX_BYTES)) {
+          return respond({ error: "BRANDING_LOGO_UNSUPPORTED", message: "Branded broadcasts need a project logo of 10MB or less. Upload a smaller PNG or JPEG in Project Profile." }, 400);
+        }
+        const w = typeof assetRow.width === "number" ? assetRow.width : null;
+        const h = typeof assetRow.height === "number" ? assetRow.height : null;
+        if (w !== null && h !== null) {
+          const ratio = Math.max(w, h) / Math.max(1, Math.min(w, h));
+          if (w <= 0 || h <= 0 || w + h > 10000 || ratio > 20) {
+            return respond({ error: "BRANDING_LOGO_UNSUPPORTED", message: "Telegram cannot post this logo's dimensions. Upload a more standard PNG or JPEG logo in Project Profile." }, 400);
+          }
+        }
+
+        deliveredText = buildBrandedCaption(currentProjectName, currentTicker || null, messageText);
+        if (deliveredText.length > BRANDED_CAPTION_MAX) {
+          return respond({
+            error: "INVALID_MESSAGE",
+            message: `Branded broadcasts are limited to ${BRANDED_CAPTION_MAX} characters including the branding header and footer. Shorten the message or post it as plain text.`,
+          }, 400);
+        }
+        brandingSnapshot = {
+          projectName: currentProjectName,
+          ticker: currentTicker || null,
+          logoAssetId: currentLogoAssetId,
+          storagePath,
+          mimeType,
+        };
+      }
+
 
       // Claim the durable ledger row BEFORE live verification and before sending.
       let announcementId: string | null = null;
@@ -650,7 +700,7 @@ Deno.serve(async (req: Request) => {
         }
         announcementId = inserted?.id ?? null;
       }
-      if (!announcementId) throw new Error("Could not record this announcement. Nothing was posted.");
+      if (!announcementId) throw new Error("Could not record this official broadcast. Nothing was posted.");
 
       /** Records a definite no-send against the claimed ledger row. */
       const markFailed = async (reason: string) => {
@@ -703,6 +753,11 @@ Deno.serve(async (req: Request) => {
           const { data: fileData, error: fileError } = await admin.storage
             .from(ASSETS_BUCKET).download(brandingSnapshot.storagePath);
           if (fileError || !fileData) throw new Error(fileError?.message ?? "Logo download returned no data.");
+          // Definite pre-send gate: never hand Telegram an empty or oversize file.
+          if (fileData.size <= 0) throw new Error("The stored project logo file is empty.");
+          if (fileData.size > BRANDED_LOGO_MAX_BYTES) {
+            throw new Error("The project logo is larger than 10MB and cannot be posted to Telegram.");
+          }
           logoBytes = fileData;
         } catch (e) {
           const reason = `Could not read the project logo: ${e instanceof Error ? e.message : "unknown error"}`;
@@ -767,7 +822,7 @@ Deno.serve(async (req: Request) => {
           lastError = `Telegram response was inconclusive (${res.status}).`;
         } else if (payload?.ok === false) {
           outcome = "FAILED";
-          lastError = String(payload?.description ?? `Telegram rejected the announcement (${res.status}).`);
+          lastError = String(payload?.description ?? `Telegram rejected the official broadcast (${res.status}).`);
         } else {
           outcome = "AMBIGUOUS";
           lastError = "Telegram did not confirm a message id.";

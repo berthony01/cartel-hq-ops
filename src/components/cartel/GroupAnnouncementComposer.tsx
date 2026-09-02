@@ -32,14 +32,16 @@ import { getLaunchAccess } from "@/lib/launch-control";
 import { getProjectProfile } from "@/lib/project-profile";
 import { listWorkspaceAssets, signedUrl } from "@/lib/media";
 import {
-  BRANDED_BROADCAST_CAPTION_MAX,
+  BROADCAST_BRANDING_TEMPLATE_VERSION,
   GROUP_ANNOUNCEMENT_MAX,
+  GROUP_BRANDED_CAPTION_MAX,
   buildBrandedBroadcastCaption,
   fetchTelegramGroupStatus,
   sendGroupAnnouncement,
   type GroupAnnouncementResult,
   type ReviewedBroadcastBranding,
 } from "@/lib/telegram-group";
+import type { MediaAsset } from "@/lib/media";
 import type { GroupReadiness, TelegramGroupSetup } from "@/components/cartel/TelegramGroupCard";
 
 /**
@@ -80,10 +82,55 @@ type Attempt = {
   message: string;
   clientRequestId: string;
   branded: boolean;
+  /** Stable branding identity of that intent; empty string for plain text. */
+  brandingKey: string;
 };
 
 function newRequestId() {
   return crypto.randomUUID();
+}
+
+/**
+ * The branded intent, reduced to one comparable string. It must change whenever
+ * anything the server treats as branding identity changes.
+ */
+function makeBrandingKey(branding: ReviewedBroadcastBranding | null): string {
+  if (!branding) return "";
+  return [
+    branding.templateVersion,
+    branding.projectName,
+    branding.ticker,
+    branding.logoAssetId,
+  ].join("\u0000");
+}
+
+/**
+ * Honest saved-logo compatibility, derived only from stored metadata using the
+ * same known rules the server enforces. Unknown dimensions stay eligible: the
+ * server remains authoritative on the actual download and the Telegram call.
+ */
+function logoCompatibilityReason(asset: MediaAsset | null): string | null {
+  if (!asset) return "Select a project logo in Project Profile to post branded broadcasts.";
+  if (asset.asset_type !== "logo") {
+    return "The selected asset is not a project logo. Choose a logo in Project Profile.";
+  }
+  const mime = (asset.mime_type ?? "").toLowerCase();
+  if (mime !== "image/png" && mime !== "image/jpeg") {
+    return "Branded broadcasts need a PNG or JPEG project logo. Upload one in Project Profile.";
+  }
+  const size = typeof asset.file_size_bytes === "number" ? asset.file_size_bytes : null;
+  if (size !== null && (size <= 0 || size > 10 * 1024 * 1024)) {
+    return "Branded broadcasts need a project logo of 10MB or less. Upload a smaller PNG or JPEG in Project Profile.";
+  }
+  const w = typeof asset.width === "number" ? asset.width : null;
+  const h = typeof asset.height === "number" ? asset.height : null;
+  if (w !== null && h !== null) {
+    const ratio = Math.max(w, h) / Math.max(1, Math.min(w, h));
+    if (w <= 0 || h <= 0 || w + h > 10000 || ratio > 20) {
+      return "Telegram cannot post this logo's dimensions. Upload a more standard PNG or JPEG logo in Project Profile.";
+    }
+  }
+  return null;
 }
 
 /** The most truthful blocking reason derivable from stored/live readiness. */
@@ -147,9 +194,8 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
     profile?.logo_asset_id
       ? ((logosQuery.data ?? []).find((a) => a.id === profile.logo_asset_id) ?? null)
       : null;
-  const logoMime = (logoAsset?.mime_type ?? "").toLowerCase();
-  const logoSupported = logoMime === "image/png" || logoMime === "image/jpeg";
-  const brandingReady = !!profile?.project_name?.trim() && !!logoAsset && logoSupported;
+  const logoReason = logoCompatibilityReason(logoAsset);
+  const brandingReady = !!profile?.project_name?.trim() && !!logoAsset && !logoReason;
 
   const brandingIdentity: ReviewedBroadcastBranding | null =
     brandingReady && profile && logoAsset
@@ -157,6 +203,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
           projectName: profile.project_name.trim(),
           ticker: (profile.ticker ?? "").trim(),
           logoAssetId: logoAsset.id,
+          templateVersion: BROADCAST_BRANDING_TEMPLATE_VERSION,
         }
       : null;
 
@@ -168,11 +215,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         ? "Save a Project Profile to post branded broadcasts."
         : !profile.project_name?.trim()
           ? "Add a project name in Project Profile to post branded broadcasts."
-          : !logoAsset
-            ? "Select a project logo in Project Profile to post branded broadcasts."
-            : !logoSupported
-              ? "Branded broadcasts need a PNG or JPEG project logo. Upload one in Project Profile."
-              : null;
+          : logoReason;
 
   const [message, setMessage] = useState("");
   const [brandedRequested, setBrandedRequested] = useState(false);
@@ -216,12 +259,14 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
           trimmed,
         )
       : trimmed;
-  const brandedOverLimit = branded && previewText.length > BRANDED_BROADCAST_CAPTION_MAX;
+  const brandedOverLimit = branded && previewText.length > GROUP_BRANDED_CAPTION_MAX;
+
+  const brandingKey = makeBrandingKey(branded ? brandingIdentity : null);
 
   /**
    * Latest committed selection + draft, readable across an await. Preparation
    * compares against this ref rather than its own captured closure values, so a
-   * reviewed announcement can never differ from the submitted one.
+   * reviewed broadcast can never differ from the submitted one.
    */
   const latestRef = useRef<{
     groupConnectionId: string | null;
@@ -232,11 +277,8 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
     groupConnectionId: resolvedGroupId,
     message: trimmed,
     branded,
-    brandingKey: "",
+    brandingKey,
   });
-  const brandingKey = brandingIdentity
-    ? `${brandingIdentity.projectName}\u0000${brandingIdentity.ticker}\u0000${brandingIdentity.logoAssetId}`
-    : "";
   latestRef.current = {
     groupConnectionId: resolvedGroupId,
     message: trimmed,
@@ -252,23 +294,27 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
     setOutcome(null);
   }
 
-  // Switching community makes this a different intended announcement.
+  // Switching community makes this a different intended broadcast.
   useEffect(() => {
     resetComposer();
   }, [resolvedGroupId]);
 
-  // Editing away from a submitted intent retires that request id and outcome.
+  /**
+   * Editing away from a submitted intent retires that request id and outcome —
+   * including when the SAVED branding identity behind a branded attempt changed.
+   */
   useEffect(() => {
     if (!attempt) return;
     if (
       attempt.message !== trimmed ||
       attempt.groupConnectionId !== resolvedGroupId ||
-      attempt.branded !== branded
+      attempt.branded !== branded ||
+      attempt.brandingKey !== brandingKey
     ) {
       setAttempt(null);
       setOutcome(null);
     }
-  }, [attempt, trimmed, resolvedGroupId, branded]);
+  }, [attempt, trimmed, resolvedGroupId, branded, brandingKey]);
 
   /** Shared community state is page-level; ask it to refresh, never re-own it. */
   function refreshSharedCommunityState(id?: string | null) {
@@ -291,6 +337,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         message: snap.message,
         clientRequestId: snap.clientRequestId,
         branded: !!snap.branding,
+        brandingKey: makeBrandingKey(snap.branding),
       });
       setOutcome(null);
     },
@@ -351,7 +398,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
                 ? (brandingUnavailableReason ??
                   "Branded posting is unavailable for this project right now.")
                 : brandedOverLimit
-                  ? `Branded broadcasts are limited to ${BRANDED_BROADCAST_CAPTION_MAX} characters including the branding header. Shorten the message or turn branding off.`
+                  ? `Branded broadcasts are limited to ${GROUP_BRANDED_CAPTION_MAX} characters including the branding header. Shorten the message or turn branding off.`
                   : null;
 
   const sendDisabled =
@@ -407,9 +454,11 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
       }
       /**
        * Branded posting is reviewed against freshly re-read Project Profile
-       * identity. Any disagreement stops here; the server performs the same
-       * check again and is the authority.
+       * identity, including the locked template version. Any disagreement stops
+       * here; the server performs the same check again and is the authority.
        */
+      let freshBranding: ReviewedBroadcastBranding | null = null;
+      let freshLogoUrl: string | null = null;
       if (clicked.branded) {
         if (
           profileResult.status !== "fulfilled" ||
@@ -424,17 +473,27 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         const freshLogo = freshProfile?.logo_asset_id
           ? ((logosResult.value.data ?? []).find((a) => a.id === freshProfile.logo_asset_id) ?? null)
           : null;
-        const freshMime = (freshLogo?.mime_type ?? "").toLowerCase();
-        const freshKey =
-          freshProfile?.project_name?.trim() &&
-          freshLogo &&
-          (freshMime === "image/png" || freshMime === "image/jpeg")
-            ? `${freshProfile.project_name.trim()}\u0000${(freshProfile.ticker ?? "").trim()}\u0000${freshLogo.id}`
-            : "";
+        const freshIdentity: ReviewedBroadcastBranding | null =
+          freshProfile?.project_name?.trim() && freshLogo && !logoCompatibilityReason(freshLogo)
+            ? {
+                projectName: freshProfile.project_name.trim(),
+                ticker: (freshProfile.ticker ?? "").trim(),
+                logoAssetId: freshLogo.id,
+                templateVersion: BROADCAST_BRANDING_TEMPLATE_VERSION,
+              }
+            : null;
+        const freshKey = makeBrandingKey(freshIdentity);
         if (!freshKey || freshKey !== clicked.brandingKey) {
           toast.error(
             "Your project branding changed while this broadcast was loading. Review it again — nothing was posted.",
           );
+          return;
+        }
+        freshBranding = freshIdentity;
+        // The reviewed image must be the freshly resolved logo, never a stale preview URL.
+        freshLogoUrl = freshLogo ? await signedUrl(freshLogo.storage_path, 300) : null;
+        if (!freshLogoUrl) {
+          toast.error("Could not load your project logo for review. Nothing was posted.");
           return;
         }
       }
@@ -452,10 +511,11 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         attempt &&
         attempt.groupConnectionId === clicked.groupConnectionId &&
         attempt.message === clicked.message &&
-        attempt.branded === clicked.branded
+        attempt.branded === clicked.branded &&
+        attempt.brandingKey === clicked.brandingKey
           ? attempt.clientRequestId
           : newRequestId();
-      const brandingForSend = clicked.branded ? clicked.branding : null;
+      const brandingForSend = clicked.branded ? freshBranding : null;
       setSnapshot({
         groupConnectionId: clicked.groupConnectionId,
         groupTitle: live.group?.title ?? group.title,
@@ -469,7 +529,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
             )
           : clicked.message,
         branding: brandingForSend,
-        brandingLogoUrl: brandingForSend ? logoPreviewUrl : null,
+        brandingLogoUrl: brandingForSend ? freshLogoUrl : null,
       });
       setConfirmOpen(true);
     } finally {
@@ -569,11 +629,16 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
                 </p>
               ) : branded ? (
                 <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  Branded posts are limited to {BRANDED_BROADCAST_CAPTION_MAX} characters including
-                  the branding header. The branding is re-checked against your saved Project Profile
+                  Branded posts are limited to {GROUP_BRANDED_CAPTION_MAX} characters including the
+                  branding header. The branding is re-checked against your saved Project Profile
                   before anything is posted.
                 </p>
               ) : null}
+              <p className="mt-2 border-t border-border/60 pt-2 text-xs leading-relaxed text-muted-foreground">
+                Project branding helps members recognize an official project communication. It is
+                not proof of token safety, team identity/KYC, contract safety, or investment
+                quality.
+              </p>
             </div>
 
             {trimmed ? (
@@ -595,7 +660,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
                   <p
                     className={`mt-1 text-right text-xs ${brandedOverLimit ? "text-destructive" : "text-muted-foreground"}`}
                   >
-                    {previewText.length}/{BRANDED_BROADCAST_CAPTION_MAX}
+                    {previewText.length}/{GROUP_BRANDED_CAPTION_MAX}
                   </p>
                 ) : null}
                 <p className="mt-2 border-t border-border/60 pt-2 text-xs leading-relaxed text-muted-foreground">

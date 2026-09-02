@@ -438,14 +438,20 @@ export type GroupAnnouncementResult = {
 /* C7.2 — Official Broadcast branding                                  */
 /* ------------------------------------------------------------------ */
 
-/** Telegram's hard photo-caption limit; enforced again server-side. */
-export const BRANDED_BROADCAST_CAPTION_MAX = 1024;
-export const BRANDED_BROADCAST_TEMPLATE_VERSION = "telegram_photo_v1";
+/**
+ * Telegram's hard photo-caption limit, applied to the FULL final caption
+ * including the branding header and footer. Enforced again server-side.
+ */
+export const GROUP_BRANDED_CAPTION_MAX = 1024;
+export const BROADCAST_BRANDING_TEMPLATE_VERSION = "telegram_photo_v1";
 
 /**
- * `telegram_photo_v1` caption assembly, byte-identical to the server copy in
- * the `telegram-group` function. This is preview only — the server rebuilds the
- * caption from the saved Project Profile and posts only its own result.
+ * Locked `telegram_photo_v1` caption assembly, semantically byte-identical to
+ * the server copy in the `telegram-group` function. Trim only: the saved ticker
+ * is used exactly as stored — no `$` is added and none is removed.
+ *
+ * Preview only — the server rebuilds the caption from the saved Project Profile
+ * and posts only its own result.
  */
 export function buildBrandedBroadcastCaption(
   projectName: string,
@@ -454,8 +460,7 @@ export function buildBrandedBroadcastCaption(
 ): string {
   const name = projectName.trim();
   const tick = (ticker ?? "").trim();
-  const header = tick ? `${name} · $${tick.replace(/^\$+/, "")}` : name;
-  return `${header}\nOFFICIAL PROJECT UPDATE\n\n${message.trim()}`;
+  return `${name}${tick ? " · " + tick : ""}\nOFFICIAL PROJECT UPDATE\n\n${message.trim()}\n\nOfficial communication through @PepeCartelHQBot`;
 }
 
 /** The Project Profile identity the operator actually reviewed before posting. */
@@ -463,6 +468,7 @@ export type ReviewedBroadcastBranding = {
   projectName: string;
   ticker: string;
   logoAssetId: string;
+  templateVersion: typeof BROADCAST_BRANDING_TEMPLATE_VERSION;
 };
 
 /**
@@ -487,8 +493,14 @@ export function sendGroupAnnouncement(params: {
     message: params.message,
     clientRequestId: params.clientRequestId,
     ...(params.branding
-      ? { branded: true, reviewedBranding: params.branding }
-      : {}),
+      ? {
+          brandingEnabled: true,
+          reviewedProjectName: params.branding.projectName,
+          reviewedTicker: params.branding.ticker,
+          reviewedLogoAssetId: params.branding.logoAssetId,
+          reviewedTemplateVersion: params.branding.templateVersion,
+        }
+      : { brandingEnabled: false }),
   });
 }
 
