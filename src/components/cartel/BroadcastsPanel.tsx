@@ -565,7 +565,7 @@ export function BroadcastsPanel({
         open={confirmOpen}
         onOpenChange={(open) => {
           setConfirmOpen(open);
-          if (!open) setConfirmCount(null);
+          if (!open) setConfirmSnapshot(null);
           // Explicit cancel BEFORE any send attempt: the next confirmation
           // starts a fresh idempotency id. After a failed attempt the id is
           // preserved so an identical retry stays idempotent.
@@ -575,37 +575,39 @@ export function BroadcastsPanel({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Send this update to {confirmCount ?? 0} watcher(s)?
+              Send this update to {confirmSnapshot?.eligibleCount ?? 0} watcher(s)?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {selected
-                ? `${selected.token_name} (${selected.ticker}) — ${LAUNCH_STATUS_LABELS[status!]}. `
+              {confirmSnapshot
+                ? `${confirmSnapshot.launchLabel} — ${confirmSnapshot.statusLabel}. `
                 : ""}
               Only active watchers who currently allow project updates will receive it. Nothing is
               posted to your community group.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="max-h-48 overflow-y-auto rounded-md border border-border/60 bg-background/40 p-3">
-            {title.trim() ? (
+            {confirmSnapshot?.sendTitle ? (
               <p className="text-xs font-semibold text-foreground [overflow-wrap:anywhere]">
-                {title.trim()}
+                {confirmSnapshot.sendTitle}
               </p>
             ) : null}
             <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-              {body}
+              {confirmSnapshot?.sendBody ?? ""}
             </p>
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              disabled={mutation.isPending || !confirmCount || confirmCount < 1}
+              disabled={
+                mutation.isPending || !confirmSnapshot || confirmSnapshot.eligibleCount < 1
+              }
               onClick={(e) => {
                 e.preventDefault();
-                mutation.mutate();
+                if (!confirmSnapshot || confirmSnapshot.eligibleCount < 1) return;
+                mutation.mutate(confirmSnapshot);
                 setConfirmOpen(false);
               }}
             >
-
               Send watcher update
             </AlertDialogAction>
           </AlertDialogFooter>
