@@ -1,86 +1,101 @@
-# Sticker Lab V2A — Surface + End-to-End Visibility Audit (READ-ONLY)
+# C3 Pre-Build Architecture Check — Community Command > Audience
 
-Gate verified: HEAD `87b833607b7d48baf74ffeca12f4ede962fcea00`, working tree clean. No edits, no commands against Kie/Telegram/database.
+Read-only inspection at gate `94fb1674b7eb904305824a44bf9508eda60543ec` (repo HEAD confirmed). No files, DB, functions, or Telegram state were changed.
 
-Classification used: **A** visible + connected end-to-end, **B** visible but partial/unclear, **C** built but effectively invisible, **D** planned/not built.
+## 1. Verified current state (live DB)
 
-## Where the V2 surfaces actually live
+Active-watcher fields on `launch_watch_subscriptions`: `is_active`, `updates_enabled`, `reminders_enabled`, `subscribed_at`, `unsubscribed_at`, `last_interaction_at`, `confirmation_status` (`null|sent|failed|ambiguous`), `confirmation_attempt_count`, `source` (always `telegram_deep_link`). Constraint guarantees `is_active=true` implies `unsubscribed_at IS NULL`.
 
-Everything V2A is inside one route: `src/routes/_authenticated/sticker-lab.new.tsx` (4,325 lines), rendered as five conditional step blocks (`step === 1..5`, L1726 / L2021 / L2228 / L2754 / L3320). `sticker-lab.index.tsx` is a pack list, `sticker-lab.$packId.tsx` is a read-only pack manager that links back into the builder (`Continue editing` -> `/sticker-lab/new?pack=<id>`, L193-195; `?pack=<id>&step=5` at L182).
+Existing RPCs (all `STABLE SECURITY DEFINER`, all gate on `is_workspace_member(workspace_id, auth.uid())`, all counts-only):
+- `get_launch_watch_summary(_launch_id)` -> `active_count`, `total_count`
+- `get_launch_watcher_update_stats(_launch_id)` -> `active_watchers`, `updates_enabled_watchers`, `updates_muted_watchers`
+- `get_launch_notification_summary(_launch_id)` -> `event_count`, `pending_count` (pending+processing+retry), `sent_count`, `failed_count`, `ambiguous_count`, `skipped_count`, `reminder_enabled_watchers` (active AND reminders_enabled)
+- `get_launch_watch_confirmation_summary(_launch_id)` -> `delivered/failed/ambiguous/untracked/attempted` over ACTIVE watchers
 
-Consequence: **all V2 work is only reachable after clicking Create Sticker Pack or Continue editing, then stepping to the right step.** Nothing on the Sticker Lab home page names Blueprint, Concept Studio, Sticker Studio, version history or published safety. That alone explains "I do not see what the recent phases created."
+Wrappers already exist in `src/lib/launch-control.ts` for all four.
 
-## Capability-by-capability findings
+`launch_notification_deliveries`: RLS on, 0 policies, no anon/authenticated grants (service-role only). `status` CHECK = `pending|processing|retry|sent|failed|ambiguous|skipped`. `error_class` is free text; only two producers exist in live code: `mark_stale_launch_notification_claims` writes `stale_processing_claim`, and `telegram-webhook` writes a per-outcome class on confirmation DMs. Live table today holds exactly 1 row (`sent`, `error_class` null). **CORRECTION: `error_class` cannot carry a dashboard taxonomy — it is unenumerated, sparsely populated, and does not distinguish a blocked bot. C3 must classify on `status` only.**
 
-### 1. Creative Blueprint / Character Lock — A (with one B caveat)
-- Character Lock is authored in Brand Kit (`brand-kit.tsx` L485 panel, canonical reference picker L589, persisted via `writeCharacterLock` L220 into `brand_kits.metadata`).
-- Builder Step 1 shows a Character Lock card with status badge, subject/traits/wardrobe/never-change list, a "Set up in Brand Kit" link, and the per-pack opt-in checkbox `Use Brand Kit Character Lock for this pack` (L1909-2016).
-- Creative Direction (purpose, audience, tone, humor, intensity, visual direction, plus a collapsed `Text treatment & pack rules` block) is Step 2, L2112-2222.
-- Generation genuinely consumes it: `backend-source/edge-functions/sticker-ai/index.ts` parses `creative_blueprint` (L104, L469), applies the lock as an identity contract (L258-293), uses canonical references as fallback (L488-500), and records `character_lock_applied` (L558).
-- Caveat (B): it only takes effect **after the pack is saved** (blueprint lives on the pack row), and the Text/pack-rules half is inside a `<details>` most users will never open.
+## 2. Classification contract (MECE over ACTIVE watchers)
 
-### 2. AI Concept Studio — A, but discoverable only inside Step 3
-- Explicit actions exist: `Suggest unlocked concepts` and `Alternatives for selected (n)` (L2253-2278), gated by a cost/scope `AlertDialog` (L2648-2699) that states tokens-only, no images.
-- Suggestions land in a non-destructive preview panel with per-item `Use this one`, `Use all suggestions`, `Suggest another set`, `Discard` (L2318-2426), plus a second confirm when the pack is already saved (L2701-2748).
-- Per-concept lock/reorder/duplicate/remove/select-for-alternative controls exist (L2514-2586); `Mark concept board ready` at L2594-2630.
-- Connected end-to-end via `src/lib/sticker-concepts.ts` -> Edge Function `sticker-concepts`; a free `config` probe drives the disabled state (`conceptsConfigured`).
-- Persistence: applying only mutates the local draft; concepts persist to the DB on `Save pack to project` (L2632-2646). Correct but easy to misread as "AI results were lost".
+Per ACTIVE watcher, take its single most recent delivery row (`launch_notification_deliveries` joined via `subscription_id`, for this launch), ordered `updated_at DESC, created_at DESC, id DESC`. Bucket by that row's `status`:
 
-### 3. Sticker Studio / batch generation — A
-- Step 4 header "Sticker Studio" (L2755). Toolbar: `Select all ungenerated`, `Clear selection`, `Generate selected (n)` (L2919-2964); per-card `Select for batch` checkbox with disabled reasons in `title` (L3101-3124).
-- `Generate first test sticker` targets `draft.concepts[0]` (L2887-2903); `Generate remaining (n)` (L2904-2912); `Retry failed (n)` (L2865-2873); per-card Generate/Regenerate/Retry (L3144-3160) and per-card PNG download (L3162-3173).
-- Cost gates: both dialogs state 2 Kie tasks per sticker (L3181-3236).
-- Concurrency: `SELECTED_BATCH_CONCURRENCY = 2` (L1509), worker-pool over a shared cursor (L1514-1561) — surfaced honestly in the dialog copy "runs up to 2 stickers at a time".
-- Visibility caveat: the selection toolbar renders only when `configured && selectableIds.length > 0`, so on a fully generated pack the batch surface disappears entirely.
+| Bucket | Rule | Label |
+| --- | --- | --- |
+| Last known: delivered | latest status = `sent` | "Last delivery succeeded" |
+| Last known: rejected by Telegram | latest status = `failed` | "Telegram rejected the last delivery" |
+| Outcome uncertain | latest status = `ambiguous` | "Last delivery outcome unconfirmed" |
+| In flight | latest status in `pending|processing|retry` | "Delivery in progress" |
+| Not sent to | latest status = `skipped` | "Last message was not sent (preferences)" |
+| Never contacted | no delivery row at all | "No message attempted yet" |
 
-### 4. Version history / variations — B for history, D for variations
-- Visible: a per-card collapsed `<details>` "Version history (n)" with thumbnails, version numbers, `Current` badge and `Set current` (L3031-3097). It renders **only** when `versionsBySticker[stickerId].length > 0`, and only on Step 4.
-- Read path: `src/lib/sticker-versions.ts` (select from `sticker_versions`, signed thumbnails).
-- **No A/B/C variation generation exists anywhere** — no "generate variations" action, no variation column, no provider call for N candidates. Repo grep for variation/variant returns only unrelated Button `variant` props. This is D: history/recovery infrastructure only.
-- Gap worth flagging: **no `insert` into `sticker_versions` exists in this repo** (only reads in `sticker-versions.ts` and `telegram-stickers/index.ts` L396; no SQL migration in `supabase/migrations` creates or populates it). Row creation is happening outside the readable snapshot (external DB trigger or an unsynced function). Unverified from code alone — this needs live inspection before any Phase 5 work depends on it.
+Exactly one bucket per active watcher; buckets sum to `active_watchers`. **CORRECTION: drop "Reached recently" and "Blocked bot"** — no window is defensible and blocking is not observable. Use "last known outcome" wording with an "as of latest attempt" caption.
 
-### 5. Phase 4B Set Current / Telegram replacement — C (functionally present, practically hidden)
-- The only entry point is the `Set current` button inside the collapsed version-history `<details>` inside a sticker card inside Step 4. Two-stage confirmation exists: DB-only dialog (L3239-3277) then a separate `Replace the live Telegram sticker?` dialog (L3280-3315) wired to `confirmTelegramRestore`, backed by `telegram-stickers` `replace_version`.
-- A user who never expands a card's version history will never learn this exists. Nothing on Step 5, `$packId`, or the pack list mentions restore/replace.
+Answer to Q4: in-flight (`pending|processing|retry`) must NOT be folded into reachable or unreachable — it gets its own bucket, otherwise the dashboard flips values as the runner drains the queue. `skipped` is a preference/eligibility outcome, not a reachability signal, and gets its own bucket.
 
-### 6. Phase 4C Published Mutation Safety — A visually, C for the server half
-- Visible: card-level `Live on Telegram` disabled button plus explanatory line (L3126-3142), batch checkbox disabled with tooltip reason (L3107-3115), lock-aware toast on first-test (L2892-2897).
-- Invisible by design: the `STICKER_PUBLISHED` HTTP 409 pre-billing guard in `sticker-ai`. Correct — no surface needed, but note there is no place in the UI that tells the user "your account cannot be billed for a published sticker".
+## 3. Preferences (Q5)
 
-### 7. Review / Quality Center — B
-Present in Step 5 today: pack readiness header with Ready/In progress/Failed stats (L3326-3366), live progress bar for browser checks (L3368-3400), `Re-check transparency & cutout` and `Refresh status` (L3402-3422), a collapsed `Verification detail` block with the four counters — Backend ready, Backend transparency verified, Browser alpha verified, Telegram cutout verified (L3426-3464), per-sticker verification lines including halo cleanup wording "Outer halo will be removed on export (n px)" (L3548-3561), export gate notice (L3468-3477), per-sticker emoji/keywords (L3592-3623), ZIP/PNG export (L4090-4123), and the long halo explainer under `Advanced details` (L4125-4178).
-Not present: any named "Quality Center" surface, pack-level pass/fail checks beyond counters, per-sticker manual re-check, or side-by-side compare. The richer V2 Quality Center is **D**; the underlying checks are already **A** but buried under two `<details>`.
+Show project-update eligibility and reminder eligibility separately — the enqueue trigger filters on `updates_enabled` for `WATCHER_UPDATE` and on `reminders_enabled` for `REMINDER_24H|REMINDER_1H`, so they are genuinely different audiences. Counts needed: `active_watchers`, `updates_enabled_watchers`, `updates_muted_watchers`, `reminders_enabled_watchers`, `reminders_muted_watchers`. The last two are not exposed together today; fold them into the new RPC rather than composing three calls.
 
-### 8. Release / Telegram — B (coherent within Step 5, split from everything else)
-One screen contains Community targets with per-group readiness and select-all/clear (L3648-3777), Publish & send card with lifecycle-aware single primary action (`lifecycleMode` publish/update/add/retry/attention, L3992-4019), `Refresh Telegram status`, `Open sticker pack`, `Send test sticker to community` (L4020-4052), per-group delivery state (L3877-3931), per-sticker Telegram status in a `<details>` (L3965-3989), set-naming preview (L3839-3853), and a `Next step — Sticker Drops` card that renders only when `allPublished || packSchedules.length > 0` (L4180+).
-Split points: community connection/onboarding lives in `/telegram`, Sticker Drops scheduling in its own surface, and `$packId` duplicates a read-only view of the same state. So: one coherent publish flow, but discovery of it is spread across three routes.
+## 4. New RPC (Q6, Q7)
 
-### 9. Pack modes / static vs animated — D
-No pack-mode concept exists. `telegram-stickers/index.ts` L84 hardcodes `sticker_format: "static"`. There is no animated/WEBM/TGS path, no UI toggle, no schema field in the readable snapshot. Nothing inferred.
+Existing RPCs cannot express latest-delivery-per-watcher, so one new read-only RPC is required. Migration + thin wrapper is safer than client-side composition (no delivery rows reach the browser, one round trip, one auth gate).
 
-### 10. Navigation / onboarding — the core defect
-- Sidebar has a single `/sticker-lab` entry (`src/lib/nav.ts` L58); the dashboard links to it twice (`index.tsx` L589, L616).
-- The home page "Workflow" rail renders `FLOW_STEPS` (`sticker-lab.index.tsx` L364) = **V1 labels**: Character Reference, Pack Setup, Sticker Concepts, Generate, Review & Publish (`src/lib/sticker-lab.ts` L173-179).
-- The builder footer renders `BUILDER_STEPS` (L4276) = Character Reference, Pack Setup, Sticker Concepts, **Generation Preview**, Review.
-- The actual step cards are titled **Concept Studio** (L2230) and **Sticker Studio** (L2756).
-So three different vocabularies describe the same five steps, and the two the user sees first are both the older ones. Nothing anywhere says "Blueprint".
+```
+public.get_launch_audience_summary(_launch_id uuid)
+returns table (
+  active_watchers            bigint,
+  total_watchers             bigint,
+  updates_enabled_watchers   bigint,
+  updates_muted_watchers     bigint,
+  reminders_enabled_watchers bigint,
+  reminders_muted_watchers   bigint,
+  last_sent_watchers         bigint,
+  last_failed_watchers       bigint,
+  last_ambiguous_watchers    bigint,
+  last_inflight_watchers     bigint,
+  last_skipped_watchers      bigint,
+  never_contacted_watchers   bigint,
+  last_delivery_at           timestamptz
+)
+language plpgsql stable security definer set search_path = public
+```
+Body: resolve `launches.workspace_id` (raise `P0002` if missing), require `is_workspace_member(workspace_id, auth.uid())` else `42501` — matching the four existing RPCs verbatim. Then `LEFT JOIN LATERAL` the newest delivery per active subscription and aggregate with `count(*) filter (...)`. Returns counts and one timestamp only; no `telegram_user_id`, no `subscription_id`, no message text. Grant `EXECUTE` to `authenticated` only (mirror existing RPC grants); no anon.
 
-## Prioritized audit conclusion (no implementation proposed)
+## 5. UI contract (Q8, Q9)
 
-P0 — invisibility, not missing functionality:
-1. Terminology drift across `FLOW_STEPS`, `BUILDER_STEPS` and the rendered card titles; the home page still teaches the V1 model.
-2. Phase 4B Set Current / Telegram replacement has no discoverable entry point outside a doubly-collapsed panel.
-3. Creative Blueprint is split across Brand Kit (lock) and Step 1 + Step 2 (opt-in + direction) with no single "Blueprint" surface or summary of what will be applied at generation time.
+`src/components/cartel/AudiencePanel.tsx`, rendered in the existing `audience` tab of `/telegram`, reusing the same `?launch=` search param and the same launch-selector behaviour already implemented in `BroadcastsPanel` (selection writes the param with `replace: true`; invalid/absent param falls back to the primary launch). Sections and labels:
+1. **Watchers** — Active watchers / All-time opt-ins, caption "Aggregate only. CARTEL HQ never shows watcher identities."
+2. **What they receive** — Project updates: allowed / muted; Countdown reminders: allowed / muted.
+3. **Last known delivery outcome** — the six buckets above, with caption "Based on each active watcher's most recent message attempt" and "as of <last_delivery_at>".
+4. **Onboarding confirmation** — reuse existing `get_launch_watch_confirmation_summary`, keeping the existing "untracked" wording (pre-tracking opt-ins are never reported as failures).
 
-P1 — truth/verification risk:
-4. `sticker_versions` write path is not evidenced anywhere in this repository; the entire version-history and Set-Current feature depends on it. Requires live inspection of the external project before further phases build on it.
-5. Version history and the Quality Center counters are gated behind conditional rendering (`length > 0`, `configured && selectableIds.length > 0`), so on common pack states the V2 surfaces silently vanish.
+No per-person rows, no exports, no send controls in this tab. Empty state when `total_watchers = 0`: explain Launch Watch opt-in and link to Launch Control. Loading: skeletons, never zeros. Error: inline retry with the RPC message; `42501` renders "You do not have access to this launch." Normal workspace members see the identical dashboard (member-level gate, matching every other summary RPC); send permissions stay unchanged.
 
-P2 — genuine gaps, correctly reported as not built:
-6. A/B/C variation generation: **not built** (D).
-7. Named Quality Center with pack-level checks: **not built** (D); underlying checks exist.
-8. Animated/static pack modes: **not built** (D).
+## 6. Privacy / performance (Q10, Q11)
 
-No code exists without any entry point except the version-write path in item 4 (external) and the `sticker-ai` 409 guard in item 6 of section 6 (intentionally serverside).
+Privacy: PASS as designed — deliveries and subscriptions stay service-role only; the browser sees counts and one timestamp. Only risk is a future per-bucket drill-down; C3 must forbid it.
 
-Stop point reached. No edits made.
+Performance: existing indexes are `launch_notification_deliveries_subscription_id_idx` and `launch_watch_subscriptions_active_launch_idx`. The lateral "newest per subscription" probe sorts within each subscription's rows. Include in the same migration:
+`CREATE INDEX IF NOT EXISTS launch_notification_deliveries_sub_recent_idx ON public.launch_notification_deliveries (subscription_id, updated_at DESC, created_at DESC);`
+Current volume is 1 delivery row, so this is pre-emptive, not corrective.
+
+## 7. C3 allowlist / prohibited (Q12)
+
+Allowed: one migration (the RPC + grant + index above); `src/lib/launch-control.ts` (types + one wrapper); new `src/components/cartel/AudiencePanel.tsx`; `src/routes/_authenticated/telegram.tsx` (swap the audience placeholder only). Generated `src/integrations/supabase/types.ts` may change only via the platform regeneration.
+
+Prohibited: any change to existing RPCs, triggers, RLS, grants beyond the one new EXECUTE; any Edge Function deploy or Telegram call; any change to `BroadcastsPanel.tsx`, `launch-control.tsx` route, or notification runtime; any exposure of `telegram_user_id`/`subscription_id`/per-row delivery data; any "blocked bot", "reached recently", "safe/verified token" wording; any publish; any data mutation.
+
+## 8. Post-build audit checklist (Q13)
+
+1. Confirm the diff is exactly the allowlisted files plus the migration.
+2. `pg_get_functiondef` of the new RPC: member gate present, `stable security definer`, `search_path=public`, no identity columns in the return type.
+3. `SELECT has_function_privilege('anon', ...)` is false; `authenticated` is true.
+4. Non-member call returns `42501`; unknown launch returns `P0002`.
+5. Bucket sum equals `active_watchers` on live data, verified by an independent SQL cross-check.
+6. Network tab on `/telegram?tab=audience&launch=<id>`: response body contains no `telegram_user_id` and no delivery rows.
+7. `?launch=` round-trips between Broadcasts and Audience tabs.
+8. `bunx tsgo --noEmit` and production build pass.
+9. Preview only — not published.
+
+**Verdict: PASS WITH CORRECTIONS** — proceed with the contract above; the two corrections are (a) drop the `error_class`-based taxonomy and "blocked bot"/"reached recently" labels, and (b) add explicit in-flight and skipped buckets so the classification is mutually exclusive and exhaustive.
