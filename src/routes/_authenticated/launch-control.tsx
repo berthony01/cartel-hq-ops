@@ -604,46 +604,10 @@ function LaunchControlPage() {
   });
   const watcherUpdates = watcherUpdateHistoryQuery.data ?? [];
 
-  const [updateTitle, setUpdateTitle] = useState("");
-  const [updateBody, setUpdateBody] = useState("");
-  // ONE client request id per confirmed send attempt. It survives errors so a
-  // retry is idempotent server-side, and is only cleared on definite success.
-  const [updateRequestId, setUpdateRequestId] = useState<string | null>(null);
-  const [confirmUpdateSend, setConfirmUpdateSend] = useState(false);
+  // Composing and sending watcher updates moved to Community Command →
+  // Broadcasts (C2). Launch Control keeps the read-only audience counts and
+  // recent outcomes only, so exactly one send composer exists.
 
-  useEffect(() => {
-    setUpdateTitle("");
-    setUpdateBody("");
-    setUpdateRequestId(null);
-    setConfirmUpdateSend(false);
-  }, [selected?.id]);
-
-  const watcherUpdateMutation = useMutation({
-    mutationFn: async () => {
-      if (!selected) throw new Error("No launch selected.");
-      // The id is minted before the confirmation dialog opens, so a retry of
-      // the same confirmed attempt reuses it and stays server-side idempotent.
-      const requestId = updateRequestId;
-      if (!requestId) throw new Error("Confirm the send again to continue.");
-      return createLaunchWatcherUpdate({
-        launchId: selected.id,
-        clientRequestId: requestId,
-        title: updateTitle.trim() ? updateTitle.trim() : null,
-        body: updateBody,
-      });
-    },
-    onSuccess: () => {
-      toast.success("Watcher update queued for delivery");
-      setUpdateTitle("");
-      setUpdateBody("");
-      setUpdateRequestId(null);
-      void watcherUpdateStatsQuery.refetch();
-      void watcherUpdateHistoryQuery.refetch();
-      void notificationSummaryQuery.refetch();
-    },
-    onError: (err: unknown) =>
-      toast.error(err instanceof Error ? err.message : "Could not send the watcher update."),
-  });
 
   // ---- countdown + reminder readiness (saved launch fields only) -----------
   const nowMs = useClientNow(30_000);
