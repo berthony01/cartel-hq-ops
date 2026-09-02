@@ -26,27 +26,38 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Switch } from "@/components/ui/switch";
 import { useWorkspace } from "@/lib/workspace-context";
 import { getLaunchAccess } from "@/lib/launch-control";
+import { getProjectProfile } from "@/lib/project-profile";
+import { listWorkspaceAssets, signedUrl } from "@/lib/media";
 import {
+  BRANDED_BROADCAST_CAPTION_MAX,
   GROUP_ANNOUNCEMENT_MAX,
+  buildBrandedBroadcastCaption,
   fetchTelegramGroupStatus,
   sendGroupAnnouncement,
   type GroupAnnouncementResult,
+  type ReviewedBroadcastBranding,
 } from "@/lib/telegram-group";
 import type { GroupReadiness, TelegramGroupSetup } from "@/components/cartel/TelegramGroupCard";
 
 /**
  * Community Command → Broadcasts → Official Community Broadcast (C7).
  *
- * Posts ONE plain-text announcement to ONE connected community. Every rule that
+ * Posts ONE announcement to ONE connected community. Every rule that
  * matters — owner/admin authorization, live bot verification, exact
- * target+message idempotency and the durable announcement ledger — lives in the
- * `telegram-group` Edge Function. This component is presentation, truthful
- * disabling, and correct client-request-id lifecycle only.
+ * target+message idempotency, branding validation against the saved Project
+ * Profile, and the durable announcement ledger — lives in the `telegram-group`
+ * Edge Function. This component is presentation, truthful disabling, and
+ * correct client-request-id lifecycle only.
  *
  * Outcomes are never collapsed: a delivery that could not be confirmed
  * (AMBIGUOUS) is reported as uncertain and is NEVER resent automatically.
+ *
+ * C7.2 — branding is OPTIONAL and OFF by default; plain text stays the default
+ * delivery. The branding shown here is a preview of what the server will
+ * rebuild from the saved profile, never the source of what gets posted.
  *
  * Shared community state stays owned by the single page-level
  * `useTelegramGroupSetup()` hook; this component only reads it and asks it to
@@ -57,6 +68,10 @@ type Snapshot = {
   groupTitle: string;
   message: string;
   clientRequestId: string;
+  /** Exactly what will be posted: plain body, or the branded caption. */
+  deliveredText: string;
+  branding: ReviewedBroadcastBranding | null;
+  brandingLogoUrl: string | null;
 };
 
 /** The exact intent already submitted to the server under `clientRequestId`. */
@@ -64,6 +79,7 @@ type Attempt = {
   groupConnectionId: string;
   message: string;
   clientRequestId: string;
+  branded: boolean;
 };
 
 function newRequestId() {
