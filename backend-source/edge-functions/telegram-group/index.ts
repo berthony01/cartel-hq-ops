@@ -86,6 +86,54 @@ Deno.serve(async (req: Request) => {
     return group?.bot_is_admin === false && (last === "left" || last === "kicked") ? last : null;
   };
 
+  /**
+   * Launch Watch CTA eligibility — ONE shared definition for both the welcome
+   * card (Phase 5.1/5.2) and the Official Community Broadcast CTA. The private
+   * `launch_watch_token` is read here and used ONLY to build a Telegram deep
+   * link server-side; it is never returned to the browser.
+   */
+  const LW_OPEN_STATUSES = ["WATCHLIST_OPEN", "LAUNCH_APPROACHING", "CONTRACT_PENDING", "OFFICIAL_CONTRACT_REGISTERED"];
+  const LW_TOKEN_PATTERN = /^[0-9a-f]{24}$/;
+  const isHttpUrl = (value: unknown) => {
+    if (typeof value !== "string" || !value.trim()) return false;
+    try { const u = new URL(value.trim()); return u.protocol === "https:" || u.protocol === "http:"; } catch { return false; }
+  };
+  const loadEligibleLaunchRows = async (launchId?: string) => {
+    let query = admin.from("launches")
+      .select("id,token_name,ticker,chain,status,launch_watch_token,project_profile_id,project_profiles(workspace_id,project_name,discovery_status,website_url,telegram_url,x_url)")
+      .eq("workspace_id", workspaceId)
+      .in("status", LW_OPEN_STATUSES);
+    if (launchId) query = query.eq("id", launchId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data ?? []).filter((row: any) => {
+      const profile = Array.isArray(row?.project_profiles) ? row.project_profiles[0] : row?.project_profiles;
+      // The Project Profile must belong to the SAME workspace as the launch.
+      return String(profile?.workspace_id ?? "") === String(workspaceId)
+        && profile?.discovery_status === "published"
+        && LW_TOKEN_PATTERN.test(String(row?.launch_watch_token ?? ""));
+    });
+  };
+  /** Safe browser-facing option shape. Never includes the Launch Watch token. */
+  const toOption = (row: any) => {
+    const profile = Array.isArray(row?.project_profiles) ? row.project_profiles[0] : row?.project_profiles;
+    return {
+      launchId: String(row.id),
+      projectName: String(profile?.project_name ?? "Project"),
+      tokenName: String(row.token_name ?? ""),
+      ticker: String(row.ticker ?? ""),
+      chain: String(row.chain ?? ""),
+      status: String(row.status ?? ""),
+      hasWebsite: isHttpUrl(profile?.website_url),
+      hasTelegram: isHttpUrl(profile?.telegram_url),
+      hasX: isHttpUrl(profile?.x_url),
+    };
+  };
+  /** The one canonical Launch Watch deep link. Token stays server-side. */
+  const launchWatchDeepLink = (row: any) => `https://t.me/PepeCartelHQBot?start=lw_${String(row.launch_watch_token)}`;
+
+
+
   const verifyGroup = async (group: any) => {
     if (!group) throw new Error("Connect a Telegram group before publishing.");
     const removedStatus = storedRemovedStatus(group);
@@ -253,48 +301,8 @@ Deno.serve(async (req: Request) => {
       };
 
 
-      /**
-       * Phase 5.1 — Launch Watch CTA eligibility. Identical rules are applied at
-       * save time and at send time; a stale selection never fails the welcome.
-       */
-      const LW_OPEN_STATUSES = ["WATCHLIST_OPEN", "LAUNCH_APPROACHING", "CONTRACT_PENDING", "OFFICIAL_CONTRACT_REGISTERED"];
-      const LW_TOKEN_PATTERN = /^[0-9a-f]{24}$/;
-      const isHttpUrl = (value: unknown) => {
-        if (typeof value !== "string" || !value.trim()) return false;
-        try { const u = new URL(value.trim()); return u.protocol === "https:" || u.protocol === "http:"; } catch { return false; }
-      };
-      const loadEligibleLaunchRows = async (launchId?: string) => {
-        let query = admin.from("launches")
-          .select("id,token_name,ticker,chain,status,launch_watch_token,project_profile_id,project_profiles(workspace_id,project_name,discovery_status,website_url,telegram_url,x_url)")
-          .eq("workspace_id", workspaceId)
-          .in("status", LW_OPEN_STATUSES);
-        if (launchId) query = query.eq("id", launchId);
-        const { data, error } = await query;
-        if (error) throw error;
-        return (data ?? []).filter((row: any) => {
-          const profile = Array.isArray(row?.project_profiles) ? row.project_profiles[0] : row?.project_profiles;
-          // The Project Profile must belong to the SAME workspace as the launch.
-          return String(profile?.workspace_id ?? "") === String(workspaceId)
-            && profile?.discovery_status === "published"
-            && LW_TOKEN_PATTERN.test(String(row?.launch_watch_token ?? ""));
-        });
+      /** Shared Launch Watch eligibility lives at request scope (see above). */
 
-      };
-      const toOption = (row: any) => {
-        const profile = Array.isArray(row?.project_profiles) ? row.project_profiles[0] : row?.project_profiles;
-        return {
-          launchId: String(row.id),
-          projectName: String(profile?.project_name ?? "Project"),
-          tokenName: String(row.token_name ?? ""),
-          ticker: String(row.ticker ?? ""),
-          chain: String(row.chain ?? ""),
-          status: String(row.status ?? ""),
-          hasWebsite: isHttpUrl(profile?.website_url),
-          hasTelegram: isHttpUrl(profile?.telegram_url),
-          hasX: isHttpUrl(profile?.x_url),
-        };
-      };
-      /** Inline keyboard for the public group welcome. Private controls never appear here. */
       const buildCtaKeyboard = (row: any, settings: any) => {
         const profile = Array.isArray(row?.project_profiles) ? row.project_profiles[0] : row?.project_profiles;
         const rows: any[] = [[{ text: "🔔 Watch this launch", url: `https://t.me/PepeCartelHQBot?start=lw_${String(row.launch_watch_token)}` }]];
@@ -478,6 +486,16 @@ Deno.serve(async (req: Request) => {
      *   FAILED    Definitively not delivered — nothing was posted.
      *   AMBIGUOUS Transport uncertainty — delivery is unknown. Never auto-resent.
      */
+    /**
+     * Eligible Launch Watch CTA options for the Official Community Broadcast.
+     * Read-only, owner/admin only, and token-free by construction.
+     */
+    if (action === "broadcast_launch_options") {
+      if (!canManageCommunity) return respond({ error: "FORBIDDEN", message: "Only workspace owners and admins can post official community broadcasts." }, 403);
+      const rows = await loadEligibleLaunchRows();
+      return respond({ options: rows.map(toOption) });
+    }
+
     if (action === "send_group_announcement") {
       if (!canManageCommunity) return respond({ error: "FORBIDDEN", message: "Only workspace owners and admins can post official community broadcasts." }, 403);
       if (!groupConnectionId) return respond({ error: "GROUP_REQUIRED", message: "Choose a connected Telegram community." }, 400);
@@ -505,6 +523,19 @@ Deno.serve(async (req: Request) => {
       const reviewedLogoAssetId = typeof body.reviewedLogoAssetId === "string" ? body.reviewedLogoAssetId.trim() : "";
       const reviewedTemplateVersion = typeof body.reviewedTemplateVersion === "string" ? body.reviewedTemplateVersion.trim() : "";
 
+      /**
+       * Optional Launch Watch CTA. Presence and the selected launch are part of
+       * the EXACT intent of this request id — reusing an id with a different CTA
+       * state is a conflict, not a duplicate.
+       */
+      const ctaEnabled = body.ctaEnabled === true;
+      const ctaLaunchId = typeof body.ctaLaunchId === "string" ? body.ctaLaunchId.trim() : "";
+      if (ctaEnabled && !ctaLaunchId) {
+        return respond({ error: "CTA_LAUNCH_REQUIRED", message: "Select the launch this Launch Watch button should point to." }, 400);
+      }
+      let ctaSnapshot: { projectName: string; tokenName: string; ticker: string; chain: string; status: string } | null = null;
+      let ctaKeyboard: { inline_keyboard: { text: string; url: string }[][] } | null = null;
+
       const deliveryKind: "TEXT" | "BRANDED_PHOTO" = brandingEnabled ? "BRANDED_PHOTO" : "TEXT";
       /** Caption implied by the REVIEWED identity — used only for intent comparison. */
       const reviewedCaption = brandingEnabled
@@ -514,7 +545,7 @@ Deno.serve(async (req: Request) => {
       const rawGroup = await getGroup();
       if (!rawGroup) return respond({ error: "GROUP_NOT_FOUND", message: "That Telegram community is no longer connected." }, 404);
 
-      const ledgerSelect = "id,status,telegram_message_id,message_text,group_title,group_connection_id,telegram_chat_id,last_error,requested_at,sent_at,delivery_kind,delivered_text_snapshot,branding_template_version,branding_project_name,branding_ticker,branding_logo_asset_id";
+      const ledgerSelect = "id,status,telegram_message_id,message_text,group_title,group_connection_id,telegram_chat_id,last_error,requested_at,sent_at,delivery_kind,delivered_text_snapshot,branding_template_version,branding_project_name,branding_ticker,branding_logo_asset_id,cta_enabled,cta_launch_id,cta_project_name,cta_token_name,cta_ticker,cta_chain,cta_launch_status";
       let brandingSnapshot:
         | { projectName: string; ticker: string | null; logoAssetId: string; storagePath: string; mimeType: string }
         | null = null;
@@ -538,6 +569,13 @@ Deno.serve(async (req: Request) => {
           technical: row.last_error ?? null,
           deliveryKind: row.delivery_kind ?? deliveryKind,
           deliveredText: row.delivered_text_snapshot ?? deliveredText,
+          ctaEnabled: row.cta_enabled ?? ctaEnabled,
+          ctaLaunchId: row.cta_launch_id ?? (ctaEnabled ? ctaLaunchId : null),
+          ctaProjectName: row.cta_project_name ?? null,
+          ctaTokenName: row.cta_token_name ?? null,
+          ctaTicker: row.cta_ticker ?? null,
+          ctaChain: row.cta_chain ?? null,
+          ctaLaunchStatus: row.cta_launch_status ?? null,
           message: outcomeMessage(status, String(row.group_title ?? rawGroup.title)),
         });
       };
@@ -552,6 +590,9 @@ Deno.serve(async (req: Request) => {
       const sameIntent = (row: any) => {
         if (String(row?.message_text ?? "") !== messageText) return false;
         if (!row?.group_connection_id || String(row.group_connection_id) !== String(rawGroup.id)) return false;
+        // CTA presence and the exact selected launch are part of the intent.
+        if ((row?.cta_enabled === true) !== ctaEnabled) return false;
+        if (ctaEnabled && String(row?.cta_launch_id ?? "") !== ctaLaunchId) return false;
         const storedKind = String(row?.delivery_kind ?? "TEXT");
         if (storedKind !== deliveryKind) return false;
         if (deliveryKind === "TEXT") {
@@ -575,7 +616,7 @@ Deno.serve(async (req: Request) => {
 
       const conflictResponse = () => respond({
         error: "IDEMPOTENCY_CONFLICT",
-        message: "This broadcast id was already used for a different community, message, or branding. Start a new official broadcast.",
+        message: "This broadcast id was already used for a different community, message, branding, or Launch Watch button. Start a new official broadcast.",
       }, 409);
 
       /**
@@ -673,6 +714,25 @@ Deno.serve(async (req: Request) => {
         };
       }
 
+      /**
+       * NEW request only. The selected Launch Watch launch is re-read and
+       * re-validated here with the SAME eligibility rules as the welcome CTA.
+       * A stale/ineligible selection blocks the send truthfully — it is never
+       * silently dropped and never silently replaced with another launch.
+       */
+      if (ctaEnabled) {
+        const rows = await loadEligibleLaunchRows(ctaLaunchId);
+        const row = rows.find((r: any) => String(r.id) === ctaLaunchId) ?? null;
+        if (!row) {
+          return respond({
+            error: "CTA_LAUNCH_INELIGIBLE",
+            message: "The selected launch can no longer accept new Launch Watch signups, or its Project Profile is no longer published. Review the broadcast again.",
+          }, 409);
+        }
+        ctaSnapshot = toOption(row);
+        // Built server-side from the private token, which never leaves the server.
+        ctaKeyboard = { inline_keyboard: [[{ text: "🔔 Watch this launch", url: launchWatchDeepLink(row) }]] };
+      }
 
       // Claim the durable ledger row BEFORE live verification and before sending.
       let announcementId: string | null = null;
@@ -694,6 +754,14 @@ Deno.serve(async (req: Request) => {
           branding_logo_asset_id: brandingSnapshot?.logoAssetId ?? null,
           branding_logo_storage_path: brandingSnapshot?.storagePath ?? null,
           branding_logo_mime_type: brandingSnapshot?.mimeType ?? null,
+          // Immutable CTA intent snapshot. The private token is never stored.
+          cta_enabled: ctaEnabled,
+          cta_launch_id: ctaEnabled ? ctaLaunchId : null,
+          cta_project_name: ctaSnapshot?.projectName ?? null,
+          cta_token_name: ctaSnapshot?.tokenName ?? null,
+          cta_ticker: ctaSnapshot?.ticker ?? null,
+          cta_chain: ctaSnapshot?.chain ?? null,
+          cta_launch_status: ctaSnapshot?.status ?? null,
         }).select(ledgerSelect).maybeSingle();
         if (insertError) {
           // Concurrent duplicate submit — never send twice, and still prove intent.
@@ -808,6 +876,8 @@ Deno.serve(async (req: Request) => {
             logoBytes,
             brandingSnapshot?.mimeType === "image/jpeg" ? "logo.jpg" : "logo.png",
           );
+          // The inline keyboard rides along in the SAME call — never a 2nd message.
+          if (ctaKeyboard) form.append("reply_markup", JSON.stringify(ctaKeyboard));
           endpoint = "sendPhoto";
           init = { method: "POST", body: form };
         } else {
@@ -815,7 +885,12 @@ Deno.serve(async (req: Request) => {
           init = {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: String(group.telegram_chat_id), text: deliveredText, disable_web_page_preview: true }),
+            body: JSON.stringify({
+              chat_id: String(group.telegram_chat_id),
+              text: deliveredText,
+              disable_web_page_preview: true,
+              ...(ctaKeyboard ? { reply_markup: ctaKeyboard } : {}),
+            }),
           };
         }
         const res = await fetch(`${TG_BASE}/bot${TELEGRAM_BOT_TOKEN}/${endpoint}`, {

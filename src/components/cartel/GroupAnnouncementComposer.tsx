@@ -36,9 +36,11 @@ import {
   GROUP_ANNOUNCEMENT_MAX,
   GROUP_BRANDED_CAPTION_MAX,
   buildBrandedBroadcastCaption,
+  fetchBroadcastLaunchOptions,
   fetchTelegramGroupStatus,
   sendGroupAnnouncement,
   type GroupAnnouncementResult,
+  type LaunchWatchCtaOption,
   type ReviewedBroadcastBranding,
 } from "@/lib/telegram-group";
 import type { MediaAsset } from "@/lib/media";
@@ -74,6 +76,8 @@ type Snapshot = {
   deliveredText: string;
   branding: ReviewedBroadcastBranding | null;
   brandingLogoUrl: string | null;
+  /** Frozen Launch Watch CTA intent. The private token stays server-side. */
+  cta: LaunchWatchCtaOption | null;
 };
 
 /** The exact intent already submitted to the server under `clientRequestId`. */
@@ -84,6 +88,8 @@ type Attempt = {
   branded: boolean;
   /** Stable branding identity of that intent; empty string for plain text. */
   brandingKey: string;
+  /** Selected Launch Watch launch id; empty string when no CTA was attached. */
+  ctaKey: string;
 };
 
 function newRequestId() {
@@ -220,7 +226,17 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
           : logoReason;
 
   const [message, setMessage] = useState("");
+  /**
+   * Branding is the NORMAL delivery when saved branding is valid: the toggle
+   * defaults ON once readiness is positively known, and only until the operator
+   * takes over the decision for this draft.
+   */
   const [brandedRequested, setBrandedRequested] = useState(false);
+  const [brandingTouched, setBrandingTouched] = useState(false);
+  useEffect(() => {
+    if (brandingTouched) return;
+    if (brandingReady) setBrandedRequested(true);
+  }, [brandingReady, brandingTouched]);
   const branded = brandedRequested && brandingReady;
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
 
@@ -237,6 +253,35 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
       active = false;
     };
   }, [branded, logoAsset]);
+
+  /**
+   * Optional Launch Watch CTA. The server validates eligibility again at send
+   * time and builds the deep link itself — the browser never sees the token.
+   */
+  const [ctaRequested, setCtaRequested] = useState(false);
+  const [ctaLaunchId, setCtaLaunchId] = useState<string | null>(null);
+  const ctaQuery = useQuery({
+    queryKey: ["broadcast-launch-cta-options", workspaceId, resolvedGroupId],
+    enabled: !!workspaceId && !!resolvedGroupId && canManage,
+    queryFn: () =>
+      fetchBroadcastLaunchOptions({
+        workspaceId: workspaceId!,
+        groupConnectionId: resolvedGroupId!,
+      }),
+  });
+  const ctaOptions = ctaQuery.data?.options ?? [];
+  const ctaSelected = ctaLaunchId
+    ? (ctaOptions.find((o) => o.launchId === ctaLaunchId) ?? null)
+    : null;
+  const ctaActive = ctaRequested && !!ctaSelected;
+  const ctaKey = ctaActive ? ctaSelected!.launchId : "";
+  const ctaUnavailableReason = ctaQuery.isPending
+    ? "Checking eligible launches…"
+    : ctaQuery.isError
+      ? "Could not read your eligible launches, so the Launch Watch button is unavailable."
+      : ctaOptions.length === 0
+        ? "No launch is currently open for Launch Watch signups with a published Project Profile."
+        : null;
 
   /**
    * ONE client request id per exact intended announcement (target + text). It
@@ -275,21 +320,29 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
     message: string;
     branded: boolean;
     brandingKey: string;
+    ctaKey: string;
   }>({
     groupConnectionId: resolvedGroupId,
     message: trimmed,
     branded,
     brandingKey,
+    ctaKey,
   });
   latestRef.current = {
     groupConnectionId: resolvedGroupId,
     message: trimmed,
     branded,
     brandingKey,
+    ctaKey,
   };
 
   function resetComposer() {
     setMessage("");
+    // A genuinely new broadcast recomputes the branding default from readiness.
+    setBrandingTouched(false);
+    setBrandedRequested(brandingReady);
+    setCtaRequested(false);
+    setCtaLaunchId(null);
     setAttempt(null);
     setConfirmOpen(false);
     setSnapshot(null);
@@ -311,12 +364,13 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
       attempt.message !== trimmed ||
       attempt.groupConnectionId !== resolvedGroupId ||
       attempt.branded !== branded ||
-      attempt.brandingKey !== brandingKey
+      attempt.brandingKey !== brandingKey ||
+      attempt.ctaKey !== ctaKey
     ) {
       setAttempt(null);
       setOutcome(null);
     }
-  }, [attempt, trimmed, resolvedGroupId, branded, brandingKey]);
+  }, [attempt, trimmed, resolvedGroupId, branded, brandingKey, ctaKey]);
 
   /** Shared community state is page-level; ask it to refresh, never re-own it. */
   function refreshSharedCommunityState(id?: string | null) {
@@ -332,6 +386,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         message: snap.message,
         clientRequestId: snap.clientRequestId,
         branding: snap.branding,
+        ctaLaunchId: snap.cta?.launchId ?? null,
       }),
     onMutate: (snap) => {
       setAttempt({
@@ -340,6 +395,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         clientRequestId: snap.clientRequestId,
         branded: !!snap.branding,
         brandingKey: makeBrandingKey(snap.branding),
+        ctaKey: snap.cta?.launchId ?? "",
       });
       setOutcome(null);
     },
@@ -399,6 +455,9 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
               : brandedRequested && !brandingReady
                 ? (brandingUnavailableReason ??
                   "Branded posting is unavailable for this project right now.")
+                : ctaRequested && !ctaSelected
+                  ? (ctaUnavailableReason ??
+                    "Select the launch this Launch Watch button should point to.")
                 : brandedOverLimit
                   ? `Branded broadcasts are limited to ${GROUP_BRANDED_CAPTION_MAX} characters including the branding header and footer. Shorten the message or turn branding off.`
                   : null;
@@ -420,14 +479,18 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
       branded,
       branding: brandingIdentity,
       brandingKey,
+      ctaActive,
+      ctaKey,
+      cta: ctaSelected,
     };
     setPreparing(true);
     try {
-      const [accessResult, liveResult, profileResult, logosResult] = await Promise.allSettled([
+      const [accessResult, liveResult, profileResult, logosResult, ctaResult] = await Promise.allSettled([
         accessQuery.refetch(),
         fetchTelegramGroupStatus({ workspaceId, groupConnectionId: clicked.groupConnectionId }),
         profileQuery.refetch(),
         logosQuery.refetch(),
+        ctaQuery.refetch(),
       ]);
       if (
         accessResult.status !== "fulfilled" ||
@@ -499,12 +562,33 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
           return;
         }
       }
+      /**
+       * The selected launch is re-read before review. A launch that stopped
+       * accepting Launch Watch signups blocks the send truthfully — it is never
+       * silently dropped and never silently replaced.
+       */
+      let freshCta: LaunchWatchCtaOption | null = null;
+      if (clicked.ctaActive) {
+        if (ctaResult.status !== "fulfilled") {
+          toast.error("Could not confirm the selected launch. Nothing was posted.");
+          return;
+        }
+        freshCta =
+          (ctaResult.value.data?.options ?? []).find((o) => o.launchId === clicked.ctaKey) ?? null;
+        if (!freshCta) {
+          toast.error(
+            "The selected launch can no longer accept new Launch Watch signups. Review the broadcast again — nothing was posted.",
+          );
+          return;
+        }
+      }
       // Drift across the await, measured against the LATEST state, not a closure.
       if (
         latestRef.current.groupConnectionId !== clicked.groupConnectionId ||
         latestRef.current.message !== clicked.message ||
         latestRef.current.branded !== clicked.branded ||
-        latestRef.current.brandingKey !== clicked.brandingKey
+        latestRef.current.brandingKey !== clicked.brandingKey ||
+        latestRef.current.ctaKey !== clicked.ctaKey
       ) {
         toast.error("The official broadcast changed while it was loading. Nothing was posted.");
         return;
@@ -514,7 +598,8 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         attempt.groupConnectionId === clicked.groupConnectionId &&
         attempt.message === clicked.message &&
         attempt.branded === clicked.branded &&
-        attempt.brandingKey === clicked.brandingKey
+        attempt.brandingKey === clicked.brandingKey &&
+        attempt.ctaKey === clicked.ctaKey
           ? attempt.clientRequestId
           : newRequestId();
       const brandingForSend = clicked.branded ? freshBranding : null;
@@ -532,6 +617,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
           : clicked.message,
         branding: brandingForSend,
         brandingLogoUrl: brandingForSend ? freshLogoUrl : null,
+        cta: clicked.ctaActive ? freshCta : null,
       });
       setConfirmOpen(true);
     } finally {
@@ -644,6 +730,66 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
               </p>
             </div>
 
+            <div className="min-w-0 rounded-md border border-border/60 bg-background/30 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Label htmlFor="group-announcement-cta">Include Launch Watch CTA</Label>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    Telegram shows a 🔔 Watch this launch button below this official broadcast.
+                    Tapping it opens @PepeCartelHQBot privately so that member can opt in. Nobody is
+                    subscribed automatically.
+                  </p>
+                </div>
+                <Switch
+                  id="group-announcement-cta"
+                  checked={ctaRequested}
+                  disabled={busy || !canManage || ctaOptions.length === 0}
+                  onCheckedChange={(checked) => {
+                    setCtaRequested(checked);
+                    if (!checked) setCtaLaunchId(null);
+                    else if (!ctaLaunchId && ctaOptions.length === 1) {
+                      setCtaLaunchId(ctaOptions[0]!.launchId);
+                    }
+                  }}
+                />
+              </div>
+              {ctaRequested && ctaOptions.length > 0 ? (
+                <div className="mt-3 min-w-0 space-y-2">
+                  <Label htmlFor="group-announcement-cta-launch">Launch</Label>
+                  <Select
+                    value={ctaLaunchId ?? ""}
+                    disabled={busy || !canManage}
+                    onValueChange={(value) => setCtaLaunchId(value)}
+                  >
+                    <SelectTrigger id="group-announcement-cta-launch" className="min-h-11 w-full">
+                      <SelectValue placeholder="Select an eligible launch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ctaOptions.map((o) => (
+                        <SelectItem key={o.launchId} value={o.launchId}>
+                          {o.projectName} · {o.tokenName}
+                          {o.ticker ? ` (${o.ticker})` : ""} · {o.chain} · {o.status}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+              {ctaUnavailableReason ? (
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  {ctaUnavailableReason}{" "}
+                  <Link to="/launch-control" className="underline underline-offset-2">
+                    Open Launch Control
+                  </Link>
+                </p>
+              ) : (
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  The button is a Telegram inline button, so it does not use any of your message
+                  characters. The launch is re-checked before anything is posted.
+                </p>
+              )}
+            </div>
+
             {trimmed ? (
               <div className="min-w-0 rounded-md border border-border/60 bg-background/30 p-3">
                 <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
@@ -665,6 +811,17 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
                   >
                     {previewText.length}/{GROUP_BRANDED_CAPTION_MAX}
                   </p>
+                ) : null}
+                {ctaActive && ctaSelected ? (
+                  <div className="mt-2 min-w-0 rounded-md border border-border/60 bg-background/50 p-2">
+                    <p className="text-xs font-medium text-foreground">🔔 Watch this launch</p>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+                      Button shown below this message for {ctaSelected.projectName} ·{" "}
+                      {ctaSelected.tokenName}
+                      {ctaSelected.ticker ? ` (${ctaSelected.ticker})` : ""} · {ctaSelected.chain} ·{" "}
+                      {ctaSelected.status}
+                    </p>
+                  </div>
                 ) : null}
                 <p className="mt-2 border-t border-border/60 pt-2 text-xs leading-relaxed text-muted-foreground">
                   {branded
@@ -805,6 +962,24 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
                 </span>
               </div>
             ) : null}
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span className="uppercase tracking-[0.12em] text-muted-foreground">
+                Launch Watch CTA
+              </span>
+              <span className="min-w-0 font-medium text-foreground [overflow-wrap:anywhere]">
+                {snapshot?.cta ? "Included" : "Not included"}
+              </span>
+            </div>
+            {snapshot?.cta ? (
+              <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <span className="uppercase tracking-[0.12em] text-muted-foreground">Launch</span>
+                <span className="min-w-0 font-medium text-foreground [overflow-wrap:anywhere]">
+                  {snapshot.cta.projectName} · {snapshot.cta.tokenName}
+                  {snapshot.cta.ticker ? ` (${snapshot.cta.ticker})` : ""} · {snapshot.cta.chain} ·{" "}
+                  {snapshot.cta.status}
+                </span>
+              </div>
+            ) : null}
           </div>
           <div className="max-h-48 overflow-y-auto rounded-md border border-border/60 bg-background/40 p-3">
             {snapshot?.branding && snapshot.brandingLogoUrl ? (
@@ -817,6 +992,14 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
             <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground [overflow-wrap:anywhere]">
               {snapshot?.deliveredText ?? snapshot?.message ?? ""}
             </p>
+            {snapshot?.cta ? (
+              <div className="mt-2 rounded-md border border-border/60 bg-background/60 p-2 text-center">
+                <p className="text-xs font-medium text-foreground">🔔 Watch this launch</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  This button will appear below the Telegram message.
+                </p>
+              </div>
+            ) : null}
           </div>
 
           <AlertDialogFooter>
