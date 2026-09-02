@@ -1744,6 +1744,72 @@ export type Database = {
           },
         ]
       }
+      telegram_group_announcements: {
+        Row: {
+          client_request_id: string
+          group_connection_id: string | null
+          group_title: string
+          id: string
+          last_error: string | null
+          message_text: string
+          requested_at: string
+          requested_by: string | null
+          sent_at: string | null
+          status: string
+          telegram_chat_id: number
+          telegram_message_id: number | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          client_request_id: string
+          group_connection_id?: string | null
+          group_title: string
+          id?: string
+          last_error?: string | null
+          message_text: string
+          requested_at?: string
+          requested_by?: string | null
+          sent_at?: string | null
+          status: string
+          telegram_chat_id: number
+          telegram_message_id?: number | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          client_request_id?: string
+          group_connection_id?: string | null
+          group_title?: string
+          id?: string
+          last_error?: string | null
+          message_text?: string
+          requested_at?: string
+          requested_by?: string | null
+          sent_at?: string | null
+          status?: string
+          telegram_chat_id?: number
+          telegram_message_id?: number | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_group_announcements_group_connection_id_fkey"
+            columns: ["group_connection_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_group_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_group_announcements_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       telegram_group_connections: {
         Row: {
           bot_is_admin: boolean
