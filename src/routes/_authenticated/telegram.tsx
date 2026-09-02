@@ -413,7 +413,12 @@ function TelegramPage() {
 
         {/* ---------------------------------------------------------------- */}
         <TabsContent value="broadcasts" className="mt-0 min-w-0">
-          <BroadcastsPanel selectedLaunchId={search.launch ?? null} onLaunchChange={setLaunch} />
+          <BroadcastsPanel
+            selectedLaunchId={search.launch ?? null}
+            onLaunchChange={setLaunch}
+            groupSetup={groupSetup}
+          />
+
         </TabsContent>
 
 
