@@ -58,7 +58,9 @@ import {
  * new-conversation DM capture, and History integration.
  */
 
+const REPLY_MAX = 3500;
 const DELIVERY_IN_FLIGHT = new Set(["pending", "processing", "retry"]);
+
 
 function deliveryTone(status: string | null): "gold" | "green" | "red" | "muted" {
   switch (status) {
