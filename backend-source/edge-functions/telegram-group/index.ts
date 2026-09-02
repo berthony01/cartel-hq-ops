@@ -826,6 +826,8 @@ Deno.serve(async (req: Request) => {
             logoBytes,
             brandingSnapshot?.mimeType === "image/jpeg" ? "logo.jpg" : "logo.png",
           );
+          // The inline keyboard rides along in the SAME call — never a 2nd message.
+          if (ctaKeyboard) form.append("reply_markup", JSON.stringify(ctaKeyboard));
           endpoint = "sendPhoto";
           init = { method: "POST", body: form };
         } else {
@@ -833,7 +835,12 @@ Deno.serve(async (req: Request) => {
           init = {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: String(group.telegram_chat_id), text: deliveredText, disable_web_page_preview: true }),
+            body: JSON.stringify({
+              chat_id: String(group.telegram_chat_id),
+              text: deliveredText,
+              disable_web_page_preview: true,
+              ...(ctaKeyboard ? { reply_markup: ctaKeyboard } : {}),
+            }),
           };
         }
         const res = await fetch(`${TG_BASE}/bot${TELEGRAM_BOT_TOKEN}/${endpoint}`, {
