@@ -334,6 +334,236 @@ export function BroadcastsPanel({
     }
   }
 
+  // -------------------------------------------------------------------------
+  // C6 — Launch schedule update decision.
+  //
+  // The C5 trigger detects a real schedule change and opens exactly one PENDING
+  // row per launch. The factual Previous/New text is composed SERVER-SIDE by
+  // `send_launch_schedule_communication`, which reuses the existing
+  // `create_launch_watcher_update` engine, so every lifecycle/audience/anti-spam
+  // rule stays authoritative. The operator only supplies an optional note and
+  // the decision (notify or dismiss).
+  // -------------------------------------------------------------------------
+  const scheduleCommQuery = useQuery({
+    queryKey: scheduleCommunicationQueryKey(selected?.id ?? null),
+    enabled: !!selected?.id,
+    queryFn: () => getPendingScheduleCommunication(selected!.id),
+  });
+  const pendingComm = scheduleCommQuery.data ?? null;
+
+  const [note, setNote] = useState("");
+  const [scheduleRequestId, setScheduleRequestId] = useState<string | null>(null);
+  const [attemptedSchedule, setAttemptedSchedule] = useState<{
+    note: string;
+    identity: string;
+  } | null>(null);
+  const [scheduleConfirmOpen, setScheduleConfirmOpen] = useState(false);
+  const [dismissConfirmOpen, setDismissConfirmOpen] = useState(false);
+  const [schedulePreparing, setSchedulePreparing] = useState(false);
+
+  type ScheduleSnapshot = {
+    communicationId: string;
+    identity: string;
+    launchId: string;
+    launchLabel: string;
+    statusLabel: string;
+    previous: string;
+    current: string;
+    note: string;
+    eligibleCount: number;
+    clientRequestId: string;
+  };
+  const [scheduleSnapshot, setScheduleSnapshot] = useState<ScheduleSnapshot | null>(null);
+
+  /** Stable identity of the exact pending row + its current schedule facts. */
+  const commIdentity = (row: LaunchScheduleCommunication) =>
+    [
+      row.id,
+      row.status,
+      row.change_count,
+      row.current_launch_at ?? "",
+      row.current_window_start ?? "",
+      row.current_window_end ?? "",
+      row.current_timezone,
+      row.updated_at,
+    ].join("|");
+
+  const scheduleLatestRef = useRef({
+    launchId: null as string | null,
+    identity: null as string | null,
+    note: "",
+    canManage: false,
+  });
+  scheduleLatestRef.current = {
+    launchId: selected?.id ?? null,
+    identity: pendingComm ? commIdentity(pendingComm) : null,
+    note,
+    canManage,
+  };
+
+  // A new launch selection, or a changed pending row, is a different intended
+  // send: never reuse the previous idempotency id across it.
+  useEffect(() => {
+    setNote("");
+    setScheduleRequestId(null);
+    setAttemptedSchedule(null);
+    setScheduleSnapshot(null);
+    setScheduleConfirmOpen(false);
+    setDismissConfirmOpen(false);
+  }, [selected?.id, pendingComm?.id]);
+
+  useEffect(() => {
+    if (!attemptedSchedule || !pendingComm) return;
+    if (
+      attemptedSchedule.note !== note ||
+      attemptedSchedule.identity !== commIdentity(pendingComm)
+    ) {
+      setScheduleRequestId(null);
+      setAttemptedSchedule(null);
+    }
+  }, [note, pendingComm, attemptedSchedule]);
+
+  const scheduleMutation = useMutation({
+    mutationFn: async (snapshot: ScheduleSnapshot) =>
+      sendLaunchScheduleCommunication({
+        communicationId: snapshot.communicationId,
+        clientRequestId: snapshot.clientRequestId,
+        note: snapshot.note.trim() ? snapshot.note.trim() : null,
+      }),
+    onMutate: (snapshot) =>
+      setAttemptedSchedule({ note: snapshot.note, identity: snapshot.identity }),
+    onSuccess: (_eventId, snapshot) => {
+      toast.success("Schedule update queued for delivery to eligible watchers");
+      setScheduleRequestId(null);
+      setAttemptedSchedule(null);
+      setScheduleSnapshot(null);
+      setScheduleConfirmOpen(false);
+      if (scheduleLatestRef.current.launchId === snapshot.launchId) setNote("");
+      refreshAfterScheduleDecision(snapshot.launchId);
+    },
+    onError: (err: unknown) => {
+      // The request id is kept so an identical retry of an ambiguous outcome
+      // resolves to the same event server-side.
+      setScheduleSnapshot(null);
+      toast.error(err instanceof Error ? err.message : "Could not send the schedule update.");
+    },
+  });
+
+  const dismissMutation = useMutation({
+    mutationFn: async (communicationId: string) =>
+      dismissLaunchScheduleCommunication(communicationId),
+    onSuccess: () => {
+      toast.success("Schedule change dismissed. No watcher message was created.");
+      setDismissConfirmOpen(false);
+      refreshAfterScheduleDecision(selected?.id ?? null);
+    },
+    onError: (err: unknown) =>
+      toast.error(err instanceof Error ? err.message : "Could not dismiss this schedule change."),
+  });
+
+  function refreshAfterScheduleDecision(launchId: string | null) {
+    void queryClient.invalidateQueries({ queryKey: scheduleCommunicationQueryKey(launchId) });
+    void queryClient.invalidateQueries({
+      queryKey: workspaceScheduleCommunicationsQueryKey(workspaceId ?? null),
+    });
+    void queryClient.invalidateQueries({ queryKey: ["launch-watcher-update-stats", launchId] });
+    void queryClient.invalidateQueries({ queryKey: ["launch-watcher-updates", launchId] });
+    void queryClient.invalidateQueries({ queryKey: ["launch-notification-summary", launchId] });
+  }
+
+  const noteTooLong = note.length > SCHEDULE_NOTE_MAX;
+  const scheduleBusy =
+    schedulePreparing ||
+    scheduleMutation.isPending ||
+    dismissMutation.isPending ||
+    scheduleConfirmOpen;
+  const scheduleBlockReason: string | null = accessQuery.isPending
+    ? "Checking your permissions…"
+    : accessQuery.isError
+      ? "Could not verify your permissions, so notifying is blocked."
+      : !canManage
+        ? "Only project owners and admins can notify watchers or dismiss this."
+        : !lifecycleEligible
+          ? `Watcher updates can be sent from Watchlist open through Live. This launch is currently ${LAUNCH_STATUS_LABELS[status!]}.`
+          : statsQuery.isError
+            ? "Audience counts could not be loaded, so notifying is blocked until they load."
+            : !statsReady
+              ? "Loading the current audience…"
+              : eligibleCount < 1
+                ? "No active watcher currently allows project updates, so there is nobody to notify yet."
+                : null;
+
+  /**
+   * Refetches BOTH the audience and the pending row, then freezes the exact
+   * reviewed send. Any drift across the await aborts without sending.
+   */
+  async function prepareScheduleConfirmation() {
+    if (!selected || !pendingComm || scheduleBlockReason || noteTooLong) return;
+    const clicked = {
+      launchId: selected.id,
+      identity: commIdentity(pendingComm),
+      note,
+    };
+    setSchedulePreparing(true);
+    try {
+      const [statsResult, commResult] = await Promise.all([
+        statsQuery.refetch(),
+        scheduleCommQuery.refetch(),
+      ]);
+      const latest = scheduleLatestRef.current;
+      const freshComm = commResult.data ?? null;
+      if (
+        latest.launchId !== clicked.launchId ||
+        latest.note !== clicked.note ||
+        !freshComm ||
+        commIdentity(freshComm) !== clicked.identity ||
+        latest.identity !== clicked.identity
+      ) {
+        toast.error(
+          "The launch, schedule change or your note changed while this was loading. Nothing was sent — review it and try again.",
+        );
+        return;
+      }
+      if (commResult.isError || statsResult.isError || !statsResult.data) {
+        toast.error("Could not confirm the current audience or schedule change. Nothing was sent.");
+        return;
+      }
+      const freshLaunch = (launchesQuery.data ?? []).find((l) => l.id === latest.launchId);
+      const freshStatus = freshLaunch ? toLaunchStatus(freshLaunch.status) : null;
+      if (!latest.canManage || !freshLaunch || !freshStatus || !canSendWatcherUpdate(freshStatus)) {
+        toast.error("This launch can no longer receive an update. Nothing was sent.");
+        return;
+      }
+      const fresh = statsResult.data.updates_enabled_watchers;
+      if (fresh < 1) {
+        toast.error("No active watcher currently allows project updates. Nothing was sent.");
+        return;
+      }
+      if (latest.note.length > SCHEDULE_NOTE_MAX) {
+        toast.error("Shorten your explanation before sending.");
+        return;
+      }
+      const idForSend = scheduleRequestId ?? crypto.randomUUID();
+      setScheduleRequestId(idForSend);
+      const pair = scheduleSnapshotPair(freshComm);
+      setScheduleSnapshot({
+        communicationId: freshComm.id,
+        identity: commIdentity(freshComm),
+        launchId: freshLaunch.id,
+        launchLabel: `${freshLaunch.token_name} (${freshLaunch.ticker})`,
+        statusLabel: LAUNCH_STATUS_LABELS[freshStatus],
+        previous: pair.previous,
+        current: pair.current,
+        note: latest.note,
+        eligibleCount: fresh,
+        clientRequestId: idForSend,
+      });
+      setScheduleConfirmOpen(true);
+    } finally {
+      setSchedulePreparing(false);
+    }
+  }
+
 
   return (
     <div className="flex min-w-0 flex-col gap-4 sm:gap-6">
