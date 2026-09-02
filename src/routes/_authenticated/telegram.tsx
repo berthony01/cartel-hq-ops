@@ -1,11 +1,14 @@
 import { useCallback } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
+  CalendarClock,
   Clock3,
   Megaphone,
   Radio,
 } from "lucide-react";
+
 
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
