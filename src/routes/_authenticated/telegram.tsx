@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowRight,
   Clock3,
@@ -12,6 +11,7 @@ import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
+import { BroadcastsPanel } from "@/components/cartel/BroadcastsPanel";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWorkspace } from "@/lib/workspace-context";
@@ -21,6 +21,26 @@ import {
   TelegramGroupCard,
   useTelegramGroupSetup,
 } from "@/components/cartel/TelegramGroupCard";
+
+const TAB_KEYS = ["overview", "broadcasts", "audience", "communities", "history"] as const;
+type TabKey = (typeof TAB_KEYS)[number];
+
+type TelegramSearch = { tab: TabKey; launch?: string };
+
+/** Invalid or missing values fail safe to the Overview tab and no launch. */
+function validateTelegramSearch(search: Record<string, unknown>): TelegramSearch {
+  const rawTab = search["tab"];
+  const tab = (TAB_KEYS as readonly string[]).includes(String(rawTab))
+    ? (String(rawTab) as TabKey)
+    : "overview";
+  const rawLaunch = search["launch"];
+  const launch =
+    typeof rawLaunch === "string" && rawLaunch.trim().length > 0 && rawLaunch.length <= 100
+      ? rawLaunch.trim()
+      : undefined;
+  return launch ? { tab, launch } : { tab };
+}
+
 
 export const Route = createFileRoute("/_authenticated/telegram")({
   head: () => ({
