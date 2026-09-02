@@ -372,6 +372,7 @@ export function BroadcastsPanel({
   const [scheduleConfirmOpen, setScheduleConfirmOpen] = useState(false);
   const [dismissConfirmOpen, setDismissConfirmOpen] = useState(false);
   const [schedulePreparing, setSchedulePreparing] = useState(false);
+  const [dismissPreparing, setDismissPreparing] = useState(false);
 
   type ScheduleSnapshot = {
     communicationId: string;
@@ -384,8 +385,22 @@ export function BroadcastsPanel({
     note: string;
     eligibleCount: number;
     clientRequestId: string;
+    /** Exact C5 row state the operator reviewed; the server re-checks it. */
+    expected: ExpectedScheduleSnapshot;
   };
   const [scheduleSnapshot, setScheduleSnapshot] = useState<ScheduleSnapshot | null>(null);
+
+  /** The frozen decision behind the dismiss confirmation. */
+  type DismissSnapshot = {
+    communicationId: string;
+    launchId: string;
+    launchLabel: string;
+    previous: string;
+    current: string;
+    expected: ExpectedScheduleSnapshot;
+  };
+  const [dismissSnapshot, setDismissSnapshot] = useState<DismissSnapshot | null>(null);
+
 
   /** Stable identity of the exact pending row + its current schedule facts. */
   const commIdentity = (row: LaunchScheduleCommunication) =>
