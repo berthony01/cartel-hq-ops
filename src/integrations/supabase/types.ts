@@ -737,6 +737,394 @@ export type Database = {
         }
         Relationships: []
       }
+      project_conversation_messages: {
+        Row: {
+          author_type: string
+          body: string
+          channel: string
+          client_request_id: string | null
+          conversation_id: string
+          created_at: string
+          id: string
+          reply_to_message_id: string | null
+          team_user_id: string | null
+          telegram_chat_id: number | null
+          telegram_message_id: number | null
+          telegram_reply_to_message_id: number | null
+          telegram_update_id: number | null
+        }
+        Insert: {
+          author_type: string
+          body: string
+          channel: string
+          client_request_id?: string | null
+          conversation_id: string
+          created_at?: string
+          id?: string
+          reply_to_message_id?: string | null
+          team_user_id?: string | null
+          telegram_chat_id?: number | null
+          telegram_message_id?: number | null
+          telegram_reply_to_message_id?: number | null
+          telegram_update_id?: number | null
+        }
+        Update: {
+          author_type?: string
+          body?: string
+          channel?: string
+          client_request_id?: string | null
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          reply_to_message_id?: string | null
+          team_user_id?: string | null
+          telegram_chat_id?: number | null
+          telegram_message_id?: number | null
+          telegram_reply_to_message_id?: number | null
+          telegram_update_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_conversation_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "project_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_conversation_messages_reply_to_message_id_fkey"
+            columns: ["reply_to_message_id"]
+            isOneToOne: false
+            referencedRelation: "project_conversation_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_conversation_messages_team_user_id_fkey"
+            columns: ["team_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_conversations: {
+        Row: {
+          assigned_to: string | null
+          category: string
+          contact_id: string
+          created_at: string
+          id: string
+          last_message_at: string
+          opened_at: string
+          origin_group_announcement_id: string | null
+          origin_launch_delivery_id: string | null
+          origin_launch_event_id: string | null
+          origin_launch_id: string | null
+          origin_telegram_message_id: number | null
+          origin_text_snapshot: string | null
+          origin_title_snapshot: string | null
+          origin_type: string
+          priority: string
+          resolved_at: string | null
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          category?: string
+          contact_id: string
+          created_at?: string
+          id?: string
+          last_message_at?: string
+          opened_at?: string
+          origin_group_announcement_id?: string | null
+          origin_launch_delivery_id?: string | null
+          origin_launch_event_id?: string | null
+          origin_launch_id?: string | null
+          origin_telegram_message_id?: number | null
+          origin_text_snapshot?: string | null
+          origin_title_snapshot?: string | null
+          origin_type: string
+          priority?: string
+          resolved_at?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          assigned_to?: string | null
+          category?: string
+          contact_id?: string
+          created_at?: string
+          id?: string
+          last_message_at?: string
+          opened_at?: string
+          origin_group_announcement_id?: string | null
+          origin_launch_delivery_id?: string | null
+          origin_launch_event_id?: string | null
+          origin_launch_id?: string | null
+          origin_telegram_message_id?: number | null
+          origin_text_snapshot?: string | null
+          origin_title_snapshot?: string | null
+          origin_type?: string
+          priority?: string
+          resolved_at?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_conversations_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_conversations_contact_ws_fkey"
+            columns: ["contact_id", "workspace_id"]
+            isOneToOne: false
+            referencedRelation: "project_inbox_contacts"
+            referencedColumns: ["id", "workspace_id"]
+          },
+          {
+            foreignKeyName: "project_conversations_origin_group_announcement_id_fkey"
+            columns: ["origin_group_announcement_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_group_announcements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_conversations_origin_launch_delivery_id_fkey"
+            columns: ["origin_launch_delivery_id"]
+            isOneToOne: false
+            referencedRelation: "launch_notification_deliveries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_conversations_origin_launch_event_id_fkey"
+            columns: ["origin_launch_event_id"]
+            isOneToOne: false
+            referencedRelation: "launch_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_conversations_origin_launch_id_fkey"
+            columns: ["origin_launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_inbox_contacts: {
+        Row: {
+          blocked_at: string | null
+          blocked_by: string | null
+          created_at: string
+          first_contact_at: string
+          id: string
+          last_contact_at: string
+          member_ref: string
+          status: string
+          telegram_user_id: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          blocked_at?: string | null
+          blocked_by?: string | null
+          created_at?: string
+          first_contact_at?: string
+          id?: string
+          last_contact_at?: string
+          member_ref?: string
+          status?: string
+          telegram_user_id: number
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          blocked_at?: string | null
+          blocked_by?: string | null
+          created_at?: string
+          first_contact_at?: string
+          id?: string
+          last_contact_at?: string
+          member_ref?: string
+          status?: string
+          telegram_user_id?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_inbox_contacts_blocked_by_fkey"
+            columns: ["blocked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_inbox_contacts_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_inbox_deliveries: {
+        Row: {
+          attempt_count: number
+          claimed_at: string | null
+          conversation_id: string
+          created_at: string
+          error_class: string | null
+          id: string
+          last_error: string | null
+          message_id: string
+          next_attempt_at: string
+          sent_at: string | null
+          status: string
+          telegram_message_id: number | null
+          telegram_user_id: number
+          updated_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          claimed_at?: string | null
+          conversation_id: string
+          created_at?: string
+          error_class?: string | null
+          id?: string
+          last_error?: string | null
+          message_id: string
+          next_attempt_at?: string
+          sent_at?: string | null
+          status?: string
+          telegram_message_id?: number | null
+          telegram_user_id: number
+          updated_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          claimed_at?: string | null
+          conversation_id?: string
+          created_at?: string
+          error_class?: string | null
+          id?: string
+          last_error?: string | null
+          message_id?: string
+          next_attempt_at?: string
+          sent_at?: string | null
+          status?: string
+          telegram_message_id?: number | null
+          telegram_user_id?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_inbox_deliveries_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "project_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_inbox_deliveries_message_conv_fkey"
+            columns: ["message_id", "conversation_id"]
+            isOneToOne: false
+            referencedRelation: "project_conversation_messages"
+            referencedColumns: ["id", "conversation_id"]
+          },
+        ]
+      }
+      project_inbox_settings: {
+        Row: {
+          created_at: string
+          new_conversations_enabled: boolean
+          replies_enabled: boolean
+          security_warning_version: string
+          updated_at: string
+          updated_by: string | null
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          new_conversations_enabled?: boolean
+          replies_enabled?: boolean
+          security_warning_version?: string
+          updated_at?: string
+          updated_by?: string | null
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          new_conversations_enabled?: boolean
+          replies_enabled?: boolean
+          security_warning_version?: string
+          updated_at?: string
+          updated_by?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_inbox_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_inbox_settings_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_inbox_team_preferences: {
+        Row: {
+          assigned_reply_alerts: boolean
+          every_message_alerts: boolean
+          new_conversation_alerts: boolean
+          new_security_alerts: boolean
+          updated_at: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          assigned_reply_alerts?: boolean
+          every_message_alerts?: boolean
+          new_conversation_alerts?: boolean
+          new_security_alerts?: boolean
+          updated_at?: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          assigned_reply_alerts?: boolean
+          every_message_alerts?: boolean
+          new_conversation_alerts?: boolean
+          new_security_alerts?: boolean
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_inbox_team_preferences_member_fkey"
+            columns: ["workspace_id", "user_id"]
+            isOneToOne: true
+            referencedRelation: "workspace_members"
+            referencedColumns: ["workspace_id", "user_id"]
+          },
+        ]
+      }
       project_network_moderation: {
         Row: {
           created_at: string
@@ -1918,6 +2306,56 @@ export type Database = {
           },
         ]
       }
+      telegram_inbound_updates: {
+        Row: {
+          conversation_message_id: string | null
+          last_error: string | null
+          processed_at: string | null
+          received_at: string
+          status: string
+          telegram_chat_id: number | null
+          telegram_message_id: number | null
+          telegram_update_id: number
+          telegram_user_id: number | null
+          update_kind: string
+          updated_at: string
+        }
+        Insert: {
+          conversation_message_id?: string | null
+          last_error?: string | null
+          processed_at?: string | null
+          received_at?: string
+          status?: string
+          telegram_chat_id?: number | null
+          telegram_message_id?: number | null
+          telegram_update_id: number
+          telegram_user_id?: number | null
+          update_kind: string
+          updated_at?: string
+        }
+        Update: {
+          conversation_message_id?: string | null
+          last_error?: string | null
+          processed_at?: string | null
+          received_at?: string
+          status?: string
+          telegram_chat_id?: number | null
+          telegram_message_id?: number | null
+          telegram_update_id?: number
+          telegram_user_id?: number | null
+          update_kind?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_inbound_updates_conversation_message_id_fkey"
+            columns: ["conversation_message_id"]
+            isOneToOne: false
+            referencedRelation: "project_conversation_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       telegram_link_requests: {
         Row: {
           consumed_at: string | null
@@ -2023,6 +2461,55 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      telegram_team_sessions: {
+        Row: {
+          active_conversation_id: string | null
+          expires_at: string
+          mode: string
+          selected_workspace_id: string | null
+          telegram_user_id: number
+          updated_at: string
+        }
+        Insert: {
+          active_conversation_id?: string | null
+          expires_at: string
+          mode?: string
+          selected_workspace_id?: string | null
+          telegram_user_id: number
+          updated_at?: string
+        }
+        Update: {
+          active_conversation_id?: string | null
+          expires_at?: string
+          mode?: string
+          selected_workspace_id?: string | null
+          telegram_user_id?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_team_sessions_active_conversation_id_fkey"
+            columns: ["active_conversation_id"]
+            isOneToOne: false
+            referencedRelation: "project_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_team_sessions_selected_workspace_id_fkey"
+            columns: ["selected_workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_team_sessions_telegram_user_id_fkey"
+            columns: ["telegram_user_id"]
+            isOneToOne: true
+            referencedRelation: "telegram_connections"
+            referencedColumns: ["telegram_user_id"]
           },
         ]
       }
@@ -2176,6 +2663,17 @@ export type Database = {
           payload: Json
           scheduled_for: string
           subscription_id: string
+          telegram_user_id: number
+        }[]
+      }
+      claim_project_inbox_deliveries: {
+        Args: { _limit?: number }
+        Returns: {
+          attempt_count: number
+          body: string
+          conversation_id: string
+          delivery_id: string
+          message_id: string
           telegram_user_id: number
         }[]
       }
@@ -2493,6 +2991,17 @@ export type Database = {
           telegram_connected: boolean
         }[]
       }
+      get_my_project_inbox_team_preferences: {
+        Args: { _workspace_id: string }
+        Returns: {
+          assigned_reply_alerts: boolean
+          every_message_alerts: boolean
+          new_conversation_alerts: boolean
+          new_security_alerts: boolean
+          updated_at: string
+          workspace_id: string
+        }[]
+      }
       get_platform_launch_analytics: {
         Args: never
         Returns: {
@@ -2563,6 +3072,26 @@ export type Database = {
           x_url: string
         }[]
       }
+      get_project_inbox_settings: {
+        Args: { _workspace_id: string }
+        Returns: {
+          new_conversations_enabled: boolean
+          replies_enabled: boolean
+          security_warning_version: string
+          updated_at: string
+          workspace_id: string
+        }[]
+      }
+      get_project_inbox_summary: {
+        Args: { _workspace_id: string }
+        Returns: {
+          blocked_contact_count: number
+          open_count: number
+          resolved_count: number
+          waiting_on_member_count: number
+          waiting_on_team_count: number
+        }[]
+      }
       get_project_verification_state: {
         Args: { _project_profile_id: string }
         Returns: {
@@ -2618,7 +3147,38 @@ export type Database = {
           title: string
         }[]
       }
+      list_project_conversation_messages: {
+        Args: { _conversation_id: string; _limit?: number }
+        Returns: {
+          author_type: string
+          body: string
+          channel: string
+          created_at: string
+          message_id: string
+          reply_to_message_id: string
+          team_display_name: string
+        }[]
+      }
+      list_project_inbox_conversations: {
+        Args: { _limit?: number; _status?: string; _workspace_id: string }
+        Returns: {
+          assigned_display_name: string
+          assigned_to: string
+          category: string
+          contact_status: string
+          conversation_id: string
+          last_message_at: string
+          latest_message_preview: string
+          member_ref: string
+          opened_at: string
+          origin_title_snapshot: string
+          origin_type: string
+          priority: string
+          status: string
+        }[]
+      }
       mark_stale_launch_notification_claims: { Args: never; Returns: number }
+      mark_stale_project_inbox_delivery_claims: { Args: never; Returns: number }
       record_launch_watch_confirmation: {
         Args: {
           _attempted_at: string
@@ -2703,6 +3263,46 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      set_my_project_inbox_team_preferences: {
+        Args: {
+          _assigned_reply_alerts: boolean
+          _every_message_alerts: boolean
+          _new_conversation_alerts: boolean
+          _new_security_alerts: boolean
+          _workspace_id: string
+        }
+        Returns: {
+          assigned_reply_alerts: boolean
+          every_message_alerts: boolean
+          new_conversation_alerts: boolean
+          new_security_alerts: boolean
+          updated_at: string
+          workspace_id: string
+        }[]
+      }
+      set_project_inbox_contact_blocked: {
+        Args: { _blocked: boolean; _contact_id: string }
+        Returns: {
+          blocked_at: string
+          contact_id: string
+          member_ref: string
+          status: string
+        }[]
+      }
+      set_project_inbox_settings: {
+        Args: {
+          _new_conversations_enabled: boolean
+          _replies_enabled: boolean
+          _workspace_id: string
+        }
+        Returns: {
+          new_conversations_enabled: boolean
+          replies_enabled: boolean
+          security_warning_version: string
+          updated_at: string
+          workspace_id: string
+        }[]
+      }
       set_project_network_moderation: {
         Args: {
           _hidden: boolean
@@ -2772,6 +3372,15 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      update_project_conversation_status: {
+        Args: { _conversation_id: string; _status: string }
+        Returns: {
+          conversation_id: string
+          resolved_at: string
+          status: string
+          updated_at: string
+        }[]
       }
     }
     Enums: {
