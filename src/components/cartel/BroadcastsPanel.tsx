@@ -248,6 +248,21 @@ export function BroadcastsPanel({
     bodyTooLong ||
     titleTooLong;
 
+  // Race guard: nothing about the intended send may change while a
+  // confirmation is being prepared, reviewed, or submitted.
+  const composerLocked = preparing || confirmOpen || mutation.isPending;
+  const inputsDisabled = !accessKnown || !canManage || composerLocked;
+
+  // Latest-render mirror, read only after an await to detect drift.
+  latestRef.current = {
+    launchId: selected?.id ?? null,
+    title,
+    body,
+    canManage,
+    status,
+  };
+
+
   /**
    * M2: the confirmation must be based on a fresh, successful audience read —
    * never on whatever happened to be cached. Any failure, any zero audience and
