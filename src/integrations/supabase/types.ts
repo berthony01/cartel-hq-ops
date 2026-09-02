@@ -3205,6 +3205,7 @@ export type Database = {
         Returns: boolean
       }
       invoke_launch_notification_scheduler: { Args: never; Returns: number }
+      invoke_project_inbox_delivery_scheduler: { Args: never; Returns: number }
       invoke_sticker_drop_scheduler: { Args: never; Returns: number }
       invoke_telegram_message_cleanup_scheduler: {
         Args: never
