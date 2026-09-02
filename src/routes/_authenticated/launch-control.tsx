@@ -2028,41 +2028,8 @@ function LaunchControlPage() {
         <StickyActionBar desktop="hidden" end={saveButton} />
       ) : null}
 
-      <AlertDialog
-        open={confirmUpdateSend}
-        onOpenChange={(open) => {
-          setConfirmUpdateSend(open);
-          // Explicit cancel before any send attempt: the next confirmation
-          // starts a fresh idempotency id.
-          if (!open && !watcherUpdateMutation.isPending) setUpdateRequestId(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Send this update privately to {watcherUpdateStats?.updates_enabled_watchers ?? 0}{" "}
-              watcher(s)?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              This creates one private bot message per eligible watcher and does not post to your
-              community group.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={watcherUpdateMutation.isPending}
-              onClick={(e) => {
-                e.preventDefault();
-                watcherUpdateMutation.mutate();
-                setConfirmUpdateSend(false);
-              }}
-            >
-              Send watcher update
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+
+
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
