@@ -910,8 +910,11 @@ export function BroadcastsPanel({
                 variant="outline"
                 className="min-h-11"
                 disabled={!accessKnown || !canManage || scheduleBusy}
-                onClick={() => setDismissConfirmOpen(true)}
+                onClick={() => void prepareDismissConfirmation()}
               >
+                {dismissPreparing ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : null}
                 Dismiss without notifying
               </Button>
             </div>
