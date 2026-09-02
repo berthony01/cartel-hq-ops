@@ -2652,6 +2652,22 @@ export type Database = {
         Args: { _pack_id: string; _user_id: string }
         Returns: boolean
       }
+      capture_project_inbox_launch_reply: {
+        Args: {
+          _body: string
+          _telegram_chat_id: number
+          _telegram_message_id: number
+          _telegram_reply_to_message_id: number
+          _telegram_update_id: number
+          _telegram_user_id: number
+        }
+        Returns: {
+          conversation_id: string
+          conversation_message_id: string
+          outcome: string
+          reason: string
+        }[]
+      }
       claim_launch_notification_deliveries: {
         Args: { _limit?: number }
         Returns: {
