@@ -696,9 +696,10 @@ function ProjectProfilePage() {
                     }}
                   />
                   <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                    Uploading only selects the logo here. It is not part of your project identity —
-                    and branded community broadcasts will not use it — until you save this profile.
+                    Uploading only selects the logo here. It is not part of your project identity,
+                    and branded community broadcasts will not use it, until you save this profile.
                   </p>
+
                 </div>
                 {logos.length === 0 ? (
                   <EmptyState
