@@ -36,6 +36,7 @@ import {
   canSendWatcherUpdate,
   createLaunchWatcherUpdate,
   dismissLaunchScheduleCommunication,
+  expectedScheduleSnapshot,
   getLaunchAccess,
   getLaunchWatcherUpdateStats,
   getPendingScheduleCommunication,
@@ -45,6 +46,7 @@ import {
   sendLaunchScheduleCommunication,
   toLaunchStatus,
   workspaceScheduleCommunicationsQueryKey,
+  type ExpectedScheduleSnapshot,
   type LaunchScheduleCommunication,
 } from "@/lib/launch-control";
 
