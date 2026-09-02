@@ -283,12 +283,14 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         groupConnectionId: snap.groupConnectionId,
         message: snap.message,
         clientRequestId: snap.clientRequestId,
+        branding: snap.branding,
       }),
     onMutate: (snap) => {
       setAttempt({
         groupConnectionId: snap.groupConnectionId,
         message: snap.message,
         clientRequestId: snap.clientRequestId,
+        branded: !!snap.branding,
       });
       setOutcome(null);
     },
