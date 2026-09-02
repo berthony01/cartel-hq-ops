@@ -577,8 +577,10 @@ export const SCHEDULE_NOTE_MAX = 800;
 
 /**
  * Formats one stored schedule snapshot in ITS OWN timezone. Never claims the
- * device timezone: the zone is always printed. An unusable stored timezone
- * degrades to a clearly labelled UTC rendering rather than inventing a time.
+ * device timezone: the zone is always printed, INCLUDING when no time or window
+ * is stored, so a timezone-only change stays visible. An unusable stored
+ * timezone degrades to a clearly labelled UTC rendering rather than inventing
+ * a time. Mirrors `public.format_launch_schedule_snapshot`.
  */
 export function formatScheduleSnapshot(
   at: string | null,
@@ -601,26 +603,28 @@ export function formatScheduleSnapshot(
     }
   };
   const label = (text: string) => `${text} (${zone})`;
+  const notSet = label("Not set");
 
   if (at) {
     const formatted = one(at);
-    return formatted ? label(formatted) : "Not set";
+    return formatted ? label(formatted) : notSet;
   }
   if (windowStart && windowEnd) {
     const a = one(windowStart);
     const b = one(windowEnd);
-    return a && b ? label(`Between ${a} and ${b}`) : "Not set";
+    return a && b ? label(`Between ${a} and ${b}`) : notSet;
   }
   if (windowStart) {
     const a = one(windowStart);
-    return a ? label(`From ${a}`) : "Not set";
+    return a ? label(`From ${a}`) : notSet;
   }
   if (windowEnd) {
     const b = one(windowEnd);
-    return b ? label(`By ${b}`) : "Not set";
+    return b ? label(`By ${b}`) : notSet;
   }
-  return "Not set";
+  return notSet;
 }
+
 
 function safeTimeZone(timezone: string | null): string {
   const candidate = (timezone ?? "").trim();
