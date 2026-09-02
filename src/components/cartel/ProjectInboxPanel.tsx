@@ -349,7 +349,7 @@ export function ProjectInboxPanel({
       void queryClient.invalidateQueries({
         queryKey: projectInboxKeys.messages(workspaceId, selectedConversationId),
       });
-      toast.success("Marked as reviewed. Nothing was resent.");
+      toast.success("Uncertainty acknowledged. Nothing was resent.");
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
