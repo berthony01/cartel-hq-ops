@@ -48,7 +48,14 @@ import {
  * in the `create_launch_watcher_update` SECURITY DEFINER RPC. Everything here
  * is presentation: truthful disabling, never security.
  */
-export function BroadcastsPanel({ initialLaunchId }: { initialLaunchId?: string | null }) {
+export function BroadcastsPanel({
+  selectedLaunchId,
+  onLaunchChange,
+}: {
+  /** Validated `launch` search param. The URL owns the selection. */
+  selectedLaunchId?: string | null;
+  onLaunchChange: (launchId: string) => void;
+}) {
   const { workspaceId, workspace } = useWorkspace();
   const queryClient = useQueryClient();
 
@@ -67,23 +74,26 @@ export function BroadcastsPanel({ initialLaunchId }: { initialLaunchId?: string 
   });
   const canManage = accessQuery.data?.canManage ?? false;
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // The URL param is only honoured when it names a launch in THIS workspace
+  // (the list itself is RLS-scoped). Anything else falls back to the newest
+  // update-eligible launch, then the newest launch.
+  const resolvedId = useMemo(() => {
+    if (launches.length === 0) return null;
+    if (selectedLaunchId && launches.some((l) => l.id === selectedLaunchId)) {
+      return selectedLaunchId;
+    }
+    const eligible = launches.find((l) => canSendWatcherUpdate(toLaunchStatus(l.status)));
+    return (eligible ?? launches[0]!).id;
+  }, [launches, selectedLaunchId]);
 
-  // Deep-linked launch wins when it exists in this workspace; otherwise fall
-  // back to the newest launch that can currently receive a watcher update.
+  // Normalize the URL once a fallback resolved, so reload/back-forward keep the
+  // launch the operator is actually looking at. Guarded: only fires when the
+  // param genuinely differs, so it cannot loop.
   useEffect(() => {
-    if (launches.length === 0) return;
-    setSelectedId((current) => {
-      if (current && launches.some((l) => l.id === current)) return current;
-      if (initialLaunchId && launches.some((l) => l.id === initialLaunchId)) {
-        return initialLaunchId;
-      }
-      const eligible = launches.find((l) => canSendWatcherUpdate(toLaunchStatus(l.status)));
-      return (eligible ?? launches[0]!).id;
-    });
-  }, [launches, initialLaunchId]);
+    if (resolvedId && resolvedId !== selectedLaunchId) onLaunchChange(resolvedId);
+  }, [resolvedId, selectedLaunchId, onLaunchChange]);
 
-  const selected = launches.find((l) => l.id === selectedId) ?? null;
+  const selected = launches.find((l) => l.id === resolvedId) ?? null;
   const status = selected ? toLaunchStatus(selected.status) : null;
   const lifecycleEligible = status ? canSendWatcherUpdate(status) : false;
 
@@ -97,17 +107,40 @@ export function BroadcastsPanel({ initialLaunchId }: { initialLaunchId?: string 
 
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  // ONE client request id per confirmed send attempt. It survives errors so an
-  // ambiguous retry of the same submission stays idempotent server-side.
+  // ONE client request id per intended send. It survives a failed attempt so an
+  // ambiguous retry of the SAME draft stays idempotent server-side, and is
+  // rotated as soon as that draft is edited into a different message.
   const [requestId, setRequestId] = useState<string | null>(null);
+  const [attemptedDraft, setAttemptedDraft] = useState<{ title: string; body: string } | null>(
+    null,
+  );
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Count captured from a fresh, successful stats refetch at confirmation time.
+  const [confirmCount, setConfirmCount] = useState<number | null>(null);
+  const [preparing, setPreparing] = useState(false);
 
-  useEffect(() => {
+  function resetComposer() {
     setTitle("");
     setBody("");
     setRequestId(null);
+    setAttemptedDraft(null);
     setConfirmOpen(false);
+    setConfirmCount(null);
+  }
+
+  useEffect(() => {
+    resetComposer();
   }, [selected?.id]);
+
+  // M1: an edit AFTER a real send attempt makes this a different intended
+  // message, so it must not reuse the previous idempotency id.
+  useEffect(() => {
+    if (!attemptedDraft) return;
+    if (attemptedDraft.title !== title || attemptedDraft.body !== body) {
+      setRequestId(null);
+      setAttemptedDraft(null);
+    }
+  }, [title, body, attemptedDraft]);
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -120,21 +153,25 @@ export function BroadcastsPanel({ initialLaunchId }: { initialLaunchId?: string 
         body,
       });
     },
+    onMutate: () => {
+      // Snapshot the exact draft this idempotency id belongs to.
+      setAttemptedDraft({ title, body });
+    },
     onSuccess: (eventId) => {
       toast.success(
         eventId
           ? "Update queued for delivery to eligible watchers"
           : "Update recorded",
       );
-      setTitle("");
-      setBody("");
-      // Rotate the idempotency id so the NEXT send is a distinct attempt.
-      setRequestId(null);
       const id = selected?.id ?? null;
+      // Success clears the draft; the NEXT send mints a fresh id.
+      resetComposer();
       void statsQuery.refetch();
       void queryClient.invalidateQueries({ queryKey: ["launch-watcher-updates", id] });
       void queryClient.invalidateQueries({ queryKey: ["launch-notification-summary", id] });
     },
+    // The id is deliberately NOT cleared here: an identical retry must be
+    // idempotent against an ambiguous outcome.
     onError: (err: unknown) =>
       toast.error(err instanceof Error ? err.message : "Could not send the update."),
   });
@@ -160,9 +197,47 @@ export function BroadcastsPanel({ initialLaunchId }: { initialLaunchId?: string 
   const sendDisabled =
     !!blockReason ||
     mutation.isPending ||
+    preparing ||
     !body.trim() ||
     bodyTooLong ||
     titleTooLong;
+
+  /**
+   * M2: the confirmation must be based on a fresh, successful audience read —
+   * never on whatever happened to be cached. Any failure, any zero audience and
+   * any change of permission/lifecycle/draft validity keeps the dialog closed.
+   */
+  async function prepareConfirmation() {
+    if (!selected || sendDisabled) return;
+    setPreparing(true);
+    try {
+      const result = await statsQuery.refetch();
+      if (result.isError || !result.data) {
+        toast.error("Could not confirm the current audience. Nothing was sent.");
+        return;
+      }
+      const fresh = result.data.updates_enabled_watchers;
+      if (!canManage || !canSendWatcherUpdate(toLaunchStatus(selected.status))) {
+        toast.error("This launch can no longer receive an update. Nothing was sent.");
+        return;
+      }
+      if (!body.trim() || bodyTooLong || titleTooLong) {
+        toast.error("Check the update text before sending.");
+        return;
+      }
+      if (fresh < 1) {
+        toast.error("No active watcher currently allows project updates. Nothing was sent.");
+        return;
+      }
+      setConfirmCount(fresh);
+      // Mint (or reuse) the idempotency id for this intended send.
+      setRequestId((current) => current ?? crypto.randomUUID());
+      setConfirmOpen(true);
+    } finally {
+      setPreparing(false);
+    }
+  }
+
 
   return (
     <div className="flex min-w-0 flex-col gap-4 sm:gap-6">
