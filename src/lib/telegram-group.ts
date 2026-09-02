@@ -427,6 +427,14 @@ export type GroupAnnouncementResult = {
   /** C7.2 — how the broadcast was delivered, and the exact delivered text. */
   deliveryKind?: "TEXT" | "BRANDED_PHOTO" | (string & {});
   deliveredText?: string;
+  /** Immutable Launch Watch CTA snapshot recorded for this exact broadcast. */
+  ctaEnabled?: boolean;
+  ctaLaunchId?: string | null;
+  ctaProjectName?: string | null;
+  ctaTokenName?: string | null;
+  ctaTicker?: string | null;
+  ctaChain?: string | null;
+  ctaLaunchStatus?: string | null;
   /** Recoverable: the bot was removed from the community. */
   reconnectRequired?: boolean;
   connectionState?: string;
