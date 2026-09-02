@@ -126,11 +126,18 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
       setOutcome(null);
     },
     onSuccess: (result) => {
-      setOutcome(result);
-      if (result.reconnectRequired) {
-        toast.error(result.message ?? "@PepeCartelHQBot is no longer in this community.");
+      if (result.reconnectRequired || !result.status) {
+        // Recoverable lifecycle state — not an announcement outcome.
+        setOutcome(null);
+        setRequestId(null);
+        setAttemptedMessage(null);
+        toast.error(
+          result.message ?? "@PepeCartelHQBot is no longer in this community. Nothing was posted.",
+        );
         return;
       }
+      setOutcome(result);
+
       if (result.status === "SENT") {
         toast.success(result.message ?? "Announcement posted.");
         return;
