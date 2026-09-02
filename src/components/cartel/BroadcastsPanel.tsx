@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Megaphone, Users } from "lucide-react";
+import { AlertTriangle, CalendarClock, Loader2, Megaphone, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { Section } from "@/components/cartel/Section";
