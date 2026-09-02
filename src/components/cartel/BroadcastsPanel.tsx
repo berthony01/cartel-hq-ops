@@ -63,13 +63,20 @@ import {
 export function BroadcastsPanel({
   selectedLaunchId,
   onLaunchChange,
+  groupSetup,
 }: {
   /** Validated `launch` search param. The URL owns the selection. */
   selectedLaunchId?: string | null;
   onLaunchChange: (launchId: string) => void;
+  /** Page-level community state, shared with Communities — never re-fetched here. */
+  groupSetup: TelegramGroupSetup;
 }) {
   const { workspaceId, workspace } = useWorkspace();
   const queryClient = useQueryClient();
+
+  /** Broadcast channel. Watcher DM and community announcements never mix. */
+  const [channel, setChannel] = useState<"watcher" | "community">("watcher");
+
 
   // Same query keys/wrappers as Launch Control so cache stays shared.
   const launchesQuery = useQuery({
