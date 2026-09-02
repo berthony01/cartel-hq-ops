@@ -407,6 +407,33 @@ export function sendCommunityWelcomeTest(params: {
 /** Server-enforced plain-text announcement limit. */
 export const GROUP_ANNOUNCEMENT_MAX = 3500;
 
+/**
+ * Outcome vocabulary, never collapsed:
+ * - `SENT` Telegram confirmed a message id.
+ * - `FAILED` Telegram definitively rejected it — nothing was delivered.
+ * - `AMBIGUOUS` transport uncertainty — delivery unknown, never auto-resent.
+ */
+export type GroupAnnouncementStatus = "SENT" | "FAILED" | "AMBIGUOUS";
+
+export type GroupAnnouncementResult = {
+  status?: GroupAnnouncementStatus;
+  /** True when this exact request id was already recorded — nothing was re-sent. */
+  duplicate?: boolean;
+  announcementId?: string;
+  groupConnectionId?: string;
+  groupTitle?: string;
+  messageId?: number | null;
+  sentAt?: string | null;
+  /** C7.2 — how the broadcast was delivered, and the exact delivered text. */
+  deliveryKind?: "TEXT" | "BRANDED_PHOTO" | (string & {});
+  deliveredText?: string;
+  /** Recoverable: the bot was removed from the community. */
+  reconnectRequired?: boolean;
+  connectionState?: string;
+  message?: string;
+  technical?: string | null;
+};
+
 /* ------------------------------------------------------------------ */
 /* C7.2 — Official Broadcast branding                                  */
 /* ------------------------------------------------------------------ */
