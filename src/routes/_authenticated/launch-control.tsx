@@ -607,7 +607,13 @@ function LaunchControlPage() {
     queryFn: () => listLaunchWatcherUpdates(selected!.id, 10),
   });
   const watcherUpdates = watcherUpdateHistoryQuery.data ?? [];
+
+  // Composing and sending watcher updates moved to Community Command →
+  // Broadcasts (C2). Launch Control keeps the read-only audience counts and
+  // recent outcomes only, so exactly one send composer exists.
+
   // ---- C6: pending schedule-change communication ---------------------------
+
   // Read-only here. The canonical review/notify/dismiss composer lives in
   // Community Command → Broadcasts, so Launch Control only warns and links.
   const scheduleCommQuery = useQuery({
