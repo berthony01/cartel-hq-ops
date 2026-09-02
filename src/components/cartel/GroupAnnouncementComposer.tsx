@@ -196,7 +196,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         // never be posted twice. The truthful outcome card stays visible.
         setAttempt(null);
         setMessage("");
-        toast.success(result.message ?? "Announcement posted.");
+        toast.success(result.message ?? `Official broadcast posted to ${snap.groupTitle}.`);
         return;
       }
       if (result.status === "FAILED") {
@@ -224,13 +224,13 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
     : accessQuery.isError
       ? "Could not verify your permissions, so posting is blocked."
       : !canManage
-        ? "Only workspace owners and admins can post community announcements."
+        ? "Only workspace owners and admins can post official community broadcasts."
         : groups.length === 0
-          ? "Connect a Telegram community before posting an announcement."
+          ? "Connect a Telegram community before posting an official broadcast."
           : readinessBlock
             ? readinessBlock
             : outcome?.status === "AMBIGUOUS"
-              ? "This announcement's delivery is unconfirmed. Check the community in Telegram before writing a new one."
+              ? "This broadcast's delivery is unconfirmed. Check the community in Telegram before writing a new one."
               : null;
 
   const sendDisabled =
@@ -486,11 +486,12 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Post this announcement to {snapshot?.groupTitle ?? "this community"}?
+              Post this official broadcast to {snapshot?.groupTitle ?? "this community"}?
             </AlertDialogTitle>
             <AlertDialogDescription>
               Everyone in the community can see it. It is posted as plain text by
-              @PepeCartelHQBot and no watcher DM is sent.
+              @PepeCartelHQBot for official project/team communications and does not replace normal
+              everyday conversation. No watcher DM is sent.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="max-h-48 overflow-y-auto rounded-md border border-border/60 bg-background/40 p-3">
@@ -509,7 +510,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
                 setConfirmOpen(false);
               }}
             >
-              Post announcement
+              Post Official Broadcast
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
