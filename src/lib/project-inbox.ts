@@ -157,10 +157,10 @@ export const projectInboxKeys = {
     ["project-inbox", "conversations", workspaceId] as const,
   conversations: (workspaceId: string | null, status: ConversationStatus | null) =>
     ["project-inbox", "conversations", workspaceId, status ?? "ALL"] as const,
-  conversation: (conversationId: string | null) =>
-    ["project-inbox", "conversation", conversationId] as const,
-  messages: (conversationId: string | null) =>
-    ["project-inbox", "messages", conversationId] as const,
+  conversation: (workspaceId: string | null, conversationId: string | null) =>
+    ["project-inbox", "conversation", workspaceId, conversationId] as const,
+  messages: (workspaceId: string | null, conversationId: string | null) =>
+    ["project-inbox", "messages", workspaceId, conversationId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -243,10 +243,18 @@ export async function listProjectInboxConversations(
   return manyRows<ProjectInboxConversationListItem>(data);
 }
 
+/**
+ * Workspace-bound detail: the server authorizes the caller against the
+ * supplied ACTIVE workspace FIRST, then resolves the conversation only with
+ * `id AND workspace_id`. A stale selection from another workspace fails
+ * closed with a generic error instead of rendering.
+ */
 export async function getProjectInboxConversation(
+  workspaceId: string,
   conversationId: string,
 ): Promise<ProjectInboxConversationDetail> {
   const { data, error } = await supabase.rpc("get_project_inbox_conversation", {
+    _workspace_id: workspaceId,
     _conversation_id: conversationId,
   });
   if (error) throw error;
@@ -277,13 +285,23 @@ export async function updateProjectConversationStatus(
   return oneRow<ProjectConversationStatusResult>(data, "Conversation status update");
 }
 
+/**
+ * Workspace-bound block/unblock: the server authorizes the caller against the
+ * supplied ACTIVE workspace FIRST and resolves the contact only from a
+ * conversation matching `id AND workspace_id`. Wrong workspace fails closed.
+ */
 export async function setProjectInboxConversationBlocked(
+  workspaceId: string,
   conversationId: string,
   blocked: boolean,
 ): Promise<ProjectInboxConversationBlockResult> {
   const { data, error } = await supabase.rpc(
     "set_project_inbox_conversation_contact_blocked",
-    { _conversation_id: conversationId, _blocked: blocked },
+    {
+      _workspace_id: workspaceId,
+      _conversation_id: conversationId,
+      _blocked: blocked,
+    },
   );
   if (error) throw error;
   return oneRow<ProjectInboxConversationBlockResult>(data, "Member block update");
