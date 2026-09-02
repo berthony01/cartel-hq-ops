@@ -523,6 +523,19 @@ Deno.serve(async (req: Request) => {
       const reviewedLogoAssetId = typeof body.reviewedLogoAssetId === "string" ? body.reviewedLogoAssetId.trim() : "";
       const reviewedTemplateVersion = typeof body.reviewedTemplateVersion === "string" ? body.reviewedTemplateVersion.trim() : "";
 
+      /**
+       * Optional Launch Watch CTA. Presence and the selected launch are part of
+       * the EXACT intent of this request id — reusing an id with a different CTA
+       * state is a conflict, not a duplicate.
+       */
+      const ctaEnabled = body.ctaEnabled === true;
+      const ctaLaunchId = typeof body.ctaLaunchId === "string" ? body.ctaLaunchId.trim() : "";
+      if (ctaEnabled && !ctaLaunchId) {
+        return respond({ error: "CTA_LAUNCH_REQUIRED", message: "Select the launch this Launch Watch button should point to." }, 400);
+      }
+      let ctaSnapshot: { projectName: string; tokenName: string; ticker: string; chain: string; status: string } | null = null;
+      let ctaKeyboard: { inline_keyboard: { text: string; url: string }[][] } | null = null;
+
       const deliveryKind: "TEXT" | "BRANDED_PHOTO" = brandingEnabled ? "BRANDED_PHOTO" : "TEXT";
       /** Caption implied by the REVIEWED identity — used only for intent comparison. */
       const reviewedCaption = brandingEnabled
@@ -532,7 +545,7 @@ Deno.serve(async (req: Request) => {
       const rawGroup = await getGroup();
       if (!rawGroup) return respond({ error: "GROUP_NOT_FOUND", message: "That Telegram community is no longer connected." }, 404);
 
-      const ledgerSelect = "id,status,telegram_message_id,message_text,group_title,group_connection_id,telegram_chat_id,last_error,requested_at,sent_at,delivery_kind,delivered_text_snapshot,branding_template_version,branding_project_name,branding_ticker,branding_logo_asset_id";
+      const ledgerSelect = "id,status,telegram_message_id,message_text,group_title,group_connection_id,telegram_chat_id,last_error,requested_at,sent_at,delivery_kind,delivered_text_snapshot,branding_template_version,branding_project_name,branding_ticker,branding_logo_asset_id,cta_enabled,cta_launch_id,cta_project_name,cta_token_name,cta_ticker,cta_chain,cta_launch_status";
       let brandingSnapshot:
         | { projectName: string; ticker: string | null; logoAssetId: string; storagePath: string; mimeType: string }
         | null = null;
