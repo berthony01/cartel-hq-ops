@@ -36,6 +36,7 @@ import {
   canSendWatcherUpdate,
   createLaunchWatcherUpdate,
   dismissLaunchScheduleCommunication,
+  expectedScheduleSnapshot,
   getLaunchAccess,
   getLaunchWatcherUpdateStats,
   getPendingScheduleCommunication,
@@ -45,6 +46,7 @@ import {
   sendLaunchScheduleCommunication,
   toLaunchStatus,
   workspaceScheduleCommunicationsQueryKey,
+  type ExpectedScheduleSnapshot,
   type LaunchScheduleCommunication,
 } from "@/lib/launch-control";
 
@@ -370,6 +372,7 @@ export function BroadcastsPanel({
   const [scheduleConfirmOpen, setScheduleConfirmOpen] = useState(false);
   const [dismissConfirmOpen, setDismissConfirmOpen] = useState(false);
   const [schedulePreparing, setSchedulePreparing] = useState(false);
+  const [dismissPreparing, setDismissPreparing] = useState(false);
 
   type ScheduleSnapshot = {
     communicationId: string;
@@ -382,8 +385,22 @@ export function BroadcastsPanel({
     note: string;
     eligibleCount: number;
     clientRequestId: string;
+    /** Exact C5 row state the operator reviewed; the server re-checks it. */
+    expected: ExpectedScheduleSnapshot;
   };
   const [scheduleSnapshot, setScheduleSnapshot] = useState<ScheduleSnapshot | null>(null);
+
+  /** The frozen decision behind the dismiss confirmation. */
+  type DismissSnapshot = {
+    communicationId: string;
+    launchId: string;
+    launchLabel: string;
+    previous: string;
+    current: string;
+    expected: ExpectedScheduleSnapshot;
+  };
+  const [dismissSnapshot, setDismissSnapshot] = useState<DismissSnapshot | null>(null);
+
 
   /** Stable identity of the exact pending row + its current schedule facts. */
   const commIdentity = (row: LaunchScheduleCommunication) =>
@@ -418,6 +435,7 @@ export function BroadcastsPanel({
     setScheduleRequestId(null);
     setAttemptedSchedule(null);
     setScheduleSnapshot(null);
+    setDismissSnapshot(null);
     setScheduleConfirmOpen(false);
     setDismissConfirmOpen(false);
   }, [selected?.id, pendingComm?.id]);
@@ -439,6 +457,8 @@ export function BroadcastsPanel({
         communicationId: snapshot.communicationId,
         clientRequestId: snapshot.clientRequestId,
         note: snapshot.note.trim() ? snapshot.note.trim() : null,
+        // Only the frozen reviewed values are submitted, never live state.
+        ...snapshot.expected,
       }),
     onMutate: (snapshot) =>
       setAttemptedSchedule({ note: snapshot.note, identity: snapshot.identity }),
@@ -460,16 +480,24 @@ export function BroadcastsPanel({
   });
 
   const dismissMutation = useMutation({
-    mutationFn: async (communicationId: string) =>
-      dismissLaunchScheduleCommunication(communicationId),
-    onSuccess: () => {
+    mutationFn: async (snapshot: DismissSnapshot) =>
+      dismissLaunchScheduleCommunication({
+        communicationId: snapshot.communicationId,
+        ...snapshot.expected,
+      }),
+    onSuccess: (_void, snapshot) => {
       toast.success("Schedule change dismissed. No watcher message was created.");
       setDismissConfirmOpen(false);
-      refreshAfterScheduleDecision(selected?.id ?? null);
+      setDismissSnapshot(null);
+      refreshAfterScheduleDecision(snapshot.launchId);
     },
-    onError: (err: unknown) =>
-      toast.error(err instanceof Error ? err.message : "Could not dismiss this schedule change."),
+    onError: (err: unknown) => {
+      setDismissSnapshot(null);
+      setDismissConfirmOpen(false);
+      toast.error(err instanceof Error ? err.message : "Could not dismiss this schedule change.");
+    },
   });
+
 
   function refreshAfterScheduleDecision(launchId: string | null) {
     void queryClient.invalidateQueries({ queryKey: scheduleCommunicationQueryKey(launchId) });
@@ -484,9 +512,11 @@ export function BroadcastsPanel({
   const noteTooLong = note.length > SCHEDULE_NOTE_MAX;
   const scheduleBusy =
     schedulePreparing ||
+    dismissPreparing ||
     scheduleMutation.isPending ||
     dismissMutation.isPending ||
-    scheduleConfirmOpen;
+    scheduleConfirmOpen ||
+    dismissConfirmOpen;
   const scheduleBlockReason: string | null = accessQuery.isPending
     ? "Checking your permissions…"
     : accessQuery.isError
@@ -504,8 +534,10 @@ export function BroadcastsPanel({
                 : null;
 
   /**
-   * Refetches BOTH the audience and the pending row, then freezes the exact
-   * reviewed send. Any drift across the await aborts without sending.
+   * Refetches the audience, the pending row, the launches list AND the access
+   * check, then freezes the exact reviewed send — including the C5 snapshot the
+   * server will re-verify. Any drift or query error across the await aborts
+   * without sending.
    */
   async function prepareScheduleConfirmation() {
     if (!selected || !pendingComm || scheduleBlockReason || noteTooLong) return;
@@ -516,9 +548,11 @@ export function BroadcastsPanel({
     };
     setSchedulePreparing(true);
     try {
-      const [statsResult, commResult] = await Promise.all([
+      const [statsResult, commResult, launchesResult, accessResult] = await Promise.all([
         statsQuery.refetch(),
         scheduleCommQuery.refetch(),
+        launchesQuery.refetch(),
+        accessQuery.refetch(),
       ]);
       const latest = scheduleLatestRef.current;
       const freshComm = commResult.data ?? null;
@@ -534,13 +568,29 @@ export function BroadcastsPanel({
         );
         return;
       }
-      if (commResult.isError || statsResult.isError || !statsResult.data) {
-        toast.error("Could not confirm the current audience or schedule change. Nothing was sent.");
+      if (
+        commResult.isError ||
+        statsResult.isError ||
+        launchesResult.isError ||
+        accessResult.isError ||
+        !statsResult.data ||
+        !launchesResult.data ||
+        !accessResult.data
+      ) {
+        toast.error(
+          "Could not confirm your permissions, the current audience or the schedule change. Nothing was sent.",
+        );
         return;
       }
-      const freshLaunch = (launchesQuery.data ?? []).find((l) => l.id === latest.launchId);
+      // Freshly fetched permission/lifecycle — never the pre-await cache.
+      const freshLaunch = launchesResult.data.find((l) => l.id === clicked.launchId);
       const freshStatus = freshLaunch ? toLaunchStatus(freshLaunch.status) : null;
-      if (!latest.canManage || !freshLaunch || !freshStatus || !canSendWatcherUpdate(freshStatus)) {
+      if (
+        !accessResult.data.canManage ||
+        !freshLaunch ||
+        !freshStatus ||
+        !canSendWatcherUpdate(freshStatus)
+      ) {
         toast.error("This launch can no longer receive an update. Nothing was sent.");
         return;
       }
@@ -567,12 +617,67 @@ export function BroadcastsPanel({
         note: latest.note,
         eligibleCount: fresh,
         clientRequestId: idForSend,
+        expected: expectedScheduleSnapshot(freshComm),
       });
       setScheduleConfirmOpen(true);
     } finally {
       setSchedulePreparing(false);
     }
   }
+
+  /**
+   * Dismiss carries the same review-to-submit risk: a newer version of the SAME
+   * pending row must never be dismissed as if it were the reviewed one. The
+   * confirmation is built from a fresh read and the mutation submits only that
+   * frozen snapshot; the server rejects it if the row moved on.
+   */
+  async function prepareDismissConfirmation() {
+    if (!selected || !pendingComm || !accessKnown || !canManage || scheduleBusy) return;
+    const clicked = { launchId: selected.id, identity: commIdentity(pendingComm) };
+    setDismissPreparing(true);
+    try {
+      const [commResult, accessResult] = await Promise.all([
+        scheduleCommQuery.refetch(),
+        accessQuery.refetch(),
+      ]);
+      const latest = scheduleLatestRef.current;
+      const freshComm = commResult.data ?? null;
+      if (commResult.isError || accessResult.isError || !accessResult.data) {
+        toast.error(
+          "Could not confirm your permissions or the schedule change. Nothing was dismissed.",
+        );
+        return;
+      }
+      if (
+        latest.launchId !== clicked.launchId ||
+        !freshComm ||
+        commIdentity(freshComm) !== clicked.identity
+      ) {
+        toast.error(
+          "This schedule change was updated while it was loading. Nothing was dismissed — review it again.",
+        );
+        return;
+      }
+      if (!accessResult.data.canManage) {
+        toast.error("You can no longer resolve this schedule change. Nothing was dismissed.");
+        return;
+      }
+      const pair = scheduleSnapshotPair(freshComm);
+      setDismissSnapshot({
+        communicationId: freshComm.id,
+        launchId: clicked.launchId,
+        launchLabel: `${selected.token_name} (${selected.ticker})`,
+        previous: pair.previous,
+        current: pair.current,
+        expected: expectedScheduleSnapshot(freshComm),
+      });
+      setDismissConfirmOpen(true);
+    } finally {
+      setDismissPreparing(false);
+    }
+  }
+
+
 
 
   return (
@@ -805,8 +910,11 @@ export function BroadcastsPanel({
                 variant="outline"
                 className="min-h-11"
                 disabled={!accessKnown || !canManage || scheduleBusy}
-                onClick={() => setDismissConfirmOpen(true)}
+                onClick={() => void prepareDismissConfirmation()}
               >
+                {dismissPreparing ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : null}
                 Dismiss without notifying
               </Button>
             </div>
@@ -1015,7 +1123,13 @@ export function BroadcastsPanel({
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={dismissConfirmOpen} onOpenChange={setDismissConfirmOpen}>
+      <AlertDialog
+        open={dismissConfirmOpen}
+        onOpenChange={(open) => {
+          setDismissConfirmOpen(open);
+          if (!open) setDismissSnapshot(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Dismiss this schedule change?</AlertDialogTitle>
@@ -1024,14 +1138,25 @@ export function BroadcastsPanel({
               watchers will not be told that the schedule moved.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {dismissSnapshot ? (
+            <div className="space-y-2 rounded-md border border-border bg-muted/40 p-3 text-sm">
+              <p className="font-medium">{dismissSnapshot.launchLabel}</p>
+              <p className="text-muted-foreground">
+                <span className="text-foreground">Previous:</span> {dismissSnapshot.previous}
+              </p>
+              <p className="text-muted-foreground">
+                <span className="text-foreground">New:</span> {dismissSnapshot.current}
+              </p>
+            </div>
+          ) : null}
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              disabled={dismissMutation.isPending || !pendingComm}
+              disabled={dismissMutation.isPending || !dismissSnapshot}
               onClick={(e) => {
                 e.preventDefault();
-                if (!pendingComm) return;
-                dismissMutation.mutate(pendingComm.id);
+                if (!dismissSnapshot) return;
+                dismissMutation.mutate(dismissSnapshot);
               }}
             >
               Dismiss
@@ -1039,6 +1164,7 @@ export function BroadcastsPanel({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
     </div>
 
   );

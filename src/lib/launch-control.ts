@@ -577,8 +577,10 @@ export const SCHEDULE_NOTE_MAX = 800;
 
 /**
  * Formats one stored schedule snapshot in ITS OWN timezone. Never claims the
- * device timezone: the zone is always printed. An unusable stored timezone
- * degrades to a clearly labelled UTC rendering rather than inventing a time.
+ * device timezone: the zone is always printed, INCLUDING when no time or window
+ * is stored, so a timezone-only change stays visible. An unusable stored
+ * timezone degrades to a clearly labelled UTC rendering rather than inventing
+ * a time. Mirrors `public.format_launch_schedule_snapshot`.
  */
 export function formatScheduleSnapshot(
   at: string | null,
@@ -601,26 +603,28 @@ export function formatScheduleSnapshot(
     }
   };
   const label = (text: string) => `${text} (${zone})`;
+  const notSet = label("Not set");
 
   if (at) {
     const formatted = one(at);
-    return formatted ? label(formatted) : "Not set";
+    return formatted ? label(formatted) : notSet;
   }
   if (windowStart && windowEnd) {
     const a = one(windowStart);
     const b = one(windowEnd);
-    return a && b ? label(`Between ${a} and ${b}`) : "Not set";
+    return a && b ? label(`Between ${a} and ${b}`) : notSet;
   }
   if (windowStart) {
     const a = one(windowStart);
-    return a ? label(`From ${a}`) : "Not set";
+    return a ? label(`From ${a}`) : notSet;
   }
   if (windowEnd) {
     const b = one(windowEnd);
-    return b ? label(`By ${b}`) : "Not set";
+    return b ? label(`By ${b}`) : notSet;
   }
-  return "Not set";
+  return notSet;
 }
+
 
 function safeTimeZone(timezone: string | null): string {
   const candidate = (timezone ?? "").trim();
@@ -681,16 +685,47 @@ export async function listPendingScheduleCommunications(
   return data ?? [];
 }
 
-export type SendScheduleCommunicationInput = {
+/**
+ * The exact reviewed decision. `expected*` is the frozen snapshot the operator
+ * actually saw; the server refuses the decision if the PENDING row moved on,
+ * so reviewed == submitted is enforced server-side, not by the browser.
+ */
+export type ExpectedScheduleSnapshot = {
+  expectedChangeCount: number;
+  expectedCurrentLaunchAt: string | null;
+  expectedCurrentWindowStart: string | null;
+  expectedCurrentWindowEnd: string | null;
+  expectedCurrentTimezone: string;
+};
+
+export type SendScheduleCommunicationInput = ExpectedScheduleSnapshot & {
   communicationId: string;
   clientRequestId: string;
   note: string | null;
 };
 
+export type DismissScheduleCommunicationInput = ExpectedScheduleSnapshot & {
+  communicationId: string;
+};
+
+/** Captures the expected snapshot from a freshly read PENDING row. */
+export function expectedScheduleSnapshot(
+  row: LaunchScheduleCommunication,
+): ExpectedScheduleSnapshot {
+  return {
+    expectedChangeCount: row.change_count,
+    expectedCurrentLaunchAt: row.current_launch_at,
+    expectedCurrentWindowStart: row.current_window_start,
+    expectedCurrentWindowEnd: row.current_window_end,
+    expectedCurrentTimezone: row.current_timezone,
+  };
+}
+
 /**
  * Atomic + idempotent server-side. The factual Previous/New schedule text is
  * composed by the RPC; `note` is the operator's optional explanation only.
- * Repeating the same clientRequestId returns the original event id.
+ * Repeating the same clientRequestId returns the original event id. A PENDING
+ * row that no longer matches the reviewed snapshot is rejected.
  */
 export async function sendLaunchScheduleCommunication(
   input: SendScheduleCommunicationInput,
@@ -700,6 +735,11 @@ export async function sendLaunchScheduleCommunication(
     {
       _id: input.communicationId,
       _client_request_id: input.clientRequestId,
+      _expected_change_count: input.expectedChangeCount,
+      _expected_current_launch_at: input.expectedCurrentLaunchAt,
+      _expected_current_window_start: input.expectedCurrentWindowStart,
+      _expected_current_window_end: input.expectedCurrentWindowEnd,
+      _expected_current_timezone: input.expectedCurrentTimezone,
       _note: input.note,
     },
   );
@@ -707,12 +747,20 @@ export async function sendLaunchScheduleCommunication(
   return String(data ?? "");
 }
 
+/** Conditional dismiss: rejected if the PENDING row changed after review. */
 export async function dismissLaunchScheduleCommunication(
-  communicationId: string,
+  input: DismissScheduleCommunicationInput,
 ): Promise<void> {
   const { error } = await (supabase as unknown as RpcClient).rpc(
     "dismiss_launch_schedule_communication",
-    { _id: communicationId },
+    {
+      _id: input.communicationId,
+      _expected_change_count: input.expectedChangeCount,
+      _expected_current_launch_at: input.expectedCurrentLaunchAt,
+      _expected_current_window_start: input.expectedCurrentWindowStart,
+      _expected_current_window_end: input.expectedCurrentWindowEnd,
+      _expected_current_timezone: input.expectedCurrentTimezone,
+    },
   );
   if (error) rethrow(error);
 }

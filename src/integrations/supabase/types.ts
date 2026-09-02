@@ -2085,7 +2085,14 @@ export type Database = {
         Returns: Json
       }
       dismiss_launch_schedule_communication: {
-        Args: { _id: string }
+        Args: {
+          _expected_change_count: number
+          _expected_current_launch_at: string
+          _expected_current_timezone: string
+          _expected_current_window_end: string
+          _expected_current_window_start: string
+          _id: string
+        }
         Returns: {
           baseline_launch_at: string | null
           baseline_timezone: string
@@ -2526,7 +2533,16 @@ export type Database = {
         }[]
       }
       send_launch_schedule_communication: {
-        Args: { _client_request_id: string; _id: string; _note?: string }
+        Args: {
+          _client_request_id: string
+          _expected_change_count: number
+          _expected_current_launch_at: string
+          _expected_current_timezone: string
+          _expected_current_window_end: string
+          _expected_current_window_start: string
+          _id: string
+          _note?: string
+        }
         Returns: string
       }
       set_launch_contract_address: {
