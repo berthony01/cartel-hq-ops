@@ -691,6 +691,25 @@ Deno.serve(async (req: Request) => {
         };
       }
 
+      /**
+       * NEW request only. The selected Launch Watch launch is re-read and
+       * re-validated here with the SAME eligibility rules as the welcome CTA.
+       * A stale/ineligible selection blocks the send truthfully — it is never
+       * silently dropped and never silently replaced with another launch.
+       */
+      if (ctaEnabled) {
+        const rows = await loadEligibleLaunchRows(ctaLaunchId);
+        const row = rows.find((r: any) => String(r.id) === ctaLaunchId) ?? null;
+        if (!row) {
+          return respond({
+            error: "CTA_LAUNCH_INELIGIBLE",
+            message: "The selected launch can no longer accept new Launch Watch signups, or its Project Profile is no longer published. Review the broadcast again.",
+          }, 409);
+        }
+        ctaSnapshot = toOption(row);
+        // Built server-side from the private token, which never leaves the server.
+        ctaKeyboard = { inline_keyboard: [[{ text: "🔔 Watch this launch", url: launchWatchDeepLink(row) }]] };
+      }
 
       // Claim the durable ledger row BEFORE live verification and before sending.
       let announcementId: string | null = null;
@@ -712,6 +731,14 @@ Deno.serve(async (req: Request) => {
           branding_logo_asset_id: brandingSnapshot?.logoAssetId ?? null,
           branding_logo_storage_path: brandingSnapshot?.storagePath ?? null,
           branding_logo_mime_type: brandingSnapshot?.mimeType ?? null,
+          // Immutable CTA intent snapshot. The private token is never stored.
+          cta_enabled: ctaEnabled,
+          cta_launch_id: ctaEnabled ? ctaLaunchId : null,
+          cta_project_name: ctaSnapshot?.projectName ?? null,
+          cta_token_name: ctaSnapshot?.tokenName ?? null,
+          cta_ticker: ctaSnapshot?.ticker ?? null,
+          cta_chain: ctaSnapshot?.chain ?? null,
+          cta_launch_status: ctaSnapshot?.status ?? null,
         }).select(ledgerSelect).maybeSingle();
         if (insertError) {
           // Concurrent duplicate submit — never send twice, and still prove intent.
