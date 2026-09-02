@@ -442,14 +442,20 @@ Deno.serve(async (req: Request) => {
     /**
      * C7 — post ONE plain-text announcement to ONE connected community.
      *
-     * Durable ledger first (`telegram_group_announcements`), then send. The
-     * ledger row is written BEFORE the Telegram call so an interrupted run can
-     * never look like "nothing happened". Idempotency is
-     * (workspace_id, client_request_id) and a repeated request NEVER re-sends.
+     * Order is deliberate: authorize, validate, resolve the target group inside
+     * the workspace, resolve idempotency, CLAIM the durable ledger row, and only
+     * then live-verify and send. The ledger row exists before any Telegram call
+     * so an interrupted run can never look like "nothing happened", and a
+     * verification failure is durably recorded as a definite no-send.
+     *
+     * Idempotency key is (workspace_id, client_request_id) and binds ONE exact
+     * intent: same target community AND same exact trimmed text. A repeated
+     * request id NEVER re-sends for any prior state — including FAILED. A
+     * deliberate retry must arrive with a fresh client request id.
      *
      * Outcome vocabulary:
      *   SENT      Telegram confirmed a message id.
-     *   FAILED    Telegram definitively rejected it — nothing was delivered.
+     *   FAILED    Definitively not delivered — nothing was posted.
      *   AMBIGUOUS Transport uncertainty — delivery is unknown. Never auto-resent.
      */
     if (action === "send_group_announcement") {
@@ -467,67 +473,119 @@ Deno.serve(async (req: Request) => {
       const rawGroup = await getGroup();
       if (!rawGroup) return respond({ error: "GROUP_NOT_FOUND", message: "That Telegram community is no longer connected." }, 404);
 
-      const ledgerSelect = "id,status,telegram_message_id,message_text,group_title,last_error,requested_at,sent_at";
+      const ledgerSelect = "id,status,telegram_message_id,message_text,group_title,group_connection_id,telegram_chat_id,last_error,requested_at,sent_at";
       const outcomeMessage = (status: string, title: string) =>
         status === "SENT"
           ? `Announcement posted to ${title}.`
           : status === "FAILED"
             ? `The announcement was not posted to ${title}.`
             : `Delivery to ${title} could not be confirmed. Check the community before posting again — CARTEL HQ will not resend this automatically.`;
-      const ledgerResponse = (row: any, duplicate: boolean) => respond({
-        status: row.status === "SENDING" ? "AMBIGUOUS" : row.status,
-        duplicate,
-        announcementId: row.id,
-        groupConnectionId: rawGroup.id,
-        groupTitle: row.group_title ?? rawGroup.title,
-        messageId: row.telegram_message_id ?? null,
-        sentAt: row.sent_at ?? null,
-        technical: row.last_error ?? null,
-        message: outcomeMessage(row.status === "SENDING" ? "AMBIGUOUS" : row.status, String(row.group_title ?? rawGroup.title)),
-      });
+      const ledgerResponse = (row: any, duplicate: boolean) => {
+        const status = row.status === "SENDING" ? "AMBIGUOUS" : row.status;
+        return respond({
+          status,
+          duplicate,
+          announcementId: row.id,
+          groupConnectionId: row.group_connection_id ?? rawGroup.id,
+          groupTitle: row.group_title ?? rawGroup.title,
+          messageId: row.telegram_message_id ?? null,
+          sentAt: row.sent_at ?? null,
+          technical: row.last_error ?? null,
+          message: outcomeMessage(status, String(row.group_title ?? rawGroup.title)),
+        });
+      };
+      /**
+       * A request id represents ONE exact intent. A stored row whose target
+       * connection is NULL (the connection was deleted) can never be proven to
+       * match this target, so reuse is rejected instead of guessed.
+       */
+      const sameIntent = (row: any) =>
+        String(row?.message_text ?? "") === messageText &&
+        !!row?.group_connection_id &&
+        String(row.group_connection_id) === String(rawGroup.id);
+      const conflictResponse = () => respond({
+        error: "IDEMPOTENCY_CONFLICT",
+        message: "This announcement id was already used for a different community or a different message. Start a new announcement.",
+      }, 409);
 
       const { data: existing } = await admin.from("telegram_group_announcements").select(ledgerSelect)
         .eq("workspace_id", workspaceId).eq("client_request_id", clientRequestId).maybeSingle();
       if (existing) {
-        if (String(existing.message_text) !== messageText) {
-          return respond({ error: "IDEMPOTENCY_CONFLICT", message: "This announcement was already submitted with different text. Start a new announcement." }, 409);
-        }
-        // SENT / AMBIGUOUS / in-flight SENDING are all terminal for this request.
-        if (existing.status !== "FAILED") return ledgerResponse(existing, true);
+        if (!sameIntent(existing)) return conflictResponse();
+        // SENT / SENDING / AMBIGUOUS / FAILED all return the recorded outcome.
+        // The same request id never sends a second Telegram message.
+        return ledgerResponse(existing, true);
       }
 
-      // Live verification (bot present + admin) before anything is recorded as sent.
-      const group = await verifyGroup(rawGroup);
-
-      let announcementId = existing?.id ?? null;
-      if (announcementId) {
-        const { error: retryError } = await admin.from("telegram_group_announcements")
-          .update({ status: "SENDING", last_error: null, group_title: String(group.title ?? rawGroup.title), telegram_chat_id: group.telegram_chat_id })
-          .eq("id", announcementId).eq("status", "FAILED");
-        if (retryError) throw retryError;
-      } else {
+      // Claim the durable ledger row BEFORE live verification and before sending.
+      let announcementId: string | null = null;
+      {
         const { data: inserted, error: insertError } = await admin.from("telegram_group_announcements").insert({
           workspace_id: workspaceId,
-          group_connection_id: group.id,
-          telegram_chat_id: group.telegram_chat_id,
-          group_title: String(group.title ?? "Telegram community").slice(0, 512),
+          group_connection_id: rawGroup.id,
+          telegram_chat_id: rawGroup.telegram_chat_id,
+          group_title: String(rawGroup.title ?? "Telegram community").slice(0, 512),
           requested_by: user.id,
           client_request_id: clientRequestId,
           message_text: messageText,
           status: "SENDING",
         }).select(ledgerSelect).maybeSingle();
         if (insertError) {
-          // Concurrent duplicate submit — never send twice.
+          // Concurrent duplicate submit — never send twice, and still prove intent.
           if (String((insertError as any).code) === "23505") {
             const { data: raced } = await admin.from("telegram_group_announcements").select(ledgerSelect)
               .eq("workspace_id", workspaceId).eq("client_request_id", clientRequestId).maybeSingle();
-            if (raced) return ledgerResponse(raced, true);
+            if (raced) {
+              if (!sameIntent(raced)) return conflictResponse();
+              return ledgerResponse(raced, true);
+            }
           }
           throw insertError;
         }
         announcementId = inserted?.id ?? null;
       }
       if (!announcementId) throw new Error("Could not record this announcement. Nothing was posted.");
+
+      /** Records a definite no-send against the claimed ledger row. */
+      const markFailed = async (reason: string) => {
+        try {
+          await admin.from("telegram_group_announcements")
+            .update({ status: "FAILED", last_error: reason.slice(0, 1000) })
+            .eq("id", announcementId).eq("status", "SENDING");
+        } catch (e) {
+          console.error("[telegram-group] announcement failure record", e instanceof Error ? e.message : "unknown");
+        }
+      };
+
+      // Live verification. A definite verification failure means nothing was sent.
+      let group: any;
+      try {
+        group = await verifyGroup(rawGroup);
+      } catch (verifyError) {
+        const reason = verifyError instanceof Error ? verifyError.message : "Community verification failed.";
+        await markFailed(reason);
+        // Bot removal keeps its recoverable lifecycle response.
+        if (verifyError instanceof BotRemovedError) throw verifyError;
+        if (verifyError instanceof Error && isBotRemovedMessage(verifyError.message)) throw verifyError;
+        return ledgerResponse({
+          id: announcementId,
+          status: "FAILED",
+          telegram_message_id: null,
+          group_title: rawGroup.title,
+          group_connection_id: rawGroup.id,
+          last_error: reason,
+          sent_at: null,
+        }, false);
+      }
+
+      // Keep the ledger's stored target label current with live verification.
+      if (String(group.title ?? "") && String(group.title) !== String(rawGroup.title ?? "")) {
+        try {
+          await admin.from("telegram_group_announcements")
+            .update({ group_title: String(group.title).slice(0, 512) })
+            .eq("id", announcementId);
+        } catch (e) { console.error("[telegram-group] announcement title sync", e instanceof Error ? e.message : "unknown"); }
+      }
 
       /**
        * Plain text only: no parse_mode, so operator text is never re-interpreted
@@ -571,14 +629,25 @@ Deno.serve(async (req: Request) => {
         : { status: outcome, last_error: lastError ? lastError.slice(0, 1000) : null };
       const { data: finalRow, error: finalError } = await admin.from("telegram_group_announcements")
         .update(patch).eq("id", announcementId).select(ledgerSelect).maybeSingle();
-      if (finalError) {
-        console.error("[telegram-group] announcement ledger update", finalError.message);
-        throw finalError;
-      }
+      /**
+       * A ledger write failure AFTER the send must never surface as a retryable
+       * error: the row stays SENDING, so this request id can only ever return an
+       * uncertain outcome and can never trigger a second Telegram send.
+       */
+      if (finalError) console.error("[telegram-group] announcement ledger update", finalError.message);
 
-      const row = finalRow ?? { id: announcementId, status: outcome, telegram_message_id: telegramMessageId, group_title: group.title, last_error: lastError, sent_at: null };
+      const row = finalRow ?? {
+        id: announcementId,
+        status: outcome,
+        telegram_message_id: telegramMessageId,
+        group_title: group.title,
+        group_connection_id: rawGroup.id,
+        last_error: lastError,
+        sent_at: outcome === "SENT" ? new Date().toISOString() : null,
+      };
       return ledgerResponse(row, false);
     }
+
 
     return respond({ error: "UNKNOWN_ACTION", message: "Unknown Telegram group action." }, 400);
 
