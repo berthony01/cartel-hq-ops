@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Inbox as InboxIcon, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,9 +22,12 @@ import { cn } from "@/lib/utils";
 import {
   CONVERSATION_STATUSES,
   CONVERSATION_STATUS_LABELS,
+  acknowledgeProjectInboxDelivery,
   conversationCategoryLabel,
   conversationOriginLabel,
   conversationStatusLabel,
+  createProjectInboxTeamReply,
+  deliveryStatusLabel,
   getProjectInboxConversation,
   getProjectInboxSettings,
   getProjectInboxSummary,
@@ -37,16 +41,40 @@ import {
 } from "@/lib/project-inbox";
 
 /**
- * C7.3C — Project Inbox panel inside Community Command.
+ * C7.3C/C7.3D — Project Inbox panel inside Community Command.
  *
  * Reads/writes go ONLY through the privacy-safe authenticated RPCs in
  * `@/lib/project-inbox`. The panel never renders a Telegram user id, chat id,
  * message id or username — members are shown by opaque `member_ref` only.
  *
- * Deliberately NOT here (not live yet): a reply composer, assignment
- * controls, notification/team-preference controls, unread counts, arbitrary
+ * C7.3D D1 adds an outbound reply composer. Sending is idempotent (one client
+ * request id per composed reply) and a successful submit means the reply was
+ * QUEUED, never that Telegram delivered it. Delivery state is shown per
+ * message and uncertain deliveries are acknowledged, never auto-resent.
+ *
+ * Deliberately NOT here (not live yet): assignment controls,
+ * notification/team-preference controls, unread counts, arbitrary
  * new-conversation DM capture, and History integration.
  */
+
+const DELIVERY_IN_FLIGHT = new Set(["pending", "processing", "retry"]);
+
+function deliveryTone(status: string | null): "gold" | "green" | "red" | "muted" {
+  switch (status) {
+    case "sent":
+      return "green";
+    case "failed":
+    case "ambiguous":
+      return "red";
+    case "pending":
+    case "processing":
+    case "retry":
+      return "gold";
+    default:
+      return "muted";
+  }
+}
+
 
 type ProjectInboxPanelProps = {
   /** URL-owned selection; null means no conversation is open. */
