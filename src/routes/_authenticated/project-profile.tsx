@@ -679,7 +679,7 @@ function ProjectProfilePage() {
             <Section
               variant="surface"
               title="Project logo"
-              description="Upload a logo or choose one already stored in this project. Branded community broadcasts use PNG or JPEG logos."
+              description="Upload a logo or choose one already stored in this project. Branded Telegram broadcasts require a PNG or JPEG logo no larger than 10MB."
             >
               <div className="space-y-4">
                 <div className="max-w-sm">
