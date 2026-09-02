@@ -486,6 +486,16 @@ Deno.serve(async (req: Request) => {
      *   FAILED    Definitively not delivered — nothing was posted.
      *   AMBIGUOUS Transport uncertainty — delivery is unknown. Never auto-resent.
      */
+    /**
+     * Eligible Launch Watch CTA options for the Official Community Broadcast.
+     * Read-only, owner/admin only, and token-free by construction.
+     */
+    if (action === "broadcast_launch_options") {
+      if (!canManageCommunity) return respond({ error: "FORBIDDEN", message: "Only workspace owners and admins can post official community broadcasts." }, 403);
+      const rows = await loadEligibleLaunchRows();
+      return respond({ options: rows.map(toOption) });
+    }
+
     if (action === "send_group_announcement") {
       if (!canManageCommunity) return respond({ error: "FORBIDDEN", message: "Only workspace owners and admins can post official community broadcasts." }, 403);
       if (!groupConnectionId) return respond({ error: "GROUP_REQUIRED", message: "Choose a connected Telegram community." }, 400);
