@@ -137,10 +137,17 @@ export function ProjectInboxPanel({
   const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
   const [blockDialog, setBlockDialog] = useState<"block" | "unblock" | null>(null);
   const [replyBody, setReplyBody] = useState("");
-  // One stable client request id per composed reply. It is regenerated only
-  // after the server accepts the reply, so retries of the SAME text — double
-  // click, reconnect, refetch — resolve to the original message server-side.
-  const [replyRequestId, setReplyRequestId] = useState(() => crypto.randomUUID());
+  // A send attempt freezes its request id AND the exact text submitted. If the
+  // RPC result is uncertain (network error, timeout) the SAME id and text are
+  // reused on retry, so the server resolves it to the original message instead
+  // of queueing a second reply. A new id is minted only after acceptance or an
+  // explicit, warned abandonment.
+  const [pendingAttempt, setPendingAttempt] = useState<
+    { requestId: string; attemptedBody: string } | null
+  >(null);
+  const [abandonDialogOpen, setAbandonDialogOpen] = useState(false);
+  const [ackDialogMessageId, setAckDialogMessageId] = useState<string | null>(null);
+
 
 
   // Clear any selected conversation when the ACTIVE workspace actually
