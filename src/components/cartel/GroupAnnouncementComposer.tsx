@@ -196,14 +196,14 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         // never be posted twice. The truthful outcome card stays visible.
         setAttempt(null);
         setMessage("");
-        toast.success(result.message ?? `Official broadcast posted to ${snap.groupTitle}.`);
+        toast.success(`Official broadcast posted to ${snap.groupTitle}.`);
         return;
       }
       if (result.status === "FAILED") {
         // Definite no-send: keep the draft for correction, retire the id so a
         // deliberate retry is submitted as a new request.
         setAttempt(null);
-        toast.error(result.message ?? "The announcement was not posted.");
+        toast.error(`Official broadcast was not posted to ${snap.groupTitle}.`);
         return;
       }
       // AMBIGUOUS: keep the id so an identical retry stays idempotent.
@@ -439,10 +439,11 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
                   </StatusBadge>
                 </div>
                 <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  {outcome.message ??
-                    (outcome.status === "SENT"
-                      ? "Official broadcast posted."
-                      : "The broadcast outcome was recorded.")}
+                  {outcome.status === "SENT"
+                    ? `Official broadcast posted to ${outcome.groupTitle ?? group?.title ?? "this community"}.`
+                    : outcome.status === "FAILED"
+                      ? `Official broadcast was not posted to ${outcome.groupTitle ?? group?.title ?? "this community"}.`
+                      : outcome.message ?? "The broadcast outcome was recorded."}
                 </p>
                 {outcome.status === "AMBIGUOUS" ? (
                   <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
