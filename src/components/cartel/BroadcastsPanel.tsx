@@ -1,0 +1,440 @@
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2, Megaphone, Users } from "lucide-react";
+import { toast } from "sonner";
+
+import { Section } from "@/components/cartel/Section";
+import { StatusBadge } from "@/components/cartel/StatusBadge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useWorkspace } from "@/lib/workspace-context";
+import {
+  LAUNCH_STATUS_LABELS,
+  WATCHER_UPDATE_BODY_MAX,
+  WATCHER_UPDATE_TITLE_MAX,
+  canSendWatcherUpdate,
+  createLaunchWatcherUpdate,
+  getLaunchAccess,
+  getLaunchWatcherUpdateStats,
+  listLaunches,
+  toLaunchStatus,
+} from "@/lib/launch-control";
+
+/**
+ * Community Command → Broadcasts (C2).
+ *
+ * Canonical UI for the EXISTING send-now Launch Watcher Update capability.
+ * Every server rule — operator authorization, lifecycle and profile gates,
+ * audience eligibility, anti-spam, daily cap, idempotency and fan-out — stays
+ * in the `create_launch_watcher_update` SECURITY DEFINER RPC. Everything here
+ * is presentation: truthful disabling, never security.
+ */
+export function BroadcastsPanel({ initialLaunchId }: { initialLaunchId?: string | null }) {
+  const { workspaceId, workspace } = useWorkspace();
+  const queryClient = useQueryClient();
+
+  // Same query keys/wrappers as Launch Control so cache stays shared.
+  const launchesQuery = useQuery({
+    queryKey: ["launches", workspaceId],
+    enabled: !!workspaceId,
+    queryFn: () => listLaunches(workspaceId!),
+  });
+  const launches = useMemo(() => launchesQuery.data ?? [], [launchesQuery.data]);
+
+  const accessQuery = useQuery({
+    queryKey: ["launch-access", workspaceId, workspace?.owner_id ?? null],
+    enabled: !!workspaceId,
+    queryFn: () => getLaunchAccess(workspaceId!, workspace?.owner_id ?? null),
+  });
+  const canManage = accessQuery.data?.canManage ?? false;
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Deep-linked launch wins when it exists in this workspace; otherwise fall
+  // back to the newest launch that can currently receive a watcher update.
+  useEffect(() => {
+    if (launches.length === 0) return;
+    setSelectedId((current) => {
+      if (current && launches.some((l) => l.id === current)) return current;
+      if (initialLaunchId && launches.some((l) => l.id === initialLaunchId)) {
+        return initialLaunchId;
+      }
+      const eligible = launches.find((l) => canSendWatcherUpdate(toLaunchStatus(l.status)));
+      return (eligible ?? launches[0]!).id;
+    });
+  }, [launches, initialLaunchId]);
+
+  const selected = launches.find((l) => l.id === selectedId) ?? null;
+  const status = selected ? toLaunchStatus(selected.status) : null;
+  const lifecycleEligible = status ? canSendWatcherUpdate(status) : false;
+
+  const statsQuery = useQuery({
+    queryKey: ["launch-watcher-update-stats", selected?.id ?? null],
+    enabled: !!selected?.id,
+    queryFn: () => getLaunchWatcherUpdateStats(selected!.id),
+  });
+  const stats = statsQuery.data ?? null;
+  const statsReady = statsQuery.isSuccess && !!stats;
+
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  // ONE client request id per confirmed send attempt. It survives errors so an
+  // ambiguous retry of the same submission stays idempotent server-side.
+  const [requestId, setRequestId] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  useEffect(() => {
+    setTitle("");
+    setBody("");
+    setRequestId(null);
+    setConfirmOpen(false);
+  }, [selected?.id]);
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (!selected) throw new Error("No launch selected.");
+      if (!requestId) throw new Error("Confirm the send again to continue.");
+      return createLaunchWatcherUpdate({
+        launchId: selected.id,
+        clientRequestId: requestId,
+        title: title.trim() ? title.trim() : null,
+        body,
+      });
+    },
+    onSuccess: (eventId) => {
+      toast.success(
+        eventId
+          ? "Update queued for delivery to eligible watchers"
+          : "Update recorded",
+      );
+      setTitle("");
+      setBody("");
+      // Rotate the idempotency id so the NEXT send is a distinct attempt.
+      setRequestId(null);
+      const id = selected?.id ?? null;
+      void statsQuery.refetch();
+      void queryClient.invalidateQueries({ queryKey: ["launch-watcher-updates", id] });
+      void queryClient.invalidateQueries({ queryKey: ["launch-notification-summary", id] });
+    },
+    onError: (err: unknown) =>
+      toast.error(err instanceof Error ? err.message : "Could not send the update."),
+  });
+
+  const eligibleCount = stats?.updates_enabled_watchers ?? 0;
+  const titleTooLong = title.length > WATCHER_UPDATE_TITLE_MAX;
+  const bodyTooLong = body.length > WATCHER_UPDATE_BODY_MAX;
+
+  const blockReason: string | null = !canManage
+    ? "Only project owners and admins can send updates. The audience counts below are read-only for you."
+    : !selected
+      ? "Select a launch to send an update."
+      : !lifecycleEligible
+        ? `Updates can be sent from Watchlist open through Live. This launch is currently ${LAUNCH_STATUS_LABELS[status!]}.`
+        : statsQuery.isError
+          ? "Audience counts could not be loaded, so sending is blocked until they load."
+          : !statsReady
+            ? "Loading the current audience…"
+            : eligibleCount < 1
+              ? "No active watcher currently allows project updates, so there is nobody to send this to yet."
+              : null;
+
+  const sendDisabled =
+    !!blockReason ||
+    mutation.isPending ||
+    !body.trim() ||
+    bodyTooLong ||
+    titleTooLong;
+
+  return (
+    <div className="flex min-w-0 flex-col gap-4 sm:gap-6">
+      <Section
+        variant="hero"
+        title="Broadcasts"
+        description="Send a private project update to Launch Watch watchers who allow project updates."
+        leading={<Megaphone className="size-4" aria-hidden="true" />}
+        actions={<StatusBadge tone="green">Watcher DM live</StatusBadge>}
+      >
+        <ul className="grid gap-2 sm:grid-cols-2">
+          <li className="min-w-0 rounded-md border border-border/70 bg-background/40 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
+                Watcher DM
+              </p>
+              <StatusBadge tone="green">Available</StatusBadge>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              A private @PepeCartelHQBot message to active watchers of the selected launch who
+              currently allow project updates.
+            </p>
+          </li>
+          <li
+            className="min-w-0 rounded-md border border-dashed border-border/70 bg-background/30 p-3 opacity-70"
+            aria-disabled="true"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
+                Telegram community
+              </p>
+              <StatusBadge tone="muted">Planned</StatusBadge>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              Posting an announcement into a connected community group is not built yet. Nothing
+              here can post to a group.
+            </p>
+          </li>
+        </ul>
+      </Section>
+
+      <Section variant="surface" title="Launch">
+        {launchesQuery.isError ? (
+          <div>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Launches could not be loaded right now.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2 min-h-11"
+              onClick={() => void launchesQuery.refetch()}
+            >
+              Retry
+            </Button>
+          </div>
+        ) : launchesQuery.isPending ? (
+          <p className="text-xs text-muted-foreground">Loading launches…</p>
+        ) : launches.length === 0 ? (
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            No launches exist in this workspace yet. Create one in Launch Control first.
+          </p>
+        ) : (
+          <div className="min-w-0 space-y-2">
+            <Label htmlFor="broadcast-launch">Selected launch</Label>
+            <Select value={selectedId ?? ""} onValueChange={(value) => setSelectedId(value)}>
+              <SelectTrigger id="broadcast-launch" className="min-h-11 w-full">
+                <SelectValue placeholder="Select a launch" />
+              </SelectTrigger>
+              <SelectContent>
+                {launches.map((launch) => (
+                  <SelectItem key={launch.id} value={launch.id}>
+                    {launch.token_name} · {launch.ticker} ·{" "}
+                    {LAUNCH_STATUS_LABELS[toLaunchStatus(launch.status)]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selected ? (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {selected.token_name} ({selected.ticker}) on {selected.chain} —{" "}
+                {LAUNCH_STATUS_LABELS[status!]}.
+              </p>
+            ) : null}
+          </div>
+        )}
+      </Section>
+
+      <Section
+        variant="surface"
+        title="Audience"
+        leading={<Users className="size-4" aria-hidden="true" />}
+        description="Only active watchers who currently allow project updates receive this send."
+      >
+        {!selected ? (
+          <p className="text-xs text-muted-foreground">Select a launch to see its audience.</p>
+        ) : statsQuery.isError ? (
+          <div>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Audience counts could not be loaded right now.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2 min-h-11"
+              onClick={() => void statsQuery.refetch()}
+            >
+              Retry
+            </Button>
+          </div>
+        ) : (
+          <>
+            <dl className="grid grid-cols-3 gap-x-4 gap-y-2 text-xs">
+              <div className="min-w-0">
+                <dt className="text-muted-foreground">Active watchers</dt>
+                <dd className="font-mono text-sm text-foreground">
+                  {stats ? stats.active_watchers : "—"}
+                </dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-muted-foreground">Updates enabled</dt>
+                <dd className="font-mono text-sm text-foreground">
+                  {stats ? stats.updates_enabled_watchers : "—"}
+                </dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-muted-foreground">Updates muted</dt>
+                <dd className="font-mono text-sm text-foreground">
+                  {stats ? stats.updates_muted_watchers : "—"}
+                </dd>
+              </div>
+            </dl>
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              Counts only. Telegram identities, usernames and per-recipient records are never shown
+              in CARTEL HQ. Watchers control their own project-update preference in
+              @PepeCartelHQBot.
+            </p>
+          </>
+        )}
+      </Section>
+
+      <Section
+        variant="surface"
+        title="Your message"
+        description="Text only. No scheduling, attachments or formatting modes in this phase."
+      >
+        <div className="min-w-0 space-y-3">
+          <div className="min-w-0">
+            <Label htmlFor="broadcast-title">Title (optional)</Label>
+            <Input
+              id="broadcast-title"
+              maxLength={WATCHER_UPDATE_TITLE_MAX}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Short headline for this update"
+              disabled={!canManage}
+            />
+            <p className="mt-1 text-right text-xs text-muted-foreground">
+              {title.length}/{WATCHER_UPDATE_TITLE_MAX}
+            </p>
+          </div>
+          <div className="min-w-0">
+            <Label htmlFor="broadcast-body">Update text</Label>
+            <Textarea
+              id="broadcast-body"
+              rows={6}
+              maxLength={WATCHER_UPDATE_BODY_MAX}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="What do your watchers need to know?"
+              disabled={!canManage}
+            />
+            <p className="mt-1 text-right text-xs text-muted-foreground">
+              {body.length}/{WATCHER_UPDATE_BODY_MAX}
+            </p>
+          </div>
+
+          {body.trim() ? (
+            <div className="min-w-0 rounded-md border border-border/60 bg-background/30 p-3">
+              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                Operator message preview
+              </p>
+              {title.trim() ? (
+                <p className="mt-2 text-xs font-semibold text-foreground [overflow-wrap:anywhere]">
+                  {title.trim()}
+                </p>
+              ) : null}
+              <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+                {body}
+              </p>
+              <p className="mt-2 border-t border-border/60 pt-2 text-xs leading-relaxed text-muted-foreground">
+                This shows your own text only. The delivered Telegram message also carries the
+                authenticated-project identity, official links and the standard disclaimer added by
+                the notification worker.
+              </p>
+            </div>
+          ) : null}
+
+          <Button
+            className="min-h-11"
+            disabled={sendDisabled}
+            onClick={() => {
+              // Mint the idempotency id BEFORE confirmation so a retry of the
+              // same confirmed attempt reuses it.
+              setRequestId((current) => current ?? crypto.randomUUID());
+              setConfirmOpen(true);
+            }}
+          >
+            {mutation.isPending ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Megaphone className="size-4" aria-hidden="true" />
+            )}
+            Send watcher update
+          </Button>
+
+          {blockReason ? (
+            <p className="text-xs leading-relaxed text-muted-foreground">{blockReason}</p>
+          ) : null}
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Sending queues one private bot message per eligible watcher. Delivery happens
+            asynchronously, so outcomes appear afterwards in the launch’s recent updates in Launch
+            Control.
+          </p>
+        </div>
+      </Section>
+
+      <AlertDialog
+        open={confirmOpen}
+        onOpenChange={(open) => {
+          setConfirmOpen(open);
+          // Explicit cancel before any send attempt: next confirmation starts a
+          // fresh idempotency id.
+          if (!open && !mutation.isPending) setRequestId(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send this update to {eligibleCount} watcher(s)?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selected
+                ? `${selected.token_name} (${selected.ticker}) — ${LAUNCH_STATUS_LABELS[status!]}. `
+                : ""}
+              Only active watchers who currently allow project updates will receive it. Nothing is
+              posted to your community group.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-48 overflow-y-auto rounded-md border border-border/60 bg-background/40 p-3">
+            {title.trim() ? (
+              <p className="text-xs font-semibold text-foreground [overflow-wrap:anywhere]">
+                {title.trim()}
+              </p>
+            ) : null}
+            <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+              {body}
+            </p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={mutation.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                mutation.mutate();
+                setConfirmOpen(false);
+              }}
+            >
+              Send watcher update
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
