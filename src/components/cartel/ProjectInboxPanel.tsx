@@ -22,11 +22,10 @@ import { cn } from "@/lib/utils";
 import {
   CONVERSATION_STATUSES,
   CONVERSATION_STATUS_LABELS,
-  acknowledgeProjectInboxDelivery,
+  acknowledgeProjectInboxDeliveryUncertainty,
   conversationCategoryLabel,
   conversationOriginLabel,
   conversationStatusLabel,
-  createProjectInboxTeamReply,
   deliveryStatusLabel,
   getProjectInboxConversation,
   getProjectInboxSettings,
@@ -34,11 +33,13 @@ import {
   listProjectConversationMessages,
   listProjectInboxConversations,
   projectInboxKeys,
+  sendProjectInboxTeamReply,
   setProjectInboxConversationBlocked,
   setProjectInboxRepliesEnabled,
   updateProjectConversationStatus,
   type ConversationStatus,
 } from "@/lib/project-inbox";
+
 
 /**
  * C7.3C/C7.3D — Project Inbox panel inside Community Command.
