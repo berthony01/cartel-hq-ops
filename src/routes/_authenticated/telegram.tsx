@@ -149,6 +149,17 @@ function TelegramPage() {
       }),
     [navigate],
   );
+  // Audience owns the same `launch` param, so switching Broadcasts → Audience
+  // preserves the selection. Replace-only, same as Broadcasts.
+  const setAudienceLaunch = useCallback(
+    (launchId: string) =>
+      void navigate({
+        search: (prev: TelegramSearch) => ({ ...prev, tab: "audience", launch: launchId }),
+        replace: true,
+      }),
+    [navigate],
+  );
+
 
 
 
