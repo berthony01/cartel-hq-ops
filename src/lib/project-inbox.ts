@@ -263,6 +263,26 @@ export async function setProjectInboxRepliesEnabled(
   return oneRow<ProjectInboxSettings>(data, "Inbox settings update");
 }
 
+/**
+ * C7.3E — enables/disables MEMBER-INITIATED conversations ONLY.
+ * `replies_enabled` is passed through UNCHANGED from the caller-supplied
+ * current value, so this control can never turn reply capture on or off.
+ * Callers must pass the value from the most recent server-returned row.
+ */
+export async function setProjectInboxNewConversationsEnabled(
+  workspaceId: string,
+  newConversationsEnabled: boolean,
+  currentRepliesEnabled: boolean,
+): Promise<ProjectInboxSettings> {
+  const { data, error } = await supabase.rpc("set_project_inbox_settings", {
+    _workspace_id: workspaceId,
+    _replies_enabled: currentRepliesEnabled,
+    _new_conversations_enabled: newConversationsEnabled,
+  });
+  if (error) throw error;
+  return oneRow<ProjectInboxSettings>(data, "Inbox settings update");
+}
+
 export async function getProjectInboxSummary(
   workspaceId: string,
 ): Promise<ProjectInboxSummary> {
