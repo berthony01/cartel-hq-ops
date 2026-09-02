@@ -122,7 +122,15 @@ function TelegramPage() {
   const setup = useTelegramSetup();
   const groupSetup = useTelegramGroupSetup();
   const { workspaceId } = useWorkspace();
-  const [tab, setTab] = useState<TabKey>("overview");
+  const search = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
+  const tab = search.tab;
+  const setTab = (next: TabKey) =>
+    void navigate({
+      search: (prev: TelegramSearch) => ({ ...prev, tab: next }),
+      replace: true,
+    });
+
 
   const groupCount = groupSetup.connectedGroupCount;
   const readyCount = groupSetup.readiness.filter((r) => r.ready).length;
