@@ -132,7 +132,7 @@ function TelegramPage() {
   const { workspaceId } = useWorkspace();
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
-  const tab = search.tab;
+  const tab = search.tab ?? "overview";
   const setTab = (next: TabKey) =>
     void navigate({
       search: (prev: TelegramSearch) => ({ ...prev, tab: next }),
