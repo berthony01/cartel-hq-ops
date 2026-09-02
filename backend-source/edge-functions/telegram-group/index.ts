@@ -564,6 +564,8 @@ Deno.serve(async (req: Request) => {
           messageId: row.telegram_message_id ?? null,
           sentAt: row.sent_at ?? null,
           technical: row.last_error ?? null,
+          deliveryKind: row.delivery_kind ?? deliveryKind,
+          deliveredText: row.delivered_text_snapshot ?? deliveredText,
           message: outcomeMessage(status, String(row.group_title ?? rawGroup.title)),
         });
       };
@@ -571,9 +573,15 @@ Deno.serve(async (req: Request) => {
        * A request id represents ONE exact intent. A stored row whose target
        * connection is NULL (the connection was deleted) can never be proven to
        * match this target, so reuse is rejected instead of guessed.
+       *
+       * C7.2 — the delivery kind and the exact delivered text (plain body or
+       * branded caption) are part of that intent: the same id can never be
+       * reused to post the same words in a different form.
        */
       const sameIntent = (row: any) =>
         String(row?.message_text ?? "") === messageText &&
+        String(row?.delivery_kind ?? "TEXT") === deliveryKind &&
+        String(row?.delivered_text_snapshot ?? "") === deliveredText &&
         !!row?.group_connection_id &&
         String(row.group_connection_id) === String(rawGroup.id);
       const conflictResponse = () => respond({
