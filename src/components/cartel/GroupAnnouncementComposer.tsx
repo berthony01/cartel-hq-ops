@@ -347,7 +347,12 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
             ? readinessBlock
             : outcome?.status === "AMBIGUOUS"
               ? "This broadcast's delivery is unconfirmed. Check the community in Telegram before writing a new one."
-              : null;
+              : brandedRequested && !brandingReady
+                ? (brandingUnavailableReason ??
+                  "Branded posting is unavailable for this project right now.")
+                : brandedOverLimit
+                  ? `Branded broadcasts are limited to ${BRANDED_BROADCAST_CAPTION_MAX} characters including the branding header. Shorten the message or turn branding off.`
+                  : null;
 
   const sendDisabled =
     busy || !workspaceId || !group || !canManage || !trimmed || tooLong || !!blockReason;
