@@ -1042,6 +1042,10 @@ export function BroadcastsPanel({
           </p>
         </div>
       </Section>
+        </>
+      ) : null}
+
+
 
       <AlertDialog
         open={confirmOpen}
