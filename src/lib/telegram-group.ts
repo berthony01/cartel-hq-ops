@@ -399,3 +399,55 @@ export function sendCommunityWelcomeTest(params: {
     groupConnectionId: params.groupConnectionId,
   });
 }
+
+/* ------------------------------------------------------------------ */
+/* Community announcements (C7 — telegram-group)                       */
+/* ------------------------------------------------------------------ */
+
+/** Server-enforced plain-text announcement limit. */
+export const GROUP_ANNOUNCEMENT_MAX = 3500;
+
+/**
+ * Outcome vocabulary, never collapsed:
+ * - `SENT` Telegram confirmed a message id.
+ * - `FAILED` Telegram definitively rejected it — nothing was delivered.
+ * - `AMBIGUOUS` transport uncertainty — delivery unknown, never auto-resent.
+ */
+export type GroupAnnouncementStatus = "SENT" | "FAILED" | "AMBIGUOUS";
+
+export type GroupAnnouncementResult = {
+  status?: GroupAnnouncementStatus;
+  /** True when this exact request id was already recorded — nothing was re-sent. */
+  duplicate?: boolean;
+  announcementId?: string;
+  groupConnectionId?: string;
+  groupTitle?: string;
+  messageId?: number | null;
+  sentAt?: string | null;
+  /** Recoverable: the bot was removed from the community. */
+  reconnectRequired?: boolean;
+  connectionState?: string;
+  message?: string;
+  technical?: string | null;
+};
+
+/**
+ * Posts ONE plain-text announcement to ONE connected community.
+ * `clientRequestId` must stay stable for one intended announcement: the server
+ * ledger is keyed on `(workspace, clientRequestId)` and never posts it twice.
+ */
+export function sendGroupAnnouncement(params: {
+  workspaceId: string;
+  groupConnectionId: string;
+  message: string;
+  clientRequestId: string;
+}): Promise<GroupAnnouncementResult> {
+  return invoke<GroupAnnouncementResult>({
+    action: "send_group_announcement",
+    workspaceId: params.workspaceId,
+    groupConnectionId: params.groupConnectionId,
+    message: params.message,
+    clientRequestId: params.clientRequestId,
+  });
+}
+

@@ -413,7 +413,12 @@ function TelegramPage() {
 
         {/* ---------------------------------------------------------------- */}
         <TabsContent value="broadcasts" className="mt-0 min-w-0">
-          <BroadcastsPanel selectedLaunchId={search.launch ?? null} onLaunchChange={setLaunch} />
+          <BroadcastsPanel
+            selectedLaunchId={search.launch ?? null}
+            onLaunchChange={setLaunch}
+            groupSetup={groupSetup}
+          />
+
         </TabsContent>
 
 
@@ -523,12 +528,13 @@ function TelegramPage() {
       <p className="flex items-center gap-2 text-[11px] leading-relaxed text-muted-foreground">
         <Radio className="size-3.5 shrink-0" aria-hidden="true" />
         <span>
-          Audience and History are being added in later controlled phases. They are placeholders
-          today and cannot send or expose anything. Broadcasts currently sends private watcher
-          updates only — it cannot post to a community group.
+          History is being added in a later controlled phase. It is a placeholder today and cannot
+          send or expose anything. Broadcasts sends private watcher updates, and can post one
+          plain-text announcement into a connected community you select.
 
         </span>
       </p>
     </div>
   );
+
 }

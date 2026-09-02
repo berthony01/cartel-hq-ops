@@ -439,8 +439,149 @@ Deno.serve(async (req: Request) => {
 
     }
 
+    /**
+     * C7 — post ONE plain-text announcement to ONE connected community.
+     *
+     * Durable ledger first (`telegram_group_announcements`), then send. The
+     * ledger row is written BEFORE the Telegram call so an interrupted run can
+     * never look like "nothing happened". Idempotency is
+     * (workspace_id, client_request_id) and a repeated request NEVER re-sends.
+     *
+     * Outcome vocabulary:
+     *   SENT      Telegram confirmed a message id.
+     *   FAILED    Telegram definitively rejected it — nothing was delivered.
+     *   AMBIGUOUS Transport uncertainty — delivery is unknown. Never auto-resent.
+     */
+    if (action === "send_group_announcement") {
+      if (!canManageCommunity) return respond({ error: "FORBIDDEN", message: "Only workspace owners and admins can post community announcements." }, 403);
+      if (!groupConnectionId) return respond({ error: "GROUP_REQUIRED", message: "Choose a connected Telegram community." }, 400);
+
+      const clientRequestId = String(body.clientRequestId ?? "").trim();
+      if (!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(clientRequestId)) {
+        return respond({ error: "INVALID_REQUEST_ID", message: "Invalid announcement request id." }, 400);
+      }
+      const messageText = typeof body.message === "string" ? body.message.trim() : "";
+      if (!messageText) return respond({ error: "INVALID_MESSAGE", message: "Enter an announcement message." }, 400);
+      if (messageText.length > 3500) return respond({ error: "INVALID_MESSAGE", message: "Announcements are limited to 3500 characters." }, 400);
+
+      const rawGroup = await getGroup();
+      if (!rawGroup) return respond({ error: "GROUP_NOT_FOUND", message: "That Telegram community is no longer connected." }, 404);
+
+      const ledgerSelect = "id,status,telegram_message_id,message_text,group_title,last_error,requested_at,sent_at";
+      const outcomeMessage = (status: string, title: string) =>
+        status === "SENT"
+          ? `Announcement posted to ${title}.`
+          : status === "FAILED"
+            ? `The announcement was not posted to ${title}.`
+            : `Delivery to ${title} could not be confirmed. Check the community before posting again — CARTEL HQ will not resend this automatically.`;
+      const ledgerResponse = (row: any, duplicate: boolean) => respond({
+        status: row.status === "SENDING" ? "AMBIGUOUS" : row.status,
+        duplicate,
+        announcementId: row.id,
+        groupConnectionId: rawGroup.id,
+        groupTitle: row.group_title ?? rawGroup.title,
+        messageId: row.telegram_message_id ?? null,
+        sentAt: row.sent_at ?? null,
+        technical: row.last_error ?? null,
+        message: outcomeMessage(row.status === "SENDING" ? "AMBIGUOUS" : row.status, String(row.group_title ?? rawGroup.title)),
+      });
+
+      const { data: existing } = await admin.from("telegram_group_announcements").select(ledgerSelect)
+        .eq("workspace_id", workspaceId).eq("client_request_id", clientRequestId).maybeSingle();
+      if (existing) {
+        if (String(existing.message_text) !== messageText) {
+          return respond({ error: "IDEMPOTENCY_CONFLICT", message: "This announcement was already submitted with different text. Start a new announcement." }, 409);
+        }
+        // SENT / AMBIGUOUS / in-flight SENDING are all terminal for this request.
+        if (existing.status !== "FAILED") return ledgerResponse(existing, true);
+      }
+
+      // Live verification (bot present + admin) before anything is recorded as sent.
+      const group = await verifyGroup(rawGroup);
+
+      let announcementId = existing?.id ?? null;
+      if (announcementId) {
+        const { error: retryError } = await admin.from("telegram_group_announcements")
+          .update({ status: "SENDING", last_error: null, group_title: String(group.title ?? rawGroup.title), telegram_chat_id: group.telegram_chat_id })
+          .eq("id", announcementId).eq("status", "FAILED");
+        if (retryError) throw retryError;
+      } else {
+        const { data: inserted, error: insertError } = await admin.from("telegram_group_announcements").insert({
+          workspace_id: workspaceId,
+          group_connection_id: group.id,
+          telegram_chat_id: group.telegram_chat_id,
+          group_title: String(group.title ?? "Telegram community").slice(0, 512),
+          requested_by: user.id,
+          client_request_id: clientRequestId,
+          message_text: messageText,
+          status: "SENDING",
+        }).select(ledgerSelect).maybeSingle();
+        if (insertError) {
+          // Concurrent duplicate submit — never send twice.
+          if (String((insertError as any).code) === "23505") {
+            const { data: raced } = await admin.from("telegram_group_announcements").select(ledgerSelect)
+              .eq("workspace_id", workspaceId).eq("client_request_id", clientRequestId).maybeSingle();
+            if (raced) return ledgerResponse(raced, true);
+          }
+          throw insertError;
+        }
+        announcementId = inserted?.id ?? null;
+      }
+      if (!announcementId) throw new Error("Could not record this announcement. Nothing was posted.");
+
+      /**
+       * Plain text only: no parse_mode, so operator text is never re-interpreted
+       * as markup. Outcome is classified into definite failure vs transport
+       * uncertainty — an uncertain send is NEVER retried automatically.
+       */
+      let outcome: "SENT" | "FAILED" | "AMBIGUOUS" = "AMBIGUOUS";
+      let telegramMessageId: number | null = null;
+      let lastError: string | null = null;
+      try {
+        const res = await fetch(`${TG_BASE}/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: String(group.telegram_chat_id), text: messageText, disable_web_page_preview: true }),
+          signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
+        });
+        const payload = await res.json().catch(() => null) as any;
+        if (payload?.ok === true && typeof payload?.result?.message_id === "number") {
+          outcome = "SENT";
+          telegramMessageId = payload.result.message_id;
+        } else if (res.status >= 500 || !payload) {
+          outcome = "AMBIGUOUS";
+          lastError = `Telegram response was inconclusive (${res.status}).`;
+        } else if (payload?.ok === false) {
+          outcome = "FAILED";
+          lastError = String(payload?.description ?? `Telegram rejected the announcement (${res.status}).`);
+        } else {
+          outcome = "AMBIGUOUS";
+          lastError = "Telegram did not confirm a message id.";
+        }
+      } catch (e) {
+        // Network error / timeout: the message may or may not have been delivered.
+        outcome = "AMBIGUOUS";
+        lastError = e instanceof Error && e.name === "TimeoutError"
+          ? "Telegram did not respond in time."
+          : "Could not reach Telegram.";
+      }
+
+      const patch: Record<string, unknown> = outcome === "SENT"
+        ? { status: "SENT", telegram_message_id: telegramMessageId, sent_at: new Date().toISOString(), last_error: null }
+        : { status: outcome, last_error: lastError ? lastError.slice(0, 1000) : null };
+      const { data: finalRow, error: finalError } = await admin.from("telegram_group_announcements")
+        .update(patch).eq("id", announcementId).select(ledgerSelect).maybeSingle();
+      if (finalError) {
+        console.error("[telegram-group] announcement ledger update", finalError.message);
+        throw finalError;
+      }
+
+      const row = finalRow ?? { id: announcementId, status: outcome, telegram_message_id: telegramMessageId, group_title: group.title, last_error: lastError, sent_at: null };
+      return ledgerResponse(row, false);
+    }
 
     return respond({ error: "UNKNOWN_ACTION", message: "Unknown Telegram group action." }, 400);
+
   } catch (err) {
     // Bot removal is a recoverable lifecycle state: always HTTP 200, never an
     // `error` field, so the app renders a reconnect prompt instead of a crash.

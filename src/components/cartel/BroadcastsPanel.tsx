@@ -28,6 +28,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useWorkspace } from "@/lib/workspace-context";
 import { ScheduleChangeSummary } from "@/components/cartel/ScheduleChangeSummary";
+import { GroupAnnouncementComposer } from "@/components/cartel/GroupAnnouncementComposer";
+import type { TelegramGroupSetup } from "@/components/cartel/TelegramGroupCard";
+
 import {
   LAUNCH_STATUS_LABELS,
   SCHEDULE_NOTE_MAX,
@@ -63,13 +66,20 @@ import {
 export function BroadcastsPanel({
   selectedLaunchId,
   onLaunchChange,
+  groupSetup,
 }: {
   /** Validated `launch` search param. The URL owns the selection. */
   selectedLaunchId?: string | null;
   onLaunchChange: (launchId: string) => void;
+  /** Page-level community state, shared with Communities — never re-fetched here. */
+  groupSetup: TelegramGroupSetup;
 }) {
   const { workspaceId, workspace } = useWorkspace();
   const queryClient = useQueryClient();
+
+  /** Broadcast channel. Watcher DM and community announcements never mix. */
+  const [channel, setChannel] = useState<"watcher" | "community">("watcher");
+
 
   // Same query keys/wrappers as Launch Control so cache stays shared.
   const launchesQuery = useQuery({
@@ -685,40 +695,69 @@ export function BroadcastsPanel({
       <Section
         variant="hero"
         title="Broadcasts"
-        description="Send a private project update to Launch Watch watchers who allow project updates."
+        description="Send a private project update to Launch Watch watchers, or post one plain-text announcement into a connected Telegram community."
         leading={<Megaphone className="size-4" aria-hidden="true" />}
-        actions={<StatusBadge tone="green">Watcher DM live</StatusBadge>}
+        actions={<StatusBadge tone="green">Live</StatusBadge>}
       >
-        <ul className="grid gap-2 sm:grid-cols-2">
-          <li className="min-w-0 rounded-md border border-border/70 bg-background/40 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
-                Watcher DM
+        <ul className="grid gap-2 sm:grid-cols-2" role="list">
+          <li className="min-w-0">
+            <button
+              type="button"
+              aria-pressed={channel === "watcher"}
+              onClick={() => setChannel("watcher")}
+              className={`min-w-0 w-full rounded-md border p-3 text-left transition-colors ${
+                channel === "watcher"
+                  ? "border-primary/70 bg-primary/10"
+                  : "border-border/70 bg-background/40 hover:bg-background/60"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
+                  Watcher DM
+                </p>
+                <StatusBadge tone={channel === "watcher" ? "green" : "muted"}>
+                  {channel === "watcher" ? "Selected" : "Available"}
+                </StatusBadge>
+              </div>
+              <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                A private @PepeCartelHQBot message to active watchers of the selected launch who
+                currently allow project updates.
               </p>
-              <StatusBadge tone="green">Available</StatusBadge>
-            </div>
-            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              A private @PepeCartelHQBot message to active watchers of the selected launch who
-              currently allow project updates.
-            </p>
+            </button>
           </li>
-          <li
-            className="min-w-0 rounded-md border border-dashed border-border/70 bg-background/30 p-3 opacity-70"
-            aria-disabled="true"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
-                Telegram community
+          <li className="min-w-0">
+            <button
+              type="button"
+              aria-pressed={channel === "community"}
+              onClick={() => setChannel("community")}
+              className={`min-w-0 w-full rounded-md border p-3 text-left transition-colors ${
+                channel === "community"
+                  ? "border-primary/70 bg-primary/10"
+                  : "border-border/70 bg-background/40 hover:bg-background/60"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
+                  Telegram community
+                </p>
+                <StatusBadge tone={channel === "community" ? "green" : "muted"}>
+                  {channel === "community" ? "Selected" : "Available"}
+                </StatusBadge>
+              </div>
+              <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                One public plain-text announcement posted into a connected community group. No
+                watcher DM is sent.
               </p>
-              <StatusBadge tone="muted">Planned</StatusBadge>
-            </div>
-            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              Posting an announcement into a connected community group is not built yet. Nothing
-              here can post to a group.
-            </p>
+            </button>
           </li>
         </ul>
       </Section>
+
+      {channel === "community" ? <GroupAnnouncementComposer setup={groupSetup} /> : null}
+
+      {channel === "watcher" ? (
+        <>
+
 
       <Section variant="surface" title="Launch">
         {launchesQuery.isError ? (
@@ -1013,6 +1052,10 @@ export function BroadcastsPanel({
           </p>
         </div>
       </Section>
+        </>
+      ) : null}
+
+
 
       <AlertDialog
         open={confirmOpen}
