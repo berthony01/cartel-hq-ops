@@ -569,6 +569,13 @@ Deno.serve(async (req: Request) => {
           technical: row.last_error ?? null,
           deliveryKind: row.delivery_kind ?? deliveryKind,
           deliveredText: row.delivered_text_snapshot ?? deliveredText,
+          ctaEnabled: row.cta_enabled === true,
+          ctaLaunchId: row.cta_launch_id ?? null,
+          ctaProjectName: row.cta_project_name ?? null,
+          ctaTokenName: row.cta_token_name ?? null,
+          ctaTicker: row.cta_ticker ?? null,
+          ctaChain: row.cta_chain ?? null,
+          ctaLaunchStatus: row.cta_launch_status ?? null,
           message: outcomeMessage(status, String(row.group_title ?? rawGroup.title)),
         });
       };
