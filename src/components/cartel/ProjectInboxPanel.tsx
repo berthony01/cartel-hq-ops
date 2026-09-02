@@ -198,7 +198,19 @@ export function ProjectInboxPanel({
     queryKey: projectInboxKeys.messages(workspaceId, selectedConversationId),
     enabled: detailConfirmedForSelection,
     queryFn: () => listProjectConversationMessages(selectedConversationId!, 200),
+    // Delivery happens out of band in a background worker, so poll only while
+    // this thread actually has a reply still in flight.
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some(
+        (m) => m.delivery_status != null && DELIVERY_IN_FLIGHT.has(m.delivery_status),
+      )
+        ? 10_000
+        : false,
   });
+
+  const messages = useMemo(() => messagesQuery.data ?? [], [messagesQuery.data]);
+
+
 
   // --------------------------------------------------------------- mutations
   const repliesMutation = useMutation({
