@@ -978,7 +978,10 @@ export type Database = {
       }
       project_inbox_deliveries: {
         Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
           attempt_count: number
+          body_snapshot: string
           claimed_at: string | null
           conversation_id: string
           created_at: string
@@ -989,12 +992,17 @@ export type Database = {
           next_attempt_at: string
           sent_at: string | null
           status: string
+          team_user_id: string
           telegram_message_id: number | null
           telegram_user_id: number
           updated_at: string
+          workspace_id: string
         }
         Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
           attempt_count?: number
+          body_snapshot: string
           claimed_at?: string | null
           conversation_id: string
           created_at?: string
@@ -1005,12 +1013,17 @@ export type Database = {
           next_attempt_at?: string
           sent_at?: string | null
           status?: string
+          team_user_id: string
           telegram_message_id?: number | null
           telegram_user_id: number
           updated_at?: string
+          workspace_id: string
         }
         Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
           attempt_count?: number
+          body_snapshot?: string
           claimed_at?: string | null
           conversation_id?: string
           created_at?: string
@@ -1021,9 +1034,11 @@ export type Database = {
           next_attempt_at?: string
           sent_at?: string | null
           status?: string
+          team_user_id?: string
           telegram_message_id?: number | null
           telegram_user_id?: number
           updated_at?: string
+          workspace_id?: string
         }
         Relationships: [
           {
@@ -2647,6 +2662,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      acknowledge_project_inbox_delivery: {
+        Args: { _delivery_id: string; _workspace_id: string }
+        Returns: {
+          acknowledged_at: string
+          delivery_id: string
+          status: string
+        }[]
+      }
       archive_sticker_pack: { Args: { _pack_id: string }; Returns: Json }
       can_access_pack: {
         Args: { _pack_id: string; _user_id: string }
@@ -2686,11 +2709,15 @@ export type Database = {
         Args: { _limit?: number }
         Returns: {
           attempt_count: number
-          body: string
+          body_snapshot: string
+          contact_blocked: boolean
           conversation_id: string
           delivery_id: string
           message_id: string
+          replies_enabled: boolean
+          team_user_id: string
           telegram_user_id: number
+          workspace_id: string
         }[]
       }
       claim_telegram_message_cleanup_jobs: {
@@ -2711,6 +2738,20 @@ export type Database = {
           _title: string
         }
         Returns: string
+      }
+      create_project_inbox_team_reply: {
+        Args: {
+          _body: string
+          _client_request_id: string
+          _conversation_id: string
+          _workspace_id: string
+        }
+        Returns: {
+          delivery_id: string
+          delivery_status: string
+          message_id: string
+          replayed: boolean
+        }[]
       }
       delete_sticker_pack_if_eligible: {
         Args: { _pack_id: string }
@@ -2758,6 +2799,17 @@ export type Database = {
       enqueue_due_launch_reminder_events: {
         Args: { _now?: string }
         Returns: number
+      }
+      finalize_project_inbox_delivery: {
+        Args: {
+          _delivery_id: string
+          _error_class?: string
+          _last_error?: string
+          _outcome: string
+          _retry_after_seconds?: number
+          _telegram_message_id?: number
+        }
+        Returns: string
       }
       format_launch_schedule_snapshot: {
         Args: { _at: string; _tz: string; _we: string; _ws: string }
@@ -3189,6 +3241,10 @@ export type Database = {
           body: string
           channel: string
           created_at: string
+          delivery_acknowledged_at: string
+          delivery_error_class: string
+          delivery_id: string
+          delivery_status: string
           message_id: string
           reply_to_message_id: string
           team_display_name: string
@@ -3214,6 +3270,10 @@ export type Database = {
       }
       mark_stale_launch_notification_claims: { Args: never; Returns: number }
       mark_stale_project_inbox_delivery_claims: { Args: never; Returns: number }
+      project_inbox_delivery_scheduler_secret_matches: {
+        Args: { p_secret: string }
+        Returns: boolean
+      }
       record_launch_watch_confirmation: {
         Args: {
           _attempted_at: string
