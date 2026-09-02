@@ -34,10 +34,8 @@ import {
   getLaunchWatchConfirmationSummary,
   getLaunchWatcherUpdateStats,
   listLaunchWatcherUpdates,
-  createLaunchWatcherUpdate,
   canSendWatcherUpdate,
-  WATCHER_UPDATE_TITLE_MAX,
-  WATCHER_UPDATE_BODY_MAX,
+
 
   isLaunchWatchClosedStatus,
   isLaunchWatchOpenStatus,
