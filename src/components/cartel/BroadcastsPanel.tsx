@@ -534,8 +534,10 @@ export function BroadcastsPanel({
                 : null;
 
   /**
-   * Refetches BOTH the audience and the pending row, then freezes the exact
-   * reviewed send. Any drift across the await aborts without sending.
+   * Refetches the audience, the pending row, the launches list AND the access
+   * check, then freezes the exact reviewed send — including the C5 snapshot the
+   * server will re-verify. Any drift or query error across the await aborts
+   * without sending.
    */
   async function prepareScheduleConfirmation() {
     if (!selected || !pendingComm || scheduleBlockReason || noteTooLong) return;
@@ -546,9 +548,11 @@ export function BroadcastsPanel({
     };
     setSchedulePreparing(true);
     try {
-      const [statsResult, commResult] = await Promise.all([
+      const [statsResult, commResult, launchesResult, accessResult] = await Promise.all([
         statsQuery.refetch(),
         scheduleCommQuery.refetch(),
+        launchesQuery.refetch(),
+        accessQuery.refetch(),
       ]);
       const latest = scheduleLatestRef.current;
       const freshComm = commResult.data ?? null;
@@ -564,13 +568,29 @@ export function BroadcastsPanel({
         );
         return;
       }
-      if (commResult.isError || statsResult.isError || !statsResult.data) {
-        toast.error("Could not confirm the current audience or schedule change. Nothing was sent.");
+      if (
+        commResult.isError ||
+        statsResult.isError ||
+        launchesResult.isError ||
+        accessResult.isError ||
+        !statsResult.data ||
+        !launchesResult.data ||
+        !accessResult.data
+      ) {
+        toast.error(
+          "Could not confirm your permissions, the current audience or the schedule change. Nothing was sent.",
+        );
         return;
       }
-      const freshLaunch = (launchesQuery.data ?? []).find((l) => l.id === latest.launchId);
+      // Freshly fetched permission/lifecycle — never the pre-await cache.
+      const freshLaunch = launchesResult.data.find((l) => l.id === clicked.launchId);
       const freshStatus = freshLaunch ? toLaunchStatus(freshLaunch.status) : null;
-      if (!latest.canManage || !freshLaunch || !freshStatus || !canSendWatcherUpdate(freshStatus)) {
+      if (
+        !accessResult.data.canManage ||
+        !freshLaunch ||
+        !freshStatus ||
+        !canSendWatcherUpdate(freshStatus)
+      ) {
         toast.error("This launch can no longer receive an update. Nothing was sent.");
         return;
       }
@@ -597,12 +617,67 @@ export function BroadcastsPanel({
         note: latest.note,
         eligibleCount: fresh,
         clientRequestId: idForSend,
+        expected: expectedScheduleSnapshot(freshComm),
       });
       setScheduleConfirmOpen(true);
     } finally {
       setSchedulePreparing(false);
     }
   }
+
+  /**
+   * Dismiss carries the same review-to-submit risk: a newer version of the SAME
+   * pending row must never be dismissed as if it were the reviewed one. The
+   * confirmation is built from a fresh read and the mutation submits only that
+   * frozen snapshot; the server rejects it if the row moved on.
+   */
+  async function prepareDismissConfirmation() {
+    if (!selected || !pendingComm || !accessKnown || !canManage || scheduleBusy) return;
+    const clicked = { launchId: selected.id, identity: commIdentity(pendingComm) };
+    setDismissPreparing(true);
+    try {
+      const [commResult, accessResult] = await Promise.all([
+        scheduleCommQuery.refetch(),
+        accessQuery.refetch(),
+      ]);
+      const latest = scheduleLatestRef.current;
+      const freshComm = commResult.data ?? null;
+      if (commResult.isError || accessResult.isError || !accessResult.data) {
+        toast.error(
+          "Could not confirm your permissions or the schedule change. Nothing was dismissed.",
+        );
+        return;
+      }
+      if (
+        latest.launchId !== clicked.launchId ||
+        !freshComm ||
+        commIdentity(freshComm) !== clicked.identity
+      ) {
+        toast.error(
+          "This schedule change was updated while it was loading. Nothing was dismissed — review it again.",
+        );
+        return;
+      }
+      if (!accessResult.data.canManage) {
+        toast.error("You can no longer resolve this schedule change. Nothing was dismissed.");
+        return;
+      }
+      const pair = scheduleSnapshotPair(freshComm);
+      setDismissSnapshot({
+        communicationId: freshComm.id,
+        launchId: clicked.launchId,
+        launchLabel: `${selected.token_name} (${selected.ticker})`,
+        previous: pair.previous,
+        current: pair.current,
+        expected: expectedScheduleSnapshot(freshComm),
+      });
+      setDismissConfirmOpen(true);
+    } finally {
+      setDismissPreparing(false);
+    }
+  }
+
+
 
 
   return (
