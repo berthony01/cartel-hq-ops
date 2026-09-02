@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, HelpCircle, Loader2, Send } from "lucide-react";
+import { AlertTriangle, CheckCircle2, HelpCircle, Loader2, Send, Users } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 
 import { Section } from "@/components/cartel/Section";
@@ -33,18 +34,23 @@ import {
   sendGroupAnnouncement,
   type GroupAnnouncementResult,
 } from "@/lib/telegram-group";
-import type { TelegramGroupSetup } from "@/components/cartel/TelegramGroupCard";
+import type { GroupReadiness, TelegramGroupSetup } from "@/components/cartel/TelegramGroupCard";
 
 /**
  * Community Command → Broadcasts → Telegram community (C7).
  *
  * Posts ONE plain-text announcement to ONE connected community. Every rule that
- * matters — owner/admin authorization, live bot verification, idempotency and
- * the durable announcement ledger — lives in the `telegram-group` Edge Function.
- * This component is presentation and truthful disabling only.
+ * matters — owner/admin authorization, live bot verification, exact
+ * target+message idempotency and the durable announcement ledger — lives in the
+ * `telegram-group` Edge Function. This component is presentation, truthful
+ * disabling, and correct client-request-id lifecycle only.
  *
  * Outcomes are never collapsed: a delivery that could not be confirmed
  * (AMBIGUOUS) is reported as uncertain and is NEVER resent automatically.
+ *
+ * Shared community state stays owned by the single page-level
+ * `useTelegramGroupSetup()` hook; this component only reads it and asks it to
+ * refresh. It never calls that hook itself.
  */
 type Snapshot = {
   groupConnectionId: string;
@@ -53,8 +59,33 @@ type Snapshot = {
   clientRequestId: string;
 };
 
+/** The exact intent already submitted to the server under `clientRequestId`. */
+type Attempt = {
+  groupConnectionId: string;
+  message: string;
+  clientRequestId: string;
+};
+
 function newRequestId() {
   return crypto.randomUUID();
+}
+
+/** The most truthful blocking reason derivable from stored/live readiness. */
+function unreadyReason(readiness: GroupReadiness): string | null {
+  if (readiness.ready) return null;
+  if (readiness.botRemoved) {
+    return "@PepeCartelHQBot is no longer in this community. Re-add the bot as an administrator, then re-check it in Communities.";
+  }
+  if (!readiness.supportedChatType) {
+    return "This connected chat is not a supported Telegram group, so an announcement cannot be posted to it.";
+  }
+  if (!readiness.botAdmin) {
+    return "@PepeCartelHQBot is not an administrator in this community. Promote the bot, then re-check it in Communities.";
+  }
+  if (readiness.botCanChangeInfo === false) {
+    return "@PepeCartelHQBot is missing the Change Group Info permission in this community. Grant it, then re-check it in Communities.";
+  }
+  return "This community has not been verified as ready. Re-check it in Communities before posting.";
 }
 
 export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup }) {
@@ -79,21 +110,33 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
 
   const [message, setMessage] = useState("");
   /**
-   * ONE client request id per intended announcement. It survives a failed or
-   * uncertain attempt so an identical retry stays idempotent server-side, and is
-   * rotated as soon as the draft is edited into a different message.
+   * ONE client request id per exact intended announcement (target + text). It
+   * survives only an uncertain attempt, so an identical retry stays idempotent
+   * server-side. A confirmed SENT or a definite FAILED retires it immediately:
+   * the server refuses to re-send any id, so a deliberate retry needs a new one.
    */
-  const [requestId, setRequestId] = useState<string | null>(null);
-  const [attemptedMessage, setAttemptedMessage] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState<Attempt | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [outcome, setOutcome] = useState<GroupAnnouncementResult | null>(null);
 
+  const trimmed = message.trim();
+
+  /**
+   * Latest committed selection + draft, readable across an await. Preparation
+   * compares against this ref rather than its own captured closure values, so a
+   * reviewed announcement can never differ from the submitted one.
+   */
+  const latestRef = useRef<{ groupConnectionId: string | null; message: string }>({
+    groupConnectionId: resolvedGroupId,
+    message: trimmed,
+  });
+  latestRef.current = { groupConnectionId: resolvedGroupId, message: trimmed };
+
   function resetComposer() {
     setMessage("");
-    setRequestId(null);
-    setAttemptedMessage(null);
+    setAttempt(null);
     setConfirmOpen(false);
     setSnapshot(null);
     setOutcome(null);
@@ -104,14 +147,20 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
     resetComposer();
   }, [resolvedGroupId]);
 
+  // Editing away from a submitted intent retires that request id and outcome.
   useEffect(() => {
-    if (attemptedMessage === null) return;
-    if (attemptedMessage !== message) {
-      setRequestId(null);
-      setAttemptedMessage(null);
+    if (!attempt) return;
+    if (attempt.message !== trimmed || attempt.groupConnectionId !== resolvedGroupId) {
+      setAttempt(null);
       setOutcome(null);
     }
-  }, [message, attemptedMessage]);
+  }, [attempt, trimmed, resolvedGroupId]);
+
+  /** Shared community state is page-level; ask it to refresh, never re-own it. */
+  function refreshSharedCommunityState(id?: string | null) {
+    void setup.groupQuery.refetch();
+    if (id) void setup.recheckGroup(id, true);
+  }
 
   const mutation = useMutation({
     mutationFn: (snap: Snapshot) =>
@@ -122,15 +171,19 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         clientRequestId: snap.clientRequestId,
       }),
     onMutate: (snap) => {
-      setAttemptedMessage(snap.message);
+      setAttempt({
+        groupConnectionId: snap.groupConnectionId,
+        message: snap.message,
+        clientRequestId: snap.clientRequestId,
+      });
       setOutcome(null);
     },
-    onSuccess: (result) => {
+    onSuccess: (result, snap) => {
       if (result.reconnectRequired || !result.status) {
         // Recoverable lifecycle state — not an announcement outcome.
         setOutcome(null);
-        setRequestId(null);
-        setAttemptedMessage(null);
+        setAttempt(null);
+        refreshSharedCommunityState(snap.groupConnectionId);
         toast.error(
           result.message ?? "@PepeCartelHQBot is no longer in this community. Nothing was posted.",
         );
@@ -139,26 +192,32 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
       setOutcome(result);
 
       if (result.status === "SENT") {
+        // Confirmed post: retire the id and the draft so the same intent can
+        // never be posted twice. The truthful outcome card stays visible.
+        setAttempt(null);
+        setMessage("");
         toast.success(result.message ?? "Announcement posted.");
         return;
       }
       if (result.status === "FAILED") {
+        // Definite no-send: keep the draft for correction, retire the id so a
+        // deliberate retry is submitted as a new request.
+        setAttempt(null);
         toast.error(result.message ?? "The announcement was not posted.");
         return;
       }
+      // AMBIGUOUS: keep the id so an identical retry stays idempotent.
       toast.warning(result.message ?? "Delivery could not be confirmed.");
     },
     onError: (err: unknown) => {
       setSnapshot(null);
-      toast.error(
-        err instanceof Error ? err.message : "Could not post the announcement.",
-      );
+      toast.error(err instanceof Error ? err.message : "Could not post the announcement.");
     },
   });
 
-  const trimmed = message.trim();
   const tooLong = message.length > GROUP_ANNOUNCEMENT_MAX;
   const busy = mutation.isPending || preparing;
+  const readinessBlock = readiness ? unreadyReason(readiness) : null;
   // Never claim a permission answer before permission is known.
   const blockReason: string | null = accessQuery.isPending
     ? "Checking your permissions…"
@@ -168,22 +227,20 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         ? "Only workspace owners and admins can post community announcements."
         : groups.length === 0
           ? "Connect a Telegram community before posting an announcement."
-          : readiness?.botRemoved
-            ? "@PepeCartelHQBot is no longer in this community. Re-add the bot as an administrator, then re-check it in Communities."
+          : readinessBlock
+            ? readinessBlock
             : outcome?.status === "AMBIGUOUS"
               ? "This announcement's delivery is unconfirmed. Check the community in Telegram before writing a new one."
-              : outcome?.status === "SENT"
-                ? "This announcement was posted. Start a new one to post again."
-                : null;
+              : null;
 
   const sendDisabled =
     busy || !workspaceId || !group || !canManage || !trimmed || tooLong || !!blockReason;
 
   /**
    * Freeze the exact reviewed announcement. The confirmation is built only after
-   * a fresh permission check and a live community verification that still match
-   * the operator's current selection and draft — the dialog renders from this
-   * snapshot and the mutation submits only this snapshot.
+   * a fresh permission check and a live community verification, and only if the
+   * latest selection and draft still match what was clicked — the dialog renders
+   * from this snapshot and the mutation submits only this snapshot.
    */
   async function prepareConfirmation() {
     if (sendDisabled || !group || !workspaceId) return;
@@ -192,7 +249,7 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
     try {
       const [accessResult, liveResult] = await Promise.allSettled([
         accessQuery.refetch(),
-        fetchTelegramGroupStatus({ workspaceId, groupConnectionId: group.id }),
+        fetchTelegramGroupStatus({ workspaceId, groupConnectionId: clicked.groupConnectionId }),
       ]);
       if (
         accessResult.status !== "fulfilled" ||
@@ -212,19 +269,27 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
       }
       const live = liveResult.value;
       if (live.reconnectRequired || live.connectionState === "bot_removed") {
+        refreshSharedCommunityState(clicked.groupConnectionId);
         toast.error(
           live.message ??
             "@PepeCartelHQBot is no longer in this community. Nothing was posted.",
         );
         return;
       }
-      // Drift across the await: the operator changed the draft or the community.
-      if (clicked.groupConnectionId !== group.id || clicked.message !== message.trim()) {
+      // Drift across the await, measured against the LATEST state, not a closure.
+      if (
+        latestRef.current.groupConnectionId !== clicked.groupConnectionId ||
+        latestRef.current.message !== clicked.message
+      ) {
         toast.error("The announcement changed while it was loading. Nothing was posted.");
         return;
       }
-      const id = requestId ?? newRequestId();
-      setRequestId(id);
+      const id =
+        attempt &&
+        attempt.groupConnectionId === clicked.groupConnectionId &&
+        attempt.message === clicked.message
+          ? attempt.clientRequestId
+          : newRequestId();
       setSnapshot({
         groupConnectionId: clicked.groupConnectionId,
         groupTitle: live.group?.title ?? group.title,
@@ -246,10 +311,18 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         description="Posts one plain-text message from @PepeCartelHQBot into the selected connected community."
       >
         {groups.length === 0 ? (
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            No Telegram community is connected to this workspace yet. Connect one in Communities
-            first.
-          </p>
+          <div className="min-w-0 space-y-3">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              No Telegram community is connected to this workspace yet. Connect one in Communities
+              first.
+            </p>
+            <Button asChild variant="outline" className="min-h-11">
+              <Link to="/telegram" search={{ tab: "communities" }}>
+                <Users className="size-4" aria-hidden="true" />
+                Go to Communities
+              </Link>
+            </Button>
+          </div>
         ) : (
           <div className="min-w-0 space-y-3">
             <div className="min-w-0 space-y-2">
@@ -272,11 +345,10 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
               </Select>
               {readiness ? (
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  {readiness.botRemoved
-                    ? "@PepeCartelHQBot is not in this community right now."
-                    : readiness.ready
-                      ? "@PepeCartelHQBot is an administrator in this community."
-                      : "This community has not been verified as ready. The bot is re-checked before anything is posted."}
+                  {readiness.ready
+                    ? "@PepeCartelHQBot is an administrator in this community. It is re-checked live before anything is posted."
+                    : (unreadyReason(readiness) ??
+                      "This community has not been verified as ready.")}
                 </p>
               ) : null}
             </div>
@@ -374,8 +446,15 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
                 </p>
                 {outcome.status === "AMBIGUOUS" ? (
                   <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                    CARTEL HQ will not resend this automatically. Open the community in Telegram to
-                    check whether the message arrived before writing a new announcement.
+                    Do not assume this was delivered. CARTEL HQ will not resend it automatically.
+                    Open the community in Telegram to check whether the message arrived before
+                    writing a new announcement.
+                  </p>
+                ) : null}
+                {outcome.status === "FAILED" ? (
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                    Nothing was posted. Your text is still here — fix it and post again as a new
+                    announcement.
                   </p>
                 ) : null}
                 {outcome.technical ? (
@@ -402,9 +481,6 @@ export function GroupAnnouncementComposer({ setup }: { setup: TelegramGroupSetup
         onOpenChange={(open) => {
           setConfirmOpen(open);
           if (!open) setSnapshot(null);
-          // Cancelling BEFORE any attempt starts a fresh idempotency id; after an
-          // attempt the id is preserved so an identical retry cannot double-post.
-          if (!open && !mutation.isPending && attemptedMessage === null) setRequestId(null);
         }}
       >
         <AlertDialogContent>
