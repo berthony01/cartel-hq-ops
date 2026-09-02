@@ -512,9 +512,11 @@ export function BroadcastsPanel({
   const noteTooLong = note.length > SCHEDULE_NOTE_MAX;
   const scheduleBusy =
     schedulePreparing ||
+    dismissPreparing ||
     scheduleMutation.isPending ||
     dismissMutation.isPending ||
-    scheduleConfirmOpen;
+    scheduleConfirmOpen ||
+    dismissConfirmOpen;
   const scheduleBlockReason: string | null = accessQuery.isPending
     ? "Checking your permissions…"
     : accessQuery.isError
