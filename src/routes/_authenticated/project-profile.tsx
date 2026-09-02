@@ -295,6 +295,32 @@ function ProjectProfilePage() {
   });
 
   const selectedLogo: MediaAsset | undefined = logos.find((a) => a.id === form.logo_asset_id);
+  /**
+   * Honest branded-broadcast eligibility for the selected logo, derived from
+   * stored metadata using the same rules the Edge Function enforces before it
+   * uploads the image to Telegram.
+   */
+  const selectedLogoIssue: string | null = (() => {
+    if (!selectedLogo) return null;
+    const mime = (selectedLogo.mime_type ?? "").toLowerCase();
+    if (mime !== "image/png" && mime !== "image/jpeg") {
+      return "This logo is not a PNG or JPEG, so branded community broadcasts cannot use it. Upload a PNG or JPEG version to enable branded posting.";
+    }
+    const size = typeof selectedLogo.file_size_bytes === "number" ? selectedLogo.file_size_bytes : null;
+    if (size !== null && (size <= 0 || size > 10 * 1024 * 1024)) {
+      return "This logo is larger than 10MB, so branded community broadcasts cannot use it. Upload a smaller PNG or JPEG.";
+    }
+    const w = typeof selectedLogo.width === "number" ? selectedLogo.width : null;
+    const h = typeof selectedLogo.height === "number" ? selectedLogo.height : null;
+    if (w !== null && h !== null) {
+      const ratio = Math.max(w, h) / Math.max(1, Math.min(w, h));
+      if (w <= 0 || h <= 0 || w + h > 10000 || ratio > 20) {
+        return "Telegram cannot post this logo's dimensions, so branded community broadcasts cannot use it. Upload a more standard PNG or JPEG logo.";
+      }
+    }
+    return null;
+  })();
+  const logoSelectionUnsaved = (form.logo_asset_id || "") !== (profile?.logo_asset_id ?? "");
 
   const saveButton = (
     <Button
