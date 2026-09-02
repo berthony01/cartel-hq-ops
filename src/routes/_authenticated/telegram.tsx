@@ -138,6 +138,18 @@ function TelegramPage() {
       search: (prev: TelegramSearch) => ({ ...prev, tab: next }),
       replace: true,
     });
+  // The URL owns the Broadcasts launch selection (M3). Replace, not push, so
+  // back/forward stay meaningful and normalization cannot loop.
+  const setLaunch = useCallback(
+    (launchId: string) =>
+      void navigate({
+        search: (prev: TelegramSearch) => ({ ...prev, tab: "broadcasts", launch: launchId }),
+        replace: true,
+      }),
+    [navigate],
+  );
+
+
 
 
   const groupCount = groupSetup.connectedGroupCount;
