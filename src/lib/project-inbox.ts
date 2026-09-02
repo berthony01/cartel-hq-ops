@@ -360,15 +360,16 @@ export async function setProjectInboxConversationBlocked(
  * C7.3D D1 — writes ONE outbound team reply and queues it durably.
  *
  * Workspace-bound and idempotent: the server authorizes the ACTIVE workspace
- * first, refuses blocked members and disabled reply capture, and returns the
- * ORIGINAL message when the same `clientRequestId` is submitted again, so a
- * double click, retry or reconnect can never send twice.
+ * first, refuses blocked members and resolved threads, blocks a new send while
+ * an earlier reply is unresolved, and returns the ORIGINAL message when the
+ * same `clientRequestId` (UUID) is submitted again, so a double click, retry
+ * or reconnect can never send twice.
  *
  * Returning successfully means the reply was durably QUEUED — not that
  * Telegram has delivered it. Delivery state arrives through
  * `listProjectConversationMessages`.
  */
-export async function createProjectInboxTeamReply(
+export async function sendProjectInboxTeamReply(
   workspaceId: string,
   conversationId: string,
   body: string,
@@ -385,17 +386,28 @@ export async function createProjectInboxTeamReply(
 }
 
 /**
- * Acknowledges an uncertain or failed delivery. This is a bookkeeping action
- * only: it NEVER resends anything to the member.
+ * Acknowledges an UNCERTAIN delivery. Bookkeeping only: nothing is resent and
+ * the delivery stays uncertain — Telegram may already have delivered it. It
+ * only unblocks a later deliberate reply. Failed deliveries are not
+ * acknowledgeable through this call.
  */
-export async function acknowledgeProjectInboxDelivery(
+export async function acknowledgeProjectInboxDeliveryUncertainty(
   workspaceId: string,
-  deliveryId: string,
-): Promise<ProjectInboxDeliveryAckResult> {
-  const { data, error } = await supabase.rpc("acknowledge_project_inbox_delivery", {
-    _workspace_id: workspaceId,
-    _delivery_id: deliveryId,
-  });
+  conversationId: string,
+  messageId: string,
+): Promise<ProjectInboxDeliveryUncertaintyAckResult> {
+  const { data, error } = await supabase.rpc(
+    "acknowledge_project_inbox_delivery_uncertainty",
+    {
+      _workspace_id: workspaceId,
+      _conversation_id: conversationId,
+      _message_id: messageId,
+    },
+  );
   if (error) throw error;
-  return oneRow<ProjectInboxDeliveryAckResult>(data, "Delivery acknowledgement");
+  return oneRow<ProjectInboxDeliveryUncertaintyAckResult>(
+    data,
+    "Delivery uncertainty acknowledgement",
+  );
 }
+
