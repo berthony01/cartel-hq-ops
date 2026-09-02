@@ -1605,6 +1605,42 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true });
     }
 
+    /**
+     * C7.3B — Project Inbox reply capture. This runs LAST, only after every
+     * known command, deep link, linking and callback branch has already
+     * returned above. Any remaining text starting with "/" stays the existing
+     * no-op, so an unknown slash command can never become a project message.
+     * Routing is decided entirely by ONE atomic service-only RPC, and this
+     * path never sends any Telegram message.
+     */
+    if (text.startsWith("/")) return json({ ok: true });
+
+    const inboundUpdateId = Number(update?.update_id);
+    const inboundMessageId = Number(message?.message_id);
+    const inboundReplyToId = Number(message?.reply_to_message?.message_id);
+    const inboundSenderId = Number(from.id);
+    const inboundChatId = Number(chat?.id);
+    const capturable =
+      chat?.type === "private" &&
+      from?.is_bot !== true &&
+      Number.isSafeInteger(inboundUpdateId) && inboundUpdateId > 0 &&
+      Number.isSafeInteger(inboundMessageId) && inboundMessageId > 0 &&
+      Number.isSafeInteger(inboundReplyToId) && inboundReplyToId > 0 &&
+      Number.isSafeInteger(inboundSenderId) && inboundSenderId > 0 &&
+      Number.isSafeInteger(inboundChatId) && inboundChatId === inboundSenderId;
+
+    if (capturable) {
+      const { error: captureError } = await admin.rpc("capture_project_inbox_launch_reply", {
+        _telegram_update_id: inboundUpdateId,
+        _telegram_user_id: inboundSenderId,
+        _telegram_chat_id: inboundChatId,
+        _telegram_message_id: inboundMessageId,
+        _telegram_reply_to_message_id: inboundReplyToId,
+        _body: text,
+      });
+      if (captureError) throw captureError;
+    }
+
     return json({ ok: true });
   } catch (err) {
     console.error("[telegram-webhook]", err instanceof Error ? err.message : "unknown error");
