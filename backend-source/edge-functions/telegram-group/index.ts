@@ -628,23 +628,29 @@ Deno.serve(async (req: Request) => {
         : { status: outcome, last_error: lastError ? lastError.slice(0, 1000) : null };
       const { data: finalRow, error: finalError } = await admin.from("telegram_group_announcements")
         .update(patch).eq("id", announcementId).select(ledgerSelect).maybeSingle();
-      /**
-       * A ledger write failure AFTER the send must never surface as a retryable
-       * error: the row stays SENDING, so this request id can only ever return an
-       * uncertain outcome and can never trigger a second Telegram send.
-       */
-      if (finalError) console.error("[telegram-group] announcement ledger update", finalError.message);
 
-      const row = finalRow ?? {
-        id: announcementId,
-        status: outcome,
-        telegram_message_id: telegramMessageId,
-        group_title: group.title,
-        group_connection_id: rawGroup.id,
-        last_error: lastError,
-        sent_at: outcome === "SENT" ? new Date().toISOString() : null,
-      };
-      return ledgerResponse(row, false);
+      if (finalError || !finalRow) {
+        console.error("[telegram-group] announcement ledger update", finalError?.message ?? "no row returned");
+        /**
+         * The durable row is still SENDING. This request id can only ever return
+         * an uncertain outcome and can never trigger a second Telegram send.
+         * The confirmed Telegram message id, if any, is preserved internally
+         * but the status is NOT claimed as SENT.
+         */
+        return respond({
+          status: "AMBIGUOUS",
+          duplicate: false,
+          announcementId,
+          groupConnectionId: rawGroup.id,
+          groupTitle: group.title,
+          messageId: telegramMessageId ?? null,
+          sentAt: null,
+          technical: "Telegram outcome was obtained, but CARTEL HQ could not finalize the durable delivery record. Check the Telegram community before taking any action.",
+          message: `Delivery to ${group.title} could not be confirmed. Check the community before posting again — CARTEL HQ will not resend this automatically.`,
+        });
+      }
+
+      return ledgerResponse(finalRow, false);
     }
 
 
