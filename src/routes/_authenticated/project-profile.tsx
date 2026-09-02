@@ -37,6 +37,9 @@ import { EmptyState } from "@/components/cartel/EmptyState";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
 import { launchReadinessQueryKey } from "@/lib/launch-readiness";
+import { AssetUploader } from "@/components/cartel/AssetUploader";
+import { useSession } from "@/hooks/useSession";
+
 
 import { StickyActionBar } from "@/components/cartel/StickyActionBar";
 import { Button } from "@/components/ui/button";
