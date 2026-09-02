@@ -315,19 +315,9 @@ function TelegramPage() {
 
         {/* ---------------------------------------------------------------- */}
         <TabsContent value="broadcasts" className="mt-0 min-w-0">
-          <ComingSoonPanel
-            icon={Megaphone}
-            title="Broadcasts"
-            summary="One composer for everything you send on purpose. Not available yet."
-            points={[
-              "Project updates sent privately to Launch Watch watchers, consolidated here from Launch Control.",
-              "Announcements posted into a connected Telegram community.",
-              "Telegram preview and the exact eligible recipient count before anything is sent.",
-              "Explicit confirmation before any send, with opt-outs always respected.",
-            ]}
-            footnote="Until this ships, watcher updates continue to be sent from Launch Control. Nothing on this screen sends a message."
-          />
+          <BroadcastsPanel initialLaunchId={search.launch ?? null} />
         </TabsContent>
+
 
         {/* ---------------------------------------------------------------- */}
         <TabsContent value="audience" className="mt-0 min-w-0">
