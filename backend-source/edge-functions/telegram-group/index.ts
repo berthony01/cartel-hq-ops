@@ -569,8 +569,8 @@ Deno.serve(async (req: Request) => {
           technical: row.last_error ?? null,
           deliveryKind: row.delivery_kind ?? deliveryKind,
           deliveredText: row.delivered_text_snapshot ?? deliveredText,
-          ctaEnabled: row.cta_enabled === true,
-          ctaLaunchId: row.cta_launch_id ?? null,
+          ctaEnabled: row.cta_enabled ?? ctaEnabled,
+          ctaLaunchId: row.cta_launch_id ?? (ctaEnabled ? ctaLaunchId : null),
           ctaProjectName: row.cta_project_name ?? null,
           ctaTokenName: row.cta_token_name ?? null,
           ctaTicker: row.cta_ticker ?? null,
@@ -590,6 +590,9 @@ Deno.serve(async (req: Request) => {
       const sameIntent = (row: any) => {
         if (String(row?.message_text ?? "") !== messageText) return false;
         if (!row?.group_connection_id || String(row.group_connection_id) !== String(rawGroup.id)) return false;
+        // CTA presence and the exact selected launch are part of the intent.
+        if ((row?.cta_enabled === true) !== ctaEnabled) return false;
+        if (ctaEnabled && String(row?.cta_launch_id ?? "") !== ctaLaunchId) return false;
         const storedKind = String(row?.delivery_kind ?? "TEXT");
         if (storedKind !== deliveryKind) return false;
         if (deliveryKind === "TEXT") {
@@ -613,7 +616,7 @@ Deno.serve(async (req: Request) => {
 
       const conflictResponse = () => respond({
         error: "IDEMPOTENCY_CONFLICT",
-        message: "This broadcast id was already used for a different community, message, or branding. Start a new official broadcast.",
+        message: "This broadcast id was already used for a different community, message, branding, or Launch Watch button. Start a new official broadcast.",
       }, 409);
 
       /**
