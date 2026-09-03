@@ -430,7 +430,6 @@ export function ProjectInboxPanel({
         title="Project Inbox"
         leading={<InboxIcon className="size-4" aria-hidden="true" />}
         description="Private Telegram messages from members, captured into one place your team can triage."
-
         actions={<StatusBadge tone={headerTone}>{headerLabel}</StatusBadge>}
       >
         <div className="space-y-3">
@@ -438,13 +437,15 @@ export function ProjectInboxPanel({
             <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
               <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-gold" aria-hidden="true" />
               <span>
-                Only an explicit private reply to a known official Launch Watch bot message can
-                enter this Inbox. Arbitrary bot DMs, commands and group messages are never
-                captured. Your team sees an opaque Member reference — never the subscriber&apos;s
-                Telegram user id or username. A direct Telegram DM can only start a new thread
-                when new member conversations are allowed below and the bot can safely identify
-                exactly one project for that member.
+                Two things can reach this Inbox. An explicit private reply to a known official
+                bot message is captured while reply capture is on. A plain direct Telegram DM can
+                start or continue a member-initiated thread only while “Allow new member
+                conversations” is on AND the bot can identify exactly one project from an existing
+                project relationship — if two or more projects could match, nothing is captured.
+                Commands and group messages are never captured. Your team sees an opaque Member
+                reference — never the member&apos;s Telegram user id or username.
               </span>
+
             </p>
           </div>
 
