@@ -1067,26 +1067,28 @@ export function ProjectInboxPanel({
             </AlertDialogTitle>
             <AlertDialogDescription>
               {settingsDialog === "enable"
-                ? "Explicit private replies to your official Launch Watch bot messages will be captured into this Inbox."
+                ? "Explicit private replies to your official bot messages will be captured into this Inbox."
                 : "New explicit replies will stop being captured. Existing conversations and messages remain in the Inbox."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {settingsDialog === "enable" ? (
             <ul className="list-disc space-y-1.5 pl-5 text-xs leading-relaxed text-muted-foreground">
               <li>
-                Only an explicit reply to a known official Launch Watch bot message is captured —
-                arbitrary bot DMs, commands and group messages are not.
+                This switch covers explicit replies to a known official bot message only. Commands
+                and group messages are never captured.
               </li>
               <li>
-                Your team sees an opaque Member reference, never the subscriber&apos;s Telegram
-                user id or username.
+                Your team sees an opaque Member reference, never the member&apos;s Telegram user id
+                or username.
               </li>
               <li>
-                Starting new conversations from arbitrary bot DMs stays off — this switch does not
-                enable it.
+                Plain direct DMs that start a new member-initiated thread are governed by the
+                separate “Allow new member conversations” switch, and only when exactly one project
+                can be identified.
               </li>
             </ul>
           ) : null}
+
           <AlertDialogFooter>
             <AlertDialogCancel className="min-h-11">Cancel</AlertDialogCancel>
             <AlertDialogAction
