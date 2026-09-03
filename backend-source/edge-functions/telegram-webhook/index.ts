@@ -1639,7 +1639,50 @@ Deno.serve(async (req: Request) => {
         _body: text,
       });
       if (captureError) throw captureError;
+      return json({ ok: true });
     }
+
+    /**
+     * C7.3E — member-initiated Project Inbox capture.
+     *
+     * Runs strictly AFTER every command, deep link, linking and callback
+     * branch, and strictly AFTER the C7.3B/D reply-to routing above, which
+     * returns before this point whenever a reply target is present. This
+     * handler therefore only ever sees a plain, unthreaded, private text DM.
+     * It never sends a Telegram message and never guesses a project.
+     *
+     * Hardening: this path performs NO direct table access. The entire
+     * decision (candidate workspaces, exactly-one requirement, settings gate,
+     * dedupe, contact/conversation/message persistence) happens inside ONE
+     * atomic service-only RPC, so an unexpected failure rolls the inbound
+     * update back and a legitimate Telegram retry can retry.
+     */
+    const bareDmCapturable =
+      chat?.type === "private" &&
+      from?.is_bot !== true &&
+      !Number.isSafeInteger(inboundReplyToId) &&
+      Number.isSafeInteger(inboundUpdateId) && inboundUpdateId > 0 &&
+      Number.isSafeInteger(inboundMessageId) && inboundMessageId > 0 &&
+      Number.isSafeInteger(inboundSenderId) && inboundSenderId > 0 &&
+      Number.isSafeInteger(inboundChatId) && inboundChatId === inboundSenderId &&
+      text.length >= 1 && text.length <= 4096;
+
+    if (bareDmCapturable) {
+      const { error: memberCaptureError } = await admin.rpc(
+        "capture_project_inbox_member_message",
+        {
+          _telegram_update_id: inboundUpdateId,
+          _telegram_user_id: inboundSenderId,
+          _telegram_chat_id: inboundChatId,
+          _telegram_message_id: inboundMessageId,
+          _body: text,
+        },
+      );
+      if (memberCaptureError) throw memberCaptureError;
+      return json({ ok: true });
+    }
+
+
 
     return json({ ok: true });
   } catch (err) {

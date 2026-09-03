@@ -2698,6 +2698,16 @@ export type Database = {
           reason: string
         }[]
       }
+      capture_project_inbox_member_message: {
+        Args: {
+          _body: string
+          _telegram_chat_id: number
+          _telegram_message_id: number
+          _telegram_update_id: number
+          _telegram_user_id: number
+        }
+        Returns: string
+      }
       claim_launch_notification_deliveries: {
         Args: { _limit?: number }
         Returns: {
@@ -3406,6 +3416,26 @@ export type Database = {
           contact_status: string
           conversation_id: string
           member_ref: string
+        }[]
+      }
+      set_project_inbox_new_conversations_enabled: {
+        Args: { _enabled: boolean; _workspace_id: string }
+        Returns: {
+          new_conversations_enabled: boolean
+          replies_enabled: boolean
+          security_warning_version: string
+          updated_at: string
+          workspace_id: string
+        }[]
+      }
+      set_project_inbox_replies_enabled: {
+        Args: { _enabled: boolean; _workspace_id: string }
+        Returns: {
+          new_conversations_enabled: boolean
+          replies_enabled: boolean
+          security_warning_version: string
+          updated_at: string
+          workspace_id: string
         }[]
       }
       set_project_inbox_settings: {

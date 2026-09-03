@@ -242,14 +242,9 @@ export function ProjectInboxPanel({
 
   // --------------------------------------------------------------- mutations
   const repliesMutation = useMutation({
-    mutationFn: (next: boolean) =>
-      // Preserves the server-returned `new_conversations_enabled` unchanged —
-      // this panel exposes no control for it and must never flip it.
-      setProjectInboxRepliesEnabled(
-        workspaceId!,
-        next,
-        settings?.new_conversations_enabled ?? false,
-      ),
+    // C7.3E hardening: dedicated server-side setter — only `replies_enabled`
+    // is submitted, so no cached cross-setting value can be overwritten.
+    mutationFn: (next: boolean) => setProjectInboxRepliesEnabled(workspaceId!, next),
     onSuccess: (row) => {
       queryClient.setQueryData(projectInboxKeys.settings(workspaceId), row);
       toast.success(
@@ -259,15 +254,10 @@ export function ProjectInboxPanel({
     onError: (error) => toast.error(errorMessage(error)),
   });
 
-  // C7.3E — flips ONLY `new_conversations_enabled`; `replies_enabled` is
-  // passed through unchanged from the last server-returned settings row.
+  // C7.3E — dedicated server-side setter for `new_conversations_enabled` only.
   const newConversationsMutation = useMutation({
     mutationFn: (next: boolean) =>
-      setProjectInboxNewConversationsEnabled(
-        workspaceId!,
-        next,
-        settings?.replies_enabled ?? false,
-      ),
+      setProjectInboxNewConversationsEnabled(workspaceId!, next),
     onSuccess: (row) => {
       queryClient.setQueryData(projectInboxKeys.settings(workspaceId), row);
       toast.success(
@@ -278,6 +268,7 @@ export function ProjectInboxPanel({
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
+
 
   const statusMutation = useMutation({
     mutationFn: (vars: { conversationId: string; status: ConversationStatus }) =>
@@ -438,7 +429,7 @@ export function ProjectInboxPanel({
         variant="hero"
         title="Project Inbox"
         leading={<InboxIcon className="size-4" aria-hidden="true" />}
-        description="Private replies from Launch Watch members, captured into one place your team can triage."
+        description="Private Telegram messages from members, captured into one place your team can triage."
         actions={<StatusBadge tone={headerTone}>{headerLabel}</StatusBadge>}
       >
         <div className="space-y-3">
@@ -446,13 +437,15 @@ export function ProjectInboxPanel({
             <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
               <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-gold" aria-hidden="true" />
               <span>
-                Only an explicit private reply to a known official Launch Watch bot message can
-                enter this Inbox. Arbitrary bot DMs, commands and group messages are never
-                captured. Your team sees an opaque Member reference — never the subscriber&apos;s
-                Telegram user id or username. A direct Telegram DM can only start a new thread
-                when new member conversations are allowed below and the bot can safely identify
-                exactly one project for that member.
+                Two things can reach this Inbox. An explicit private reply to a known official
+                bot message is captured while reply capture is on. A plain direct Telegram DM can
+                start or continue a member-initiated thread only while “Allow new member
+                conversations” is on AND the bot can identify exactly one project from an existing
+                project relationship — if two or more projects could match, nothing is captured.
+                Commands and group messages are never captured. Your team sees an opaque Member
+                reference — never the member&apos;s Telegram user id or username.
               </span>
+
             </p>
           </div>
 
@@ -613,16 +606,20 @@ export function ProjectInboxPanel({
                 {settings && !repliesOn ? (
                   <p className="text-xs leading-relaxed text-muted-foreground">
                     Reply capture is off. Enable it above so explicit private replies to your
-                    official Launch Watch bot messages can reach this Inbox.
+                    official bot messages can reach this Inbox. Member-initiated threads are
+                    governed separately by “Allow new member conversations”.
                   </p>
                 ) : (
                   <p className="text-xs leading-relaxed text-muted-foreground">
                     {filter
                       ? `No ${CONVERSATION_STATUS_LABELS[filter].toLowerCase()} conversations.`
                       : "No conversations yet."}{" "}
-                    Only explicit replies to official Launch Watch bot DMs appear here.
+                    Explicit replies to official bot DMs appear here, and — when “Allow new member
+                    conversations” is on and exactly one project can be identified — plain direct
+                    DMs from members. Commands and group messages never appear.
                   </p>
                 )}
+
               </div>
             ) : (
               <ul className="flex flex-col gap-2" aria-label="Inbox conversations">
@@ -1070,26 +1067,28 @@ export function ProjectInboxPanel({
             </AlertDialogTitle>
             <AlertDialogDescription>
               {settingsDialog === "enable"
-                ? "Explicit private replies to your official Launch Watch bot messages will be captured into this Inbox."
+                ? "Explicit private replies to your official bot messages will be captured into this Inbox."
                 : "New explicit replies will stop being captured. Existing conversations and messages remain in the Inbox."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {settingsDialog === "enable" ? (
             <ul className="list-disc space-y-1.5 pl-5 text-xs leading-relaxed text-muted-foreground">
               <li>
-                Only an explicit reply to a known official Launch Watch bot message is captured —
-                arbitrary bot DMs, commands and group messages are not.
+                This switch covers explicit replies to a known official bot message only. Commands
+                and group messages are never captured.
               </li>
               <li>
-                Your team sees an opaque Member reference, never the subscriber&apos;s Telegram
-                user id or username.
+                Your team sees an opaque Member reference, never the member&apos;s Telegram user id
+                or username.
               </li>
               <li>
-                Starting new conversations from arbitrary bot DMs stays off — this switch does not
-                enable it.
+                Plain direct DMs that start a new member-initiated thread are governed by the
+                separate “Allow new member conversations” switch, and only when exactly one project
+                can be identified.
               </li>
             </ul>
           ) : null}
+
           <AlertDialogFooter>
             <AlertDialogCancel className="min-h-11">Cancel</AlertDialogCancel>
             <AlertDialogAction

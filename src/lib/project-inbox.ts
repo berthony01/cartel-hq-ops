@@ -244,44 +244,47 @@ export async function getProjectInboxSettings(
 }
 
 /**
- * Enables/disables reply capture ONLY. `new_conversations_enabled` is passed
- * through UNCHANGED from the caller-supplied current value so this UI can
- * never enable or reset it accidentally. Callers must pass the value from the
- * most recent server-returned settings row.
+ * Enables/disables reply capture ONLY.
+ *
+ * C7.3E hardening: this calls a dedicated setter that updates ONLY
+ * `replies_enabled` server-side. No cached value for
+ * `new_conversations_enabled` is submitted, so a stale browser value can never
+ * overwrite the other setting.
  */
 export async function setProjectInboxRepliesEnabled(
   workspaceId: string,
   repliesEnabled: boolean,
-  currentNewConversationsEnabled: boolean,
 ): Promise<ProjectInboxSettings> {
-  const { data, error } = await supabase.rpc("set_project_inbox_settings", {
+  const { data, error } = await supabase.rpc("set_project_inbox_replies_enabled", {
     _workspace_id: workspaceId,
-    _replies_enabled: repliesEnabled,
-    _new_conversations_enabled: currentNewConversationsEnabled,
+    _enabled: repliesEnabled,
   });
   if (error) throw error;
   return oneRow<ProjectInboxSettings>(data, "Inbox settings update");
 }
 
 /**
- * C7.3E — enables/disables MEMBER-INITIATED conversations ONLY.
- * `replies_enabled` is passed through UNCHANGED from the caller-supplied
- * current value, so this control can never turn reply capture on or off.
- * Callers must pass the value from the most recent server-returned row.
+ * Enables/disables MEMBER-INITIATED conversations ONLY.
+ *
+ * C7.3E hardening: this calls a dedicated setter that updates ONLY
+ * `new_conversations_enabled` server-side; `replies_enabled` is never read or
+ * written by this call.
  */
 export async function setProjectInboxNewConversationsEnabled(
   workspaceId: string,
   newConversationsEnabled: boolean,
-  currentRepliesEnabled: boolean,
 ): Promise<ProjectInboxSettings> {
-  const { data, error } = await supabase.rpc("set_project_inbox_settings", {
-    _workspace_id: workspaceId,
-    _replies_enabled: currentRepliesEnabled,
-    _new_conversations_enabled: newConversationsEnabled,
-  });
+  const { data, error } = await supabase.rpc(
+    "set_project_inbox_new_conversations_enabled",
+    {
+      _workspace_id: workspaceId,
+      _enabled: newConversationsEnabled,
+    },
+  );
   if (error) throw error;
   return oneRow<ProjectInboxSettings>(data, "Inbox settings update");
 }
+
 
 export async function getProjectInboxSummary(
   workspaceId: string,
