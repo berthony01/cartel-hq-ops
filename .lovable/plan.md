@@ -1,83 +1,57 @@
-# C7.3E Hardening Pass — Plan
+# Roadmap Reconciliation After C7.3E (read-only report)
 
-Start commit verified: `4453b9f1d17d28b66a0833c4dfb7583c9a537c20`, working tree clean. Read-only investigation only; nothing was edited, deployed, published, or sent to Telegram.
+No files were edited, no migration applied, no deploy/publish, no Telegram call.
 
-## A) New member-initiated capture RPC
+## 1. Current HEAD
 
-`public.capture_project_inbox_member_message(
-  _telegram_update_id bigint,
-  _telegram_user_id bigint,
-  _telegram_chat_id bigint,
-  _telegram_message_id bigint,
-  _body text
-) returns text` — SECURITY DEFINER, `set search_path = public`, `language plpgsql`, mirroring the shape/style of `capture_project_inbox_launch_reply` (verified signature: 6 bigint/text args, `prosecdef = true`).
+`b95929a1f99d36f358bccd4e747e2b29b5bd5ac5` — working tree clean (`b95929a Update plan`).
 
-Return is a single lowercase outcome token, never data: `captured` | `duplicate` | `invalid_input` | `no_candidate_workspace` | `ambiguous_workspace` | `new_conversations_disabled` | `contact_blocked`. No workspace id, conversation id, or member identity is returned.
+## 2. What the repository actually contains as authoritative planning material
 
-Order inside ONE transaction (the whole function body is the transaction — any unexpected exception rolls back the inbound-update insert, so Telegram retry can retry):
+There is **no roadmap file in the repository**. `AGENTS.md`, `README.md` and `docs/` contain no phase IDs. `.lovable/plan.md` held only the C7.3E hardening plan. The only authoritative phase enumeration is in project knowledge (product build order 0–10) and in the phase contracts issued in chat.
 
-1. Structural validation: all four ids positive, `_telegram_chat_id = _telegram_user_id`, `btrim(_body)` length between 1 and 4096. Fail → `invalid_input`, nothing written.
-2. Candidate workspaces (server-side evidence only, no client input):
-   - `project_inbox_contacts` for this `telegram_user_id`: `ACTIVE` rows add their workspace; `BLOCKED` rows record an exclusion set.
-   - `launch_watch_subscriptions` where `is_active` and `telegram_user_id` matches, joined `launches.workspace_id`.
-   - Subtract the blocked set.
-3. Keep only workspaces with `project_inbox_settings.new_conversations_enabled = true` (missing row = false, via inner join).
-4. Count: 0 → `no_candidate_workspace` / `new_conversations_disabled` (distinguished by whether step 2 produced anything); >1 → `ambiguous_workspace`. Both return with zero writes and no guessing.
-5. Dedupe: `insert into telegram_inbound_updates (telegram_update_id, update_kind='MESSAGE', chat/message/user ids, status='RECEIVED') on conflict (telegram_update_id) do nothing returning 1`. No row returned → `duplicate`, nothing else happens.
-6. Contact: `insert ... on conflict (workspace_id, telegram_user_id) do nothing`, then `select ... for update` to serialize against block/unblock (the established pattern in the launch-reply RPC). If the locked row is not `ACTIVE`, mark the inbound update `IGNORED` with `last_error='contact_blocked'` and return `contact_blocked`. A BLOCKED contact is never reactivated.
-7. Conversation: select the single unresolved `MEMBER_INITIATED` row (`status in ('OPEN','WAITING_ON_TEAM','WAITING_ON_MEMBER')`) for `(workspace_id, contact_id)` `for update`; if none, insert `MEMBER_INITIATED` / `GENERAL` / `NORMAL` / `WAITING_ON_TEAM`. A `unique_violation` on the existing partial index `project_conversations_member_initiated_unresolved_key` is caught and resolved by re-reading the winner. That index is preserved unchanged; migration `20260902233008` is not rewritten.
-8. Message: one `project_conversation_messages` row (`MEMBER` / `TELEGRAM`, telegram update/chat/message ids, `telegram_reply_to_message_id = null`). Its unique indexes on `telegram_update_id` and `(chat_id, message_id)` are the final duplicate guard; a `unique_violation` here returns `duplicate`. The existing `project_inbox_apply_message_state()` trigger keeps `last_message_at`/status/contact activity consistent — no duplicate hand-written state updates.
-9. Mark the inbound update `PROCESSED` only after the message insert succeeds; return `captured`.
+The C7.3 arc IDs come from the C7.3A contract (chat #731), which names the full intended series: **C7.3A, C7.3B, C7.3C, C7.3D, C7.3E, C7.3F, C7.3G**, then **C8**.
 
-No Telegram send anywhere in this function or path.
+## 3. Genuinely outstanding items, in order
 
-Grants: `revoke all on function ... from public, anon, authenticated;` then `grant execute ... to service_role;` — identical posture to the existing capture RPC.
+1. **C7.3D D2 repository-record sync (only open remnant of C7.3D).**
+   Live infrastructure is already done outside Lovable — migration version `20260902220631_c73d_d2_activate_project_inbox_delivery_scheduler`, Edge Function `project-inbox-delivery` v1 ACTIVE, cron `cartel-project-inbox-delivery-runner` every minute. The repository still does **not** contain that migration file (verified absent from `supabase/migrations/`), and `supabase/functions/` contains only `telegram-webhook` while the worker source lives solely at `backend-source/edge-functions/project-inbox-delivery/`, with no `supabase/config.toml` entry for it. This is a repo-vs-live drift record, not new behavior. Two prior attempts stopped: once on a gate mismatch, once because the migration system refused a direct migration-file write.
 
-Webhook change: the C7.3E block collapses from ~10 service-role table calls to shape validation (private chat, non-bot sender, no `reply_to_message`, safe positive ids, `chat_id = from.id`, 1..4096 text) plus one `admin.rpc("capture_project_inbox_member_message", {...})`. Ordering is untouched: unknown `/` commands still return above, and the C7.3B/D reply branch still returns before this point.
+2. **C7.3E runtime proof (no phase ID assigned).**
+   The hardened webhook was deployed at HEAD `b95929a`, but the deploy tool returned no version/hash and no live bare-DM capture has ever been observed end-to-end. No authoritative contract exists for this verification turn; it would need one.
 
-## B) Setter contract
+3. **C7.3F** — named in the C7.3A contract, **no scope defined anywhere** in repository or chat.
 
-```
-public.set_project_inbox_replies_enabled(_workspace_id uuid, _enabled boolean)
-public.set_project_inbox_new_conversations_enabled(_workspace_id uuid, _enabled boolean)
-```
-Both: SECURITY DEFINER, `set search_path = public`, return the same row shape the UI already consumes (`workspace_id, replies_enabled, new_conversations_enabled, security_warning_version, updated_at`).
+4. **C7.3G** — named in the C7.3A contract, **no scope defined anywhere** in repository or chat.
 
-Behavior: authorize first with `is_workspace_operator(_workspace_id, auth.uid())` (verified signature `(_workspace_id uuid, _user_id uuid)`) and raise a generic exception otherwise; then `insert into project_inbox_settings (workspace_id, <own column>, updated_by) values (...) on conflict (workspace_id) do update set <own column> = excluded.<own column>, updated_by = auth.uid(), updated_at = now()`. The other setting takes its column default on insert and is never referenced on update, so a stale browser value can no longer overwrite it.
+5. **C8** — referenced only as a prohibition ("no C8 work", once as "C8 History"); **no contract, no scope**.
 
-Grants: `revoke all ... from public, anon;` `grant execute ... to authenticated;`
+## 4. One-sentence scope of each remaining item
 
-`set_project_inbox_settings` stays in place untouched for compatibility, but `src/lib/project-inbox.ts` stops calling it: `setProjectInboxRepliesEnabled` and `setProjectInboxNewConversationsEnabled` lose their "current other value" parameter and call their own RPC. `ProjectInboxPanel.tsx` mutations drop the cached cross-setting argument.
+- **C7.3D D2 sync** — add the already-live scheduler migration file (and decide whether the delivery worker source/config also belongs in `supabase/`) so the repository matches production, with zero live changes.
+- **C7.3E runtime proof** — controlled live verification that a bare eligible private DM produces exactly one MEMBER_INITIATED conversation and message, and that ambiguous/ineligible DMs produce nothing.
+- **C7.3F / C7.3G / C8** — undefined; see item 7.
 
-## C) The `telegram_beta_contacts` gate should be REMOVED
+## 5. Already done, superseded, or overlapping with C7.3E — do NOT rebuild
 
-Evidence from current source and live data:
-- The Launch Watch deep-link handler (`/start lw_<token>`, webhook lines 1519-1568) calls `resolveLaunchWatch` → `launchWatchSubscribe` → confirmation send. It never calls `touchUserContact`, so joining Launch Watch does not create a `telegram_beta_contacts` row. `touchUserContact` is only reached from beta/roadmap/start-menu/group-install branches.
-- Live: 3 active launch-watch subscriptions, **2 of which have no `subject_type='user'` beta contact row**. The gate today silently disqualifies two thirds of real subscribers.
+- **Member-initiated Telegram DMs**: fully delivered by C7.3E via `capture_project_inbox_member_message`. Any older "member DM capture" plan is superseded.
+- **Project selection / project picker for ambiguous DMs**: deliberately **excluded** by the C7.3E contract — ambiguity returns `ambiguous_workspace` with zero writes and no chooser. This is a decided non-goal, not an unfinished task; reintroducing a picker requires a new explicit contract.
+- **Project Inbox routing** (candidate workspaces from ACTIVE `project_inbox_contacts` + active `launch_watch_subscriptions`, `new_conversations_enabled` gate, BLOCKED exclusion, dedupe, unresolved-thread continuity): closed in C7.3E.
+- **Independent `replies_enabled` / `new_conversations_enabled` setters and Inbox settings UI/copy**: closed in C7.3E.
+- **Reply capture (C7.3B), Inbox UI (C7.3C), durable team replies + worker + thread continuity (C7.3D D1/D3)**: complete.
+- **Team Bot Console** (owners reading/replying from inside Telegram): explicitly deferred by every C7.3 contract; it is **not** part of C7.3E and remains unbuilt and unscoped.
+- Product build order items 6–9 (Cartel Network, Watchlist/Signals, Project Verification, Owner Console) already have shipped surfaces in the repo; project-knowledge "6 NEXT" is stale.
 
-`launch_watch_subscriptions.telegram_user_id` is itself the authenticated project-relationship evidence; `telegram_beta_contacts` is a global platform contact table with no workspace column and adds no tenant safety. Removing the gate restores intended C7.3E eligibility without broadening it. (Separately noted, not fixed here: the webhook currently queries that table with a string id against a `bigint` column.)
+## 6. Is C7.3 fully closed?
 
-## D) Files changed in the build turn
+**No — but functionally it is.** C7.3A through C7.3E are implemented and verified. What remains under the C7.3 umbrella is (a) the D2 repository-record sync, (b) unproven C7.3E runtime behavior, and (c) two named-but-never-specified subphases C7.3F and C7.3G. C7.3 cannot be declared closed while F and G exist as placeholders with no contract.
 
-Inside the allowlist, no additions required:
-1. `supabase/functions/telegram-webhook/index.ts` — replace the C7.3E block with shape check + one RPC call.
-2. `backend-source/edge-functions/telegram-webhook/index.ts` — sync the same block only; `diff` of the two files must then be empty.
-3. `src/lib/project-inbox.ts` — two independent setter wrappers.
-4. `src/components/cartel/ProjectInboxPanel.tsx` — setter wiring + copy fixes (item 3 below).
-5. `src/integrations/supabase/types.ts` — regenerated only, for the three new RPC signatures.
-6. ONE new migration: the capture RPC, the two setters, and their grants. No change to `20260902233008`, no destructive schema change, no row writes.
+## 7. Missing authoritative contracts (stated explicitly, not guessed)
 
-Copy corrections in the panel (and nowhere else): the header/description, the security block at ~lines 449-455, the switch helper text, and the empty states at ~lines 616 and 623 currently claim only explicit Launch Watch replies can ever appear and that a direct DM can "only" start a thread. New wording: explicit private replies to official bot messages are captured when reply capture is on; a plain direct DM can start a MEMBER_INITIATED thread only when "Allow new member conversations" is on and exactly one project can be identified; commands and group messages are never captured.
+The repository and chat history contain **no scope, acceptance criteria, or contract** for **C7.3F**, **C7.3G**, or **C8**. Nothing in either source defines the Team Bot Console phase either. No inference is offered here; these need to be specified before any gate can be written.
 
-## E) Verification before declaring done
+Also note: no message in this project's history ever contained the ID **C7.4A** — there is no older C7.4A plan in the repository or chat to reconcile against.
 
-- `git diff --name-only` proves only the six allowlisted files changed.
-- `bunx tsgo --noEmit`, `bun run build`, `bun run lint`.
-- `diff` the two webhook copies → empty; grep proves the unknown-`/` return and the reply-capture branch both still precede the bare-DM branch.
-- SQL checks against live catalog (read-only): `prosecdef`, `proconfig` search_path, and `proacl` for all three new functions — service_role-only execute on the capture RPC, authenticated-only on the setters, no anon/public anywhere. Re-confirm the partial unique index still exists and Inbox tables still have zero browser policies/grants.
-- Rollback-only DB test script (BEGIN … ROLLBACK, synthetic fixtures only, no production rows touched) covering: 0 candidates; 2 candidates → ambiguous; `new_conversations_enabled=false`; BLOCKED contact; launch-watch-only subscriber with no beta contact → captured; duplicate `telegram_update_id` → `duplicate` and no second message; second DM continues the same unresolved thread; RESOLVED thread → new conversation; each setter leaves the other column untouched; non-operator caller rejected.
-- No Telegram send exists on this path (assert by grep in the diff). No deploy, no publish, no C7.4/C8 work.
+## 8. Immediate next safe phase
 
-## Known limitation
-
-The migration tool applies migrations to the live external Supabase project on approval; the new functions will exist in production immediately, but they are unreachable until the webhook is redeployed — which this phase does not do. The hardened path stays runtime-unproven by design.
+**C7.3D D2 repository-record sync** — smallest, lowest-risk, zero live effect, and it removes a real repo-vs-production drift. Note the known blocker: the migration tooling previously refused a direct migration-file write, so the turn may need an explicit decision on how the file gets recorded.
