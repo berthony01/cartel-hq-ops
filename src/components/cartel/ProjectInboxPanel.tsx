@@ -606,16 +606,20 @@ export function ProjectInboxPanel({
                 {settings && !repliesOn ? (
                   <p className="text-xs leading-relaxed text-muted-foreground">
                     Reply capture is off. Enable it above so explicit private replies to your
-                    official Launch Watch bot messages can reach this Inbox.
+                    official bot messages can reach this Inbox. Member-initiated threads are
+                    governed separately by “Allow new member conversations”.
                   </p>
                 ) : (
                   <p className="text-xs leading-relaxed text-muted-foreground">
                     {filter
                       ? `No ${CONVERSATION_STATUS_LABELS[filter].toLowerCase()} conversations.`
                       : "No conversations yet."}{" "}
-                    Only explicit replies to official Launch Watch bot DMs appear here.
+                    Explicit replies to official bot DMs appear here, and — when “Allow new member
+                    conversations” is on and exactly one project can be identified — plain direct
+                    DMs from members. Commands and group messages never appear.
                   </p>
                 )}
+
               </div>
             ) : (
               <ul className="flex flex-col gap-2" aria-label="Inbox conversations">
