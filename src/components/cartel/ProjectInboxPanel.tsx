@@ -429,7 +429,8 @@ export function ProjectInboxPanel({
         variant="hero"
         title="Project Inbox"
         leading={<InboxIcon className="size-4" aria-hidden="true" />}
-        description="Private replies from Launch Watch members, captured into one place your team can triage."
+        description="Private Telegram messages from members, captured into one place your team can triage."
+
         actions={<StatusBadge tone={headerTone}>{headerLabel}</StatusBadge>}
       >
         <div className="space-y-3">
