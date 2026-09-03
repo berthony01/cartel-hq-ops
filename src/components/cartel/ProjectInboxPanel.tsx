@@ -242,14 +242,9 @@ export function ProjectInboxPanel({
 
   // --------------------------------------------------------------- mutations
   const repliesMutation = useMutation({
-    mutationFn: (next: boolean) =>
-      // Preserves the server-returned `new_conversations_enabled` unchanged —
-      // this panel exposes no control for it and must never flip it.
-      setProjectInboxRepliesEnabled(
-        workspaceId!,
-        next,
-        settings?.new_conversations_enabled ?? false,
-      ),
+    // C7.3E hardening: dedicated server-side setter — only `replies_enabled`
+    // is submitted, so no cached cross-setting value can be overwritten.
+    mutationFn: (next: boolean) => setProjectInboxRepliesEnabled(workspaceId!, next),
     onSuccess: (row) => {
       queryClient.setQueryData(projectInboxKeys.settings(workspaceId), row);
       toast.success(
@@ -259,15 +254,10 @@ export function ProjectInboxPanel({
     onError: (error) => toast.error(errorMessage(error)),
   });
 
-  // C7.3E — flips ONLY `new_conversations_enabled`; `replies_enabled` is
-  // passed through unchanged from the last server-returned settings row.
+  // C7.3E — dedicated server-side setter for `new_conversations_enabled` only.
   const newConversationsMutation = useMutation({
     mutationFn: (next: boolean) =>
-      setProjectInboxNewConversationsEnabled(
-        workspaceId!,
-        next,
-        settings?.replies_enabled ?? false,
-      ),
+      setProjectInboxNewConversationsEnabled(workspaceId!, next),
     onSuccess: (row) => {
       queryClient.setQueryData(projectInboxKeys.settings(workspaceId), row);
       toast.success(
@@ -278,6 +268,7 @@ export function ProjectInboxPanel({
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
+
 
   const statusMutation = useMutation({
     mutationFn: (vars: { conversationId: string; status: ConversationStatus }) =>
