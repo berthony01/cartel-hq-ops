@@ -28,6 +28,12 @@ export const CARTEL_FIXED_ERC20_COMPILER = {
   viaIR: false,
   evmVersion: "paris",
   metadataBytecodeHash: "none",
+  /**
+   * settings.metadata.appendCBOR — false. Required to reproduce the frozen
+   * bytecode below byte-for-byte; with CBOR appended the trailing metadata
+   * blob differs and both keccak hashes change.
+   */
+  metadataAppendCBOR: false,
 } as const;
 
 /** Fixed decimals for every token deployed through this artifact. */
