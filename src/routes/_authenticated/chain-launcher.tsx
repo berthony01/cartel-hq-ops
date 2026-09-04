@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -72,7 +72,15 @@ import {
   type SimulationSession,
 } from "@/lib/chain-simulation";
 import { LaunchReceiptCard } from "@/components/chain/LaunchReceiptCard";
-import { deriveLaunchReceipt } from "@/lib/launch-receipt";
+import {
+  clearRecoveryRecord,
+  deriveLaunchReceipt,
+  isRecoveryRestorable,
+  parseRecoveryRecord,
+  readRecoveryRecord,
+  saveRecoveryRecord,
+  type RecoveryRecord,
+} from "@/lib/launch-receipt";
 
 export const Route = createFileRoute("/_authenticated/chain-launcher")({
   head: () => ({
@@ -118,8 +126,11 @@ function ChainLauncherPage() {
   // never reuse an earlier request id.
   const [simSession, setSimSession] = useState<SimulationSession | null>(null);
   const simulation = simSession && isSessionBound(simSession) ? simSession.simulation : null;
-  const [recovery, setRecovery] = useState<{ attemptId: string; txHash: string } | null>(null);
+  const [recovery, setRecovery] = useState<RecoveryRecord | null>(null);
   const [recoveryBusy, setRecoveryBusy] = useState(false);
+  // Synchronous in-flight lock. `tokenBusy` only takes effect after a React
+  // rerender, so it cannot stop two events fired in the same tick.
+  const tokenInFlight = useRef(false);
   const [simBusy, setSimBusy] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -282,8 +293,13 @@ function ChainLauncherPage() {
         recipient: tokenRecipient,
       });
       setNowMs(Date.now());
-      setSimSession(bindSimulationSession(result, newClientRequestId()));
-      if (!result.preflight.passed) toast.error("Simulation did not pass. Review the checks.");
+      if (result.preflight.passed) {
+        // A request id exists ONLY for a passing simulation.
+        setSimSession(bindSimulationSession(result, newClientRequestId()));
+      } else {
+        setSimSession(null);
+        toast.error("Simulation did not pass. Review the checks.");
+      }
     } catch (e) {
       setSimSession(null);
       toast.error(e instanceof SimulationError ? e.message : "Could not simulate this deployment.");
