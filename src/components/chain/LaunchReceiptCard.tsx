@@ -108,10 +108,7 @@ export function LaunchReceiptCard({ receipt }: { receipt: LaunchReceipt }) {
                 label="Requested supply (base units, exact)"
                 value={receipt.requestedSupplyBaseUnits}
               />
-              <Row
-                label="Requested supply (whole tokens)"
-                value={receipt.requestedSupplyWhole}
-              />
+              <Row label="Requested supply (whole tokens)" value={receipt.requestedSupplyWhole} />
               <Row label="Initial recipient" value={receipt.recipient} />
             </>
           ) : null}

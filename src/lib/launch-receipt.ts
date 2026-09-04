@@ -111,12 +111,16 @@ export function receiptStateForStatus(status: string): ReceiptState {
 
 /** Strict 32-byte hash. */
 function safeHash(value: unknown): string | null {
-  return typeof value === "string" && /^0x[0-9a-fA-F]{64}$/.test(value) ? value.toLowerCase() : null;
+  return typeof value === "string" && /^0x[0-9a-fA-F]{64}$/.test(value)
+    ? value.toLowerCase()
+    : null;
 }
 
 /** Strict 20-byte address. */
 function safeAddress(value: unknown): string | null {
-  return typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value) ? value.toLowerCase() : null;
+  return typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value)
+    ? value.toLowerCase()
+    : null;
 }
 
 /** Exact decimal digit string, or null. Never a rounded or exponential value. */
