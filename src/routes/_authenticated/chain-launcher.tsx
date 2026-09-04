@@ -150,7 +150,9 @@ function ChainLauncherPage() {
       setAccount(address);
       await refreshWallet(address);
     } catch (e) {
-      toast.error(isUserRejection(e) ? "Wallet connection cancelled." : "Could not connect wallet.");
+      toast.error(
+        isUserRejection(e) ? "Wallet connection cancelled." : "Could not connect wallet.",
+      );
     }
   }
 
@@ -214,7 +216,12 @@ function ChainLauncherPage() {
   if (!isPlatformOwner) {
     return (
       <div className="flex min-w-0 flex-col gap-5">
-        <PageHeader eyebrow="System" title="Unavailable" description="This area is restricted." status="Restricted" />
+        <PageHeader
+          eyebrow="System"
+          title="Unavailable"
+          description="This area is restricted."
+          status="Restricted"
+        />
         <EmptyState
           icon={Lock}
           title="Access restricted"
@@ -252,13 +259,27 @@ function ChainLauncherPage() {
         </p>
       </div>
 
-      <Section variant="primary" title="Launch" description="Select a launch in this workspace. Its lifecycle is not modified.">
+      <Section
+        variant="primary"
+        title="Launch"
+        description="Select a launch in this workspace. Its lifecycle is not modified."
+      >
         {!workspaceId ? (
-          <EmptyState icon={FlaskConical} title="No workspace" description="Select a workspace first." compact />
+          <EmptyState
+            icon={FlaskConical}
+            title="No workspace"
+            description="Select a workspace first."
+            compact
+          />
         ) : launchesQuery.isPending ? (
           <p className="text-xs text-muted-foreground">Loading launches…</p>
         ) : launches.length === 0 ? (
-          <EmptyState icon={FlaskConical} title="No launches" description="Create a launch in Launch Control first." compact />
+          <EmptyState
+            icon={FlaskConical}
+            title="No launches"
+            description="Create a launch in Launch Control first."
+            compact
+          />
         ) : (
           <div className="flex flex-col gap-2">
             <label htmlFor="launch-select" className="text-xs font-medium text-muted-foreground">
@@ -285,7 +306,11 @@ function ChainLauncherPage() {
         )}
       </Section>
 
-      <Section variant="primary" title="Wallet" description="Your browser wallet is the only signer. CARTEL HQ never holds keys.">
+      <Section
+        variant="primary"
+        title="Wallet"
+        description="Your browser wallet is the only signer. CARTEL HQ never holds keys."
+      >
         {!hasProvider ? (
           <EmptyState
             icon={Wallet}
@@ -296,14 +321,22 @@ function ChainLauncherPage() {
         ) : (
           <div className="flex flex-col gap-3">
             <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
-              <p>Address: <span className="text-foreground">{account ?? "Not connected"}</span></p>
+              <p>
+                Address: <span className="text-foreground">{account ?? "Not connected"}</span>
+              </p>
               <p>
                 Network:{" "}
                 <span className={onTestnet ? "text-foreground" : "text-destructive"}>
-                  {chainId === null ? "Unknown" : onTestnet ? "Robinhood Chain Testnet" : `Chain ${chainId}`}
+                  {chainId === null
+                    ? "Unknown"
+                    : onTestnet
+                      ? "Robinhood Chain Testnet"
+                      : `Chain ${chainId}`}
                 </span>
               </p>
-              <p>Balance: <span className="text-foreground">{formatEth(balance)}</span></p>
+              <p>
+                Balance: <span className="text-foreground">{formatEth(balance)}</span>
+              </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" onClick={() => void handleConnect()}>
@@ -331,7 +364,11 @@ function ChainLauncherPage() {
         description={`Confirmed only after ${REQUIRED_CONFIRMATIONS} confirmations verified server-side.`}
         actions={
           <Button size="sm" onClick={() => void handleDeploy()} disabled={!canDeploy}>
-            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <FlaskConical className="size-4" aria-hidden="true" />}
+            {busy ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <FlaskConical className="size-4" aria-hidden="true" />
+            )}
             Deploy Test Contract
           </Button>
         }
@@ -339,11 +376,19 @@ function ChainLauncherPage() {
         {deploymentsQuery.isPending && launchId ? (
           <p className="text-xs text-muted-foreground">Loading attempts…</p>
         ) : attempts.length === 0 ? (
-          <EmptyState icon={FlaskConical} title="No attempts yet" description="No test deployment has been attempted for this launch." compact />
+          <EmptyState
+            icon={FlaskConical}
+            title="No attempts yet"
+            description="No test deployment has been attempted for this launch."
+            compact
+          />
         ) : (
           <ul className="flex flex-col gap-3">
             {attempts.map((a) => (
-              <li key={a.id} className="rounded-md border border-border bg-surface-raised/40 p-3 text-xs">
+              <li
+                key={a.id}
+                className="rounded-md border border-border bg-surface-raised/40 p-3 text-xs"
+              >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-semibold text-foreground">
                     Attempt #{a.attempt_number} · {DEPLOYMENT_STATUS_LABEL[a.status] ?? a.status}
@@ -352,11 +397,18 @@ function ChainLauncherPage() {
                     {a.confirmations}/{REQUIRED_CONFIRMATIONS} confirmations
                   </span>
                 </div>
-                <p className="mt-1 break-all text-muted-foreground">Deployer: {a.deployer_address}</p>
+                <p className="mt-1 break-all text-muted-foreground">
+                  Deployer: {a.deployer_address}
+                </p>
                 {a.tx_hash ? (
                   <p className="mt-1 break-all text-muted-foreground">
                     Tx:{" "}
-                    <a className="text-gold underline" href={explorerTxUrl(a.tx_hash)} target="_blank" rel="noreferrer">
+                    <a
+                      className="text-gold underline"
+                      href={explorerTxUrl(a.tx_hash)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
                       {a.tx_hash} <ExternalLink className="inline size-3" aria-hidden="true" />
                     </a>
                   </p>
@@ -365,12 +417,19 @@ function ChainLauncherPage() {
                   <p className="mt-1 flex flex-wrap items-center gap-1 break-all text-muted-foreground">
                     <CheckCircle2 className="size-3 text-emerald-500" aria-hidden="true" />
                     Verified test contract:{" "}
-                    <a className="text-gold underline" href={explorerAddressUrl(a.contract_address)} target="_blank" rel="noreferrer">
+                    <a
+                      className="text-gold underline"
+                      href={explorerAddressUrl(a.contract_address)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
                       {a.contract_address}
                     </a>
                   </p>
                 ) : null}
-                {a.failure_detail ? <p className="mt-1 text-destructive">{a.failure_detail}</p> : null}
+                {a.failure_detail ? (
+                  <p className="mt-1 text-destructive">{a.failure_detail}</p>
+                ) : null}
                 {!isTerminal(a.status) && a.tx_hash ? (
                   <Button
                     size="sm"

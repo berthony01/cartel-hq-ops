@@ -64,7 +64,8 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
 
     if (error || !row) throw new Error("Not authorized");
 
-    const terminal = row.status === "CONFIRMED" || row.status === "FAILED" || row.status === "ABANDONED";
+    const terminal =
+      row.status === "CONFIRMED" || row.status === "FAILED" || row.status === "ABANDONED";
     if (terminal || row.status === "DRAFT" || !row.tx_hash) {
       return {
         status: row.status as VerifyResult["status"],
@@ -77,7 +78,10 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
     }
 
     // Hard pin: this verifier only ever speaks to the testnet.
-    if (Number(row.chain_id) !== ROBINHOOD_TESTNET_CHAIN_ID || row.network_environment !== "TESTNET") {
+    if (
+      Number(row.chain_id) !== ROBINHOOD_TESTNET_CHAIN_ID ||
+      row.network_environment !== "TESTNET"
+    ) {
       throw new Error("Unsupported chain");
     }
 
@@ -121,7 +125,6 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
         args,
       );
       if (rpcError) throw new Error("Verification could not be recorded");
-
     };
 
     // --- Independent chain reads. Nothing below comes from the browser. ---

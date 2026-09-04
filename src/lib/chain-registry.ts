@@ -24,11 +24,10 @@ export const NETWORK_ENVIRONMENT = "TESTNET" as const;
  * supplied later through this single override with no data-model change.
  */
 export const ROBINHOOD_TESTNET_RPC_URL =
-  (import.meta.env['VITE_ROBINHOOD_TESTNET_RPC_URL'] as string | undefined)?.trim() ||
+  (import.meta.env["VITE_ROBINHOOD_TESTNET_RPC_URL"] as string | undefined)?.trim() ||
   "https://rpc.testnet.chain.robinhood.com";
 
-export const ROBINHOOD_TESTNET_EXPLORER_URL =
-  "https://explorer.testnet.chain.robinhood.com";
+export const ROBINHOOD_TESTNET_EXPLORER_URL = "https://explorer.testnet.chain.robinhood.com";
 
 /** Conservative confirmation depth before an attempt may be called CONFIRMED. */
 export const REQUIRED_CONFIRMATIONS = 5 as const;
@@ -68,8 +67,7 @@ export const CHAIN_ID_HEX = `0x${ROBINHOOD_TESTNET_CHAIN_ID.toString(16)}` as co
  *
  * The bytecode is a fixed constant: the user never supplies or influences it.
  */
-export const TEST_ARTIFACT_CREATION_BYTECODE =
-  "0x600180600b6000396000f3fd" as const;
+export const TEST_ARTIFACT_CREATION_BYTECODE = "0x600180600b6000396000f3fd" as const;
 
 /** Expected `eth_getCode` result for a correctly deployed test artifact. */
 export const TEST_ARTIFACT_RUNTIME_BYTECODE = "0xfd" as const;
