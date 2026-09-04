@@ -44,6 +44,7 @@ import {
   getInjectedProvider,
   isTerminal,
   isUserRejection,
+  isValidTxHash,
   listChainDeployments,
   newClientRequestId,
   readAccount,
@@ -66,8 +67,12 @@ import {
   evaluatePreSignGate,
   isQuoteFresh,
   runSimulation,
-  type Simulation,
+  bindSimulationSession,
+  isSessionBound,
+  type SimulationSession,
 } from "@/lib/chain-simulation";
+import { LaunchReceiptCard } from "@/components/chain/LaunchReceiptCard";
+import { deriveLaunchReceipt } from "@/lib/launch-receipt";
 
 export const Route = createFileRoute("/_authenticated/chain-launcher")({
   head: () => ({
@@ -108,7 +113,13 @@ function ChainLauncherPage() {
   const [tokenSymbol, setTokenSymbol] = useState("");
   const [tokenSupply, setTokenSupply] = useState("1000000");
   const [tokenRecipient, setTokenRecipient] = useState("");
-  const [simulation, setSimulation] = useState<Simulation | null>(null);
+  // C8.5 — the passing simulation and its stable client request id travel
+  // together. Discarding the session discards the id, so a new intent can
+  // never reuse an earlier request id.
+  const [simSession, setSimSession] = useState<SimulationSession | null>(null);
+  const simulation = simSession && isSessionBound(simSession) ? simSession.simulation : null;
+  const [recovery, setRecovery] = useState<{ attemptId: string; txHash: string } | null>(null);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [simBusy, setSimBusy] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -162,7 +173,7 @@ function ChainLauncherPage() {
   // Any change to the reviewed intent, the account or the chain invalidates the
   // simulation immediately. Deployment stays locked until a fresh run passes.
   useEffect(() => {
-    setSimulation(null);
+    setSimSession(null);
   }, [tokenName, tokenSymbol, tokenSupply, tokenRecipient, account, chainId]);
 
   useEffect(() => {
@@ -271,10 +282,10 @@ function ChainLauncherPage() {
         recipient: tokenRecipient,
       });
       setNowMs(Date.now());
-      setSimulation(result);
+      setSimSession(bindSimulationSession(result, newClientRequestId()));
       if (!result.preflight.passed) toast.error("Simulation did not pass. Review the checks.");
     } catch (e) {
-      setSimulation(null);
+      setSimSession(null);
       toast.error(e instanceof SimulationError ? e.message : "Could not simulate this deployment.");
     } finally {
       setSimBusy(false);
@@ -306,7 +317,7 @@ function ChainLauncherPage() {
       liveAccount,
     });
     if (!gate.ok) {
-      setSimulation(null);
+      setSimSession(null);
       toast.error(gate.reason);
       return;
     }
@@ -316,7 +327,7 @@ function ChainLauncherPage() {
     const intent = simulation.intent.tokenIntent;
     if (buildTokenInitCode(intent) !== simulation.intent.initCode) {
       toast.error("The reviewed deployment payload could not be re-derived. Simulate again.");
-      setSimulation(null);
+      setSimSession(null);
       return;
     }
 
@@ -326,16 +337,28 @@ function ChainLauncherPage() {
     try {
       const attempt = await createTokenDeploymentAttempt({
         launchId,
-        clientRequestId: newClientRequestId(),
+        // Stable for this simulation: a duplicate click resolves to the SAME
+        // row through the server-side idempotency guard, never a second one.
+        clientRequestId: simSession!.clientRequestId,
         deployerAddress: account,
         intent,
       });
       attemptId = attempt.id;
       await invalidate();
 
-      txHash = await broadcastTokenDeployment(account, intent);
-      await submitDeploymentTx(attempt.id, txHash);
+      // The wallet receives the EXACT reviewed bytes, not a re-encoded copy.
+      txHash = await broadcastTokenDeployment(account, simulation.intent.initCode);
+      try {
+        await submitDeploymentTx(attempt.id, txHash);
+      } catch (submitError) {
+        // Broadcast succeeded but the record write failed. The transaction may
+        // be on chain, so the attempt is NEVER abandoned: the hash is surfaced
+        // for manual attachment to this same attempt.
+        setRecovery({ attemptId: attempt.id, txHash });
+        throw submitError;
+      }
       await invalidate();
+      setRecovery(null);
       toast.success("Token transaction broadcast. Verify once it is mined.");
     } catch (e) {
       // Identical pre/post-broadcast rule as the inert path: a broadcast
