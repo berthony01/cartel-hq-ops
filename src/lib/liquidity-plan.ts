@@ -23,8 +23,12 @@ import {
  * `LIQUIDITY_TX_ENABLED` is a frozen `false` constant.
  */
 
-/** Domain separator for the canonical fingerprint pre-image. */
-export const LIQUIDITY_PLAN_FINGERPRINT_DOMAIN = "cartel-liq-plan-v1" as const;
+/**
+ * Domain separator for the canonical fingerprint pre-image.
+ * v2 binds the recorded source chain id and the token name; a v1 pre-image can
+ * never collide with a v2 pre-image.
+ */
+export const LIQUIDITY_PLAN_FINGERPRINT_DOMAIN = "cartel-liq-plan-v2" as const;
 
 /** ASCII unit separator — cannot appear in a normalized field. */
 const FIELD_SEPARATOR = "\u001f";
