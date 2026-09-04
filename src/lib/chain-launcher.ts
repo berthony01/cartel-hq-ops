@@ -318,27 +318,50 @@ export function buildTokenInitCode(intent: TokenIntent): `0x${string}` {
 }
 
 /**
- * Broadcasts the fixed-supply token as a contract creation. `to` is omitted and
- * `value` is zero; the server re-derives and re-checks the exact init code.
+ * C8.5 — broadcasts the EXACT init code that the operator reviewed in the
+ * active simulation. The bytes are passed in; nothing is re-encoded or
+ * re-derived here, so the wallet can only ever receive the reviewed payload.
+ * `to` is omitted (contract creation) and `value` is zero; the server
+ * re-derives and re-checks the init code independently during verification.
  */
-export async function broadcastTokenDeployment(from: string, intent: TokenIntent): Promise<string> {
+export async function broadcastTokenDeployment(
+  from: string,
+  reviewedInitCode: `0x${string}`,
+): Promise<string> {
   const provider = getInjectedProvider();
   if (!provider) throw new WalletError("No browser wallet detected.");
+
+  if (typeof reviewedInitCode !== "string" || !/^0x[0-9a-f]+$/i.test(reviewedInitCode)) {
+    throw new WalletError("The reviewed deployment payload is not valid creation data.");
+  }
+  if (reviewedInitCode.length % 2 !== 0) {
+    throw new WalletError("The reviewed deployment payload is not byte-aligned.");
+  }
 
   const chainId = await readChainId();
   if (chainId !== ROBINHOOD_TESTNET_CHAIN_ID) {
     throw new WalletError("Wallet is not on Robinhood Chain Testnet.");
   }
 
+  const liveAccount = await readAccount();
+  if (!liveAccount || liveAccount !== from.toLowerCase()) {
+    throw new WalletError("The connected wallet account changed. Run the simulation again.");
+  }
+
   const hash = (await provider.request({
     method: "eth_sendTransaction",
-    params: [{ from, data: buildTokenInitCode(intent), value: "0x0" }],
+    params: [{ from, data: reviewedInitCode, value: "0x0" }],
   })) as string;
 
   if (typeof hash !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(hash)) {
     throw new WalletError("Wallet returned an invalid transaction hash.");
   }
   return hash.toLowerCase();
+}
+
+/** Strict validator for a 32-byte transaction hash, used by recovery paths. */
+export function isValidTxHash(value: unknown): value is string {
+  return typeof value === "string" && /^0x[0-9a-f]{64}$/.test(value);
 }
 
 export async function createTokenDeploymentAttempt(input: {

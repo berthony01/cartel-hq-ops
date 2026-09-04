@@ -473,6 +473,39 @@ export function evaluatePreSignGate(
 }
 
 /* ------------------------------------------------------------------ */
+/* C8.5 — stable per-simulation request id                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A passing simulation bound to exactly one client request id. Every deploy
+ * click made against this still-valid simulation reuses the same id, so the
+ * existing server-side idempotency guard resolves repeated clicks to one row.
+ * Invalidating the simulation discards the session and its id with it.
+ */
+export type SimulationSession = {
+  simulation: Simulation;
+  /** Stable for the lifetime of this session only. */
+  clientRequestId: string;
+  /** Bound fingerprint — guards against reusing an id across intents. */
+  boundFingerprint: string;
+};
+
+export function bindSimulationSession(
+  simulation: Simulation,
+  clientRequestId: string,
+): SimulationSession {
+  return { simulation, clientRequestId, boundFingerprint: simulation.intent.fingerprint };
+}
+
+/** True only when the id still belongs to this exact simulation intent. */
+export function isSessionBound(session: SimulationSession): boolean {
+  return (
+    session.boundFingerprint === session.simulation.intent.fingerprint &&
+    session.clientRequestId.length > 0
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Display helpers                                                     */
 /* ------------------------------------------------------------------ */
 
