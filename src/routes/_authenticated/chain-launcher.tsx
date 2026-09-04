@@ -147,6 +147,15 @@ function ChainLauncherPage() {
   const [simBusy, setSimBusy] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
+  // C8.6A — liquidity readiness planning only. No transaction state exists here.
+  const [liqSourceId, setLiqSourceId] = useState<string | null>(null);
+  const [liqTokenAmount, setLiqTokenAmount] = useState("");
+  const [liqEthAmount, setLiqEthAmount] = useState("");
+  const [liqSlippage, setLiqSlippage] = useState("100");
+  const [liqDeadline, setLiqDeadline] = useState("20");
+  const [liqPlan, setLiqPlan] = useState<LiquidityPlan | null>(null);
+
+
   const hasProvider = typeof window !== "undefined" && getInjectedProvider() !== null;
   const onTestnet = chainId === ROBINHOOD_TESTNET_CHAIN_ID;
 
