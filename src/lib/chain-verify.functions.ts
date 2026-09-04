@@ -96,9 +96,8 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
     const isToken = row.deployment_kind === "FIXED_SUPPLY_ERC20";
     // Fail closed: the supply used for every security comparison must be an
     // exact decimal digit string from the generated mirror, never a JS number.
-    const supplyText = typeof row.token_total_supply_text === "string"
-      ? row.token_total_supply_text
-      : null;
+    const supplyText =
+      typeof row.token_total_supply_text === "string" ? row.token_total_supply_text : null;
     if (
       isToken &&
       (row.artifact_id !== "cartel-fixed-erc20-v1" ||
