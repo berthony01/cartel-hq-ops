@@ -70,7 +70,6 @@ export function SimulationReviewCard({
     { label: "Balance covers estimated cost", ok: preflight.sufficientBalance === true },
   ];
 
-
   async function copyFingerprint() {
     try {
       await navigator.clipboard.writeText(intent.fingerprint);

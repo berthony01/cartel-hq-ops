@@ -387,7 +387,6 @@ export async function runPreflight(intent: SimulationIntent): Promise<PreflightR
     result.estimatedCostWei !== null &&
     result.sufficientBalance === true;
 
-
   return result;
 }
 
