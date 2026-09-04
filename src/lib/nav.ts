@@ -9,6 +9,8 @@ import {
   Send,
   Globe,
   Eye,
+  FlaskConical,
+
 
   ShieldHalf,
   type LucideIcon,
@@ -89,8 +91,10 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "System",
     items: [
       { label: "Owner Console", to: "/admin", icon: ShieldHalf, ownerOnly: true },
+      { label: "Chain Launcher", to: "/chain-launcher", icon: FlaskConical, ownerOnly: true },
     ],
   },
+
 ];
 
 export const MOBILE_PRIMARY_ITEMS: NavItem[] = NAV_SECTIONS.flatMap((section) =>
