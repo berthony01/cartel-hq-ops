@@ -156,7 +156,8 @@ function ChainLauncherPage() {
     enabled: isPlatformOwner === true && !!launchId,
   });
 
-  const attempts: DeploymentRow[] = deploymentsQuery.data ?? [];
+  const deploymentsData = deploymentsQuery.data;
+  const attempts: DeploymentRow[] = useMemo(() => deploymentsData ?? [], [deploymentsData]);
   const latest = attempts[0] ?? null;
   const selectedLaunch = useMemo(
     () => launches.find((l) => l.id === launchId) ?? null,
