@@ -354,7 +354,7 @@ function evaluateDeployment(
       "Production environment",
       envApproved ? "PASS" : "BLOCKED",
       envApproved
-        ? "Recorded on an approved production environment."
+        ? "Recorded on an eligible production environment."
         : `Recorded on ${environment ?? "an unrecorded environment"}. Test networks are never eligible for official registration.`,
     ),
   );
@@ -362,7 +362,7 @@ function evaluateDeployment(
     registrationBlockReasons.push(
       environment === "TESTNET"
         ? "Test network deployment"
-        : `Environment ${environment ?? "unknown"} is not an approved production environment`,
+        : `Environment ${environment ?? "unknown"} is not an eligible production environment`,
     );
   }
 
@@ -386,12 +386,12 @@ function evaluateDeployment(
   registrationChecks.push(
     check(
       "deployment_kind",
-      "Approved official token kind",
+      "Recognised official token kind",
       isTokenKind ? "PASS" : "BLOCKED",
-      isTokenKind ? `${kind} is an approved official token kind.` : `${kind ?? "Unknown kind"} is not an approved official token kind.`,
+      isTokenKind ? `${kind} is a recognised official token kind.` : `${kind ?? "Unknown kind"} is not a recognised official token kind.`,
     ),
   );
-  if (!isTokenKind) registrationBlockReasons.push("Deployment kind is not an approved official token kind");
+  if (!isTokenKind) registrationBlockReasons.push("Deployment kind is not a recognised official token kind");
 
   registrationChecks.push(
     check(
