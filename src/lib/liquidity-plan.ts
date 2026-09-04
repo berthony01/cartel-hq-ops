@@ -23,8 +23,12 @@ import {
  * `LIQUIDITY_TX_ENABLED` is a frozen `false` constant.
  */
 
-/** Domain separator for the canonical fingerprint pre-image. */
-export const LIQUIDITY_PLAN_FINGERPRINT_DOMAIN = "cartel-liq-plan-v1" as const;
+/**
+ * Domain separator for the canonical fingerprint pre-image.
+ * v2 binds the recorded source chain id and the token name; a v1 pre-image can
+ * never collide with a v2 pre-image.
+ */
+export const LIQUIDITY_PLAN_FINGERPRINT_DOMAIN = "cartel-liq-plan-v2" as const;
 
 /** ASCII unit separator — cannot appear in a normalized field. */
 const FIELD_SEPARATOR = "\u001f";
@@ -164,6 +168,8 @@ export type LiquidityPlanInput = {
 export type LiquidityPlanIntent = {
   environment: typeof NETWORK_ENVIRONMENT;
   chainId: typeof ROBINHOOD_TESTNET_CHAIN_ID;
+  /** Chain id recorded on the source deployment row (fingerprint-bound). */
+  sourceChainId: number;
   infrastructureState: typeof LIQUIDITY_INFRASTRUCTURE_STATE;
   quoteAsset: typeof LIQUIDITY_QUOTE_ASSET;
   artifactId: string;
@@ -211,12 +217,16 @@ export type LiquidityPlan = {
 
 export function liquidityFingerprintPreimage(fields: {
   environment: string;
+  /** Intended execution chain — hard-pinned to Robinhood Chain Testnet. */
   chainId: number;
+  /** Chain id recorded on the source deployment row, bound independently. */
+  sourceChainId: number;
   infrastructureState: string;
   quoteAsset: string;
   artifactId: string;
   sourceDeploymentId: string;
   tokenContract: string;
+  tokenName: string;
   tokenSymbol: string;
   tokenDecimals: number;
   operator: string;
@@ -225,15 +235,18 @@ export function liquidityFingerprintPreimage(fields: {
   slippageBps: number;
   deadlineMinutes: number;
 }): string {
+  // Explicit, ordered, separator-delimited encoding. Never object-key order.
   return [
     LIQUIDITY_PLAN_FINGERPRINT_DOMAIN,
     fields.environment,
     String(fields.chainId),
+    String(fields.sourceChainId),
     fields.infrastructureState,
     fields.quoteAsset,
     fields.artifactId,
     fields.sourceDeploymentId.toLowerCase(),
     fields.tokenContract.toLowerCase(),
+    fields.tokenName.normalize("NFC"),
     fields.tokenSymbol.normalize("NFC"),
     String(fields.tokenDecimals),
     fields.operator.toLowerCase(),
@@ -317,14 +330,18 @@ export function buildLiquidityPlan(input: LiquidityPlanInput): LiquidityPlan {
   const tokenSymbol = (source.tokenSymbol ?? "").trim();
   const tokenName = (source.tokenName ?? "").trim();
 
+  const sourceChainId = Number(source.chainId);
+
   const preimage = liquidityFingerprintPreimage({
     environment: NETWORK_ENVIRONMENT,
     chainId: ROBINHOOD_TESTNET_CHAIN_ID,
+    sourceChainId,
     infrastructureState: LIQUIDITY_INFRASTRUCTURE_STATE,
     quoteAsset: LIQUIDITY_QUOTE_ASSET,
     artifactId,
     sourceDeploymentId: source.deploymentId,
     tokenContract,
+    tokenName,
     tokenSymbol,
     tokenDecimals: decimals,
     operator,
@@ -337,6 +354,7 @@ export function buildLiquidityPlan(input: LiquidityPlanInput): LiquidityPlan {
   const intent: LiquidityPlanIntent = {
     environment: NETWORK_ENVIRONMENT,
     chainId: ROBINHOOD_TESTNET_CHAIN_ID,
+    sourceChainId,
     infrastructureState: LIQUIDITY_INFRASTRUCTURE_STATE,
     quoteAsset: LIQUIDITY_QUOTE_ASSET,
     artifactId,
