@@ -240,7 +240,8 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
     // Nothing about the bytecode is ever taken from the browser.
     let expectedTotalSupply = 0n;
     if (isToken) {
-      expectedTotalSupply = BigInt(String(row.token_total_supply));
+      // supplyText is proven to be digits-only above; BigInt is exact.
+      expectedTotalSupply = BigInt(supplyText as string);
       const expectedInitCode = (CARTEL_FIXED_ERC20_CREATION_BYTECODE +
         encodeAbiParameters(
           [{ type: "string" }, { type: "string" }, { type: "uint256" }, { type: "address" }],
