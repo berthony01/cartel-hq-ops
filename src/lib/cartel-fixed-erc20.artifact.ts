@@ -43,102 +43,102 @@ export const CARTEL_FIXED_ERC20_CONSTRUCTOR_INPUTS = [
 
 export const CARTEL_FIXED_ERC20_ABI = [
   {
-    "inputs": [
+    inputs: [
       {
-        "internalType": "string",
-        "name": "name_",
-        "type": "string"
+        internalType: "string",
+        name: "name_",
+        type: "string",
       },
       {
-        "internalType": "string",
-        "name": "symbol_",
-        "type": "string"
+        internalType: "string",
+        name: "symbol_",
+        type: "string",
       },
       {
-        "internalType": "uint256",
-        "name": "totalSupply_",
-        "type": "uint256"
+        internalType: "uint256",
+        name: "totalSupply_",
+        type: "uint256",
       },
       {
-        "internalType": "address",
-        "name": "recipient_",
-        "type": "address"
-      }
+        internalType: "address",
+        name: "recipient_",
+        type: "address",
+      },
     ],
-    "stateMutability": "nonpayable",
-    "type": "constructor"
+    stateMutability: "nonpayable",
+    type: "constructor",
   },
   {
-    "inputs": [
+    inputs: [
       {
-        "internalType": "address",
-        "name": "account",
-        "type": "address"
-      }
+        internalType: "address",
+        name: "account",
+        type: "address",
+      },
     ],
-    "name": "balanceOf",
-    "outputs": [
+    name: "balanceOf",
+    outputs: [
       {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
+        internalType: "uint256",
+        name: "",
+        type: "uint256",
+      },
     ],
-    "stateMutability": "view",
-    "type": "function"
+    stateMutability: "view",
+    type: "function",
   },
   {
-    "inputs": [],
-    "name": "decimals",
-    "outputs": [
+    inputs: [],
+    name: "decimals",
+    outputs: [
       {
-        "internalType": "uint8",
-        "name": "",
-        "type": "uint8"
-      }
+        internalType: "uint8",
+        name: "",
+        type: "uint8",
+      },
     ],
-    "stateMutability": "view",
-    "type": "function"
+    stateMutability: "view",
+    type: "function",
   },
   {
-    "inputs": [],
-    "name": "name",
-    "outputs": [
+    inputs: [],
+    name: "name",
+    outputs: [
       {
-        "internalType": "string",
-        "name": "",
-        "type": "string"
-      }
+        internalType: "string",
+        name: "",
+        type: "string",
+      },
     ],
-    "stateMutability": "view",
-    "type": "function"
+    stateMutability: "view",
+    type: "function",
   },
   {
-    "inputs": [],
-    "name": "symbol",
-    "outputs": [
+    inputs: [],
+    name: "symbol",
+    outputs: [
       {
-        "internalType": "string",
-        "name": "",
-        "type": "string"
-      }
+        internalType: "string",
+        name: "",
+        type: "string",
+      },
     ],
-    "stateMutability": "view",
-    "type": "function"
+    stateMutability: "view",
+    type: "function",
   },
   {
-    "inputs": [],
-    "name": "totalSupply",
-    "outputs": [
+    inputs: [],
+    name: "totalSupply",
+    outputs: [
       {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
+        internalType: "uint256",
+        name: "",
+        type: "uint256",
+      },
     ],
-    "stateMutability": "view",
-    "type": "function"
-  }
+    stateMutability: "view",
+    type: "function",
+  },
 ] as const;
 
 export const CARTEL_FIXED_ERC20_CREATION_BYTECODE =
