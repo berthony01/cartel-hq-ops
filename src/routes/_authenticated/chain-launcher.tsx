@@ -272,6 +272,62 @@ function ChainLauncherPage() {
     if (liqPlan && !isLiquidityPlanFresh(liqPlan, nowMs)) setLiqPlan(null);
   }, [liqPlan, nowMs]);
 
+  /**
+   * C8.6A — pure, local plan derivation. Reads no chain data of its own and
+   * never contacts the wallet: only values already held in component state are
+   * passed in. Nothing is persisted and nothing is signed.
+   */
+  const handleBuildLiquidityPlan = () => {
+    if (!liquiditySource) {
+      toast.error("Select a confirmed test-token attempt first.");
+      return;
+    }
+    if (!account) {
+      toast.error("Connect a wallet first.");
+      return;
+    }
+    // Only a balance actually verified on chain for THIS operator counts.
+    const availableTokenBaseUnits =
+      liquiditySource.token_recipient &&
+      liquiditySource.token_recipient.toLowerCase() === account.toLowerCase()
+        ? liquiditySource.verified_recipient_balance_text
+        : null;
+
+    try {
+      const plan = buildLiquidityPlan({
+        source: {
+          deploymentId: liquiditySource.id,
+          status: liquiditySource.status,
+          deploymentKind: liquiditySource.deployment_kind,
+          artifactId: liquiditySource.artifact_id,
+          chainId: Number(liquiditySource.chain_id),
+          contractAddress: liquiditySource.contract_address,
+          tokenName: liquiditySource.verified_token_name ?? liquiditySource.token_name,
+          tokenSymbol: liquiditySource.verified_token_symbol ?? liquiditySource.token_symbol,
+          tokenDecimals: liquiditySource.verified_token_decimals ?? liquiditySource.token_decimals,
+          availableTokenBaseUnits,
+        },
+        operator: account,
+        liveAccount: account,
+        liveChainId: chainId,
+        walletBalanceWei: balance === null ? null : balance.toString(),
+        tokenAmount: liqTokenAmount,
+        ethAmount: liqEthAmount,
+        slippageBps: Number.parseInt(liqSlippage.trim(), 10),
+        deadlineMinutes: Number.parseInt(liqDeadline.trim(), 10),
+      });
+      setLiqPlan(plan);
+      setNowMs(Date.now());
+    } catch (planError) {
+      setLiqPlan(null);
+      toast.error(
+        planError instanceof LiquidityPlanError
+          ? planError.message
+          : "Could not build a liquidity plan from these values.",
+      );
+    }
+  };
+
 
   // B — same-tab recovery restore. Only ever restores a record that still
   // matches a DRAFT row without a server-side tx hash in the CURRENT scope.
