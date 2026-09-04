@@ -260,8 +260,8 @@ async function readFeeWeiPerGas(provider: {
 
 /**
  * Runs every read-only chain check for an exact intent. Never signs, never
- * broadcasts, never writes. Fee data is advisory and excluded from the
- * fingerprint.
+ * broadcasts, never writes. Fee data is required for the preflight to pass and
+ * is excluded from the fingerprint.
  */
 export async function runPreflight(intent: SimulationIntent): Promise<PreflightResult> {
   const errors: string[] = [];
