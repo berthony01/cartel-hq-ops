@@ -57,7 +57,7 @@ function CopyValue({ label, value, href }: { label: string; value: string; href?
 export function LaunchReceiptCard({ receipt }: { receipt: LaunchReceipt }) {
   const badgeClass = receipt.verified
     ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-500"
-    : receipt.state === "FAILED"
+    : receipt.state === "FAILED" || receipt.state === "EVIDENCE_INCOMPLETE"
       ? "border-destructive/40 bg-destructive/10 text-destructive"
       : "border-gold/40 bg-gold/10 text-gold";
 
@@ -128,8 +128,22 @@ export function LaunchReceiptCard({ receipt }: { receipt: LaunchReceipt }) {
         <p className="mt-1 text-muted-foreground">
           {receipt.verified
             ? "Confirmed server-side against Robinhood Chain Testnet."
-            : "Not yet independently confirmed by the server verifier."}
+            : receipt.state === "EVIDENCE_INCOMPLETE"
+              ? `Platform status is ${receipt.platformStatus}, but the recorded evidence is incomplete or inconsistent. This receipt does not claim verification.`
+              : "Not yet independently confirmed by the server verifier."}
         </p>
+        {receipt.runtimeBytecodeVerified ? (
+          <p className="mt-1 text-emerald-500">
+            Runtime bytecode hash: matched frozen artifact during server verification.
+          </p>
+        ) : null}
+        {!receipt.verified && receipt.evidenceGaps.length > 0 ? (
+          <ul className="mt-1 list-disc space-y-1 pl-4 text-destructive">
+            {receipt.evidenceGaps.map((gap) => (
+              <li key={gap}>{gap}</li>
+            ))}
+          </ul>
+        ) : null}
         <dl className="mt-2 grid gap-x-4 gap-y-1 sm:grid-cols-2">
           {receipt.txHash ? (
             <CopyValue label="Transaction hash" value={receipt.txHash} href={receipt.txUrl} />
