@@ -173,6 +173,7 @@ export type Database = {
       }
       launch_chain_deployments: {
         Row: {
+          artifact_id: string | null
           attempt_number: number
           block_hash: string | null
           block_number: number | null
@@ -183,6 +184,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deployer_address: string
+          deployment_kind: string
           failure_code: string | null
           failure_detail: string | null
           id: string
@@ -191,12 +193,23 @@ export type Database = {
           network_environment: string
           status: string
           submitted_at: string | null
+          token_decimals: number | null
+          token_name: string | null
+          token_recipient: string | null
+          token_symbol: string | null
+          token_total_supply: number | null
           tx_hash: string | null
           updated_at: string
           verified_at: string | null
+          verified_recipient_balance: number | null
+          verified_token_decimals: number | null
+          verified_token_name: string | null
+          verified_token_symbol: string | null
+          verified_total_supply: number | null
           workspace_id: string
         }
         Insert: {
+          artifact_id?: string | null
           attempt_number: number
           block_hash?: string | null
           block_number?: number | null
@@ -207,6 +220,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deployer_address: string
+          deployment_kind?: string
           failure_code?: string | null
           failure_detail?: string | null
           id?: string
@@ -215,12 +229,23 @@ export type Database = {
           network_environment: string
           status?: string
           submitted_at?: string | null
+          token_decimals?: number | null
+          token_name?: string | null
+          token_recipient?: string | null
+          token_symbol?: string | null
+          token_total_supply?: number | null
           tx_hash?: string | null
           updated_at?: string
           verified_at?: string | null
+          verified_recipient_balance?: number | null
+          verified_token_decimals?: number | null
+          verified_token_name?: string | null
+          verified_token_symbol?: string | null
+          verified_total_supply?: number | null
           workspace_id: string
         }
         Update: {
+          artifact_id?: string | null
           attempt_number?: number
           block_hash?: string | null
           block_number?: number | null
@@ -231,6 +256,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deployer_address?: string
+          deployment_kind?: string
           failure_code?: string | null
           failure_detail?: string | null
           id?: string
@@ -239,9 +265,19 @@ export type Database = {
           network_environment?: string
           status?: string
           submitted_at?: string | null
+          token_decimals?: number | null
+          token_name?: string | null
+          token_recipient?: string | null
+          token_symbol?: string | null
+          token_total_supply?: number | null
           tx_hash?: string | null
           updated_at?: string
           verified_at?: string | null
+          verified_recipient_balance?: number | null
+          verified_token_decimals?: number | null
+          verified_token_name?: string | null
+          verified_token_symbol?: string | null
+          verified_total_supply?: number | null
           workspace_id?: string
         }
         Relationships: [
@@ -2758,6 +2794,7 @@ export type Database = {
       abandon_launch_chain_deployment_attempt: {
         Args: { _deployment_id: string; _reason?: string }
         Returns: {
+          artifact_id: string | null
           attempt_number: number
           block_hash: string | null
           block_number: number | null
@@ -2768,6 +2805,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deployer_address: string
+          deployment_kind: string
           failure_code: string | null
           failure_detail: string | null
           id: string
@@ -2776,9 +2814,19 @@ export type Database = {
           network_environment: string
           status: string
           submitted_at: string | null
+          token_decimals: number | null
+          token_name: string | null
+          token_recipient: string | null
+          token_symbol: string | null
+          token_total_supply: number | null
           tx_hash: string | null
           updated_at: string
           verified_at: string | null
+          verified_recipient_balance: number | null
+          verified_token_decimals: number | null
+          verified_token_name: string | null
+          verified_token_symbol: string | null
+          verified_total_supply: number | null
           workspace_id: string
         }
         SetofOptions: {
@@ -2812,6 +2860,7 @@ export type Database = {
           _status: string
         }
         Returns: {
+          artifact_id: string | null
           attempt_number: number
           block_hash: string | null
           block_number: number | null
@@ -2822,6 +2871,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deployer_address: string
+          deployment_kind: string
           failure_code: string | null
           failure_detail: string | null
           id: string
@@ -2830,9 +2880,78 @@ export type Database = {
           network_environment: string
           status: string
           submitted_at: string | null
+          token_decimals: number | null
+          token_name: string | null
+          token_recipient: string | null
+          token_symbol: string | null
+          token_total_supply: number | null
           tx_hash: string | null
           updated_at: string
           verified_at: string | null
+          verified_recipient_balance: number | null
+          verified_token_decimals: number | null
+          verified_token_name: string | null
+          verified_token_symbol: string | null
+          verified_total_supply: number | null
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_chain_deployments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      apply_launch_chain_token_deployment_verification: {
+        Args: {
+          _block_hash?: string
+          _block_number?: number
+          _confirmations?: number
+          _contract_address?: string
+          _deployment_id: string
+          _failure_code?: string
+          _failure_detail?: string
+          _status: string
+          _verified_recipient_balance?: number
+          _verified_token_decimals?: number
+          _verified_token_name?: string
+          _verified_token_symbol?: string
+          _verified_total_supply?: number
+        }
+        Returns: {
+          artifact_id: string | null
+          attempt_number: number
+          block_hash: string | null
+          block_number: number | null
+          chain_id: number
+          client_request_id: string
+          confirmations: number
+          contract_address: string | null
+          created_at: string
+          created_by: string | null
+          deployer_address: string
+          deployment_kind: string
+          failure_code: string | null
+          failure_detail: string | null
+          id: string
+          last_checked_at: string | null
+          launch_id: string
+          network_environment: string
+          status: string
+          submitted_at: string | null
+          token_decimals: number | null
+          token_name: string | null
+          token_recipient: string | null
+          token_symbol: string | null
+          token_total_supply: number | null
+          tx_hash: string | null
+          updated_at: string
+          verified_at: string | null
+          verified_recipient_balance: number | null
+          verified_token_decimals: number | null
+          verified_token_name: string | null
+          verified_token_symbol: string | null
+          verified_total_supply: number | null
           workspace_id: string
         }
         SetofOptions: {
@@ -2925,6 +3044,7 @@ export type Database = {
           _launch_id: string
         }
         Returns: {
+          artifact_id: string | null
           attempt_number: number
           block_hash: string | null
           block_number: number | null
@@ -2935,6 +3055,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deployer_address: string
+          deployment_kind: string
           failure_code: string | null
           failure_detail: string | null
           id: string
@@ -2943,9 +3064,72 @@ export type Database = {
           network_environment: string
           status: string
           submitted_at: string | null
+          token_decimals: number | null
+          token_name: string | null
+          token_recipient: string | null
+          token_symbol: string | null
+          token_total_supply: number | null
           tx_hash: string | null
           updated_at: string
           verified_at: string | null
+          verified_recipient_balance: number | null
+          verified_token_decimals: number | null
+          verified_token_name: string | null
+          verified_token_symbol: string | null
+          verified_total_supply: number | null
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_chain_deployments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_launch_chain_token_deployment_attempt: {
+        Args: {
+          _client_request_id: string
+          _deployer_address: string
+          _launch_id: string
+          _token_name: string
+          _token_recipient: string
+          _token_symbol: string
+          _token_total_supply: number
+        }
+        Returns: {
+          artifact_id: string | null
+          attempt_number: number
+          block_hash: string | null
+          block_number: number | null
+          chain_id: number
+          client_request_id: string
+          confirmations: number
+          contract_address: string | null
+          created_at: string
+          created_by: string | null
+          deployer_address: string
+          deployment_kind: string
+          failure_code: string | null
+          failure_detail: string | null
+          id: string
+          last_checked_at: string | null
+          launch_id: string
+          network_environment: string
+          status: string
+          submitted_at: string | null
+          token_decimals: number | null
+          token_name: string | null
+          token_recipient: string | null
+          token_symbol: string | null
+          token_total_supply: number | null
+          tx_hash: string | null
+          updated_at: string
+          verified_at: string | null
+          verified_recipient_balance: number | null
+          verified_token_decimals: number | null
+          verified_token_name: string | null
+          verified_token_symbol: string | null
+          verified_total_supply: number | null
           workspace_id: string
         }
         SetofOptions: {
@@ -3455,6 +3639,7 @@ export type Database = {
       list_launch_chain_deployments: {
         Args: { _launch_id: string }
         Returns: {
+          artifact_id: string | null
           attempt_number: number
           block_hash: string | null
           block_number: number | null
@@ -3465,6 +3650,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deployer_address: string
+          deployment_kind: string
           failure_code: string | null
           failure_detail: string | null
           id: string
@@ -3473,9 +3659,19 @@ export type Database = {
           network_environment: string
           status: string
           submitted_at: string | null
+          token_decimals: number | null
+          token_name: string | null
+          token_recipient: string | null
+          token_symbol: string | null
+          token_total_supply: number | null
           tx_hash: string | null
           updated_at: string
           verified_at: string | null
+          verified_recipient_balance: number | null
+          verified_token_decimals: number | null
+          verified_token_name: string | null
+          verified_token_symbol: string | null
+          verified_total_supply: number | null
           workspace_id: string
         }[]
         SetofOptions: {
@@ -3724,6 +3920,7 @@ export type Database = {
       submit_launch_chain_deployment_tx: {
         Args: { _deployment_id: string; _tx_hash: string }
         Returns: {
+          artifact_id: string | null
           attempt_number: number
           block_hash: string | null
           block_number: number | null
@@ -3734,6 +3931,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deployer_address: string
+          deployment_kind: string
           failure_code: string | null
           failure_detail: string | null
           id: string
@@ -3742,9 +3940,19 @@ export type Database = {
           network_environment: string
           status: string
           submitted_at: string | null
+          token_decimals: number | null
+          token_name: string | null
+          token_recipient: string | null
+          token_symbol: string | null
+          token_total_supply: number | null
           tx_hash: string | null
           updated_at: string
           verified_at: string | null
+          verified_recipient_balance: number | null
+          verified_token_decimals: number | null
+          verified_token_name: string | null
+          verified_token_symbol: string | null
+          verified_total_supply: number | null
           workspace_id: string
         }
         SetofOptions: {
