@@ -220,7 +220,11 @@ export function deriveLaunchReceipt({ row, activeSimulation }: ReceiptInput): La
     }
     // The frozen artifact mints 100% of the supply once, to the recorded
     // recipient, so the verified balance must equal the full supply exactly.
-    if (verifiedBalance === null || requestedSupply === null || verifiedBalance !== requestedSupply) {
+    if (
+      verifiedBalance === null ||
+      requestedSupply === null ||
+      verifiedBalance !== requestedSupply
+    ) {
       gaps.push("Verified recipient balance does not equal the full requested supply.");
     }
     if (recipient === null) gaps.push("No valid initial recipient is recorded.");
