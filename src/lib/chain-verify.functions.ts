@@ -63,7 +63,9 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
     const { data: row, error } = await context.supabase
       .from("launch_chain_deployments")
       .select(
-        "id, status, chain_id, network_environment, deployer_address, tx_hash, confirmations, contract_address, block_number, block_hash, deployment_kind, artifact_id, token_name, token_symbol, token_decimals, token_total_supply, token_recipient",
+        // token_total_supply_text is the generated exact-decimal mirror. The
+        // numeric column crosses JSON as a double and is never trusted here.
+        "id, status, chain_id, network_environment, deployer_address, tx_hash, confirmations, contract_address, block_number, block_hash, deployment_kind, artifact_id, token_name, token_symbol, token_decimals, token_total_supply_text, token_recipient",
       )
       .eq("id", data.deploymentId)
       .maybeSingle();
