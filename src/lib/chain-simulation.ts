@@ -4,10 +4,7 @@ import {
   CARTEL_FIXED_ERC20_DECIMALS,
   CARTEL_FIXED_ERC20_RUNTIME_BYTECODE_HASH,
 } from "./cartel-fixed-erc20.artifact";
-import {
-  NETWORK_ENVIRONMENT,
-  ROBINHOOD_TESTNET_CHAIN_ID,
-} from "./chain-registry";
+import { NETWORK_ENVIRONMENT, ROBINHOOD_TESTNET_CHAIN_ID } from "./chain-registry";
 import {
   ZERO_ADDRESS,
   buildTokenInitCode,
@@ -69,13 +66,7 @@ export type SimulationIntent = {
   tokenIntent: TokenIntent;
 };
 
-export type PreflightCheckKey =
-  | "chain"
-  | "account"
-  | "recipient"
-  | "call"
-  | "estimate"
-  | "balance";
+export type PreflightCheckKey = "chain" | "account" | "recipient" | "call" | "estimate" | "balance";
 
 export type PreflightResult = {
   observedChainId: number | null;
@@ -116,7 +107,8 @@ export class SimulationError extends Error {
 
 function normalizeAddress(value: string, label: string): string {
   const address = value.trim().toLowerCase();
-  if (!/^0x[0-9a-f]{40}$/.test(address)) throw new SimulationError(`${label} is not a valid address.`);
+  if (!/^0x[0-9a-f]{40}$/.test(address))
+    throw new SimulationError(`${label} is not a valid address.`);
   if (address === ZERO_ADDRESS) throw new SimulationError(`${label} cannot be the zero address.`);
   return address;
 }
@@ -160,7 +152,9 @@ export function fingerprintPreimage(fields: {
  * Builds the frozen, deterministic simulation intent. Pure: no provider call,
  * no network access, no persistence.
  */
-export function buildSimulationIntent(input: TokenIntentInput & { deployer: string }): SimulationIntent {
+export function buildSimulationIntent(
+  input: TokenIntentInput & { deployer: string },
+): SimulationIntent {
   const deployer = normalizeAddress(input.deployer, "Deployer wallet");
 
   let tokenIntent: TokenIntent;
@@ -232,9 +226,9 @@ function parseHexQuantity(value: unknown): bigint | null {
   }
 }
 
-async function readFeeWeiPerGas(
-  provider: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> },
-): Promise<{ fee: bigint; source: "eth_gasPrice" | "baseFee+priority" } | null> {
+async function readFeeWeiPerGas(provider: {
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+}): Promise<{ fee: bigint; source: "eth_gasPrice" | "baseFee+priority" } | null> {
   // Preferred: EIP-1559 base fee plus a conservative priority tip.
   try {
     const block = (await provider.request({
@@ -245,7 +239,8 @@ async function readFeeWeiPerGas(
     if (baseFee !== null) {
       let priority = 0n;
       try {
-        priority = parseHexQuantity(await provider.request({ method: "eth_maxPriorityFeePerGas" })) ?? 0n;
+        priority =
+          parseHexQuantity(await provider.request({ method: "eth_maxPriorityFeePerGas" })) ?? 0n;
       } catch {
         priority = 0n;
       }
@@ -329,7 +324,10 @@ export async function runPreflight(intent: SimulationIntent): Promise<PreflightR
   if (result.observedAccount) {
     try {
       const balance = parseHexQuantity(
-        await provider.request({ method: "eth_getBalance", params: [result.observedAccount, "latest"] }),
+        await provider.request({
+          method: "eth_getBalance",
+          params: [result.observedAccount, "latest"],
+        }),
       );
       result.balanceWei = balance === null ? null : balance.toString();
       if (balance === null) errors.push("The wallet returned a malformed balance.");
@@ -369,7 +367,8 @@ export async function runPreflight(intent: SimulationIntent): Promise<PreflightR
       result.estimatedCostWei = cost.toString();
       if (result.balanceWei !== null) {
         result.sufficientBalance = BigInt(result.balanceWei) >= cost;
-        if (!result.sufficientBalance) errors.push("Insufficient testnet ETH for the estimated gas cost.");
+        if (!result.sufficientBalance)
+          errors.push("Insufficient testnet ETH for the estimated gas cost.");
       }
     }
   }
@@ -422,7 +421,9 @@ export type PreSignGateInput = {
  * created and before the wallet is asked to sign. Returns a plain reason
  * string on failure; the caller aborts without touching the database.
  */
-export function evaluatePreSignGate(input: PreSignGateInput): { ok: true } | { ok: false; reason: string } {
+export function evaluatePreSignGate(
+  input: PreSignGateInput,
+): { ok: true } | { ok: false; reason: string } {
   const { simulation, current } = input;
   const now = input.now ?? Date.now();
 
@@ -437,16 +438,28 @@ export function evaluatePreSignGate(input: PreSignGateInput): { ok: true } | { o
   try {
     rebuilt = buildSimulationIntent(current);
   } catch (error) {
-    return { ok: false, reason: error instanceof SimulationError ? error.message : "Check the token details." };
+    return {
+      ok: false,
+      reason: error instanceof SimulationError ? error.message : "Check the token details.",
+    };
   }
   if (rebuilt.fingerprint !== simulation.intent.fingerprint) {
-    return { ok: false, reason: "The deployment details changed since the simulation. Run it again." };
+    return {
+      ok: false,
+      reason: "The deployment details changed since the simulation. Run it again.",
+    };
   }
   if (rebuilt.initCode !== simulation.intent.initCode) {
-    return { ok: false, reason: "The deployment payload changed since the simulation. Run it again." };
+    return {
+      ok: false,
+      reason: "The deployment payload changed since the simulation. Run it again.",
+    };
   }
   if (input.liveChainId !== ROBINHOOD_TESTNET_CHAIN_ID) {
-    return { ok: false, reason: `Wallet is not on Robinhood Chain Testnet ${ROBINHOOD_TESTNET_CHAIN_ID}.` };
+    return {
+      ok: false,
+      reason: `Wallet is not on Robinhood Chain Testnet ${ROBINHOOD_TESTNET_CHAIN_ID}.`,
+    };
   }
   if (!input.liveAccount || input.liveAccount.toLowerCase() !== simulation.intent.deployer) {
     return { ok: false, reason: "The wallet account changed since the simulation. Run it again." };

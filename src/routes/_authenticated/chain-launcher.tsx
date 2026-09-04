@@ -275,9 +275,7 @@ function ChainLauncherPage() {
       if (!result.preflight.passed) toast.error("Simulation did not pass. Review the checks.");
     } catch (e) {
       setSimulation(null);
-      toast.error(
-        e instanceof SimulationError ? e.message : "Could not simulate this deployment.",
-      );
+      toast.error(e instanceof SimulationError ? e.message : "Could not simulate this deployment.");
     } finally {
       setSimBusy(false);
     }

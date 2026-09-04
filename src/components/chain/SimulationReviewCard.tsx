@@ -145,7 +145,9 @@ export function SimulationReviewCard({
         ) : preflight.passed ? (
           <span className="text-emerald-500">Simulation passed. Deployment is unlocked.</span>
         ) : (
-          <span className="text-destructive">Simulation did not pass. Deployment stays locked.</span>
+          <span className="text-destructive">
+            Simulation did not pass. Deployment stays locked.
+          </span>
         )}
       </p>
     </div>
