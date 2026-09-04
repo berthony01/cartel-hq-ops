@@ -44,7 +44,6 @@ export const REQUIRED_CONFIRMATIONS = 5 as const;
  */
 export const LIQUIDITY_TX_ENABLED = false as const;
 
-
 export const robinhoodTestnet = defineChain({
   id: ROBINHOOD_TESTNET_CHAIN_ID,
   name: "Robinhood Chain Testnet",

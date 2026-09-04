@@ -94,7 +94,6 @@ import {
   type LiquidityPlan,
 } from "@/lib/liquidity-plan";
 
-
 export const Route = createFileRoute("/_authenticated/chain-launcher")({
   head: () => ({
     meta: [
@@ -154,7 +153,6 @@ function ChainLauncherPage() {
   const [liqSlippage, setLiqSlippage] = useState("100");
   const [liqDeadline, setLiqDeadline] = useState("20");
   const [liqPlan, setLiqPlan] = useState<LiquidityPlan | null>(null);
-
 
   const hasProvider = typeof window !== "undefined" && getInjectedProvider() !== null;
   const onTestnet = chainId === ROBINHOOD_TESTNET_CHAIN_ID;
@@ -332,7 +330,6 @@ function ChainLauncherPage() {
       );
     }
   };
-
 
   // B — same-tab recovery restore. Only ever restores a record that still
   // matches a DRAFT row without a server-side tx hash in the CURRENT scope.
@@ -1163,4 +1160,3 @@ function ChainLauncherPage() {
     </div>
   );
 }
-

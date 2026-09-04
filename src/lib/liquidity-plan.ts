@@ -255,7 +255,8 @@ function normalizeAddress(value: string | null | undefined, label: string): stri
   if (!/^0x[0-9a-f]{40}$/.test(address)) {
     throw new LiquidityPlanError(`${label} is not a valid address.`);
   }
-  if (address === ZERO_ADDRESS) throw new LiquidityPlanError(`${label} cannot be the zero address.`);
+  if (address === ZERO_ADDRESS)
+    throw new LiquidityPlanError(`${label} cannot be the zero address.`);
   return address;
 }
 
