@@ -1,141 +1,153 @@
-# C8.1 — Cartel Chain Launcher: Architecture Contract (Testnet Only)
+# C8.3 Read-Only Architecture Audit — Restricted Fixed-Supply ERC-20 (Testnet Only)
 
-Architecture only. No app code, no migration, no packages, no deploy/publish in this turn. Builds on the C8.0 audit (HEAD `8440931`, clean tree; C7.3D D2 present and untouched).
+Start gate verified: HEAD `2658f08af1461d895a89da1303259f2d3cdb2620`, working tree clean, no edits made in this audit.
 
-C8.0 confirmed: **zero** wallet/EVM/provider/signing/deployment/explorer/monitoring code exists anywhere in the repo. `launches.chain` is unvalidated free text. `set_launch_contract_address` is workspace-operator gated, requires status `CONTRACT_PENDING`, caps 256 chars, does no chain validation; `enforce_launch_contract_update` makes registration one-way.
+## A. Existing C8.2 surface C8.3 must reuse (verified)
 
-## A. Trust boundaries
+Code:
+- `src/lib/chain-registry.ts` — chain 46630 only, RPC URL + single env override, explorer helpers, `REQUIRED_CONFIRMATIONS = 5`, frozen test-artifact bytecode constants.
+- `src/lib/chain-launcher.ts` — EIP-1193 provider access, `connectWallet`, `readChainId`, `readBalanceWei`, `ensureTestnet`, `isUserRejection`, `broadcastTestDeployment`, and the four RPC wrappers (create / submit / abandon / list).
+- `src/lib/chain-verify.functions.ts` — authenticated server function `verifyChainDeployment`; independent chain reads, shape checks (to=null, value=0, sender match), receipt/confirmation logic, runtime-bytecode fingerprint, service-role apply RPC.
+- `src/routes/_authenticated/chain-launcher.tsx` — owner-gated UI, attempt lifecycle, pre-broadcast abandon sentinel.
 
-Four zones, one direction of trust:
-1. **Browser + user wallet** — sole holder of keys, sole signer. Produces a tx hash. Treated as an untrusted claim.
-2. **Application DB** — records *workflow* only (attempts, statuses, timestamps). Never canonical proof.
-3. **Server verifier** — the only component permitted to move an attempt to CONFIRMED, and only after reading the chain itself.
-4. **Chain RPC** — the sole source of truth. Every CONFIRMED state must be re-derivable by replaying the receipt read.
+Database (`public.launch_chain_deployments`, 22 columns, 3 rows: 2 ABANDONED + 1 CONFIRMED `0xfd741c…921e`, 1417 confirmations):
+- Hard CHECKs already pin `chain_id = 46630` and `network_environment = 'TESTNET'`; address/hash regex checks; status enum DRAFT→SUBMITTED→PENDING→CONFIRMED/FAILED/ABANDONED; FKs to `launches` and `workspaces`.
+- RLS enabled with one read policy (platform-owner operator); table grants: anon none, authenticated SELECT only, service_role full.
+- RPCs: `create_launch_chain_deployment_attempt`, `submit_launch_chain_deployment_tx`, `abandon_launch_chain_deployment_attempt`, `list_launch_chain_deployments`, `authorize_launch_chain_deployment`, `can_read_launch_chain_deployment`, service-role-only `apply_launch_chain_deployment_verification`, plus two tenant/update enforcement triggers (EXECUTE revoked from PUBLIC).
 
-Absolute invariants: no private key, seed, custody, server-side signer, or deployer key exists in any layer. No testnet artifact can ever reach `official_contract_address`, `launch_events`, or `launch_notification_deliveries`. No deployment ever calls `transition_launch_status`.
+C8.3 extends this harness. It creates no new lifecycle, no new tenant model, no second deployments table.
 
-## B. Chain registry — code/config, not a table
+## B. Smart-contract pipeline
 
-Recommendation: a frozen TypeScript constant in `src/lib/chain-registry.ts`, mirrored by a hardcoded allowlist inside the verifier. **Not** a DB table for C8.1/C8.2.
+None exists. No Foundry, Hardhat, solc, `.sol` sources, or artifacts anywhere in the repo; the only chain code is viem-based TypeScript.
 
-Reason: a table is a mutable attack/mistake surface — one row edit could introduce mainnet. A code constant makes mainnet absence a property of the deployed artifact, reviewable in a diff.
+Recommendation: do **not** introduce a Solidity build toolchain into this repo/Worker build. Compile the contract out-of-band with a pinned solc version and commit a **frozen artifact constant** (ABI + creation bytecode + solc version/settings + keccak hashes) in the same style as the C8.2 frozen bytecode. This keeps the trusted surface reviewable as a shipped constant and keeps the Cloudflare Worker build free of Node-only tooling.
 
-Single entry:
-- chain_id `46630` (numeric, canonical identity)
-- name `Robinhood Chain Testnet`, native token `ETH`
-- rpc_url `https://rpc.testnet.chain.robinhood.com`
-- explorer `https://explorer.testnet.chain.robinhood.com`, verification API `.../api/`
-- network_environment `TESTNET`, required confirmations (default 5, config knob)
+## C. Dependencies
 
-Chain id `4663` (mainnet) is **not present in the registry at all** — not disabled, absent. `launches.chain` free text is never consulted for routing or verification.
+`viem@^2.56.3` is already installed and is sufficient for ABI encoding (`encodeAbiParameters`, `encodeDeployData`), `keccak256`, address checksum/validation (`getAddress`, `isAddress`), `parseUnits`, and all read calls. `zod@^3` is available for input validation.
 
-RPC URL is read from an env override falling back to the public endpoint, so a managed provider drops in later with zero data-model change.
+Smallest safe set for C8.3: **no new runtime dependency**. OpenZeppelin Contracts is used as the *source* of the token (audited ERC-20 base), consumed at out-of-band compile time — it does not need to become an npm dependency of this app. If a compile step is ever brought in-repo, it belongs in a separate isolated tool directory, never in the app dependency graph. Nothing installed in this audit.
 
-## C. Subordinate record: `public.launch_chain_deployments`
+## D. Recommended contract pattern
 
-Name follows repo convention and is collision-free. One row per **attempt**; never updated in place across attempts.
+`CartelFixedSupplyToken` — OpenZeppelin `ERC20` only. No `Ownable`, no `ERC20Burnable`, no `ERC20Pausable`, no access-control roles, no hooks.
 
-Columns: `id` uuid pk; `workspace_id` uuid not null; `launch_id` uuid not null → `launches(id)`; `attempt_number` int not null; `client_request_id` text not null (browser-generated idempotency key, unique per launch); `chain_id` bigint not null; `network_environment` text not null; `deployer_address` text not null; `tx_hash` text; `contract_address` text; `status` text not null; `block_number` bigint; `block_hash` text; `confirmations` int not null default 0; `submitted_at`, `verified_at`, `last_checked_at` timestamptz; `failure_code` text; `failure_detail` text (bounded); `created_by` uuid; `created_at`/`updated_at` timestamptz not null.
+```text
+constructor(string name_, string symbol_, uint256 totalSupply_, address recipient_)
+  require(recipient_ != address(0))
+  require(totalSupply_ > 0)
+  _mint(recipient_, totalSupply_)
+```
 
-Deliberately excluded as overbuild for C8.2: gas accounting, ABI/bytecode blobs, token metadata (that is C8.3), reorg-history log, multi-chain routing tables.
+- decimals fixed at 18 (inherited default, not overridable by input).
+- No `mint`, `burnFrom`-by-owner, tax, blacklist, freeze, trading toggle, max-wallet/max-tx, or upgrade proxy.
+- No owner exists after deployment: total supply is minted once to the disclosed recipient and the contract has zero privileged functions. Post-deployment minting: **NOT RECOMMENDED**, and not included.
+- Result: the only state-changing functions are the standard ERC-20 `transfer`, `approve`, `transferFrom`.
 
-Constraints: `chain_id = 46630` and `network_environment = 'TESTNET'` enforced by CHECK for this phase; unique `(launch_id, client_request_id)`; unique `(chain_id, tx_hash)` where tx_hash not null; partial unique on at most one non-terminal attempt per launch.
+## E. Deterministic server-side verification
 
-## D. Attempt state machine
+All checks run in an extended `verifyChainDeployment` (same trust model: authenticated, RLS-read row, independent RPC reads, service-role apply). Practical checks, in order:
 
-`DRAFT → SUBMITTED → PENDING → CONFIRMED` with `FAILED` and `ABANDONED` as terminals.
+1. `eth_chainId` / registry pin = 46630, `network_environment = TESTNET`.
+2. `tx.from` == stored `deployer_address`; `tx.to` is null; `tx.value` == 0.
+3. **Exact init-code equality** — the strongest check available. The server recomputes `expected_init_code = FROZEN_CREATION_BYTECODE || abi.encode(name, symbol, supply, recipient)` from the intent stored in the database at attempt creation, and compares byte-for-byte with `tx.input`. This simultaneously proves the contract source, the constructor arguments, and that no substituted bytecode was signed.
+4. Receipt `status == 0x1`, `contractAddress` present, receipt hash matches request.
+5. Confirmations `>= 5` before anything is marked CONFIRMED; block hash overwritten every check (reorg-safe, as in C8.2).
+6. **Runtime code check** — `eth_getCode` keccak compared to the artifact's expected runtime hash. Feasible here because the contract uses no `immutable` variables (name/symbol are storage strings), so runtime code is constructor-argument independent. If the pinned artifact ever gains immutables this check must degrade to a length/prefix check and step 3 remains authoritative.
+7. **Live metadata via `eth_call`** at the created address: `name()`, `symbol()`, `decimals() == 18`, `totalSupply() == intent supply`, `balanceOf(recipient) == totalSupply`. Any mismatch → FAILED with a specific failure code.
 
-- DRAFT: row created server-side before the wallet is invoked (gives an idempotency anchor if the browser dies).
-- SUBMITTED: browser reports a tx hash; still an untrusted claim.
-- PENDING: verifier has seen the tx on chain but confirmations < required.
-- CONFIRMED: receipt fetched, `status = 1`, contract address present, confirmations ≥ required, deployer matches. Only the verifier writes this.
-- FAILED: receipt `status = 0`, tx replaced/dropped past deadline, deployer mismatch, or chain mismatch. Carries `failure_code`.
-- ABANDONED: user cancelled in wallet, or a stale non-terminal attempt is retired.
+Steps 3 and 7 together mean the browser is trusted for nothing: intent is recorded before signing, and the chain is the arbiter afterwards.
 
-Rules: transitions are forward-only and enforced by a trigger mirroring the existing `enforce_launch_status_transition` pattern. Terminal rows are immutable. **Retry creates a new row with `attempt_number + 1`** — history is never overwritten. CONFIRMED is unreachable without a verifier-supplied receipt.
+## F. Database changes actually required
 
-## E. Transaction flow (testnet only)
+Extend `launch_chain_deployments` — do not create a parallel table (columns nullable, so every existing row and the C8.2 path stay valid):
 
-1. Owner opens the launcher, picks a launch in their workspace, connects wallet.
-2. Client asserts `chainId === 46630`; wrong chain → prompt switch, refuse to proceed. No mainnet path exists in the UI or the registry.
-3. Server RPC creates the DRAFT attempt (authorization checked here) and returns its id.
-4. Wallet signs and broadcasts. User cancellation → attempt marked ABANDONED.
-5. Client reports `tx_hash` → server moves DRAFT to SUBMITTED. Hash format validated; content still untrusted.
-6. Verifier independently queries the chain: `eth_getTransactionReceipt`, current block height, and the tx's `from`. It does **not** trust any client-supplied address, block, or status.
-7. PENDING until confirmations ≥ required; then CONFIRMED with the receipt's `contractAddress`. Contract address is only ever taken from the receipt.
-8. Nothing is promoted. Nothing notifies. No lifecycle transition.
+- `deployment_kind text not null default 'TEST_ARTIFACT'` CHECK in `('TEST_ARTIFACT','FIXED_SUPPLY_ERC20')`
+- `artifact_id text` (pinned artifact identifier, e.g. `cartel-fixed-erc20-v1`)
+- `token_name text`, `token_symbol text`, `token_decimals smallint CHECK (token_decimals = 18)`
+- `token_total_supply numeric(78,0) CHECK (token_total_supply > 0)` (base units)
+- `token_recipient text CHECK (~ '^0x[0-9a-f]{40}$' and <> zero address)`
+- `expected_init_code_hash text CHECK (~ '^0x[0-9a-f]{64}$')`
+- verified-side: `verified_token_name text`, `verified_token_symbol text`, `verified_total_supply numeric(78,0)`, `verified_recipient_balance numeric(78,0)`
+- row CHECK: when `deployment_kind = 'FIXED_SUPPLY_ERC20'`, all token intent columns are NOT NULL.
 
-Recovery after browser close: the attempt row plus tx hash lets the verifier finish independently; reopening the page re-reads current state.
+RPCs (existing C8.2 functions stay frozen and unmodified):
+- new `create_launch_chain_token_deployment_attempt(_launch_id, _client_request_id, _deployer_address, _artifact_id, _token_name, _token_symbol, _token_total_supply, _token_recipient, _expected_init_code_hash)` — same owner+operator authorization, same attempt-number/idempotency semantics, server-side re-validation of every field.
+- extend `apply_launch_chain_deployment_verification` with optional verified-token parameters (service-role only, additive, defaulted).
+- `list_launch_chain_deployments` returns the new columns automatically (row type).
+- Grants mirror C8.2 exactly: anon none, authenticated EXECUTE on the create RPC only, apply RPC service-role only. No RLS policy change.
 
-## F. Server verification surface
+Nothing writes `launches.official_contract_address`, `set_launch_contract_address`, or any lifecycle column.
 
-An **authenticated RPC + Edge Function pair**, matching the project's existing patterns:
-- SECURITY DEFINER RPCs (fixed `search_path`, authenticated-only EXECUTE) own authorization and all state writes: create attempt, record submitted hash, apply verified receipt, abandon.
-- An Edge Function (`verify_jwt=true`) owns the outbound chain read, because Postgres must not make outbound HTTP for this. It authenticates the caller, re-checks platform-owner + workspace-operator, queries the registry RPC endpoint, then calls the apply-receipt RPC.
+## G. Chain Launcher UI
 
-The RPC endpoint and any future managed-provider key live in Edge Function secrets, read at request time. The browser never sees a secret, never sees service-role, and never writes the deployment table directly.
+Add a second mode on the existing owner-only route (test artifact remains, unchanged and default). Fields — exactly four, nothing else:
 
-Every authorization check is server-side and repeated in the Edge Function — UI gating is UX only.
+| Field | Validation |
+| --- | --- |
+| Token name | trimmed, 1–32 chars, printable ASCII only |
+| Token symbol | trimmed, 2–11 chars, `^[A-Z0-9]+$` after uppercasing |
+| Fixed total supply | integer whole-token string, 1 … 1,000,000,000,000 (10^12); converted with `parseUnits(value, 18)`; no decimals accepted |
+| Initial recipient | `isAddress` + `getAddress` checksum; zero address rejected; defaults to (and is pre-filled with) the connected wallet, but is editable and explicitly displayed |
 
-## G. RLS, grants, tenant isolation
+Decimals are fixed at 18 and shown read-only, not an input. Before signing, the UI shows a mandatory disclosure panel: exact name/symbol/supply/recipient, "100% of supply is minted once to this address", "no owner, no mint, no tax, no blacklist, no pause", "Robinhood Chain TESTNET (46630) — not a real token, not tradable, no liquidity". Same pre-broadcast abandon sentinel as the C8.2 patch.
 
-RLS enabled; explicit GRANTs (this project gets no default Data API privileges). SELECT granted to `authenticated` under a policy requiring `is_platform_owner(auth.uid()) AND is_workspace_operator(workspace_id, auth.uid())`. **No** browser INSERT/UPDATE/DELETE — all writes flow through the SECURITY DEFINER RPCs. `GRANT ALL` to `service_role` for the verifier.
+## H. Threat model
 
-`workspace_id` must be derived server-side from `launches.workspace_id`, never accepted from the client, and a trigger enforces the pair matches — this is the cross-tenant defence.
+| Risk | Control |
+| --- | --- |
+| Malicious/oversized input | Zod + RPC-side re-validation + DB CHECKs (defence in depth, all three) |
+| Supply overflow | `numeric(78,0)` upper bound + uint256 range assertion before encoding |
+| Wrong chain / accidental mainnet | 4663 absent from the codebase entirely; wallet chain check pre-send; DB CHECK `chain_id = 46630`; verifier re-pins |
+| Wallet/account mismatch | `tx.from` compared to stored `deployer_address` server-side |
+| Substituted or tampered bytecode | Exact init-code equality against server-recomputed expected calldata (E.3) |
+| Front-end tampering | Browser is not trusted for any recorded fact; intent is stored before signing and re-derived server-side |
+| Replay / duplicate attempts | `client_request_id` idempotency + attempt numbering, both already enforced |
+| Database tampering | Table writes only via SECURITY DEFINER RPCs; authenticated has SELECT only; apply RPC is service-role only; update trigger constrains transitions |
+| Verification bypass | Only the server function can call the apply RPC; terminal states are not re-openable |
+| RPC disagreement / reorg | 5-confirmation threshold; block hash rewritten each check; below threshold nothing is finalized |
+| Privileged token functions | Contract has none by construction — reviewable in the frozen artifact |
+| Duplicate token name/symbol | Not blocked on chain (impossible), surfaced in UI as a non-authoritative warning; not a security control and must not be described as one |
+| Misleading legitimacy | Every surface labelled TESTNET TEST TOKEN; no Launch Watch, Telegram, broadcast, or public-network exposure in C8.3 |
 
-Browser-readable fields: status, chain_id, network_environment, tx_hash, contract_address, confirmations, block_number, attempt_number, timestamps, failure_code. Nothing sensitive exists in this table by construction. Deployment rows never surface on the public Cartel Network.
+## I. Build allowlist for C8.3
 
-## H. Anti-confusion: testnet cannot be promoted
+Allowed:
+- `src/lib/chain-registry.ts` (add frozen ERC-20 artifact constants only; mainnet stays absent)
+- `src/lib/chain-launcher.ts` (add token intent encoding + token broadcast + new create RPC wrapper)
+- `src/lib/chain-verify.functions.ts` (add token verification branch)
+- `src/routes/_authenticated/chain-launcher.tsx` (token mode UI)
+- exactly one new migration under `supabase/migrations/`
+- `src/integrations/supabase/types.ts` only as regenerated output
 
-Defence in depth, none of it cosmetic:
-1. Registry contains no mainnet entry.
-2. CHECK constraint pins `chain_id = 46630` / `network_environment = 'TESTNET'`.
-3. **No code path in C8.2 writes `official_contract_address`.** No promotion RPC is created in this phase at all — the capability does not exist to be misused.
-4. The existing `enforce_launch_contract_update` trigger still blocks writes outside `CONTRACT_PENDING`, independently.
-5. Any future promotion RPC (C8.4+) must reject `network_environment <> 'MAINNET'` as its first check.
-6. UI labels every artifact TESTNET and states plainly it is not the official contract.
+Prohibited: mainnet 4663 in any form; arbitrary user bytecode/Solidity input; `launches` writes, `official_contract_address`, `set_launch_contract_address`, lifecycle transitions; Launch Watch, Telegram, inbox, broadcast, notification, cron, edge-function changes; liquidity/DEX (C8.6); package.json/lockfile changes; nav/route additions; edits to existing migrations or C8.2 RPC bodies; publish/deploy; any private key, mnemonic, seed, or server signer.
 
-Manual `set_launch_contract_address` for externally launched projects is untouched. Launch Watch, `launch_events`, and deliveries are untouched.
+## J. Tests required before C8.3 can close
 
-## I. UI seam
+1. Artifact reproducibility: recompiling the pinned source with the pinned solc version and settings reproduces the committed creation bytecode and runtime keccak, byte-for-byte.
+2. Static contract property review: no `mint` after construction, no owner/roles, no pause/blacklist/fee/limit logic, no proxy/upgrade path, no selfdestruct, no immutables.
+3. Unit/pure tests on the encoder: init code = frozen bytecode ‖ encoded args; symbol/name/supply/address validators accept the legal set and reject the illegal set (empty, oversized, non-ASCII, lowercase symbol, zero supply, over-max supply, zero address, malformed address).
+4. Rollback-safe SQL QA (transaction, always rolled back): new columns/CHECKs, kind-conditional NOT NULL, RPC authorization for owner / non-owner / cross-tenant, grants (anon none, authenticated SELECT + create-RPC EXECUTE, apply RPC service-role only), RLS policy unchanged, no residue afterwards.
+5. Negative verifier tests: sender mismatch, non-creation tx, non-zero value, init-code mismatch, reverted receipt, runtime-hash mismatch, metadata mismatch, sub-threshold confirmations — each must produce FAILED/PENDING, never CONFIRMED.
+6. Live testnet wallet E2E: real deploy, verifier reaches CONFIRMED at ≥5 confirmations, independent raw JSON-RPC cross-check of metadata and balances, and confirmation that `launches` and `official_contract_address` are untouched.
+7. `eslint` on touched files, `bunx tsgo --noEmit`, `bun run build` — all clean.
 
-New owner-only route `src/routes/_authenticated/chain-launcher.tsx`, added to nav with the existing `ownerOnly: true` flag alongside Owner Console — the same pattern `/admin` uses, gated by `usePlatformAccess({ fresh: true })` failing closed.
+## K. Direct creation bytecode vs factory — decision
 
-Launch Control remains the sole lifecycle authority and is **not modified in C8.2**; at most a later phase adds a read-only reference. Keeping the launcher on its own route avoids touching the 2132-line Launch Control file and keeps the C8.2 diff auditable.
+**Choose direct deployment from the frozen creation bytecode. No factory in C8.3.**
 
-## J. Wallet approach
+- Direct: trusted surface is one immutable constant plus ABI-encoded args; verification is exact init-code equality; no extra deployed contract, no factory ownership/authority question, no factory address to protect or migrate; identical to the C8.2 harness already proven end-to-end.
+- Factory: adds a persistent privileged contract, a deployment-of-the-deployer trust step, event-based (weaker) verification, and an on-chain authority model contradicting constraint 8 — its only real gains (gas amortisation, on-chain registry) are irrelevant for owner-only testnet work.
 
-**Recommendation: native injected EIP-1193 + `viem` only.** No WalletConnect, no RainbowKit, no wagmi.
+A factory can be revisited at C8.6 if liquidity orchestration genuinely requires atomicity.
 
-Rationale: the audience is a single platform owner on testnet using a browser wallet. `viem` is one well-audited, tree-shakeable dependency covering both the browser request path and the server-side receipt read, so client and verifier share one code path. A full wallet stack adds many transitive dependencies, relay infrastructure, and remote session surface for zero benefit at this scale. Broader wallet support can be added later without changing the data model or the verifier.
+## L. Must remain untouched
 
-## K. C8.2 implementation allowlist (candidates — not created now)
+The single live launch — PEPECARTEL / `$PCART`, chain **Solana**, status `WATCHLIST_OPEN`, `official_contract_address` NULL, with a live Launch Watch token and active watchers/notifications. C8.3 attempts attach to this launch row only as subordinate `launch_chain_deployments` children. Its `chain`, `status`, `official_contract_address`, `contract_registered_*`, all lifecycle timestamps, and its Launch Watch token must not change. An EVM testnet test token must never be presented as, or promoted to, the official PEPECARTEL contract.
 
-- `package.json` — add `viem` only (needs explicit authorization)
-- `supabase/migrations/<ts>_c8_2_launch_chain_deployments.sql` — one migration: table, GRANTs, RLS, policy, CHECKs, state trigger, the four RPCs
-- `src/lib/chain-registry.ts` (new)
-- `src/lib/chain-launcher.ts` (new client layer)
-- `src/routes/_authenticated/chain-launcher.tsx` (new)
-- `src/lib/nav.ts` (one owner-only entry)
-- `supabase/functions/chain-verify/index.ts` + `deno.json`, and its `backend-source/edge-functions/chain-verify/` snapshot per the repo's mirror rule
-- `src/integrations/supabase/types.ts` (generated)
+## Recommendation
 
-Explicitly out of scope: `launches`, `set_launch_contract_address`, Launch Control, Launch Watch, notifications, Project Inbox, Telegram, Cartel Network.
+**GO** for C8.3 as scoped above: extend the proven C8.2 harness with a `FIXED_SUPPLY_ERC20` deployment kind, one frozen OpenZeppelin-based artifact, one additive migration, one new create RPC, one additive verifier branch, and a four-field owner-only UI mode — testnet 46630 only, no factory, no mint, no owner, no liquidity, no launch-lifecycle contact.
 
-## L. C8.2 verification matrix
-
-Non-owner denied; owner without workspace-operator denied; cross-tenant launch_id denied; wrong chain id rejected client- and server-side; mainnet id rejected by CHECK; wallet cancellation → ABANDONED; insufficient gas → FAILED with code; tx replaced/dropped → FAILED, not stuck; receipt `status = 0` → FAILED, never CONFIRMED; forged/nonexistent tx hash → never CONFIRMED; deployer address mismatch → FAILED; duplicate `client_request_id` → same row, no second attempt; duplicate verifier callback idempotent; confirmations below threshold stay PENDING; reorg re-check does not silently keep a stale CONFIRMED; browser-close recovery resumes correctly; **zero** Telegram sends; **zero** writes to `official_contract_address`; **zero** launch status transitions; `bunx tsgo --noEmit` and `bun run build` pass; rollback-only SQL QA leaves no residue.
-
-## M. Deferred to C8.3
-
-The ERC-20 token factory is entirely C8.3: token contract source, supply/decimals/ownership semantics, mint/burn authority, liquidity, verification-on-explorer, and any mainnet capability. C8.2 must **not** partially implement any of it.
-
-C8.2 proves plumbing only — wallet connect, network assertion, attempt record, signed deployment, independent receipt verification — using a harmless deterministic minimal test contract with no token semantics. No production token, no user-supplied token parameters.
-
-## GO / NO-GO for C8.2
-
-**GO**, scoped exactly as above: owner-only, testnet-only, no promotion path, non-token test artifact.
-
-One authorization needed before the build contract: adding `viem` to `package.json`, since package changes are otherwise prohibited.
-
-**NO-GO** for any mainnet path, any ERC-20 factory work, or any `official_contract_address` write in C8.2.
+Open item to confirm before build: the artifact must be compiled out-of-band and its bytecode/hashes supplied (or the compile explicitly authorized as a separate isolated step), since no Solidity toolchain exists in this repository.
