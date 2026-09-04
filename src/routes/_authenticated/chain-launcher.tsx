@@ -11,6 +11,7 @@ import {
   FlaskConical,
   Loader2,
   Lock,
+  ShieldCheck,
   RefreshCw,
   Wallet,
 } from "lucide-react";
@@ -31,6 +32,7 @@ import {
   DEPLOYMENT_STATUS_LABEL,
   abandonDeploymentAttempt,
   broadcastTestDeployment,
+  buildTokenInitCode,
   broadcastTokenDeployment,
   chainDeploymentsQueryKey,
   connectWallet,
@@ -44,7 +46,7 @@ import {
   isUserRejection,
   listChainDeployments,
   newClientRequestId,
-  normalizeTokenIntent,
+  readAccount,
   readBalanceWei,
   readChainId,
   submitDeploymentTx,
@@ -57,6 +59,15 @@ import {
   CARTEL_FIXED_ERC20_DECIMALS,
 } from "@/lib/cartel-fixed-erc20.artifact";
 import { Input } from "@/components/ui/input";
+import { SimulationReviewCard } from "@/components/chain/SimulationReviewCard";
+import {
+  SIMULATION_QUOTE_TTL_MS,
+  SimulationError,
+  evaluatePreSignGate,
+  isQuoteFresh,
+  runSimulation,
+  type Simulation,
+} from "@/lib/chain-simulation";
 
 export const Route = createFileRoute("/_authenticated/chain-launcher")({
   head: () => ({
@@ -97,6 +108,9 @@ function ChainLauncherPage() {
   const [tokenSymbol, setTokenSymbol] = useState("");
   const [tokenSupply, setTokenSupply] = useState("1000000");
   const [tokenRecipient, setTokenRecipient] = useState("");
+  const [simulation, setSimulation] = useState<Simulation | null>(null);
+  const [simBusy, setSimBusy] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const hasProvider = typeof window !== "undefined" && getInjectedProvider() !== null;
   const onTestnet = chainId === ROBINHOOD_TESTNET_CHAIN_ID;
@@ -144,6 +158,18 @@ function ChainLauncherPage() {
       provider?.removeListener?.("accountsChanged", onChanged);
     };
   }, [hasProvider, account, refreshWallet]);
+
+  // Any change to the reviewed intent, the account or the chain invalidates the
+  // simulation immediately. Deployment stays locked until a fresh run passes.
+  useEffect(() => {
+    setSimulation(null);
+  }, [tokenName, tokenSymbol, tokenSupply, tokenRecipient, account, chainId]);
+
+  useEffect(() => {
+    if (!simulation) return;
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [simulation]);
 
   useEffect(() => {
     // The connected wallet is the default recipient; the operator may change it.
@@ -233,18 +259,64 @@ function ChainLauncherPage() {
     }
   }
 
-  async function handleDeployToken() {
-    if (!launchId || !account || !onTestnet) return;
-    let intent;
+  async function handleRunSimulation() {
+    if (!account) return;
+    setSimBusy(true);
     try {
-      intent = normalizeTokenIntent({
+      const result = await runSimulation({
+        deployer: account,
         name: tokenName,
         symbol: tokenSymbol,
         supplyWhole: tokenSupply,
         recipient: tokenRecipient,
       });
+      setNowMs(Date.now());
+      setSimulation(result);
+      if (!result.preflight.passed) toast.error("Simulation did not pass. Review the checks.");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Check the token details.");
+      setSimulation(null);
+      toast.error(e instanceof SimulationError ? e.message : "Could not simulate this deployment.");
+    } finally {
+      setSimBusy(false);
+    }
+  }
+
+  async function handleDeployToken() {
+    if (!launchId || !account || !onTestnet) return;
+    if (!simulation) {
+      toast.error("Run the simulation before deploying.");
+      return;
+    }
+
+    // Pre-sign gate: re-read live chain/account, re-normalize the current form
+    // values and require an exact fingerprint match against the reviewed
+    // simulation. Any mismatch aborts BEFORE a deployment attempt is created.
+    const liveChainId = await readChainId();
+    const liveAccount = await readAccount();
+    const gate = evaluatePreSignGate({
+      simulation,
+      current: {
+        deployer: account,
+        name: tokenName,
+        symbol: tokenSymbol,
+        supplyWhole: tokenSupply,
+        recipient: tokenRecipient,
+      },
+      liveChainId,
+      liveAccount,
+    });
+    if (!gate.ok) {
+      setSimulation(null);
+      toast.error(gate.reason);
+      return;
+    }
+
+    // The reviewed intent is authoritative from here on. Nothing is rebuilt
+    // from raw form state after the gate.
+    const intent = simulation.intent.tokenIntent;
+    if (buildTokenInitCode(intent) !== simulation.intent.initCode) {
+      toast.error("The reviewed deployment payload could not be re-derived. Simulate again.");
+      setSimulation(null);
       return;
     }
 
@@ -327,8 +399,16 @@ function ChainLauncherPage() {
 
   const canDeploy =
     !!launchId && !!account && onTestnet && !busy && (!latest || isTerminal(latest.status));
+  const simulationFresh = simulation ? isQuoteFresh(simulation.preflight, nowMs) : false;
+  const simulationReady = !!simulation && simulation.preflight.passed && simulationFresh;
+  const canSimulate = !!account && onTestnet && !simBusy && !tokenBusy;
   const canDeployToken =
-    !!launchId && !!account && onTestnet && !tokenBusy && (!latest || isTerminal(latest.status));
+    !!launchId &&
+    !!account &&
+    onTestnet &&
+    !tokenBusy &&
+    simulationReady &&
+    (!latest || isTerminal(latest.status));
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
@@ -556,14 +636,29 @@ function ChainLauncherPage() {
         title="Testnet token — internal test only"
         description="Fixed-supply ERC-20 from a frozen, pre-compiled artifact. Testnet only."
         actions={
-          <Button size="sm" onClick={() => void handleDeployToken()} disabled={!canDeployToken}>
-            {tokenBusy ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Coins className="size-4" aria-hidden="true" />
-            )}
-            Deploy Test Token
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void handleRunSimulation()}
+              disabled={!canSimulate}
+            >
+              {simBusy ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <ShieldCheck className="size-4" aria-hidden="true" />
+              )}
+              Run simulation
+            </Button>
+            <Button size="sm" onClick={() => void handleDeployToken()} disabled={!canDeployToken}>
+              {tokenBusy ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Coins className="size-4" aria-hidden="true" />
+              )}
+              Deploy Test Token
+            </Button>
+          </div>
         }
       >
         <div className="grid gap-3 sm:grid-cols-2">
@@ -618,6 +713,15 @@ function ChainLauncherPage() {
           Decimals: {CARTEL_FIXED_ERC20_DECIMALS} (fixed) · Artifact:{" "}
           {CARTEL_FIXED_ERC20_ARTIFACT_ID}
         </p>
+
+        {simulation ? (
+          <SimulationReviewCard simulation={simulation} stale={false} nowMs={nowMs} />
+        ) : (
+          <p className="mt-3 text-xs text-destructive">
+            Deployment is locked until a simulation passes. Editing any field above requires a new
+            simulation. Estimates expire after {SIMULATION_QUOTE_TTL_MS / 1000} seconds.
+          </p>
+        )}
 
         <div className="mt-3 rounded-lg border border-gold/40 bg-gold/10 p-3 text-xs leading-relaxed">
           <p className="flex items-center gap-2 font-semibold uppercase tracking-wide text-gold">
