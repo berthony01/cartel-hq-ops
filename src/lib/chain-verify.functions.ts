@@ -1,12 +1,18 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { createPublicClient, http } from "viem";
+import { createPublicClient, encodeAbiParameters, http, keccak256 } from "viem";
 import {
   REQUIRED_CONFIRMATIONS,
   ROBINHOOD_TESTNET_CHAIN_ID,
   TEST_ARTIFACT_RUNTIME_BYTECODE,
   robinhoodTestnet,
 } from "./chain-registry";
+import {
+  CARTEL_FIXED_ERC20_ABI,
+  CARTEL_FIXED_ERC20_CREATION_BYTECODE,
+  CARTEL_FIXED_ERC20_DECIMALS,
+  CARTEL_FIXED_ERC20_RUNTIME_BYTECODE_HASH,
+} from "./cartel-fixed-erc20.artifact";
 
 /**
  * C8.2 — independent, server-side chain verification.
@@ -57,7 +63,7 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
     const { data: row, error } = await context.supabase
       .from("launch_chain_deployments")
       .select(
-        "id, status, chain_id, network_environment, deployer_address, tx_hash, confirmations, contract_address, block_number, block_hash",
+        "id, status, chain_id, network_environment, deployer_address, tx_hash, confirmations, contract_address, block_number, block_hash, deployment_kind, artifact_id, token_name, token_symbol, token_decimals, token_total_supply, token_recipient",
       )
       .eq("id", data.deploymentId)
       .maybeSingle();
@@ -85,6 +91,19 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
       throw new Error("Unsupported chain");
     }
 
+    const isToken = row.deployment_kind === "FIXED_SUPPLY_ERC20";
+    if (
+      isToken &&
+      (row.artifact_id !== "cartel-fixed-erc20-v1" ||
+        row.token_decimals !== CARTEL_FIXED_ERC20_DECIMALS ||
+        !row.token_name ||
+        !row.token_symbol ||
+        row.token_total_supply === null ||
+        !row.token_recipient)
+    ) {
+      throw new Error("Unsupported deployment artifact");
+    }
+
     const client = createPublicClient({ chain: robinhoodTestnet, transport: http() });
     const txHash = row.tx_hash as `0x${string}`;
 
@@ -96,6 +115,13 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
       blockHash?: string | null;
       failureCode?: string | null;
       failureDetail?: string | null;
+      verifiedToken?: {
+        name: string;
+        symbol: string;
+        decimals: number;
+        totalSupply: bigint;
+        recipientBalance: bigint;
+      };
     }) => {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       const args: {
@@ -119,6 +145,30 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
       if (payload.blockHash) args._block_hash = payload.blockHash;
       if (payload.failureCode) args._failure_code = payload.failureCode;
       if (payload.failureDetail) args._failure_detail = payload.failureDetail;
+
+      if (isToken) {
+        const tokenArgs = {
+          ...args,
+          ...(payload.verifiedToken
+            ? {
+                _verified_token_name: payload.verifiedToken.name,
+                _verified_token_symbol: payload.verifiedToken.symbol,
+                _verified_token_decimals: payload.verifiedToken.decimals,
+                // Decimal strings: base units exceed IEEE-754 safe integers.
+                _verified_total_supply: payload.verifiedToken.totalSupply.toString(),
+                _verified_recipient_balance: payload.verifiedToken.recipientBalance.toString(),
+              }
+            : {}),
+        } as unknown as Parameters<
+          typeof supabaseAdmin.rpc<"apply_launch_chain_token_deployment_verification">
+        >[1];
+        const { error: tokenError } = await supabaseAdmin.rpc(
+          "apply_launch_chain_token_deployment_verification",
+          tokenArgs,
+        );
+        if (tokenError) throw new Error("Verification could not be recorded");
+        return;
+      }
 
       const { error: rpcError } = await supabaseAdmin.rpc(
         "apply_launch_chain_deployment_verification",
@@ -175,6 +225,34 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
         failureDetail: "Transaction sender does not match the recorded deployer.",
       });
       return failed("Transaction sender does not match the recorded deployer.");
+    }
+
+    // Token attempts: the broadcast init code must be byte-for-byte the frozen
+    // artifact plus the constructor args recorded server-side at creation.
+    // Nothing about the bytecode is ever taken from the browser.
+    let expectedTotalSupply = 0n;
+    if (isToken) {
+      expectedTotalSupply = BigInt(String(row.token_total_supply));
+      const expectedInitCode = (CARTEL_FIXED_ERC20_CREATION_BYTECODE +
+        encodeAbiParameters(
+          [{ type: "string" }, { type: "string" }, { type: "uint256" }, { type: "address" }],
+          [
+            row.token_name as string,
+            row.token_symbol as string,
+            expectedTotalSupply,
+            row.token_recipient as `0x${string}`,
+          ],
+        ).slice(2)) as `0x${string}`;
+
+      if ((tx.input ?? "0x").toLowerCase() !== expectedInitCode.toLowerCase()) {
+        await apply({
+          status: "FAILED",
+          confirmations: 0,
+          failureCode: "INIT_CODE_MISMATCH",
+          failureDetail: "Broadcast init code does not match the recorded token intent.",
+        });
+        return failed("Broadcast init code does not match the recorded token intent.");
+      }
     }
 
     let receipt: Awaited<ReturnType<typeof client.getTransactionReceipt>> | null = null;
@@ -251,6 +329,92 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
     // Fingerprint: the deployed runtime code must be exactly the fixed test
     // artifact, so an unrelated contract can never be recorded as ours.
     const code = await client.getCode({ address: created as `0x${string}` });
+
+    if (isToken) {
+      const runtimeHash = keccak256((code ?? "0x") as `0x${string}`);
+      if (runtimeHash.toLowerCase() !== CARTEL_FIXED_ERC20_RUNTIME_BYTECODE_HASH.toLowerCase()) {
+        await apply({
+          status: "FAILED",
+          confirmations,
+          blockNumber: receipt.blockNumber,
+          blockHash: receipt.blockHash,
+          failureCode: "ARTIFACT_MISMATCH",
+          failureDetail: "Deployed runtime code does not match the frozen token artifact.",
+        });
+        return failed("Deployed runtime code does not match the frozen token artifact.");
+      }
+
+      const address = created as `0x${string}`;
+      const abi = CARTEL_FIXED_ERC20_ABI;
+      let onChain: {
+        name: string;
+        symbol: string;
+        decimals: number;
+        totalSupply: bigint;
+        recipientBalance: bigint;
+      };
+      try {
+        const [name, symbol, decimals, totalSupply, recipientBalance] = await Promise.all([
+          client.readContract({ address, abi, functionName: "name" }) as Promise<string>,
+          client.readContract({ address, abi, functionName: "symbol" }) as Promise<string>,
+          client.readContract({ address, abi, functionName: "decimals" }) as Promise<number>,
+          client.readContract({ address, abi, functionName: "totalSupply" }) as Promise<bigint>,
+          client.readContract({
+            address,
+            abi,
+            functionName: "balanceOf",
+            args: [row.token_recipient as `0x${string}`],
+          }) as Promise<bigint>,
+        ]);
+        onChain = { name, symbol, decimals: Number(decimals), totalSupply, recipientBalance };
+      } catch {
+        return {
+          status: row.status as VerifyResult["status"],
+          confirmations,
+          contractAddress: null,
+          blockNumber: String(receipt.blockNumber),
+          requiredConfirmations: REQUIRED_CONFIRMATIONS,
+          notice: "Could not read the token state yet. Check again shortly.",
+        };
+      }
+
+      if (
+        onChain.name !== row.token_name ||
+        onChain.symbol !== row.token_symbol ||
+        onChain.decimals !== CARTEL_FIXED_ERC20_DECIMALS ||
+        onChain.totalSupply !== expectedTotalSupply ||
+        onChain.recipientBalance !== expectedTotalSupply
+      ) {
+        await apply({
+          status: "FAILED",
+          confirmations,
+          blockNumber: receipt.blockNumber,
+          blockHash: receipt.blockHash,
+          failureCode: "TOKEN_STATE_MISMATCH",
+          failureDetail: "On-chain token state does not match the recorded intent.",
+        });
+        return failed("On-chain token state does not match the recorded intent.");
+      }
+
+      await apply({
+        status: "CONFIRMED",
+        confirmations,
+        contractAddress: created,
+        blockNumber: receipt.blockNumber,
+        blockHash: receipt.blockHash,
+        verifiedToken: onChain,
+      });
+
+      return {
+        status: "CONFIRMED",
+        confirmations,
+        contractAddress: created,
+        blockNumber: String(receipt.blockNumber),
+        requiredConfirmations: REQUIRED_CONFIRMATIONS,
+        notice: null,
+      };
+    }
+
     if ((code ?? "0x").toLowerCase() !== TEST_ARTIFACT_RUNTIME_BYTECODE) {
       await apply({
         status: "FAILED",
