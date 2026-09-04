@@ -1,3 +1,4 @@
+import { encodeAbiParameters } from "viem";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import {
@@ -7,6 +8,10 @@ import {
   ROBINHOOD_TESTNET_RPC_URL,
   TEST_ARTIFACT_CREATION_BYTECODE,
 } from "./chain-registry";
+import {
+  CARTEL_FIXED_ERC20_CREATION_BYTECODE,
+  CARTEL_FIXED_ERC20_DECIMALS,
+} from "./cartel-fixed-erc20.artifact";
 
 /**
  * C8.2 — Cartel Chain Launcher client layer (TESTNET ONLY).
@@ -224,4 +229,138 @@ export const DEPLOYMENT_STATUS_LABEL: Record<string, string> = {
 
 export function isTerminal(status: string): boolean {
   return status === "CONFIRMED" || status === "FAILED" || status === "ABANDONED";
+}
+
+/* ------------------------------------------------------------------ */
+/* C8.3 — fixed-supply ERC-20 test token (TESTNET ONLY)                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The token intent the operator typed. There is no free-form Solidity or
+ * bytecode input anywhere: only these four values are variable, and the
+ * creation bytecode is the frozen, pre-compiled artifact.
+ */
+export type TokenIntentInput = {
+  name: string;
+  symbol: string;
+  /** Whole tokens, as typed. Never base units. */
+  supplyWhole: string;
+  recipient: string;
+};
+
+export type TokenIntent = {
+  name: string;
+  symbol: string;
+  supplyWhole: bigint;
+  /** supplyWhole * 10^18. */
+  totalSupply: bigint;
+  recipient: string;
+};
+
+export const TOKEN_NAME_MAX = 32;
+export const TOKEN_SUPPLY_MIN_WHOLE = 1n;
+export const TOKEN_SUPPLY_MAX_WHOLE = 1_000_000_000_000n;
+export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+/** Mirrors the server-side validation exactly. The server remains authoritative. */
+export function normalizeTokenIntent(input: TokenIntentInput): TokenIntent {
+  const name = input.name.trim();
+  if (name.length < 1 || name.length > TOKEN_NAME_MAX) {
+    fail(`Token name must be 1–${TOKEN_NAME_MAX} characters.`);
+  }
+  if (!/^[\x20-\x7e]+$/.test(name)) fail("Token name must be printable ASCII.");
+
+  const symbol = input.symbol.trim().toUpperCase();
+  if (!/^[A-Z0-9]{2,11}$/.test(symbol)) {
+    fail("Symbol must be 2–11 characters, A–Z and 0–9 only.");
+  }
+
+  const rawSupply = input.supplyWhole.trim().replace(/[\s,]/g, "");
+  if (!/^[0-9]+$/.test(rawSupply)) fail("Total supply must be a whole number of tokens.");
+  const supplyWhole = BigInt(rawSupply);
+  if (supplyWhole < TOKEN_SUPPLY_MIN_WHOLE || supplyWhole > TOKEN_SUPPLY_MAX_WHOLE) {
+    fail("Total supply must be between 1 and 1,000,000,000,000 tokens.");
+  }
+
+  const recipient = input.recipient.trim().toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(recipient)) fail("Recipient must be a valid EVM address.");
+  if (recipient === ZERO_ADDRESS) fail("Recipient cannot be the zero address.");
+
+  return {
+    name,
+    symbol,
+    supplyWhole,
+    totalSupply: supplyWhole * 10n ** BigInt(CARTEL_FIXED_ERC20_DECIMALS),
+    recipient,
+  };
+}
+
+/** Frozen creation bytecode + ABI-encoded constructor args. */
+export function buildTokenInitCode(intent: TokenIntent): `0x${string}` {
+  const args = encodeAbiParameters(
+    [{ type: "string" }, { type: "string" }, { type: "uint256" }, { type: "address" }],
+    [intent.name, intent.symbol, intent.totalSupply, intent.recipient as `0x${string}`],
+  );
+  return `${CARTEL_FIXED_ERC20_CREATION_BYTECODE}${args.slice(2)}` as `0x${string}`;
+}
+
+/**
+ * Broadcasts the fixed-supply token as a contract creation. `to` is omitted and
+ * `value` is zero; the server re-derives and re-checks the exact init code.
+ */
+export async function broadcastTokenDeployment(from: string, intent: TokenIntent): Promise<string> {
+  const provider = getInjectedProvider();
+  if (!provider) throw new WalletError("No browser wallet detected.");
+
+  const chainId = await readChainId();
+  if (chainId !== ROBINHOOD_TESTNET_CHAIN_ID) {
+    throw new WalletError("Wallet is not on Robinhood Chain Testnet.");
+  }
+
+  const hash = (await provider.request({
+    method: "eth_sendTransaction",
+    params: [{ from, data: buildTokenInitCode(intent), value: "0x0" }],
+  })) as string;
+
+  if (typeof hash !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(hash)) {
+    throw new WalletError("Wallet returned an invalid transaction hash.");
+  }
+  return hash.toLowerCase();
+}
+
+export async function createTokenDeploymentAttempt(input: {
+  launchId: string;
+  clientRequestId: string;
+  deployerAddress: string;
+  intent: TokenIntent;
+}): Promise<DeploymentRow> {
+  const { data, error } = await supabase.rpc("create_launch_chain_token_deployment_attempt", {
+    _launch_id: input.launchId,
+    _client_request_id: input.clientRequestId,
+    _deployer_address: input.deployerAddress.toLowerCase(),
+    _token_name: input.intent.name,
+    _token_symbol: input.intent.symbol,
+    // Sent as a decimal string: base units exceed IEEE-754 safe integers.
+    // PostgREST casts the text to `numeric` for the RPC parameter.
+    _token_total_supply: input.intent.totalSupply.toString() as unknown as number,
+    _token_recipient: input.intent.recipient,
+  });
+  if (error) fail(error.message || "Could not start a token deployment attempt.");
+  return data as unknown as DeploymentRow;
+}
+
+/**
+ * Display helper for base-unit supplies. Numeric values arriving as JSON
+ * numbers are rounded back to whole tokens, which is exact for the allowed
+ * range (max 1,000,000,000,000 whole tokens).
+ */
+export function formatWholeSupply(baseUnits: string | number | null): string {
+  if (baseUnits === null || baseUnits === "") return "—";
+  const scale = 10n ** BigInt(CARTEL_FIXED_ERC20_DECIMALS);
+  if (typeof baseUnits === "string" && /^[0-9]+$/.test(baseUnits)) {
+    return (BigInt(baseUnits) / scale).toLocaleString("en-US");
+  }
+  const asNumber = Number(baseUnits);
+  if (!Number.isFinite(asNumber)) return String(baseUnits);
+  return Math.round(asNumber / 1e18).toLocaleString("en-US");
 }
