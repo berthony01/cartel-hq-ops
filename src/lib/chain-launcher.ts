@@ -1,3 +1,4 @@
+import { encodeAbiParameters } from "viem";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import {
@@ -7,6 +8,10 @@ import {
   ROBINHOOD_TESTNET_RPC_URL,
   TEST_ARTIFACT_CREATION_BYTECODE,
 } from "./chain-registry";
+import {
+  CARTEL_FIXED_ERC20_CREATION_BYTECODE,
+  CARTEL_FIXED_ERC20_DECIMALS,
+} from "./cartel-fixed-erc20.artifact";
 
 /**
  * C8.2 — Cartel Chain Launcher client layer (TESTNET ONLY).
