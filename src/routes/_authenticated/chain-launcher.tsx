@@ -1051,6 +1051,116 @@ function ChainLauncherPage() {
           </ul>
         </div>
       </Section>
+
+      <Section
+        title="Liquidity readiness — testnet plan only"
+        description="Derives a deterministic liquidity plan for a confirmed test token. No approval, pool or liquidity transaction is ever sent from this panel."
+      >
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs leading-relaxed">
+          <p className="font-semibold uppercase tracking-wide text-destructive">
+            Plan only — no approval or liquidity transaction will be sent.
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            Robinhood Chain Testnet liquidity infrastructure is not yet verified, so execution
+            remains blocked.
+          </p>
+        </div>
+
+        {liquiditySources.length === 0 ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            No confirmed fixed-supply test token exists for this launch yet. Deploy and verify one
+            above first.
+          </p>
+        ) : (
+          <>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="flex flex-col gap-1">
+                <label htmlFor="liq-source" className="text-xs font-medium text-muted-foreground">
+                  Confirmed test token
+                </label>
+                <select
+                  id="liq-source"
+                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                  value={liquiditySource?.id ?? ""}
+                  onChange={(e) => setLiqSourceId(e.target.value)}
+                >
+                  {liquiditySources.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      #{a.attempt_number} · {a.verified_token_symbol ?? a.token_symbol ?? "—"} ·{" "}
+                      {a.contract_address}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label
+                  htmlFor="liq-token-amount"
+                  className="text-xs font-medium text-muted-foreground"
+                >
+                  Token amount (whole tokens)
+                </label>
+                <Input
+                  id="liq-token-amount"
+                  inputMode="decimal"
+                  placeholder="100000"
+                  value={liqTokenAmount}
+                  onChange={(e) => setLiqTokenAmount(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label
+                  htmlFor="liq-eth-amount"
+                  className="text-xs font-medium text-muted-foreground"
+                >
+                  Pair amount (ETH)
+                </label>
+                <Input
+                  id="liq-eth-amount"
+                  inputMode="decimal"
+                  placeholder="0.5"
+                  value={liqEthAmount}
+                  onChange={(e) => setLiqEthAmount(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label htmlFor="liq-slippage" className="text-xs font-medium text-muted-foreground">
+                  Slippage (bps, {SLIPPAGE_BPS_MIN}–{SLIPPAGE_BPS_MAX})
+                </label>
+                <Input
+                  id="liq-slippage"
+                  inputMode="numeric"
+                  value={liqSlippage}
+                  onChange={(e) => setLiqSlippage(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label htmlFor="liq-deadline" className="text-xs font-medium text-muted-foreground">
+                  Deadline (minutes, {DEADLINE_MINUTES_MIN}–{DEADLINE_MINUTES_MAX})
+                </label>
+                <Input
+                  id="liq-deadline"
+                  inputMode="numeric"
+                  value={liqDeadline}
+                  onChange={(e) => setLiqDeadline(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" onClick={handleBuildLiquidityPlan}>
+                Build Liquidity Plan
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Plans expire after {LIQUIDITY_PLAN_TTL_MS / 1000} seconds and are discarded when any
+                input, the wallet or the network changes.
+              </span>
+            </div>
+
+            {liqPlan ? <LiquidityPlanCard plan={liqPlan} nowMs={nowMs} /> : null}
+          </>
+        )}
+      </Section>
     </div>
   );
 }
+
