@@ -11,6 +11,7 @@ import {
   FlaskConical,
   Loader2,
   Lock,
+  ShieldCheck,
   RefreshCw,
   Wallet,
 } from "lucide-react";
@@ -57,6 +58,15 @@ import {
   CARTEL_FIXED_ERC20_DECIMALS,
 } from "@/lib/cartel-fixed-erc20.artifact";
 import { Input } from "@/components/ui/input";
+import { SimulationReviewCard } from "@/components/chain/SimulationReviewCard";
+import {
+  SIMULATION_QUOTE_TTL_MS,
+  SimulationError,
+  evaluatePreSignGate,
+  isQuoteFresh,
+  runSimulation,
+  type Simulation,
+} from "@/lib/chain-simulation";
 
 export const Route = createFileRoute("/_authenticated/chain-launcher")({
   head: () => ({
@@ -97,6 +107,9 @@ function ChainLauncherPage() {
   const [tokenSymbol, setTokenSymbol] = useState("");
   const [tokenSupply, setTokenSupply] = useState("1000000");
   const [tokenRecipient, setTokenRecipient] = useState("");
+  const [simulation, setSimulation] = useState<Simulation | null>(null);
+  const [simBusy, setSimBusy] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const hasProvider = typeof window !== "undefined" && getInjectedProvider() !== null;
   const onTestnet = chainId === ROBINHOOD_TESTNET_CHAIN_ID;
