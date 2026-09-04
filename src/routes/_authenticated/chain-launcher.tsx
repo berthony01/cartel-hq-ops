@@ -81,6 +81,19 @@ import {
   saveRecoveryRecord,
   type RecoveryRecord,
 } from "@/lib/launch-receipt";
+import { LiquidityPlanCard } from "@/components/chain/LiquidityPlanCard";
+import {
+  DEADLINE_MINUTES_MAX,
+  DEADLINE_MINUTES_MIN,
+  LIQUIDITY_PLAN_TTL_MS,
+  LiquidityPlanError,
+  SLIPPAGE_BPS_MAX,
+  SLIPPAGE_BPS_MIN,
+  buildLiquidityPlan,
+  isLiquidityPlanFresh,
+  type LiquidityPlan,
+} from "@/lib/liquidity-plan";
+
 
 export const Route = createFileRoute("/_authenticated/chain-launcher")({
   head: () => ({
