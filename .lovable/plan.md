@@ -1,83 +1,114 @@
-# C7.3E Hardening Pass — Plan
+# C8.0 — Cartel Chain Launcher: Read-Only Architecture Audit
 
-Start commit verified: `4453b9f1d17d28b66a0833c4dfb7583c9a537c20`, working tree clean. Read-only investigation only; nothing was edited, deployed, published, or sent to Telegram.
+Audit only. No code, migrations, packages, deploys, or publishes were produced in this turn.
 
-## A) New member-initiated capture RPC
+HEAD at audit time: `8440931e3f0bb3127956e494ecefc68faf0af284`, working tree clean. The C7.3D D2 migration/copy hardening is present and untouched (`supabase/migrations/20260902220631_c73d_d2_activate_project_inbox_delivery_scheduler.sql`).
 
-`public.capture_project_inbox_member_message(
-  _telegram_update_id bigint,
-  _telegram_user_id bigint,
-  _telegram_chat_id bigint,
-  _telegram_message_id bigint,
-  _body text
-) returns text` — SECURITY DEFINER, `set search_path = public`, `language plpgsql`, mirroring the shape/style of `capture_project_inbox_launch_reply` (verified signature: 6 bigint/text args, `prosecdef = true`).
+## 1. VERIFIED EXISTING STATE
 
-Return is a single lowercase outcome token, never data: `captured` | `duplicate` | `invalid_input` | `no_candidate_workspace` | `ambiguous_workspace` | `new_conversations_disabled` | `contact_blocked`. No workspace id, conversation id, or member identity is returned.
+Cross-checked against the repository and the live database — each item below was read directly, not inferred.
 
-Order inside ONE transaction (the whole function body is the transaction — any unexpected exception rolls back the inbound-update insert, so Telegram retry can retry):
+Launch lifecycle (confirmed live in Postgres):
+- `public.launches` has 29 columns including `chain text NOT NULL`, `official_contract_address text NULL`, `contract_registered_at`, `contract_registered_by`, plus one timestamp per lifecycle stage and `launch_watch_token`.
+- `transition_launch_status(uuid, text)` is SECURITY DEFINER, locks the row `FOR UPDATE`, and authorizes via `is_workspace_operator(workspace_id, auth.uid())` — that is, workspace `owner` or `admin`. There is no platform-owner bypass in this path.
+- `enforce_launch_status_transition()` is a trigger enforcing a strictly linear chain: DRAFT → ANNOUNCED → WATCHLIST_OPEN → LAUNCH_APPROACHING → CONTRACT_PENDING → OFFICIAL_CONTRACT_REGISTERED → LIVE → COMPLETED. No skips, no branches, no rollback. It refuses OFFICIAL_CONTRACT_REGISTERED unless a non-blank `official_contract_address` is already set, and it mints the Launch Watch token at first WATCHLIST_OPEN.
+- `set_launch_contract_address(uuid, text)` is the only sanctioned writer of the address: workspace-operator gated, requires status exactly `CONTRACT_PENDING`, trims, and caps at 256 characters. It performs **no** chain-format validation and no chain-side verification.
+- `enforce_launch_contract_update()` additionally blocks any address change outside `CONTRACT_PENDING` and blocks replacing an already-registered address.
 
-1. Structural validation: all four ids positive, `_telegram_chat_id = _telegram_user_id`, `btrim(_body)` length between 1 and 4096. Fail → `invalid_input`, nothing written.
-2. Candidate workspaces (server-side evidence only, no client input):
-   - `project_inbox_contacts` for this `telegram_user_id`: `ACTIVE` rows add their workspace; `BLOCKED` rows record an exclusion set.
-   - `launch_watch_subscriptions` where `is_active` and `telegram_user_id` matches, joined `launches.workspace_id`.
-   - Subtract the blocked set.
-3. Keep only workspaces with `project_inbox_settings.new_conversations_enabled = true` (missing row = false, via inner join).
-4. Count: 0 → `no_candidate_workspace` / `new_conversations_disabled` (distinguished by whether step 2 produced anything); >1 → `ambiguous_workspace`. Both return with zero writes and no guessing.
-5. Dedupe: `insert into telegram_inbound_updates (telegram_update_id, update_kind='MESSAGE', chat/message/user ids, status='RECEIVED') on conflict (telegram_update_id) do nothing returning 1`. No row returned → `duplicate`, nothing else happens.
-6. Contact: `insert ... on conflict (workspace_id, telegram_user_id) do nothing`, then `select ... for update` to serialize against block/unblock (the established pattern in the launch-reply RPC). If the locked row is not `ACTIVE`, mark the inbound update `IGNORED` with `last_error='contact_blocked'` and return `contact_blocked`. A BLOCKED contact is never reactivated.
-7. Conversation: select the single unresolved `MEMBER_INITIATED` row (`status in ('OPEN','WAITING_ON_TEAM','WAITING_ON_MEMBER')`) for `(workspace_id, contact_id)` `for update`; if none, insert `MEMBER_INITIATED` / `GENERAL` / `NORMAL` / `WAITING_ON_TEAM`. A `unique_violation` on the existing partial index `project_conversations_member_initiated_unresolved_key` is caught and resolved by re-reading the winner. That index is preserved unchanged; migration `20260902233008` is not rewritten.
-8. Message: one `project_conversation_messages` row (`MEMBER` / `TELEGRAM`, telegram update/chat/message ids, `telegram_reply_to_message_id = null`). Its unique indexes on `telegram_update_id` and `(chat_id, message_id)` are the final duplicate guard; a `unique_violation` here returns `duplicate`. The existing `project_inbox_apply_message_state()` trigger keeps `last_message_at`/status/contact activity consistent — no duplicate hand-written state updates.
-9. Mark the inbound update `PROCESSED` only after the message insert succeeds; return `captured`.
+Frontend: `src/lib/launch-control.ts` (809 lines) is the RPC-only client layer; `src/routes/_authenticated/launch-control.tsx` (2132 lines) is the operator surface. `src/lib/cartel-network.ts` serves the public read side.
 
-No Telegram send anywhere in this function or path.
+Authorization: two independent, already-working ladders — `is_workspace_operator(workspace_id, user_id)` for owner/admin within a tenant, and `is_platform_owner(user_id)` / `has_platform_unrestricted_access(user_id)` reading `platform_user_roles`. The client mirror is `usePlatformAccess` (fails closed on error/pending) and the `ownerOnly` nav flag already used by `/admin`.
 
-Grants: `revoke all on function ... from public, anon, authenticated;` then `grant execute ... to service_role;` — identical posture to the existing capture RPC.
+## 2. WEB3 / ONCHAIN SURFACE — EXPLICIT FINDING
 
-Webhook change: the C7.3E block collapses from ~10 service-role table calls to shape validation (private chat, non-bot sender, no `reply_to_message`, safe positive ids, `chat_id = from.id`, 1..4096 text) plus one `admin.rpc("capture_project_inbox_member_message", {...})`. Ordering is untouched: unknown `/` commands still return above, and the C7.3B/D reply branch still returns before this point.
+**None exists anywhere in the repository.** Confirmed by dependency read and full-tree search:
+- `package.json` contains no wagmi, viem, ethers, web3.js, WalletConnect, RainbowKit, or any crypto/RPC library. Zero.
+- No wallet connection UI, no EVM provider, no signer, no transaction construction or signing.
+- No contract deployment, no bytecode, no ABI, no Solidity, no token factory, no liquidity/DEX integration.
+- No chain RPC client, no block explorer integration, no transaction receipt polling, no confirmation monitoring, no reorg handling.
+- No chain-side verification of `official_contract_address` — the string is operator-asserted and trusted only as "the authenticated project said so", exactly matching existing trust copy.
 
-## B) Setter contract
+The `chain` column is a free-text label, not a validated chain identifier. Phase 8 is a genuine greenfield capability on top of a mature lifecycle, not a rebuild.
 
-```
-public.set_project_inbox_replies_enabled(_workspace_id uuid, _enabled boolean)
-public.set_project_inbox_new_conversations_enabled(_workspace_id uuid, _enabled boolean)
-```
-Both: SECURITY DEFINER, `set search_path = public`, return the same row shape the UI already consumes (`workspace_id, replies_enabled, new_conversations_enabled, security_warning_version, updated_at`).
+## 3. REUSE MAP — do NOT duplicate
 
-Behavior: authorize first with `is_workspace_operator(_workspace_id, auth.uid())` (verified signature `(_workspace_id uuid, _user_id uuid)`) and raise a generic exception otherwise; then `insert into project_inbox_settings (workspace_id, <own column>, updated_by) values (...) on conflict (workspace_id) do update set <own column> = excluded.<own column>, updated_by = auth.uid(), updated_at = now()`. The other setting takes its column default on insert and is never referenced on update, so a stale browser value can no longer overwrite it.
+| Need in Phase 8 | Reuse this |
+| --- | --- |
+| Launch identity, schedule, lifecycle | `public.launches` + `transition_launch_status` + the status trigger |
+| Project identity / publish state | `project_profiles` |
+| Contract address of record | `official_contract_address` + `set_launch_contract_address` |
+| Watcher notification on contract/live | `launch_events`, `launch_notification_deliveries`, existing scheduler + runner cron |
+| Schedule-change comms | `launch_schedule_communications` |
+| Public display of the launch | `cartel-network` routes and `get_cartel_network_launch` |
+| Tenant authorization | `is_workspace_operator` |
+| Owner-only gating | `is_platform_owner` / `usePlatformAccess` / `ownerOnly` nav |
+| Owner console surface | `src/routes/_authenticated/admin.tsx` |
+| Background/idempotent job pattern | the claim/stale-reclaim/attempt-cap pattern already used by inbox delivery and message cleanup |
 
-Grants: `revoke all ... from public, anon;` `grant execute ... to authenticated;`
+## 4. GAPS (what Phase 8 must genuinely add)
 
-`set_project_inbox_settings` stays in place untouched for compatibility, but `src/lib/project-inbox.ts` stops calling it: `setProjectInboxRepliesEnabled` and `setProjectInboxNewConversationsEnabled` lose their "current other value" parameter and call their own RPC. `ProjectInboxPanel.tsx` mutations drop the cached cross-setting argument.
+1. Client-side wallet connect + signing for Robinhood Chain testnet (new dependency; currently zero).
+2. A record of an attempted/confirmed onchain deployment, distinct from `launches`.
+3. Server-side, read-only chain confirmation (receipt + N confirmations) before anything is treated as registered.
+4. A chain registry (chain id, RPC URL, explorer base, testnet flag) — currently `chain` is only a label.
+5. Address-format validation, which `set_launch_contract_address` deliberately does not do today.
 
-## C) The `telegram_beta_contacts` gate should be REMOVED
+## 5. SECURITY RISKS TO DESIGN AGAINST
 
-Evidence from current source and live data:
-- The Launch Watch deep-link handler (`/start lw_<token>`, webhook lines 1519-1568) calls `resolveLaunchWatch` → `launchWatchSubscribe` → confirmation send. It never calls `touchUserContact`, so joining Launch Watch does not create a `telegram_beta_contacts` row. `touchUserContact` is only reached from beta/roadmap/start-menu/group-install branches.
-- Live: 3 active launch-watch subscriptions, **2 of which have no `subject_type='user'` beta contact row**. The gate today silently disqualifies two thirds of real subscribers.
+- **Private keys: never.** No key material may be stored, transmitted, or handled by the database, Edge Functions, or repository — the user's own wallet signs, the server only observes.
+- **The database must never be authoritative proof of deployment.** A row saying "deployed" proves nothing; only a fetched chain receipt with sufficient confirmations does. Any status must be derived from a verification read, and must be re-derivable.
+- Mainnet/testnet confusion is the highest-severity product risk: a testnet address promoted into `official_contract_address` would be published to real watchers via the existing notification engine. Testnet must be structurally incapable of promoting.
+- Client-supplied tx hash or address is untrusted input; verify server-side against the chain before any promotion.
+- The existing one-way, non-replaceable contract registration is a safety feature — an automated writer must not weaken it.
+- RPC endpoint secrets belong in Supabase secrets, read inside handlers, never in the browser bundle.
 
-`launch_watch_subscriptions.telegram_user_id` is itself the authenticated project-relationship evidence; `telegram_beta_contacts` is a global platform contact table with no workspace column and adds no tenant safety. Removing the gate restores intended C7.3E eligibility without broadening it. (Separately noted, not fixed here: the webhook currently queries that table with a string id against a `bigint` column.)
+## 6. TENANT ISOLATION / RLS
 
-## D) Files changed in the build turn
+Any new deployment table is workspace-scoped and must carry `workspace_id`, with RLS enabled and grants issued explicitly (the project's tables get no default Data API privileges). Read for workspace operators only; all writes through SECURITY DEFINER RPCs or service-role, never direct table writes from the browser. Chain-verification writes are service-role-only, matching how watcher and delivery rows are already kept out of the browser. Nothing about a deployment should surface on the public Cartel Network until it is confirmed and promoted.
 
-Inside the allowlist, no additions required:
-1. `supabase/functions/telegram-webhook/index.ts` — replace the C7.3E block with shape check + one RPC call.
-2. `backend-source/edge-functions/telegram-webhook/index.ts` — sync the same block only; `diff` of the two files must then be empty.
-3. `src/lib/project-inbox.ts` — two independent setter wrappers.
-4. `src/components/cartel/ProjectInboxPanel.tsx` — setter wiring + copy fixes (item 3 below).
-5. `src/integrations/supabase/types.ts` — regenerated only, for the three new RPC signatures.
-6. ONE new migration: the capture RPC, the two setters, and their grants. No change to `20260902233008`, no destructive schema change, no row writes.
+## 7. PROPOSED INTEGRATION SEAMS
 
-Copy corrections in the panel (and nowhere else): the header/description, the security block at ~lines 449-455, the switch helper text, and the empty states at ~lines 616 and 623 currently claim only explicit Launch Watch replies can ever appear and that a direct DM can "only" start a thread. New wording: explicit private replies to official bot messages are captured when reply capture is on; a plain direct DM can start a MEMBER_INITIATED thread only when "Allow new member conversations" is on and exactly one project can be identified; commands and group messages are never captured.
+Recommendation: **a new subordinate data model linked to `launches`**, not new columns on `launches`. Reasons: a launch may have several attempts (failed, replaced, testnet then mainnet); `launches` is already 29 columns and guarded by two triggers that assume a single one-way registration; and a separate table lets the deployment lifecycle be messy without destabilizing the audited launch lifecycle.
 
-## E) Verification before declaring done
+Shape (indicative, not to be built yet): one row per deployment attempt — workspace, launch, chain id, network (`TESTNET` first), deployer wallet address, tx hash, deployed contract address, status (`DRAFT → SUBMITTED → PENDING → CONFIRMED → FAILED`), confirmation count, verified-at, error text.
 
-- `git diff --name-only` proves only the six allowlisted files changed.
-- `bunx tsgo --noEmit`, `bun run build`, `bun run lint`.
-- `diff` the two webhook copies → empty; grep proves the unknown-`/` return and the reply-capture branch both still precede the bare-DM branch.
-- SQL checks against live catalog (read-only): `prosecdef`, `proconfig` search_path, and `proacl` for all three new functions — service_role-only execute on the capture RPC, authenticated-only on the setters, no anon/public anywhere. Re-confirm the partial unique index still exists and Inbox tables still have zero browser policies/grants.
-- Rollback-only DB test script (BEGIN … ROLLBACK, synthetic fixtures only, no production rows touched) covering: 0 candidates; 2 candidates → ambiguous; `new_conversations_enabled=false`; BLOCKED contact; launch-watch-only subscriber with no beta contact → captured; duplicate `telegram_update_id` → `duplicate` and no second message; second DM continues the same unresolved thread; RESOLVED thread → new conversation; each setter leaves the other column untouched; non-operator caller rejected.
-- No Telegram send exists on this path (assert by grep in the diff). No deploy, no publish, no C7.4/C8 work.
+Promotion rule for `official_contract_address`:
+- Manual registration for externally launched projects stays exactly as-is via `set_launch_contract_address`. Unchanged. No regression.
+- For Cartel-created deployments, promotion is a **separate** SECURITY DEFINER RPC that succeeds only when: the deployment row is `CONFIRMED` by server-side chain verification, network is mainnet (testnet can never promote), the launch belongs to the same workspace, the launch is in `CONTRACT_PENDING`, and no address is registered yet. It writes the same field with the same one-way guarantee, so the trigger invariants and all downstream notification/public-network behavior hold untouched.
+- Testnet deployments in C8.1/C8.2 promote nothing. They exercise wallet → sign → verify → record only.
 
-## Known limitation
+Lifecycle seam: the launcher is additive. It does not add, remove, or reorder any status, and it does not call `transition_launch_status`. The operator still advances the lifecycle by hand.
 
-The migration tool applies migrations to the live external Supabase project on approval; the new functions will exist in production immediately, but they are unreachable until the webhook is redeployed — which this phase does not do. The hardened path stays runtime-unproven by design.
+## 8. FUTURE ALLOWLIST CANDIDATES (C8.1/C8.2) — not created
+
+Migration: one, creating the deployment table with GRANTs, RLS, workspace-operator read policy, and the verification/promotion RPCs.
+
+Files likely in scope:
+- `package.json` (wallet/EVM dependency — explicit authorization required)
+- `src/lib/chain-launcher.ts` (new client layer)
+- a new owner-only route or an `admin.tsx` section
+- `src/integrations/supabase/types.ts` (generated)
+- a chain-verification server function or Edge Function, plus its `backend-source` snapshot
+
+## 9. CONFLICTS / UNSAFE ASSUMPTIONS FOUND
+
+- Writing `official_contract_address` outside `CONTRACT_PENDING`, or attempting to replace it, will be rejected by `enforce_launch_contract_update`. Any launcher design that assumes it can write the address at deploy time is wrong.
+- `launches.chain` is unvalidated free text, so it cannot currently be trusted to identify a chain; a real chain id must come from the new model, not from that column.
+- `set_launch_contract_address` accepts up to 256 characters of arbitrary text — no EVM format check exists today. Do not assume validation you have not added.
+- Any hint of a testnet address reaching the public network or the notification engine is a correctness failure, not a cosmetic one.
+
+## 10. NARROWEST GATE FOR THE FIRST TESTNET LAUNCHER
+
+**Platform owner only** (`is_platform_owner`), and additionally workspace-operator on the target launch. Not workspace admin, not member. The launcher stays behind the existing `ownerOnly` Owner Console pattern until testnet behavior is proven end-to-end, then widens deliberately in a later phase.
+
+## C8.0 GO / NO-GO
+
+**GO for C8.1 scoped as owner-only Robinhood Chain TESTNET, with no promotion path to `official_contract_address`.**
+
+Reason: nothing in Phase 8 duplicates existing systems — the onchain surface is verifiably empty — and the additive subordinate-model seam leaves the audited launch lifecycle, contract-registration invariants, notification engine, and tenant isolation untouched.
+
+Two conditions before C8.1 is contracted:
+1. Robinhood Chain testnet chain id, RPC endpoint, and explorer base must be supplied as authoritative values; they are not in the repository and must not be guessed.
+2. Adding a wallet/EVM dependency to `package.json` needs explicit authorization, since package changes are otherwise prohibited.
+
+**NO-GO for any mainnet deployment or any automated write to `official_contract_address`** until testnet deploy-and-verify is proven against live chain data.
