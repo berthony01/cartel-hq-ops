@@ -37,7 +37,9 @@ function CheckLine({ item }: { item: EvidenceCheck }) {
 function Field({ label, value }: { label: string; value: string | number | null | undefined }) {
   return (
     <div className="min-w-0">
-      <dt className="truncate text-[10px] uppercase tracking-[0.1em] text-muted-foreground">{label}</dt>
+      <dt className="truncate text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+        {label}
+      </dt>
       <dd className="break-all font-mono text-xs text-foreground">
         {value === null || value === undefined || value === "" ? "—" : String(value)}
       </dd>
@@ -99,7 +101,9 @@ function DeploymentCard({ item }: { item: DeploymentEvidenceResult }) {
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div className="min-w-0">
-          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Chain evidence</p>
+          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+            Chain evidence
+          </p>
           <ul className="mt-1.5 space-y-1">
             {item.evidenceChecks.map((c) => (
               <CheckLine key={c.id} item={c} />
@@ -135,7 +139,12 @@ export function VerifiedDeploymentEvidencePanel({
       variant="surface"
       title="Cartel Verified Launch — deployment evidence"
       description="Chain-derived deployment evidence for this launch, and why it can or cannot be considered for official contract registration."
-      leading={<ShieldCheck className="size-4 text-[color:var(--cartel-gold,#D4A82A)]" aria-hidden="true" />}
+      leading={
+        <ShieldCheck
+          className="size-4 text-[color:var(--cartel-gold,#D4A82A)]"
+          aria-hidden="true"
+        />
+      }
       actions={
         <span className="rounded-sm border border-border px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
           Read only — no registration
@@ -174,8 +183,8 @@ export function VerifiedDeploymentEvidencePanel({
             </p>
             {evaluation.ambiguous ? (
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Multiple confirmed deployments are present. No candidate is selected automatically, and
-                older confirmed records are still shown below.
+                Multiple confirmed deployments are present. No candidate is selected automatically,
+                and older confirmed records are still shown below.
               </p>
             ) : null}
           </div>
@@ -192,10 +201,12 @@ export function VerifiedDeploymentEvidencePanel({
             </ul>
           )}
 
-          <p className="text-xs leading-relaxed text-muted-foreground">{VERIFIED_DEPLOYMENT_DISCLAIMER}</p>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            This panel only reads and explains recorded evidence. It cannot register a contract, change
-            the launch lifecycle, or notify anyone.
+            {VERIFIED_DEPLOYMENT_DISCLAIMER}
+          </p>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            This panel only reads and explains recorded evidence. It cannot register a contract,
+            change the launch lifecycle, or notify anyone.
           </p>
         </div>
       )}

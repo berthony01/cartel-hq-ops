@@ -91,7 +91,10 @@ export type ChainCompatibilityResult = {
   networkLabel: string;
 };
 
-const KNOWN_CHAINS: Record<number, { label: string; testnet: boolean; aliases: readonly string[] }> = {
+const KNOWN_CHAINS: Record<
+  number,
+  { label: string; testnet: boolean; aliases: readonly string[] }
+> = {
   [ROBINHOOD_TESTNET_CHAIN_ID]: {
     label: "Robinhood Chain Testnet",
     testnet: true,
@@ -100,7 +103,16 @@ const KNOWN_CHAINS: Record<number, { label: string; testnet: boolean; aliases: r
 };
 
 /** Declared chain strings known to be non-EVM, and therefore never matched by an EVM chain id. */
-const KNOWN_NON_EVM_CHAINS: readonly string[] = ["solana", "sol", "bitcoin", "btc", "sui", "aptos", "ton", "tron"];
+const KNOWN_NON_EVM_CHAINS: readonly string[] = [
+  "solana",
+  "sol",
+  "bitcoin",
+  "btc",
+  "sui",
+  "aptos",
+  "ton",
+  "tron",
+];
 
 function normalizeChainName(value: string | null): string {
   return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
@@ -117,11 +129,20 @@ export function evaluateChainCompatibility(
 ): ChainCompatibilityResult {
   const declared = normalizeChainName(declaredChain);
   const known = chainId == null ? undefined : KNOWN_CHAINS[chainId];
-  const networkLabel = known ? known.label : chainId == null ? "Unknown network" : `Chain ${chainId}`;
+  const networkLabel = known
+    ? known.label
+    : chainId == null
+      ? "Unknown network"
+      : `Chain ${chainId}`;
   const isTestnet = known ? known.testnet : false;
 
   if (chainId == null) {
-    return { result: "UNKNOWN", detail: "The deployment has no recorded chain id.", isTestnet, networkLabel };
+    return {
+      result: "UNKNOWN",
+      detail: "The deployment has no recorded chain id.",
+      isTestnet,
+      networkLabel,
+    };
   }
   if (!known) {
     return {
@@ -132,7 +153,12 @@ export function evaluateChainCompatibility(
     };
   }
   if (declared === "") {
-    return { result: "UNKNOWN", detail: "This launch has no declared chain.", isTestnet, networkLabel };
+    return {
+      result: "UNKNOWN",
+      detail: "This launch has no declared chain.",
+      isTestnet,
+      networkLabel,
+    };
   }
   if (KNOWN_NON_EVM_CHAINS.includes(declared)) {
     return {
@@ -143,7 +169,12 @@ export function evaluateChainCompatibility(
     };
   }
   if (known.aliases.includes(declared)) {
-    return { result: "COMPATIBLE", detail: `Declared chain matches ${known.label}.`, isTestnet, networkLabel };
+    return {
+      result: "COMPATIBLE",
+      detail: `Declared chain matches ${known.label}.`,
+      isTestnet,
+      networkLabel,
+    };
   }
   return {
     result: "INCOMPATIBLE",
@@ -246,7 +277,8 @@ function evaluateDeployment(
 
   const evidenceChecks: EvidenceCheck[] = [];
 
-  const associationOk = row.launch_id === context.launchId && row.workspace_id === context.workspaceId;
+  const associationOk =
+    row.launch_id === context.launchId && row.workspace_id === context.workspaceId;
   evidenceChecks.push(
     check(
       "association",
@@ -276,17 +308,22 @@ function evaluateDeployment(
       "tx_hash",
       "Transaction hash recorded",
       txOk ? "PASS" : "FAIL",
-      txOk ? "A well-formed transaction hash is recorded." : "No valid transaction hash is recorded.",
+      txOk
+        ? "A well-formed transaction hash is recorded."
+        : "No valid transaction hash is recorded.",
     ),
   );
 
-  const addressOk = !isBlank(row.contract_address) && EVM_ADDRESS_PATTERN.test(row.contract_address as string);
+  const addressOk =
+    !isBlank(row.contract_address) && EVM_ADDRESS_PATTERN.test(row.contract_address as string);
   evidenceChecks.push(
     check(
       "contract_address",
       "Contract address recorded",
       addressOk ? "PASS" : "FAIL",
-      addressOk ? "A well-formed contract address is recorded." : "No valid contract address is recorded.",
+      addressOk
+        ? "A well-formed contract address is recorded."
+        : "No valid contract address is recorded.",
     ),
   );
 
@@ -307,7 +344,9 @@ function evaluateDeployment(
       "failure_state",
       "No recorded failure",
       noFailure ? "PASS" : "FAIL",
-      noFailure ? "No failure was recorded for this attempt." : `Failure recorded: ${row.failure_code ?? "see detail"}.`,
+      noFailure
+        ? "No failure was recorded for this attempt."
+        : `Failure recorded: ${row.failure_code ?? "see detail"}.`,
     ),
   );
 
@@ -317,7 +356,9 @@ function evaluateDeployment(
       "artifact",
       "Frozen artifact identified",
       artifactOk ? "PASS" : "FAIL",
-      artifactOk ? `Artifact ${row.artifact_id}.` : "No frozen artifact is recorded for this attempt.",
+      artifactOk
+        ? `Artifact ${row.artifact_id}.`
+        : "No frozen artifact is recorded for this attempt.",
     ),
   );
 
@@ -347,7 +388,8 @@ function evaluateDeployment(
   const registrationChecks: EvidenceCheck[] = [];
   const registrationBlockReasons: string[] = [];
 
-  const envApproved = environment != null && APPROVED_REGISTRATION_ENVIRONMENTS.includes(environment);
+  const envApproved =
+    environment != null && APPROVED_REGISTRATION_ENVIRONMENTS.includes(environment);
   registrationChecks.push(
     check(
       "environment",
@@ -388,17 +430,22 @@ function evaluateDeployment(
       "deployment_kind",
       "Recognised official token kind",
       isTokenKind ? "PASS" : "BLOCKED",
-      isTokenKind ? `${kind} is a recognised official token kind.` : `${kind ?? "Unknown kind"} is not a recognised official token kind.`,
+      isTokenKind
+        ? `${kind} is a recognised official token kind.`
+        : `${kind ?? "Unknown kind"} is not a recognised official token kind.`,
     ),
   );
-  if (!isTokenKind) registrationBlockReasons.push("Deployment kind is not a recognised official token kind");
+  if (!isTokenKind)
+    registrationBlockReasons.push("Deployment kind is not a recognised official token kind");
 
   registrationChecks.push(
     check(
       "evidence",
       "Complete chain evidence",
       evidenceVerified ? "PASS" : "BLOCKED",
-      evidenceVerified ? "All chain-evidence checks passed." : "One or more chain-evidence checks did not pass.",
+      evidenceVerified
+        ? "All chain-evidence checks passed."
+        : "One or more chain-evidence checks did not pass.",
     ),
   );
   if (!evidenceVerified) registrationBlockReasons.push("Chain evidence is incomplete");
