@@ -431,7 +431,7 @@ export function buildLiquidityPlan(input: LiquidityPlanInput): LiquidityPlan {
       "infrastructure",
       "Execution infrastructure verified",
       "BLOCKED",
-      LIQUIDITY_INFRASTRUCTURE_BLOCKER,
+      `Transactions disabled (LIQUIDITY_TX_ENABLED=${String(LIQUIDITY_TX_ENABLED)}). ${LIQUIDITY_INFRASTRUCTURE_BLOCKER}`,
     ),
   ];
 
@@ -445,7 +445,7 @@ export function buildLiquidityPlan(input: LiquidityPlanInput): LiquidityPlan {
     // Frozen false. `LIQUIDITY_TX_ENABLED` is a literal `false` constant and
     // there is no branch anywhere that can promote this field.
     executionReady: false as const,
-    blockers: LIQUIDITY_TX_ENABLED ? blockers : blockers,
+    blockers,
     createdAtMs: now,
     expiresAtMs: now + LIQUIDITY_PLAN_TTL_MS,
   };
