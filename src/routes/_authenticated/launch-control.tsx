@@ -631,6 +631,31 @@ function LaunchControlPage() {
   });
   const pendingScheduleComm = scheduleCommQuery.data ?? null;
 
+  // ---- C8.7A: read-only deployment evidence / eligibility ------------------
+  // Reuses the existing authenticated `list_launch_chain_deployments` read
+  // surface. Nothing here writes, registers, transitions or notifies.
+  const deploymentEvidenceQuery = useQuery({
+    queryKey: chainDeploymentsQueryKey(selected?.id ?? null),
+    enabled: !!selected?.id,
+    queryFn: () => listChainDeployments(selected!.id),
+  });
+  const deploymentEvidence = useMemo(() => {
+    if (!selected) return null;
+    return evaluateLaunchDeploymentEvidence(
+      {
+        launchId: selected.id,
+        workspaceId: selected.workspace_id,
+        declaredChain: selected.chain,
+        launchStatus: selected.status,
+        officialContractAddress: selected.official_contract_address,
+        contractRegisteredAt: selected.contract_registered_at,
+      },
+      deploymentEvidenceQuery.data ?? [],
+    );
+  }, [selected, deploymentEvidenceQuery.data]);
+
+
+
 
 
   // ---- countdown + reminder readiness (saved launch fields only) -----------
