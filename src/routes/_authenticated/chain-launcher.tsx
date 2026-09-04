@@ -401,8 +401,16 @@ function ChainLauncherPage() {
 
   const canDeploy =
     !!launchId && !!account && onTestnet && !busy && (!latest || isTerminal(latest.status));
+  const simulationFresh = simulation ? isQuoteFresh(simulation.preflight, nowMs) : false;
+  const simulationReady = !!simulation && simulation.preflight.passed && simulationFresh;
+  const canSimulate = !!account && onTestnet && !simBusy && !tokenBusy;
   const canDeployToken =
-    !!launchId && !!account && onTestnet && !tokenBusy && (!latest || isTerminal(latest.status));
+    !!launchId &&
+    !!account &&
+    onTestnet &&
+    !tokenBusy &&
+    simulationReady &&
+    (!latest || isTerminal(latest.status));
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
@@ -630,14 +638,29 @@ function ChainLauncherPage() {
         title="Testnet token — internal test only"
         description="Fixed-supply ERC-20 from a frozen, pre-compiled artifact. Testnet only."
         actions={
-          <Button size="sm" onClick={() => void handleDeployToken()} disabled={!canDeployToken}>
-            {tokenBusy ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Coins className="size-4" aria-hidden="true" />
-            )}
-            Deploy Test Token
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void handleRunSimulation()}
+              disabled={!canSimulate}
+            >
+              {simBusy ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <ShieldCheck className="size-4" aria-hidden="true" />
+              )}
+              Run simulation
+            </Button>
+            <Button size="sm" onClick={() => void handleDeployToken()} disabled={!canDeployToken}>
+              {tokenBusy ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Coins className="size-4" aria-hidden="true" />
+              )}
+              Deploy Test Token
+            </Button>
+          </div>
         }
       >
         <div className="grid gap-3 sm:grid-cols-2">
@@ -692,6 +715,15 @@ function ChainLauncherPage() {
           Decimals: {CARTEL_FIXED_ERC20_DECIMALS} (fixed) · Artifact:{" "}
           {CARTEL_FIXED_ERC20_ARTIFACT_ID}
         </p>
+
+        {simulation ? (
+          <SimulationReviewCard simulation={simulation} stale={false} nowMs={nowMs} />
+        ) : (
+          <p className="mt-3 text-xs text-destructive">
+            Deployment is locked until a simulation passes. Editing any field above requires a new
+            simulation. Estimates expire after {SIMULATION_QUOTE_TTL_MS / 1000} seconds.
+          </p>
+        )}
 
         <div className="mt-3 rounded-lg border border-gold/40 bg-gold/10 p-3 text-xs leading-relaxed">
           <p className="flex items-center gap-2 font-semibold uppercase tracking-wide text-gold">
