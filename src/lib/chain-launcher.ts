@@ -268,7 +268,6 @@ export function normalizeTokenIntent(input: TokenIntentInput): TokenIntent {
   if (name.length < 1 || name.length > TOKEN_NAME_MAX) {
     fail(`Token name must be 1–${TOKEN_NAME_MAX} characters.`);
   }
-  // eslint-disable-next-line no-control-regex
   if (!/^[\x20-\x7e]+$/.test(name)) fail("Token name must be printable ASCII.");
 
   const symbol = input.symbol.trim().toUpperCase();
@@ -309,10 +308,7 @@ export function buildTokenInitCode(intent: TokenIntent): `0x${string}` {
  * Broadcasts the fixed-supply token as a contract creation. `to` is omitted and
  * `value` is zero; the server re-derives and re-checks the exact init code.
  */
-export async function broadcastTokenDeployment(
-  from: string,
-  intent: TokenIntent,
-): Promise<string> {
+export async function broadcastTokenDeployment(from: string, intent: TokenIntent): Promise<string> {
   const provider = getInjectedProvider();
   if (!provider) throw new WalletError("No browser wallet detected.");
 
