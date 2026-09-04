@@ -198,14 +198,17 @@ export type Database = {
           token_recipient: string | null
           token_symbol: string | null
           token_total_supply: number | null
+          token_total_supply_text: string | null
           tx_hash: string | null
           updated_at: string
           verified_at: string | null
           verified_recipient_balance: number | null
+          verified_recipient_balance_text: string | null
           verified_token_decimals: number | null
           verified_token_name: string | null
           verified_token_symbol: string | null
           verified_total_supply: number | null
+          verified_total_supply_text: string | null
           workspace_id: string
         }
         Insert: {
@@ -234,14 +237,17 @@ export type Database = {
           token_recipient?: string | null
           token_symbol?: string | null
           token_total_supply?: number | null
+          token_total_supply_text?: string | null
           tx_hash?: string | null
           updated_at?: string
           verified_at?: string | null
           verified_recipient_balance?: number | null
+          verified_recipient_balance_text?: string | null
           verified_token_decimals?: number | null
           verified_token_name?: string | null
           verified_token_symbol?: string | null
           verified_total_supply?: number | null
+          verified_total_supply_text?: string | null
           workspace_id: string
         }
         Update: {
@@ -270,14 +276,17 @@ export type Database = {
           token_recipient?: string | null
           token_symbol?: string | null
           token_total_supply?: number | null
+          token_total_supply_text?: string | null
           tx_hash?: string | null
           updated_at?: string
           verified_at?: string | null
           verified_recipient_balance?: number | null
+          verified_recipient_balance_text?: string | null
           verified_token_decimals?: number | null
           verified_token_name?: string | null
           verified_token_symbol?: string | null
           verified_total_supply?: number | null
+          verified_total_supply_text?: string | null
           workspace_id?: string
         }
         Relationships: [
@@ -2819,14 +2828,17 @@ export type Database = {
           token_recipient: string | null
           token_symbol: string | null
           token_total_supply: number | null
+          token_total_supply_text: string | null
           tx_hash: string | null
           updated_at: string
           verified_at: string | null
           verified_recipient_balance: number | null
+          verified_recipient_balance_text: string | null
           verified_token_decimals: number | null
           verified_token_name: string | null
           verified_token_symbol: string | null
           verified_total_supply: number | null
+          verified_total_supply_text: string | null
           workspace_id: string
         }
         SetofOptions: {
@@ -2885,14 +2897,17 @@ export type Database = {
           token_recipient: string | null
           token_symbol: string | null
           token_total_supply: number | null
+          token_total_supply_text: string | null
           tx_hash: string | null
           updated_at: string
           verified_at: string | null
           verified_recipient_balance: number | null
+          verified_recipient_balance_text: string | null
           verified_token_decimals: number | null
           verified_token_name: string | null
           verified_token_symbol: string | null
           verified_total_supply: number | null
+          verified_total_supply_text: string | null
           workspace_id: string
         }
         SetofOptions: {
@@ -2944,14 +2959,17 @@ export type Database = {
           token_recipient: string | null
           token_symbol: string | null
           token_total_supply: number | null
+          token_total_supply_text: string | null
           tx_hash: string | null
           updated_at: string
           verified_at: string | null
           verified_recipient_balance: number | null
+          verified_recipient_balance_text: string | null
           verified_token_decimals: number | null
           verified_token_name: string | null
           verified_token_symbol: string | null
           verified_total_supply: number | null
+          verified_total_supply_text: string | null
           workspace_id: string
         }
         SetofOptions: {
@@ -3069,14 +3087,17 @@ export type Database = {
           token_recipient: string | null
           token_symbol: string | null
           token_total_supply: number | null
+          token_total_supply_text: string | null
           tx_hash: string | null
           updated_at: string
           verified_at: string | null
           verified_recipient_balance: number | null
+          verified_recipient_balance_text: string | null
           verified_token_decimals: number | null
           verified_token_name: string | null
           verified_token_symbol: string | null
           verified_total_supply: number | null
+          verified_total_supply_text: string | null
           workspace_id: string
         }
         SetofOptions: {
@@ -3122,14 +3143,17 @@ export type Database = {
           token_recipient: string | null
           token_symbol: string | null
           token_total_supply: number | null
+          token_total_supply_text: string | null
           tx_hash: string | null
           updated_at: string
           verified_at: string | null
           verified_recipient_balance: number | null
+          verified_recipient_balance_text: string | null
           verified_token_decimals: number | null
           verified_token_name: string | null
           verified_token_symbol: string | null
           verified_total_supply: number | null
+          verified_total_supply_text: string | null
           workspace_id: string
         }
         SetofOptions: {
@@ -3664,14 +3688,17 @@ export type Database = {
           token_recipient: string | null
           token_symbol: string | null
           token_total_supply: number | null
+          token_total_supply_text: string | null
           tx_hash: string | null
           updated_at: string
           verified_at: string | null
           verified_recipient_balance: number | null
+          verified_recipient_balance_text: string | null
           verified_token_decimals: number | null
           verified_token_name: string | null
           verified_token_symbol: string | null
           verified_total_supply: number | null
+          verified_total_supply_text: string | null
           workspace_id: string
         }[]
         SetofOptions: {
@@ -3945,14 +3972,17 @@ export type Database = {
           token_recipient: string | null
           token_symbol: string | null
           token_total_supply: number | null
+          token_total_supply_text: string | null
           tx_hash: string | null
           updated_at: string
           verified_at: string | null
           verified_recipient_balance: number | null
+          verified_recipient_balance_text: string | null
           verified_token_decimals: number | null
           verified_token_name: string | null
           verified_token_symbol: string | null
           verified_total_supply: number | null
+          verified_total_supply_text: string | null
           workspace_id: string
         }
         SetofOptions: {
