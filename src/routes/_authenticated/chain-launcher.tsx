@@ -38,6 +38,7 @@ import {
   createTokenDeploymentAttempt,
   formatEth,
   formatWholeSupply,
+  tokenSupplyText,
   getInjectedProvider,
   isTerminal,
   isUserRejection,
