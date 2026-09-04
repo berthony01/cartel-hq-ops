@@ -30,15 +30,19 @@ import {
   DEPLOYMENT_STATUS_LABEL,
   abandonDeploymentAttempt,
   broadcastTestDeployment,
+  broadcastTokenDeployment,
   chainDeploymentsQueryKey,
   connectWallet,
   createDeploymentAttempt,
+  createTokenDeploymentAttempt,
   formatEth,
+  formatWholeSupply,
   getInjectedProvider,
   isTerminal,
   isUserRejection,
   listChainDeployments,
   newClientRequestId,
+  normalizeTokenIntent,
   readBalanceWei,
   readChainId,
   submitDeploymentTx,
@@ -46,6 +50,11 @@ import {
   type DeploymentRow,
 } from "@/lib/chain-launcher";
 import { verifyChainDeployment } from "@/lib/chain-verify.functions";
+import {
+  CARTEL_FIXED_ERC20_ARTIFACT_ID,
+  CARTEL_FIXED_ERC20_DECIMALS,
+} from "@/lib/cartel-fixed-erc20.artifact";
+import { Input } from "@/components/ui/input";
 
 export const Route = createFileRoute("/_authenticated/chain-launcher")({
   head: () => ({
@@ -81,6 +90,11 @@ function ChainLauncherPage() {
   const [chainId, setChainId] = useState<number | null>(null);
   const [balance, setBalance] = useState<bigint | null>(null);
   const [busy, setBusy] = useState(false);
+  const [tokenBusy, setTokenBusy] = useState(false);
+  const [tokenName, setTokenName] = useState("");
+  const [tokenSymbol, setTokenSymbol] = useState("");
+  const [tokenSupply, setTokenSupply] = useState("1000000");
+  const [tokenRecipient, setTokenRecipient] = useState("");
 
   const hasProvider = typeof window !== "undefined" && getInjectedProvider() !== null;
   const onTestnet = chainId === ROBINHOOD_TESTNET_CHAIN_ID;
@@ -128,6 +142,11 @@ function ChainLauncherPage() {
       provider?.removeListener?.("accountsChanged", onChanged);
     };
   }, [hasProvider, account, refreshWallet]);
+
+  useEffect(() => {
+    // The connected wallet is the default recipient; the operator may change it.
+    if (account && !tokenRecipient) setTokenRecipient(account);
+  }, [account, tokenRecipient]);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: chainDeploymentsQueryKey(launchId) });
@@ -209,6 +228,65 @@ function ChainLauncherPage() {
       }
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleDeployToken() {
+    if (!launchId || !account || !onTestnet) return;
+    let intent;
+    try {
+      intent = normalizeTokenIntent({
+        name: tokenName,
+        symbol: tokenSymbol,
+        supplyWhole: tokenSupply,
+        recipient: tokenRecipient,
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Check the token details.");
+      return;
+    }
+
+    setTokenBusy(true);
+    let attemptId: string | null = null;
+    let txHash: string | null = null;
+    try {
+      const attempt = await createTokenDeploymentAttempt({
+        launchId,
+        clientRequestId: newClientRequestId(),
+        deployerAddress: account,
+        intent,
+      });
+      attemptId = attempt.id;
+      await invalidate();
+
+      txHash = await broadcastTokenDeployment(account, intent);
+      await submitDeploymentTx(attempt.id, txHash);
+      await invalidate();
+      toast.success("Token transaction broadcast. Verify once it is mined.");
+    } catch (e) {
+      // Identical pre/post-broadcast rule as the inert path: a broadcast
+      // transaction is never discarded.
+      if (attemptId && !txHash) {
+        const userCancelled = isUserRejection(e);
+        try {
+          await abandonDeploymentAttempt(
+            attemptId,
+            userCancelled ? "Cancelled in wallet" : "Wallet request ended before broadcast",
+          );
+          await invalidate();
+        } catch {
+          /* leave the attempt as-is; history is never rewritten */
+        }
+        toast.info(
+          userCancelled
+            ? "Deployment cancelled in wallet."
+            : "Wallet request ended before broadcast. The draft attempt was abandoned.",
+        );
+      } else {
+        toast.error(e instanceof Error ? e.message : "Token deployment failed.");
+      }
+    } finally {
+      setTokenBusy(false);
     }
   }
 
