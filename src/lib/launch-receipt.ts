@@ -432,7 +432,9 @@ export function readRecoveryRecord(scope: {
 }): RecoveryRecord | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.sessionStorage.getItem(recoveryStorageKey(scope.workspaceId, scope.launchId));
+    const raw = window.sessionStorage.getItem(
+      recoveryStorageKey(scope.workspaceId, scope.launchId),
+    );
     if (!raw) return null;
     return parseRecoveryRecord(JSON.parse(raw) as unknown, scope);
   } catch {
