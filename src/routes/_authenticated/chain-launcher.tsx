@@ -81,6 +81,18 @@ import {
   saveRecoveryRecord,
   type RecoveryRecord,
 } from "@/lib/launch-receipt";
+import { LiquidityPlanCard } from "@/components/chain/LiquidityPlanCard";
+import {
+  DEADLINE_MINUTES_MAX,
+  DEADLINE_MINUTES_MIN,
+  LIQUIDITY_PLAN_TTL_MS,
+  LiquidityPlanError,
+  SLIPPAGE_BPS_MAX,
+  SLIPPAGE_BPS_MIN,
+  buildLiquidityPlan,
+  isLiquidityPlanFresh,
+  type LiquidityPlan,
+} from "@/lib/liquidity-plan";
 
 export const Route = createFileRoute("/_authenticated/chain-launcher")({
   head: () => ({
@@ -133,6 +145,14 @@ function ChainLauncherPage() {
   const tokenInFlight = useRef(false);
   const [simBusy, setSimBusy] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
+
+  // C8.6A — liquidity readiness planning only. No transaction state exists here.
+  const [liqSourceId, setLiqSourceId] = useState<string | null>(null);
+  const [liqTokenAmount, setLiqTokenAmount] = useState("");
+  const [liqEthAmount, setLiqEthAmount] = useState("");
+  const [liqSlippage, setLiqSlippage] = useState("100");
+  const [liqDeadline, setLiqDeadline] = useState("20");
+  const [liqPlan, setLiqPlan] = useState<LiquidityPlan | null>(null);
 
   const hasProvider = typeof window !== "undefined" && getInjectedProvider() !== null;
   const onTestnet = chainId === ROBINHOOD_TESTNET_CHAIN_ID;
@@ -201,6 +221,115 @@ function ChainLauncherPage() {
       setSimSession(null);
     }
   }, [simSession, nowMs]);
+
+  // C8.6A — CONFIRMED fixed-supply test tokens that can be planned against.
+  const liquiditySources = useMemo(
+    () =>
+      attempts.filter(
+        (a) =>
+          a.status === "CONFIRMED" &&
+          a.deployment_kind === "FIXED_SUPPLY_ERC20" &&
+          typeof a.contract_address === "string" &&
+          /^0x[0-9a-fA-F]{40}$/.test(a.contract_address),
+      ),
+    [attempts],
+  );
+
+  const liquiditySource = useMemo(
+    () => liquiditySources.find((a) => a.id === liqSourceId) ?? liquiditySources[0] ?? null,
+    [liquiditySources, liqSourceId],
+  );
+
+  useEffect(() => {
+    if (!liqSourceId && liquiditySources.length > 0) setLiqSourceId(liquiditySources[0]!.id);
+  }, [liquiditySources, liqSourceId]);
+
+  // Any change to the plan inputs, the source attempt, the account or the chain
+  // destroys the plan. It is never silently reused.
+  useEffect(() => {
+    setLiqPlan(null);
+  }, [
+    liqSourceId,
+    liqTokenAmount,
+    liqEthAmount,
+    liqSlippage,
+    liqDeadline,
+    account,
+    chainId,
+    balance,
+  ]);
+
+  useEffect(() => {
+    if (!liqPlan) return;
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [liqPlan]);
+
+  // Fail closed: an expired plan is destroyed, not merely greyed out.
+  useEffect(() => {
+    if (liqPlan && !isLiquidityPlanFresh(liqPlan, nowMs)) setLiqPlan(null);
+  }, [liqPlan, nowMs]);
+
+  /**
+   * C8.6A — pure, local plan derivation. Reads no chain data of its own and
+   * never contacts the wallet: only values already held in component state are
+   * passed in. Nothing is persisted and nothing is signed.
+   */
+  const handleBuildLiquidityPlan = () => {
+    if (!liquiditySource) {
+      toast.error("Select a confirmed test-token attempt first.");
+      return;
+    }
+    if (!account) {
+      toast.error("Connect a wallet first.");
+      return;
+    }
+    // Only a balance actually verified on chain for THIS operator counts.
+    const availableTokenBaseUnits =
+      liquiditySource.token_recipient &&
+      liquiditySource.token_recipient.toLowerCase() === account.toLowerCase()
+        ? liquiditySource.verified_recipient_balance_text
+        : null;
+
+    if (!/^[0-9]{1,6}$/.test(liqSlippage.trim()) || !/^[0-9]{1,6}$/.test(liqDeadline.trim())) {
+      toast.error("Slippage and deadline must be whole numbers.");
+      return;
+    }
+
+    try {
+      const plan = buildLiquidityPlan({
+        source: {
+          deploymentId: liquiditySource.id,
+          status: liquiditySource.status,
+          deploymentKind: liquiditySource.deployment_kind,
+          artifactId: liquiditySource.artifact_id,
+          chainId: Number(liquiditySource.chain_id),
+          contractAddress: liquiditySource.contract_address,
+          tokenName: liquiditySource.verified_token_name ?? liquiditySource.token_name,
+          tokenSymbol: liquiditySource.verified_token_symbol ?? liquiditySource.token_symbol,
+          tokenDecimals: liquiditySource.verified_token_decimals ?? liquiditySource.token_decimals,
+          availableTokenBaseUnits,
+        },
+        operator: account,
+        liveAccount: account,
+        liveChainId: chainId,
+        walletBalanceWei: balance === null ? null : balance.toString(),
+        tokenAmount: liqTokenAmount,
+        ethAmount: liqEthAmount,
+        slippageBps: Number.parseInt(liqSlippage.trim(), 10),
+        deadlineMinutes: Number.parseInt(liqDeadline.trim(), 10),
+      });
+      setLiqPlan(plan);
+      setNowMs(Date.now());
+    } catch (planError) {
+      setLiqPlan(null);
+      toast.error(
+        planError instanceof LiquidityPlanError
+          ? planError.message
+          : "Could not build a liquidity plan from these values.",
+      );
+    }
+  };
 
   // B — same-tab recovery restore. Only ever restores a record that still
   // matches a DRAFT row without a server-side tx hash in the CURRENT scope.
@@ -918,6 +1047,115 @@ function ChainLauncherPage() {
             </li>
           </ul>
         </div>
+      </Section>
+
+      <Section
+        title="Liquidity readiness — testnet plan only"
+        description="Derives a deterministic liquidity plan for a confirmed test token. No approval, pool or liquidity transaction is ever sent from this panel."
+      >
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs leading-relaxed">
+          <p className="font-semibold uppercase tracking-wide text-destructive">
+            Plan only — no approval or liquidity transaction will be sent.
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            Robinhood Chain Testnet liquidity infrastructure is not yet verified, so execution
+            remains blocked.
+          </p>
+        </div>
+
+        {liquiditySources.length === 0 ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            No confirmed fixed-supply test token exists for this launch yet. Deploy and verify one
+            above first.
+          </p>
+        ) : (
+          <>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="flex flex-col gap-1">
+                <label htmlFor="liq-source" className="text-xs font-medium text-muted-foreground">
+                  Confirmed test token
+                </label>
+                <select
+                  id="liq-source"
+                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                  value={liquiditySource?.id ?? ""}
+                  onChange={(e) => setLiqSourceId(e.target.value)}
+                >
+                  {liquiditySources.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      #{a.attempt_number} · {a.verified_token_symbol ?? a.token_symbol ?? "—"} ·{" "}
+                      {a.contract_address}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label
+                  htmlFor="liq-token-amount"
+                  className="text-xs font-medium text-muted-foreground"
+                >
+                  Token amount (whole tokens)
+                </label>
+                <Input
+                  id="liq-token-amount"
+                  inputMode="decimal"
+                  placeholder="100000"
+                  value={liqTokenAmount}
+                  onChange={(e) => setLiqTokenAmount(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label
+                  htmlFor="liq-eth-amount"
+                  className="text-xs font-medium text-muted-foreground"
+                >
+                  Pair amount (ETH)
+                </label>
+                <Input
+                  id="liq-eth-amount"
+                  inputMode="decimal"
+                  placeholder="0.5"
+                  value={liqEthAmount}
+                  onChange={(e) => setLiqEthAmount(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label htmlFor="liq-slippage" className="text-xs font-medium text-muted-foreground">
+                  Slippage (bps, {SLIPPAGE_BPS_MIN}–{SLIPPAGE_BPS_MAX})
+                </label>
+                <Input
+                  id="liq-slippage"
+                  inputMode="numeric"
+                  value={liqSlippage}
+                  onChange={(e) => setLiqSlippage(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label htmlFor="liq-deadline" className="text-xs font-medium text-muted-foreground">
+                  Deadline (minutes, {DEADLINE_MINUTES_MIN}–{DEADLINE_MINUTES_MAX})
+                </label>
+                <Input
+                  id="liq-deadline"
+                  inputMode="numeric"
+                  value={liqDeadline}
+                  onChange={(e) => setLiqDeadline(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" onClick={handleBuildLiquidityPlan}>
+                Build Liquidity Plan
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Plans expire after {LIQUIDITY_PLAN_TTL_MS / 1000} seconds and are discarded when any
+                input, the wallet or the network changes.
+              </span>
+            </div>
+
+            {liqPlan ? <LiquidityPlanCard plan={liqPlan} nowMs={nowMs} /> : null}
+          </>
+        )}
       </Section>
     </div>
   );
