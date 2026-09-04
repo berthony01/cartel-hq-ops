@@ -344,19 +344,27 @@ export async function createTokenDeploymentAttempt(input: {
     _deployer_address: input.deployerAddress.toLowerCase(),
     _token_name: input.intent.name,
     _token_symbol: input.intent.symbol,
-    _token_total_supply: input.intent.totalSupply.toString(),
+    // Sent as a decimal string: base units exceed IEEE-754 safe integers.
+    // PostgREST casts the text to `numeric` for the RPC parameter.
+    _token_total_supply: input.intent.totalSupply.toString() as unknown as number,
     _token_recipient: input.intent.recipient,
   });
   if (error) fail(error.message || "Could not start a token deployment attempt.");
   return data as unknown as DeploymentRow;
 }
 
+/**
+ * Display helper for base-unit supplies. Numeric values arriving as JSON
+ * numbers are rounded back to whole tokens, which is exact for the allowed
+ * range (max 1,000,000,000,000 whole tokens).
+ */
 export function formatWholeSupply(baseUnits: string | number | null): string {
-  if (baseUnits === null) return "—";
-  try {
-    const whole = BigInt(String(baseUnits)) / 10n ** BigInt(CARTEL_FIXED_ERC20_DECIMALS);
-    return whole.toLocaleString("en-US");
-  } catch {
-    return String(baseUnits);
+  if (baseUnits === null || baseUnits === "") return "—";
+  const scale = 10n ** BigInt(CARTEL_FIXED_ERC20_DECIMALS);
+  if (typeof baseUnits === "string" && /^[0-9]+$/.test(baseUnits)) {
+    return (BigInt(baseUnits) / scale).toLocaleString("en-US");
   }
+  const asNumber = Number(baseUnits);
+  if (!Number.isFinite(asNumber)) return String(baseUnits);
+  return Math.round(asNumber / 1e18).toLocaleString("en-US");
 }
