@@ -215,12 +215,16 @@ export type LiquidityPlan = {
 
 export function liquidityFingerprintPreimage(fields: {
   environment: string;
+  /** Intended execution chain — hard-pinned to Robinhood Chain Testnet. */
   chainId: number;
+  /** Chain id recorded on the source deployment row, bound independently. */
+  sourceChainId: number;
   infrastructureState: string;
   quoteAsset: string;
   artifactId: string;
   sourceDeploymentId: string;
   tokenContract: string;
+  tokenName: string;
   tokenSymbol: string;
   tokenDecimals: number;
   operator: string;
@@ -229,15 +233,18 @@ export function liquidityFingerprintPreimage(fields: {
   slippageBps: number;
   deadlineMinutes: number;
 }): string {
+  // Explicit, ordered, separator-delimited encoding. Never object-key order.
   return [
     LIQUIDITY_PLAN_FINGERPRINT_DOMAIN,
     fields.environment,
     String(fields.chainId),
+    String(fields.sourceChainId),
     fields.infrastructureState,
     fields.quoteAsset,
     fields.artifactId,
     fields.sourceDeploymentId.toLowerCase(),
     fields.tokenContract.toLowerCase(),
+    fields.tokenName.normalize("NFC"),
     fields.tokenSymbol.normalize("NFC"),
     String(fields.tokenDecimals),
     fields.operator.toLowerCase(),
