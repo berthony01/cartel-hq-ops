@@ -1,184 +1,100 @@
-# C8.4 Read-Only Architecture Audit — Launch Simulation / Pre-Sign Preflight
+# C8.6 Liquidity Integration — Read-Only Architecture Audit
 
-Audit only. No code, migrations, SQL writes, deployments, or publishes were performed in this turn.
+Audit only. No code, migrations, packages, wallet requests, transactions, or publishing were performed.
 
-## 1. Authoritative current-state findings (verified this turn)
+## 1. Start gate — CONFIRMED
 
-- HEAD is `4f544f6defae69d9393b188499f8aef3adfca8d8`, `git status --porcelain` empty. No newer code commit exists.
-- PEPECARTEL launch `9f9af215-66ee-4a10-92db-617b61fb7fd3`: chain `Solana`, status `WATCHLIST_OPEN`, `official_contract_address` NULL, `contract_registered_at` NULL, Launch Watch token present, 4 chain deployment attempts.
-- `src/lib/chain-registry.ts` holds the only chain configuration: `ROBINHOOD_TESTNET_CHAIN_ID = 46630`, `NETWORK_ENVIRONMENT = "TESTNET"`, RPC/explorer constants, `CHAIN_ID_HEX`, `REQUIRED_CONFIRMATIONS = 5`, and the inert C8.2 test artifact. Mainnet 4663 is absent, not disabled.
-- `src/lib/chain-launcher.ts` already contains every primitive C8.4 needs, and they are already non-mutating: `getInjectedProvider`, `connectWallet`, `readChainId`, `readBalanceWei`, `formatEth`, `ensureTestnet`, `normalizeTokenIntent` (ASCII-only 1–32 char name, `^[A-Z0-9]{2,11}$` symbol, digits-only supply 1…1e12 whole tokens, non-zero checksum-insensitive recipient), `buildTokenInitCode` (frozen creation bytecode + `encodeAbiParameters` for `(string,string,uint256,address)`), and exact base-unit handling via `bigint`/text only.
-- There is **no** `eth_estimateGas`, fee-data, or `eth_call` preflight anywhere in the client today. Gas estimation exists only as out-of-band audit scripting from earlier phases.
-- Mutating boundary today: `handleDeployToken` calls `createTokenDeploymentAttempt` (DB row) **before** `broadcastTokenDeployment`. Nothing between validation and row creation reviews the intent. That gap is exactly what C8.4 fills.
-- `src/lib/chain-verify.functions.ts` is an authenticated `createServerFn` with `requireSupabaseAuth`; it re-derives init code server-side and enforces the 5-confirmation floor. C8.4 must not alter it.
-- `src/routes/_authenticated/chain-launcher.tsx` gates on `usePlatformAccess({ fresh: true })` plus `useWorkspace()`; RPCs and the verifier enforce authorization independently (fail-closed).
-- No test runner is installed (no `vitest` dependency, no test script, no test files). C8.4 tests must therefore be out-of-band Node/bun scripts under `/tmp`, not new repo test infrastructure — adding a runner would require package.json changes, which are prohibited.
+- HEAD `b9968902d243200eb513a7ff5df0d949f90d1580`, working tree clean (`git status --porcelain` empty).
+- Attempt #5 `ea54b0cc-4800-4a48-b03d-bc4f62c9083e`: status `CONFIRMED`, kind `FIXED_SUPPLY_ERC20`, artifact `cartel-fixed-erc20-v1`, chain 46630 / TESTNET, contract `0x7fee942a9200ae5a3f64315be53039b38bc5b8fa`, 2235 confirmations, CTEST / 18 / `1000000000000000000000000` / recipient `0x1fc16e...52b68`.
+- Launch `9f9af215-66ee-4a10-92db-617b61fb7fd3` PEPECARTEL / $PCART: chain `Solana`, status `WATCHLIST_OPEN`, `official_contract_address` NULL, `contract_registered_at` NULL. Unchanged.
 
-**Verdict: GO** for a client-side, zero-persistence simulation layer as specified below.
+## 2. Current state — what exists and must be reused
 
-## 2. Recommended C8.4 architecture
+| Surface | File / object | Reuse |
+|---|---|---|
+| Chain registry (testnet-only constant, no mainnet entry) | `src/lib/chain-registry.ts` | Extend with liquidity infra addresses only after external verification |
+| Frozen token artifact | `src/lib/cartel-fixed-erc20.artifact.ts`, `contracts/CartelFixedSupplyToken.sol` | Reuse verbatim; frozen, no contract change |
+| Wallet layer (EIP-1193, injected only, no server signer) | `src/lib/chain-launcher.ts` | Reuse `getInjectedProvider`, `connectWallet`, `readAccount`, `readChainId`, `readBalanceWei`, `WalletError`, `isUserRejection` |
+| Deterministic preflight + fingerprint + 90s TTL + fail-closed fee/balance gate | `src/lib/chain-simulation.ts`, `src/components/chain/SimulationReviewCard.tsx` | Reuse the pattern for a liquidity preflight; do not fork a second simulation engine |
+| Receipt derivation (platform record vs on-chain evidence separated) | `src/lib/launch-receipt.ts`, `src/components/chain/LaunchReceiptCard.tsx` | Reuse the receipt shape and provenance model |
+| Independent server verifier (authenticated server fn, RLS re-check, service-role RPC write) | `src/lib/chain-verify.functions.ts` | Reuse the exact trust model for liquidity verification |
+| Attempt/receipt persistence | `launch_chain_deployments` + `create_/submit_/abandon_/apply_..._verification` RPCs, text mirrors for big integers | Reuse pattern, see section 7 |
+| Operator UI | `src/routes/_authenticated/chain-launcher.tsx` | Host the liquidity panel here; no new route |
 
-A pure, in-memory preflight module plus a review card. No database, no server function, no new RPC, no schema.
+**No liquidity code or schema exists.** Repository-wide search for `uniswap`, `liquidity`, `WETH`, `poolKey`, `tickSpacing`, `nonfungible` returns only disclaimer copy. `viem ^2.56.3` is already a dependency — no new package is needed for encoding, ABI work, or read-only calls. Duplicate-system risk is therefore concentrated in one place: do not build a second simulation engine, a second verifier, a second receipt model, or a second attempts table.
+
+## 3. Infrastructure availability — BLOCKER
+
+Read-only `eth_getCode` probe on chain 46630:
 
 ```text
-operator input (name, symbol, supplyWhole, recipient)
-        v
-normalizeTokenIntent()                      [existing, unchanged]
-        v
-buildSimulationIntent()                     [new, pure]
-  -> frozen fields + initCode + initCodeHash + intentFingerprint
-        v
-runPreflight(provider, intent)              [new, read-only RPC only]
-  -> eth_chainId, eth_accounts, eth_getBalance,
-     eth_call(create), eth_estimateGas(create), fee data
-        v
-SimulationReviewCard                        [new UI, testnet warning]
-        v
-operator confirms -> existing handleDeployToken, gated on
-  fingerprint match + freshness  ->  createTokenDeploymentAttempt -> sign
+Permit2  0x000000000022D473030F116dDEE9F6B43aC78BA3   CODE PRESENT (18306 hex chars)
+UniswapV2Factory  0x5C69bEe7...cc5aA6f                 NO CODE
+UniswapV3Factory  0x1F98431c...31F984                  NO CODE
+V3 NonfungiblePositionManager 0xC36442b4...11FE88      NO CODE
+UniversalRouter   0x66a9893c...1dBA8Af                 NO CODE
+V4 PoolManager    0x00000000...3dE08A90                NO CODE
+V4 PositionManager 0xbD216513...FF64ee9e               NO CODE
 ```
 
-Authorization: the simulation is rendered only inside the existing `usePlatformAccess({ fresh: true })` + workspace-scoped route. No new data is exposed that the operator did not type or that the wallet does not already expose to the page, so no new server-side authorization surface is required. The authoritative checks remain the existing SECURITY DEFINER RPCs and the server verifier.
+Permit2 is deployed deterministically and its presence does **not** prove any Uniswap router, factory, PoolManager or PositionManager exists here. The repository holds no authoritative Uniswap deployment address for 46630, and none will be invented. **External verification of official Uniswap deployment addresses on Robinhood Chain Testnet 46630 — plus the canonical WETH9 address — is a hard prerequisite before any liquidity transaction is enabled.** Each address must be confirmed by `eth_getCode` presence plus an on-chain identity read (for example factory `owner()`/`poolManager()`, WETH `symbol()`/`decimals()`) at build time, not trusted from a document.
 
-## 3. Simulation data model (in-memory only)
+No custom AMM, router, factory, pair, or position contract will be written under any circumstance.
 
-```ts
-type SimulationIntent = {
-  environment: "TESTNET";
-  chainId: 46630;
-  artifactId: "cartel-fixed-erc20-v1";
-  runtimeBytecodeHash: `0x${string}`;   // frozen artifact hash
-  deployer: `0x${string}`;              // lowercase
-  recipient: `0x${string}`;             // lowercase
-  name: string;
-  symbol: string;
-  decimals: 18;
-  supplyWhole: string;                  // exact decimal string
-  totalSupplyBaseUnits: string;         // exact decimal string, never a number
-  initCode: `0x${string}`;
-  initCodeHash: `0x${string}`;          // keccak256(initCode)
-  fingerprint: `0x${string}`;           // see section 4
-};
+## 4. Token artifact compatibility
 
-type PreflightResult = {
-  observedChainId: number | null;
-  chainOk: boolean;
-  observedAccount: string | null;       // lowercase
-  accountMatchesDeployer: boolean;
-  recipientValid: boolean;
-  balanceWei: string | null;            // decimal string
-  callOk: boolean;                      // eth_call on the creation tx
-  gasEstimate: string | null;           // decimal string
-  feeWeiPerGas: string | null;          // decimal string
-  estimatedCostWei: string | null;      // gas * fee, bigint math only
-  sufficientBalance: boolean | null;
-  txValueWei: "0";
-  errors: string[];
-  quotedAtMs: number;
-};
-```
+`CartelFixedSupplyToken` is stock OpenZeppelin 5.6.1 ERC20: standard `approve`/`transferFrom`, 18 decimals, no fee-on-transfer, no hooks, no blacklist, no pausing, no rebasing, no transfer restrictions. It is compatible with Uniswap v2, v3, and v4 style liquidity provision with **zero contract changes**. The artifact stays frozen; nothing in C8.6 recompiles or edits Solidity.
 
-**Persistence recommendation: none.** Storing a simulation adds a writable pre-signing surface, an attacker-visible table, and retention/RLS obligations, while buying nothing — the binding property is the fingerprint, which is recomputed deterministically from the intent at sign time and re-derived independently server-side during verification. The server verifier is already the authority on what was actually deployed. Persist nothing in C8.4.
+## 5. Plan vs transaction — hard separation
 
-## 4. Deterministic intent fingerprint
+- **Liquidity PLAN / readiness / quote (C8.6A):** pure, zero-persistence, read-only. No `approve`, no pool creation, no `eth_sendTransaction`. Produces a fingerprinted, TTL-bounded `LiquidityPlan` mirroring the C8.4 preflight contract.
+- **Liquidity TRANSACTION (C8.6B):** remains hard-blocked behind a compile-time constant `LIQUIDITY_TX_ENABLED = false` until infrastructure addresses, pair, fee tier/tick spacing, price encoding, slippage, approval strategy, and signing flow are each explicitly reviewed and authorized. In C8.6A the button does not exist — not disabled, absent.
 
-`fingerprint = keccak256(utf8(canonicalString))` where `canonicalString` joins the following with `\u001f`, in this fixed order, all lowercase for hex fields:
+## 6. Proposed phases
 
-```
-"cartel-sim-v1"
-environment            "TESTNET"
-chainId                "46630"
-artifactId             "cartel-fixed-erc20-v1"
-runtimeBytecodeHash
-deployer
-recipient
-name                   exact normalized string, NFC-normalized
-symbol                 exact normalized uppercase string
-decimals               "18"
-totalSupplyBaseUnits   exact decimal string
-initCodeHash
-```
+- **C8.6A — Liquidity Readiness & Plan (first build, transaction-free).** Registry entries only for addresses that pass live identity probes; a pure `liquidity-plan` module; a review card; a panel in the existing chain launcher. No DB, no RPC, no approvals, no signing.
+- **C8.6B — Testnet liquidity transaction.** Exact-amount approval, pool create/initialize, add-liquidity, all browser-wallet signed. Requires its own contract and start gate.
+- **C8.6C — Server verification + Liquidity Receipt.** Independent server-side verification and receipt rendering.
 
-Properties: `initCode` is not included directly (its hash pins it); every mutable input is covered, so changing name, symbol, supply, recipient, deployer, chain, or artifact changes the fingerprint. Because it is a pure function of the intent, it cannot be replayed against a different intent, and a stale fingerprint carried forward is caught by recomputation immediately before signing.
+## 7. Minimum database model (C8.6B/C, not C8.6A)
 
-Deliberately excluded: gas, fee, balance, nonce, timestamps — these are dynamic and must not invalidate a still-correct intent.
+`launch_chain_deployments` is a token-deployment table (`deployment_kind`, `artifact_id`, `token_*`, `verified_token_*`); overloading it with pool/position/pair columns would corrupt its contract. Recommendation: one new subordinate table `launch_chain_liquidity_attempts`, modelled *exactly* on the existing pattern — `workspace_id`, `launch_chain_deployment_id` FK, `attempt_number`, `client_request_id` idempotency, `chain_id`, `network_environment`, `status` state machine (`DRAFT|APPROVAL_SUBMITTED|SUBMITTED|PENDING|CONFIRMED|FAILED|ABANDONED`), `tx_hash`, `block_number/hash`, `confirmations`, plus `GENERATED ALWAYS AS STORED` text mirrors for every amount and liquidity/position value. Same privilege posture: RLS platform-owner AND workspace-operator for SELECT; all writes through service-role-only RPCs; internal trigger functions with EXECUTE revoked. No second source of truth: the chain remains authoritative and the row records evidence.
 
-## 5. Expiration / staleness rules
+## 8. Server-side verification (C8.6C)
 
-- Fingerprint: never expires; it is recomputed, not remembered.
-- Preflight quote (`gasEstimate`, `feeWeiPerGas`, `estimatedCostWei`, `balanceWei`): valid for **90 seconds**. After that the review card shows "Estimate expired — re-run preflight" and the deploy control is disabled.
-- Any `chainChanged` or `accountsChanged` event immediately invalidates the whole simulation (not just the quote) and clears the card.
-- Editing any intent field clears the simulation; the deploy control stays disabled until a fresh preflight passes.
+Authenticated server function in the `chain-verify.functions.ts` mould, trusting nothing from the browser: re-read the row through the caller's RLS context; pin chain 46630; fetch tx and receipt independently; assert `tx.from` equals recorded operator, `tx.to` equals the pinned verified router/manager address (never a browser-supplied address), receipt `status === success`, confirmations at or above `REQUIRED_CONFIRMATIONS`; re-derive the expected pool/pair address deterministically and compare with the address read from the factory/manager; read pool token0/token1, fee tier, and reserves/liquidity on chain; read the operator's resulting LP balance or position; write the verified values only through the service-role RPC, using exact text mirrors.
 
-## 6. UI/UX
-
-A `SimulationReviewCard` rendered between the token form and the deploy button:
-
-- Header: "Simulation — TESTNET ONLY. This is not the official PEPECARTEL token and creates no official contract."
-- Intent block: name, symbol, decimals 18 (fixed), supply in whole tokens **and** exact base units, recipient, deployer, chain "Robinhood Chain Testnet (46630)", artifact `cartel-fixed-erc20-v1`.
-- Guarantees block (restating the frozen contract): no owner/admin role, no post-deployment minting, no tax, no blacklist, no pause, no trading toggle, no proxy, no upgrade path.
-- Preflight block: chain match, account match, recipient valid, balance, gas estimate, fee, estimated cost, `value = 0 ETH`, `eth_call` result — each pass/fail with a plain reason on failure.
-- Fingerprint shown truncated with a copy affordance.
-- Deploy is disabled unless every hard check passes and the quote is fresh.
-
-## 7. C8.5 handoff contract
-
-Before `createTokenDeploymentAttempt` and before `eth_sendTransaction`, C8.5 must require:
-
-1. A `SimulationIntent` exists in state and its fingerprint, recomputed from the current form values at that instant, equals the stored fingerprint byte-for-byte.
-2. Live `eth_chainId` still equals 46630, and live `eth_accounts[0]` still equals `intent.deployer`.
-3. The preflight quote is fresh (< 90s) and `callOk` is true.
-4. The transaction sent uses exactly `intent.initCode` as `data`, no `to`, `value: "0x0"` — the init code is taken from the simulation object, never rebuilt from raw form state.
-5. The DB attempt is created from the same intent fields, so the existing server-side idempotency-conflict guard and the verifier's byte-for-byte init-code comparison both re-prove the binding.
-
-Any mismatch aborts before the attempt row is created.
-
-## 8. Security invariants and threat model
+## 9. Threat model and required mitigations
 
 | Threat | Mitigation |
-| --- | --- |
-| Parameter tampering between simulation and signing | Fingerprint recomputed at sign time; init code taken from the simulation object |
-| Chain switching mid-flow | `chainChanged` clears simulation; live `eth_chainId` re-read before signing; server verifier re-checks chain |
-| Stale wallet account | `accountsChanged` clears simulation; live account re-read and compared to `intent.deployer` |
-| Stale gas quote | 90s freshness window; expired quote disables deploy |
-| Malicious injected provider response | All provider output is untrusted: hex strings are regex-validated before `BigInt`, gas/fee are advisory only, and no provider value ever enters the fingerprint or the init code |
-| Oversized string / supply input | Existing `normalizeTokenIntent` bounds (name ≤ 32 printable ASCII, symbol 2–11 A–Z0–9, supply 1…1e12 whole) apply unchanged and are re-enforced server-side |
-| Unicode / metadata ambiguity | Name is printable-ASCII-only already; fingerprint applies NFC normalization defensively so no two visually identical intents can diverge |
-| Replay of a simulation fingerprint | Fingerprint is a pure function of intent, so replaying it against different values is impossible; it grants no authority by itself |
-| Client-only trust | Simulation is advisory UX. Authority remains the SECURITY DEFINER RPCs, the idempotency-conflict guard, and the server verifier's init-code and 5-confirmation checks |
-| Mainnet leakage | No 4663 constant may be introduced; chain id is a frozen literal |
-| Floating point | Every supply/gas/fee/balance value is `bigint` or decimal string end-to-end; no `Number` on base units |
+|---|---|
+| Wrong/spoofed router or factory | Addresses are frozen code constants, identity-probed on chain at build time; never user input, never from DB |
+| Malicious approval target | `approve` spender restricted to the single pinned address; any mismatch fails closed |
+| Unlimited allowance | Exact-amount approval only; never `MaxUint256`; show current allowance, and require reset-to-zero before re-approving a different amount |
+| Wrong token / wrong recipient | Token pinned to the CONFIRMED attempt's `contract_address`; recipient pinned to the connected signer |
+| Price inversion / token ordering | Canonical sort by address; price encoded after sorting; display the human price both ways for confirmation |
+| Zero or absurd initial price | Bounded validation with explicit refusal; no silent clamping |
+| Slippage abuse | Explicit min amounts and a bounded deadline; defaults conservative, no unlimited slippage |
+| Replay / double-click | `client_request_id` idempotency plus in-flight lock, as in C8.5 |
+| Tx replacement / reorg | Confirmation floor of 5, block hash recorded, verifier re-reads chain and never trusts prior state |
+| Stale quote | Fingerprint plus 90s TTL, invalidated on account/chain/param change |
+| Partial approve-then-add | Distinct persisted statuses so an interrupted sequence is recoverable, never assumed complete |
+| Browser crash / DB write fails after broadcast | Reuse the C8.5 sessionStorage recovery record with validate-on-write and delete-on-parse-failure |
+| Unsupported chain / RPC inconsistency | Hard chain pin; missing or contradictory RPC data yields no PASS |
 
-Hard invariants: zero DB writes during simulation; zero lifecycle writes; no signing or broadcasting; no new chain constants; artifact bytecode and hashes byte-identical; no bytecode input surface.
+## 10. C8.6A allowlist (first build only)
 
-## 9. Exact file allowlist for C8.4 implementation
+**Allowed to create:** `src/lib/liquidity-plan.ts`, `src/components/chain/LiquidityPlanCard.tsx`.
+**Allowed to modify:** `src/lib/chain-registry.ts` (verified infra addresses + `LIQUIDITY_TX_ENABLED=false` only), `src/routes/_authenticated/chain-launcher.tsx` (mount the panel).
 
-Allowed to edit / create:
-- `src/lib/chain-simulation.ts` (new — intent building, fingerprint, preflight, all pure/read-only)
-- `src/lib/chain-launcher.ts` (only to export existing helpers the simulation needs, or add read-only `eth_call`/`eth_estimateGas`/fee-data helpers; no change to broadcast or RPC functions)
-- `src/components/chain/SimulationReviewCard.tsx` (new presentational component; final path confirmed against existing component conventions at build time)
-- `src/routes/_authenticated/chain-launcher.tsx` (wire the card and gate the existing deploy handler)
+**Prohibited surfaces:** any migration, any RPC, `src/lib/chain-launcher.ts`, `chain-simulation.ts`, `chain-verify.functions.ts`, `launch-receipt.ts`, the token artifact, `contracts/`, `package.json`/lockfile, all Telegram/Launch Watch/broadcast code, `launches.official_contract_address`, any lifecycle transition, any mainnet 4663 path, any publish.
 
-Prohibited: `contracts/CartelFixedSupplyToken.sol`, `src/lib/cartel-fixed-erc20.artifact.ts`, `src/lib/chain-registry.ts`, `src/lib/chain-verify.functions.ts`, `src/integrations/supabase/*`, any `supabase/migrations/*` (no new migration in C8.4), `package.json`/lockfiles, all `launch_chain_deployments` tables/RPCs/policies, `launches` and Launch Control, Telegram/Launch Watch/notification/broadcast surfaces, and every publish/deploy action.
+**Acceptance tests:** deterministic plan fingerprint across repeated runs; canonical token ordering stable under input order; refusal on zero/absurd price; TTL expiry invalidates the plan; account or chain change invalidates the plan; no `eth_sendTransaction`, `approve`, or write RPC reachable from the new modules; disclaimer copy states TESTNET ONLY and no endorsement; `eslint` (no fix), `tsgo --noEmit`, and `bun run build` pass.
 
-## 10. Test matrix (out-of-band scripts under /tmp; no test runner added)
+## 11. Verdict
 
-1. `bunx eslint` (no `--fix`) on every touched file — 0 errors, 0 warnings.
-2. `bunx tsgo --noEmit` clean.
-3. `bun run build` passes.
-4. Fingerprint determinism: same intent → same hash across repeated runs and fresh processes.
-5. Fingerprint sensitivity: changed name, symbol, supply, recipient, deployer, artifact id, or chain id each produce a different hash.
-6. Exact init code: computed init code equals frozen creation bytecode + `encodeAbiParameters(...)`, and matches the already-verified attempt #4 input byte-for-byte for the same intent.
-7. Max-supply precision: 1e12 whole tokens → `1000000000000000000000000000000` base units exactly, digits only, no exponent, no rounding.
-8. Wrong-chain preflight: observed chain ≠ 46630 → hard fail, deploy disabled.
-9. Account changed after simulation → simulation cleared, deploy disabled.
-10. Gas-estimate failure / `eth_call` revert → hard fail with a readable reason, no signing path reachable.
-11. Zero DB writes: `launch_chain_deployments` row count and `updated_at` values unchanged across a full simulation session.
-12. Zero lifecycle writes: PEPECARTEL row still Solana / WATCHLIST_OPEN / NULL contract / NULL registered_at / Launch Watch token present.
-13. Mainnet grep: `rg -n "4663\b"` finds no mainnet chain id anywhere in `src/`.
-14. C8.2 / C8.3 regression: inert test-artifact path and existing token deploy path unchanged apart from the added pre-sign gate; artifact bytecode and both keccak hashes byte-identical.
-15. Final `git diff --stat` / `git status` proving scope.
+**GO for C8.6A (readiness/plan only). NO-GO for C8.6B/C until the blocker clears.**
 
-## 11. Stop point
+Blocker: no authoritative Uniswap deployment addresses (and no WETH9 address) for Robinhood Chain Testnet 46630 exist in this repository, and the canonical mainnet addresses carry no code on 46630. These must be externally verified and on-chain identity-probed before any liquidity transaction is enabled.
 
-C8.4 implementation stops after the simulation module, the review card, the deploy gate, and the full verification report. No token is deployed, no attempt row is created, nothing is published, and C8.5 is not started.
+Audit complete. STOP — no build.
