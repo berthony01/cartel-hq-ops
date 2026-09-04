@@ -339,3 +339,112 @@ export function deriveLaunchReceipt({ row, activeSimulation }: ReceiptInput): La
 export function isTestnetReceipt(receipt: LaunchReceipt): boolean {
   return receipt.chainId === ROBINHOOD_TESTNET_CHAIN_ID && receipt.environment === "TESTNET";
 }
+
+/* ------------------------------------------------------------------ */
+/* C8.5 closeout — same-tab recovery record (sessionStorage only)      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A broadcast transaction whose hash could not be persisted. This is kept in
+ * `sessionStorage` (never `localStorage`) so it survives a same-tab refresh
+ * but never outlives the tab, and it is scoped to one workspace + launch.
+ *
+ * It is a client-side reminder only: no database column, table or RPC is
+ * added, and restoring it can only ever re-offer the EXISTING
+ * `submit_launch_chain_deployment_tx` call for the SAME attempt.
+ */
+export type RecoveryRecord = {
+  attemptId: string;
+  attemptNumber: number;
+  txHash: string;
+  launchId: string;
+  workspaceId: string;
+};
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TX_HASH_RE = /^0x[0-9a-f]{64}$/;
+
+export function recoveryStorageKey(workspaceId: string, launchId: string): string {
+  return `cartel:c85-recovery:${workspaceId}:${launchId}`;
+}
+
+/** Structural + scope validation. Returns null on anything unexpected. */
+export function parseRecoveryRecord(
+  value: unknown,
+  scope: { workspaceId: string; launchId: string },
+): RecoveryRecord | null {
+  if (!value || typeof value !== "object") return null;
+  const r = value as Partial<RecoveryRecord>;
+  if (typeof r.attemptId !== "string" || !UUID_RE.test(r.attemptId)) return null;
+  if (
+    typeof r.attemptNumber !== "number" ||
+    !Number.isSafeInteger(r.attemptNumber) ||
+    r.attemptNumber <= 0
+  ) {
+    return null;
+  }
+  if (typeof r.txHash !== "string" || !TX_HASH_RE.test(r.txHash)) return null;
+  if (typeof r.launchId !== "string" || r.launchId !== scope.launchId) return null;
+  if (typeof r.workspaceId !== "string" || r.workspaceId !== scope.workspaceId) return null;
+  return {
+    attemptId: r.attemptId,
+    attemptNumber: r.attemptNumber,
+    txHash: r.txHash,
+    launchId: r.launchId,
+    workspaceId: r.workspaceId,
+  };
+}
+
+/**
+ * A stored record may only be restored when the referenced attempt is still
+ * exactly the row it claims to be: present in the CURRENT launch's rows, same
+ * attempt number, still DRAFT and with no server-side tx hash yet. Anything
+ * else is stale and must be discarded.
+ */
+export function isRecoveryRestorable(
+  record: RecoveryRecord,
+  rows: Pick<DeploymentRow, "id" | "attempt_number" | "status" | "tx_hash" | "launch_id">[],
+): boolean {
+  const row = rows.find((r) => r.id === record.attemptId);
+  if (!row) return false;
+  if (row.launch_id !== record.launchId) return false;
+  if (row.attempt_number !== record.attemptNumber) return false;
+  if (row.status !== "DRAFT") return false;
+  if (row.tx_hash) return false;
+  return true;
+}
+
+export function saveRecoveryRecord(record: RecoveryRecord): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(
+      recoveryStorageKey(record.workspaceId, record.launchId),
+      JSON.stringify(record),
+    );
+  } catch {
+    /* storage unavailable — the in-memory panel still shows the hash */
+  }
+}
+
+export function readRecoveryRecord(scope: {
+  workspaceId: string;
+  launchId: string;
+}): RecoveryRecord | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(recoveryStorageKey(scope.workspaceId, scope.launchId));
+    if (!raw) return null;
+    return parseRecoveryRecord(JSON.parse(raw) as unknown, scope);
+  } catch {
+    return null;
+  }
+}
+
+export function clearRecoveryRecord(scope: { workspaceId: string; launchId: string }): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(recoveryStorageKey(scope.workspaceId, scope.launchId));
+  } catch {
+    /* nothing further to do */
+  }
+}
