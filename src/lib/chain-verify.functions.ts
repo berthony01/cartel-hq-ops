@@ -63,7 +63,9 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
     const { data: row, error } = await context.supabase
       .from("launch_chain_deployments")
       .select(
-        "id, status, chain_id, network_environment, deployer_address, tx_hash, confirmations, contract_address, block_number, block_hash, deployment_kind, artifact_id, token_name, token_symbol, token_decimals, token_total_supply, token_recipient",
+        // token_total_supply_text is the generated exact-decimal mirror. The
+        // numeric column crosses JSON as a double and is never trusted here.
+        "id, status, chain_id, network_environment, deployer_address, tx_hash, confirmations, contract_address, block_number, block_hash, deployment_kind, artifact_id, token_name, token_symbol, token_decimals, token_total_supply_text, token_recipient",
       )
       .eq("id", data.deploymentId)
       .maybeSingle();
@@ -92,13 +94,18 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
     }
 
     const isToken = row.deployment_kind === "FIXED_SUPPLY_ERC20";
+    // Fail closed: the supply used for every security comparison must be an
+    // exact decimal digit string from the generated mirror, never a JS number.
+    const supplyText =
+      typeof row.token_total_supply_text === "string" ? row.token_total_supply_text : null;
     if (
       isToken &&
       (row.artifact_id !== "cartel-fixed-erc20-v1" ||
         row.token_decimals !== CARTEL_FIXED_ERC20_DECIMALS ||
         !row.token_name ||
         !row.token_symbol ||
-        row.token_total_supply === null ||
+        supplyText === null ||
+        !/^[0-9]+$/.test(supplyText) ||
         !row.token_recipient)
     ) {
       throw new Error("Unsupported deployment artifact");
@@ -232,7 +239,8 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
     // Nothing about the bytecode is ever taken from the browser.
     let expectedTotalSupply = 0n;
     if (isToken) {
-      expectedTotalSupply = BigInt(String(row.token_total_supply));
+      // supplyText is proven to be digits-only above; BigInt is exact.
+      expectedTotalSupply = BigInt(supplyText as string);
       const expectedInitCode = (CARTEL_FIXED_ERC20_CREATION_BYTECODE +
         encodeAbiParameters(
           [{ type: "string" }, { type: "string" }, { type: "uint256" }, { type: "address" }],

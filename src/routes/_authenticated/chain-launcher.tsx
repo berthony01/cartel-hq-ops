@@ -38,6 +38,7 @@ import {
   createTokenDeploymentAttempt,
   formatEth,
   formatWholeSupply,
+  tokenSupplyText,
   getInjectedProvider,
   isTerminal,
   isUserRejection,
@@ -494,7 +495,7 @@ function ChainLauncherPage() {
                 </p>
                 {a.deployment_kind === "FIXED_SUPPLY_ERC20" ? (
                   <p className="mt-1 break-all text-muted-foreground">
-                    {a.token_name} ({a.token_symbol}) · {formatWholeSupply(a.token_total_supply)}{" "}
+                    {a.token_name} ({a.token_symbol}) · {formatWholeSupply(tokenSupplyText(a))}{" "}
                     tokens · {CARTEL_FIXED_ERC20_DECIMALS} decimals · recipient {a.token_recipient}
                   </p>
                 ) : null}
