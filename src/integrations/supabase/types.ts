@@ -171,6 +171,96 @@ export type Database = {
           },
         ]
       }
+      launch_chain_deployments: {
+        Row: {
+          attempt_number: number
+          block_hash: string | null
+          block_number: number | null
+          chain_id: number
+          client_request_id: string
+          confirmations: number
+          contract_address: string | null
+          created_at: string
+          created_by: string | null
+          deployer_address: string
+          failure_code: string | null
+          failure_detail: string | null
+          id: string
+          last_checked_at: string | null
+          launch_id: string
+          network_environment: string
+          status: string
+          submitted_at: string | null
+          tx_hash: string | null
+          updated_at: string
+          verified_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          attempt_number: number
+          block_hash?: string | null
+          block_number?: number | null
+          chain_id: number
+          client_request_id: string
+          confirmations?: number
+          contract_address?: string | null
+          created_at?: string
+          created_by?: string | null
+          deployer_address: string
+          failure_code?: string | null
+          failure_detail?: string | null
+          id?: string
+          last_checked_at?: string | null
+          launch_id: string
+          network_environment: string
+          status?: string
+          submitted_at?: string | null
+          tx_hash?: string | null
+          updated_at?: string
+          verified_at?: string | null
+          workspace_id: string
+        }
+        Update: {
+          attempt_number?: number
+          block_hash?: string | null
+          block_number?: number | null
+          chain_id?: number
+          client_request_id?: string
+          confirmations?: number
+          contract_address?: string | null
+          created_at?: string
+          created_by?: string | null
+          deployer_address?: string
+          failure_code?: string | null
+          failure_detail?: string | null
+          id?: string
+          last_checked_at?: string | null
+          launch_id?: string
+          network_environment?: string
+          status?: string
+          submitted_at?: string | null
+          tx_hash?: string | null
+          updated_at?: string
+          verified_at?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launch_chain_deployments_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_chain_deployments_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       launch_events: {
         Row: {
           created_at: string
@@ -2665,6 +2755,39 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      abandon_launch_chain_deployment_attempt: {
+        Args: { _deployment_id: string; _reason?: string }
+        Returns: {
+          attempt_number: number
+          block_hash: string | null
+          block_number: number | null
+          chain_id: number
+          client_request_id: string
+          confirmations: number
+          contract_address: string | null
+          created_at: string
+          created_by: string | null
+          deployer_address: string
+          failure_code: string | null
+          failure_detail: string | null
+          id: string
+          last_checked_at: string | null
+          launch_id: string
+          network_environment: string
+          status: string
+          submitted_at: string | null
+          tx_hash: string | null
+          updated_at: string
+          verified_at: string | null
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_chain_deployments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       acknowledge_project_inbox_delivery_uncertainty: {
         Args: {
           _conversation_id: string
@@ -2677,9 +2800,59 @@ export type Database = {
           uncertainty_acknowledged_at: string
         }[]
       }
+      apply_launch_chain_deployment_verification: {
+        Args: {
+          _block_hash?: string
+          _block_number?: number
+          _confirmations?: number
+          _contract_address?: string
+          _deployment_id: string
+          _failure_code?: string
+          _failure_detail?: string
+          _status: string
+        }
+        Returns: {
+          attempt_number: number
+          block_hash: string | null
+          block_number: number | null
+          chain_id: number
+          client_request_id: string
+          confirmations: number
+          contract_address: string | null
+          created_at: string
+          created_by: string | null
+          deployer_address: string
+          failure_code: string | null
+          failure_detail: string | null
+          id: string
+          last_checked_at: string | null
+          launch_id: string
+          network_environment: string
+          status: string
+          submitted_at: string | null
+          tx_hash: string | null
+          updated_at: string
+          verified_at: string | null
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_chain_deployments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       archive_sticker_pack: { Args: { _pack_id: string }; Returns: Json }
+      authorize_launch_chain_deployment: {
+        Args: { _launch_id: string }
+        Returns: string
+      }
       can_access_pack: {
         Args: { _pack_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_read_launch_chain_deployment: {
+        Args: { _workspace_id: string }
         Returns: boolean
       }
       capture_project_inbox_launch_reply: {
@@ -2744,6 +2917,43 @@ export type Database = {
           telegram_chat_id: number
           telegram_message_id: number
         }[]
+      }
+      create_launch_chain_deployment_attempt: {
+        Args: {
+          _client_request_id: string
+          _deployer_address: string
+          _launch_id: string
+        }
+        Returns: {
+          attempt_number: number
+          block_hash: string | null
+          block_number: number | null
+          chain_id: number
+          client_request_id: string
+          confirmations: number
+          contract_address: string | null
+          created_at: string
+          created_by: string | null
+          deployer_address: string
+          failure_code: string | null
+          failure_detail: string | null
+          id: string
+          last_checked_at: string | null
+          launch_id: string
+          network_environment: string
+          status: string
+          submitted_at: string | null
+          tx_hash: string | null
+          updated_at: string
+          verified_at: string | null
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_chain_deployments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       create_launch_watcher_update: {
         Args: {
@@ -3242,6 +3452,39 @@ export type Database = {
         Args: { p_secret: string }
         Returns: boolean
       }
+      list_launch_chain_deployments: {
+        Args: { _launch_id: string }
+        Returns: {
+          attempt_number: number
+          block_hash: string | null
+          block_number: number | null
+          chain_id: number
+          client_request_id: string
+          confirmations: number
+          contract_address: string | null
+          created_at: string
+          created_by: string | null
+          deployer_address: string
+          failure_code: string | null
+          failure_detail: string | null
+          id: string
+          last_checked_at: string | null
+          launch_id: string
+          network_environment: string
+          status: string
+          submitted_at: string | null
+          tx_hash: string | null
+          updated_at: string
+          verified_at: string | null
+          workspace_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "launch_chain_deployments"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       list_launch_watcher_updates: {
         Args: { _launch_id: string; _limit?: number }
         Returns: {
@@ -3477,6 +3720,39 @@ export type Database = {
       sticker_pack_lifecycle_state: {
         Args: { _pack_id: string }
         Returns: Json
+      }
+      submit_launch_chain_deployment_tx: {
+        Args: { _deployment_id: string; _tx_hash: string }
+        Returns: {
+          attempt_number: number
+          block_hash: string | null
+          block_number: number | null
+          chain_id: number
+          client_request_id: string
+          confirmations: number
+          contract_address: string | null
+          created_at: string
+          created_by: string | null
+          deployer_address: string
+          failure_code: string | null
+          failure_detail: string | null
+          id: string
+          last_checked_at: string | null
+          launch_id: string
+          network_environment: string
+          status: string
+          submitted_at: string | null
+          tx_hash: string | null
+          updated_at: string
+          verified_at: string | null
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_chain_deployments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       telegram_message_cleanup_scheduler_secret_matches: {
         Args: { p_secret: string }

@@ -18,6 +18,7 @@ import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedAssetsRouteImport } from './routes/_authenticated/assets'
 import { Route as AuthenticatedBrandKitRouteImport } from './routes/_authenticated/brand-kit'
 import { Route as AuthenticatedCartelShieldRouteImport } from './routes/_authenticated/cartel-shield'
+import { Route as AuthenticatedChainLauncherRouteImport } from './routes/_authenticated/chain-launcher'
 import { Route as AuthenticatedClearanceRouteImport } from './routes/_authenticated/clearance'
 import { Route as AuthenticatedCommandTerminalRouteImport } from './routes/_authenticated/command-terminal'
 import { Route as AuthenticatedDistributionRouteImport } from './routes/_authenticated/distribution'
@@ -85,6 +86,12 @@ const AuthenticatedCartelShieldRoute =
   AuthenticatedCartelShieldRouteImport.update({
     id: '/cartel-shield',
     path: '/cartel-shield',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedChainLauncherRoute =
+  AuthenticatedChainLauncherRouteImport.update({
+    id: '/chain-launcher',
+    path: '/chain-launcher',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedClearanceRoute = AuthenticatedClearanceRouteImport.update({
@@ -220,6 +227,7 @@ export interface FileRoutesByFullPath {
   '/assets': typeof AuthenticatedAssetsRoute
   '/brand-kit': typeof AuthenticatedBrandKitRoute
   '/cartel-shield': typeof AuthenticatedCartelShieldRoute
+  '/chain-launcher': typeof AuthenticatedChainLauncherRoute
   '/clearance': typeof AuthenticatedClearanceRoute
   '/command-terminal': typeof AuthenticatedCommandTerminalRoute
   '/distribution': typeof AuthenticatedDistributionRoute
@@ -251,6 +259,7 @@ export interface FileRoutesByTo {
   '/assets': typeof AuthenticatedAssetsRoute
   '/brand-kit': typeof AuthenticatedBrandKitRoute
   '/cartel-shield': typeof AuthenticatedCartelShieldRoute
+  '/chain-launcher': typeof AuthenticatedChainLauncherRoute
   '/clearance': typeof AuthenticatedClearanceRoute
   '/command-terminal': typeof AuthenticatedCommandTerminalRoute
   '/distribution': typeof AuthenticatedDistributionRoute
@@ -285,6 +294,7 @@ export interface FileRoutesById {
   '/_authenticated/assets': typeof AuthenticatedAssetsRoute
   '/_authenticated/brand-kit': typeof AuthenticatedBrandKitRoute
   '/_authenticated/cartel-shield': typeof AuthenticatedCartelShieldRoute
+  '/_authenticated/chain-launcher': typeof AuthenticatedChainLauncherRoute
   '/_authenticated/clearance': typeof AuthenticatedClearanceRoute
   '/_authenticated/command-terminal': typeof AuthenticatedCommandTerminalRoute
   '/_authenticated/distribution': typeof AuthenticatedDistributionRoute
@@ -321,6 +331,7 @@ export interface FileRouteTypes {
     | '/assets'
     | '/brand-kit'
     | '/cartel-shield'
+    | '/chain-launcher'
     | '/clearance'
     | '/command-terminal'
     | '/distribution'
@@ -352,6 +363,7 @@ export interface FileRouteTypes {
     | '/assets'
     | '/brand-kit'
     | '/cartel-shield'
+    | '/chain-launcher'
     | '/clearance'
     | '/command-terminal'
     | '/distribution'
@@ -385,6 +397,7 @@ export interface FileRouteTypes {
     | '/_authenticated/assets'
     | '/_authenticated/brand-kit'
     | '/_authenticated/cartel-shield'
+    | '/_authenticated/chain-launcher'
     | '/_authenticated/clearance'
     | '/_authenticated/command-terminal'
     | '/_authenticated/distribution'
@@ -481,6 +494,13 @@ declare module '@tanstack/react-router' {
       path: '/cartel-shield'
       fullPath: '/cartel-shield'
       preLoaderRoute: typeof AuthenticatedCartelShieldRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/chain-launcher': {
+      id: '/_authenticated/chain-launcher'
+      path: '/chain-launcher'
+      fullPath: '/chain-launcher'
+      preLoaderRoute: typeof AuthenticatedChainLauncherRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/clearance': {
@@ -671,6 +691,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAssetsRoute: typeof AuthenticatedAssetsRoute
   AuthenticatedBrandKitRoute: typeof AuthenticatedBrandKitRoute
   AuthenticatedCartelShieldRoute: typeof AuthenticatedCartelShieldRoute
+  AuthenticatedChainLauncherRoute: typeof AuthenticatedChainLauncherRoute
   AuthenticatedClearanceRoute: typeof AuthenticatedClearanceRoute
   AuthenticatedCommandTerminalRoute: typeof AuthenticatedCommandTerminalRoute
   AuthenticatedDistributionRoute: typeof AuthenticatedDistributionRoute
@@ -693,6 +714,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAssetsRoute: AuthenticatedAssetsRoute,
   AuthenticatedBrandKitRoute: AuthenticatedBrandKitRoute,
   AuthenticatedCartelShieldRoute: AuthenticatedCartelShieldRoute,
+  AuthenticatedChainLauncherRoute: AuthenticatedChainLauncherRoute,
   AuthenticatedClearanceRoute: AuthenticatedClearanceRoute,
   AuthenticatedCommandTerminalRoute: AuthenticatedCommandTerminalRoute,
   AuthenticatedDistributionRoute: AuthenticatedDistributionRoute,
