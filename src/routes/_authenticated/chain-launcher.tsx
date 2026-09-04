@@ -193,6 +193,36 @@ function ChainLauncherPage() {
     return () => window.clearInterval(id);
   }, [simulation]);
 
+  // Expiry is not just a disabled button: the stale session and its stable
+  // request id are destroyed once the 90-second quote is no longer fresh.
+  useEffect(() => {
+    if (simSession && !isQuoteFresh(simSession.simulation.preflight, nowMs)) {
+      setSimSession(null);
+    }
+  }, [simSession, nowMs]);
+
+  // B — same-tab recovery restore. Only ever restores a record that still
+  // matches a DRAFT row without a server-side tx hash in the CURRENT scope.
+  useEffect(() => {
+    if (!workspaceId || !launchId) return;
+    if (recovery) return;
+    if (!deploymentsQuery.isSuccess) return;
+    const scope = { workspaceId, launchId };
+    const stored = readRecoveryRecord(scope);
+    if (!stored) return;
+    if (isRecoveryRestorable(stored, attempts)) setRecovery(stored);
+    else clearRecoveryRecord(scope);
+  }, [workspaceId, launchId, recovery, deploymentsQuery.isSuccess, attempts]);
+
+  // Never surface another launch's or workspace's recovery record.
+  useEffect(() => {
+    setRecovery((current) =>
+      current && current.launchId === launchId && current.workspaceId === workspaceId
+        ? current
+        : null,
+    );
+  }, [launchId, workspaceId]);
+
   useEffect(() => {
     // The connected wallet is the default recipient; the operator may change it.
     if (account && !tokenRecipient) setTokenRecipient(account);
@@ -309,6 +339,19 @@ function ChainLauncherPage() {
   }
 
   async function handleDeployToken() {
+    // Synchronous duplicate-broadcast guard: claimed BEFORE any await, so a
+    // second invocation in the same tick returns before an attempt row is
+    // created and before any wallet request is made.
+    if (tokenInFlight.current) return;
+    tokenInFlight.current = true;
+    try {
+      await runTokenDeployment();
+    } finally {
+      tokenInFlight.current = false;
+    }
+  }
+
+  async function runTokenDeployment() {
     if (!launchId || !account || !onTestnet) return;
     if (!simulation || !simSession) {
       toast.error("Run the simulation before deploying.");
@@ -371,11 +414,25 @@ function ChainLauncherPage() {
         // Broadcast succeeded but the record write failed. The transaction may
         // be on chain, so the attempt is NEVER abandoned: the hash is surfaced
         // for manual attachment to this same attempt.
-        setRecovery({ attemptId: attempt.id, txHash });
+        const record = parseRecoveryRecord(
+          {
+            attemptId: attempt.id,
+            attemptNumber: attempt.attempt_number,
+            txHash,
+            launchId,
+            workspaceId: workspaceId ?? "",
+          },
+          { workspaceId: workspaceId ?? "", launchId },
+        );
+        if (record) {
+          setRecovery(record);
+          saveRecoveryRecord(record);
+        }
         throw submitError;
       }
       await invalidate();
       setRecovery(null);
+      if (workspaceId) clearRecoveryRecord({ workspaceId, launchId });
       toast.success("Token transaction broadcast. Verify once it is mined.");
     } catch (e) {
       // Identical pre/post-broadcast rule as the inert path: a broadcast
@@ -419,6 +476,7 @@ function ChainLauncherPage() {
     try {
       await submitDeploymentTx(recovery.attemptId, recovery.txHash);
       await invalidate();
+      clearRecoveryRecord({ workspaceId: recovery.workspaceId, launchId: recovery.launchId });
       setRecovery(null);
       toast.success("Transaction hash recorded. Verify once it is mined.");
     } catch (e) {
@@ -794,9 +852,14 @@ function ChainLauncherPage() {
               Transaction broadcast but not recorded
             </p>
             <p className="mt-1 text-muted-foreground">
-              The wallet returned a transaction hash for attempt {recovery.attemptId}, but CARTEL HQ
-              could not save it. The transaction may already be on Robinhood Chain Testnet — do not
-              deploy again. Record the hash against this same attempt.
+              Attempt #{recovery.attemptNumber} on Robinhood Chain Testnet{" "}
+              {ROBINHOOD_TESTNET_CHAIN_ID}. The wallet returned a transaction hash but CARTEL HQ
+              could not save it. The transaction may already be on chain —{" "}
+              <span className="text-foreground">do not deploy again</span> while this is pending.
+              Record the hash against this same attempt.
+            </p>
+            <p className="mt-1 break-all text-muted-foreground">
+              Attempt id <span className="text-foreground">{recovery.attemptId}</span>
             </p>
             <p className="mt-1 break-all text-foreground">{recovery.txHash}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
