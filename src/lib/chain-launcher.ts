@@ -350,17 +350,25 @@ export async function createTokenDeploymentAttempt(input: {
 }
 
 /**
- * Display helper for base-unit supplies. Numeric values arriving as JSON
- * numbers are rounded back to whole tokens, which is exact for the allowed
- * range (max 1,000,000,000,000 whole tokens).
+ * Display helper for base-unit supplies. Only an exact decimal string is
+ * treated as trustworthy: token rows must pass the generated
+ * `token_total_supply_text` mirror, because the numeric column arrives over
+ * JSON as an IEEE-754 double and is not exact above 2^53. Anything else is
+ * shown as unavailable rather than as a rounded figure.
  */
-export function formatWholeSupply(baseUnits: string | number | null): string {
-  if (baseUnits === null || baseUnits === "") return "—";
+export function formatWholeSupply(baseUnits: string | null | undefined): string {
+  if (baseUnits === null || baseUnits === undefined || baseUnits === "") return "—";
+  if (!/^[0-9]+$/.test(baseUnits)) return "—";
   const scale = 10n ** BigInt(CARTEL_FIXED_ERC20_DECIMALS);
-  if (typeof baseUnits === "string" && /^[0-9]+$/.test(baseUnits)) {
-    return (BigInt(baseUnits) / scale).toLocaleString("en-US");
-  }
-  const asNumber = Number(baseUnits);
-  if (!Number.isFinite(asNumber)) return String(baseUnits);
-  return Math.round(asNumber / 1e18).toLocaleString("en-US");
+  return (BigInt(baseUnits) / scale).toLocaleString("en-US");
+}
+
+/**
+ * Exact base-unit supply for a token attempt, taken from the generated text
+ * mirror only. Never derived from the JSON numeric column.
+ */
+export function tokenSupplyText(row: DeploymentRow): string | null {
+  if (row.deployment_kind !== "FIXED_SUPPLY_ERC20") return null;
+  const text = row.token_total_supply_text;
+  return typeof text === "string" && /^[0-9]+$/.test(text) ? text : null;
 }
