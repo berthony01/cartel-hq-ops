@@ -32,6 +32,7 @@ import {
   DEPLOYMENT_STATUS_LABEL,
   abandonDeploymentAttempt,
   broadcastTestDeployment,
+  buildTokenInitCode,
   broadcastTokenDeployment,
   chainDeploymentsQueryKey,
   connectWallet,
@@ -45,7 +46,7 @@ import {
   isUserRejection,
   listChainDeployments,
   newClientRequestId,
-  normalizeTokenIntent,
+  readAccount,
   readBalanceWei,
   readChainId,
   submitDeploymentTx,
@@ -293,12 +294,7 @@ function ChainLauncherPage() {
     // values and require an exact fingerprint match against the reviewed
     // simulation. Any mismatch aborts BEFORE a deployment attempt is created.
     const liveChainId = await readChainId();
-    let liveAccount: string | null = null;
-    try {
-      liveAccount = await connectWallet();
-    } catch {
-      liveAccount = null;
-    }
+    const liveAccount = await readAccount();
     const gate = evaluatePreSignGate({
       simulation,
       current: {
@@ -320,7 +316,11 @@ function ChainLauncherPage() {
     // The reviewed intent is authoritative from here on. Nothing is rebuilt
     // from raw form state after the gate.
     const intent = simulation.intent.tokenIntent;
-    const reviewedInitCode = simulation.intent.initCode;
+    if (buildTokenInitCode(intent) !== simulation.intent.initCode) {
+      toast.error("The reviewed deployment payload could not be re-derived. Simulate again.");
+      setSimulation(null);
+      return;
+    }
 
     setTokenBusy(true);
     let attemptId: string | null = null;
@@ -335,7 +335,7 @@ function ChainLauncherPage() {
       attemptId = attempt.id;
       await invalidate();
 
-      txHash = await broadcastTokenDeployment(account, intent, reviewedInitCode);
+      txHash = await broadcastTokenDeployment(account, intent);
       await submitDeploymentTx(attempt.id, txHash);
       await invalidate();
       toast.success("Token transaction broadcast. Verify once it is mined.");

@@ -72,6 +72,19 @@ export async function connectWallet(): Promise<string> {
   return address.toLowerCase();
 }
 
+/** Read-only: the currently authorized account, without prompting the wallet. */
+export async function readAccount(): Promise<string | null> {
+  const provider = getInjectedProvider();
+  if (!provider) return null;
+  try {
+    const accounts = (await provider.request({ method: "eth_accounts" })) as unknown;
+    const first = Array.isArray(accounts) && typeof accounts[0] === "string" ? accounts[0] : null;
+    return first ? first.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function readChainId(): Promise<number | null> {
   const provider = getInjectedProvider();
   if (!provider) return null;
