@@ -27,6 +27,7 @@ export type ReceiptState =
   | "TX_SUBMITTED"
   | "CONFIRMATIONS_PENDING"
   | "VERIFIED"
+  | "EVIDENCE_INCOMPLETE"
   | "FAILED"
   | "ABANDONED";
 
@@ -37,8 +38,21 @@ export type FingerprintProvenance = "SESSION" | "RE_DERIVED" | "UNAVAILABLE";
 export type LaunchReceipt = {
   state: ReceiptState;
   stateLabel: string;
-  /** True only when the row is CONFIRMED and the required evidence is present. */
+  /** True only when every required evidence field is present and consistent. */
   verified: boolean;
+  /**
+   * The raw platform status, kept available even when the receipt fails
+   * closed and refuses to use verified-success language.
+   */
+  platformStatus: string;
+  /** Reasons the receipt could not present verified-success semantics. */
+  evidenceGaps: string[];
+  /**
+   * Derived ONLY from full verified success. The server verifier compares the
+   * deployed runtime bytecode hash against the frozen artifact before it may
+   * set CONFIRMED; no hash value is persisted, so none is displayed.
+   */
+  runtimeBytecodeVerified: boolean;
   isToken: boolean;
   header: string;
 
@@ -101,6 +115,7 @@ export const RECEIPT_STATE_LABEL: Record<ReceiptState, string> = {
   TX_SUBMITTED: "Transaction submitted",
   CONFIRMATIONS_PENDING: "Awaiting confirmations",
   VERIFIED: "Verified on testnet",
+  EVIDENCE_INCOMPLETE: "Verification evidence incomplete",
   FAILED: "Failed",
   ABANDONED: "Abandoned",
 };
@@ -159,7 +174,6 @@ export type ReceiptInput = {
  * Derives the read-only receipt. Pure: no network, no persistence, no writes.
  */
 export function deriveLaunchReceipt({ row, activeSimulation }: ReceiptInput): LaunchReceipt {
-  const state = receiptStateForStatus(row.status);
   const isToken = row.deployment_kind === "FIXED_SUPPLY_ERC20";
 
   const txHash = safeHash(row.tx_hash);
@@ -168,24 +182,60 @@ export function deriveLaunchReceipt({ row, activeSimulation }: ReceiptInput): La
   const verifiedSupply = safeDigits(row.verified_total_supply_text);
   const verifiedBalance = safeDigits(row.verified_recipient_balance_text);
   const recipient = safeAddress(row.token_recipient);
+  const confirmations = typeof row.confirmations === "number" ? row.confirmations : 0;
 
-  // A receipt may only present verified evidence when the server verifier put
-  // the row in CONFIRMED and the required evidence for the kind is present.
-  const tokenEvidenceComplete =
-    !!row.verified_token_name &&
-    !!row.verified_token_symbol &&
-    row.verified_token_decimals === CARTEL_FIXED_ERC20_DECIMALS &&
-    verifiedSupply !== null &&
-    requestedSupply !== null &&
-    verifiedSupply === requestedSupply &&
-    row.verified_token_name === row.token_name &&
-    row.verified_token_symbol === row.token_symbol;
+  // FAIL CLOSED. A receipt may present verified-success semantics only when
+  // EVERY required piece of evidence is present and internally consistent.
+  // A CONFIRMED row with incomplete or contradictory evidence is reported as
+  // "Verification evidence incomplete"; no database state is changed here.
+  const gaps: string[] = [];
+  if (row.status !== "CONFIRMED") gaps.push("Server verification has not confirmed this attempt.");
+  if (row.chain_id !== ROBINHOOD_TESTNET_CHAIN_ID) gaps.push("Recorded chain is not the testnet.");
+  if (row.network_environment !== "TESTNET") gaps.push("Recorded environment is not TESTNET.");
+  if (txHash === null) gaps.push("No valid transaction hash is recorded.");
+  if (contractAddress === null) gaps.push("No valid contract address is recorded.");
+  if (confirmations < REQUIRED_CONFIRMATIONS) {
+    gaps.push(`Fewer than ${REQUIRED_CONFIRMATIONS} confirmations are recorded.`);
+  }
 
-  const verified =
-    row.status === "CONFIRMED" &&
-    contractAddress !== null &&
-    txHash !== null &&
-    (isToken ? tokenEvidenceComplete : true);
+  if (isToken) {
+    if (!row.token_name || !row.verified_token_name || row.verified_token_name !== row.token_name) {
+      gaps.push("Verified token name does not match the requested name.");
+    }
+    if (
+      !row.token_symbol ||
+      !row.verified_token_symbol ||
+      row.verified_token_symbol !== row.token_symbol
+    ) {
+      gaps.push("Verified symbol does not match the requested symbol.");
+    }
+    if (
+      row.token_decimals !== CARTEL_FIXED_ERC20_DECIMALS ||
+      row.verified_token_decimals !== CARTEL_FIXED_ERC20_DECIMALS
+    ) {
+      gaps.push("Verified decimals do not match the frozen artifact.");
+    }
+    if (requestedSupply === null || verifiedSupply === null || verifiedSupply !== requestedSupply) {
+      gaps.push("Verified total supply does not match the requested supply.");
+    }
+    // The frozen artifact mints 100% of the supply once, to the recorded
+    // recipient, so the verified balance must equal the full supply exactly.
+    if (
+      verifiedBalance === null ||
+      requestedSupply === null ||
+      verifiedBalance !== requestedSupply
+    ) {
+      gaps.push("Verified recipient balance does not equal the full requested supply.");
+    }
+    if (recipient === null) gaps.push("No valid initial recipient is recorded.");
+  }
+
+  const verified = gaps.length === 0;
+  const state: ReceiptState = verified
+    ? "VERIFIED"
+    : row.status === "CONFIRMED"
+      ? "EVIDENCE_INCOMPLETE"
+      : receiptStateForStatus(row.status);
 
   // Fingerprint / init-code hash are never persisted. They come from the
   // active session simulation when it matches this exact row, otherwise they
@@ -236,6 +286,11 @@ export function deriveLaunchReceipt({ row, activeSimulation }: ReceiptInput): La
     state,
     stateLabel: RECEIPT_STATE_LABEL[state],
     verified,
+    platformStatus: row.status,
+    evidenceGaps: gaps,
+    // Only full verified success may assert the runtime-bytecode comparison,
+    // which the server verifier performs against the frozen artifact hash.
+    runtimeBytecodeVerified: verified,
     isToken,
     header: RECEIPT_HEADER,
 
@@ -262,7 +317,7 @@ export function deriveLaunchReceipt({ row, activeSimulation }: ReceiptInput): La
     contractUrl: contractAddress ? explorerAddressUrl(contractAddress) : null,
     blockNumber: formatBlockNumber(row.block_number),
     blockHash: safeHash(row.block_hash),
-    confirmations: row.confirmations ?? 0,
+    confirmations,
     requiredConfirmations: REQUIRED_CONFIRMATIONS,
     verifiedName: row.verified_token_name,
     verifiedSymbol: row.verified_token_symbol,
@@ -283,4 +338,115 @@ export function deriveLaunchReceipt({ row, activeSimulation }: ReceiptInput): La
 /** Guard for display code: the testnet is the only supported environment. */
 export function isTestnetReceipt(receipt: LaunchReceipt): boolean {
   return receipt.chainId === ROBINHOOD_TESTNET_CHAIN_ID && receipt.environment === "TESTNET";
+}
+
+/* ------------------------------------------------------------------ */
+/* C8.5 closeout — same-tab recovery record (sessionStorage only)      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A broadcast transaction whose hash could not be persisted. This is kept in
+ * `sessionStorage` (never `localStorage`) so it survives a same-tab refresh
+ * but never outlives the tab, and it is scoped to one workspace + launch.
+ *
+ * It is a client-side reminder only: no database column, table or RPC is
+ * added, and restoring it can only ever re-offer the EXISTING
+ * `submit_launch_chain_deployment_tx` call for the SAME attempt.
+ */
+export type RecoveryRecord = {
+  attemptId: string;
+  attemptNumber: number;
+  txHash: string;
+  launchId: string;
+  workspaceId: string;
+};
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TX_HASH_RE = /^0x[0-9a-f]{64}$/;
+
+export function recoveryStorageKey(workspaceId: string, launchId: string): string {
+  return `cartel:c85-recovery:${workspaceId}:${launchId}`;
+}
+
+/** Structural + scope validation. Returns null on anything unexpected. */
+export function parseRecoveryRecord(
+  value: unknown,
+  scope: { workspaceId: string; launchId: string },
+): RecoveryRecord | null {
+  if (!value || typeof value !== "object") return null;
+  const r = value as Partial<RecoveryRecord>;
+  if (typeof r.attemptId !== "string" || !UUID_RE.test(r.attemptId)) return null;
+  if (
+    typeof r.attemptNumber !== "number" ||
+    !Number.isSafeInteger(r.attemptNumber) ||
+    r.attemptNumber <= 0
+  ) {
+    return null;
+  }
+  if (typeof r.txHash !== "string" || !TX_HASH_RE.test(r.txHash)) return null;
+  if (typeof r.launchId !== "string" || r.launchId !== scope.launchId) return null;
+  if (typeof r.workspaceId !== "string" || r.workspaceId !== scope.workspaceId) return null;
+  return {
+    attemptId: r.attemptId,
+    attemptNumber: r.attemptNumber,
+    txHash: r.txHash,
+    launchId: r.launchId,
+    workspaceId: r.workspaceId,
+  };
+}
+
+/**
+ * A stored record may only be restored when the referenced attempt is still
+ * exactly the row it claims to be: present in the CURRENT launch's rows, same
+ * attempt number, still DRAFT and with no server-side tx hash yet. Anything
+ * else is stale and must be discarded.
+ */
+export function isRecoveryRestorable(
+  record: RecoveryRecord,
+  rows: Pick<DeploymentRow, "id" | "attempt_number" | "status" | "tx_hash" | "launch_id">[],
+): boolean {
+  const row = rows.find((r) => r.id === record.attemptId);
+  if (!row) return false;
+  if (row.launch_id !== record.launchId) return false;
+  if (row.attempt_number !== record.attemptNumber) return false;
+  if (row.status !== "DRAFT") return false;
+  if (row.tx_hash) return false;
+  return true;
+}
+
+export function saveRecoveryRecord(record: RecoveryRecord): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(
+      recoveryStorageKey(record.workspaceId, record.launchId),
+      JSON.stringify(record),
+    );
+  } catch {
+    /* storage unavailable — the in-memory panel still shows the hash */
+  }
+}
+
+export function readRecoveryRecord(scope: {
+  workspaceId: string;
+  launchId: string;
+}): RecoveryRecord | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(
+      recoveryStorageKey(scope.workspaceId, scope.launchId),
+    );
+    if (!raw) return null;
+    return parseRecoveryRecord(JSON.parse(raw) as unknown, scope);
+  } catch {
+    return null;
+  }
+}
+
+export function clearRecoveryRecord(scope: { workspaceId: string; launchId: string }): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(recoveryStorageKey(scope.workspaceId, scope.launchId));
+  } catch {
+    /* nothing further to do */
+  }
 }
