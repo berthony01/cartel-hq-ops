@@ -168,6 +168,8 @@ export type LiquidityPlanInput = {
 export type LiquidityPlanIntent = {
   environment: typeof NETWORK_ENVIRONMENT;
   chainId: typeof ROBINHOOD_TESTNET_CHAIN_ID;
+  /** Chain id recorded on the source deployment row (fingerprint-bound). */
+  sourceChainId: number;
   infrastructureState: typeof LIQUIDITY_INFRASTRUCTURE_STATE;
   quoteAsset: typeof LIQUIDITY_QUOTE_ASSET;
   artifactId: string;
