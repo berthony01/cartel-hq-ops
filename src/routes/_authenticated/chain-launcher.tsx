@@ -224,6 +224,55 @@ function ChainLauncherPage() {
     }
   }, [simSession, nowMs]);
 
+  // C8.6A — CONFIRMED fixed-supply test tokens that can be planned against.
+  const liquiditySources = useMemo(
+    () =>
+      attempts.filter(
+        (a) =>
+          a.status === "CONFIRMED" &&
+          a.deployment_kind === "FIXED_SUPPLY_ERC20" &&
+          typeof a.contract_address === "string" &&
+          /^0x[0-9a-fA-F]{40}$/.test(a.contract_address),
+      ),
+    [attempts],
+  );
+
+  const liquiditySource = useMemo(
+    () => liquiditySources.find((a) => a.id === liqSourceId) ?? liquiditySources[0] ?? null,
+    [liquiditySources, liqSourceId],
+  );
+
+  useEffect(() => {
+    if (!liqSourceId && liquiditySources.length > 0) setLiqSourceId(liquiditySources[0]!.id);
+  }, [liquiditySources, liqSourceId]);
+
+  // Any change to the plan inputs, the source attempt, the account or the chain
+  // destroys the plan. It is never silently reused.
+  useEffect(() => {
+    setLiqPlan(null);
+  }, [
+    liqSourceId,
+    liqTokenAmount,
+    liqEthAmount,
+    liqSlippage,
+    liqDeadline,
+    account,
+    chainId,
+    balance,
+  ]);
+
+  useEffect(() => {
+    if (!liqPlan) return;
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [liqPlan]);
+
+  // Fail closed: an expired plan is destroyed, not merely greyed out.
+  useEffect(() => {
+    if (liqPlan && !isLiquidityPlanFresh(liqPlan, nowMs)) setLiqPlan(null);
+  }, [liqPlan, nowMs]);
+
+
   // B — same-tab recovery restore. Only ever restores a record that still
   // matches a DRAFT row without a server-side tx hash in the CURRENT scope.
   useEffect(() => {
