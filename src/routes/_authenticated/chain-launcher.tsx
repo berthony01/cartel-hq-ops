@@ -158,6 +158,18 @@ function ChainLauncherPage() {
     };
   }, [hasProvider, account, refreshWallet]);
 
+  // Any change to the reviewed intent, the account or the chain invalidates the
+  // simulation immediately. Deployment stays locked until a fresh run passes.
+  useEffect(() => {
+    setSimulation(null);
+  }, [tokenName, tokenSymbol, tokenSupply, tokenRecipient, account, chainId]);
+
+  useEffect(() => {
+    if (!simulation) return;
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [simulation]);
+
   useEffect(() => {
     // The connected wallet is the default recipient; the operator may change it.
     if (account && !tokenRecipient) setTokenRecipient(account);
@@ -246,20 +258,69 @@ function ChainLauncherPage() {
     }
   }
 
-  async function handleDeployToken() {
-    if (!launchId || !account || !onTestnet) return;
-    let intent;
+  async function handleRunSimulation() {
+    if (!account) return;
+    setSimBusy(true);
     try {
-      intent = normalizeTokenIntent({
+      const result = await runSimulation({
+        deployer: account,
         name: tokenName,
         symbol: tokenSymbol,
         supplyWhole: tokenSupply,
         recipient: tokenRecipient,
       });
+      setNowMs(Date.now());
+      setSimulation(result);
+      if (!result.preflight.passed) toast.error("Simulation did not pass. Review the checks.");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Check the token details.");
+      setSimulation(null);
+      toast.error(
+        e instanceof SimulationError ? e.message : "Could not simulate this deployment.",
+      );
+    } finally {
+      setSimBusy(false);
+    }
+  }
+
+  async function handleDeployToken() {
+    if (!launchId || !account || !onTestnet) return;
+    if (!simulation) {
+      toast.error("Run the simulation before deploying.");
       return;
     }
+
+    // Pre-sign gate: re-read live chain/account, re-normalize the current form
+    // values and require an exact fingerprint match against the reviewed
+    // simulation. Any mismatch aborts BEFORE a deployment attempt is created.
+    const liveChainId = await readChainId();
+    let liveAccount: string | null = null;
+    try {
+      liveAccount = await connectWallet();
+    } catch {
+      liveAccount = null;
+    }
+    const gate = evaluatePreSignGate({
+      simulation,
+      current: {
+        deployer: account,
+        name: tokenName,
+        symbol: tokenSymbol,
+        supplyWhole: tokenSupply,
+        recipient: tokenRecipient,
+      },
+      liveChainId,
+      liveAccount,
+    });
+    if (!gate.ok) {
+      setSimulation(null);
+      toast.error(gate.reason);
+      return;
+    }
+
+    // The reviewed intent is authoritative from here on. Nothing is rebuilt
+    // from raw form state after the gate.
+    const intent = simulation.intent.tokenIntent;
+    const reviewedInitCode = simulation.intent.initCode;
 
     setTokenBusy(true);
     let attemptId: string | null = null;
@@ -274,7 +335,7 @@ function ChainLauncherPage() {
       attemptId = attempt.id;
       await invalidate();
 
-      txHash = await broadcastTokenDeployment(account, intent);
+      txHash = await broadcastTokenDeployment(account, intent, reviewedInitCode);
       await submitDeploymentTx(attempt.id, txHash);
       await invalidate();
       toast.success("Token transaction broadcast. Verify once it is mined.");
