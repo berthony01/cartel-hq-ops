@@ -174,7 +174,6 @@ export type ReceiptInput = {
  * Derives the read-only receipt. Pure: no network, no persistence, no writes.
  */
 export function deriveLaunchReceipt({ row, activeSimulation }: ReceiptInput): LaunchReceipt {
-  const state = receiptStateForStatus(row.status);
   const isToken = row.deployment_kind === "FIXED_SUPPLY_ERC20";
 
   const txHash = safeHash(row.tx_hash);
@@ -183,24 +182,56 @@ export function deriveLaunchReceipt({ row, activeSimulation }: ReceiptInput): La
   const verifiedSupply = safeDigits(row.verified_total_supply_text);
   const verifiedBalance = safeDigits(row.verified_recipient_balance_text);
   const recipient = safeAddress(row.token_recipient);
+  const confirmations = typeof row.confirmations === "number" ? row.confirmations : 0;
 
-  // A receipt may only present verified evidence when the server verifier put
-  // the row in CONFIRMED and the required evidence for the kind is present.
-  const tokenEvidenceComplete =
-    !!row.verified_token_name &&
-    !!row.verified_token_symbol &&
-    row.verified_token_decimals === CARTEL_FIXED_ERC20_DECIMALS &&
-    verifiedSupply !== null &&
-    requestedSupply !== null &&
-    verifiedSupply === requestedSupply &&
-    row.verified_token_name === row.token_name &&
-    row.verified_token_symbol === row.token_symbol;
+  // FAIL CLOSED. A receipt may present verified-success semantics only when
+  // EVERY required piece of evidence is present and internally consistent.
+  // A CONFIRMED row with incomplete or contradictory evidence is reported as
+  // "Verification evidence incomplete"; no database state is changed here.
+  const gaps: string[] = [];
+  if (row.status !== "CONFIRMED") gaps.push("Server verification has not confirmed this attempt.");
+  if (row.chain_id !== ROBINHOOD_TESTNET_CHAIN_ID) gaps.push("Recorded chain is not the testnet.");
+  if (row.network_environment !== "TESTNET") gaps.push("Recorded environment is not TESTNET.");
+  if (txHash === null) gaps.push("No valid transaction hash is recorded.");
+  if (contractAddress === null) gaps.push("No valid contract address is recorded.");
+  if (confirmations < REQUIRED_CONFIRMATIONS) {
+    gaps.push(`Fewer than ${REQUIRED_CONFIRMATIONS} confirmations are recorded.`);
+  }
 
-  const verified =
-    row.status === "CONFIRMED" &&
-    contractAddress !== null &&
-    txHash !== null &&
-    (isToken ? tokenEvidenceComplete : true);
+  if (isToken) {
+    if (!row.token_name || !row.verified_token_name || row.verified_token_name !== row.token_name) {
+      gaps.push("Verified token name does not match the requested name.");
+    }
+    if (
+      !row.token_symbol ||
+      !row.verified_token_symbol ||
+      row.verified_token_symbol !== row.token_symbol
+    ) {
+      gaps.push("Verified symbol does not match the requested symbol.");
+    }
+    if (
+      row.token_decimals !== CARTEL_FIXED_ERC20_DECIMALS ||
+      row.verified_token_decimals !== CARTEL_FIXED_ERC20_DECIMALS
+    ) {
+      gaps.push("Verified decimals do not match the frozen artifact.");
+    }
+    if (requestedSupply === null || verifiedSupply === null || verifiedSupply !== requestedSupply) {
+      gaps.push("Verified total supply does not match the requested supply.");
+    }
+    // The frozen artifact mints 100% of the supply once, to the recorded
+    // recipient, so the verified balance must equal the full supply exactly.
+    if (verifiedBalance === null || requestedSupply === null || verifiedBalance !== requestedSupply) {
+      gaps.push("Verified recipient balance does not equal the full requested supply.");
+    }
+    if (recipient === null) gaps.push("No valid initial recipient is recorded.");
+  }
+
+  const verified = gaps.length === 0;
+  const state: ReceiptState = verified
+    ? "VERIFIED"
+    : row.status === "CONFIRMED"
+      ? "EVIDENCE_INCOMPLETE"
+      : receiptStateForStatus(row.status);
 
   // Fingerprint / init-code hash are never persisted. They come from the
   // active session simulation when it matches this exact row, otherwise they
@@ -251,6 +282,11 @@ export function deriveLaunchReceipt({ row, activeSimulation }: ReceiptInput): La
     state,
     stateLabel: RECEIPT_STATE_LABEL[state],
     verified,
+    platformStatus: row.status,
+    evidenceGaps: gaps,
+    // Only full verified success may assert the runtime-bytecode comparison,
+    // which the server verifier performs against the frozen artifact hash.
+    runtimeBytecodeVerified: verified,
     isToken,
     header: RECEIPT_HEADER,
 
@@ -277,7 +313,7 @@ export function deriveLaunchReceipt({ row, activeSimulation }: ReceiptInput): La
     contractUrl: contractAddress ? explorerAddressUrl(contractAddress) : null,
     blockNumber: formatBlockNumber(row.block_number),
     blockHash: safeHash(row.block_hash),
-    confirmations: row.confirmations ?? 0,
+    confirmations,
     requiredConfirmations: REQUIRED_CONFIRMATIONS,
     verifiedName: row.verified_token_name,
     verifiedSymbol: row.verified_token_symbol,
