@@ -364,7 +364,6 @@ export function isValidTxHash(value: unknown): value is string {
   return typeof value === "string" && /^0x[0-9a-f]{64}$/.test(value);
 }
 
-
 export async function createTokenDeploymentAttempt(input: {
   launchId: string;
   clientRequestId: string;
