@@ -94,13 +94,19 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
     }
 
     const isToken = row.deployment_kind === "FIXED_SUPPLY_ERC20";
+    // Fail closed: the supply used for every security comparison must be an
+    // exact decimal digit string from the generated mirror, never a JS number.
+    const supplyText = typeof row.token_total_supply_text === "string"
+      ? row.token_total_supply_text
+      : null;
     if (
       isToken &&
       (row.artifact_id !== "cartel-fixed-erc20-v1" ||
         row.token_decimals !== CARTEL_FIXED_ERC20_DECIMALS ||
         !row.token_name ||
         !row.token_symbol ||
-        row.token_total_supply === null ||
+        supplyText === null ||
+        !/^[0-9]+$/.test(supplyText) ||
         !row.token_recipient)
     ) {
       throw new Error("Unsupported deployment artifact");
