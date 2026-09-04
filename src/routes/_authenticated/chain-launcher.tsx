@@ -294,10 +294,11 @@ function ChainLauncherPage() {
 
   async function handleDeployToken() {
     if (!launchId || !account || !onTestnet) return;
-    if (!simulation) {
+    if (!simulation || !simSession) {
       toast.error("Run the simulation before deploying.");
       return;
     }
+    const clientRequestId = simSession.clientRequestId;
 
     // Pre-sign gate: re-read live chain/account, re-normalize the current form
     // values and require an exact fingerprint match against the reviewed
@@ -339,7 +340,7 @@ function ChainLauncherPage() {
         launchId,
         // Stable for this simulation: a duplicate click resolves to the SAME
         // row through the server-side idempotency guard, never a second one.
-        clientRequestId: simSession!.clientRequestId,
+        clientRequestId,
         deployerAddress: account,
         intent,
       });
@@ -384,6 +385,30 @@ function ChainLauncherPage() {
       }
     } finally {
       setTokenBusy(false);
+    }
+  }
+
+  /**
+   * Recovery only: attaches an ALREADY BROADCAST transaction hash to the same
+   * DRAFT attempt through the existing RPC. It never signs, never broadcasts
+   * and never creates a second attempt.
+   */
+  async function handleRecordTxHash() {
+    if (!recovery || recoveryBusy) return;
+    if (!isValidTxHash(recovery.txHash)) {
+      toast.error("That transaction hash is not valid.");
+      return;
+    }
+    setRecoveryBusy(true);
+    try {
+      await submitDeploymentTx(recovery.attemptId, recovery.txHash);
+      await invalidate();
+      setRecovery(null);
+      toast.success("Transaction hash recorded. Verify once it is mined.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not record the transaction hash.");
+    } finally {
+      setRecoveryBusy(false);
     }
   }
 
@@ -745,6 +770,48 @@ function ChainLauncherPage() {
             simulation. Estimates expire after {SIMULATION_QUOTE_TTL_MS / 1000} seconds.
           </p>
         )}
+
+        {recovery ? (
+          <div className="mt-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs leading-relaxed">
+            <p className="flex items-center gap-2 font-semibold uppercase tracking-wide text-destructive">
+              <AlertTriangle className="size-4" aria-hidden="true" />
+              Transaction broadcast but not recorded
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              The wallet returned a transaction hash for attempt {recovery.attemptId}, but CARTEL HQ
+              could not save it. The transaction may already be on Robinhood Chain Testnet — do not
+              deploy again. Record the hash against this same attempt.
+            </p>
+            <p className="mt-1 break-all text-foreground">{recovery.txHash}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button size="sm" disabled={recoveryBusy} onClick={() => void handleRecordTxHash()}>
+                {recoveryBusy ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <ShieldCheck className="size-4" aria-hidden="true" />
+                )}
+                Record transaction hash
+              </Button>
+              <a
+                className="text-gold underline"
+                href={explorerTxUrl(recovery.txHash)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                View on explorer
+                <ExternalLink className="ml-1 inline size-3" aria-hidden="true" />
+              </a>
+            </div>
+          </div>
+        ) : null}
+
+        {latest ? (
+          <div className="mt-3">
+            <LaunchReceiptCard
+              receipt={deriveLaunchReceipt({ row: latest, activeSimulation: simulation })}
+            />
+          </div>
+        ) : null}
 
         <div className="mt-3 rounded-lg border border-gold/40 bg-gold/10 p-3 text-xs leading-relaxed">
           <p className="flex items-center gap-2 font-semibold uppercase tracking-wide text-gold">
