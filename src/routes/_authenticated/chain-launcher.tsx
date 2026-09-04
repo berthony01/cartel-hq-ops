@@ -91,7 +91,8 @@ function ChainLauncherPage() {
     enabled: isPlatformOwner === true && !!workspaceId,
   });
 
-  const launches: LaunchRow[] = launchesQuery.data ?? [];
+  const launchesData = launchesQuery.data;
+  const launches: LaunchRow[] = useMemo(() => launchesData ?? [], [launchesData]);
 
   useEffect(() => {
     if (!launchId && launches.length > 0) setLaunchId(launches[0]!.id);
