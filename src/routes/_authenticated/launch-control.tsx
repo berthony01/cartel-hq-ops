@@ -1944,6 +1944,18 @@ function LaunchControlPage() {
                   )}
                 </Section>
 
+                <VerifiedDeploymentEvidencePanel
+                  evaluation={deploymentEvidence}
+                  loading={deploymentEvidenceQuery.isLoading}
+                  error={
+                    deploymentEvidenceQuery.isError
+                      ? "Could not load deployment evidence for this launch."
+                      : null
+                  }
+                />
+
+
+
                 <Section
                   variant="surface"
                   title="Launch preview"
