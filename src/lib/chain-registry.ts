@@ -32,6 +32,19 @@ export const ROBINHOOD_TESTNET_EXPLORER_URL = "https://explorer.testnet.chain.ro
 /** Conservative confirmation depth before an attempt may be called CONFIRMED. */
 export const REQUIRED_CONFIRMATIONS = 5 as const;
 
+/**
+ * C8.6A — liquidity execution safety gate.
+ *
+ * Frozen `false`. No approval, pool creation or liquidity transaction may be
+ * built or sent while this is false, and nothing in the codebase assigns to it
+ * or branches around it. No wrapped-native, factory, router, position-manager
+ * or liquidity-launcher address is declared anywhere in this project, because
+ * none is verified for Robinhood Chain Testnet 46630 — the published Robinhood
+ * deployments target chain 4663, which this project does not support.
+ */
+export const LIQUIDITY_TX_ENABLED = false as const;
+
+
 export const robinhoodTestnet = defineChain({
   id: ROBINHOOD_TESTNET_CHAIN_ID,
   name: "Robinhood Chain Testnet",
