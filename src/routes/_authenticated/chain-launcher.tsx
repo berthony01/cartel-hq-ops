@@ -172,6 +172,7 @@ function ChainLauncherPage() {
     if (!launchId || !account || !onTestnet) return;
     setBusy(true);
     let attemptId: string | null = null;
+    let txHash: string | null = null;
     try {
       const attempt = await createDeploymentAttempt({
         launchId,
@@ -181,20 +182,28 @@ function ChainLauncherPage() {
       attemptId = attempt.id;
       await invalidate();
 
-      const txHash = await broadcastTestDeployment(account);
+      txHash = await broadcastTestDeployment(account);
       await submitDeploymentTx(attempt.id, txHash);
       await invalidate();
       toast.success("Transaction broadcast. Verify once it is mined.");
     } catch (e) {
       // Only an unbroadcast DRAFT is abandoned; a broadcast tx is never discarded.
-      if (attemptId && isUserRejection(e)) {
+      if (attemptId && !txHash) {
+        const userCancelled = isUserRejection(e);
         try {
-          await abandonDeploymentAttempt(attemptId, "Cancelled in wallet");
+          await abandonDeploymentAttempt(
+            attemptId,
+            userCancelled ? "Cancelled in wallet" : "Wallet request ended before broadcast",
+          );
           await invalidate();
         } catch {
           /* leave the attempt as-is; history is never rewritten */
         }
-        toast.info("Deployment cancelled in wallet.");
+        toast.info(
+          userCancelled
+            ? "Deployment cancelled in wallet."
+            : "Wallet request ended before broadcast. The draft attempt was abandoned.",
+        );
       } else {
         toast.error(e instanceof Error ? e.message : "Deployment failed.");
       }
