@@ -293,6 +293,11 @@ function ChainLauncherPage() {
         ? liquiditySource.verified_recipient_balance_text
         : null;
 
+    if (!/^[0-9]{1,6}$/.test(liqSlippage.trim()) || !/^[0-9]{1,6}$/.test(liqDeadline.trim())) {
+      toast.error("Slippage and deadline must be whole numbers.");
+      return;
+    }
+
     try {
       const plan = buildLiquidityPlan({
         source: {
