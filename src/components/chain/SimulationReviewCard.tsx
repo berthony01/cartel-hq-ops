@@ -63,8 +63,13 @@ export function SimulationReviewCard({
     { label: "Recipient valid and non-zero", ok: preflight.recipientOk },
     { label: "Creation simulated without revert", ok: preflight.callOk },
     { label: "Gas estimated", ok: preflight.gasEstimate !== null },
-    { label: "Balance covers estimated cost", ok: preflight.sufficientBalance !== false },
+    {
+      label: "Fee estimate available",
+      ok: preflight.feeWeiPerGas !== null && preflight.estimatedCostWei !== null,
+    },
+    { label: "Balance covers estimated cost", ok: preflight.sufficientBalance === true },
   ];
+
 
   async function copyFingerprint() {
     try {
