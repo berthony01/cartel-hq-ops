@@ -1029,8 +1029,8 @@ export function ProjectInboxPanel({
                           </p>
                         ) : null}
                         <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                          Delivery activation is still pending, so a queued reply has not reached
-                          the member yet. Each reply shows its own delivery state above.
+                          Queued replies are processed by the background delivery worker. Delivery
+                          confirmation appears on the message when available.
                         </p>
                       </div>
                     );
