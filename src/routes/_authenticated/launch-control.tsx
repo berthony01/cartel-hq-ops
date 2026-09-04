@@ -76,6 +76,9 @@ import { EmptyState } from "@/components/cartel/EmptyState";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { ScheduleChangeSummary } from "@/components/cartel/ScheduleChangeSummary";
 import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
+import { VerifiedDeploymentEvidencePanel } from "@/components/cartel/VerifiedDeploymentEvidencePanel";
+import { evaluateLaunchDeploymentEvidence } from "@/lib/launch-verified-eligibility";
+import { chainDeploymentsQueryKey, listChainDeployments } from "@/lib/chain-launcher";
 
 import { launchReadinessQueryKey } from "@/lib/launch-readiness";
 
