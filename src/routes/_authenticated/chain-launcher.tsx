@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   AlertTriangle,
   CheckCircle2,
+  Coins,
   ExternalLink,
   FlaskConical,
   Loader2,
@@ -325,6 +326,8 @@ function ChainLauncherPage() {
 
   const canDeploy =
     !!launchId && !!account && onTestnet && !busy && (!latest || isTerminal(latest.status));
+  const canDeployToken =
+    !!launchId && !!account && onTestnet && !tokenBusy && (!latest || isTerminal(latest.status));
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
@@ -479,7 +482,8 @@ function ChainLauncherPage() {
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-semibold text-foreground">
-                    Attempt #{a.attempt_number} · {DEPLOYMENT_STATUS_LABEL[a.status] ?? a.status}
+                    Attempt #{a.attempt_number} · {DEPLOYMENT_STATUS_LABEL[a.status] ?? a.status} ·{" "}
+                    {a.deployment_kind === "FIXED_SUPPLY_ERC20" ? "Test token" : "Inert artifact"}
                   </span>
                   <span className="text-muted-foreground">
                     {a.confirmations}/{REQUIRED_CONFIRMATIONS} confirmations
@@ -488,6 +492,12 @@ function ChainLauncherPage() {
                 <p className="mt-1 break-all text-muted-foreground">
                   Deployer: {a.deployer_address}
                 </p>
+                {a.deployment_kind === "FIXED_SUPPLY_ERC20" ? (
+                  <p className="mt-1 break-all text-muted-foreground">
+                    {a.token_name} ({a.token_symbol}) · {formatWholeSupply(a.token_total_supply)}{" "}
+                    tokens · {CARTEL_FIXED_ERC20_DECIMALS} decimals · recipient {a.token_recipient}
+                  </p>
+                ) : null}
                 {a.tx_hash ? (
                   <p className="mt-1 break-all text-muted-foreground">
                     Tx:{" "}
@@ -538,6 +548,101 @@ function ChainLauncherPage() {
           Retrying creates a new attempt; earlier attempts are preserved. Verification is manual to
           avoid hammering the public testnet RPC.
         </p>
+      </Section>
+
+      <Section
+        variant="primary"
+        title="Testnet token — internal test only"
+        description="Fixed-supply ERC-20 from a frozen, pre-compiled artifact. Testnet only."
+        actions={
+          <Button size="sm" onClick={() => void handleDeployToken()} disabled={!canDeployToken}>
+            {tokenBusy ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Coins className="size-4" aria-hidden="true" />
+            )}
+            Deploy Test Token
+          </Button>
+        }
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="token-name" className="text-xs font-medium text-muted-foreground">
+              Token name
+            </label>
+            <Input
+              id="token-name"
+              value={tokenName}
+              maxLength={32}
+              placeholder="Cartel Test Token"
+              onChange={(e) => setTokenName(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="token-symbol" className="text-xs font-medium text-muted-foreground">
+              Symbol
+            </label>
+            <Input
+              id="token-symbol"
+              value={tokenSymbol}
+              maxLength={11}
+              placeholder="CTEST"
+              onChange={(e) => setTokenSymbol(e.target.value.toUpperCase())}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="token-supply" className="text-xs font-medium text-muted-foreground">
+              Total supply (whole tokens)
+            </label>
+            <Input
+              id="token-supply"
+              inputMode="numeric"
+              value={tokenSupply}
+              onChange={(e) => setTokenSupply(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="token-recipient" className="text-xs font-medium text-muted-foreground">
+              Initial recipient
+            </label>
+            <Input
+              id="token-recipient"
+              value={tokenRecipient}
+              placeholder="0x…"
+              onChange={(e) => setTokenRecipient(e.target.value)}
+            />
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Decimals: {CARTEL_FIXED_ERC20_DECIMALS} (fixed) · Artifact:{" "}
+          {CARTEL_FIXED_ERC20_ARTIFACT_ID}
+        </p>
+
+        <div className="mt-3 rounded-lg border border-gold/40 bg-gold/10 p-3 text-xs leading-relaxed">
+          <p className="flex items-center gap-2 font-semibold uppercase tracking-wide text-gold">
+            <AlertTriangle className="size-4" aria-hidden="true" />
+            Immutable — read before signing
+          </p>
+          <ul className="mt-1 list-disc space-y-1 pl-4 text-muted-foreground">
+            <li>
+              Name <span className="text-foreground">{tokenName.trim() || "—"}</span>, symbol{" "}
+              <span className="text-foreground">{tokenSymbol.trim().toUpperCase() || "—"}</span>,
+              supply <span className="text-foreground">{tokenSupply.trim() || "—"}</span> whole
+              tokens, {CARTEL_FIXED_ERC20_DECIMALS} decimals.
+            </li>
+            <li className="break-all">
+              100% of the supply is minted once, at deployment, to{" "}
+              <span className="text-foreground">{tokenRecipient.trim() || "—"}</span>.
+            </li>
+            <li>No owner or admin role exists after deployment. No post-deployment minting.</li>
+            <li>No tax or fee, no blacklist or freeze, no pause or trading toggle, no limits.</li>
+            <li>Robinhood Chain TESTNET {ROBINHOOD_TESTNET_CHAIN_ID} only. No mainnet path.</li>
+            <li>
+              This is NOT the official PEPECARTEL token. No liquidity and no trading are created,
+              and no launch record or contract address is changed.
+            </li>
+          </ul>
+        </div>
       </Section>
     </div>
   );
