@@ -27,6 +27,7 @@ export type ReceiptState =
   | "TX_SUBMITTED"
   | "CONFIRMATIONS_PENDING"
   | "VERIFIED"
+  | "EVIDENCE_INCOMPLETE"
   | "FAILED"
   | "ABANDONED";
 
@@ -37,8 +38,21 @@ export type FingerprintProvenance = "SESSION" | "RE_DERIVED" | "UNAVAILABLE";
 export type LaunchReceipt = {
   state: ReceiptState;
   stateLabel: string;
-  /** True only when the row is CONFIRMED and the required evidence is present. */
+  /** True only when every required evidence field is present and consistent. */
   verified: boolean;
+  /**
+   * The raw platform status, kept available even when the receipt fails
+   * closed and refuses to use verified-success language.
+   */
+  platformStatus: string;
+  /** Reasons the receipt could not present verified-success semantics. */
+  evidenceGaps: string[];
+  /**
+   * Derived ONLY from full verified success. The server verifier compares the
+   * deployed runtime bytecode hash against the frozen artifact before it may
+   * set CONFIRMED; no hash value is persisted, so none is displayed.
+   */
+  runtimeBytecodeVerified: boolean;
   isToken: boolean;
   header: string;
 
@@ -101,6 +115,7 @@ export const RECEIPT_STATE_LABEL: Record<ReceiptState, string> = {
   TX_SUBMITTED: "Transaction submitted",
   CONFIRMATIONS_PENDING: "Awaiting confirmations",
   VERIFIED: "Verified on testnet",
+  EVIDENCE_INCOMPLETE: "Verification evidence incomplete",
   FAILED: "Failed",
   ABANDONED: "Abandoned",
 };
