@@ -260,8 +260,8 @@ async function readFeeWeiPerGas(provider: {
 
 /**
  * Runs every read-only chain check for an exact intent. Never signs, never
- * broadcasts, never writes. Fee data is advisory and excluded from the
- * fingerprint.
+ * broadcasts, never writes. Fee data is required for the preflight to pass and
+ * is excluded from the fingerprint.
  */
 export async function runPreflight(intent: SimulationIntent): Promise<PreflightResult> {
   const errors: string[] = [];
@@ -357,7 +357,7 @@ export async function runPreflight(intent: SimulationIntent): Promise<PreflightR
   }
   result.gasEstimate = gas === null ? null : gas.toString();
 
-  // Advisory fee data
+  // Fee data — required. Without it, cost coverage cannot be established.
   const fee = await readFeeWeiPerGas(provider);
   if (fee) {
     result.feeWeiPerGas = fee.fee.toString();
@@ -371,16 +371,21 @@ export async function runPreflight(intent: SimulationIntent): Promise<PreflightR
           errors.push("Insufficient testnet ETH for the estimated gas cost.");
       }
     }
+  } else {
+    errors.push("Could not obtain a current fee estimate. Run the simulation again.");
   }
 
   result.passed =
-    result.chainOk &&
-    result.accountOk &&
-    result.recipientOk &&
-    result.callOk &&
+    result.chainOk === true &&
+    result.accountOk === true &&
+    result.recipientOk === true &&
+    result.callOk === true &&
     result.balanceWei !== null &&
     gas !== null &&
-    result.sufficientBalance !== false;
+    result.gasEstimate !== null &&
+    result.feeWeiPerGas !== null &&
+    result.estimatedCostWei !== null &&
+    result.sufficientBalance === true;
 
   return result;
 }
