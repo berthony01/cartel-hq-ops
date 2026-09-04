@@ -416,6 +416,13 @@ export function isRecoveryRestorable(
 
 export function saveRecoveryRecord(record: RecoveryRecord): void {
   if (typeof window === "undefined") return;
+  // Independently validate before writing. A record that does not pass the
+  // same structural + scope check used at restore time must never be stored.
+  const validated = parseRecoveryRecord(record, {
+    workspaceId: record.workspaceId,
+    launchId: record.launchId,
+  });
+  if (!validated) return;
   try {
     window.sessionStorage.setItem(
       recoveryStorageKey(record.workspaceId, record.launchId),
@@ -431,13 +438,19 @@ export function readRecoveryRecord(scope: {
   launchId: string;
 }): RecoveryRecord | null {
   if (typeof window === "undefined") return null;
+  const key = recoveryStorageKey(scope.workspaceId, scope.launchId);
   try {
-    const raw = window.sessionStorage.getItem(
-      recoveryStorageKey(scope.workspaceId, scope.launchId),
-    );
+    const raw = window.sessionStorage.getItem(key);
     if (!raw) return null;
-    return parseRecoveryRecord(JSON.parse(raw) as unknown, scope);
+    const parsed = JSON.parse(raw) as unknown;
+    const validated = parseRecoveryRecord(parsed, scope);
+    if (!validated) {
+      window.sessionStorage.removeItem(key);
+      return null;
+    }
+    return validated;
   } catch {
+    window.sessionStorage.removeItem(key);
     return null;
   }
 }
