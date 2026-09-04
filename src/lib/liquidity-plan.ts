@@ -328,14 +328,18 @@ export function buildLiquidityPlan(input: LiquidityPlanInput): LiquidityPlan {
   const tokenSymbol = (source.tokenSymbol ?? "").trim();
   const tokenName = (source.tokenName ?? "").trim();
 
+  const sourceChainId = Number(source.chainId);
+
   const preimage = liquidityFingerprintPreimage({
     environment: NETWORK_ENVIRONMENT,
     chainId: ROBINHOOD_TESTNET_CHAIN_ID,
+    sourceChainId,
     infrastructureState: LIQUIDITY_INFRASTRUCTURE_STATE,
     quoteAsset: LIQUIDITY_QUOTE_ASSET,
     artifactId,
     sourceDeploymentId: source.deploymentId,
     tokenContract,
+    tokenName,
     tokenSymbol,
     tokenDecimals: decimals,
     operator,
@@ -348,6 +352,7 @@ export function buildLiquidityPlan(input: LiquidityPlanInput): LiquidityPlan {
   const intent: LiquidityPlanIntent = {
     environment: NETWORK_ENVIRONMENT,
     chainId: ROBINHOOD_TESTNET_CHAIN_ID,
+    sourceChainId,
     infrastructureState: LIQUIDITY_INFRASTRUCTURE_STATE,
     quoteAsset: LIQUIDITY_QUOTE_ASSET,
     artifactId,
