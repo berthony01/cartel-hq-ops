@@ -1,100 +1,113 @@
-# C8.6 Liquidity Integration — Read-Only Architecture Audit
+# C8.7 Cartel Verified Launch — Read-Only Architecture Audit
 
-Audit only. No code, migrations, packages, wallet requests, transactions, or publishing were performed.
+Audit only. No code, schema, data, migration, package, secret, Telegram send, or publish change was made.
 
-## 1. Start gate — CONFIRMED
+## 0. Start gate — CONFIRMED
 
-- HEAD `b9968902d243200eb513a7ff5df0d949f90d1580`, working tree clean (`git status --porcelain` empty).
-- Attempt #5 `ea54b0cc-4800-4a48-b03d-bc4f62c9083e`: status `CONFIRMED`, kind `FIXED_SUPPLY_ERC20`, artifact `cartel-fixed-erc20-v1`, chain 46630 / TESTNET, contract `0x7fee942a9200ae5a3f64315be53039b38bc5b8fa`, 2235 confirmations, CTEST / 18 / `1000000000000000000000000` / recipient `0x1fc16e...52b68`.
-- Launch `9f9af215-66ee-4a10-92db-617b61fb7fd3` PEPECARTEL / $PCART: chain `Solana`, status `WATCHLIST_OPEN`, `official_contract_address` NULL, `contract_registered_at` NULL. Unchanged.
+- HEAD `b5ad35acd3ce71a7f28ce4d4b272abac25c3842e`, working tree clean.
+- PEPECARTEL launch `9f9af215-66ee-4a10-92db-617b61fb7fd3`: chain `Solana`, status `WATCHLIST_OPEN`, `official_contract_address` NULL, `contract_registered_at` NULL. Unchanged.
+- 5 deployment rows, all TESTNET / chain 46630, max attempt 5. Attempts 3, 4, 5 are all `CONFIRMED`; 4 and 5 are `FIXED_SUPPLY_ERC20` (CTEST).
 
-## 2. Current state — what exists and must be reused
+## A. System-of-record map
 
-| Surface | File / object | Reuse |
-|---|---|---|
-| Chain registry (testnet-only constant, no mainnet entry) | `src/lib/chain-registry.ts` | Extend with liquidity infra addresses only after external verification |
-| Frozen token artifact | `src/lib/cartel-fixed-erc20.artifact.ts`, `contracts/CartelFixedSupplyToken.sol` | Reuse verbatim; frozen, no contract change |
-| Wallet layer (EIP-1193, injected only, no server signer) | `src/lib/chain-launcher.ts` | Reuse `getInjectedProvider`, `connectWallet`, `readAccount`, `readChainId`, `readBalanceWei`, `WalletError`, `isUserRejection` |
-| Deterministic preflight + fingerprint + 90s TTL + fail-closed fee/balance gate | `src/lib/chain-simulation.ts`, `src/components/chain/SimulationReviewCard.tsx` | Reuse the pattern for a liquidity preflight; do not fork a second simulation engine |
-| Receipt derivation (platform record vs on-chain evidence separated) | `src/lib/launch-receipt.ts`, `src/components/chain/LaunchReceiptCard.tsx` | Reuse the receipt shape and provenance model |
-| Independent server verifier (authenticated server fn, RLS re-check, service-role RPC write) | `src/lib/chain-verify.functions.ts` | Reuse the exact trust model for liquidity verification |
-| Attempt/receipt persistence | `launch_chain_deployments` + `create_/submit_/abandon_/apply_..._verification` RPCs, text mirrors for big integers | Reuse pattern, see section 7 |
-| Operator UI | `src/routes/_authenticated/chain-launcher.tsx` | Host the liquidity panel here; no new route |
+| Layer | Authoritative object |
+|---|---|
+| Launch model | `public.launches` — `chain` (free text, currently "Solana"), `status`, `official_contract_address` (text, nullable, no format constraint), `contract_registered_at`, `contract_registered_by`, `launch_watch_token` |
+| Lifecycle enforcement | triggers `enforce_launch_status_transition`, `enforce_launch_contract_update`, `enforce_launch_update_rules`, `launches_before_insert` |
+| Contract write | RPC `set_launch_contract_address(_launch_id, _contract_address)` SECURITY DEFINER; RPC `transition_launch_status` |
+| Chain evidence | `public.launch_chain_deployments` (+ `launch_id` FK, `chain_id`, `network_environment`, `deployment_kind`, `artifact_id`, `contract_address`, `tx_hash`, `block_*`, `confirmations`, `verified_token_*`, `verified_total_supply_text`, `verified_recipient_balance_text`) and RPCs `create_/submit_/abandon_/apply_launch_chain_token_deployment_verification` |
+| Client verification | `src/lib/chain-verify.functions.ts`, `chain-registry.ts`, `launch-receipt.ts`, `chain-simulation.ts`, route `_authenticated/chain-launcher.tsx` |
+| Launch Control UI | `src/lib/launch-control.ts`, `src/routes/_authenticated/launch-control.tsx` (contract field at ~1859-1903) |
+| Notifications | `launch_events`, `launch_notification_deliveries`, `launch_watch_subscriptions`; triggers `enqueue_launch_lifecycle_notification_events`, `enqueue_launch_event_deliveries`; fn `launch_notification_payload`; edge fn `launch-notifications` + per-minute runner |
+| Telegram | edge fns `telegram-webhook`, `telegram-group`; `src/lib/telegram-group.ts`; `telegram_group_announcements` |
+| Broadcast UI | `BroadcastsPanel.tsx`, `GroupAnnouncementComposer.tsx` |
+| Identity/roles | `project_profiles`, `project_platform_reviews` + `src/lib/project-verification.ts`; `is_workspace_operator/owner/member`, `has_platform_unrestricted_access` |
 
-**No liquidity code or schema exists.** Repository-wide search for `uniswap`, `liquidity`, `WETH`, `poolKey`, `tickSpacing`, `nonfungible` returns only disclaimer copy. `viem ^2.56.3` is already a dependency — no new package is needed for encoding, ABI work, or read-only calls. Duplicate-system risk is therefore concentrated in one place: do not build a second simulation engine, a second verifier, a second receipt model, or a second attempts table.
+## B. Current registration flow
 
-## 3. Infrastructure availability — BLOCKER
+1. Launch must be at `CONTRACT_PENDING` (single-step lifecycle, no skipping).
+2. Owner/admin types a free-text string into the Launch Control field and saves.
+3. `set_launch_contract_address` locks the row `FOR UPDATE`, requires `is_workspace_operator(workspace_id, auth.uid())`, requires status `CONTRACT_PENDING`, trims, and only checks **1–256 characters**. No address format, no checksum, no chain match, no on-chain existence check, no link to any deployment row.
+4. `enforce_launch_contract_update` allows edits only while `CONTRACT_PENDING` and only while `contract_registered_at` is NULL — so it is effectively immutable after registration, with no correction workflow.
+5. Registration is *completed* by a separate `transition_launch_status` to `OFFICIAL_CONTRACT_REGISTERED`, which stamps `contract_registered_at/by`.
 
-Read-only `eth_getCode` probe on chain 46630:
+**Confirmed:** there is no code path, RPC, or trigger anywhere that promotes a `launch_chain_deployments` row into `launches.official_contract_address`. The C8 pipeline is walled off by design and by explicit doc comments.
+
+## C. Current communication flow — registration DOES auto-send
+
+The status transition to `OFFICIAL_CONTRACT_REGISTERED` fires `enqueue_launch_lifecycle_notification_events` **in the same transaction**, inserting a `launch_events` row with the payload snapshot; that insert fires `enqueue_launch_event_deliveries`, fanning out `launch_notification_deliveries` rows for every active subscriber. The per-minute `launch-notifications` worker then DMs a "📦 VERIFIED LAUNCH PACKET" (it re-checks published profile, non-empty address, and not already LIVE/COMPLETED; stale claims become `ambiguous`, never blind-retried).
+
+Group broadcasts are **not** automatic: `telegram-group` requires an authenticated owner/admin and a `clientRequestId`, deduped in `telegram_group_announcements`.
+
+So: watcher DMs fire automatically on the lifecycle write, group posts do not. This violates the C8.7 "no send in the same transaction as registration" principle and is the single most important architectural finding.
+
+## D. Gap analysis
+
+1. No evidence binding: no column/table joins a launch's official contract to the deployment row that proves it.
+2. No eligibility gate: `CONFIRMED` alone is meaningless — three CONFIRMED testnet rows already hang off PEPECARTEL.
+3. No environment guard: nothing prevents a TESTNET address from being pasted into the official field.
+4. No chain-consistency guard: launch `chain` is free text ("Solana") while evidence is EVM 46630 — mismatch is currently unrepresentable and unchecked.
+5. No separation of registration from notification (see C).
+6. No correction workflow for a wrong-but-registered address.
+7. No audit record of *why* an address was accepted (`launch_events` is a notification queue, not a decision ledger; `contract_registered_by` is the only trace).
+8. No owner-only fail-closed review step; workspace operator is sufficient today.
+
+## E. Threat model
+
+| Threat | Current exposure |
+|---|---|
+| Testnet mistaken for official | HIGH — free text, no environment check |
+| Wrong chain | HIGH — `chain` is free text, never compared to `chain_id` |
+| Stale / ambiguous deployment | HIGH — 3 CONFIRMED rows, no "which one" concept |
+| Manual fake CA | HIGH — any 1–256 char string accepted |
+| Confirmed tx but wrong runtime/token metadata | Mitigated in C8 verifier (bytecode hash + token reads), unused by registration |
+| Manipulated DB row | Writes are RPC/service-role only; trigger functions have EXECUTE revoked |
+| Duplicate registration / replacement | Blocked after `contract_registered_at` — but also blocks legitimate correction |
+| Cross-tenant | Enforced (`is_workspace_operator`, tenant trigger on deployments) |
+| Unauthorized team member | Operator-level today, not owner-only |
+| Duplicate / partial notification | Handled: `on conflict do nothing`, claim + stale→`ambiguous` |
+| Race condition | `FOR UPDATE` on launch; no lock coupling registration to evidence |
+| Replay | Deployment RPCs use `client_request_id`; registration has none |
+
+## F. Proposed state machine (reusing existing names)
 
 ```text
-Permit2  0x000000000022D473030F116dDEE9F6B43aC78BA3   CODE PRESENT (18306 hex chars)
-UniswapV2Factory  0x5C69bEe7...cc5aA6f                 NO CODE
-UniswapV3Factory  0x1F98431c...31F984                  NO CODE
-V3 NonfungiblePositionManager 0xC36442b4...11FE88      NO CODE
-UniversalRouter   0x66a9893c...1dBA8Af                 NO CODE
-V4 PoolManager    0x00000000...3dE08A90                NO CODE
-V4 PositionManager 0xbD216513...FF64ee9e               NO CODE
+DEPLOYMENT CONFIRMED (existing, chain-verified)
+   -> C8.7 ELIGIBILITY EVALUATED   (pure derivation, no write)
+   -> OWNER REVIEW / EXPLICIT CONFIRMATION (owner-only, typed confirmation)
+   -> OFFICIAL REGISTRATION        (bind evidence + write address; NO sends)
+   -> COMMUNICATION READY          (explicit separate step)
+   -> NOTIFY WATCHERS / GROUP BROADCAST (existing engines, operator-triggered)
 ```
 
-Permit2 is deployed deterministically and its presence does **not** prove any Uniswap router, factory, PoolManager or PositionManager exists here. The repository holds no authoritative Uniswap deployment address for 46630, and none will be invented. **External verification of official Uniswap deployment addresses on Robinhood Chain Testnet 46630 — plus the canonical WETH9 address — is a hard prerequisite before any liquidity transaction is enabled.** Each address must be confirmed by `eth_getCode` presence plus an on-chain identity read (for example factory `owner()`/`poolManager()`, WETH `symbol()`/`decimals()`) at build time, not trusted from a document.
+Requires decoupling the auto-enqueue trigger from the lifecycle write — a deliberate, separately authorized change.
 
-No custom AMM, router, factory, pair, or position contract will be written under any circumstance.
+## G. Build slices
 
-## 4. Token artifact compatibility
+- **C8.7A** — read-only eligibility + evidence panel in Launch Control (pure derivation, zero writes, zero schema).
+- **C8.7B** — schema: evidence binding columns/table + eligibility-gated, owner-only registration RPC.
+- **C8.7C** — decouple notification enqueue from the registration transaction; explicit "notify watchers" action.
+- **C8.7D** — group broadcast integration reusing `telegram-group`.
+- **C8.7E** — correction workflow, audit ledger, terminology hardening.
 
-`CartelFixedSupplyToken` is stock OpenZeppelin 5.6.1 ERC20: standard `approve`/`transferFrom`, 18 decimals, no fee-on-transfer, no hooks, no blacklist, no pausing, no rebasing, no transfer restrictions. It is compatible with Uniswap v2, v3, and v4 style liquidity provision with **zero contract changes**. The artifact stays frozen; nothing in C8.6 recompiles or edits Solidity.
+## H. C8.7A allowlist (first slice only)
 
-## 5. Plan vs transaction — hard separation
+- **Create:** `src/lib/launch-verified-eligibility.ts`, `src/components/cartel/VerifiedDeploymentEvidencePanel.tsx`.
+- **Modify:** `src/routes/_authenticated/launch-control.tsx` (mount panel only).
+- **Prohibited:** any migration/RPC/grant/trigger; any write; `set_launch_contract_address`; `transition_launch_status`; `official_contract_address`; chain-launcher/chain-verify/chain-registry/launch-receipt/liquidity files; Telegram, Launch Watch, broadcast; mainnet 4663; publish.
+- **Tests:** deterministic eligibility across the 5 live rows; TESTNET → BLOCKED; chain mismatch (`Solana` vs 46630) → FAIL; multiple CONFIRMED rows → explicit AMBIGUOUS, never auto-pick; `registrationReady` always false in C8.7A; eslint 0/0; `tsgo --noEmit`; `bun run build`.
+- **DB QA (read-only, rollback-safe by containing no writes):** 5 deployment rows / max attempt 5 unchanged; PEPECARTEL still Solana / WATCHLIST_OPEN / NULL / NULL; zero `launch_events` of type `OFFICIAL_CONTRACT_REGISTERED`; unpublished.
+- **Stop point:** after C8.7A verification report.
 
-- **Liquidity PLAN / readiness / quote (C8.6A):** pure, zero-persistence, read-only. No `approve`, no pool creation, no `eth_sendTransaction`. Produces a fingerprinted, TTL-bounded `LiquidityPlan` mirroring the C8.4 preflight contract.
-- **Liquidity TRANSACTION (C8.6B):** remains hard-blocked behind a compile-time constant `LIQUIDITY_TX_ENABLED = false` until infrastructure addresses, pair, fee tier/tick spacing, price encoding, slippage, approval strategy, and signing flow are each explicitly reviewed and authorized. In C8.6A the button does not exist — not disabled, absent.
+## I. NO-GO factors
 
-## 6. Proposed phases
+- **GO for C8.7A** (read-only evidence and eligibility).
+- **NO-GO for C8.7B+** until three decisions are authorized: (1) how launch `chain` maps to a numeric chain id, since "Solana" can never match EVM evidence; (2) that the notification auto-enqueue trigger may be modified; (3) a mainnet-eligible environment, since every existing evidence row is TESTNET and can never be official.
 
-- **C8.6A — Liquidity Readiness & Plan (first build, transaction-free).** Registry entries only for addresses that pass live identity probes; a pure `liquidity-plan` module; a review card; a panel in the existing chain launcher. No DB, no RPC, no approvals, no signing.
-- **C8.6B — Testnet liquidity transaction.** Exact-amount approval, pool create/initialize, add-liquidity, all browser-wallet signed. Requires its own contract and start gate.
-- **C8.6C — Server verification + Liquidity Receipt.** Independent server-side verification and receipt rendering.
+## J. Terminology flags
 
-## 7. Minimum database model (C8.6B/C, not C8.6A)
+"Verified Launch Packet" and "Official contract registered" currently describe *operator self-attestation*, not chain verification, and every occurrence carries an explicit disclaimer. `project-verification.ts` correctly labels staff review as "Platform Reviewed". No "audited"/"endorsed" claims exist. Recommendation for C8.7: reserve "VERIFIED DEPLOYMENT" / "VERIFIED CONTRACT" strictly for chain-evidenced registrations and rename the self-attested path to "PROJECT-DECLARED CONTRACT" to keep the two provably distinct.
 
-`launch_chain_deployments` is a token-deployment table (`deployment_kind`, `artifact_id`, `token_*`, `verified_token_*`); overloading it with pool/position/pair columns would corrupt its contract. Recommendation: one new subordinate table `launch_chain_liquidity_attempts`, modelled *exactly* on the existing pattern — `workspace_id`, `launch_chain_deployment_id` FK, `attempt_number`, `client_request_id` idempotency, `chain_id`, `network_environment`, `status` state machine (`DRAFT|APPROVAL_SUBMITTED|SUBMITTED|PENDING|CONFIRMED|FAILED|ABANDONED`), `tx_hash`, `block_number/hash`, `confirmations`, plus `GENERATED ALWAYS AS STORED` text mirrors for every amount and liquidity/position value. Same privilege posture: RLS platform-owner AND workspace-operator for SELECT; all writes through service-role-only RPCs; internal trigger functions with EXECUTE revoked. No second source of truth: the chain remains authoritative and the row records evidence.
+## Confirmation
 
-## 8. Server-side verification (C8.6C)
-
-Authenticated server function in the `chain-verify.functions.ts` mould, trusting nothing from the browser: re-read the row through the caller's RLS context; pin chain 46630; fetch tx and receipt independently; assert `tx.from` equals recorded operator, `tx.to` equals the pinned verified router/manager address (never a browser-supplied address), receipt `status === success`, confirmations at or above `REQUIRED_CONFIRMATIONS`; re-derive the expected pool/pair address deterministically and compare with the address read from the factory/manager; read pool token0/token1, fee tier, and reserves/liquidity on chain; read the operator's resulting LP balance or position; write the verified values only through the service-role RPC, using exact text mirrors.
-
-## 9. Threat model and required mitigations
-
-| Threat | Mitigation |
-|---|---|
-| Wrong/spoofed router or factory | Addresses are frozen code constants, identity-probed on chain at build time; never user input, never from DB |
-| Malicious approval target | `approve` spender restricted to the single pinned address; any mismatch fails closed |
-| Unlimited allowance | Exact-amount approval only; never `MaxUint256`; show current allowance, and require reset-to-zero before re-approving a different amount |
-| Wrong token / wrong recipient | Token pinned to the CONFIRMED attempt's `contract_address`; recipient pinned to the connected signer |
-| Price inversion / token ordering | Canonical sort by address; price encoded after sorting; display the human price both ways for confirmation |
-| Zero or absurd initial price | Bounded validation with explicit refusal; no silent clamping |
-| Slippage abuse | Explicit min amounts and a bounded deadline; defaults conservative, no unlimited slippage |
-| Replay / double-click | `client_request_id` idempotency plus in-flight lock, as in C8.5 |
-| Tx replacement / reorg | Confirmation floor of 5, block hash recorded, verifier re-reads chain and never trusts prior state |
-| Stale quote | Fingerprint plus 90s TTL, invalidated on account/chain/param change |
-| Partial approve-then-add | Distinct persisted statuses so an interrupted sequence is recoverable, never assumed complete |
-| Browser crash / DB write fails after broadcast | Reuse the C8.5 sessionStorage recovery record with validate-on-write and delete-on-parse-failure |
-| Unsupported chain / RPC inconsistency | Hard chain pin; missing or contradictory RPC data yields no PASS |
-
-## 10. C8.6A allowlist (first build only)
-
-**Allowed to create:** `src/lib/liquidity-plan.ts`, `src/components/chain/LiquidityPlanCard.tsx`.
-**Allowed to modify:** `src/lib/chain-registry.ts` (verified infra addresses + `LIQUIDITY_TX_ENABLED=false` only), `src/routes/_authenticated/chain-launcher.tsx` (mount the panel).
-
-**Prohibited surfaces:** any migration, any RPC, `src/lib/chain-launcher.ts`, `chain-simulation.ts`, `chain-verify.functions.ts`, `launch-receipt.ts`, the token artifact, `contracts/`, `package.json`/lockfile, all Telegram/Launch Watch/broadcast code, `launches.official_contract_address`, any lifecycle transition, any mainnet 4663 path, any publish.
-
-**Acceptance tests:** deterministic plan fingerprint across repeated runs; canonical token ordering stable under input order; refusal on zero/absurd price; TTL expiry invalidates the plan; account or chain change invalidates the plan; no `eth_sendTransaction`, `approve`, or write RPC reachable from the new modules; disclaimer copy states TESTNET ONLY and no endorsement; `eslint` (no fix), `tsgo --noEmit`, and `bun run build` pass.
-
-## 11. Verdict
-
-**GO for C8.6A (readiness/plan only). NO-GO for C8.6B/C until the blocker clears.**
-
-Blocker: no authoritative Uniswap deployment addresses (and no WETH9 address) for Robinhood Chain Testnet 46630 exist in this repository, and the canonical mainnet addresses carry no code on 46630. These must be externally verified and on-chain identity-probed before any liquidity transaction is enabled.
-
-Audit complete. STOP — no build.
+No application code, schema, data, migration, secret, Telegram message, or publish state was changed. All database access was SELECT-only. STOP — no build.
