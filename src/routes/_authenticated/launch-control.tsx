@@ -659,12 +659,6 @@ function LaunchControlPage() {
       ? broadcastOutcome
       : null;
 
-
-
-
-
-
-
   const [confirmDelete, setConfirmDelete] = useState(false);
   const deleteMutation = useMutation({
     mutationFn: async () => {
