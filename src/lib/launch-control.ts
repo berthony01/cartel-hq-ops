@@ -298,8 +298,10 @@ export async function registerVerifiedLaunchContract(
  * re-derives the address from the bound deployment evidence and reuses the
  * existing `launch_events` uniqueness key, so a retry reports the queued event
  * again instead of sending a second time. Delivery itself is still performed by
- * the existing Launch Watch worker, which continues to exclude muted, stopped
- * and otherwise ineligible watchers.
+ * the existing Launch Watch worker, which continues to exclude subscribers who
+ * stopped watching. Muting countdown reminders does not exclude a subscriber
+ * from the official contract packet.
+
  */
 export type OfficialContractNotifyResult = {
   status: "queued" | "already_notified";
