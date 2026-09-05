@@ -29,7 +29,6 @@ import { REQUIRED_CONFIRMATIONS, ROBINHOOD_TESTNET_CHAIN_ID } from "./chain-regi
  */
 export const REGISTRATION_READY = true as const;
 
-
 /**
  * Environments that may host an officially registerable deployment.
  * Test networks are never included.

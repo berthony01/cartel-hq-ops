@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Loader2, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Section } from "@/components/cartel/Section";
 import { Button } from "@/components/ui/button";
@@ -70,30 +70,37 @@ export function VerifiedContractRegistrationPanel({
   onRegister,
 }: VerifiedContractRegistrationPanelProps) {
   const eligible = (evaluation?.deployments ?? []).filter((d) => d.officialRegistrationEligible);
-  const soleEligibleId = eligible.length === 1 ? (eligible[0] as DeploymentEvidenceResult).deploymentId : null;
+  const soleEligibleId =
+    eligible.length === 1 ? (eligible[0] as DeploymentEvidenceResult).deploymentId : null;
 
-  const [selectedId, setSelectedId] = useState<string | null>(soleEligibleId);
-  const [confirmInput, setConfirmInput] = useState("");
+  // Selection and confirmation are keyed to the launch and to the exact set of
+  // eligible candidates, and derived during render rather than repaired by an
+  // effect. Exactly one candidate may be preselected; two or more must always
+  // start with nothing chosen, so an owner cannot register by reflex.
+  const selectionKey = `${launchId ?? ""}::${eligible.map((d) => d.deploymentId).join("|")}`;
+  const [selection, setSelection] = useState<{ key: string; id: string | null }>({
+    key: selectionKey,
+    id: soleEligibleId,
+  });
+  const selectedId = selection.key === selectionKey ? selection.id : soleEligibleId;
 
-  // Selection resets whenever the launch changes, and whenever the set of
-  // eligible candidates changes shape. Exactly one candidate may be selected
-  // automatically; two or more must always start with nothing preselected.
-  const eligibleKey = eligible.map((d) => d.deploymentId).join("|");
-  useEffect(() => {
-    setSelectedId(eligible.length === 1 ? (eligible[0] as DeploymentEvidenceResult).deploymentId : null);
-    setConfirmInput("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [launchId, eligibleKey]);
+  // Retyped confirmation is re-armed whenever the launch, the candidate set, or
+  // the chosen candidate changes. Stale keystrokes can never carry over.
+  const confirmKey = `${selectionKey}::${selectedId ?? ""}`;
+  const [confirm, setConfirm] = useState<{ key: string; value: string }>({
+    key: confirmKey,
+    value: "",
+  });
+  const confirmInput = confirm.key === confirmKey ? confirm.value : "";
 
-  // Retyped confirmation is always re-armed when the chosen candidate changes.
-  useEffect(() => {
-    setConfirmInput("");
-  }, [selectedId]);
+  const selectCandidate = (id: string) => setSelection({ key: selectionKey, id });
+  const setConfirmInput = (value: string) => setConfirm({ key: confirmKey, value });
 
   const selected = eligible.find((d) => d.deploymentId === selectedId) ?? null;
   const expectedAddress = selected?.contractAddress ?? null;
   const confirmMatches =
     expectedAddress != null &&
+    expectedAddress.trim() !== "" &&
     confirmInput.trim().toLowerCase() === expectedAddress.trim().toLowerCase();
 
   const registrationFieldsPresent = [
@@ -199,7 +206,7 @@ export function VerifiedContractRegistrationPanel({
                   <li key={item.deploymentId}>
                     <button
                       type="button"
-                      onClick={() => setSelectedId(item.deploymentId)}
+                      onClick={() => selectCandidate(item.deploymentId)}
                       aria-pressed={active}
                       className={`w-full rounded-md border px-3 py-2 text-left ${
                         active
