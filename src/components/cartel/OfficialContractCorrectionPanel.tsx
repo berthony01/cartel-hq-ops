@@ -48,6 +48,12 @@ const CORRECTABLE_STATUSES = ["OFFICIAL_CONTRACT_REGISTERED", "LIVE", "COMPLETED
  */
 const REGISTRATION_STATE_CHECK_IDS = ["lifecycle", "not_registered"];
 
+/**
+ * Safe connected-community option already produced by the route for the
+ * C8.7D broadcast panel. Presentation only — no data access here.
+ */
+export type CorrectionGroupOption = { id: string; title: string; ready: boolean };
+
 export type OfficialContractCorrectionPanelProps = {
   launchId: string | null;
   launchStatus: string;
@@ -67,7 +73,21 @@ export type OfficialContractCorrectionPanelProps = {
   result: OfficialContractCorrectionResult | null;
   error: string | null;
   onCorrect: (input: { deploymentId: string; expectedAddress: string; reason: string }) => void;
+
+  // C8.7E E4B — two independent, explicit post-correction communications.
+  /** Reuses the already-loaded connected-community list. No second query. */
+  groups?: CorrectionGroupOption[];
+  groupsLoading?: boolean;
+  correctionNotifyPending?: boolean;
+  correctionNotifyResult?: OfficialContractCorrectionNotifyResult | null;
+  correctionNotifyError?: string | null;
+  correctionBroadcastPending?: boolean;
+  correctionBroadcastResult?: OfficialContractCorrectionBroadcastResult | null;
+  correctionBroadcastError?: string | null;
+  onNotifyCorrection?: (registrationEventId: string) => void;
+  onBroadcastCorrection?: (groupConnectionId: string, registrationEventId: string) => void;
 };
+
 
 function Note({ children }: { children: React.ReactNode }) {
   return <p className="text-xs leading-relaxed text-muted-foreground">{children}</p>;
