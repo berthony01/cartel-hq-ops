@@ -726,6 +726,93 @@ function LaunchControlPage() {
       ? correctionOutcome
       : null;
 
+  // C8.7E E4B — two independent, explicit post-correction communications.
+  // Neither is ever called from `correctContractMutation.onSuccess`: recording
+  // a correction still sends nothing. Both are keyed to launch + registration
+  // event so an outcome can never be shown against a different correction.
+  const [correctionNotifyOutcome, setCorrectionNotifyOutcome] = useState<{
+    launchId: string;
+    registrationEventId: string;
+    result: OfficialContractCorrectionNotifyResult | null;
+    error: string | null;
+  } | null>(null);
+  const correctionNotifyMutation = useMutation({
+    mutationFn: async (registrationEventId: string) => {
+      if (!selected) throw new Error("No launch selected.");
+      return notifyLaunchWatchersOfficialContractCorrection(selected.id, registrationEventId);
+    },
+    onSuccess: (result, registrationEventId) => {
+      const launchId = selected?.id ?? "";
+      setCorrectionNotifyOutcome({ launchId, registrationEventId, result, error: null });
+      toast.success(
+        result.status === "queued"
+          ? "Correction queued for active Launch Watch subscribers"
+          : "Subscribers were already notified about this correction — nothing was sent again",
+      );
+      void queryClient.invalidateQueries({
+        queryKey: ["launch-notification-summary", launchId],
+      });
+    },
+    onError: (err: unknown, registrationEventId) => {
+      const message =
+        err instanceof Error ? err.message : "Could not notify Launch Watch subscribers.";
+      setCorrectionNotifyOutcome({
+        launchId: selected?.id ?? "",
+        registrationEventId,
+        result: null,
+        error: message,
+      });
+      toast.error(message);
+    },
+  });
+
+  const [correctionBroadcastOutcome, setCorrectionBroadcastOutcome] = useState<{
+    launchId: string;
+    registrationEventId: string;
+    result: OfficialContractCorrectionBroadcastResult | null;
+    error: string | null;
+  } | null>(null);
+  const correctionBroadcastMutation = useMutation({
+    mutationFn: async (input: { groupConnectionId: string; registrationEventId: string }) => {
+      if (!selected || !workspaceId) throw new Error("No launch selected.");
+      return sendOfficialContractCorrectionBroadcast({
+        workspaceId,
+        groupConnectionId: input.groupConnectionId,
+        launchId: selected.id,
+        registrationEventId: input.registrationEventId,
+        clientRequestId: crypto.randomUUID(),
+      });
+    },
+    onSuccess: (result, input) => {
+      setCorrectionBroadcastOutcome({
+        launchId: selected?.id ?? "",
+        registrationEventId: input.registrationEventId,
+        result,
+        error: null,
+      });
+      if (result.status === "SENT" && !result.duplicate) {
+        toast.success("Correction posted to the community");
+      } else if (result.status === "SENT") {
+        toast.success("Already posted — nothing was posted again");
+      } else if (result.status === "FAILED") {
+        toast.error(result.message ?? "The correction was not posted.");
+      } else {
+        toast.warning(
+          result.message ?? "The community post outcome could not be confirmed. Nothing is retried.",
+        );
+      }
+    },
+    onError: (err: unknown, input) => {
+      const message = err instanceof Error ? err.message : "Could not post the correction.";
+      setCorrectionBroadcastOutcome({
+        launchId: selected?.id ?? "",
+        registrationEventId: input.registrationEventId,
+        result: null,
+        error: message,
+      });
+      toast.error(message);
+    },
+  });
 
 
   const [confirmDelete, setConfirmDelete] = useState(false);
