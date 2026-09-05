@@ -1000,7 +1000,185 @@ Deno.serve(async (req: Request) => {
     return { ok: true, groupRow };
   };
 
+  /**
+   * C7.3 — Team-side Project Inbox console.
+   *
+   * Every branch below is private-chat only and delegates ALL authorization to
+   * service-only RPCs which resolve telegram_connections -> application user ->
+   * CURRENT workspace_members membership. telegram_team_sessions is convenience
+   * state only and is NEVER an authorization source. Member Telegram identities
+   * are never exposed to the team; only the opaque member_ref is shown.
+   */
+  const INBOX_STATUS_DOT = (status: string) =>
+    status === "RESOLVED" ? "⚪️" : status === "WAITING_ON_MEMBER" ? "🟡" : "🔴";
+
+  /** Deterministic idempotency key so a Telegram retry cannot double-queue. */
+  const replyRequestId = async (updateId: number) => {
+    const hex = await sha256Hex(`pi-bot-reply:${updateId}`);
+    const b = hex.slice(0, 32).split("");
+    b[12] = "5";
+    b[16] = "8";
+    const s = b.join("");
+    return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20, 32)}`;
+  };
+
+  const inboxListMarkup = (rows: any[]) => ({
+    inline_keyboard: [
+      ...rows.map((r: any) => [{
+        text: `${INBOX_STATUS_DOT(String(r.conversation_status))} ${String(r.member_ref)}`,
+        callback_data: `pi_c_${String(r.conversation_id)}`,
+      }]),
+      [{ text: "✖️ Close inbox", callback_data: "pi_x" }],
+    ],
+  });
+
+  const renderInboxList = async (
+    telegramUserId: number,
+    chatId: string,
+    workspaceId: string,
+    workspaceName: string,
+  ) => {
+    const { data, error } = await admin.rpc("bot_inbox_list_conversations", {
+      _telegram_user_id: telegramUserId,
+      _workspace_id: workspaceId,
+      _limit: 8,
+    });
+    if (error) {
+      await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "Project Inbox is unavailable right now. Try again shortly.");
+      return;
+    }
+    const rows = Array.isArray(data) ? data : [];
+    if (rows.length === 0) {
+      await sendMessage(
+        TELEGRAM_BOT_TOKEN,
+        chatId,
+        `<b>📥 PROJECT INBOX — ${escapeHtml(workspaceName)}</b>\n\nNo member conversations yet.`,
+        { parse_mode: "HTML" },
+      );
+      return;
+    }
+    const lines = rows.map((r: any) =>
+      `${INBOX_STATUS_DOT(String(r.conversation_status))} <b>${escapeHtml(String(r.member_ref))}</b> • ${escapeHtml(String(r.conversation_status))}\n<i>${escapeHtml(String(r.preview ?? ""))}</i>`
+    );
+    await sendMessage(
+      TELEGRAM_BOT_TOKEN,
+      chatId,
+      `<b>📥 PROJECT INBOX — ${escapeHtml(workspaceName)}</b>\n\n${lines.join("\n\n")}\n\nPick a conversation to read and reply.`,
+      { parse_mode: "HTML", reply_markup: inboxListMarkup(rows) },
+    );
+  };
+
+  const openInboxCommand = async (telegramUserId: number, chatId: string) => {
+    const { data, error } = await admin.rpc("bot_inbox_operator_workspaces", {
+      _telegram_user_id: telegramUserId,
+    });
+    if (error) {
+      await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "Project Inbox is unavailable right now. Try again shortly.");
+      return;
+    }
+    const workspaces = Array.isArray(data) ? data : [];
+    if (workspaces.length === 0) {
+      await sendMessage(
+        TELEGRAM_BOT_TOKEN,
+        chatId,
+        "<b>Project Inbox</b>\n\nThis Telegram account is not connected to a Cartel HQ workspace you can manage.",
+        { parse_mode: "HTML" },
+      );
+      return;
+    }
+    if (workspaces.length === 1) {
+      const ws = workspaces[0];
+      await admin.rpc("bot_inbox_set_session", {
+        _telegram_user_id: telegramUserId,
+        _mode: "INBOX",
+        _workspace_id: String(ws.workspace_id),
+      });
+      await renderInboxList(telegramUserId, chatId, String(ws.workspace_id), String(ws.workspace_name ?? "Workspace"));
+      return;
+    }
+    await sendMessage(
+      TELEGRAM_BOT_TOKEN,
+      chatId,
+      "<b>📥 PROJECT INBOX</b>\n\nChoose a workspace.",
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            ...workspaces.map((w: any) => [{
+              text: `${String(w.workspace_name ?? "Workspace")} (${Number(w.waiting_count ?? 0)})`,
+              callback_data: `pi_w_${String(w.workspace_id)}`,
+            }]),
+            [{ text: "✖️ Close inbox", callback_data: "pi_x" }],
+          ],
+        },
+      },
+    );
+  };
+
+  const openInboxConversation = async (telegramUserId: number, chatId: string, conversationId: string) => {
+    const { data, error } = await admin.rpc("bot_inbox_open_conversation", {
+      _telegram_user_id: telegramUserId,
+      _conversation_id: conversationId,
+    });
+    const row = Array.isArray(data) ? data[0] : null;
+    if (error || !row || String(row.outcome) !== "ok") {
+      await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "That conversation is not available to this account.");
+      return;
+    }
+    const transcript = Array.isArray(row.transcript) ? [...row.transcript] : [];
+    transcript.sort((a: any, b: any) => String(a.created_at).localeCompare(String(b.created_at)));
+    const body = transcript.length === 0
+      ? "<i>No messages yet.</i>"
+      : transcript.map((m: any) => {
+        const who = String(m.author_type) === "TEAM" ? "Team" : String(m.author_type) === "SYSTEM" ? "System" : "Member";
+        return `<b>${who}</b>\n${escapeHtml(String(m.body ?? ""))}`;
+      }).join("\n\n");
+    await sendMessage(
+      TELEGRAM_BOT_TOKEN,
+      chatId,
+      `<b>📥 ${escapeHtml(String(row.member_ref ?? "Member"))}</b> • ${escapeHtml(String(row.conversation_status ?? ""))}\n${escapeHtml(String(row.workspace_name ?? ""))}\n\n${body}\n\n<b>Reply mode is on for 30 minutes.</b> Send your reply as a normal message. It is delivered as an official project response. Use /cancel to exit.`,
+      { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "✖️ Exit reply mode", callback_data: "pi_x" }]] } },
+    );
+  };
+
+  /**
+   * C7.3 — team alert after a CONFIRMED member capture. Best effort only:
+   * a failure here can never roll back or invalidate the captured message.
+   * The member's Telegram identity is never included; only member_ref.
+   */
+  const notifyTeamOfCapture = async (updateId: number) => {
+    try {
+      const { data, error } = await admin.rpc("bot_inbox_capture_alert_targets", {
+        _telegram_update_id: updateId,
+      });
+      if (error) return;
+      const targets = Array.isArray(data) ? data : [];
+      for (const target of targets) {
+        const operatorId = Number(target.operator_telegram_user_id);
+        if (!Number.isSafeInteger(operatorId) || operatorId <= 0) continue;
+        const heading = target.is_new_conversation === true
+          ? "🆕 NEW PROJECT INBOX MESSAGE"
+          : "📥 PROJECT INBOX MESSAGE";
+        await sendMessage(
+          TELEGRAM_BOT_TOKEN,
+          String(operatorId),
+          `<b>${heading}</b>\n\nFrom <b>${escapeHtml(String(target.member_ref ?? "Member"))}</b>\n\n${escapeHtml(String(target.body ?? ""))}`,
+          {
+            parse_mode: "HTML",
+            reply_markup: {
+              inline_keyboard: [[{ text: "📖 Open conversation", callback_data: `pi_c_${String(target.conversation_id)}` }]],
+            },
+          },
+        );
+      }
+    } catch (alertError) {
+      console.error("[telegram-webhook] inbox alert", alertError instanceof Error ? alertError.message : "unknown error");
+    }
+  };
+
   try {
+
+
     const callback = update?.callback_query;
     if (callback?.id && callback?.from?.id) {
       const from = callback.from;
@@ -1008,6 +1186,36 @@ Deno.serve(async (req: Request) => {
       const callbackChat = callback.message?.chat;
       const callbackChatId = callbackChat?.id != null ? String(callbackChat.id) : String(from.id);
       const linked = await getLinkedUser(String(from.id));
+
+      // C7.3 — Project Inbox console callbacks. Private chat only; every one
+      // re-authorizes inside the service-only RPC before exposing anything.
+      const piWorkspace = callbackData.match(/^pi_w_([0-9a-f-]{36})$/i);
+      const piConversation = callbackData.match(/^pi_c_([0-9a-f-]{36})$/i);
+      if ((piWorkspace || piConversation || callbackData === "pi_x") && callbackChat?.type === "private") {
+        const operatorId = Number(from.id);
+        if (callbackData === "pi_x") {
+          await admin.rpc("bot_inbox_set_session", { _telegram_user_id: operatorId, _mode: "NONE", _workspace_id: null });
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Inbox closed.");
+          return json({ ok: true });
+        }
+        if (piWorkspace) {
+          const workspaceId = String(piWorkspace[1]);
+          const { data: wsData } = await admin.rpc("bot_inbox_operator_workspaces", { _telegram_user_id: operatorId });
+          const match = (Array.isArray(wsData) ? wsData : []).find((w: any) => String(w.workspace_id) === workspaceId);
+          if (!match) {
+            await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "That workspace is not available.");
+            return json({ ok: true });
+          }
+          await admin.rpc("bot_inbox_set_session", { _telegram_user_id: operatorId, _mode: "INBOX", _workspace_id: workspaceId });
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, String(match.workspace_name ?? "Workspace"));
+          await renderInboxList(operatorId, callbackChatId, workspaceId, String(match.workspace_name ?? "Workspace"));
+          return json({ ok: true });
+        }
+        await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Opening conversation…");
+        await openInboxConversation(operatorId, callbackChatId, String(piConversation![1]));
+        return json({ ok: true });
+      }
+
       if (callbackData === "beta_join") {
         if (linked?.user_id) {
           const existing = await getUserBetaContact(String(from.id));
@@ -1692,7 +1900,78 @@ Deno.serve(async (req: Request) => {
      * Routing is decided entirely by ONE atomic service-only RPC, and this
      * path never sends any Telegram message.
      */
+    // C7.3 — team console commands, private chat only. These run before the
+    // unknown-slash-command no-op so they can never fall through to capture.
+    if (chat?.type === "private" && from?.is_bot !== true && /^\/inbox(?:@\w+)?$/i.test(text)) {
+      await openInboxCommand(Number(from.id), chatId);
+      return json({ ok: true });
+    }
+    if (chat?.type === "private" && from?.is_bot !== true && /^\/cancel(?:@\w+)?$/i.test(text)) {
+      const cleared = await admin.rpc("bot_inbox_set_session", { _telegram_user_id: Number(from.id), _mode: "NONE", _workspace_id: null });
+      await sendMessage(
+        TELEGRAM_BOT_TOKEN,
+        chatId,
+        cleared.error ? "Could not close the inbox right now." : "Reply mode closed. Use /inbox to open Project Inbox again.",
+      );
+      return json({ ok: true });
+    }
+
     if (text.startsWith("/")) return json({ ok: true });
+
+    /**
+     * C7.3 — TEAM reply from the bot console.
+     *
+     * A valid, unexpired REPLY session owned by a still-authorized operator
+     * turns the next plain private message into a TEAM reply instead of a
+     * member-initiated inbound DM. The RPC re-authorizes identity, membership
+     * and conversation/workspace binding, and queues the reply through the
+     * SAME durable project_inbox_deliveries ledger the web inbox uses. This
+     * handler never contacts the member directly.
+     */
+    if (chat?.type === "private" && from?.is_bot !== true) {
+      const { data: sessionData } = await admin.rpc("bot_inbox_active_reply_session", {
+        _telegram_user_id: Number(from.id),
+      });
+      const session = Array.isArray(sessionData) ? sessionData[0] : null;
+      if (session?.conversation_id) {
+        const requestId = await replyRequestId(Number(update?.update_id));
+        const { data: replyData, error: replyError } = await admin.rpc("bot_inbox_create_team_reply", {
+          _telegram_user_id: Number(from.id),
+          _body: text,
+          _client_request_id: requestId,
+        });
+        const outcome = Array.isArray(replyData) ? replyData[0] : null;
+        if (replyError || !outcome) {
+          await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "That reply could not be queued. Nothing was sent. Try again.");
+          return json({ ok: true });
+        }
+        if (String(outcome.outcome) === "queued") {
+          await sendMessage(
+            TELEGRAM_BOT_TOKEN,
+            chatId,
+            `<b>Reply queued for ${escapeHtml(String(session.member_ref))}</b>\n\nIt is being delivered as an official project response. Delivery is confirmed by the delivery worker, not by this message.`,
+            { parse_mode: "HTML" },
+          );
+          return json({ ok: true });
+        }
+        const reasonText: Record<string, string> = {
+          conversation_resolved: "This conversation is resolved. Reopen it in Cartel HQ before replying.",
+          contact_blocked: "This member is blocked, so no reply can be sent.",
+          earlier_reply_unsettled: "An earlier reply in this conversation is not settled yet. Nothing was queued.",
+          missing_project_name: "Save your Project Profile name in Cartel HQ before replying.",
+          too_long_to_deliver: "That reply is too long to deliver.",
+          invalid_length: "A reply must be between 1 and 3500 characters.",
+          request_id_reused: "That reply was not queued.",
+        };
+        await sendMessage(
+          TELEGRAM_BOT_TOKEN,
+          chatId,
+          reasonText[String(outcome.reason ?? "")] ?? "That reply could not be queued. Nothing was sent.",
+        );
+        return json({ ok: true });
+      }
+    }
+
 
     const inboundUpdateId = Number(update?.update_id);
     const inboundMessageId = Number(message?.message_id);
@@ -1709,7 +1988,7 @@ Deno.serve(async (req: Request) => {
       Number.isSafeInteger(inboundChatId) && inboundChatId === inboundSenderId;
 
     if (capturable) {
-      const { error: captureError } = await admin.rpc("capture_project_inbox_launch_reply", {
+      const { data: captureData, error: captureError } = await admin.rpc("capture_project_inbox_launch_reply", {
         _telegram_update_id: inboundUpdateId,
         _telegram_user_id: inboundSenderId,
         _telegram_chat_id: inboundChatId,
@@ -1718,8 +1997,13 @@ Deno.serve(async (req: Request) => {
         _body: text,
       });
       if (captureError) throw captureError;
+      const captureRow = Array.isArray(captureData) ? captureData[0] : null;
+      if (captureRow && String(captureRow.outcome) === "captured") {
+        await notifyTeamOfCapture(inboundUpdateId);
+      }
       return json({ ok: true });
     }
+
 
     /**
      * C7.3E — member-initiated Project Inbox capture.
@@ -1747,7 +2031,7 @@ Deno.serve(async (req: Request) => {
       text.length >= 1 && text.length <= 4096;
 
     if (bareDmCapturable) {
-      const { error: memberCaptureError } = await admin.rpc(
+      const { data: memberCaptureData, error: memberCaptureError } = await admin.rpc(
         "capture_project_inbox_member_message",
         {
           _telegram_update_id: inboundUpdateId,
@@ -1758,8 +2042,12 @@ Deno.serve(async (req: Request) => {
         },
       );
       if (memberCaptureError) throw memberCaptureError;
+      if (String(memberCaptureData ?? "") === "captured") {
+        await notifyTeamOfCapture(inboundUpdateId);
+      }
       return json({ ok: true });
     }
+
 
 
 

@@ -242,7 +242,9 @@ Deno.serve(async (request) => {
           !message ||
           message.conversation_id !== delivery.conversation_id ||
           message.author_type !== "TEAM" ||
-          message.channel !== "WEB" ||
+          // C7.3: a team reply may legitimately originate from the web inbox
+          // ('WEB') or from the team-side Telegram bot console ('TELEGRAM').
+          (message.channel !== "WEB" && message.channel !== "TELEGRAM") ||
           message.team_user_id !== delivery.team_user_id
         ) {
           desired = {
