@@ -264,7 +264,7 @@ export type DeploymentEvidenceResult = {
   officialRegistrationEligible: boolean;
   registrationChecks: EvidenceCheck[];
   registrationBlockReasons: string[];
-  /** Set when more than one deployment carries verified evidence. */
+  /** Set when more than one deployment is eligible for official registration. */
   ambiguous: boolean;
 };
 
