@@ -253,6 +253,52 @@ export function OfficialContractCorrectionPanel({
       : { key: formKey, selectedId: null, confirmAddress: "", reason: "", reviewing: false };
   const patch = (next: Partial<typeof state>) => setForm({ ...state, ...next, key: formKey });
 
+  // C8.7E E4B — the CURRENT communicable correction is derived from the
+  // immutable, chronological ledger passed in by the route, never from this
+  // browser session's last mutation result. A correction recorded on an
+  // earlier day therefore stays communicable after a reload, and a superseded
+  // one stops being communicable immediately. The server revalidates all of
+  // this independently; everything below is presentation only.
+  const latestEvent = events.length > 0 ? events[events.length - 1]! : null;
+  const currentCorrection =
+    registrationComplete &&
+    !eventsLoading &&
+    !eventsError &&
+    latestEvent != null &&
+    latestEvent.action === "CORRECTED" &&
+    (latestEvent.id ?? "").trim() !== "" &&
+    latestEvent.deployment_id === officialContractDeploymentId &&
+    officialContractAddress != null &&
+    (latestEvent.contract_address ?? "").trim().toLowerCase() ===
+      officialContractAddress.trim().toLowerCase() &&
+    (latestEvent.superseded_event_id ?? "").trim() !== "" &&
+    (latestEvent.correction_reason ?? "").trim() !== ""
+      ? latestEvent
+      : null;
+  const supersededEvent = currentCorrection
+    ? (events.find((e) => e.id === currentCorrection.superseded_event_id) ?? null)
+    : null;
+
+  // Armed confirmations and the selected community are keyed to the current
+  // correction, so they re-arm automatically whenever the launch changes or a
+  // newer correction supersedes this one. Durable outcomes come from props and
+  // are never cleared by cancelling an armed confirmation.
+  const commKey = `${launchId ?? ""}::${currentCorrection?.id ?? ""}`;
+  const [comm, setComm] = useState<{
+    key: string;
+    notifyArmed: boolean;
+    groupId: string | null;
+    groupArmed: boolean;
+  }>({ key: commKey, notifyArmed: false, groupId: null, groupArmed: false });
+  const commState =
+    comm.key === commKey
+      ? comm
+      : { key: commKey, notifyArmed: false, groupId: null, groupArmed: false };
+  const patchComm = (next: Partial<typeof commState>) =>
+    setComm({ ...commState, ...next, key: commKey });
+
+
+
   const selected = candidates.find((d) => d.deploymentId === state.selectedId) ?? null;
   const replacementAddress = selected?.contractAddress ?? null;
   const confirmMatches =
