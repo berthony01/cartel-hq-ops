@@ -171,7 +171,86 @@ function startMenuText(linked: boolean) {
     : `<b>WELCOME TO CARTEL HQ 🐸</b>\n\nThe Telegram command bot for the growing PEPECARTEL ecosystem.\n\nSticker creation, Telegram sticker-pack publishing, native sticker delivery and multi-group distribution are live in <b>Private Beta</b>. More community tools are on the way.\n\n<b>What would you like to do?</b>`;
 }
 function roadmapText() {
-  return `<b>CARTEL HQ BOT • PRIVATE BETA ROADMAP</b>\n\n<b>LIVE NOW</b>\n✅ AI Sticker Lab\n✅ Telegram sticker-pack publishing\n✅ Native Telegram sticker delivery\n✅ Multi-group sticker distribution\n✅ Community join welcomes with optional auto-delete\n✅ Launch Watch opt-ins\n✅ Controlled 24h &amp; 1h launch countdown reminders\n✅ Official-contract registration alerts\n✅ Launch-live alerts\n\n<b>IN DEVELOPMENT</b>\n🚧 <b>Telegram Community Tools</b>\n• Sticker Pack Manager\n• Cartel Sticker Drops — scheduled branded sticker posts\n• Scheduled announcements, polls &amp; giveaways\n• Community analytics\n\n🚧 <b>Cartel Launch Network</b>\n• Public Cartel Network project &amp; launch pages\n• My Watchlist\n• Cartel Signals project-event feed\n\n🚧 Operations &amp; Missions\n🚧 Project Verification\n🚧 Distribution expansion\n🚧 Cartel Shield\n🚧 Reputation &amp; analytics\n\nLaunch Watch messages are opt-in and can be muted or stopped at any time. They are not token safety checks, audits, verification or endorsements. Cartel Sticker Drops will be admin-controlled with scheduling, quiet hours and post limits. More capabilities will roll out progressively through Cartel HQ. Public Cartel HQ web access will be added here when it is ready.\n\n<b>Want early access to what's coming next?</b>`;
+  return `<b>CARTEL HQ • ECOSYSTEM ROADMAP</b>
+
+Cartel HQ is evolving from community tooling into an operating system for launching and running onchain projects.
+
+<b>✅ BUILT FOUNDATION</b>
+
+🎨 <b>Brand &amp; Creative</b>
+• AI Sticker Lab
+• Telegram sticker-pack publishing
+• Native sticker delivery
+• Multi-group distribution
+• Brand Kit &amp; asset management
+• Scheduled Sticker Drops
+• Motion sticker workflow foundation
+
+🏘 <b>Community Operations</b>
+• Multi-community Telegram connections
+• Welcome &amp; onboarding automation
+• Launch Watch CTA in community onboarding
+• Official Community Broadcast
+• Two-way Project Inbox
+• Team Bot Console
+• Project-to-subscriber updates
+
+🚀 <b>Launch Infrastructure</b>
+• Project Identity &amp; Launch Control
+• Launch Watch opt-in network
+• 24h &amp; 1h countdown reminders
+• Schedule-change communication
+• Launch-live alerts
+• Deployment evidence verification
+• Official contract registration
+• Official CA delivery to Launch Watch subscribers
+• Official CA Telegram group broadcast
+• Contract correction + immutable history
+• Launch monitoring handoff
+
+🌐 <b>Cartel Network</b>
+• Public project discovery
+• Public launch pages
+• Upcoming launches
+• Cartel Signals event feed
+
+⛓ <b>Robinhood Chain Launcher Foundation</b>
+• Wallet connection + network switching
+• Robinhood Chain Testnet launch preflight
+• Fixed-supply ERC-20 deployment
+• Onchain deployment verification
+• Launch receipt
+• Official-contract + Launch Watch handoff
+
+<b>🚧 CURRENT PRODUCTION WORK</b>
+
+Robinhood Chain Mainnet readiness:
+• Production wallet/gas safeguards
+• Mainnet deployment verification
+• Verified liquidity execution path
+• Liquidity receipt/evidence
+• Full real-money launch checklist
+
+Testnet liquidity execution remains deferred until the required AMM infrastructure can be authoritatively verified. We will not invent contract addresses just to call it finished.
+
+<b>🔜 NEXT PRODUCT LAYERS</b>
+• Public Cartel Launchpad
+• Cartel Verified Launch / Launch Passport experience
+• My Watchlist
+• Expanded analytics, reputation &amp; Cartel Shield
+• Distribution and marketing expansion
+• Operations &amp; Missions
+• Cartel AI Operator
+• Deeper ecosystem integrations
+
+<b>THE VISION</b>
+Before the launch. During the launch. After the launch.
+
+One project. One operating system.
+
+<b>CARTEL HQ.</b>
+
+Launch Watch is opt-in and can be muted or stopped. Deployment verification confirms specific recorded onchain evidence. It is not a token/project safety audit, endorsement, guarantee or investment recommendation.`;
 }
 function helpText(isGroup: boolean) {
   return isGroup
