@@ -154,9 +154,10 @@ export function VerifiedDeploymentEvidencePanel({
       }
       actions={
         <span className="rounded-sm border border-border px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-          Read only — no registration
+          Evidence only — registration is confirmed separately
         </span>
       }
+
     >
       {loading ? (
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
