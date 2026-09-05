@@ -1000,7 +1000,149 @@ Deno.serve(async (req: Request) => {
     return { ok: true, groupRow };
   };
 
+  /**
+   * C7.3 — Team-side Project Inbox console.
+   *
+   * Every branch below is private-chat only and delegates ALL authorization to
+   * service-only RPCs which resolve telegram_connections -> application user ->
+   * CURRENT workspace_members membership. telegram_team_sessions is convenience
+   * state only and is NEVER an authorization source. Member Telegram identities
+   * are never exposed to the team; only the opaque member_ref is shown.
+   */
+  const INBOX_STATUS_DOT = (status: string) =>
+    status === "RESOLVED" ? "⚪️" : status === "WAITING_ON_MEMBER" ? "🟡" : "🔴";
+
+  /** Deterministic idempotency key so a Telegram retry cannot double-queue. */
+  const replyRequestId = async (updateId: number) => {
+    const hex = await sha256Hex(`pi-bot-reply:${updateId}`);
+    const b = hex.slice(0, 32).split("");
+    b[12] = "5";
+    b[16] = "8";
+    const s = b.join("");
+    return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20, 32)}`;
+  };
+
+  const inboxListMarkup = (rows: any[]) => ({
+    inline_keyboard: [
+      ...rows.map((r: any) => [{
+        text: `${INBOX_STATUS_DOT(String(r.conversation_status))} ${String(r.member_ref)}`,
+        callback_data: `pi_c_${String(r.conversation_id)}`,
+      }]),
+      [{ text: "✖️ Close inbox", callback_data: "pi_x" }],
+    ],
+  });
+
+  const renderInboxList = async (
+    telegramUserId: number,
+    chatId: string,
+    workspaceId: string,
+    workspaceName: string,
+  ) => {
+    const { data, error } = await admin.rpc("bot_inbox_list_conversations", {
+      _telegram_user_id: telegramUserId,
+      _workspace_id: workspaceId,
+      _limit: 8,
+    });
+    if (error) {
+      await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "Project Inbox is unavailable right now. Try again shortly.");
+      return;
+    }
+    const rows = Array.isArray(data) ? data : [];
+    if (rows.length === 0) {
+      await sendMessage(
+        TELEGRAM_BOT_TOKEN,
+        chatId,
+        `<b>📥 PROJECT INBOX — ${escapeHtml(workspaceName)}</b>\n\nNo member conversations yet.`,
+        { parse_mode: "HTML" },
+      );
+      return;
+    }
+    const lines = rows.map((r: any) =>
+      `${INBOX_STATUS_DOT(String(r.conversation_status))} <b>${escapeHtml(String(r.member_ref))}</b> • ${escapeHtml(String(r.conversation_status))}\n<i>${escapeHtml(String(r.preview ?? ""))}</i>`
+    );
+    await sendMessage(
+      TELEGRAM_BOT_TOKEN,
+      chatId,
+      `<b>📥 PROJECT INBOX — ${escapeHtml(workspaceName)}</b>\n\n${lines.join("\n\n")}\n\nPick a conversation to read and reply.`,
+      { parse_mode: "HTML", reply_markup: inboxListMarkup(rows) },
+    );
+  };
+
+  const openInboxCommand = async (telegramUserId: number, chatId: string) => {
+    const { data, error } = await admin.rpc("bot_inbox_operator_workspaces", {
+      _telegram_user_id: telegramUserId,
+    });
+    if (error) {
+      await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "Project Inbox is unavailable right now. Try again shortly.");
+      return;
+    }
+    const workspaces = Array.isArray(data) ? data : [];
+    if (workspaces.length === 0) {
+      await sendMessage(
+        TELEGRAM_BOT_TOKEN,
+        chatId,
+        "<b>Project Inbox</b>\n\nThis Telegram account is not connected to a Cartel HQ workspace you can manage.",
+        { parse_mode: "HTML" },
+      );
+      return;
+    }
+    if (workspaces.length === 1) {
+      const ws = workspaces[0];
+      await admin.rpc("bot_inbox_set_session", {
+        _telegram_user_id: telegramUserId,
+        _mode: "INBOX",
+        _workspace_id: String(ws.workspace_id),
+      });
+      await renderInboxList(telegramUserId, chatId, String(ws.workspace_id), String(ws.workspace_name ?? "Workspace"));
+      return;
+    }
+    await sendMessage(
+      TELEGRAM_BOT_TOKEN,
+      chatId,
+      "<b>📥 PROJECT INBOX</b>\n\nChoose a workspace.",
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            ...workspaces.map((w: any) => [{
+              text: `${String(w.workspace_name ?? "Workspace")} (${Number(w.waiting_count ?? 0)})`,
+              callback_data: `pi_w_${String(w.workspace_id)}`,
+            }]),
+            [{ text: "✖️ Close inbox", callback_data: "pi_x" }],
+          ],
+        },
+      },
+    );
+  };
+
+  const openInboxConversation = async (telegramUserId: number, chatId: string, conversationId: string) => {
+    const { data, error } = await admin.rpc("bot_inbox_open_conversation", {
+      _telegram_user_id: telegramUserId,
+      _conversation_id: conversationId,
+    });
+    const row = Array.isArray(data) ? data[0] : null;
+    if (error || !row || String(row.outcome) !== "ok") {
+      await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "That conversation is not available to this account.");
+      return;
+    }
+    const transcript = Array.isArray(row.transcript) ? [...row.transcript] : [];
+    transcript.sort((a: any, b: any) => String(a.created_at).localeCompare(String(b.created_at)));
+    const body = transcript.length === 0
+      ? "<i>No messages yet.</i>"
+      : transcript.map((m: any) => {
+        const who = String(m.author_type) === "TEAM" ? "Team" : String(m.author_type) === "SYSTEM" ? "System" : "Member";
+        return `<b>${who}</b>\n${escapeHtml(String(m.body ?? ""))}`;
+      }).join("\n\n");
+    await sendMessage(
+      TELEGRAM_BOT_TOKEN,
+      chatId,
+      `<b>📥 ${escapeHtml(String(row.member_ref ?? "Member"))}</b> • ${escapeHtml(String(row.conversation_status ?? ""))}\n${escapeHtml(String(row.workspace_name ?? ""))}\n\n${body}\n\n<b>Reply mode is on for 30 minutes.</b> Send your reply as a normal message. It is delivered as an official project response. Use /cancel to exit.`,
+      { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "✖️ Exit reply mode", callback_data: "pi_x" }]] } },
+    );
+  };
+
   try {
+
     const callback = update?.callback_query;
     if (callback?.id && callback?.from?.id) {
       const from = callback.from;
