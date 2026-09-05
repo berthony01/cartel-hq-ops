@@ -80,6 +80,12 @@ import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
 import { VerifiedDeploymentEvidencePanel } from "@/components/cartel/VerifiedDeploymentEvidencePanel";
 import { VerifiedContractRegistrationPanel } from "@/components/cartel/VerifiedContractRegistrationPanel";
 import { OfficialContractNotifyPanel } from "@/components/cartel/OfficialContractNotifyPanel";
+import { OfficialContractGroupBroadcastPanel } from "@/components/cartel/OfficialContractGroupBroadcastPanel";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  sendOfficialContractBroadcast,
+  type OfficialContractBroadcastResult,
+} from "@/lib/telegram-group";
 import { evaluateLaunchDeploymentEvidence } from "@/lib/launch-verified-eligibility";
 import { chainDeploymentsQueryKey, listChainDeployments } from "@/lib/chain-launcher";
 
