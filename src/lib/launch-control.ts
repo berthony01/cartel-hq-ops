@@ -793,6 +793,11 @@ export const workspaceScheduleCommunicationsQueryKey = (workspaceId: string | nu
 export type LaunchAccess = {
   role: string | null;
   canManage: boolean;
+  /**
+   * True only for the workspace owner record the database itself checks
+   * (`workspaces.owner_id`). Admin membership does NOT satisfy this.
+   */
+  isWorkspaceOwner: boolean;
 };
 
 export async function getLaunchAccess(
