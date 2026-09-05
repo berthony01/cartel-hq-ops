@@ -3097,6 +3097,76 @@ export type Database = {
         Args: { _launch_id: string }
         Returns: string
       }
+      bot_inbox_active_reply_session: {
+        Args: { _telegram_user_id: number }
+        Returns: {
+          conversation_id: string
+          member_ref: string
+          workspace_id: string
+        }[]
+      }
+      bot_inbox_capture_alert_targets: {
+        Args: { _telegram_update_id: number }
+        Returns: {
+          body: string
+          conversation_id: string
+          is_new_conversation: boolean
+          member_ref: string
+          operator_telegram_user_id: number
+        }[]
+      }
+      bot_inbox_create_team_reply: {
+        Args: {
+          _body: string
+          _client_request_id: string
+          _telegram_user_id: number
+        }
+        Returns: {
+          message_id: string
+          outcome: string
+          reason: string
+        }[]
+      }
+      bot_inbox_list_conversations: {
+        Args: {
+          _limit?: number
+          _telegram_user_id: number
+          _workspace_id: string
+        }
+        Returns: {
+          conversation_id: string
+          conversation_status: string
+          last_message_at: string
+          member_ref: string
+          preview: string
+        }[]
+      }
+      bot_inbox_open_conversation: {
+        Args: { _conversation_id: string; _telegram_user_id: number }
+        Returns: {
+          conversation_status: string
+          member_ref: string
+          outcome: string
+          transcript: Json
+          workspace_name: string
+        }[]
+      }
+      bot_inbox_operator_workspaces: {
+        Args: { _telegram_user_id: number }
+        Returns: {
+          waiting_count: number
+          workspace_id: string
+          workspace_name: string
+        }[]
+      }
+      bot_inbox_set_session: {
+        Args: {
+          _mode: string
+          _telegram_user_id: number
+          _workspace_id?: string
+        }
+        Returns: string
+      }
       can_access_pack: {
         Args: { _pack_id: string; _user_id: string }
         Returns: boolean
