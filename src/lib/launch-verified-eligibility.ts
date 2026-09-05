@@ -1,17 +1,21 @@
 import { REQUIRED_CONFIRMATIONS, ROBINHOOD_TESTNET_CHAIN_ID } from "./chain-registry";
 
 /**
- * C8.7A — Cartel Verified Launch: deployment evidence + official-registration
- * eligibility evaluator.
+ * Cartel Verified Launch — deployment evidence + official-registration
+ * eligibility evaluator (C8.7A evidence model, C8.7B registration gating).
  *
  * READ ONLY BY CONSTRUCTION. This module is a pure, deterministic function of
  * its inputs. It performs no I/O, imports no Supabase client, calls no RPC,
- * never writes `launches.official_contract_address` or `contract_registered_at`,
- * never transitions a launch lifecycle status, never enqueues a launch event,
- * notification or Telegram send, and never builds or signs a transaction.
+ * never writes `launches.official_contract_address`, `contract_registered_at`
+ * or `official_contract_deployment_id`, never transitions a launch lifecycle
+ * status, never enqueues a launch event, notification or Telegram send, and
+ * never builds or signs a transaction.
  *
- * `registrationReady` is a frozen `false` for this phase: C8.7A can explain
- * evidence, it can never make official registration possible.
+ * Since C8.7B, evidence-bound official contract registration IS possible, but
+ * only through the separate `register_verified_launch_contract` RPC, which
+ * re-derives every predicate below server side and is the sole write path.
+ * What this evaluator produces only decides what an owner is OFFERED; the
+ * database remains authoritative and fails closed independently.
  *
  * "Verified deployment" means only that the recorded on-chain deployment
  * evidence passed Cartel's deployment verifier. It is not an endorsement,
@@ -24,6 +28,7 @@ import { REQUIRED_CONFIRMATIONS, ROBINHOOD_TESTNET_CHAIN_ID } from "./chain-regi
  * re-derives every predicate below server side. Nothing in this module writes.
  */
 export const REGISTRATION_READY = true as const;
+
 
 /**
  * Environments that may host an officially registerable deployment.
