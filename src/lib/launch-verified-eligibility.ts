@@ -141,9 +141,9 @@ function normalizeChainName(value: string | null): string {
 }
 
 /**
- * C8.7A does not attempt a global chain-mapping schema. It knows only enough
- * to fail closed: anything it cannot positively match is UNKNOWN, and no
- * mainnet can ever be reported COMPATIBLE from this build.
+ * No global chain-mapping schema. This knows only enough to fail closed:
+ * anything it cannot positively match is UNKNOWN, and a declared non-EVM chain
+ * can never match an EVM chain id.
  */
 export function evaluateChainCompatibility(
   declaredChain: string | null,
