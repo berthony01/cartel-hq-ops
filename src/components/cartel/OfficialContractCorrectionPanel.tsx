@@ -731,21 +731,26 @@ export function OfficialContractCorrectionPanel({
                 {/* B — one connected Telegram community */}
                 <div className="space-y-2 border-t border-border pt-3">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    Post this correction to one community
+                    Post this correction to one ready community
                   </p>
-                  {groupsLoading ? (
+                  {!onBroadcastCorrection ? (
+                    <Note>Community correction broadcast is not available in this context.</Note>
+                  ) : groupsLoading ? (
                     <Note>Loading connected communities…</Note>
-                  ) : (groups ?? []).length === 0 ? (
-                    <Note>No connected Telegram community is available for this project.</Note>
+                  ) : readyGroups.length === 0 ? (
+                    <Note>
+                      No connected Telegram community is ready to receive a correction post. The
+                      bot must be an administrator.
+                    </Note>
                   ) : (
                     <ul className="space-y-2">
-                      {(groups ?? []).map((group) => {
-                        const active = group.id === commState.groupId;
+                      {readyGroups.map((group) => {
+                        const active = group.id === selectedReadyGroup?.id;
                         return (
                           <li key={group.id}>
                             <button
                               type="button"
-                              disabled={disabled || !group.ready || correctionBroadcastPending}
+                              disabled={disabled || correctionBroadcastPending}
                               aria-pressed={active}
                               onClick={() => patchComm({ groupId: group.id, groupArmed: false })}
                               className={`min-h-11 w-full rounded-md border px-3 py-2 text-left disabled:opacity-60 ${
@@ -757,26 +762,22 @@ export function OfficialContractCorrectionPanel({
                               <span className="block truncate text-xs text-foreground">
                                 {group.title}
                               </span>
-                              {!group.ready ? (
-                                <span className="mt-1 block text-[11px] text-muted-foreground">
-                                  The bot is not an administrator in this community yet.
-                                </span>
-                              ) : null}
                             </button>
                           </li>
                         );
                       })}
                     </ul>
                   )}
-                  {commState.groupId ? (
+                  {selectedReadyGroup ? (
                     commState.groupArmed ? (
                       <div className="flex flex-wrap gap-2">
                         <Button
                           className="min-h-11"
                           disabled={disabled || correctionBroadcastPending}
-                          onClick={() =>
-                            onBroadcastCorrection?.(commState.groupId!, currentCorrection.id)
-                          }
+                          onClick={() => {
+                            if (!onBroadcastCorrection || !selectedReadyGroup) return;
+                            onBroadcastCorrection(selectedReadyGroup.id, currentCorrection.id);
+                          }}
                         >
                           {correctionBroadcastPending ? (
                             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -806,7 +807,7 @@ export function OfficialContractCorrectionPanel({
                       </Button>
                     )
                   ) : (
-                    <Note>Select one community to continue.</Note>
+                    <Note>Select one ready community to continue.</Note>
                   )}
                   {correctionBroadcastResult ? (
                     <div
