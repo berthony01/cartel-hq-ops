@@ -518,15 +518,57 @@ function evaluateDeployment(
   );
   if (!evidenceVerified) registrationBlockReasons.push("Chain evidence is incomplete");
 
+  const approvedArtifact = row.artifact_id === APPROVED_OFFICIAL_ARTIFACT_ID;
   registrationChecks.push(
     check(
-      "phase_gate",
-      "Registration path available",
-      "BLOCKED",
-      "Registering an official contract from chain evidence is not available in this release. This panel is read only.",
+      "approved_artifact",
+      "Approved frozen artifact",
+      approvedArtifact ? "PASS" : "BLOCKED",
+      approvedArtifact
+        ? `Deployed from the approved frozen artifact ${APPROVED_OFFICIAL_ARTIFACT_ID}.`
+        : `Artifact ${row.artifact_id ?? "unknown"} is not the approved official artifact.`,
     ),
   );
-  registrationBlockReasons.push("Evidence-based registration is not available in this release");
+  if (!approvedArtifact)
+    registrationBlockReasons.push("Deployment was not built from the approved frozen artifact");
+
+  const lifecycleOk = context.launchStatus === REGISTRATION_LIFECYCLE_STATUS;
+  registrationChecks.push(
+    check(
+      "lifecycle",
+      "Launch is contract pending",
+      lifecycleOk ? "PASS" : "BLOCKED",
+      lifecycleOk
+        ? "This launch is at Contract Pending, where registration is permitted."
+        : `Registration is only permitted at Contract Pending. This launch is ${context.launchStatus}.`,
+    ),
+  );
+  if (!lifecycleOk) registrationBlockReasons.push("Launch is not at Contract Pending");
+
+  const notRegistered =
+    isBlank(context.officialContractAddress) && isBlank(context.contractRegisteredAt);
+  registrationChecks.push(
+    check(
+      "not_registered",
+      "No contract registered yet",
+      notRegistered ? "PASS" : "BLOCKED",
+      notRegistered
+        ? "This launch has no registered official contract."
+        : "This launch already has a registered official contract. Registered contracts cannot be replaced.",
+    ),
+  );
+  if (!notRegistered) registrationBlockReasons.push("An official contract is already registered");
+
+  const officialRegistrationEligible =
+    envApproved &&
+    chainOk &&
+    !compatibility.isTestnet &&
+    isTokenKind &&
+    evidenceVerified &&
+    approvedArtifact &&
+    lifecycleOk &&
+    notRegistered;
+
 
   return {
     deploymentId: row.id,
