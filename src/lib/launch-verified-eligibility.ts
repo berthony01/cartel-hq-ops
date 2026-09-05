@@ -726,14 +726,24 @@ export function evaluateLaunchDeploymentEvidence(
   const evaluated = rows.map((row) => evaluateDeployment(row, context));
 
   const verified = evaluated.filter((d) => d.evidenceVerified);
-  const ambiguous = verified.length > 1;
-  if (ambiguous) {
-    for (const d of verified) d.ambiguous = true;
-  }
 
   const testnetVerifiedCount = verified.filter(
     (d) => d.environment === "TESTNET" || d.chainCompatibility.isTestnet,
   ).length;
+
+  // Ambiguity is a REGISTRATION CHOICE problem, not an evidence count problem.
+  // Several verified rows are unremarkable when exactly one of them qualifies
+  // for official registration. Only competing eligible production candidates
+  // are ambiguous, and none of those is ever selected automatically: selection
+  // is an explicit owner action and the database re-derives every predicate.
+  const eligible = evaluated.filter((d) => d.officialRegistrationEligible);
+  const ambiguous = eligible.length > 1;
+  if (ambiguous) {
+    for (const d of eligible) d.ambiguous = true;
+  }
+  const registrationCandidate =
+    eligible.length === 1 ? (eligible[0] as DeploymentEvidenceResult) : null;
+  const eligibleForOfficialRegistration = eligible.length;
 
   // A single verified deployment is described truthfully. A production record
   // is never labelled "test", and a record that is neither a known test network
@@ -751,22 +761,16 @@ export function evaluateLaunchDeploymentEvidence(
   let summaryState: SummaryState;
   if (evaluated.length === 0) summaryState = "NO_DEPLOYMENTS";
   else if (verified.length === 0) summaryState = "NO_VERIFIED_DEPLOYMENTS";
-  else if (ambiguous) summaryState = "MULTIPLE_VERIFIED_DEPLOYMENTS";
+  else if (verified.length > 1) summaryState = "MULTIPLE_VERIFIED_DEPLOYMENTS";
   else if (onlyVerifiedIsTestnet) summaryState = "VERIFIED_TEST_DEPLOYMENTS";
   else if (onlyVerifiedIsProduction) summaryState = "VERIFIED_PRODUCTION_DEPLOYMENT";
   else summaryState = "VERIFIED_DEPLOYMENT";
 
-  // Ambiguity never resolves itself. Each qualifying deployment REMAINS
-  // individually eligible — being one of several is not an evidence defect —
-  // but no candidate is ever selected automatically. Selection is an explicit
-  // owner action, and the database re-derives every predicate regardless.
-  const eligible = evaluated.filter((d) => d.officialRegistrationEligible);
-  if (eligible.length > 1) {
-    for (const d of eligible) d.ambiguous = true;
-  }
-  const registrationCandidate =
-    eligible.length === 1 ? (eligible[0] as DeploymentEvidenceResult) : null;
-  const eligibleForOfficialRegistration = eligible.length;
+  const multipleVerifiedLabel = ambiguous
+    ? `${verified.length} verified deployments recorded. ${eligibleForOfficialRegistration} qualify for official registration, so no candidate is selected automatically.`
+    : eligibleForOfficialRegistration === 1
+      ? `${verified.length} verified deployments recorded, of which exactly one qualifies for official registration.`
+      : `${verified.length} verified deployments recorded, none of which qualifies for official registration.`;
 
   const summaryLabel =
     summaryState === "NO_DEPLOYMENTS"
@@ -774,7 +778,7 @@ export function evaluateLaunchDeploymentEvidence(
       : summaryState === "NO_VERIFIED_DEPLOYMENTS"
         ? `${evaluated.length} recorded deployment${evaluated.length === 1 ? "" : "s"}, none with complete evidence`
         : summaryState === "MULTIPLE_VERIFIED_DEPLOYMENTS"
-          ? `Multiple confirmed deployments detected (${verified.length}). No candidate is selected automatically.`
+          ? multipleVerifiedLabel
           : summaryState === "VERIFIED_TEST_DEPLOYMENTS"
             ? "1 verified test network deployment recorded"
             : summaryState === "VERIFIED_PRODUCTION_DEPLOYMENT"
@@ -792,7 +796,10 @@ export function evaluateLaunchDeploymentEvidence(
     testnetVerifiedCount,
     eligibleForOfficialRegistration,
     registrationCandidate,
-    alreadyRegistered: !isBlank(context.officialContractAddress),
+    alreadyRegistered:
+      !isBlank(context.officialContractAddress) ||
+      !isBlank(context.officialContractDeploymentId) ||
+      !isBlank(context.contractRegisteredAt),
     ambiguous,
     summaryState,
     summaryLabel,
