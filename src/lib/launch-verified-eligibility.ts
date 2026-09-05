@@ -74,6 +74,12 @@ export type DeploymentEvidenceInput = {
   artifact_id: string | null;
   failure_code: string | null;
   failure_detail: string | null;
+  /* Recorded intent, as stored on the deployment row. */
+  token_name: string | null;
+  token_symbol: string | null;
+  token_decimals: number | null;
+  /** Exact-decimal generated text mirror. Never use the numeric JSON supply. */
+  token_total_supply_text: string | null;
   verified_token_name: string | null;
   verified_token_symbol: string | null;
   verified_token_decimals: number | null;
@@ -87,6 +93,7 @@ export type LaunchEvidenceContext = {
   declaredChain: string | null;
   launchStatus: string;
   officialContractAddress: string | null;
+  officialContractDeploymentId: string | null;
   contractRegisteredAt: string | null;
 };
 
