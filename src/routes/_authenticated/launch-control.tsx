@@ -532,23 +532,27 @@ function LaunchControlPage() {
       toast.error(err instanceof Error ? err.message : "Status transition was rejected."),
   });
 
-  const [contractInput, setContractInput] = useState("");
+  // C8.7B — evidence-bound registration. The operator never supplies the
+  // address: it comes from the selected verified deployment evidence and is
+  // re-derived server side. This field is a typed confirmation only.
+  const [contractConfirmInput, setContractConfirmInput] = useState("");
   useEffect(() => {
-    setContractInput(selected?.official_contract_address ?? "");
-  }, [selected?.id, selected?.official_contract_address]);
+    setContractConfirmInput("");
+  }, [selected?.id]);
 
-  const contractMutation = useMutation({
-    mutationFn: async () => {
+  const registerContractMutation = useMutation({
+    mutationFn: async (deploymentId: string) => {
       if (!selected) throw new Error("No launch selected.");
-      return setLaunchContractAddress(selected.id, contractInput);
+      return registerVerifiedLaunchContract(selected.id, deploymentId, contractConfirmInput);
     },
     onSuccess: () => {
-      toast.success("Official contract address saved");
+      toast.success("Official contract registered from verified deployment evidence");
+      setContractConfirmInput("");
       void invalidate();
     },
     onError: (err: unknown) =>
       toast.error(
-        err instanceof Error ? err.message : "Could not save the official contract address.",
+        err instanceof Error ? err.message : "Could not register the official contract.",
       ),
   });
 
