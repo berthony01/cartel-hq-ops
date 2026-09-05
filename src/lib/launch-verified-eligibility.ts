@@ -418,7 +418,6 @@ function evaluateDeployment(
     ),
   );
 
-
   const evidenceVerified = evidenceChecks.every((c) => c.state === "PASS");
 
   /* Official-registration gates — every one of these can only block. */
