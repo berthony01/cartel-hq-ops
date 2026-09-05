@@ -93,7 +93,9 @@ import { OfficialContractCorrectionPanel } from "@/components/cartel/OfficialCon
 import { supabase } from "@/integrations/supabase/client";
 import {
   sendOfficialContractBroadcast,
+  sendOfficialContractCorrectionBroadcast,
   type OfficialContractBroadcastResult,
+  type OfficialContractCorrectionBroadcastResult,
 } from "@/lib/telegram-group";
 import { evaluateLaunchDeploymentEvidence } from "@/lib/launch-verified-eligibility";
 import { chainDeploymentsQueryKey, listChainDeployments } from "@/lib/chain-launcher";
