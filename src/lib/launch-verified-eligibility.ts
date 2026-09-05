@@ -74,6 +74,12 @@ export type DeploymentEvidenceInput = {
   artifact_id: string | null;
   failure_code: string | null;
   failure_detail: string | null;
+  /* Recorded intent, as stored on the deployment row. */
+  token_name: string | null;
+  token_symbol: string | null;
+  token_decimals: number | null;
+  /** Exact-decimal generated text mirror. Never use the numeric JSON supply. */
+  token_total_supply_text: string | null;
   verified_token_name: string | null;
   verified_token_symbol: string | null;
   verified_token_decimals: number | null;
@@ -87,6 +93,7 @@ export type LaunchEvidenceContext = {
   declaredChain: string | null;
   launchStatus: string;
   officialContractAddress: string | null;
+  officialContractDeploymentId: string | null;
   contractRegisteredAt: string | null;
 };
 
@@ -257,7 +264,7 @@ export type DeploymentEvidenceResult = {
   officialRegistrationEligible: boolean;
   registrationChecks: EvidenceCheck[];
   registrationBlockReasons: string[];
-  /** Set when more than one deployment carries verified evidence. */
+  /** Set when more than one deployment is eligible for official registration. */
   ambiguous: boolean;
 };
 
@@ -293,11 +300,20 @@ export type LaunchEvidenceEvaluation = {
   deployments: DeploymentEvidenceResult[];
 };
 
-const TX_HASH_PATTERN = /^0x[0-9a-fA-F]{64}$/;
-const EVM_ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
+/** Canonical lowercase hex, mirroring `public.assert_launch_contract_evidence`. */
+const TX_HASH_PATTERN = /^0x[0-9a-f]{64}$/;
+const EVM_ADDRESS_PATTERN = /^0x[0-9a-f]{40}$/;
+const CANONICAL_DIGITS_PATTERN = /^[0-9]+$/;
+
+/** The only decimals an official Cartel fixed-supply ERC-20 may declare. */
+const REQUIRED_TOKEN_DECIMALS = 18;
 
 function isBlank(value: string | null | undefined): boolean {
   return value == null || value.trim() === "";
+}
+
+function isCanonicalDigits(value: string | null | undefined): boolean {
+  return typeof value === "string" && CANONICAL_DIGITS_PATTERN.test(value);
 }
 
 function check(id: string, label: string, state: CheckState, detail: string): EvidenceCheck {
@@ -440,8 +456,8 @@ function evaluateDeployment(
     !isBlank(row.verified_token_name) &&
     !isBlank(row.verified_token_symbol) &&
     row.verified_token_decimals != null &&
-    !isBlank(row.verified_total_supply_text) &&
-    !isBlank(row.verified_recipient_balance_text);
+    isCanonicalDigits(row.verified_total_supply_text) &&
+    isCanonicalDigits(row.verified_recipient_balance_text);
   evidenceChecks.push(
     check(
       "token_state",
@@ -450,10 +466,91 @@ function evaluateDeployment(
       isTokenKind
         ? tokenStateOk
           ? `Read back ${row.verified_token_name} (${row.verified_token_symbol}), ${row.verified_token_decimals} decimals, supply ${row.verified_total_supply_text}, recipient balance ${row.verified_recipient_balance_text}.`
-          : "Verified token state is incomplete for a token deployment."
+          : "Verified token state is incomplete or not in canonical form for a token deployment."
         : "Token state cannot be established for an unrecognised deployment kind.",
     ),
   );
+
+  /* Identity and supply parity with the recorded intent — mirrors the server
+     predicates in `public.assert_launch_contract_evidence`. Fails closed. */
+  if (isTokenKind) {
+    const nameOk = !isBlank(row.token_name) && row.verified_token_name === row.token_name;
+    evidenceChecks.push(
+      check(
+        "token_name_match",
+        "Token name matches the recorded intent",
+        nameOk ? "PASS" : "FAIL",
+        isBlank(row.token_name)
+          ? "No token name was recorded for this deployment."
+          : nameOk
+            ? `On-chain name matches the recorded name ${row.token_name}.`
+            : `On-chain name ${row.verified_token_name ?? "unknown"} does not match the recorded name ${row.token_name}.`,
+      ),
+    );
+
+    const symbolOk = !isBlank(row.token_symbol) && row.verified_token_symbol === row.token_symbol;
+    evidenceChecks.push(
+      check(
+        "token_symbol_match",
+        "Token symbol matches the recorded intent",
+        symbolOk ? "PASS" : "FAIL",
+        isBlank(row.token_symbol)
+          ? "No token symbol was recorded for this deployment."
+          : symbolOk
+            ? `On-chain symbol matches the recorded symbol ${row.token_symbol}.`
+            : `On-chain symbol ${row.verified_token_symbol ?? "unknown"} does not match the recorded symbol ${row.token_symbol}.`,
+      ),
+    );
+
+    const decimalsOk =
+      row.token_decimals === REQUIRED_TOKEN_DECIMALS &&
+      row.verified_token_decimals === REQUIRED_TOKEN_DECIMALS;
+    evidenceChecks.push(
+      check(
+        "token_decimals_match",
+        "Token decimals match the recorded intent",
+        decimalsOk ? "PASS" : "FAIL",
+        decimalsOk
+          ? `Recorded and on-chain decimals are both ${REQUIRED_TOKEN_DECIMALS}.`
+          : `Recorded decimals ${row.token_decimals ?? "unknown"} and on-chain decimals ${row.verified_token_decimals ?? "unknown"} must both be ${REQUIRED_TOKEN_DECIMALS}.`,
+      ),
+    );
+
+    const recordedSupplyOk = isCanonicalDigits(row.token_total_supply_text);
+    const supplyOk =
+      recordedSupplyOk &&
+      isCanonicalDigits(row.verified_total_supply_text) &&
+      row.verified_total_supply_text === row.token_total_supply_text;
+    evidenceChecks.push(
+      check(
+        "token_supply_match",
+        "Total supply matches the recorded intent",
+        supplyOk ? "PASS" : "FAIL",
+        !recordedSupplyOk
+          ? "No exact recorded total supply is available for this deployment."
+          : supplyOk
+            ? `On-chain total supply matches the recorded exact supply ${row.token_total_supply_text}.`
+            : `On-chain total supply ${row.verified_total_supply_text ?? "unknown"} does not match the recorded exact supply ${row.token_total_supply_text}.`,
+      ),
+    );
+
+    const balanceOk =
+      recordedSupplyOk &&
+      isCanonicalDigits(row.verified_recipient_balance_text) &&
+      row.verified_recipient_balance_text === row.token_total_supply_text;
+    evidenceChecks.push(
+      check(
+        "token_recipient_balance_match",
+        "Recipient holds the entire supply",
+        balanceOk ? "PASS" : "FAIL",
+        !recordedSupplyOk
+          ? "No exact recorded total supply is available to compare the recipient balance against."
+          : balanceOk
+            ? "The recipient balance equals the full recorded supply."
+            : `Recipient balance ${row.verified_recipient_balance_text ?? "unknown"} does not equal the recorded exact supply ${row.token_total_supply_text}.`,
+      ),
+    );
+  }
 
   const evidenceVerified = evidenceChecks.every((c) => c.state === "PASS");
 
@@ -551,7 +648,9 @@ function evaluateDeployment(
   if (!lifecycleOk) registrationBlockReasons.push("Launch is not at Contract Pending");
 
   const notRegistered =
-    isBlank(context.officialContractAddress) && isBlank(context.contractRegisteredAt);
+    isBlank(context.officialContractAddress) &&
+    isBlank(context.officialContractDeploymentId) &&
+    isBlank(context.contractRegisteredAt);
   registrationChecks.push(
     check(
       "not_registered",
@@ -559,7 +658,7 @@ function evaluateDeployment(
       notRegistered ? "PASS" : "BLOCKED",
       notRegistered
         ? "This launch has no registered official contract."
-        : "This launch already has a registered official contract. Registered contracts cannot be replaced.",
+        : "This launch already carries official contract registration state. Registered contracts cannot be replaced.",
     ),
   );
   if (!notRegistered) registrationBlockReasons.push("An official contract is already registered");
@@ -625,14 +724,24 @@ export function evaluateLaunchDeploymentEvidence(
   const evaluated = rows.map((row) => evaluateDeployment(row, context));
 
   const verified = evaluated.filter((d) => d.evidenceVerified);
-  const ambiguous = verified.length > 1;
-  if (ambiguous) {
-    for (const d of verified) d.ambiguous = true;
-  }
 
   const testnetVerifiedCount = verified.filter(
     (d) => d.environment === "TESTNET" || d.chainCompatibility.isTestnet,
   ).length;
+
+  // Ambiguity is a REGISTRATION CHOICE problem, not an evidence count problem.
+  // Several verified rows are unremarkable when exactly one of them qualifies
+  // for official registration. Only competing eligible production candidates
+  // are ambiguous, and none of those is ever selected automatically: selection
+  // is an explicit owner action and the database re-derives every predicate.
+  const eligible = evaluated.filter((d) => d.officialRegistrationEligible);
+  const ambiguous = eligible.length > 1;
+  if (ambiguous) {
+    for (const d of eligible) d.ambiguous = true;
+  }
+  const registrationCandidate =
+    eligible.length === 1 ? (eligible[0] as DeploymentEvidenceResult) : null;
+  const eligibleForOfficialRegistration = eligible.length;
 
   // A single verified deployment is described truthfully. A production record
   // is never labelled "test", and a record that is neither a known test network
@@ -650,22 +759,16 @@ export function evaluateLaunchDeploymentEvidence(
   let summaryState: SummaryState;
   if (evaluated.length === 0) summaryState = "NO_DEPLOYMENTS";
   else if (verified.length === 0) summaryState = "NO_VERIFIED_DEPLOYMENTS";
-  else if (ambiguous) summaryState = "MULTIPLE_VERIFIED_DEPLOYMENTS";
+  else if (verified.length > 1) summaryState = "MULTIPLE_VERIFIED_DEPLOYMENTS";
   else if (onlyVerifiedIsTestnet) summaryState = "VERIFIED_TEST_DEPLOYMENTS";
   else if (onlyVerifiedIsProduction) summaryState = "VERIFIED_PRODUCTION_DEPLOYMENT";
   else summaryState = "VERIFIED_DEPLOYMENT";
 
-  // Ambiguity never resolves itself. Each qualifying deployment REMAINS
-  // individually eligible — being one of several is not an evidence defect —
-  // but no candidate is ever selected automatically. Selection is an explicit
-  // owner action, and the database re-derives every predicate regardless.
-  const eligible = evaluated.filter((d) => d.officialRegistrationEligible);
-  if (eligible.length > 1) {
-    for (const d of eligible) d.ambiguous = true;
-  }
-  const registrationCandidate =
-    eligible.length === 1 ? (eligible[0] as DeploymentEvidenceResult) : null;
-  const eligibleForOfficialRegistration = eligible.length;
+  const multipleVerifiedLabel = ambiguous
+    ? `${verified.length} verified deployments recorded. ${eligibleForOfficialRegistration} qualify for official registration, so no candidate is selected automatically.`
+    : eligibleForOfficialRegistration === 1
+      ? `${verified.length} verified deployments recorded, of which exactly one qualifies for official registration.`
+      : `${verified.length} verified deployments recorded, none of which qualifies for official registration.`;
 
   const summaryLabel =
     summaryState === "NO_DEPLOYMENTS"
@@ -673,7 +776,7 @@ export function evaluateLaunchDeploymentEvidence(
       : summaryState === "NO_VERIFIED_DEPLOYMENTS"
         ? `${evaluated.length} recorded deployment${evaluated.length === 1 ? "" : "s"}, none with complete evidence`
         : summaryState === "MULTIPLE_VERIFIED_DEPLOYMENTS"
-          ? `Multiple confirmed deployments detected (${verified.length}). No candidate is selected automatically.`
+          ? multipleVerifiedLabel
           : summaryState === "VERIFIED_TEST_DEPLOYMENTS"
             ? "1 verified test network deployment recorded"
             : summaryState === "VERIFIED_PRODUCTION_DEPLOYMENT"
@@ -691,7 +794,10 @@ export function evaluateLaunchDeploymentEvidence(
     testnetVerifiedCount,
     eligibleForOfficialRegistration,
     registrationCandidate,
-    alreadyRegistered: !isBlank(context.officialContractAddress),
+    alreadyRegistered:
+      !isBlank(context.officialContractAddress) ||
+      !isBlank(context.officialContractDeploymentId) ||
+      !isBlank(context.contractRegisteredAt),
     ambiguous,
     summaryState,
     summaryLabel,
