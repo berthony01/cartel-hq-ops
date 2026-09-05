@@ -1,113 +1,106 @@
-# C8.7 Cartel Verified Launch — Read-Only Architecture Audit
+# C8.7 Cartel Verified Launch — Controlled Surgical Audit (read-only)
 
-Audit only. No code, schema, data, migration, package, secret, Telegram send, or publish change was made.
+Zero code, schema, data, migration, secret, Telegram or publish change was made this turn. All database access was SELECT / catalog metadata only.
 
-## 0. Start gate — CONFIRMED
+## 0. State at audit time
 
-- HEAD `b5ad35acd3ce71a7f28ce4d4b272abac25c3842e`, working tree clean.
-- PEPECARTEL launch `9f9af215-66ee-4a10-92db-617b61fb7fd3`: chain `Solana`, status `WATCHLIST_OPEN`, `official_contract_address` NULL, `contract_registered_at` NULL. Unchanged.
-- 5 deployment rows, all TESTNET / chain 46630, max attempt 5. Attempts 3, 4, 5 are all `CONFIRMED`; 4 and 5 are `FIXED_SUPPLY_ERC20` (CTEST).
+- `git rev-parse HEAD` = `c4e3711c15a2b6b0332b7ee92e3daca4e7c0c694`, working tree clean, unpublished.
+- **SHA drift disclosure:** the last reported C8.7B parity commit was `ed042c910a0f282395ed8b8b658d6ebb0e165b21`. `git diff ed042c9 c4e3711` is **empty** — `c4e3711` ("Harden ed 2 files, only 2") is a platform auto-commit with an identical tree. No content changed.
 
-## A. System-of-record map
+## 1. Original C8.7 scope recovered from project history
 
-| Layer | Authoritative object |
-|---|---|
-| Launch model | `public.launches` — `chain` (free text, currently "Solana"), `status`, `official_contract_address` (text, nullable, no format constraint), `contract_registered_at`, `contract_registered_by`, `launch_watch_token` |
-| Lifecycle enforcement | triggers `enforce_launch_status_transition`, `enforce_launch_contract_update`, `enforce_launch_update_rules`, `launches_before_insert` |
-| Contract write | RPC `set_launch_contract_address(_launch_id, _contract_address)` SECURITY DEFINER; RPC `transition_launch_status` |
-| Chain evidence | `public.launch_chain_deployments` (+ `launch_id` FK, `chain_id`, `network_environment`, `deployment_kind`, `artifact_id`, `contract_address`, `tx_hash`, `block_*`, `confirmations`, `verified_token_*`, `verified_total_supply_text`, `verified_recipient_balance_text`) and RPCs `create_/submit_/abandon_/apply_launch_chain_token_deployment_verification` |
-| Client verification | `src/lib/chain-verify.functions.ts`, `chain-registry.ts`, `launch-receipt.ts`, `chain-simulation.ts`, route `_authenticated/chain-launcher.tsx` |
-| Launch Control UI | `src/lib/launch-control.ts`, `src/routes/_authenticated/launch-control.tsx` (contract field at ~1859-1903) |
-| Notifications | `launch_events`, `launch_notification_deliveries`, `launch_watch_subscriptions`; triggers `enqueue_launch_lifecycle_notification_events`, `enqueue_launch_event_deliveries`; fn `launch_notification_payload`; edge fn `launch-notifications` + per-minute runner |
-| Telegram | edge fns `telegram-webhook`, `telegram-group`; `src/lib/telegram-group.ts`; `telegram_group_announcements` |
-| Broadcast UI | `BroadcastsPanel.tsx`, `GroupAnnouncementComposer.tsx` |
-| Identity/roles | `project_profiles`, `project_platform_reviews` + `src/lib/project-verification.ts`; `is_workspace_operator/owner/member`, `has_platform_unrestricted_access` |
+Source: message #839 (2026-09-04 23:41) defined C8.7 "Cartel Verified Launch"; #847, #849, #851, #853, #855, #857, #859 executed and closed the subphases.
 
-## B. Current registration flow
+Recovered subphase ladder (#839 §G, explicitly named):
 
-1. Launch must be at `CONTRACT_PENDING` (single-step lifecycle, no skipping).
-2. Owner/admin types a free-text string into the Launch Control field and saves.
-3. `set_launch_contract_address` locks the row `FOR UPDATE`, requires `is_workspace_operator(workspace_id, auth.uid())`, requires status `CONTRACT_PENDING`, trims, and only checks **1–256 characters**. No address format, no checksum, no chain match, no on-chain existence check, no link to any deployment row.
-4. `enforce_launch_contract_update` allows edits only while `CONTRACT_PENDING` and only while `contract_registered_at` is NULL — so it is effectively immutable after registration, with no correction workflow.
-5. Registration is *completed* by a separate `transition_launch_status` to `OFFICIAL_CONTRACT_REGISTERED`, which stamps `contract_registered_at/by`.
+| Label | Intended behavior | Status per history |
+|---|---|---|
+| C8.7A | Read-only eligibility evaluator + deployment evidence panel in Launch Control. Zero writes, zero schema. | Defined, built, closeout-audited, hardened |
+| C8.7B | Guarded, owner-only, evidence-bound official contract registration. Address derived from evidence, human input is confirmation only. Status unchanged, no event/notification/Telegram in the same transaction. | Defined, built, closed, ACL-corrected, parity-hardened |
+| C8.7C | Launch Watch notification integration — decouple notification enqueue from the registration transaction; explicit operator-triggered "notify watchers". | **Defined only. Never authorized, never started.** Every prompt from #847 onward says "do not start C8.7C". |
+| C8.7D | Telegram / official group broadcast integration reusing `telegram-group`. | Defined only. Not started. |
+| C8.7E | Correction workflow, audit ledger, terminology hardening. | Defined only. Not started. |
 
-**Confirmed:** there is no code path, RPC, or trigger anywhere that promotes a `launch_chain_deployments` row into `launches.official_contract_address`. The C8 pipeline is walled off by design and by explicit doc comments.
+Governing acceptance principles from #839: blockchain is authoritative; "Verified" means specific evidence was verified, never safety/endorsement; a TESTNET deployment may never become official or trigger sends; registration must be idempotent and replace-protected; no lifecycle transition / watcher notification / Telegram send in the same transaction as registration; reuse existing engines; preserve tenant isolation; no custody.
 
-## C. Current communication flow — registration DOES auto-send
+**Last confirmed continuation point:** end of C8.7B parity closeout hardening. Next authorized-but-unstarted slice is C8.7C.
 
-The status transition to `OFFICIAL_CONTRACT_REGISTERED` fires `enqueue_launch_lifecycle_notification_events` **in the same transaction**, inserting a `launch_events` row with the payload snapshot; that insert fires `enqueue_launch_event_deliveries`, fanning out `launch_notification_deliveries` rows for every active subscriber. The per-minute `launch-notifications` worker then DMs a "📦 VERIFIED LAUNCH PACKET" (it re-checks published profile, non-empty address, and not already LIVE/COMPLETED; stale claims become `ambiguous`, never blind-retried).
+## 2. Implemented, with evidence
 
-Group broadcasts are **not** automatic: `telegram-group` requires an authenticated owner/admin and a `clientRequestId`, deduped in `telegram_group_announcements`.
+Repository delta from the C8.7 gate `b5ad35a` to HEAD — 11 paths, 1995 insertions:
 
-So: watcher DMs fire automatically on the lifecycle write, group posts do not. This violates the C8.7 "no send in the same transaction as registration" principle and is the single most important architectural finding.
+- `src/lib/launch-verified-eligibility.ts` (new, 807 lines) — pure evaluator, no Supabase import, no I/O. Carries the hardened checks: `approved_kind`, `verified_at`, `block_number`, full fixed-supply token-state incl. recipient balance, canonical lowercase hex patterns for `tx_hash` / `contract_address`, fail-closed partial-registration detection, explicit AMBIGUOUS with no auto-selection.
+- `src/components/cartel/VerifiedDeploymentEvidencePanel.tsx` (new) — per-deployment blocking-check display.
+- `src/components/cartel/VerifiedContractRegistrationPanel.tsx` (new) — the only registration surface; no data access, render-derived selection/confirmation, retyped-address confirmation, owner-only presentation hint, permanence and non-endorsement wording.
+- `src/routes/_authenticated/launch-control.tsx` — mounts both panels, `registerContractMutation`, three-field `contractRegistered` derivation.
+- `src/lib/launch-control.ts` — `registerVerifiedLaunchContract(launchId, deploymentId, expectedContractAddress)`.
+- `src/integrations/supabase/types.ts` — `launches.official_contract_deployment_id`.
 
-## D. Gap analysis
+Database (live, verified in catalog this turn):
 
-1. No evidence binding: no column/table joins a launch's official contract to the deployment row that proves it.
-2. No eligibility gate: `CONFIRMED` alone is meaningless — three CONFIRMED testnet rows already hang off PEPECARTEL.
-3. No environment guard: nothing prevents a TESTNET address from being pasted into the official field.
-4. No chain-consistency guard: launch `chain` is free text ("Solana") while evidence is EVM 46630 — mismatch is currently unrepresentable and unchecked.
-5. No separation of registration from notification (see C).
-6. No correction workflow for a wrong-but-registered address.
-7. No audit record of *why* an address was accepted (`launch_events` is a notification queue, not a decision ledger; `contract_registered_by` is the only trace).
-8. No owner-only fail-closed review step; workspace operator is sufficient today.
+- `launches.official_contract_deployment_id` uuid FK → `launch_chain_deployments(id)` ON DELETE RESTRICT, indexed, nulled by `launches_before_insert`.
+- `launch_chain_deployments_network_pair_chk`: exactly (46630, TESTNET) or (4663, PRODUCTION).
+- `assert_launch_contract_evidence(uuid,uuid,text,uuid)` SECURITY DEFINER — enforces launch/workspace match, `FIXED_SUPPLY_ERC20`, frozen artifact `cartel-fixed-erc20-v1`, PRODUCTION/4663 only, declared-chain match via `launch_chain_label_is_robinhood_mainnet`, `CONFIRMED`, canonical tx/address hex, ≥5 confirmations, block + verified_at present, no failure fields, verified-vs-intent token identity with decimals 18, supply and recipient balance equal to intent.
+- `register_verified_launch_contract(...)` SECURITY DEFINER, `FOR UPDATE` lock, `is_workspace_owner` gate, typed-address confirmation, derives address server-side. ACL `postgres, authenticated` only.
+- Trigger `enforce_launch_contract_update_trigger` BEFORE UPDATE OF the four registration columns; guard function SECURITY DEFINER, ACL `postgres=X/postgres` only.
+- `assert_launch_contract_evidence` and `launch_chain_label_is_robinhood_mainnet` ACL `postgres=X/postgres` only — unreachable directly.
+- Legacy `set_launch_contract_address` body is now a hard `raise exception` stub. Free-text registration is retired.
+- `enforce_launch_status_transition` refuses `OFFICIAL_CONTRACT_REGISTERED` unless address + deployment id + registered_at are all present.
 
-## E. Threat model
+Live invariants re-checked, unchanged: deployments 5, max attempt 5, launch_events 3, deliveries 4, telegram_group_announcements 7; PEPECARTEL `9f9af215…` chain `Solana`, status `WATCHLIST_OPEN`, all four registration fields NULL.
 
-| Threat | Current exposure |
-|---|---|
-| Testnet mistaken for official | HIGH — free text, no environment check |
-| Wrong chain | HIGH — `chain` is free text, never compared to `chain_id` |
-| Stale / ambiguous deployment | HIGH — 3 CONFIRMED rows, no "which one" concept |
-| Manual fake CA | HIGH — any 1–256 char string accepted |
-| Confirmed tx but wrong runtime/token metadata | Mitigated in C8 verifier (bytecode hash + token reads), unused by registration |
-| Manipulated DB row | Writes are RPC/service-role only; trigger functions have EXECUTE revoked |
-| Duplicate registration / replacement | Blocked after `contract_registered_at` — but also blocks legitimate correction |
-| Cross-tenant | Enforced (`is_workspace_operator`, tenant trigger on deployments) |
-| Unauthorized team member | Operator-level today, not owner-only |
-| Duplicate / partial notification | Handled: `on conflict do nothing`, claim + stale→`ambiguous` |
-| Race condition | `FOR UPDATE` on launch; no lock coupling registration to evidence |
-| Replay | Deployment RPCs use `client_request_id`; registration has none |
+## 3. Partial or missing
 
-## F. Proposed state machine (reusing existing names)
+Nothing in C8.7A/C8.7B is partial. Genuinely missing, all by design and unauthorized:
 
-```text
-DEPLOYMENT CONFIRMED (existing, chain-verified)
-   -> C8.7 ELIGIBILITY EVALUATED   (pure derivation, no write)
-   -> OWNER REVIEW / EXPLICIT CONFIRMATION (owner-only, typed confirmation)
-   -> OFFICIAL REGISTRATION        (bind evidence + write address; NO sends)
-   -> COMMUNICATION READY          (explicit separate step)
-   -> NOTIFY WATCHERS / GROUP BROADCAST (existing engines, operator-triggered)
-```
+1. **C8.7C — communication decoupling.** Trigger `launches_enqueue_notification_events` (AFTER UPDATE OF status) still fires in the same transaction as the `OFFICIAL_CONTRACT_REGISTERED` lifecycle write, and `launch_events_enqueue_deliveries` fans out subscriber deliveries immediately. Registration itself is now clean, but the *subsequent status transition* still auto-sends. #839's "no notification in the same transaction" principle is satisfied for registration, not for the transition.
+2. **C8.7D** — no operator-triggered group broadcast for a registered contract.
+3. **C8.7E** — no correction workflow for a wrongly registered address (immutability is absolute), no decision ledger recording why an address was accepted, and the "Verified Launch Packet" wording still describes a project-declared contract.
 
-Requires decoupling the auto-enqueue trigger from the lifecycle write — a deliberate, separately authorized change.
+## 4. Did a recent C8.7 build execute despite a timeout?
 
-## G. Build slices
+Yes, once, earlier and already handled: commit `9688ac1` "Halted C8.7B mid-phase" was a timed-out partial run; message #851 explicitly resumed from that partial commit rather than repeating it. Since then no timed-out or duplicated build exists. The only anomaly at HEAD is the empty-diff auto-commit noted in §0. **No unexecuted or double-executed C8.7 work.**
 
-- **C8.7A** — read-only eligibility + evidence panel in Launch Control (pure derivation, zero writes, zero schema).
-- **C8.7B** — schema: evidence binding columns/table + eligibility-gated, owner-only registration RPC.
-- **C8.7C** — decouple notification enqueue from the registration transaction; explicit "notify watchers" action.
-- **C8.7D** — group broadcast integration reusing `telegram-group`.
-- **C8.7E** — correction workflow, audit ledger, terminology hardening.
+## 5. Exact surfaces involved
 
-## H. C8.7A allowlist (first slice only)
+Files: `src/lib/launch-verified-eligibility.ts`, `src/lib/launch-control.ts`, `src/routes/_authenticated/launch-control.tsx`, `src/components/cartel/VerifiedDeploymentEvidencePanel.tsx`, `src/components/cartel/VerifiedContractRegistrationPanel.tsx`, `src/integrations/supabase/types.ts`.
 
-- **Create:** `src/lib/launch-verified-eligibility.ts`, `src/components/cartel/VerifiedDeploymentEvidencePanel.tsx`.
-- **Modify:** `src/routes/_authenticated/launch-control.tsx` (mount panel only).
-- **Prohibited:** any migration/RPC/grant/trigger; any write; `set_launch_contract_address`; `transition_launch_status`; `official_contract_address`; chain-launcher/chain-verify/chain-registry/launch-receipt/liquidity files; Telegram, Launch Watch, broadcast; mainnet 4663; publish.
-- **Tests:** deterministic eligibility across the 5 live rows; TESTNET → BLOCKED; chain mismatch (`Solana` vs 46630) → FAIL; multiple CONFIRMED rows → explicit AMBIGUOUS, never auto-pick; `registrationReady` always false in C8.7A; eslint 0/0; `tsgo --noEmit`; `bun run build`.
-- **DB QA (read-only, rollback-safe by containing no writes):** 5 deployment rows / max attempt 5 unchanged; PEPECARTEL still Solana / WATCHLIST_OPEN / NULL / NULL; zero `launch_events` of type `OFFICIAL_CONTRACT_REGISTERED`; unpublished.
-- **Stop point:** after C8.7A verification report.
+Migrations: `20260905005615_…`, `20260905010704_…`, `20260905012833_…`, `20260905013812_…`.
 
-## I. NO-GO factors
+DB objects: `launches.official_contract_deployment_id`; `launch_chain_deployments_network_pair_chk`; functions `assert_launch_contract_evidence`, `launch_chain_label_is_robinhood_mainnet`, `register_verified_launch_contract`, `enforce_launch_contract_update`, `launches_before_insert`, `enforce_launch_status_transition`, `set_launch_contract_address` (retired stub); triggers `enforce_launch_contract_update_trigger`, `launches_enqueue_notification_events`, `launch_events_enqueue_deliveries`.
 
-- **GO for C8.7A** (read-only evidence and eligibility).
-- **NO-GO for C8.7B+** until three decisions are authorized: (1) how launch `chain` maps to a numeric chain id, since "Solana" can never match EVM evidence; (2) that the notification auto-enqueue trigger may be modified; (3) a mainnet-eligible environment, since every existing evidence row is TESTNET and can never be official.
+## 6. Findings
 
-## J. Terminology flags
+- **Security:** registration is fail-closed at the database, owner-only, and re-derived independently of the client. Helper functions have no `authenticated` EXECUTE. The legacy free-text path is dead. No new advisory attributable to C8.7 remains open.
+- **Tenant isolation:** preserved — evidence must match both `launch_id` and `workspace_id`, and authority is `is_workspace_owner`, stricter than the operator-level check it replaced.
+- **Routing:** no route added; registration lives inside the existing authenticated Launch Control route.
+- **State:** registration does not move the lifecycle; the separate transition now refuses to advance without a complete evidence-bound registration. Partial registration state is treated as registered (fail-closed) by both DB guard and UI.
+- **Edge cases:** multiple eligible candidates stay AMBIGUOUS with no auto-selection; uppercase-hex bypass closed; confirmation input re-arms on launch/candidate change.
+- **Integration:** unchanged Telegram, Launch Watch, broadcast and inbox surfaces — which is exactly why item §3.1 remains open.
+- **Terminology:** "Official contract registered by the authenticated project", explicitly not a safety check, audit or endorsement. No "safe"/"audited" claim exists. The C8.7A audit's recommendation to rename the self-attested path is deferred to C8.7E.
+- **Operational reality:** every existing evidence row is TESTNET/46630 and PEPECARTEL's declared chain is `Solana`, so no live launch can register today. That is intended fail-closed behavior, not a defect.
 
-"Verified Launch Packet" and "Official contract registered" currently describe *operator self-attestation*, not chain verification, and every occurrence carries an explicit disclaimer. `project-verification.ts` correctly labels staff review as "Platform Reviewed". No "audited"/"endorsed" claims exist. Recommendation for C8.7: reserve "VERIFIED DEPLOYMENT" / "VERIFIED CONTRACT" strictly for chain-evidenced registrations and rename the self-attested path to "PROJECT-DECLARED CONTRACT" to keep the two provably distinct.
+## 7. Smallest safe next delta
 
-## Confirmation
+**C8.7C — separate registration from communication.** Make the watcher notification for `OFFICIAL_CONTRACT_REGISTERED` an explicit, owner/operator-triggered, idempotent action instead of a trigger side effect, reusing `launch_events` / `launch_notification_deliveries` / the existing `launch-notifications` worker. No new send engine, no new table if an existing event/idempotency key suffices.
 
-No application code, schema, data, migration, secret, Telegram message, or publish state was changed. All database access was SELECT-only. STOP — no build.
+This requires the three NO-GO decisions already flagged and still unresolved: (1) authorization to modify `enqueue_launch_lifecycle_notification_events`; (2) whether historical automatic behavior for other lifecycle states must be preserved verbatim; (3) how a launch whose declared chain can never match EVM evidence (e.g. `Solana`) should be handled operationally.
+
+Until those are authorized, the correct action is **no delta**.
+
+## 8. Proposed allowlist for that delta (not authorized yet)
+
+- Migrate: exactly one migration altering `enqueue_launch_lifecycle_notification_events` plus one owner-gated notify RPC.
+- Modify: `src/lib/launch-control.ts`, `src/routes/_authenticated/launch-control.tsx`, `src/integrations/supabase/types.ts`.
+- Create: at most one panel component for the explicit notify action.
+- Prohibited: `chain-registry.ts`, chain launcher/verifier/liquidity, contracts, edge functions, `telegram-*`, packages/lockfiles, secrets, public network routes, `.lovable/**`, publish.
+
+## 9. Verification required before C8.7 can close
+
+Rollback-only DB proof that: the registration transaction still creates zero events/deliveries; the lifecycle transition no longer auto-enqueues; the explicit notify action enqueues exactly once and is idempotent on retry; non-owner and cross-workspace callers are refused; muted/stopped watchers receive nothing. Plus deterministic evaluator tests unchanged, ESLint zero on touched files, `bunx tsgo --noEmit`, `bun run build`, live invariants re-checked (5 / 5 / 3 / 4 / 7, PEPECARTEL unchanged), security advisor delta, clean tree, unpublished.
+
+## 10. Conclusion
+
+**C8.7 INCOMPLETE.** C8.7A and C8.7B are complete, verified and closed against their recovered acceptance criteria. C8.7C, C8.7D and C8.7E were defined in the original scope, were never authorized, and were never started; C8.7C additionally carries three unresolved decisions that keep it NO-GO until you rule on them.
+
+Stopping. No build.
