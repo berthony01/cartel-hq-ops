@@ -62,6 +62,9 @@ import {
   nullableText,
   scheduleLocked,
   registerVerifiedLaunchContract,
+  correctVerifiedLaunchContract,
+  listLaunchContractRegistrationEvents,
+  launchContractRegistrationEventsQueryKey,
   slugifyLaunch,
   toLaunchStatus,
   transitionLaunchStatus,
@@ -69,7 +72,9 @@ import {
   type LaunchRow,
   type LaunchStatus,
   type OfficialContractNotifyResult,
+  type OfficialContractCorrectionResult,
 } from "@/lib/launch-control";
+
 
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
@@ -81,6 +86,8 @@ import { VerifiedDeploymentEvidencePanel } from "@/components/cartel/VerifiedDep
 import { VerifiedContractRegistrationPanel } from "@/components/cartel/VerifiedContractRegistrationPanel";
 import { OfficialContractNotifyPanel } from "@/components/cartel/OfficialContractNotifyPanel";
 import { OfficialContractGroupBroadcastPanel } from "@/components/cartel/OfficialContractGroupBroadcastPanel";
+import { OfficialContractCorrectionPanel } from "@/components/cartel/OfficialContractCorrectionPanel";
+
 import { supabase } from "@/integrations/supabase/client";
 import {
   sendOfficialContractBroadcast,
@@ -658,6 +665,64 @@ function LaunchControlPage() {
     broadcastOutcome && selected && broadcastOutcome.launchId === selected.id
       ? broadcastOutcome
       : null;
+
+  // C8.7E E3 — append-only registration ledger (read-only; RLS authoritative)
+  // and the owner-only, evidence-bound correction RPC. A correction sends
+  // nothing: watcher and community communications remain separate actions.
+  const registrationEventsQuery = useQuery({
+    queryKey: launchContractRegistrationEventsQueryKey(selected?.id ?? null),
+    enabled: !!selected?.id,
+    queryFn: () => listLaunchContractRegistrationEvents(selected!.id),
+  });
+
+  const [correctionOutcome, setCorrectionOutcome] = useState<{
+    launchId: string;
+    result: OfficialContractCorrectionResult | null;
+    error: string | null;
+  } | null>(null);
+  const correctContractMutation = useMutation({
+    mutationFn: async (input: {
+      deploymentId: string;
+      expectedAddress: string;
+      reason: string;
+    }) => {
+      if (!selected) throw new Error("No launch selected.");
+      return correctVerifiedLaunchContract({
+        launchId: selected.id,
+        deploymentId: input.deploymentId,
+        expectedContractAddress: input.expectedAddress,
+        reason: input.reason,
+      });
+    },
+    onSuccess: (result) => {
+      const launchId = selected?.id ?? "";
+      setCorrectionOutcome({ launchId, result, error: null });
+      if (result.status === "corrected") {
+        toast.success("Official contract correction recorded");
+        void queryClient.invalidateQueries({ queryKey: ["launches", workspaceId] });
+        void queryClient.invalidateQueries({
+          queryKey: launchContractRegistrationEventsQueryKey(launchId),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: chainDeploymentsQueryKey(launchId),
+        });
+      } else {
+        toast.info("This launch is already bound to that deployment — nothing was recorded");
+      }
+    },
+    onError: (err: unknown) => {
+      const message =
+        err instanceof Error ? err.message : "Could not correct the official contract.";
+      setCorrectionOutcome({ launchId: selected?.id ?? "", result: null, error: message });
+      toast.error(message);
+    },
+  });
+  const correctionOutcomeForSelected =
+    correctionOutcome && selected && correctionOutcome.launchId === selected.id
+      ? correctionOutcome
+      : null;
+
+
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const deleteMutation = useMutation({
@@ -2036,9 +2101,27 @@ function LaunchControlPage() {
                   }
                 />
 
-
-
-
+                <OfficialContractCorrectionPanel
+                  launchId={selected.id}
+                  launchStatus={status}
+                  registrationComplete={contractRegistered}
+                  officialContractAddress={selected.official_contract_address}
+                  officialContractDeploymentId={selected.official_contract_deployment_id}
+                  isWorkspaceOwner={isWorkspaceOwner}
+                  evaluation={deploymentEvidence}
+                  events={registrationEventsQuery.data ?? []}
+                  eventsLoading={registrationEventsQuery.isLoading}
+                  eventsError={
+                    registrationEventsQuery.isError
+                      ? "Could not load the registration history for this launch."
+                      : null
+                  }
+                  disabled={readOnly}
+                  pending={correctContractMutation.isPending}
+                  result={correctionOutcomeForSelected?.result ?? null}
+                  error={correctionOutcomeForSelected?.error ?? null}
+                  onCorrect={(input) => correctContractMutation.mutate(input)}
+                />
 
 
                 <VerifiedDeploymentEvidencePanel
