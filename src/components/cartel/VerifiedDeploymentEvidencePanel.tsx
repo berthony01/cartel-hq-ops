@@ -209,7 +209,6 @@ export function VerifiedDeploymentEvidencePanel({
             ) : null}
           </div>
 
-
           {evaluation.deployments.length === 0 ? (
             <p className="text-xs leading-relaxed text-muted-foreground">
               No deployment records exist for this launch yet.
