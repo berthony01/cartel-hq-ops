@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { History, Loader2, ShieldAlert } from "lucide-react";
+import { History, Loader2, Megaphone, Send, ShieldAlert } from "lucide-react";
 import { Section } from "@/components/cartel/Section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,12 +9,15 @@ import {
   CONTRACT_CORRECTION_REASON_MAX,
   CONTRACT_MAX,
   type LaunchContractRegistrationEvent,
+  type OfficialContractCorrectionNotifyResult,
   type OfficialContractCorrectionResult,
 } from "@/lib/launch-control";
+import type { OfficialContractCorrectionBroadcastResult } from "@/lib/telegram-group";
 import type {
   DeploymentEvidenceResult,
   LaunchEvidenceEvaluation,
 } from "@/lib/launch-verified-eligibility";
+
 
 /**
  * C8.7E E3 — official contract correction + immutable registration history.
