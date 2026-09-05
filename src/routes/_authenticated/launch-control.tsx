@@ -2041,8 +2041,6 @@ function LaunchControlPage() {
 
 
 
-
-
                 <VerifiedDeploymentEvidencePanel
                   evaluation={deploymentEvidence}
                   loading={deploymentEvidenceQuery.isLoading}
