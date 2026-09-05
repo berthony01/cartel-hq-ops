@@ -586,3 +586,59 @@ export function sendOfficialContractBroadcast(params: {
     clientRequestId: params.clientRequestId,
   });
 }
+
+/* ------------------------------------------------------------------ */
+/* C8.7E — official contract CORRECTION broadcast (client contract)    */
+/* ------------------------------------------------------------------ */
+
+export type OfficialContractCorrectionBroadcastResult = {
+  status?: GroupAnnouncementStatus;
+  /** True when this exact request id was already recorded — nothing was re-sent. */
+  duplicate?: boolean;
+  announcementId?: string;
+  announcementKind?: string;
+  launchId?: string;
+  groupConnectionId?: string;
+  groupTitle?: string;
+  messageId?: number | null;
+  sentAt?: string | null;
+  deliveryKind?: "TEXT" | (string & {});
+  /** Exactly what the server posted. Never editable in the browser. */
+  deliveredText?: string;
+  contractRegistrationEventId?: string;
+  previousContractAddress?: string;
+  contractAddress?: string;
+  /** Recoverable: the bot was removed from the community. */
+  reconnectRequired?: boolean;
+  connectionState?: string;
+  message?: string;
+  technical?: string | null;
+};
+
+/**
+ * C8.7E — posts an official contract CORRECTION to ONE connected community.
+ *
+ * The browser supplies identity only: workspace, community, launch, correction
+ * event and request id. It never sends the old or new address and never sends
+ * any packet copy — the server binds the current CORRECTED ledger event,
+ * re-derives the address from the bound deployment evidence and composes the
+ * message itself. One correction event can only ever be posted once per
+ * community, and retries keep the existing no-auto-resend semantics: an
+ * ambiguous or already-recorded attempt is reported, not repeated.
+ */
+export function sendOfficialContractCorrectionBroadcast(params: {
+  workspaceId: string;
+  groupConnectionId: string;
+  launchId: string;
+  registrationEventId: string;
+  clientRequestId: string;
+}): Promise<OfficialContractCorrectionBroadcastResult> {
+  return invoke<OfficialContractCorrectionBroadcastResult>({
+    action: "send_official_contract_correction_broadcast",
+    workspaceId: params.workspaceId,
+    groupConnectionId: params.groupConnectionId,
+    launchId: params.launchId,
+    registrationEventId: params.registrationEventId,
+    clientRequestId: params.clientRequestId,
+  });
+}
