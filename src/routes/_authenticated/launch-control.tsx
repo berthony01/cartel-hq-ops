@@ -2212,7 +2212,46 @@ function LaunchControlPage() {
                   result={correctionOutcomeForSelected?.result ?? null}
                   error={correctionOutcomeForSelected?.error ?? null}
                   onCorrect={(input) => correctContractMutation.mutate(input)}
+                  groups={broadcastGroupsQuery.data ?? []}
+                  groupsLoading={broadcastGroupsQuery.isLoading}
+                  correctionNotifyPending={correctionNotifyMutation.isPending}
+                  correctionNotifyResult={
+                    correctionNotifyOutcome &&
+                    correctionNotifyOutcome.launchId === selected.id &&
+                    correctionNotifyOutcome.registrationEventId === latestRegistrationEventId
+                      ? correctionNotifyOutcome.result
+                      : null
+                  }
+                  correctionNotifyError={
+                    correctionNotifyOutcome &&
+                    correctionNotifyOutcome.launchId === selected.id &&
+                    correctionNotifyOutcome.registrationEventId === latestRegistrationEventId
+                      ? correctionNotifyOutcome.error
+                      : null
+                  }
+                  correctionBroadcastPending={correctionBroadcastMutation.isPending}
+                  correctionBroadcastResult={
+                    correctionBroadcastOutcome &&
+                    correctionBroadcastOutcome.launchId === selected.id &&
+                    correctionBroadcastOutcome.registrationEventId === latestRegistrationEventId
+                      ? correctionBroadcastOutcome.result
+                      : null
+                  }
+                  correctionBroadcastError={
+                    correctionBroadcastOutcome &&
+                    correctionBroadcastOutcome.launchId === selected.id &&
+                    correctionBroadcastOutcome.registrationEventId === latestRegistrationEventId
+                      ? correctionBroadcastOutcome.error
+                      : null
+                  }
+                  onNotifyCorrection={(registrationEventId) =>
+                    correctionNotifyMutation.mutate(registrationEventId)
+                  }
+                  onBroadcastCorrection={(groupConnectionId, registrationEventId) =>
+                    correctionBroadcastMutation.mutate({ groupConnectionId, registrationEventId })
+                  }
                 />
+
 
 
                 <VerifiedDeploymentEvidencePanel
