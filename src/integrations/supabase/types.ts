@@ -309,7 +309,7 @@ export type Database = {
       launch_contract_registration_events: {
         Row: {
           action: string
-          actor_id: string | null
+          actor_id: string
           contract_address: string
           correction_reason: string | null
           created_at: string
@@ -322,7 +322,7 @@ export type Database = {
         }
         Insert: {
           action: string
-          actor_id?: string | null
+          actor_id: string
           contract_address: string
           correction_reason?: string | null
           created_at?: string
@@ -335,7 +335,7 @@ export type Database = {
         }
         Update: {
           action?: string
-          actor_id?: string | null
+          actor_id?: string
           contract_address?: string
           correction_reason?: string | null
           created_at?: string
