@@ -655,7 +655,11 @@ function LaunchControlPage() {
     },
   });
   const broadcastOutcomeForSelected =
-    broadcastOutcome && selected && broadcastOutcome.launchId === selected.id ? broadcastOutcome : null;
+    broadcastOutcome && selected && broadcastOutcome.launchId === selected.id
+      ? broadcastOutcome
+      : null;
+
+
 
 
 
