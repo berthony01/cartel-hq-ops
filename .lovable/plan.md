@@ -1,97 +1,124 @@
-# Phase 8 (Cartel Chain Launcher) Closure Audit — READ-ONLY
+# C8.7D Controlled Surgical Audit — Official Group Broadcast of the Registered Contract
 
-No file was created, edited or deleted for the project; no commit, migration, DB write, edge deploy, Telegram call or publish occurred. All DB access was SELECT-only against `information_schema` / `pg_proc`. The only file written is this audit document.
+Audit only. Zero code, schema, data, migration, Telegram send, or publish change. All DB access was SELECT-only.
 
-## 1. Repository state
+## 0. Start gate
 
-- `git rev-parse HEAD` → `92be1d99428f2e022bd962058ec517ee6bc726b7` ("Micro-hardened E4B correction")
-- `git status --porcelain` → empty (clean tree), verified at audit start and again after the build.
-- App remains unpublished.
+- Current HEAD `ac31b3d73a77a70beda424d4812323a89933f41d`; working tree clean; unpublished.
+- `git diff eb977cbf5064c25f34e91c0ab2b28612b007eabe HEAD` is **empty** — `ac31b3d` is a platform merge commit (`gpt-engineer-app[bot]`, "Cleaned up C8.7C audit items", edit id `edt-d04d7218…`) whose tree is byte-identical to the C8.7C closure commit. Drift is platform metadata only; **no product-code drift**.
+- C8.7A (`launch-verified-eligibility.ts`, `VerifiedDeploymentEvidencePanel.tsx`), C8.7B (`register_verified_launch_contract`, `assert_launch_contract_evidence`, `VerifiedContractRegistrationPanel.tsx`) and C8.7C (`notify_launch_watchers_official_contract`, `OfficialContractNotifyPanel.tsx`) are present, unchanged and closed.
+- Live invariants unchanged: deployments 5, launch_events 3, deliveries 4, group announcements 7; PEPECARTEL `WATCHLIST_OPEN` / `official_contract_address` NULL / `official_contract_deployment_id` NULL.
 
-## 2. Recovered ORIGINAL Phase 8 roadmap (evidence-based only)
+## 0b. Queue safety check — stale C8.7C recovery card
 
-Phase 8 was opened at message **#789 (2026-09-04 05:08)**: *"We are beginning Phase 8: Cartel Chain Launcher, initially for Robinhood Chain, later potentially powering a public Cartel Launchpad."*
+Server-side state shows the C8.7C work completed and closed at `eb977cb`, with the follow-up cleanup merged as `ac31b3d`. No C8.7C recovery/build is active or pending; nothing is mid-flight. The queued UI card beginning "RECOVERY CONTINUATION ONLY…" is **stale and superseded** — it refers to a run that already completed. It was **not executed, re-run, or revived** in this turn, and it should be dismissed rather than accepted.
 
-| Item | Exact label / title (as defined) | Original purpose | Primary evidence |
-|---|---|---|---|
-| C8.0 | *C8.0 READ-ONLY ARCHITECTURE AUDIT* | Cross-check existing architecture, reuse map, forbid duplicate systems, produce GO/NO-GO for C8.1 | msg #789 / #790 |
-| C8.1 | *C8.1 ARCHITECTURE ONLY* | Testnet-only architecture contract: chain registry (46630), subordinate `launch_chain_deployments`, attempt state machine, verification surface, RLS, wallet approach, C8.2 allowlist | msg #791 / #792 |
-| C8.2 | *Owner-only Robinhood Chain TESTNET deployment plumbing* | Prove wallet → deploy → independent chain verification with a harmless non-token test artifact; no promotion to `official_contract_address` | migration `20260904051604_36b74c3a…sql:1`, corrective `20260904052339_2891d86c…sql:1`, `src/lib/chain-registry.ts:4`, `src/lib/chain-launcher.ts:17`, `src/lib/chain-verify.functions.ts:18` |
-| C8.3 | *Fixed-supply ERC-20 test token (TESTNET)* | Add a real fixed-supply ERC-20 test token on the same attempt plumbing, additively | `contracts/CartelFixedSupplyToken.sol:7`, migrations `20260904125451_4de80c8c…sql:1` and hardening `20260904131548_210e8519…sql:1`, `src/lib/cartel-fixed-erc20.artifact.ts:2`, `src/lib/chain-launcher.ts:248` |
-| C8.4 | *Launch Simulation / Pre-Sign Preflight* | Deterministic pre-sign preflight/quote before any broadcast | msg #815 / #817, `src/lib/chain-simulation.ts:18`, `src/components/chain/SimulationReviewCard.tsx:14` |
-| C8.5 | *Deployment + Launch Receipt* | Read-only launch receipt + same-tab recovery record; closeout hardening | msg #821 / #825 / #827, `src/lib/launch-receipt.ts:12,344`, `src/components/chain/LaunchReceiptCard.tsx:9` |
-| C8.6 | *Liquidity Integration* (audit) split into **C8.6A readiness/plan**, **C8.6B testnet liquidity transaction**, **C8.6C receipt/verification** | Reuse official Uniswap infra; separate plan from transaction; block execution until testnet infra addresses are externally verified | msg #831 / #832 (slice split stated in item 17 of #831 and in the #832 verdict) |
-| C8.6A | *C8.6A LIQUIDITY READINESS + PLAN ONLY* | Deterministic read-only liquidity plan/fingerprint, execution hard-blocked | msg #833–#838, `src/lib/liquidity-plan.ts:9`, `src/components/chain/LiquidityPlanCard.tsx:16`, `src/lib/chain-registry.ts:36` (`LIQUIDITY_TX_ENABLED = false`) |
-| C8.7 | *Cartel Verified Launch* | Promote verified C8 deployment evidence into an official contract registration + controlled communication, reusing existing systems | msg #839 / #840 |
-| C8.7A | *eligibility / read-only evidence panel* | Derive eligibility from deployment rows, zero writes | `src/lib/launch-verified-eligibility.ts:5`, `src/components/cartel/VerifiedDeploymentEvidencePanel.tsx:11` |
-| C8.7B | *guarded official registration* | Evidence-bound, owner-only registration of the official contract | migrations `20260905005615_20e80b1f…sql:2`, `20260905012833_011734e5…sql:1`; `register_verified_launch_contract`, `assert_launch_contract_evidence`; `src/components/cartel/VerifiedContractRegistrationPanel.tsx:15` |
-| C8.7C | *Launch Watch notification integration* | Decouple watcher notification from registration; explicit, idempotent owner action | migration `20260905033316_ebd99ebc…sql:2` (+ `20260905033854_71429d13…sql`), `notify_launch_watchers_official_contract`, `src/components/cartel/OfficialContractNotifyPanel.tsx:8` |
-| C8.7D | *Telegram/group broadcast integration* | Explicit official-contract group post reusing `telegram-group` | `backend-source/edge-functions/telegram-group/index.ts:953`, `src/lib/telegram-group.ts:537`, `src/components/cartel/OfficialContractGroupBroadcastPanel.tsx:8` |
-| C8.7E | *audit / hardening* — realised as the correction + immutable-history slice (E1–E5) | Correction path for a wrongly registered contract, append-only ledger, correction notify/broadcast, closure QA | migrations `20260905144448_4e8134b3…sql:2` and `20260905144938_5d4ee2d8…sql`; `correct_verified_launch_contract`, `launch_contract_correction_payload`, `notify_launch_watchers_official_contract_correction`, `launch_contract_registration_events`; `src/components/cartel/OfficialContractCorrectionPanel.tsx:23`; `backend-source/edge-functions/telegram-group/index.ts:1266`; `backend-source/edge-functions/launch-notifications/index.ts:194,255` |
+## 1. Recovered original C8.7D contract
 
-The C8.7A–E slice names are quoted verbatim from the C8.7 audit brief, message **#839**, section **G. EXACT C8.7 BUILD SLICES**.
+From this project's own history (C8.7 architecture audit, message #839, build-slice list G, and the archived plan section G):
 
-## 3. Was any Phase 8 launcher item defined AFTER C8.7 / C8.7E?
+> **C8.7D — group broadcast integration reusing `telegram-group`.**
 
-**No.** A full-history keyword search for `C8.8` across all 919 loaded chat messages returns exactly one hit — the current audit request (#919) — and it appears only as a negation ("Do not invent or infer a new C8.8/E6"). No repository file, migration, comment or doc contains `C8.8` or any post-C8.7 Phase 8 label. C8.7E is the last item defined in the C8.7 slice list, and E5 (closure QA, completed at HEAD `92be1d9`) is the last item defined inside C8.7E.
+Binding principles carried from the same authoritative prompt: reuse existing send engines rather than creating new ones; no automatic lifecycle transition, watcher notification, Telegram send, group broadcast, or public visibility in the same DB transaction as registration; owner-only and fail-closed; tenant isolation preserved at DB and server boundaries; "verified" means evidence was verified, never that the project is safe/endorsed. No broader C8.7D scope exists in history — nothing here is inferred beyond that.
 
-The only forward-looking Phase 8 references that do exist are:
-- **C8.6B / C8.6C** — defined in #831/#832 and explicitly held NO-GO pending externally verified Uniswap/WETH9 testnet deployment addresses.
-- **"later potentially powering a public Cartel Launchpad"** (#789) — aspirational framing, never a defined C8.x item.
+## 2. Current Telegram / group architecture
 
-## 4. Status of each recovered item
+| Layer | Authoritative object |
+|---|---|
+| Send engine | Edge function `telegram-group` (v11 live, `verify_jwt = true`), snapshot `backend-source/edge-functions/telegram-group/index.ts` |
+| Broadcast action | `action: "send_group_announcement"` — authorize → validate → resolve group in workspace → resolve idempotency → CLAIM ledger row → live-verify → send |
+| Ledger | `public.telegram_group_announcements` (29 columns) with `status` vocabulary `SENT` / `FAILED` / `AMBIGUOUS` (+ transient `SENDING`) |
+| Idempotency | unique index `telegram_group_announcements_idempotency_idx (workspace_id, client_request_id)`; a repeated id never re-sends for any prior state, and reusing an id with a different target/text/CTA is a *conflict*, not a duplicate |
+| ACL | RLS enabled, **zero policies, zero grants** — service-role only. Browsers cannot read or write it. |
+| Authorization | `workspace_members.role in ('owner','admin')` → `canManageCommunity`, checked inside the edge function against the caller's JWT |
+| Client | `src/lib/telegram-group.ts` → `sendGroupAnnouncement({ workspaceId, groupConnectionId, message, clientRequestId, branding?, ctaLaunchId? })`, plus `fetchBroadcastLaunchOptions` |
+| UI | `src/routes/_authenticated/telegram.tsx` → `BroadcastsPanel.tsx` → `GroupAnnouncementComposer.tsx` (both still authoritative) |
+| Branding | `telegram_photo_v1` caption assembled server-side from the saved Project Profile; client copy is preview-only |
+| Launch Watch CTA | server resolves the deep link; `launch_watch_token` never reaches the browser; immutable CTA snapshot columns on the ledger row |
+| C8.7B registration | `register_verified_launch_contract(_launch_id, _deployment_id, _expected_contract_address)`, owner-only, evidence-derived |
+| C8.7C watcher notify | `notify_launch_watchers_official_contract(_launch_id)`, owner-only, re-derives the address via `assert_launch_contract_evidence`, idempotent on `(launch_id, event_type, scheduled_for = contract_registered_at)` |
 
-| Item | Status | Evidence |
+Confirmed: registration does **not** post to Telegram, the `OFFICIAL_CONTRACT_REGISTERED` transition does **not** post to Telegram, and C8.7C fans out DM deliveries only. No group post happens anywhere without an explicit authenticated operator call.
+
+## 3. What can be reused as-is
+
+1. `telegram-group` edge function and its whole claim-then-send ordering. No second send engine is needed.
+2. `telegram_group_announcements` as the durable ledger, including its `SENT/FAILED/AMBIGUOUS` vocabulary and the never-auto-resend rule.
+3. `(workspace_id, client_request_id)` unique index for double-click / retry idempotency.
+4. Group resolution + live bot verification + `reconnectRequired` handling.
+5. `telegram_photo_v1` branding and the existing Launch Watch CTA keyboard resolution.
+6. `assert_launch_contract_evidence` for server-side re-derivation of the authoritative address from bound evidence.
+7. `is_workspace_owner` for the owner-only C8.7 boundary.
+8. `sendGroupAnnouncement` client shape and `GroupAnnouncementComposer` UX patterns.
+
+## 4. What is genuinely missing
+
+1. **No contract-aware broadcast path.** `send_group_announcement` takes free client text. Nothing derives the message body from the registered, evidence-bound contract, so today an operator could type any string and label it official.
+2. **No registration precondition on the send.** The broadcast action never checks launch status, `official_contract_deployment_id`, `contract_registered_at/by`, or address/evidence agreement.
+3. **No launch binding on the ledger row.** `telegram_group_announcements` has `cta_launch_id text` (a CTA pointer only) but no `announcement_kind` and no bound `launch_id` for the contract packet, so "has this launch's official contract already been broadcast to this group?" is not answerable and cannot be deduped server-side beyond the per-request-id key.
+4. **No owner-only tightening for this specific action.** Group broadcasts are owner *or admin*; C8.7B/C are owner-only. The contract broadcast must match C8.7's stronger boundary.
+5. **No Launch Control surface.** The registered-contract broadcast belongs next to the C8.7C notify panel; Community Command's composer is a generic free-text tool.
+
+## 5. Smallest safe implementation delta
+
+**One new action on the existing edge function, one narrow ledger extension, one panel.**
+
+1. **Migration (single, additive):** add `announcement_kind text not null default 'OPERATOR_TEXT'` and `launch_id uuid null references public.launches(id)` to `telegram_group_announcements`; add a partial unique index `(launch_id, group_connection_id) where announcement_kind = 'OFFICIAL_CONTRACT'` so one launch can be broadcast to one group exactly once. No RLS/grant change — the table stays service-role only.
+2. **Edge function `telegram-group`:** new `action: "send_official_contract_broadcast"` taking `{ workspaceId, groupConnectionId, launchId, clientRequestId }` and **no message text**. It calls a new owner-only SECURITY DEFINER read RPC (or reuses `assert_launch_contract_evidence` via service role plus an explicit `is_workspace_owner` check) to fail closed on: non-owner, wrong workspace, status not `OFFICIAL_CONTRACT_REGISTERED`, any NULL among address / `official_contract_deployment_id` / `contract_registered_at` / `contract_registered_by`, address ≠ evidence-derived address, unpublished project profile. It then assembles the packet text server-side from the derived values and reuses the existing claim → verify → send → ledger-update path.
+3. **Client `src/lib/telegram-group.ts`:** one thin `sendOfficialContractBroadcast(...)` wrapper mirroring `sendGroupAnnouncement`.
+4. **UI:** new `src/components/cartel/OfficialContractGroupBroadcastPanel.tsx` mounted in `src/routes/_authenticated/launch-control.tsx` beside `OfficialContractNotifyPanel`, arm-then-confirm, owner-only presentation hint, non-endorsement copy, server-derived preview only.
+
+Terminology: "Official contract registered by the authenticated project, derived from its verified deployment record." Never safe / audited / guaranteed / brokerage- or Robinhood-listed.
+
+## 6. Strict allowlist for the C8.7D build slice
+
+**Create:** `src/components/cartel/OfficialContractGroupBroadcastPanel.tsx`; exactly one migration.
+**Modify:** `backend-source/edge-functions/telegram-group/index.ts` (+ deploy that one function, `verify_jwt = true` preserved), `src/lib/telegram-group.ts`, `src/routes/_authenticated/launch-control.tsx` (mount + handler only).
+**Prohibited:** any other edge function; `telegram-webhook`; `launch-notifications`; `notify_launch_watchers_official_contract`; `register_verified_launch_contract`; `set_launch_contract_address`; `transition_launch_status`; any lifecycle trigger; `launch_events` / `launch_notification_deliveries` / `launch_watch_subscriptions`; `BroadcastsPanel.tsx`; `GroupAnnouncementComposer.tsx`; chain / deployment / wallet / custody / artifact / liquidity files; mainnet 4663; RLS or grant changes on `telegram_group_announcements`; packages; secrets; publish.
+
+## 7. Authorization, isolation, evidence, idempotency, race findings
+
+- **Authorization gap:** existing broadcast = owner **or** admin. C8.7D must be owner-only to match C8.7B/C. Decision required, but owner-only is the fail-closed default.
+- **Tenant isolation:** already enforced twice — `workspace_members` lookup in the edge function and group-in-workspace resolution. The new action must additionally assert `launches.workspace_id = workspaceId`.
+- **Evidence binding:** must re-derive via `assert_launch_contract_evidence` and compare case-insensitively to `official_contract_address`, exactly as C8.7C does. Client text must never be trusted for the address.
+- **Idempotency:** `(workspace_id, client_request_id)` covers double-click. The proposed partial unique index adds semantic dedupe (one contract broadcast per launch per group) that the current schema cannot express.
+- **Race:** the ledger row is claimed as `SENDING` before any Telegram call, so an interrupted run surfaces as `AMBIGUOUS`, never as silent success. The new action should take `select … for update` on the launch row, mirroring C8.7C.
+- **Stale registration:** if the address later diverges from its bound evidence the send must be refused, not warned about.
+
+## 8. Rollback-safe / no-send verification matrix
+
+All negative cases fail before any Telegram call, so none of them sends a message; the positive path is proven with a transaction-rolled-back ledger claim and a stubbed transport.
+
+| # | Case | Expected |
 |---|---|---|
-| C8.0 | COMPLETE | Audit delivered #790 |
-| C8.1 | COMPLETE | Architecture contract delivered #792 |
-| C8.2 | COMPLETE | Live table `launch_chain_deployments`; RPCs `create_launch_chain_deployment_attempt`, `submit_launch_chain_deployment_tx`, `apply_launch_chain_deployment_verification`, `authorize_launch_chain_deployment`, `abandon_launch_chain_deployment_attempt`, `list_launch_chain_deployments`; real testnet E2E confirmed per #815 baseline |
-| C8.3 | COMPLETE | `create_launch_chain_token_deployment_attempt`, `apply_launch_chain_token_deployment_verification` live; frozen artifact + Solidity source in repo; real fixed-supply ERC-20 test token closed per #815 |
-| C8.4 | COMPLETE | `src/lib/chain-simulation.ts`, `SimulationReviewCard.tsx`, C8.5 handoff contract at `chain-simulation.ts:425` |
-| C8.5 | COMPLETE | `launch-receipt.ts` + card; closeout and recovery-storage closeout passed (#826, #828) |
-| C8.6A | COMPLETE | `liquidity-plan.ts`, `LiquidityPlanCard.tsx`, fingerprint closeout hardening (#838); `LIQUIDITY_TX_ENABLED = false` frozen |
-| C8.6B | NOT STARTED — **intentionally blocked, not a defect** | No `launch_chain_liquidity_attempts` table exists in `public` (verified by live schema query); no router/WETH9/factory address anywhere in `src/lib/chain-registry.ts`; blocker is external (`eth_getCode` probe in #832 showed only Permit2 deployed on 46630) |
-| C8.6C | NOT STARTED — blocked by C8.6B | same |
-| C8.7A | COMPLETE | `launch-verified-eligibility.ts`, `VerifiedDeploymentEvidencePanel.tsx` |
-| C8.7B | COMPLETE | `register_verified_launch_contract` + `assert_launch_contract_evidence` live; registration panel is the sole surface |
-| C8.7C | COMPLETE | `notify_launch_watchers_official_contract` live; notify panel; registration no longer enqueues automatically (migration `20260905033316` line 20) |
-| C8.7D | COMPLETE | `send_official_contract_broadcast` branch live in `telegram-group` (v28, `verify_jwt = true`); client + panel present |
-| C8.7E | COMPLETE | E1–E4B built, E4A deployed (launch-notifications v15, telegram-group v28), E5 closure QA passed; `launch_contract_registration_events` ledger live |
+| 1 | Non-member caller | 403, no ledger row |
+| 2 | Workspace admin (non-owner) | 403 (owner-only), no ledger row |
+| 3 | Launch from another workspace | 403/404, no ledger row |
+| 4 | Status `WATCHLIST_OPEN` (PEPECARTEL today) | refused, no send |
+| 5 | Address present, `official_contract_deployment_id` NULL | refused (partial registration) |
+| 6 | Address ≠ evidence-derived address | refused (stale registration) |
+| 7 | Unpublished project profile | refused |
+| 8 | Group not connected / bot removed | refused, `reconnectRequired` |
+| 9 | Same `clientRequestId` twice | `duplicate: true`, exactly one ledger row, one send |
+| 10 | Fresh id, same launch + group already broadcast | refused by partial unique index, no second send |
+| 11 | Transport failure | `FAILED` recorded, never auto-resent |
+| 12 | Transport uncertainty | `AMBIGUOUS`, never auto-resent |
+| 13 | Copy scan | no "safe", "audited", "guaranteed", "listed" |
+| 14 | Live invariants after suite | deployments 5, events 3, deliveries 4, announcements 7, PEPECARTEL unchanged |
 
-## 5. Robinhood Chain launcher vs. public Cartel Launchpad
+Plus `eslint`, `bunx tsgo --noEmit`, `bun run build`, and re-read of the deployed `telegram-group` version/hash/`verify_jwt` per the snapshot workflow.
 
-The original Phase 8 commitment was a **launcher foundation on Robinhood Chain Testnet 46630**, not a public Launchpad product. Evidence:
+## 9. GO / NO-GO decisions
 
-- #789 frames it as *"initially for Robinhood Chain, later potentially powering a public Cartel Launchpad"* — the Launchpad is explicitly future/conditional.
-- #791 fixes testnet-only constraints and states mainnet 4663 must expose **no** deployment path; `src/lib/chain-registry.ts:11-18` encodes that as an absence, not a flag.
-- Every C8.x built slice is owner-only and workspace-scoped inside authenticated CARTEL HQ; nothing in Phase 8 touched the public `network.*` routes.
-- Public Cartel Network / Launchpad-style discovery is tracked separately in project knowledge as Build order item 6+, outside Phase 8.
+Blockers: none technical. Three decisions are required before build:
+1. **Owner-only vs owner+admin** for the contract broadcast. Recommendation: owner-only.
+2. **Authorize the additive migration** on `telegram_group_announcements` (two columns + one partial unique index). Without it, semantic dedupe and audit binding are impossible; refusing it means accepting request-id-only idempotency.
+3. **Authorize modifying and redeploying the live `telegram-group` edge function** (v11 → v12, `verify_jwt = true` preserved, snapshot + inventory updated in the same session).
 
-So: **Phase 8 = Robinhood Chain launcher foundation. The public Launchpad is a later, separate product and is not Phase 8 scope.**
+Also note: PEPECARTEL currently has no registered contract, so C8.7D cannot be end-to-end proven against real production data — verification will be rollback-safe and no-send by construction.
 
-## 6. Genuine remaining gaps vs. optional enhancements
+## 10. Verdict
 
-**Closure blockers from original Phase 8 scope: none.** Every item that was authorized to build is built, and the two unbuilt items (C8.6B/C) were themselves ruled NO-GO by their own defining audit, with an external precondition that is still unmet.
+**C8.7D READY TO BUILD** — pending the three authorizations in section 9.
 
-Externally blocked (cannot be closed by writing code):
-- C8.6B/C require officially verified Uniswap-family router / position-manager / WETH9 addresses actually deployed on chain 46630. Until Robinhood publishes them and they are identity-probed, building the execution path would mean inventing addresses — which #831 item 4 forbade.
-
-Optional future enhancements (never part of original Phase 8 scope, do not block closure):
-- Mainnet 4663 path (explicitly excluded by C8.1).
-- Managed RPC provider swap (already anticipated as a single override, `chain-registry.ts:26`).
-- Public Cartel Launchpad / Network exposure of verified launches.
-- End-to-end production proof of C8.7D/E against a real registered contract — PEPECARTEL still has `official_contract_address = NULL`, so the positive path remains rollback-safe/no-send by construction, as recorded in earlier C8.7D and E5 audits.
-
-## 7. Current-state verification (read-only)
-
-- `bunx tsgo --noEmit` → **PASS** (exit 0, no diagnostics).
-- `bun run build` → **PASS** (`✓ built in 3.44s`, nitro output generated).
-- `git status --porcelain` after both checks → still empty. **No file changed during this audit** (other than this audit document).
-
-## 8. Closure recommendation
-
-**(A) PHASE 8 CAN CLOSE.**
-
-C8.0 through C8.7E — every Phase 8 item for which build authorization was ever granted — is implemented and verified at HEAD `92be1d9`. No Phase 8 launcher item was defined after C8.7E anywhere in chat, repository, migrations or comments. C8.6B/C remain open only as a deliberately deferred, externally blocked sub-slice of the liquidity workstream, not as unfinished launcher-foundation work.
-
-Audit ends here. No build phase started, no follow-up work proposed.
+No application code, schema, data, migration, secret, Telegram message, or publish state was changed in this turn.
