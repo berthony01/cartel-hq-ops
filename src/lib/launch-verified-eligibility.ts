@@ -18,18 +18,27 @@ import { REQUIRED_CONFIRMATIONS, ROBINHOOD_TESTNET_CHAIN_ID } from "./chain-regi
  * audit, safety guarantee, or promise of legitimacy or value.
  */
 
-/** C8.7A registration phase gate. Frozen `false`; nothing assigns to it. */
-export const REGISTRATION_READY = false as const;
+/**
+ * C8.7B registration phase gate. Evidence-bound official contract registration
+ * is available, but ONLY through `register_verified_launch_contract`, which
+ * re-derives every predicate below server side. Nothing in this module writes.
+ */
+export const REGISTRATION_READY = true as const;
 
 /**
- * Environments that could ever host an officially registerable deployment.
- * Deliberately EMPTY in C8.7A: no production environment is approved yet, so
- * every deployment fails the environment gate closed.
+ * Environments that may host an officially registerable deployment.
+ * Test networks are never included.
  */
-export const APPROVED_REGISTRATION_ENVIRONMENTS: readonly string[] = [];
+export const APPROVED_REGISTRATION_ENVIRONMENTS: readonly string[] = ["PRODUCTION"];
 
 /** Deployment kinds that could ever represent an official project token. */
 export const APPROVED_OFFICIAL_DEPLOYMENT_KINDS: readonly string[] = ["FIXED_SUPPLY_ERC20"];
+
+/** The only frozen artifact whose deployment may become an official contract. */
+export const APPROVED_OFFICIAL_ARTIFACT_ID = "cartel-fixed-erc20-v1" as const;
+
+/** Lifecycle status in which official contract registration is permitted. */
+export const REGISTRATION_LIFECYCLE_STATUS = "CONTRACT_PENDING" as const;
 
 /** Minimum confirmation depth, mirroring the deployment verifier's floor. */
 export const EVIDENCE_REQUIRED_CONFIRMATIONS = REQUIRED_CONFIRMATIONS;
@@ -37,6 +46,7 @@ export const EVIDENCE_REQUIRED_CONFIRMATIONS = REQUIRED_CONFIRMATIONS;
 export const VERIFIED_DEPLOYMENT_DISCLAIMER =
   "Verified deployment means the recorded on-chain deployment evidence passed Cartel's verifier. " +
   "It is not an endorsement, audit, safety guarantee, or promise of legitimacy or value.";
+
 
 /* ------------------------------------------------------------------ */
 /* Inputs                                                              */
