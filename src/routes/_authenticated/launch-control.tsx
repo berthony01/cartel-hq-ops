@@ -561,6 +561,41 @@ function LaunchControlPage() {
       ),
   });
 
+  // C8.7C — explicit watcher notification. Registration and the lifecycle
+  // transition never notify anyone; this is the only path that queues the
+  // official-contract packet, and the database keeps it owner-only,
+  // evidence-bound and idempotent. The outcome is keyed to the launch so a
+  // result can never be shown against a different one.
+  const [notifyOutcome, setNotifyOutcome] = useState<{
+    launchId: string;
+    result: OfficialContractNotifyResult | null;
+    error: string | null;
+  } | null>(null);
+  const notifyContractMutation = useMutation({
+    mutationFn: async () => {
+      if (!selected) throw new Error("No launch selected.");
+      return notifyLaunchWatchersOfficialContract(selected.id);
+    },
+    onSuccess: (result) => {
+      setNotifyOutcome({ launchId: selected?.id ?? "", result, error: null });
+      toast.success(
+        result.status === "queued"
+          ? "Official contract queued for eligible Launch Watch subscribers"
+          : "Launch Watch subscribers were already notified — nothing was sent again",
+      );
+      void invalidate();
+    },
+    onError: (err: unknown) => {
+      const message =
+        err instanceof Error ? err.message : "Could not notify Launch Watch subscribers.";
+      setNotifyOutcome({ launchId: selected?.id ?? "", result: null, error: message });
+      toast.error(message);
+    },
+  });
+  const notifyOutcomeForSelected =
+    notifyOutcome && selected && notifyOutcome.launchId === selected.id ? notifyOutcome : null;
+
+
   const [confirmDelete, setConfirmDelete] = useState(false);
   const deleteMutation = useMutation({
     mutationFn: async () => {
