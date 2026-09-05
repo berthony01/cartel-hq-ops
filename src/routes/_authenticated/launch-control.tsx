@@ -61,7 +61,7 @@ import {
   nextLaunchStatus,
   nullableText,
   scheduleLocked,
-  setLaunchContractAddress,
+  registerVerifiedLaunchContract,
   slugifyLaunch,
   toLaunchStatus,
   transitionLaunchStatus,
@@ -350,6 +350,7 @@ function LaunchControlPage() {
     queryFn: () => getLaunchAccess(workspaceId!, workspace?.owner_id ?? null),
   });
   const canManage = accessQuery.data?.canManage ?? false;
+  const isWorkspaceOwner = accessQuery.data?.isWorkspaceOwner ?? false;
   const readOnly = !canManage;
 
 
