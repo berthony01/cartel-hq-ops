@@ -532,3 +532,57 @@ export function fetchBroadcastLaunchOptions(params: {
   });
 }
 
+
+/* ------------------------------------------------------------------ */
+/* C8.7D — Official contract group broadcast                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Outcome of an explicit OFFICIAL CONTRACT community broadcast.
+ * The address and the posted packet are always derived server-side from the
+ * evidence-bound registration — the browser never supplies either.
+ */
+export type OfficialContractBroadcastResult = {
+  status?: GroupAnnouncementStatus;
+  /** True when this exact request id was already recorded — nothing was re-sent. */
+  duplicate?: boolean;
+  announcementId?: string;
+  announcementKind?: string;
+  launchId?: string;
+  groupConnectionId?: string;
+  groupTitle?: string;
+  messageId?: number | null;
+  sentAt?: string | null;
+  deliveryKind?: "TEXT" | (string & {});
+  /** Exactly what the server posted. Never editable in the browser. */
+  deliveredText?: string;
+  contractAddress?: string;
+  /** Recoverable: the bot was removed from the community. */
+  reconnectRequired?: boolean;
+  connectionState?: string;
+  message?: string;
+  technical?: string | null;
+};
+
+/**
+ * C8.7D — posts the registered official contract to ONE connected community.
+ *
+ * Owner-only and evidence-bound server-side. Separate from registration and
+ * separate from the Launch Watch subscriber notification: neither of those ever
+ * posts to a group. `clientRequestId` must stay stable for one intended
+ * broadcast, and one launch can only ever be broadcast once per community.
+ */
+export function sendOfficialContractBroadcast(params: {
+  workspaceId: string;
+  groupConnectionId: string;
+  launchId: string;
+  clientRequestId: string;
+}): Promise<OfficialContractBroadcastResult> {
+  return invoke<OfficialContractBroadcastResult>({
+    action: "send_official_contract_broadcast",
+    workspaceId: params.workspaceId,
+    groupConnectionId: params.groupConnectionId,
+    launchId: params.launchId,
+    clientRequestId: params.clientRequestId,
+  });
+}
