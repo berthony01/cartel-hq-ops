@@ -306,6 +306,77 @@ export type Database = {
           },
         ]
       }
+      launch_contract_registration_events: {
+        Row: {
+          action: string
+          actor_id: string | null
+          contract_address: string
+          correction_reason: string | null
+          created_at: string
+          deployment_id: string
+          evidence_snapshot: Json
+          id: string
+          launch_id: string
+          superseded_event_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          contract_address: string
+          correction_reason?: string | null
+          created_at?: string
+          deployment_id: string
+          evidence_snapshot: Json
+          id?: string
+          launch_id: string
+          superseded_event_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          contract_address?: string
+          correction_reason?: string | null
+          created_at?: string
+          deployment_id?: string
+          evidence_snapshot?: Json
+          id?: string
+          launch_id?: string
+          superseded_event_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launch_contract_registration_events_deployment_id_fkey"
+            columns: ["deployment_id"]
+            isOneToOne: false
+            referencedRelation: "launch_chain_deployments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_contract_registration_events_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_contract_registration_events_superseded_event_id_fkey"
+            columns: ["superseded_event_id"]
+            isOneToOne: false
+            referencedRelation: "launch_contract_registration_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_contract_registration_events_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       launch_events: {
         Row: {
           created_at: string
@@ -2305,6 +2376,7 @@ export type Database = {
           branding_template_version: string | null
           branding_ticker: string | null
           client_request_id: string
+          contract_registration_event_id: string | null
           cta_chain: string | null
           cta_enabled: boolean
           cta_launch_id: string | null
@@ -2338,6 +2410,7 @@ export type Database = {
           branding_template_version?: string | null
           branding_ticker?: string | null
           client_request_id: string
+          contract_registration_event_id?: string | null
           cta_chain?: string | null
           cta_enabled?: boolean
           cta_launch_id?: string | null
@@ -2371,6 +2444,7 @@ export type Database = {
           branding_template_version?: string | null
           branding_ticker?: string | null
           client_request_id?: string
+          contract_registration_event_id?: string | null
           cta_chain?: string | null
           cta_enabled?: boolean
           cta_launch_id?: string | null
@@ -2401,6 +2475,13 @@ export type Database = {
             columns: ["branding_logo_asset_id"]
             isOneToOne: false
             referencedRelation: "media_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_group_announcements_contract_registration_event_i_fkey"
+            columns: ["contract_registration_event_id"]
+            isOneToOne: false
+            referencedRelation: "launch_contract_registration_events"
             referencedColumns: ["id"]
           },
           {
@@ -3087,6 +3168,15 @@ export type Database = {
           telegram_message_id: number
         }[]
       }
+      correct_verified_launch_contract: {
+        Args: {
+          _deployment_id: string
+          _expected_contract_address: string
+          _launch_id: string
+          _reason: string
+        }
+        Returns: Json
+      }
       create_launch_chain_deployment_attempt: {
         Args: {
           _client_request_id: string
@@ -3688,6 +3778,10 @@ export type Database = {
         Args: { _chain: string }
         Returns: boolean
       }
+      launch_contract_correction_payload: {
+        Args: { _launch_id: string; _registration_event_id: string }
+        Returns: Json
+      }
       launch_notification_payload: {
         Args: { _launch_id: string }
         Returns: Json
@@ -3795,6 +3889,10 @@ export type Database = {
       mark_stale_project_inbox_delivery_claims: { Args: never; Returns: number }
       notify_launch_watchers_official_contract: {
         Args: { _launch_id: string }
+        Returns: Json
+      }
+      notify_launch_watchers_official_contract_correction: {
+        Args: { _launch_id: string; _registration_event_id: string }
         Returns: Json
       }
       project_inbox_delivery_scheduler_secret_matches: {
