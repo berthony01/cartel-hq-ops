@@ -29,8 +29,14 @@ const SCHEDULE_DRIFT_TOLERANCE_MS = 60_000;
 const REMINDER_STALE_MS = 20 * 60 * 1000;
 
 const TRUST_STATEMENT =
-  `<b>What "verified" means:</b> this information was supplied by the authenticated Cartel HQ project that controls this launch. ` +
-  `It is <b>not</b> a safety audit, token safety verification, rug-proof guarantee or investment endorsement. Always do your own research.`;
+  `<b>What this means:</b> this is the project's registered official contract reference. Cartel verified the specific deployment ` +
+  `evidence bound to that registration. It is <b>not</b> a token or project safety audit, guarantee, endorsement or investment ` +
+  `recommendation. Always do your own research.`;
+
+/** Correction notices are mandatory for active watchers; scoped to evidence only. */
+const CORRECTION_DISCLAIMER =
+  `Cartel verified the specific deployment evidence bound to this registration. It is not a safety review, audit, guarantee, ` +
+  `endorsement or investment recommendation.`;
 
 const REMINDER_DISCLAIMER =
   `This is a countdown reminder for a launch you chose to watch. It is not a safety check, audit, verification or endorsement of any token.`;
@@ -183,6 +189,12 @@ Deno.serve(async (req: Request) => {
         continue;
       }
       const isWatcherUpdate = eventType === "WATCHER_UPDATE";
+      /**
+       * C8.7E — an official-contract correction is a mandatory safety-critical
+       * notice for an ACTIVE watcher. It is deliberately independent of
+       * `updates_enabled` and `reminders_enabled`; only `is_active` gates it.
+       */
+      const isCorrection = eventType === "OFFICIAL_CONTRACT_CORRECTED";
       // Current-state revalidation: a watcher who muted project updates after
       // the event was queued must never be contacted.
       if (isWatcherUpdate && subscription.updates_enabled !== true) {
@@ -201,7 +213,7 @@ Deno.serve(async (req: Request) => {
       const { data: launch, error: launchError } = await admin
         .from("launches")
         .select(
-          "id,status,launch_at,launch_window_start,launch_window_end,timezone,official_contract_address,launch_watch_token,project_profile_id,token_name,ticker,chain",
+          "id,workspace_id,status,launch_at,launch_window_start,launch_window_end,timezone,official_contract_address,official_contract_deployment_id,contract_registered_at,contract_registered_by,launch_watch_token,project_profile_id,token_name,ticker,chain",
         )
         .eq("id", claim.launch_id)
         .maybeSingle();
@@ -321,11 +333,11 @@ Deno.serve(async (req: Request) => {
           `${timingLine}${linksBlock}\n\n${REMINDER_DISCLAIMER}`;
       } else if (eventType === "OFFICIAL_CONTRACT_REGISTERED") {
         text =
-          `<b>📦 VERIFIED LAUNCH PACKET</b>\n\n${identity}\n${packetLines.join("\n")}` +
+          `<b>📦 OFFICIAL CONTRACT REGISTERED</b>\n\n${identity}\n${packetLines.join("\n")}` +
           `${timingLine}${linksBlock}\n\n${TRUST_STATEMENT}`;
       } else if (eventType === "LAUNCH_LIVE") {
         text =
-          `<b>🚀 LAUNCH IS LIVE</b>\n\n${identity}\n\n<b>📦 VERIFIED LAUNCH PACKET</b>${packetLines.join("\n")}` +
+          `<b>🚀 LAUNCH IS LIVE</b>\n\n${identity}\n\n<b>📦 OFFICIAL CONTRACT</b>${packetLines.join("\n")}` +
           `${timingLine}${linksBlock}\n\n${TRUST_STATEMENT}`;
       } else if (isWatcherUpdate) {
         // Operator-authored text only. Never any sender identity, and every
@@ -366,7 +378,7 @@ Deno.serve(async (req: Request) => {
         }
         keyboardRows.push(controls);
         // Project-update preference is independent of countdowns: muting it
-        // never suppresses the Verified Launch Packet or the live alert.
+        // never suppresses the official-contract notice or the live alert.
         keyboardRows.push([
           subscription.updates_enabled === true
             ? { text: "🔇 Mute project updates", callback_data: `ln_updates_off_${token}` }
