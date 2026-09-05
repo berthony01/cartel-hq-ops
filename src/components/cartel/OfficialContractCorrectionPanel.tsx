@@ -579,6 +579,259 @@ export function OfficialContractCorrectionPanel({
             actions.
           </Note>
         </div>
+
+        {currentCorrection ? (
+          <div className="space-y-4 rounded-md border border-border bg-background/40 px-3 py-3">
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--cartel-gold,#D4A82A)]">
+                Communicate this correction
+              </p>
+              <Note>
+                Recording the correction notified nobody. These are two separate manual actions, and
+                each one has to be confirmed on its own.
+              </Note>
+              <Note>
+                Messages that were already sent cannot be retracted. A correction notice supersedes
+                the project&apos;s previous official contract reference.
+              </Note>
+              <Note>
+                &quot;Verified&quot; here refers only to the specific recorded deployment evidence
+                this address is derived from. It is not a statement about token or project safety,
+                an audit, a guarantee, an endorsement, or investment quality.
+              </Note>
+              <dl className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <dt className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                    Previously registered
+                  </dt>
+                  <dd className="break-all font-mono text-[11px] text-foreground">
+                    {supersededEvent?.contract_address ?? "—"}
+                  </dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                    Corrected official contract
+                  </dt>
+                  <dd className="break-all font-mono text-[11px] text-foreground">
+                    {currentCorrection.contract_address}
+                  </dd>
+                </div>
+              </dl>
+              <Note>
+                This preview is read only, taken from the registration history. The server composes
+                and derives everything it actually sends.
+              </Note>
+            </div>
+
+            {!isWorkspaceOwner ? (
+              <Note>
+                Only the project owner can communicate a correction. Admin access is not sufficient.
+              </Note>
+            ) : (
+              <>
+                {/* A — Launch Watch subscribers */}
+                <div className="space-y-2 border-t border-border pt-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    Notify Launch Watch subscribers
+                  </p>
+                  <Note>
+                    This correction notice reaches active watchers even if they muted countdowns or
+                    ordinary project updates. People who stopped watching are excluded by the
+                    server.
+                  </Note>
+                  {commState.notifyArmed ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        className="min-h-11"
+                        disabled={disabled || correctionNotifyPending}
+                        onClick={() => onNotifyCorrection?.(currentCorrection.id)}
+                      >
+                        {correctionNotifyPending ? (
+                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <Send className="size-4" aria-hidden="true" />
+                        )}
+                        Confirm — notify Launch Watch subscribers
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="min-h-11"
+                        disabled={disabled || correctionNotifyPending}
+                        onClick={() => patchComm({ notifyArmed: false })}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      className="min-h-11"
+                      disabled={disabled || correctionNotifyPending}
+                      onClick={() => patchComm({ notifyArmed: true })}
+                    >
+                      <Send className="size-4" aria-hidden="true" />
+                      Notify subscribers about this correction
+                    </Button>
+                  )}
+                  {correctionNotifyResult ? (
+                    <div
+                      role="status"
+                      className="rounded-md border border-border bg-background/40 px-3 py-2"
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
+                        {correctionNotifyResult.status === "queued"
+                          ? "Queued for delivery"
+                          : "Already notified"}
+                      </p>
+                      {correctionNotifyResult.status === "queued" ? (
+                        <Note>
+                          {correctionNotifyResult.delivery_count} deliveries were queued. Queued is
+                          not the same as delivered — Telegram delivery is reported separately.
+                        </Note>
+                      ) : (
+                        <Note>
+                          This correction was already announced to subscribers. Nothing was queued or
+                          sent again.
+                        </Note>
+                      )}
+                    </div>
+                  ) : null}
+                  {correctionNotifyError ? (
+                    <div
+                      role="alert"
+                      className="rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2"
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-destructive">
+                        Not queued
+                      </p>
+                      <Note>{correctionNotifyError}</Note>
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* B — one connected Telegram community */}
+                <div className="space-y-2 border-t border-border pt-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    Post this correction to one community
+                  </p>
+                  {groupsLoading ? (
+                    <Note>Loading connected communities…</Note>
+                  ) : (groups ?? []).length === 0 ? (
+                    <Note>No connected Telegram community is available for this project.</Note>
+                  ) : (
+                    <ul className="space-y-2">
+                      {(groups ?? []).map((group) => {
+                        const active = group.id === commState.groupId;
+                        return (
+                          <li key={group.id}>
+                            <button
+                              type="button"
+                              disabled={disabled || !group.ready || correctionBroadcastPending}
+                              aria-pressed={active}
+                              onClick={() => patchComm({ groupId: group.id, groupArmed: false })}
+                              className={`min-h-11 w-full rounded-md border px-3 py-2 text-left disabled:opacity-60 ${
+                                active
+                                  ? "border-[color:var(--cartel-gold,#D4A82A)] bg-[color:var(--cartel-gold,#D4A82A)]/10"
+                                  : "border-border bg-background/40"
+                              }`}
+                            >
+                              <span className="block truncate text-xs text-foreground">
+                                {group.title}
+                              </span>
+                              {!group.ready ? (
+                                <span className="mt-1 block text-[11px] text-muted-foreground">
+                                  The bot is not an administrator in this community yet.
+                                </span>
+                              ) : null}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  {commState.groupId ? (
+                    commState.groupArmed ? (
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          className="min-h-11"
+                          disabled={disabled || correctionBroadcastPending}
+                          onClick={() =>
+                            onBroadcastCorrection?.(commState.groupId!, currentCorrection.id)
+                          }
+                        >
+                          {correctionBroadcastPending ? (
+                            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                          ) : (
+                            <Megaphone className="size-4" aria-hidden="true" />
+                          )}
+                          Confirm — post this correction
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="min-h-11"
+                          disabled={disabled || correctionBroadcastPending}
+                          onClick={() => patchComm({ groupArmed: false })}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        className="min-h-11"
+                        disabled={disabled || correctionBroadcastPending}
+                        onClick={() => patchComm({ groupArmed: true })}
+                      >
+                        <Megaphone className="size-4" aria-hidden="true" />
+                        Review community post
+                      </Button>
+                    )
+                  ) : (
+                    <Note>Select one community to continue.</Note>
+                  )}
+                  {correctionBroadcastResult ? (
+                    <div
+                      role="status"
+                      className="rounded-md border border-border bg-background/40 px-3 py-2"
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
+                        {correctionBroadcastResult.status === "SENT"
+                          ? correctionBroadcastResult.duplicate
+                            ? "Already posted"
+                            : "Posted"
+                          : correctionBroadcastResult.status === "FAILED"
+                            ? "Not posted"
+                            : "Outcome unconfirmed"}
+                      </p>
+                      <Note>
+                        {correctionBroadcastResult.status === "SENT"
+                          ? correctionBroadcastResult.duplicate
+                            ? "This exact request was already recorded. Nothing was posted again."
+                            : "The correction was posted to the selected community."
+                          : correctionBroadcastResult.status === "FAILED"
+                            ? (correctionBroadcastResult.message ??
+                              "The community post did not go out.")
+                            : "This post was not confirmed either way. Nothing is retried automatically — check the community before deciding to act again."}
+                      </Note>
+                    </div>
+                  ) : null}
+                  {correctionBroadcastError ? (
+                    <div
+                      role="alert"
+                      className="rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2"
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-destructive">
+                        Not posted
+                      </p>
+                      <Note>{correctionBroadcastError}</Note>
+                      <Note>Nothing is retried automatically.</Note>
+                    </div>
+                  ) : null}
+                </div>
+              </>
+            )}
+          </div>
+        ) : null}
       </div>
     </Section>
   );
