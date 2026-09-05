@@ -57,6 +57,7 @@ import {
   launchStatusIndex,
   listLaunches,
   notifyLaunchWatchersOfficialContract,
+  notifyLaunchWatchersOfficialContractCorrection,
   localInputToIso,
   nextLaunchStatus,
   nullableText,
