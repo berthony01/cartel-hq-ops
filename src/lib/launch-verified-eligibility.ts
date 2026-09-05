@@ -273,12 +273,18 @@ export type LaunchEvidenceEvaluation = {
   totalDeployments: number;
   verifiedCount: number;
   testnetVerifiedCount: number;
-  eligibleForOfficialRegistration: 0;
+  eligibleForOfficialRegistration: number;
+  /**
+   * The single eligible candidate, or null. Never auto-selected when more than
+   * one candidate qualifies — ambiguity blocks instead of guessing.
+   */
+  registrationCandidate: DeploymentEvidenceResult | null;
   ambiguous: boolean;
   summaryState: SummaryState;
   summaryLabel: string;
-  /** Frozen false for C8.7A. */
-  registrationReady: false;
+  registrationReady: boolean;
+  /** True when the launch already carries a registered official contract. */
+  alreadyRegistered: boolean;
   deployments: DeploymentEvidenceResult[];
 };
 
