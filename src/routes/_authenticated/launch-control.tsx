@@ -1945,6 +1945,19 @@ function LaunchControlPage() {
                   }
                 />
 
+                <OfficialContractNotifyPanel
+                  launchStatus={status}
+                  registrationComplete={contractRegistered}
+                  isWorkspaceOwner={isWorkspaceOwner}
+                  disabled={readOnly}
+                  pending={notifyContractMutation.isPending}
+                  result={notifyOutcomeForSelected?.result ?? null}
+                  error={notifyOutcomeForSelected?.error ?? null}
+                  onNotify={() => notifyContractMutation.mutate()}
+                />
+
+
+
 
 
 
