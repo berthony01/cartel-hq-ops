@@ -57,6 +57,7 @@ import {
   launchStatusIndex,
   listLaunches,
   notifyLaunchWatchersOfficialContract,
+  notifyLaunchWatchersOfficialContractCorrection,
   localInputToIso,
   nextLaunchStatus,
   nullableText,
@@ -73,6 +74,7 @@ import {
   type LaunchStatus,
   type OfficialContractNotifyResult,
   type OfficialContractCorrectionResult,
+  type OfficialContractCorrectionNotifyResult,
 } from "@/lib/launch-control";
 
 
@@ -91,7 +93,9 @@ import { OfficialContractCorrectionPanel } from "@/components/cartel/OfficialCon
 import { supabase } from "@/integrations/supabase/client";
 import {
   sendOfficialContractBroadcast,
+  sendOfficialContractCorrectionBroadcast,
   type OfficialContractBroadcastResult,
+  type OfficialContractCorrectionBroadcastResult,
 } from "@/lib/telegram-group";
 import { evaluateLaunchDeploymentEvidence } from "@/lib/launch-verified-eligibility";
 import { chainDeploymentsQueryKey, listChainDeployments } from "@/lib/chain-launcher";
@@ -722,6 +726,101 @@ function LaunchControlPage() {
       ? correctionOutcome
       : null;
 
+  // Identity of the newest immutable registration event for the selected
+  // launch. Communication outcomes are matched against it so a durable result
+  // is never displayed against a later, superseding correction.
+  const latestRegistrationEventId =
+    (registrationEventsQuery.data ?? []).at(-1)?.id ?? null;
+
+
+
+  // C8.7E E4B — two independent, explicit post-correction communications.
+  // Neither is ever called from `correctContractMutation.onSuccess`: recording
+  // a correction still sends nothing. Both are keyed to launch + registration
+  // event so an outcome can never be shown against a different correction.
+  const [correctionNotifyOutcome, setCorrectionNotifyOutcome] = useState<{
+    launchId: string;
+    registrationEventId: string;
+    result: OfficialContractCorrectionNotifyResult | null;
+    error: string | null;
+  } | null>(null);
+  const correctionNotifyMutation = useMutation({
+    mutationFn: async (registrationEventId: string) => {
+      if (!selected) throw new Error("No launch selected.");
+      return notifyLaunchWatchersOfficialContractCorrection(selected.id, registrationEventId);
+    },
+    onSuccess: (result, registrationEventId) => {
+      const launchId = selected?.id ?? "";
+      setCorrectionNotifyOutcome({ launchId, registrationEventId, result, error: null });
+      toast.success(
+        result.status === "queued"
+          ? "Correction queued for active Launch Watch subscribers"
+          : "Subscribers were already notified about this correction — nothing was sent again",
+      );
+      void queryClient.invalidateQueries({
+        queryKey: ["launch-notification-summary", launchId],
+      });
+    },
+    onError: (err: unknown, registrationEventId) => {
+      const message =
+        err instanceof Error ? err.message : "Could not notify Launch Watch subscribers.";
+      setCorrectionNotifyOutcome({
+        launchId: selected?.id ?? "",
+        registrationEventId,
+        result: null,
+        error: message,
+      });
+      toast.error(message);
+    },
+  });
+
+  const [correctionBroadcastOutcome, setCorrectionBroadcastOutcome] = useState<{
+    launchId: string;
+    registrationEventId: string;
+    result: OfficialContractCorrectionBroadcastResult | null;
+    error: string | null;
+  } | null>(null);
+  const correctionBroadcastMutation = useMutation({
+    mutationFn: async (input: { groupConnectionId: string; registrationEventId: string }) => {
+      if (!selected || !workspaceId) throw new Error("No launch selected.");
+      return sendOfficialContractCorrectionBroadcast({
+        workspaceId,
+        groupConnectionId: input.groupConnectionId,
+        launchId: selected.id,
+        registrationEventId: input.registrationEventId,
+        clientRequestId: crypto.randomUUID(),
+      });
+    },
+    onSuccess: (result, input) => {
+      setCorrectionBroadcastOutcome({
+        launchId: selected?.id ?? "",
+        registrationEventId: input.registrationEventId,
+        result,
+        error: null,
+      });
+      if (result.status === "SENT" && !result.duplicate) {
+        toast.success("Correction posted to the community");
+      } else if (result.status === "SENT") {
+        toast.success("Already posted — nothing was posted again");
+      } else if (result.status === "FAILED") {
+        toast.error(result.message ?? "The correction was not posted.");
+      } else {
+        toast.warning(
+          result.message ?? "The community post outcome could not be confirmed. Nothing is retried.",
+        );
+      }
+    },
+    onError: (err: unknown, input) => {
+      const message = err instanceof Error ? err.message : "Could not post the correction.";
+      setCorrectionBroadcastOutcome({
+        launchId: selected?.id ?? "",
+        registrationEventId: input.registrationEventId,
+        result: null,
+        error: message,
+      });
+      toast.error(message);
+    },
+  });
 
 
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -2121,7 +2220,46 @@ function LaunchControlPage() {
                   result={correctionOutcomeForSelected?.result ?? null}
                   error={correctionOutcomeForSelected?.error ?? null}
                   onCorrect={(input) => correctContractMutation.mutate(input)}
+                  groups={broadcastGroupsQuery.data ?? []}
+                  groupsLoading={broadcastGroupsQuery.isLoading}
+                  correctionNotifyPending={correctionNotifyMutation.isPending}
+                  correctionNotifyResult={
+                    correctionNotifyOutcome &&
+                    correctionNotifyOutcome.launchId === selected.id &&
+                    correctionNotifyOutcome.registrationEventId === latestRegistrationEventId
+                      ? correctionNotifyOutcome.result
+                      : null
+                  }
+                  correctionNotifyError={
+                    correctionNotifyOutcome &&
+                    correctionNotifyOutcome.launchId === selected.id &&
+                    correctionNotifyOutcome.registrationEventId === latestRegistrationEventId
+                      ? correctionNotifyOutcome.error
+                      : null
+                  }
+                  correctionBroadcastPending={correctionBroadcastMutation.isPending}
+                  correctionBroadcastResult={
+                    correctionBroadcastOutcome &&
+                    correctionBroadcastOutcome.launchId === selected.id &&
+                    correctionBroadcastOutcome.registrationEventId === latestRegistrationEventId
+                      ? correctionBroadcastOutcome.result
+                      : null
+                  }
+                  correctionBroadcastError={
+                    correctionBroadcastOutcome &&
+                    correctionBroadcastOutcome.launchId === selected.id &&
+                    correctionBroadcastOutcome.registrationEventId === latestRegistrationEventId
+                      ? correctionBroadcastOutcome.error
+                      : null
+                  }
+                  onNotifyCorrection={(registrationEventId) =>
+                    correctionNotifyMutation.mutate(registrationEventId)
+                  }
+                  onBroadcastCorrection={(groupConnectionId, registrationEventId) =>
+                    correctionBroadcastMutation.mutate({ groupConnectionId, registrationEventId })
+                  }
                 />
+
 
 
                 <VerifiedDeploymentEvidencePanel

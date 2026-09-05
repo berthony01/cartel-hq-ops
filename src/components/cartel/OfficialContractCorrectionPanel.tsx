@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { History, Loader2, ShieldAlert } from "lucide-react";
+import { History, Loader2, Megaphone, Send, ShieldAlert } from "lucide-react";
 import { Section } from "@/components/cartel/Section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,12 +9,15 @@ import {
   CONTRACT_CORRECTION_REASON_MAX,
   CONTRACT_MAX,
   type LaunchContractRegistrationEvent,
+  type OfficialContractCorrectionNotifyResult,
   type OfficialContractCorrectionResult,
 } from "@/lib/launch-control";
+import type { OfficialContractCorrectionBroadcastResult } from "@/lib/telegram-group";
 import type {
   DeploymentEvidenceResult,
   LaunchEvidenceEvaluation,
 } from "@/lib/launch-verified-eligibility";
+
 
 /**
  * C8.7E E3 — official contract correction + immutable registration history.
@@ -45,6 +48,12 @@ const CORRECTABLE_STATUSES = ["OFFICIAL_CONTRACT_REGISTERED", "LIVE", "COMPLETED
  */
 const REGISTRATION_STATE_CHECK_IDS = ["lifecycle", "not_registered"];
 
+/**
+ * Safe connected-community option already produced by the route for the
+ * C8.7D broadcast panel. Presentation only — no data access here.
+ */
+export type CorrectionGroupOption = { id: string; title: string; ready: boolean };
+
 export type OfficialContractCorrectionPanelProps = {
   launchId: string | null;
   launchStatus: string;
@@ -64,7 +73,21 @@ export type OfficialContractCorrectionPanelProps = {
   result: OfficialContractCorrectionResult | null;
   error: string | null;
   onCorrect: (input: { deploymentId: string; expectedAddress: string; reason: string }) => void;
+
+  // C8.7E E4B — two independent, explicit post-correction communications.
+  /** Reuses the already-loaded connected-community list. No second query. */
+  groups?: CorrectionGroupOption[];
+  groupsLoading?: boolean;
+  correctionNotifyPending?: boolean;
+  correctionNotifyResult?: OfficialContractCorrectionNotifyResult | null;
+  correctionNotifyError?: string | null;
+  correctionBroadcastPending?: boolean;
+  correctionBroadcastResult?: OfficialContractCorrectionBroadcastResult | null;
+  correctionBroadcastError?: string | null;
+  onNotifyCorrection?: (registrationEventId: string) => void;
+  onBroadcastCorrection?: (groupConnectionId: string, registrationEventId: string) => void;
 };
+
 
 function Note({ children }: { children: React.ReactNode }) {
   return <p className="text-xs leading-relaxed text-muted-foreground">{children}</p>;
@@ -179,6 +202,16 @@ export function OfficialContractCorrectionPanel({
   result,
   error,
   onCorrect,
+  groups,
+  groupsLoading,
+  correctionNotifyPending,
+  correctionNotifyResult,
+  correctionNotifyError,
+  correctionBroadcastPending,
+  correctionBroadcastResult,
+  correctionBroadcastError,
+  onNotifyCorrection,
+  onBroadcastCorrection,
 }: OfficialContractCorrectionPanelProps) {
   // Candidates reuse the existing evaluator verdicts. A deployment qualifies
   // when every registration gate passes except the two that only describe the
@@ -219,6 +252,52 @@ export function OfficialContractCorrectionPanel({
       ? form
       : { key: formKey, selectedId: null, confirmAddress: "", reason: "", reviewing: false };
   const patch = (next: Partial<typeof state>) => setForm({ ...state, ...next, key: formKey });
+
+  // C8.7E E4B — the CURRENT communicable correction is derived from the
+  // immutable, chronological ledger passed in by the route, never from this
+  // browser session's last mutation result. A correction recorded on an
+  // earlier day therefore stays communicable after a reload, and a superseded
+  // one stops being communicable immediately. The server revalidates all of
+  // this independently; everything below is presentation only.
+  const latestEvent = events.length > 0 ? events[events.length - 1]! : null;
+  const currentCorrection =
+    registrationComplete &&
+    !eventsLoading &&
+    !eventsError &&
+    latestEvent != null &&
+    latestEvent.action === "CORRECTED" &&
+    (latestEvent.id ?? "").trim() !== "" &&
+    latestEvent.deployment_id === officialContractDeploymentId &&
+    officialContractAddress != null &&
+    (latestEvent.contract_address ?? "").trim().toLowerCase() ===
+      officialContractAddress.trim().toLowerCase() &&
+    (latestEvent.superseded_event_id ?? "").trim() !== "" &&
+    (latestEvent.correction_reason ?? "").trim() !== ""
+      ? latestEvent
+      : null;
+  const supersededEvent = currentCorrection
+    ? (events.find((e) => e.id === currentCorrection.superseded_event_id) ?? null)
+    : null;
+
+  // Armed confirmations and the selected community are keyed to the current
+  // correction, so they re-arm automatically whenever the launch changes or a
+  // newer correction supersedes this one. Durable outcomes come from props and
+  // are never cleared by cancelling an armed confirmation.
+  const commKey = `${launchId ?? ""}::${currentCorrection?.id ?? ""}`;
+  const [comm, setComm] = useState<{
+    key: string;
+    notifyArmed: boolean;
+    groupId: string | null;
+    groupArmed: boolean;
+  }>({ key: commKey, notifyArmed: false, groupId: null, groupArmed: false });
+  const commState =
+    comm.key === commKey
+      ? comm
+      : { key: commKey, notifyArmed: false, groupId: null, groupArmed: false };
+  const patchComm = (next: Partial<typeof commState>) =>
+    setComm({ ...commState, ...next, key: commKey });
+
+
 
   const selected = candidates.find((d) => d.deploymentId === state.selectedId) ?? null;
   const replacementAddress = selected?.contractAddress ?? null;
@@ -500,6 +579,259 @@ export function OfficialContractCorrectionPanel({
             actions.
           </Note>
         </div>
+
+        {currentCorrection ? (
+          <div className="space-y-4 rounded-md border border-border bg-background/40 px-3 py-3">
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--cartel-gold,#D4A82A)]">
+                Communicate this correction
+              </p>
+              <Note>
+                Recording the correction notified nobody. These are two separate manual actions, and
+                each one has to be confirmed on its own.
+              </Note>
+              <Note>
+                Messages that were already sent cannot be retracted. A correction notice supersedes
+                the project&apos;s previous official contract reference.
+              </Note>
+              <Note>
+                &quot;Verified&quot; here refers only to the specific recorded deployment evidence
+                this address is derived from. It is not a statement about token or project safety,
+                an audit, a guarantee, an endorsement, or investment quality.
+              </Note>
+              <dl className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <dt className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                    Previously registered
+                  </dt>
+                  <dd className="break-all font-mono text-[11px] text-foreground">
+                    {supersededEvent?.contract_address ?? "—"}
+                  </dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                    Corrected official contract
+                  </dt>
+                  <dd className="break-all font-mono text-[11px] text-foreground">
+                    {currentCorrection.contract_address}
+                  </dd>
+                </div>
+              </dl>
+              <Note>
+                This preview is read only, taken from the registration history. The server composes
+                and derives everything it actually sends.
+              </Note>
+            </div>
+
+            {!isWorkspaceOwner ? (
+              <Note>
+                Only the project owner can communicate a correction. Admin access is not sufficient.
+              </Note>
+            ) : (
+              <>
+                {/* A — Launch Watch subscribers */}
+                <div className="space-y-2 border-t border-border pt-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    Notify Launch Watch subscribers
+                  </p>
+                  <Note>
+                    This correction notice reaches active watchers even if they muted countdowns or
+                    ordinary project updates. People who stopped watching are excluded by the
+                    server.
+                  </Note>
+                  {commState.notifyArmed ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        className="min-h-11"
+                        disabled={disabled || correctionNotifyPending}
+                        onClick={() => onNotifyCorrection?.(currentCorrection.id)}
+                      >
+                        {correctionNotifyPending ? (
+                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <Send className="size-4" aria-hidden="true" />
+                        )}
+                        Confirm — notify Launch Watch subscribers
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="min-h-11"
+                        disabled={disabled || correctionNotifyPending}
+                        onClick={() => patchComm({ notifyArmed: false })}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      className="min-h-11"
+                      disabled={disabled || correctionNotifyPending}
+                      onClick={() => patchComm({ notifyArmed: true })}
+                    >
+                      <Send className="size-4" aria-hidden="true" />
+                      Notify subscribers about this correction
+                    </Button>
+                  )}
+                  {correctionNotifyResult ? (
+                    <div
+                      role="status"
+                      className="rounded-md border border-border bg-background/40 px-3 py-2"
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
+                        {correctionNotifyResult.status === "queued"
+                          ? "Queued for delivery"
+                          : "Already notified"}
+                      </p>
+                      {correctionNotifyResult.status === "queued" ? (
+                        <Note>
+                          {correctionNotifyResult.delivery_count} deliveries were queued. Queued is
+                          not the same as delivered — Telegram delivery is reported separately.
+                        </Note>
+                      ) : (
+                        <Note>
+                          This correction was already announced to subscribers. Nothing was queued or
+                          sent again.
+                        </Note>
+                      )}
+                    </div>
+                  ) : null}
+                  {correctionNotifyError ? (
+                    <div
+                      role="alert"
+                      className="rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2"
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-destructive">
+                        Not queued
+                      </p>
+                      <Note>{correctionNotifyError}</Note>
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* B — one connected Telegram community */}
+                <div className="space-y-2 border-t border-border pt-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    Post this correction to one community
+                  </p>
+                  {groupsLoading ? (
+                    <Note>Loading connected communities…</Note>
+                  ) : (groups ?? []).length === 0 ? (
+                    <Note>No connected Telegram community is available for this project.</Note>
+                  ) : (
+                    <ul className="space-y-2">
+                      {(groups ?? []).map((group) => {
+                        const active = group.id === commState.groupId;
+                        return (
+                          <li key={group.id}>
+                            <button
+                              type="button"
+                              disabled={disabled || !group.ready || correctionBroadcastPending}
+                              aria-pressed={active}
+                              onClick={() => patchComm({ groupId: group.id, groupArmed: false })}
+                              className={`min-h-11 w-full rounded-md border px-3 py-2 text-left disabled:opacity-60 ${
+                                active
+                                  ? "border-[color:var(--cartel-gold,#D4A82A)] bg-[color:var(--cartel-gold,#D4A82A)]/10"
+                                  : "border-border bg-background/40"
+                              }`}
+                            >
+                              <span className="block truncate text-xs text-foreground">
+                                {group.title}
+                              </span>
+                              {!group.ready ? (
+                                <span className="mt-1 block text-[11px] text-muted-foreground">
+                                  The bot is not an administrator in this community yet.
+                                </span>
+                              ) : null}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  {commState.groupId ? (
+                    commState.groupArmed ? (
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          className="min-h-11"
+                          disabled={disabled || correctionBroadcastPending}
+                          onClick={() =>
+                            onBroadcastCorrection?.(commState.groupId!, currentCorrection.id)
+                          }
+                        >
+                          {correctionBroadcastPending ? (
+                            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                          ) : (
+                            <Megaphone className="size-4" aria-hidden="true" />
+                          )}
+                          Confirm — post this correction
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="min-h-11"
+                          disabled={disabled || correctionBroadcastPending}
+                          onClick={() => patchComm({ groupArmed: false })}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        className="min-h-11"
+                        disabled={disabled || correctionBroadcastPending}
+                        onClick={() => patchComm({ groupArmed: true })}
+                      >
+                        <Megaphone className="size-4" aria-hidden="true" />
+                        Review community post
+                      </Button>
+                    )
+                  ) : (
+                    <Note>Select one community to continue.</Note>
+                  )}
+                  {correctionBroadcastResult ? (
+                    <div
+                      role="status"
+                      className="rounded-md border border-border bg-background/40 px-3 py-2"
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
+                        {correctionBroadcastResult.status === "SENT"
+                          ? correctionBroadcastResult.duplicate
+                            ? "Already posted"
+                            : "Posted"
+                          : correctionBroadcastResult.status === "FAILED"
+                            ? "Not posted"
+                            : "Outcome unconfirmed"}
+                      </p>
+                      <Note>
+                        {correctionBroadcastResult.status === "SENT"
+                          ? correctionBroadcastResult.duplicate
+                            ? "This exact request was already recorded. Nothing was posted again."
+                            : "The correction was posted to the selected community."
+                          : correctionBroadcastResult.status === "FAILED"
+                            ? (correctionBroadcastResult.message ??
+                              "The community post did not go out.")
+                            : "This post was not confirmed either way. Nothing is retried automatically — check the community before deciding to act again."}
+                      </Note>
+                    </div>
+                  ) : null}
+                  {correctionBroadcastError ? (
+                    <div
+                      role="alert"
+                      className="rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2"
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-destructive">
+                        Not posted
+                      </p>
+                      <Note>{correctionBroadcastError}</Note>
+                      <Note>Nothing is retried automatically.</Note>
+                    </div>
+                  ) : null}
+                </div>
+              </>
+            )}
+          </div>
+        ) : null}
       </div>
     </Section>
   );
