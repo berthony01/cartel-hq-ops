@@ -488,8 +488,7 @@ function evaluateDeployment(
       ),
     );
 
-    const symbolOk =
-      !isBlank(row.token_symbol) && row.verified_token_symbol === row.token_symbol;
+    const symbolOk = !isBlank(row.token_symbol) && row.verified_token_symbol === row.token_symbol;
     evidenceChecks.push(
       check(
         "token_symbol_match",
