@@ -646,17 +646,24 @@ export function OfficialContractCorrectionPanel({
                   <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     Notify Launch Watch subscribers
                   </p>
-                  <Note>
-                    This correction notice reaches active watchers even if they muted countdowns or
-                    ordinary project updates. People who stopped watching are excluded by the
-                    server.
-                  </Note>
-                  {commState.notifyArmed ? (
+                  {!onNotifyCorrection ? (
+                    <Note>Subscriber correction notification is not available in this context.</Note>
+                  ) : (
+                    <Note>
+                      This correction notice reaches active watchers even if they muted countdowns
+                      or ordinary project updates. People who stopped watching are excluded by the
+                      server.
+                    </Note>
+                  )}
+                  {onNotifyCorrection && commState.notifyArmed ? (
                     <div className="flex flex-wrap gap-2">
                       <Button
                         className="min-h-11"
                         disabled={disabled || correctionNotifyPending}
-                        onClick={() => onNotifyCorrection?.(currentCorrection.id)}
+                        onClick={() => {
+                          if (!onNotifyCorrection) return;
+                          onNotifyCorrection(currentCorrection.id);
+                        }}
                       >
                         {correctionNotifyPending ? (
                           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -674,7 +681,7 @@ export function OfficialContractCorrectionPanel({
                         Cancel
                       </Button>
                     </div>
-                  ) : (
+                  ) : onNotifyCorrection ? (
                     <Button
                       variant="outline"
                       className="min-h-11"
@@ -684,7 +691,7 @@ export function OfficialContractCorrectionPanel({
                       <Send className="size-4" aria-hidden="true" />
                       Notify subscribers about this correction
                     </Button>
-                  )}
+                  ) : null}
                   {correctionNotifyResult ? (
                     <div
                       role="status"
