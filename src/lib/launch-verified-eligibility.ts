@@ -650,7 +650,9 @@ function evaluateDeployment(
   if (!lifecycleOk) registrationBlockReasons.push("Launch is not at Contract Pending");
 
   const notRegistered =
-    isBlank(context.officialContractAddress) && isBlank(context.contractRegisteredAt);
+    isBlank(context.officialContractAddress) &&
+    isBlank(context.officialContractDeploymentId) &&
+    isBlank(context.contractRegisteredAt);
   registrationChecks.push(
     check(
       "not_registered",
@@ -658,7 +660,7 @@ function evaluateDeployment(
       notRegistered ? "PASS" : "BLOCKED",
       notRegistered
         ? "This launch has no registered official contract."
-        : "This launch already has a registered official contract. Registered contracts cannot be replaced.",
+        : "This launch already carries official contract registration state. Registered contracts cannot be replaced.",
     ),
   );
   if (!notRegistered) registrationBlockReasons.push("An official contract is already registered");
