@@ -474,8 +474,7 @@ function evaluateDeployment(
   /* Identity and supply parity with the recorded intent — mirrors the server
      predicates in `public.assert_launch_contract_evidence`. Fails closed. */
   if (isTokenKind) {
-    const nameOk =
-      !isBlank(row.token_name) && row.verified_token_name === row.token_name;
+    const nameOk = !isBlank(row.token_name) && row.verified_token_name === row.token_name;
     evidenceChecks.push(
       check(
         "token_name_match",
