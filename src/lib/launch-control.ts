@@ -807,7 +807,7 @@ export async function getLaunchAccess(
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError) rethrow(userError);
   const userId = userData.user?.id ?? null;
-  if (!userId) return { role: null, canManage: false };
+  if (!userId) return { role: null, canManage: false, isWorkspaceOwner: false };
 
   const isOwner = !!workspaceOwnerId && workspaceOwnerId === userId;
 
@@ -821,5 +821,5 @@ export async function getLaunchAccess(
 
   const role = (data?.role as string | null) ?? (isOwner ? "owner" : null);
   const canManage = isOwner || role === "owner" || role === "admin";
-  return { role, canManage };
+  return { role, canManage, isWorkspaceOwner: isOwner };
 }
