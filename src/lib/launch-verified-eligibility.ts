@@ -300,11 +300,20 @@ export type LaunchEvidenceEvaluation = {
   deployments: DeploymentEvidenceResult[];
 };
 
-const TX_HASH_PATTERN = /^0x[0-9a-fA-F]{64}$/;
-const EVM_ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
+/** Canonical lowercase hex, mirroring `public.assert_launch_contract_evidence`. */
+const TX_HASH_PATTERN = /^0x[0-9a-f]{64}$/;
+const EVM_ADDRESS_PATTERN = /^0x[0-9a-f]{40}$/;
+const CANONICAL_DIGITS_PATTERN = /^[0-9]+$/;
+
+/** The only decimals an official Cartel fixed-supply ERC-20 may declare. */
+const REQUIRED_TOKEN_DECIMALS = 18;
 
 function isBlank(value: string | null | undefined): boolean {
   return value == null || value.trim() === "";
+}
+
+function isCanonicalDigits(value: string | null | undefined): boolean {
+  return typeof value === "string" && CANONICAL_DIGITS_PATTERN.test(value);
 }
 
 function check(id: string, label: string, state: CheckState, detail: string): EvidenceCheck {
