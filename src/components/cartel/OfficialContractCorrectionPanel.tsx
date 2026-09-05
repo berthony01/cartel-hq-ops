@@ -202,6 +202,16 @@ export function OfficialContractCorrectionPanel({
   result,
   error,
   onCorrect,
+  groups,
+  groupsLoading,
+  correctionNotifyPending,
+  correctionNotifyResult,
+  correctionNotifyError,
+  correctionBroadcastPending,
+  correctionBroadcastResult,
+  correctionBroadcastError,
+  onNotifyCorrection,
+  onBroadcastCorrection,
 }: OfficialContractCorrectionPanelProps) {
   // Candidates reuse the existing evaluator verdicts. A deployment qualifies
   // when every registration gate passes except the two that only describe the
