@@ -1952,7 +1952,7 @@ Deno.serve(async (req: Request) => {
       Number.isSafeInteger(inboundChatId) && inboundChatId === inboundSenderId;
 
     if (capturable) {
-      const { error: captureError } = await admin.rpc("capture_project_inbox_launch_reply", {
+      const { data: captureData, error: captureError } = await admin.rpc("capture_project_inbox_launch_reply", {
         _telegram_update_id: inboundUpdateId,
         _telegram_user_id: inboundSenderId,
         _telegram_chat_id: inboundChatId,
@@ -1961,8 +1961,13 @@ Deno.serve(async (req: Request) => {
         _body: text,
       });
       if (captureError) throw captureError;
+      const captureRow = Array.isArray(captureData) ? captureData[0] : null;
+      if (captureRow && String(captureRow.outcome) === "captured") {
+        await notifyTeamOfCapture(inboundUpdateId);
+      }
       return json({ ok: true });
     }
+
 
     /**
      * C7.3E — member-initiated Project Inbox capture.
