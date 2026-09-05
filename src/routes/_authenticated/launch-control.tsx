@@ -56,6 +56,7 @@ import {
   isoToLocalInput,
   launchStatusIndex,
   listLaunches,
+  notifyLaunchWatchersOfficialContract,
   localInputToIso,
   nextLaunchStatus,
   nullableText,
@@ -67,6 +68,7 @@ import {
   updateLaunchDetails,
   type LaunchRow,
   type LaunchStatus,
+  type OfficialContractNotifyResult,
 } from "@/lib/launch-control";
 
 import { PageHeader } from "@/components/cartel/PageHeader";
@@ -77,6 +79,7 @@ import { ScheduleChangeSummary } from "@/components/cartel/ScheduleChangeSummary
 import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
 import { VerifiedDeploymentEvidencePanel } from "@/components/cartel/VerifiedDeploymentEvidencePanel";
 import { VerifiedContractRegistrationPanel } from "@/components/cartel/VerifiedContractRegistrationPanel";
+import { OfficialContractNotifyPanel } from "@/components/cartel/OfficialContractNotifyPanel";
 import { evaluateLaunchDeploymentEvidence } from "@/lib/launch-verified-eligibility";
 import { chainDeploymentsQueryKey, listChainDeployments } from "@/lib/chain-launcher";
 
