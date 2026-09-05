@@ -289,6 +289,34 @@ export async function registerVerifiedLaunchContract(
   return data as unknown as LaunchRow;
 }
 
+/**
+ * C8.7C — explicit watcher notification for a registered official contract.
+ *
+ * Registration and the lifecycle transition never notify anyone on their own.
+ * This is the only path that queues the official-contract packet, and it is
+ * owner-only, workspace-isolated, evidence-bound and idempotent: the database
+ * re-derives the address from the bound deployment evidence and reuses the
+ * existing `launch_events` uniqueness key, so a retry reports the queued event
+ * again instead of sending a second time. Delivery itself is still performed by
+ * the existing Launch Watch worker, which continues to exclude muted, stopped
+ * and otherwise ineligible watchers.
+ */
+export type OfficialContractNotifyResult = {
+  status: "queued" | "already_notified";
+  event_id: string | null;
+  delivery_count: number;
+};
+
+export async function notifyLaunchWatchersOfficialContract(
+  launchId: string,
+): Promise<OfficialContractNotifyResult> {
+  const { data, error } = await supabase.rpc("notify_launch_watchers_official_contract", {
+    _launch_id: launchId,
+  });
+  if (error) rethrow(error);
+  return data as unknown as OfficialContractNotifyResult;
+}
+
 // ---------------------------------------------------------------------------
 // Phase 4 — Launch Watch (read-only surface).
 //
