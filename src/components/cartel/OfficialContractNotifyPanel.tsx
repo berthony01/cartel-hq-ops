@@ -81,9 +81,11 @@ export function OfficialContractNotifyPanel({
       <div className="space-y-3">
         <Note>
           This sends this project&apos;s evidence-bound official contract to eligible Launch Watch
-          subscribers, as a direct message from the project&apos;s own bot. Watchers who muted
-          countdowns or stopped watching are excluded by the existing delivery rules.
+          subscribers, as a direct message from the project&apos;s own bot. Subscribers who stopped
+          watching this launch are excluded by the existing delivery rules. Muting countdown
+          reminders does not opt a subscriber out of the official contract packet.
         </Note>
+
         <Note>
           It states only that the authenticated project registered this contract from a verified
           deployment record. It is not a safety check, an audit, an endorsement, or an investment
