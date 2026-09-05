@@ -206,7 +206,7 @@ export function VerifiedContractRegistrationPanel({
                   <li key={item.deploymentId}>
                     <button
                       type="button"
-                      onClick={() => setSelectedId(item.deploymentId)}
+                      onClick={() => selectCandidate(item.deploymentId)}
                       aria-pressed={active}
                       className={`w-full rounded-md border px-3 py-2 text-left ${
                         active
