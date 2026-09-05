@@ -456,8 +456,8 @@ function evaluateDeployment(
     !isBlank(row.verified_token_name) &&
     !isBlank(row.verified_token_symbol) &&
     row.verified_token_decimals != null &&
-    !isBlank(row.verified_total_supply_text) &&
-    !isBlank(row.verified_recipient_balance_text);
+    isCanonicalDigits(row.verified_total_supply_text) &&
+    isCanonicalDigits(row.verified_recipient_balance_text);
   evidenceChecks.push(
     check(
       "token_state",
@@ -466,10 +466,93 @@ function evaluateDeployment(
       isTokenKind
         ? tokenStateOk
           ? `Read back ${row.verified_token_name} (${row.verified_token_symbol}), ${row.verified_token_decimals} decimals, supply ${row.verified_total_supply_text}, recipient balance ${row.verified_recipient_balance_text}.`
-          : "Verified token state is incomplete for a token deployment."
+          : "Verified token state is incomplete or not in canonical form for a token deployment."
         : "Token state cannot be established for an unrecognised deployment kind.",
     ),
   );
+
+  /* Identity and supply parity with the recorded intent — mirrors the server
+     predicates in `public.assert_launch_contract_evidence`. Fails closed. */
+  if (isTokenKind) {
+    const nameOk =
+      !isBlank(row.token_name) && row.verified_token_name === row.token_name;
+    evidenceChecks.push(
+      check(
+        "token_name_match",
+        "Token name matches the recorded intent",
+        nameOk ? "PASS" : "FAIL",
+        isBlank(row.token_name)
+          ? "No token name was recorded for this deployment."
+          : nameOk
+            ? `On-chain name matches the recorded name ${row.token_name}.`
+            : `On-chain name ${row.verified_token_name ?? "unknown"} does not match the recorded name ${row.token_name}.`,
+      ),
+    );
+
+    const symbolOk =
+      !isBlank(row.token_symbol) && row.verified_token_symbol === row.token_symbol;
+    evidenceChecks.push(
+      check(
+        "token_symbol_match",
+        "Token symbol matches the recorded intent",
+        symbolOk ? "PASS" : "FAIL",
+        isBlank(row.token_symbol)
+          ? "No token symbol was recorded for this deployment."
+          : symbolOk
+            ? `On-chain symbol matches the recorded symbol ${row.token_symbol}.`
+            : `On-chain symbol ${row.verified_token_symbol ?? "unknown"} does not match the recorded symbol ${row.token_symbol}.`,
+      ),
+    );
+
+    const decimalsOk =
+      row.token_decimals === REQUIRED_TOKEN_DECIMALS &&
+      row.verified_token_decimals === REQUIRED_TOKEN_DECIMALS;
+    evidenceChecks.push(
+      check(
+        "token_decimals_match",
+        "Token decimals match the recorded intent",
+        decimalsOk ? "PASS" : "FAIL",
+        decimalsOk
+          ? `Recorded and on-chain decimals are both ${REQUIRED_TOKEN_DECIMALS}.`
+          : `Recorded decimals ${row.token_decimals ?? "unknown"} and on-chain decimals ${row.verified_token_decimals ?? "unknown"} must both be ${REQUIRED_TOKEN_DECIMALS}.`,
+      ),
+    );
+
+    const recordedSupplyOk = isCanonicalDigits(row.token_total_supply_text);
+    const supplyOk =
+      recordedSupplyOk &&
+      isCanonicalDigits(row.verified_total_supply_text) &&
+      row.verified_total_supply_text === row.token_total_supply_text;
+    evidenceChecks.push(
+      check(
+        "token_supply_match",
+        "Total supply matches the recorded intent",
+        supplyOk ? "PASS" : "FAIL",
+        !recordedSupplyOk
+          ? "No exact recorded total supply is available for this deployment."
+          : supplyOk
+            ? `On-chain total supply matches the recorded exact supply ${row.token_total_supply_text}.`
+            : `On-chain total supply ${row.verified_total_supply_text ?? "unknown"} does not match the recorded exact supply ${row.token_total_supply_text}.`,
+      ),
+    );
+
+    const balanceOk =
+      recordedSupplyOk &&
+      isCanonicalDigits(row.verified_recipient_balance_text) &&
+      row.verified_recipient_balance_text === row.token_total_supply_text;
+    evidenceChecks.push(
+      check(
+        "token_recipient_balance_match",
+        "Recipient holds the entire supply",
+        balanceOk ? "PASS" : "FAIL",
+        !recordedSupplyOk
+          ? "No exact recorded total supply is available to compare the recipient balance against."
+          : balanceOk
+            ? "The recipient balance equals the full recorded supply."
+            : `Recipient balance ${row.verified_recipient_balance_text ?? "unknown"} does not equal the recorded exact supply ${row.token_total_supply_text}.`,
+      ),
+    );
+  }
 
   const evidenceVerified = evidenceChecks.every((c) => c.state === "PASS");
 
