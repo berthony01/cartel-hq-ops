@@ -246,8 +246,12 @@ export type DeploymentEvidenceResult = {
   evidenceVerified: boolean;
   evidenceClass: EvidenceClass;
   evidenceChecks: EvidenceCheck[];
-  /** Always false in C8.7A. */
-  officialRegistrationEligible: false;
+  /**
+   * True only when EVERY registration gate passed. The database re-derives all
+   * of these inside `register_verified_launch_contract`; this flag only decides
+   * what the operator is offered.
+   */
+  officialRegistrationEligible: boolean;
   registrationChecks: EvidenceCheck[];
   registrationBlockReasons: string[];
   /** Set when more than one deployment carries verified evidence. */
