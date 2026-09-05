@@ -250,6 +250,103 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      /**
+       * C8.7E — official-contract correction revalidation.
+       *
+       * Every predicate below runs BEFORE any Telegram contact. The queued JSON
+       * payload is used ONLY to locate the ledger row; the addresses and the
+       * correction reason are always composed from CURRENT ledger rows and the
+       * CURRENT launch. The `superseded_by_live` rule deliberately does NOT
+       * apply: a correction is valid at OFFICIAL_CONTRACT_REGISTERED, LIVE and
+       * COMPLETED.
+       */
+      let correction:
+        | { previousAddress: string; currentAddress: string; reason: string }
+        | null = null;
+      if (isCorrection) {
+        const registrationEventId =
+          typeof payloadObject["registration_event_id"] === "string"
+            ? String(payloadObject["registration_event_id"]).trim()
+            : "";
+        if (!UUID_PATTERN.test(registrationEventId)) {
+          await skip(deliveryId, "correction_missing");
+          continue;
+        }
+
+        const ledgerSelect = "id,launch_id,workspace_id,action,contract_address,correction_reason,superseded_event_id,deployment_id";
+        const { data: correctionEvent, error: correctionError } = await admin
+          .from("launch_contract_registration_events")
+          .select(ledgerSelect)
+          .eq("id", registrationEventId)
+          .maybeSingle();
+        if (correctionError) throw new Error("correction_read_failed");
+
+        const correctionReason = String(correctionEvent?.correction_reason ?? "").trim();
+        if (
+          !correctionEvent?.id ||
+          String(correctionEvent.launch_id ?? "") !== String(launch.id) ||
+          String(correctionEvent.workspace_id ?? "") !== String(launch.workspace_id ?? "") ||
+          String(correctionEvent.action ?? "") !== "CORRECTED" ||
+          !correctionEvent.superseded_event_id ||
+          !correctionReason
+        ) {
+          await skip(deliveryId, "correction_missing");
+          continue;
+        }
+
+        const { data: predecessor, error: predecessorError } = await admin
+          .from("launch_contract_registration_events")
+          .select(ledgerSelect)
+          .eq("id", correctionEvent.superseded_event_id)
+          .maybeSingle();
+        if (predecessorError) throw new Error("correction_read_failed");
+        const previousAddress = String(predecessor?.contract_address ?? "").trim();
+        if (
+          !predecessor?.id ||
+          String(predecessor.launch_id ?? "") !== String(launch.id) ||
+          String(predecessor.workspace_id ?? "") !== String(launch.workspace_id ?? "") ||
+          !previousAddress
+        ) {
+          await skip(deliveryId, "correction_missing");
+          continue;
+        }
+
+        // A later correction that supersedes THIS one makes this notice stale.
+        const { data: laterCorrection, error: laterError } = await admin
+          .from("launch_contract_registration_events")
+          .select("id")
+          .eq("superseded_event_id", correctionEvent.id)
+          .limit(1)
+          .maybeSingle();
+        if (laterError) throw new Error("correction_read_failed");
+        if (laterCorrection?.id) {
+          await skip(deliveryId, "correction_superseded");
+          continue;
+        }
+
+        const currentAddress = String(launch.official_contract_address ?? "").trim();
+        if (
+          !currentAddress ||
+          !launch.official_contract_deployment_id ||
+          !launch.contract_registered_at ||
+          !launch.contract_registered_by
+        ) {
+          await skip(deliveryId, "correction_not_current");
+          continue;
+        }
+        if (
+          String(correctionEvent.deployment_id ?? "") !== String(launch.official_contract_deployment_id) ||
+          String(correctionEvent.contract_address ?? "").trim().toLowerCase() !== currentAddress.toLowerCase()
+        ) {
+          await skip(deliveryId, "correction_not_current");
+          continue;
+        }
+
+        correction = { previousAddress, currentAddress, reason: correctionReason };
+      }
+
+
+
       if (isReminder) {
         if (isLiveOrDone) {
           await skip(deliveryId, "launch_already_live");
