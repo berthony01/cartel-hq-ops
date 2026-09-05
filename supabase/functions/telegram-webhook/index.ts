@@ -1864,7 +1864,78 @@ Deno.serve(async (req: Request) => {
      * Routing is decided entirely by ONE atomic service-only RPC, and this
      * path never sends any Telegram message.
      */
+    // C7.3 — team console commands, private chat only. These run before the
+    // unknown-slash-command no-op so they can never fall through to capture.
+    if (chat?.type === "private" && from?.is_bot !== true && /^\/inbox(?:@\w+)?$/i.test(text)) {
+      await openInboxCommand(Number(from.id), chatId);
+      return json({ ok: true });
+    }
+    if (chat?.type === "private" && from?.is_bot !== true && /^\/cancel(?:@\w+)?$/i.test(text)) {
+      const cleared = await admin.rpc("bot_inbox_set_session", { _telegram_user_id: Number(from.id), _mode: "NONE", _workspace_id: null });
+      await sendMessage(
+        TELEGRAM_BOT_TOKEN,
+        chatId,
+        cleared.error ? "Could not close the inbox right now." : "Reply mode closed. Use /inbox to open Project Inbox again.",
+      );
+      return json({ ok: true });
+    }
+
     if (text.startsWith("/")) return json({ ok: true });
+
+    /**
+     * C7.3 — TEAM reply from the bot console.
+     *
+     * A valid, unexpired REPLY session owned by a still-authorized operator
+     * turns the next plain private message into a TEAM reply instead of a
+     * member-initiated inbound DM. The RPC re-authorizes identity, membership
+     * and conversation/workspace binding, and queues the reply through the
+     * SAME durable project_inbox_deliveries ledger the web inbox uses. This
+     * handler never contacts the member directly.
+     */
+    if (chat?.type === "private" && from?.is_bot !== true) {
+      const { data: sessionData } = await admin.rpc("bot_inbox_active_reply_session", {
+        _telegram_user_id: Number(from.id),
+      });
+      const session = Array.isArray(sessionData) ? sessionData[0] : null;
+      if (session?.conversation_id) {
+        const requestId = await replyRequestId(Number(update?.update_id));
+        const { data: replyData, error: replyError } = await admin.rpc("bot_inbox_create_team_reply", {
+          _telegram_user_id: Number(from.id),
+          _body: text,
+          _client_request_id: requestId,
+        });
+        const outcome = Array.isArray(replyData) ? replyData[0] : null;
+        if (replyError || !outcome) {
+          await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "That reply could not be queued. Nothing was sent. Try again.");
+          return json({ ok: true });
+        }
+        if (String(outcome.outcome) === "queued") {
+          await sendMessage(
+            TELEGRAM_BOT_TOKEN,
+            chatId,
+            `<b>Reply queued for ${escapeHtml(String(session.member_ref))}</b>\n\nIt is being delivered as an official project response. Delivery is confirmed by the delivery worker, not by this message.`,
+            { parse_mode: "HTML" },
+          );
+          return json({ ok: true });
+        }
+        const reasonText: Record<string, string> = {
+          conversation_resolved: "This conversation is resolved. Reopen it in Cartel HQ before replying.",
+          contact_blocked: "This member is blocked, so no reply can be sent.",
+          earlier_reply_unsettled: "An earlier reply in this conversation is not settled yet. Nothing was queued.",
+          missing_project_name: "Save your Project Profile name in Cartel HQ before replying.",
+          too_long_to_deliver: "That reply is too long to deliver.",
+          invalid_length: "A reply must be between 1 and 3500 characters.",
+          request_id_reused: "That reply was not queued.",
+        };
+        await sendMessage(
+          TELEGRAM_BOT_TOKEN,
+          chatId,
+          reasonText[String(outcome.reason ?? "")] ?? "That reply could not be queued. Nothing was sent.",
+        );
+        return json({ ok: true });
+      }
+    }
+
 
     const inboundUpdateId = Number(update?.update_id);
     const inboundMessageId = Number(message?.message_id);
