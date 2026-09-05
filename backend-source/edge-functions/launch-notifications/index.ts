@@ -25,6 +25,7 @@ const REMINDER_OFFSET_MS: Record<string, number> = {
   REMINDER_24H: 24 * 60 * 60 * 1000,
   REMINDER_1H: 60 * 60 * 1000,
 };
+const UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const SCHEDULE_DRIFT_TOLERANCE_MS = 60_000;
 const REMINDER_STALE_MS = 20 * 60 * 1000;
 
@@ -436,6 +437,16 @@ Deno.serve(async (req: Request) => {
         text =
           `<b>🚀 LAUNCH IS LIVE</b>\n\n${identity}\n\n<b>📦 OFFICIAL CONTRACT</b>${packetLines.join("\n")}` +
           `${timingLine}${linksBlock}\n\n${TRUST_STATEMENT}`;
+      } else if (isCorrection && correction) {
+        // Composed exclusively from current ledger + current launch state.
+        text =
+          `<b>⚠️ OFFICIAL CONTRACT CORRECTION</b>\n\n${identity}\n\n` +
+          `Previously registered contract:\n<code>${escapeHtml(correction.previousAddress)}</code>\n\n` +
+          `Corrected official contract:\n<code>${escapeHtml(correction.currentAddress)}</code>\n\n` +
+          `Reason: ${escapeHtml(correction.reason)}\n\n` +
+          `The corrected address supersedes the previously registered official contract reference. ` +
+          `Messages already delivered cannot be retracted, so use the corrected address going forward.` +
+          `${linksBlock}\n\n${CORRECTION_DISCLAIMER}`;
       } else if (isWatcherUpdate) {
         // Operator-authored text only. Never any sender identity, and every
         // operator-supplied character is HTML-escaped before output.
