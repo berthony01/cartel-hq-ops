@@ -260,8 +260,14 @@ export function OfficialContractCorrectionPanel({
   // one stops being communicable immediately. The server revalidates all of
   // this independently; everything below is presentation only.
   const latestEvent = events.length > 0 ? events[events.length - 1]! : null;
+  const latestSupersededEvent =
+    latestEvent?.superseded_event_id
+      ? (events.find((e) => e.id === latestEvent.superseded_event_id) ?? null)
+      : null;
+
   const currentCorrection =
     registrationComplete &&
+    atCorrectableStage &&
     !eventsLoading &&
     !eventsError &&
     latestEvent != null &&
@@ -272,12 +278,15 @@ export function OfficialContractCorrectionPanel({
     (latestEvent.contract_address ?? "").trim().toLowerCase() ===
       officialContractAddress.trim().toLowerCase() &&
     (latestEvent.superseded_event_id ?? "").trim() !== "" &&
-    (latestEvent.correction_reason ?? "").trim() !== ""
+    (latestEvent.correction_reason ?? "").trim() !== "" &&
+    latestSupersededEvent != null &&
+    latestSupersededEvent.contract_address != null &&
+    latestSupersededEvent.contract_address.trim() !== "" &&
+    latestSupersededEvent.contract_address.trim().toLowerCase() !==
+      (latestEvent.contract_address ?? "").trim().toLowerCase()
       ? latestEvent
       : null;
-  const supersededEvent = currentCorrection
-    ? (events.find((e) => e.id === currentCorrection.superseded_event_id) ?? null)
-    : null;
+  const supersededEvent = currentCorrection ? latestSupersededEvent : null;
 
   // Armed confirmations and the selected community are keyed to the current
   // correction, so they re-arm automatically whenever the launch changes or a
@@ -296,6 +305,9 @@ export function OfficialContractCorrectionPanel({
       : { key: commKey, notifyArmed: false, groupId: null, groupArmed: false };
   const patchComm = (next: Partial<typeof commState>) =>
     setComm({ ...commState, ...next, key: commKey });
+
+  const readyGroups = (groups ?? []).filter((g) => g.ready);
+  const selectedReadyGroup = readyGroups.find((g) => g.id === commState.groupId) ?? null;
 
 
 
