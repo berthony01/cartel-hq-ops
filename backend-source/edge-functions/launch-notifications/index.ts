@@ -25,12 +25,19 @@ const REMINDER_OFFSET_MS: Record<string, number> = {
   REMINDER_24H: 24 * 60 * 60 * 1000,
   REMINDER_1H: 60 * 60 * 1000,
 };
+const UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const SCHEDULE_DRIFT_TOLERANCE_MS = 60_000;
 const REMINDER_STALE_MS = 20 * 60 * 1000;
 
 const TRUST_STATEMENT =
-  `<b>What "verified" means:</b> this information was supplied by the authenticated Cartel HQ project that controls this launch. ` +
-  `It is <b>not</b> a safety audit, token safety verification, rug-proof guarantee or investment endorsement. Always do your own research.`;
+  `<b>What this means:</b> this is the project's registered official contract reference. Cartel verified the specific deployment ` +
+  `evidence bound to that registration. It is <b>not</b> a token or project safety audit, guarantee, endorsement or investment ` +
+  `recommendation. Always do your own research.`;
+
+/** Correction notices are mandatory for active watchers; scoped to evidence only. */
+const CORRECTION_DISCLAIMER =
+  `Cartel verified the specific deployment evidence bound to this registration. It is not a safety review, audit, guarantee, ` +
+  `endorsement or investment recommendation.`;
 
 const REMINDER_DISCLAIMER =
   `This is a countdown reminder for a launch you chose to watch. It is not a safety check, audit, verification or endorsement of any token.`;
@@ -183,6 +190,12 @@ Deno.serve(async (req: Request) => {
         continue;
       }
       const isWatcherUpdate = eventType === "WATCHER_UPDATE";
+      /**
+       * C8.7E — an official-contract correction is a mandatory safety-critical
+       * notice for an ACTIVE watcher. It is deliberately independent of
+       * `updates_enabled` and `reminders_enabled`; only `is_active` gates it.
+       */
+      const isCorrection = eventType === "OFFICIAL_CONTRACT_CORRECTED";
       // Current-state revalidation: a watcher who muted project updates after
       // the event was queued must never be contacted.
       if (isWatcherUpdate && subscription.updates_enabled !== true) {
@@ -201,7 +214,7 @@ Deno.serve(async (req: Request) => {
       const { data: launch, error: launchError } = await admin
         .from("launches")
         .select(
-          "id,status,launch_at,launch_window_start,launch_window_end,timezone,official_contract_address,launch_watch_token,project_profile_id,token_name,ticker,chain",
+          "id,workspace_id,status,launch_at,launch_window_start,launch_window_end,timezone,official_contract_address,official_contract_deployment_id,contract_registered_at,contract_registered_by,launch_watch_token,project_profile_id,token_name,ticker,chain",
         )
         .eq("id", claim.launch_id)
         .maybeSingle();
@@ -237,6 +250,103 @@ Deno.serve(async (req: Request) => {
           continue;
         }
       }
+
+      /**
+       * C8.7E — official-contract correction revalidation.
+       *
+       * Every predicate below runs BEFORE any Telegram contact. The queued JSON
+       * payload is used ONLY to locate the ledger row; the addresses and the
+       * correction reason are always composed from CURRENT ledger rows and the
+       * CURRENT launch. The `superseded_by_live` rule deliberately does NOT
+       * apply: a correction is valid at OFFICIAL_CONTRACT_REGISTERED, LIVE and
+       * COMPLETED.
+       */
+      let correction:
+        | { previousAddress: string; currentAddress: string; reason: string }
+        | null = null;
+      if (isCorrection) {
+        const registrationEventId =
+          typeof payloadObject["registration_event_id"] === "string"
+            ? String(payloadObject["registration_event_id"]).trim()
+            : "";
+        if (!UUID_PATTERN.test(registrationEventId)) {
+          await skip(deliveryId, "correction_missing");
+          continue;
+        }
+
+        const ledgerSelect = "id,launch_id,workspace_id,action,contract_address,correction_reason,superseded_event_id,deployment_id";
+        const { data: correctionEvent, error: correctionError } = await admin
+          .from("launch_contract_registration_events")
+          .select(ledgerSelect)
+          .eq("id", registrationEventId)
+          .maybeSingle();
+        if (correctionError) throw new Error("correction_read_failed");
+
+        const correctionReason = String(correctionEvent?.correction_reason ?? "").trim();
+        if (
+          !correctionEvent?.id ||
+          String(correctionEvent.launch_id ?? "") !== String(launch.id) ||
+          String(correctionEvent.workspace_id ?? "") !== String(launch.workspace_id ?? "") ||
+          String(correctionEvent.action ?? "") !== "CORRECTED" ||
+          !correctionEvent.superseded_event_id ||
+          !correctionReason
+        ) {
+          await skip(deliveryId, "correction_missing");
+          continue;
+        }
+
+        const { data: predecessor, error: predecessorError } = await admin
+          .from("launch_contract_registration_events")
+          .select(ledgerSelect)
+          .eq("id", correctionEvent.superseded_event_id)
+          .maybeSingle();
+        if (predecessorError) throw new Error("correction_read_failed");
+        const previousAddress = String(predecessor?.contract_address ?? "").trim();
+        if (
+          !predecessor?.id ||
+          String(predecessor.launch_id ?? "") !== String(launch.id) ||
+          String(predecessor.workspace_id ?? "") !== String(launch.workspace_id ?? "") ||
+          !previousAddress
+        ) {
+          await skip(deliveryId, "correction_missing");
+          continue;
+        }
+
+        // A later correction that supersedes THIS one makes this notice stale.
+        const { data: laterCorrection, error: laterError } = await admin
+          .from("launch_contract_registration_events")
+          .select("id")
+          .eq("superseded_event_id", correctionEvent.id)
+          .limit(1)
+          .maybeSingle();
+        if (laterError) throw new Error("correction_read_failed");
+        if (laterCorrection?.id) {
+          await skip(deliveryId, "correction_superseded");
+          continue;
+        }
+
+        const currentAddress = String(launch.official_contract_address ?? "").trim();
+        if (
+          !currentAddress ||
+          !launch.official_contract_deployment_id ||
+          !launch.contract_registered_at ||
+          !launch.contract_registered_by
+        ) {
+          await skip(deliveryId, "correction_not_current");
+          continue;
+        }
+        if (
+          String(correctionEvent.deployment_id ?? "") !== String(launch.official_contract_deployment_id) ||
+          String(correctionEvent.contract_address ?? "").trim().toLowerCase() !== currentAddress.toLowerCase()
+        ) {
+          await skip(deliveryId, "correction_not_current");
+          continue;
+        }
+
+        correction = { previousAddress, currentAddress, reason: correctionReason };
+      }
+
+
 
       if (isReminder) {
         if (isLiveOrDone) {
@@ -321,12 +431,22 @@ Deno.serve(async (req: Request) => {
           `${timingLine}${linksBlock}\n\n${REMINDER_DISCLAIMER}`;
       } else if (eventType === "OFFICIAL_CONTRACT_REGISTERED") {
         text =
-          `<b>📦 VERIFIED LAUNCH PACKET</b>\n\n${identity}\n${packetLines.join("\n")}` +
+          `<b>📦 OFFICIAL CONTRACT REGISTERED</b>\n\n${identity}\n${packetLines.join("\n")}` +
           `${timingLine}${linksBlock}\n\n${TRUST_STATEMENT}`;
       } else if (eventType === "LAUNCH_LIVE") {
         text =
-          `<b>🚀 LAUNCH IS LIVE</b>\n\n${identity}\n\n<b>📦 VERIFIED LAUNCH PACKET</b>${packetLines.join("\n")}` +
+          `<b>🚀 LAUNCH IS LIVE</b>\n\n${identity}\n\n<b>📦 OFFICIAL CONTRACT</b>${packetLines.join("\n")}` +
           `${timingLine}${linksBlock}\n\n${TRUST_STATEMENT}`;
+      } else if (isCorrection && correction) {
+        // Composed exclusively from current ledger + current launch state.
+        text =
+          `<b>⚠️ OFFICIAL CONTRACT CORRECTION</b>\n\n${identity}\n\n` +
+          `Previously registered contract:\n<code>${escapeHtml(correction.previousAddress)}</code>\n\n` +
+          `Corrected official contract:\n<code>${escapeHtml(correction.currentAddress)}</code>\n\n` +
+          `Reason: ${escapeHtml(correction.reason)}\n\n` +
+          `The corrected address supersedes the previously registered official contract reference. ` +
+          `Messages already delivered cannot be retracted, so use the corrected address going forward.` +
+          `${linksBlock}\n\n${CORRECTION_DISCLAIMER}`;
       } else if (isWatcherUpdate) {
         // Operator-authored text only. Never any sender identity, and every
         // operator-supplied character is HTML-escaped before output.
@@ -366,7 +486,7 @@ Deno.serve(async (req: Request) => {
         }
         keyboardRows.push(controls);
         // Project-update preference is independent of countdowns: muting it
-        // never suppresses the Verified Launch Packet or the live alert.
+        // never suppresses the official-contract notice or the live alert.
         keyboardRows.push([
           subscription.updates_enabled === true
             ? { text: "🔇 Mute project updates", callback_data: `ln_updates_off_${token}` }

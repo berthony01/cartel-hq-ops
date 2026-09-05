@@ -47,7 +47,8 @@ export const LAUNCH_STATUS_HELP: Record<LaunchStatus, string> = {
   LAUNCH_APPROACHING: "Schedule is confirmed and the launch window is close.",
   CONTRACT_PENDING: "Official contract address can now be submitted.",
   OFFICIAL_CONTRACT_REGISTERED:
-    "The project has registered its official contract address. Active watchers receive the official-contract Verified Launch Packet.",
+    "The project has registered its official contract reference, bound to verified deployment evidence. Notifying watchers is a separate, explicit owner action.",
+
   LIVE: "Launch is live. Schedule fields are locked and active watchers receive the launch-live alert.",
 
   COMPLETED: "Launch lifecycle is finished.",
