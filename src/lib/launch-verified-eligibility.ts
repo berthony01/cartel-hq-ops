@@ -47,7 +47,6 @@ export const VERIFIED_DEPLOYMENT_DISCLAIMER =
   "Verified deployment means the recorded on-chain deployment evidence passed Cartel's verifier. " +
   "It is not an endorsement, audit, safety guarantee, or promise of legitimacy or value.";
 
-
 /* ------------------------------------------------------------------ */
 /* Inputs                                                              */
 /* ------------------------------------------------------------------ */
@@ -568,7 +567,6 @@ function evaluateDeployment(
     approvedArtifact &&
     lifecycleOk &&
     notRegistered;
-
 
   return {
     deploymentId: row.id,
