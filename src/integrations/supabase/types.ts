@@ -2297,6 +2297,7 @@ export type Database = {
       }
       telegram_group_announcements: {
         Row: {
+          announcement_kind: string
           branding_logo_asset_id: string | null
           branding_logo_mime_type: string | null
           branding_logo_storage_path: string | null
@@ -2317,6 +2318,7 @@ export type Database = {
           group_title: string
           id: string
           last_error: string | null
+          launch_id: string | null
           message_text: string
           requested_at: string
           requested_by: string | null
@@ -2328,6 +2330,7 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          announcement_kind?: string
           branding_logo_asset_id?: string | null
           branding_logo_mime_type?: string | null
           branding_logo_storage_path?: string | null
@@ -2348,6 +2351,7 @@ export type Database = {
           group_title: string
           id?: string
           last_error?: string | null
+          launch_id?: string | null
           message_text: string
           requested_at?: string
           requested_by?: string | null
@@ -2359,6 +2363,7 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          announcement_kind?: string
           branding_logo_asset_id?: string | null
           branding_logo_mime_type?: string | null
           branding_logo_storage_path?: string | null
@@ -2379,6 +2384,7 @@ export type Database = {
           group_title?: string
           id?: string
           last_error?: string | null
+          launch_id?: string | null
           message_text?: string
           requested_at?: string
           requested_by?: string | null
@@ -2402,6 +2408,13 @@ export type Database = {
             columns: ["group_connection_id"]
             isOneToOne: false
             referencedRelation: "telegram_group_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_group_announcements_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
             referencedColumns: ["id"]
           },
           {
