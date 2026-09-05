@@ -663,6 +663,7 @@ function LaunchControlPage() {
         declaredChain: selected.chain,
         launchStatus: selected.status,
         officialContractAddress: selected.official_contract_address,
+        officialContractDeploymentId: selected.official_contract_deployment_id,
         contractRegisteredAt: selected.contract_registered_at,
       },
       deploymentEvidenceQuery.data ?? [],
