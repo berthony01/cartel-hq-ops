@@ -179,9 +179,21 @@ export function VerifiedDeploymentEvidencePanel({
             <Field label="Verified deployments" value={evaluation.verifiedCount} />
           </dl>
 
-          <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-destructive">
-              0 eligible for official registration
+          <div
+            className={`rounded-md border px-3 py-2 ${
+              evaluation.eligibleForOfficialRegistration > 0
+                ? "border-emerald-500/40 bg-emerald-500/5"
+                : "border-destructive/40 bg-destructive/5"
+            }`}
+          >
+            <p
+              className={`text-xs font-semibold uppercase tracking-[0.12em] ${
+                evaluation.eligibleForOfficialRegistration > 0
+                  ? "text-emerald-500"
+                  : "text-destructive"
+              }`}
+            >
+              {evaluation.eligibleForOfficialRegistration} eligible for official registration
             </p>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               {evaluation.summaryLabel}
@@ -196,6 +208,7 @@ export function VerifiedDeploymentEvidencePanel({
               </p>
             ) : null}
           </div>
+
 
           {evaluation.deployments.length === 0 ? (
             <p className="text-xs leading-relaxed text-muted-foreground">
