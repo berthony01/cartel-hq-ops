@@ -133,10 +133,7 @@ export function OfficialContractNotifyPanel({
       title="Notify watchers"
       description="Registration and the notification are separate steps. Registering an official contract sends nothing — this action does."
       leading={
-        <Megaphone
-          className="size-4 text-[color:var(--cartel-gold,#D4A82A)]"
-          aria-hidden="true"
-        />
+        <Megaphone className="size-4 text-[color:var(--cartel-gold,#D4A82A)]" aria-hidden="true" />
       }
     >
       <div className="space-y-3">
