@@ -68,9 +68,15 @@ function DeploymentCard({ item }: { item: DeploymentEvidenceResult }) {
                 : "Verified deployment"
               : "Evidence incomplete"}
           </span>
-          <span className="rounded-sm border border-destructive/50 px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-destructive">
-            Official registration blocked
-          </span>
+          {item.officialRegistrationEligible ? (
+            <span className="rounded-sm border border-emerald-500/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-emerald-500">
+              Eligible for official registration
+            </span>
+          ) : (
+            <span className="rounded-sm border border-destructive/50 px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-destructive">
+              Official registration blocked
+            </span>
+          )}
           {item.ambiguous ? (
             <span className="rounded-sm border border-border px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
               Ambiguous
@@ -78,6 +84,7 @@ function DeploymentCard({ item }: { item: DeploymentEvidenceResult }) {
           ) : null}
         </div>
       </div>
+
 
       <dl className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1.5 sm:grid-cols-3">
         <Field label="Deployment id" value={item.deploymentId} />
