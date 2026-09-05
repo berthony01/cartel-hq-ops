@@ -363,12 +363,48 @@ function evaluateDeployment(
   );
 
   const isTokenKind = kind != null && APPROVED_OFFICIAL_DEPLOYMENT_KINDS.includes(kind);
+  evidenceChecks.push(
+    check(
+      "approved_kind",
+      "Recognised deployment kind",
+      isTokenKind ? "PASS" : "FAIL",
+      isTokenKind
+        ? `${kind} is a recognised deployment kind.`
+        : `${kind ?? "Unknown kind"} is not a recognised deployment kind, so it cannot carry verified deployment evidence.`,
+    ),
+  );
+
+  const verifiedAtOk = !isBlank(row.verified_at);
+  evidenceChecks.push(
+    check(
+      "verified_at",
+      "Verification timestamp recorded",
+      verifiedAtOk ? "PASS" : "FAIL",
+      verifiedAtOk
+        ? `Verified at ${row.verified_at}.`
+        : "No verification timestamp is recorded for this attempt.",
+    ),
+  );
+
+  const blockNumberOk = row.block_number != null;
+  evidenceChecks.push(
+    check(
+      "block_number",
+      "Mined block recorded",
+      blockNumberOk ? "PASS" : "FAIL",
+      blockNumberOk
+        ? `Recorded in block ${row.block_number}.`
+        : "No block number is recorded for this attempt.",
+    ),
+  );
+
   const tokenStateOk =
-    !isTokenKind ||
-    (!isBlank(row.verified_token_name) &&
-      !isBlank(row.verified_token_symbol) &&
-      row.verified_token_decimals != null &&
-      !isBlank(row.verified_total_supply_text));
+    isTokenKind &&
+    !isBlank(row.verified_token_name) &&
+    !isBlank(row.verified_token_symbol) &&
+    row.verified_token_decimals != null &&
+    !isBlank(row.verified_total_supply_text) &&
+    !isBlank(row.verified_recipient_balance_text);
   evidenceChecks.push(
     check(
       "token_state",
@@ -376,11 +412,12 @@ function evaluateDeployment(
       tokenStateOk ? "PASS" : "FAIL",
       isTokenKind
         ? tokenStateOk
-          ? `Read back ${row.verified_token_name} (${row.verified_token_symbol}), ${row.verified_token_decimals} decimals.`
+          ? `Read back ${row.verified_token_name} (${row.verified_token_symbol}), ${row.verified_token_decimals} decimals, supply ${row.verified_total_supply_text}, recipient balance ${row.verified_recipient_balance_text}.`
           : "Verified token state is incomplete for a token deployment."
-        : "Not a token deployment, so no token state is expected.",
+        : "Token state cannot be established for an unrecognised deployment kind.",
     ),
   );
+
 
   const evidenceVerified = evidenceChecks.every((c) => c.state === "PASS");
 
