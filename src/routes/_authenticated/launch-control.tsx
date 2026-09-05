@@ -197,7 +197,7 @@ const LIFECYCLE_GUIDE: Record<LaunchStatus, { title: string; body: string }> = {
   OFFICIAL_CONTRACT_REGISTERED: {
     title: "Official Contract Registered",
     body:
-      "The authenticated project has formally registered the official contract address. Active watchers receive the Verified Launch Packet through the existing notification engine.",
+      "The authenticated project has registered its official contract reference, bound to verified deployment evidence. Notifying watchers is a separate, explicit owner action.",
   },
   LIVE: {
     title: "Live",
@@ -249,14 +249,14 @@ const NEXT_ACTION_GUIDE: Record<
     current: "Contract Pending",
     means:
       "Evidence-bound registration is open. Bind this launch to one qualifying verified deployment record. Registering sends nothing and does not advance the lifecycle on its own.",
-    nextAction: "Publish verified contract",
+    nextAction: "Register official contract from verified deployment evidence",
     after:
-      "Official Contract Registered: advancing can queue the Verified Launch Packet to active watchers through the existing notification engine.",
+      "Official Contract Registered: the launch carries an evidence-bound official contract reference. Notifying watchers remains a separate, explicit owner action.",
   },
   OFFICIAL_CONTRACT_REGISTERED: {
     current: "Official Contract Registered",
     means:
-      "The authenticated project has formally registered the official contract address. Active watchers will receive the Verified Launch Packet.",
+      "The authenticated project has registered its official contract reference, bound to verified deployment evidence. Notifying watchers is a separate, explicit owner action.",
     nextAction: "Mark launch live",
     after: "Live: active watchers receive the Launch Is Live alert.",
   },
@@ -280,7 +280,7 @@ const TRANSITION_BUTTON_LABEL: Record<LaunchStatus, string> = {
   ANNOUNCED: "Open Launch Watch",
   WATCHLIST_OPEN: "Confirm schedule & arm countdowns",
   LAUNCH_APPROACHING: "Open contract registration",
-  CONTRACT_PENDING: "Publish verified contract",
+  CONTRACT_PENDING: "Register official contract from verified deployment evidence",
   OFFICIAL_CONTRACT_REGISTERED: "Mark launch live",
   LIVE: "Complete launch",
   COMPLETED: "No further action",
@@ -905,7 +905,7 @@ function LaunchControlPage() {
     next === "LAUNCH_APPROACHING" && !scheduleReady
       ? "Set an exact launch time or a complete launch window before you can arm countdowns."
       : next === "OFFICIAL_CONTRACT_REGISTERED" && !contractRegistered
-        ? "Complete evidence-bound contract registration first. This launch must be bound to a verified deployment record — address, deployment and registration time — before the verified contract can be published."
+        ? "Complete evidence-bound contract registration first. This launch must be bound to a verified deployment record — address, deployment and registration time — before the official contract reference can be registered."
         : null;
 
   const saveButton =
@@ -1866,8 +1866,8 @@ function LaunchControlPage() {
                         activity, not individual Telegram identities.
                       </p>
                       <p className="text-xs leading-relaxed text-muted-foreground">
-                        Automated messages are the countdown reminders, the Verified Launch Packet
-                        and the launch-live alert. Manual project updates are sent separately from
+                        Automated messages are the countdown reminders, the official-contract
+                        notice and the launch-live alert. Manual project updates are sent separately from
                         Watcher Updates below.
                       </p>
 
@@ -1949,7 +1949,7 @@ function LaunchControlPage() {
                         <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                           Watchers who opted in before Project Updates existed agreed to countdowns
                           and launch alerts only, so they start with Project Updates off. They keep
-                          receiving countdowns, the Verified Launch Packet and the launch-live
+                          receiving countdowns, the official-contract notice and the launch-live
                           alert. Their older Launch Watch message may not show the new control yet:
                           they can open the Launch Watch link again or interact with their Launch
                           Watch controls in @PepeCartelHQBot to receive refreshed controls, then
@@ -2204,7 +2204,7 @@ function LaunchControlPage() {
 
                     <ul className="space-y-1 text-xs leading-relaxed text-muted-foreground">
                       <li>24h + 1h countdown reminders (watchers who allow them)</li>
-                      <li>Official-contract Verified Launch Packet</li>
+                      <li>Official-contract registration notice</li>
                       <li>Launch-live alert</li>
                       <li>Manual project updates (watchers who allow them)</li>
                     </ul>
