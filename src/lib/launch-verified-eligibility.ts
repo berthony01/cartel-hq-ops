@@ -18,18 +18,27 @@ import { REQUIRED_CONFIRMATIONS, ROBINHOOD_TESTNET_CHAIN_ID } from "./chain-regi
  * audit, safety guarantee, or promise of legitimacy or value.
  */
 
-/** C8.7A registration phase gate. Frozen `false`; nothing assigns to it. */
-export const REGISTRATION_READY = false as const;
+/**
+ * C8.7B registration phase gate. Evidence-bound official contract registration
+ * is available, but ONLY through `register_verified_launch_contract`, which
+ * re-derives every predicate below server side. Nothing in this module writes.
+ */
+export const REGISTRATION_READY = true as const;
 
 /**
- * Environments that could ever host an officially registerable deployment.
- * Deliberately EMPTY in C8.7A: no production environment is approved yet, so
- * every deployment fails the environment gate closed.
+ * Environments that may host an officially registerable deployment.
+ * Test networks are never included.
  */
-export const APPROVED_REGISTRATION_ENVIRONMENTS: readonly string[] = [];
+export const APPROVED_REGISTRATION_ENVIRONMENTS: readonly string[] = ["PRODUCTION"];
 
 /** Deployment kinds that could ever represent an official project token. */
 export const APPROVED_OFFICIAL_DEPLOYMENT_KINDS: readonly string[] = ["FIXED_SUPPLY_ERC20"];
+
+/** The only frozen artifact whose deployment may become an official contract. */
+export const APPROVED_OFFICIAL_ARTIFACT_ID = "cartel-fixed-erc20-v1" as const;
+
+/** Lifecycle status in which official contract registration is permitted. */
+export const REGISTRATION_LIFECYCLE_STATUS = "CONTRACT_PENDING" as const;
 
 /** Minimum confirmation depth, mirroring the deployment verifier's floor. */
 export const EVIDENCE_REQUIRED_CONFIRMATIONS = REQUIRED_CONFIRMATIONS;
@@ -91,6 +100,13 @@ export type ChainCompatibilityResult = {
   networkLabel: string;
 };
 
+/**
+ * Registration metadata only. Robinhood Chain mainnet is a LABEL here — this
+ * project declares no mainnet RPC, no mainnet wallet target and no mainnet
+ * deployment path. `src/lib/chain-registry.ts` remains testnet-only.
+ */
+export const ROBINHOOD_MAINNET_CHAIN_ID = 4663 as const;
+
 const KNOWN_CHAINS: Record<
   number,
   { label: string; testnet: boolean; aliases: readonly string[] }
@@ -99,6 +115,11 @@ const KNOWN_CHAINS: Record<
     label: "Robinhood Chain Testnet",
     testnet: true,
     aliases: ["robinhood chain testnet", "robinhood testnet", `${ROBINHOOD_TESTNET_CHAIN_ID}`],
+  },
+  [ROBINHOOD_MAINNET_CHAIN_ID]: {
+    label: "Robinhood Chain",
+    testnet: false,
+    aliases: ["robinhood chain", "robinhood chain mainnet", `${ROBINHOOD_MAINNET_CHAIN_ID}`],
   },
 };
 
@@ -119,9 +140,9 @@ function normalizeChainName(value: string | null): string {
 }
 
 /**
- * C8.7A does not attempt a global chain-mapping schema. It knows only enough
- * to fail closed: anything it cannot positively match is UNKNOWN, and no
- * mainnet can ever be reported COMPATIBLE from this build.
+ * No global chain-mapping schema. This knows only enough to fail closed:
+ * anything it cannot positively match is UNKNOWN, and a declared non-EVM chain
+ * can never match an EVM chain id.
  */
 export function evaluateChainCompatibility(
   declaredChain: string | null,
@@ -224,8 +245,12 @@ export type DeploymentEvidenceResult = {
   evidenceVerified: boolean;
   evidenceClass: EvidenceClass;
   evidenceChecks: EvidenceCheck[];
-  /** Always false in C8.7A. */
-  officialRegistrationEligible: false;
+  /**
+   * True only when EVERY registration gate passed. The database re-derives all
+   * of these inside `register_verified_launch_contract`; this flag only decides
+   * what the operator is offered.
+   */
+  officialRegistrationEligible: boolean;
   registrationChecks: EvidenceCheck[];
   registrationBlockReasons: string[];
   /** Set when more than one deployment carries verified evidence. */
@@ -247,12 +272,18 @@ export type LaunchEvidenceEvaluation = {
   totalDeployments: number;
   verifiedCount: number;
   testnetVerifiedCount: number;
-  eligibleForOfficialRegistration: 0;
+  eligibleForOfficialRegistration: number;
+  /**
+   * The single eligible candidate, or null. Never auto-selected when more than
+   * one candidate qualifies — ambiguity blocks instead of guessing.
+   */
+  registrationCandidate: DeploymentEvidenceResult | null;
   ambiguous: boolean;
   summaryState: SummaryState;
   summaryLabel: string;
-  /** Frozen false for C8.7A. */
-  registrationReady: false;
+  registrationReady: boolean;
+  /** True when the launch already carries a registered official contract. */
+  alreadyRegistered: boolean;
   deployments: DeploymentEvidenceResult[];
 };
 
@@ -486,15 +517,56 @@ function evaluateDeployment(
   );
   if (!evidenceVerified) registrationBlockReasons.push("Chain evidence is incomplete");
 
+  const approvedArtifact = row.artifact_id === APPROVED_OFFICIAL_ARTIFACT_ID;
   registrationChecks.push(
     check(
-      "phase_gate",
-      "Registration path available",
-      "BLOCKED",
-      "Registering an official contract from chain evidence is not available in this release. This panel is read only.",
+      "approved_artifact",
+      "Approved frozen artifact",
+      approvedArtifact ? "PASS" : "BLOCKED",
+      approvedArtifact
+        ? `Deployed from the approved frozen artifact ${APPROVED_OFFICIAL_ARTIFACT_ID}.`
+        : `Artifact ${row.artifact_id ?? "unknown"} is not the approved official artifact.`,
     ),
   );
-  registrationBlockReasons.push("Evidence-based registration is not available in this release");
+  if (!approvedArtifact)
+    registrationBlockReasons.push("Deployment was not built from the approved frozen artifact");
+
+  const lifecycleOk = context.launchStatus === REGISTRATION_LIFECYCLE_STATUS;
+  registrationChecks.push(
+    check(
+      "lifecycle",
+      "Launch is contract pending",
+      lifecycleOk ? "PASS" : "BLOCKED",
+      lifecycleOk
+        ? "This launch is at Contract Pending, where registration is permitted."
+        : `Registration is only permitted at Contract Pending. This launch is ${context.launchStatus}.`,
+    ),
+  );
+  if (!lifecycleOk) registrationBlockReasons.push("Launch is not at Contract Pending");
+
+  const notRegistered =
+    isBlank(context.officialContractAddress) && isBlank(context.contractRegisteredAt);
+  registrationChecks.push(
+    check(
+      "not_registered",
+      "No contract registered yet",
+      notRegistered ? "PASS" : "BLOCKED",
+      notRegistered
+        ? "This launch has no registered official contract."
+        : "This launch already has a registered official contract. Registered contracts cannot be replaced.",
+    ),
+  );
+  if (!notRegistered) registrationBlockReasons.push("An official contract is already registered");
+
+  const officialRegistrationEligible =
+    envApproved &&
+    chainOk &&
+    !compatibility.isTestnet &&
+    isTokenKind &&
+    evidenceVerified &&
+    approvedArtifact &&
+    lifecycleOk &&
+    notRegistered;
 
   return {
     deploymentId: row.id,
@@ -520,7 +592,7 @@ function evaluateDeployment(
     evidenceVerified,
     evidenceClass: evidenceVerified ? "VERIFIED_DEPLOYMENT" : "INELIGIBLE",
     evidenceChecks,
-    officialRegistrationEligible: false,
+    officialRegistrationEligible,
     registrationChecks,
     registrationBlockReasons,
     ambiguous: false,
@@ -562,6 +634,30 @@ export function evaluateLaunchDeploymentEvidence(
   else if (ambiguous) summaryState = "MULTIPLE_VERIFIED_DEPLOYMENTS";
   else summaryState = "VERIFIED_TEST_DEPLOYMENTS";
 
+  // Ambiguity never resolves itself: more than one eligible candidate blocks
+  // every candidate rather than selecting one.
+  const eligible = evaluated.filter((d) => d.officialRegistrationEligible);
+  if (eligible.length > 1) {
+    for (const d of eligible) {
+      d.officialRegistrationEligible = false;
+      d.ambiguous = true;
+      d.registrationBlockReasons.push(
+        "More than one deployment qualifies. No candidate is selected automatically.",
+      );
+      d.registrationChecks.push(
+        check(
+          "single_candidate",
+          "Exactly one qualifying deployment",
+          "BLOCKED",
+          `${eligible.length} deployments qualify for this launch. Resolve the ambiguity before registering.`,
+        ),
+      );
+    }
+  }
+  const registrationCandidate =
+    eligible.length === 1 ? (eligible[0] as DeploymentEvidenceResult) : null;
+  const eligibleForOfficialRegistration = registrationCandidate ? 1 : 0;
+
   const summaryLabel =
     summaryState === "NO_DEPLOYMENTS"
       ? "No recorded deployments for this launch"
@@ -580,7 +676,9 @@ export function evaluateLaunchDeploymentEvidence(
     totalDeployments: evaluated.length,
     verifiedCount: verified.length,
     testnetVerifiedCount,
-    eligibleForOfficialRegistration: 0,
+    eligibleForOfficialRegistration,
+    registrationCandidate,
+    alreadyRegistered: !isBlank(context.officialContractAddress),
     ambiguous,
     summaryState,
     summaryLabel,

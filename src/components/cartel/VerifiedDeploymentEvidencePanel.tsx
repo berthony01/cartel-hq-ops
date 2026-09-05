@@ -68,9 +68,15 @@ function DeploymentCard({ item }: { item: DeploymentEvidenceResult }) {
                 : "Verified deployment"
               : "Evidence incomplete"}
           </span>
-          <span className="rounded-sm border border-destructive/50 px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-destructive">
-            Official registration blocked
-          </span>
+          {item.officialRegistrationEligible ? (
+            <span className="rounded-sm border border-emerald-500/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-emerald-500">
+              Eligible for official registration
+            </span>
+          ) : (
+            <span className="rounded-sm border border-destructive/50 px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-destructive">
+              Official registration blocked
+            </span>
+          )}
           {item.ambiguous ? (
             <span className="rounded-sm border border-border px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
               Ambiguous
@@ -78,6 +84,7 @@ function DeploymentCard({ item }: { item: DeploymentEvidenceResult }) {
           ) : null}
         </div>
       </div>
+
 
       <dl className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1.5 sm:grid-cols-3">
         <Field label="Deployment id" value={item.deploymentId} />
@@ -147,9 +154,10 @@ export function VerifiedDeploymentEvidencePanel({
       }
       actions={
         <span className="rounded-sm border border-border px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-          Read only — no registration
+          Evidence only — registration is confirmed separately
         </span>
       }
+
     >
       {loading ? (
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -171,9 +179,21 @@ export function VerifiedDeploymentEvidencePanel({
             <Field label="Verified deployments" value={evaluation.verifiedCount} />
           </dl>
 
-          <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-destructive">
-              0 eligible for official registration
+          <div
+            className={`rounded-md border px-3 py-2 ${
+              evaluation.eligibleForOfficialRegistration > 0
+                ? "border-emerald-500/40 bg-emerald-500/5"
+                : "border-destructive/40 bg-destructive/5"
+            }`}
+          >
+            <p
+              className={`text-xs font-semibold uppercase tracking-[0.12em] ${
+                evaluation.eligibleForOfficialRegistration > 0
+                  ? "text-emerald-500"
+                  : "text-destructive"
+              }`}
+            >
+              {evaluation.eligibleForOfficialRegistration} eligible for official registration
             </p>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               {evaluation.summaryLabel}
@@ -205,9 +225,11 @@ export function VerifiedDeploymentEvidencePanel({
             {VERIFIED_DEPLOYMENT_DISCLAIMER}
           </p>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            This panel only reads and explains recorded evidence. It cannot register a contract,
-            change the launch lifecycle, or notify anyone.
+            This panel only reads and explains recorded evidence. It never changes the launch
+            lifecycle and never notifies anyone. Registering an official contract is a separate,
+            owner-only confirmation.
           </p>
+
         </div>
       )}
     </Section>

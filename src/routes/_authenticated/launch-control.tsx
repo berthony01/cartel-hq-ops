@@ -61,7 +61,7 @@ import {
   nextLaunchStatus,
   nullableText,
   scheduleLocked,
-  setLaunchContractAddress,
+  registerVerifiedLaunchContract,
   slugifyLaunch,
   toLaunchStatus,
   transitionLaunchStatus,
@@ -350,6 +350,7 @@ function LaunchControlPage() {
     queryFn: () => getLaunchAccess(workspaceId!, workspace?.owner_id ?? null),
   });
   const canManage = accessQuery.data?.canManage ?? false;
+  const isWorkspaceOwner = accessQuery.data?.isWorkspaceOwner ?? false;
   const readOnly = !canManage;
 
 
@@ -532,23 +533,27 @@ function LaunchControlPage() {
       toast.error(err instanceof Error ? err.message : "Status transition was rejected."),
   });
 
-  const [contractInput, setContractInput] = useState("");
+  // C8.7B — evidence-bound registration. The operator never supplies the
+  // address: it comes from the selected verified deployment evidence and is
+  // re-derived server side. This field is a typed confirmation only.
+  const [contractConfirmInput, setContractConfirmInput] = useState("");
   useEffect(() => {
-    setContractInput(selected?.official_contract_address ?? "");
-  }, [selected?.id, selected?.official_contract_address]);
+    setContractConfirmInput("");
+  }, [selected?.id]);
 
-  const contractMutation = useMutation({
-    mutationFn: async () => {
+  const registerContractMutation = useMutation({
+    mutationFn: async (deploymentId: string) => {
       if (!selected) throw new Error("No launch selected.");
-      return setLaunchContractAddress(selected.id, contractInput);
+      return registerVerifiedLaunchContract(selected.id, deploymentId, contractConfirmInput);
     },
     onSuccess: () => {
-      toast.success("Official contract address saved");
+      toast.success("Official contract registered from verified deployment evidence");
+      setContractConfirmInput("");
       void invalidate();
     },
     onError: (err: unknown) =>
       toast.error(
-        err instanceof Error ? err.message : "Could not save the official contract address.",
+        err instanceof Error ? err.message : "Could not register the official contract.",
       ),
   });
 
@@ -656,6 +661,7 @@ function LaunchControlPage() {
       deploymentEvidenceQuery.data ?? [],
     );
   }, [selected, deploymentEvidenceQuery.data]);
+  const registrationCandidate = deploymentEvidence?.registrationCandidate ?? null;
 
   // ---- countdown + reminder readiness (saved launch fields only) -----------
   const nowMs = useClientNow(30_000);
@@ -744,7 +750,6 @@ function LaunchControlPage() {
         Save launch details
       </Button>
     ) : null;
-
 
   return (
     <div className="space-y-6 pb-24 sm:space-y-8 lg:pb-0">
@@ -1880,68 +1885,103 @@ function LaunchControlPage() {
                 </Section>
 
                 <Section variant="surface" title="Official contract">
-                  {status === "CONTRACT_PENDING" ? (
-                    <div className="space-y-3">
-                      <div className="min-w-0">
-                        <Label htmlFor="contract-address">Official contract address</Label>
-                        <Input
-                          id="contract-address"
-                          maxLength={CONTRACT_MAX}
-                          disabled={readOnly}
-                          value={contractInput}
-                          onChange={(e) => setContractInput(e.target.value)}
-                          placeholder="Paste the official contract address"
-                        />
-                      </div>
-                      <p className="text-xs leading-relaxed text-muted-foreground">
-                        Not registered yet. You can correct and re-save the address while the
-                        launch is still contract pending.
-                      </p>
-                      {canManage ? (
-                        <Button
-                          className="min-h-11"
-                          disabled={contractMutation.isPending || !contractInput.trim()}
-                          onClick={() => contractMutation.mutate()}
-                        >
-                          {contractMutation.isPending ? (
-                            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                          ) : (
-                            <Save className="size-4" aria-hidden="true" />
-                          )}
-                          Save official contract address
-                        </Button>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">
-                          Registering the official contract address requires the project owner
-                          or admin role.
-                        </p>
-                      )}
-                    </div>
-                  ) : contractSaved ? (
+                  {contractSaved ? (
                     <div className="space-y-2">
                       <p className="break-all rounded-md border border-border bg-background/40 px-3 py-2 font-mono text-xs text-foreground">
                         {selected.official_contract_address}
                       </p>
                       <p className="text-xs leading-relaxed text-muted-foreground">
-                        Official contract registered by the authenticated project. This confirms
-                        the address submitted by the authenticated project itself. It is
-                        not a safety check, an audit, or an investment guarantee.
+                        Official contract registered by the authenticated project, derived from
+                        verified deployment evidence. It is not a safety check, an audit, or an
+                        investment guarantee.
                       </p>
                       <p className="text-xs leading-relaxed text-muted-foreground">
-                        Replacing a registered address is not available. It requires a future
-                        controlled authorization and history flow.
+                        A registered contract cannot be replaced or cleared.
+                      </p>
+                    </div>
+                  ) : status !== "CONTRACT_PENDING" ? (
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      {status === "WATCHLIST_OPEN"
+                        ? "Registration is not open yet. First confirm the schedule and arm countdowns, then open Contract Registration. At Contract Pending, an eligible verified deployment can be registered."
+                        : "Contract registration becomes available later in the lifecycle, once the launch reaches Contract Pending."}
+                    </p>
+                  ) : !registrationCandidate ? (
+                    <div className="space-y-2">
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        No deployment currently qualifies for official registration. The address
+                        cannot be typed in freehand — it is always taken from a verified deployment
+                        record for this launch.
+                      </p>
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        The deployment evidence panel below explains exactly which check is
+                        blocking each recorded deployment.
+                      </p>
+                    </div>
+                  ) : !isWorkspaceOwner ? (
+                    <div className="space-y-2">
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        One deployment qualifies for official registration.
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Only the project owner can register the official contract. Admin access is
+                        not sufficient.
                       </p>
                     </div>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
+                      <div className="rounded-md border border-emerald-500/40 bg-emerald-500/5 px-3 py-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-500">
+                          Eligible deployment — attempt #{registrationCandidate.attemptNumber}
+                        </p>
+                        <p className="mt-1 break-all font-mono text-xs text-foreground">
+                          {registrationCandidate.contractAddress}
+                        </p>
+                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                          {registrationCandidate.networkLabel} · {registrationCandidate.verifiedTokenName}{" "}
+                          ({registrationCandidate.verifiedTokenSymbol}) ·{" "}
+                          {registrationCandidate.confirmations} confirmations
+                        </p>
+                      </div>
+                      <div className="min-w-0">
+                        <Label htmlFor="contract-address">
+                          Type the contract address to confirm
+                        </Label>
+                        <Input
+                          id="contract-address"
+                          maxLength={CONTRACT_MAX}
+                          disabled={readOnly}
+                          value={contractConfirmInput}
+                          onChange={(e) => setContractConfirmInput(e.target.value)}
+                          placeholder="Re-type the address shown above"
+                        />
+                      </div>
                       <p className="text-xs leading-relaxed text-muted-foreground">
-                        {status === "WATCHLIST_OPEN"
-                          ? "Contract entry is not open yet. First confirm the schedule and arm countdowns. Then open Contract Registration. At Contract Pending, the official CA field becomes editable."
-                          : "Contract registration becomes available later in the lifecycle, once the launch reaches Contract Pending."}
+                        Registration is permanent, owner-only and cannot be replaced afterwards. It
+                        does not change the launch status and sends no watcher or Telegram message
+                        on its own.
                       </p>
+                      <Button
+                        className="min-h-11"
+                        disabled={
+                          registerContractMutation.isPending ||
+                          contractConfirmInput.trim().toLowerCase() !==
+                            (registrationCandidate.contractAddress ?? "").toLowerCase()
+                        }
+                        onClick={() =>
+                          registerContractMutation.mutate(registrationCandidate.deploymentId)
+                        }
+                      >
+                        {registerContractMutation.isPending ? (
+                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <Save className="size-4" aria-hidden="true" />
+                        )}
+                        Register official contract
+                      </Button>
                     </div>
                   )}
                 </Section>
+
 
                 <VerifiedDeploymentEvidencePanel
                   evaluation={deploymentEvidence}

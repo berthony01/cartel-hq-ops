@@ -266,13 +266,24 @@ export async function transitionLaunchStatus(
   return data as unknown as LaunchRow;
 }
 
-export async function setLaunchContractAddress(
+/**
+ * C8.7B — evidence-bound official contract registration.
+ *
+ * The address is NOT supplied by the caller: the database derives it from the
+ * selected verified deployment evidence row. `expectedContractAddress` is a
+ * typed human confirmation and must match, or the call is refused. The RPC is
+ * owner-only, refuses outside Contract Pending, is immutable once registered,
+ * changes no lifecycle status and sends no notification.
+ */
+export async function registerVerifiedLaunchContract(
   launchId: string,
-  contractAddress: string,
+  deploymentId: string,
+  expectedContractAddress: string,
 ): Promise<LaunchRow> {
-  const { data, error } = await supabase.rpc("set_launch_contract_address", {
+  const { data, error } = await supabase.rpc("register_verified_launch_contract", {
     _launch_id: launchId,
-    _contract_address: contractAddress.trim(),
+    _deployment_id: deploymentId,
+    _expected_contract_address: expectedContractAddress.trim(),
   });
   if (error) rethrow(error);
   return data as unknown as LaunchRow;
@@ -782,6 +793,11 @@ export const workspaceScheduleCommunicationsQueryKey = (workspaceId: string | nu
 export type LaunchAccess = {
   role: string | null;
   canManage: boolean;
+  /**
+   * True only for the workspace owner record the database itself checks
+   * (`workspaces.owner_id`). Admin membership does NOT satisfy this.
+   */
+  isWorkspaceOwner: boolean;
 };
 
 export async function getLaunchAccess(
@@ -791,7 +807,7 @@ export async function getLaunchAccess(
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError) rethrow(userError);
   const userId = userData.user?.id ?? null;
-  if (!userId) return { role: null, canManage: false };
+  if (!userId) return { role: null, canManage: false, isWorkspaceOwner: false };
 
   const isOwner = !!workspaceOwnerId && workspaceOwnerId === userId;
 
@@ -805,5 +821,5 @@ export async function getLaunchAccess(
 
   const role = (data?.role as string | null) ?? (isOwner ? "owner" : null);
   const canManage = isOwner || role === "owner" || role === "admin";
-  return { role, canManage };
+  return { role, canManage, isWorkspaceOwner: isOwner };
 }
