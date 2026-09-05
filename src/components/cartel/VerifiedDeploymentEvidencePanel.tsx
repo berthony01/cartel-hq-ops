@@ -225,9 +225,11 @@ export function VerifiedDeploymentEvidencePanel({
             {VERIFIED_DEPLOYMENT_DISCLAIMER}
           </p>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            This panel only reads and explains recorded evidence. It cannot register a contract,
-            change the launch lifecycle, or notify anyone.
+            This panel only reads and explains recorded evidence. It never changes the launch
+            lifecycle and never notifies anyone. Registering an official contract is a separate,
+            owner-only confirmation.
           </p>
+
         </div>
       )}
     </Section>
