@@ -56,6 +56,7 @@ import {
   isoToLocalInput,
   launchStatusIndex,
   listLaunches,
+  notifyLaunchWatchersOfficialContract,
   localInputToIso,
   nextLaunchStatus,
   nullableText,
@@ -67,6 +68,7 @@ import {
   updateLaunchDetails,
   type LaunchRow,
   type LaunchStatus,
+  type OfficialContractNotifyResult,
 } from "@/lib/launch-control";
 
 import { PageHeader } from "@/components/cartel/PageHeader";
@@ -77,6 +79,7 @@ import { ScheduleChangeSummary } from "@/components/cartel/ScheduleChangeSummary
 import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
 import { VerifiedDeploymentEvidencePanel } from "@/components/cartel/VerifiedDeploymentEvidencePanel";
 import { VerifiedContractRegistrationPanel } from "@/components/cartel/VerifiedContractRegistrationPanel";
+import { OfficialContractNotifyPanel } from "@/components/cartel/OfficialContractNotifyPanel";
 import { evaluateLaunchDeploymentEvidence } from "@/lib/launch-verified-eligibility";
 import { chainDeploymentsQueryKey, listChainDeployments } from "@/lib/chain-launcher";
 
@@ -557,6 +560,40 @@ function LaunchControlPage() {
         err instanceof Error ? err.message : "Could not register the official contract.",
       ),
   });
+
+  // C8.7C — explicit watcher notification. Registration and the lifecycle
+  // transition never notify anyone; this is the only path that queues the
+  // official-contract packet, and the database keeps it owner-only,
+  // evidence-bound and idempotent. The outcome is keyed to the launch so a
+  // result can never be shown against a different one.
+  const [notifyOutcome, setNotifyOutcome] = useState<{
+    launchId: string;
+    result: OfficialContractNotifyResult | null;
+    error: string | null;
+  } | null>(null);
+  const notifyContractMutation = useMutation({
+    mutationFn: async () => {
+      if (!selected) throw new Error("No launch selected.");
+      return notifyLaunchWatchersOfficialContract(selected.id);
+    },
+    onSuccess: (result) => {
+      setNotifyOutcome({ launchId: selected?.id ?? "", result, error: null });
+      toast.success(
+        result.status === "queued"
+          ? "Official contract queued for eligible Launch Watch subscribers"
+          : "Launch Watch subscribers were already notified — nothing was sent again",
+      );
+      void invalidate();
+    },
+    onError: (err: unknown) => {
+      const message =
+        err instanceof Error ? err.message : "Could not notify Launch Watch subscribers.";
+      setNotifyOutcome({ launchId: selected?.id ?? "", result: null, error: message });
+      toast.error(message);
+    },
+  });
+  const notifyOutcomeForSelected =
+    notifyOutcome && selected && notifyOutcome.launchId === selected.id ? notifyOutcome : null;
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const deleteMutation = useMutation({
@@ -1906,6 +1943,19 @@ function LaunchControlPage() {
                     registerContractMutation.mutate({ deploymentId, expectedAddress })
                   }
                 />
+
+                <OfficialContractNotifyPanel
+                  launchStatus={status}
+                  registrationComplete={contractRegistered}
+                  isWorkspaceOwner={isWorkspaceOwner}
+                  disabled={readOnly}
+                  pending={notifyContractMutation.isPending}
+                  result={notifyOutcomeForSelected?.result ?? null}
+                  error={notifyOutcomeForSelected?.error ?? null}
+                  onNotify={() => notifyContractMutation.mutate()}
+                />
+
+
 
 
 

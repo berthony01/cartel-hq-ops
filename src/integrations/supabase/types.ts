@@ -3780,6 +3780,10 @@ export type Database = {
       }
       mark_stale_launch_notification_claims: { Args: never; Returns: number }
       mark_stale_project_inbox_delivery_claims: { Args: never; Returns: number }
+      notify_launch_watchers_official_contract: {
+        Args: { _launch_id: string }
+        Returns: Json
+      }
       project_inbox_delivery_scheduler_secret_matches: {
         Args: { p_secret: string }
         Returns: boolean
