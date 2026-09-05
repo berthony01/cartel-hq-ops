@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.enforce_launch_contract_update() FROM PUBLIC, anon, authenticated;
