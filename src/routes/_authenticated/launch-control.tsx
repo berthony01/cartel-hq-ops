@@ -21,7 +21,6 @@ import { useWorkspace } from "@/lib/workspace-context";
 import { getProjectProfile } from "@/lib/project-profile";
 import {
   CHAIN_MAX,
-  CONTRACT_MAX,
   LAUNCH_STATUSES,
   LAUNCH_STATUS_HELP,
   LAUNCH_STATUS_LABELS,
@@ -77,6 +76,7 @@ import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { ScheduleChangeSummary } from "@/components/cartel/ScheduleChangeSummary";
 import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
 import { VerifiedDeploymentEvidencePanel } from "@/components/cartel/VerifiedDeploymentEvidencePanel";
+import { VerifiedContractRegistrationPanel } from "@/components/cartel/VerifiedContractRegistrationPanel";
 import { evaluateLaunchDeploymentEvidence } from "@/lib/launch-verified-eligibility";
 import { chainDeploymentsQueryKey, listChainDeployments } from "@/lib/chain-launcher";
 

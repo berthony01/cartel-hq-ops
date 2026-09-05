@@ -1,17 +1,21 @@
 import { REQUIRED_CONFIRMATIONS, ROBINHOOD_TESTNET_CHAIN_ID } from "./chain-registry";
 
 /**
- * C8.7A — Cartel Verified Launch: deployment evidence + official-registration
- * eligibility evaluator.
+ * Cartel Verified Launch — deployment evidence + official-registration
+ * eligibility evaluator (C8.7A evidence model, C8.7B registration gating).
  *
  * READ ONLY BY CONSTRUCTION. This module is a pure, deterministic function of
  * its inputs. It performs no I/O, imports no Supabase client, calls no RPC,
- * never writes `launches.official_contract_address` or `contract_registered_at`,
- * never transitions a launch lifecycle status, never enqueues a launch event,
- * notification or Telegram send, and never builds or signs a transaction.
+ * never writes `launches.official_contract_address`, `contract_registered_at`
+ * or `official_contract_deployment_id`, never transitions a launch lifecycle
+ * status, never enqueues a launch event, notification or Telegram send, and
+ * never builds or signs a transaction.
  *
- * `registrationReady` is a frozen `false` for this phase: C8.7A can explain
- * evidence, it can never make official registration possible.
+ * Since C8.7B, evidence-bound official contract registration IS possible, but
+ * only through the separate `register_verified_launch_contract` RPC, which
+ * re-derives every predicate below server side and is the sole write path.
+ * What this evaluator produces only decides what an owner is OFFERED; the
+ * database remains authoritative and fails closed independently.
  *
  * "Verified deployment" means only that the recorded on-chain deployment
  * evidence passed Cartel's deployment verifier. It is not an endorsement,
@@ -24,6 +28,7 @@ import { REQUIRED_CONFIRMATIONS, ROBINHOOD_TESTNET_CHAIN_ID } from "./chain-regi
  * re-derives every predicate below server side. Nothing in this module writes.
  */
 export const REGISTRATION_READY = true as const;
+
 
 /**
  * Environments that may host an officially registerable deployment.
@@ -261,6 +266,8 @@ export type SummaryState =
   | "NO_DEPLOYMENTS"
   | "NO_VERIFIED_DEPLOYMENTS"
   | "VERIFIED_TEST_DEPLOYMENTS"
+  | "VERIFIED_PRODUCTION_DEPLOYMENT"
+  | "VERIFIED_DEPLOYMENT"
   | "MULTIPLE_VERIFIED_DEPLOYMENTS";
 
 export type LaunchEvidenceEvaluation = {
@@ -628,35 +635,38 @@ export function evaluateLaunchDeploymentEvidence(
     (d) => d.environment === "TESTNET" || d.chainCompatibility.isTestnet,
   ).length;
 
+  // A single verified deployment is described truthfully. A production record
+  // is never labelled "test", and a record that is neither a known test network
+  // nor an approved production environment gets the neutral verified state.
+  const onlyVerified = verified.length === 1 ? (verified[0] as DeploymentEvidenceResult) : null;
+  const onlyVerifiedIsTestnet =
+    onlyVerified != null &&
+    (onlyVerified.environment === "TESTNET" || onlyVerified.chainCompatibility.isTestnet);
+  const onlyVerifiedIsProduction =
+    onlyVerified != null &&
+    onlyVerified.environment != null &&
+    APPROVED_REGISTRATION_ENVIRONMENTS.includes(onlyVerified.environment) &&
+    !onlyVerified.chainCompatibility.isTestnet;
+
   let summaryState: SummaryState;
   if (evaluated.length === 0) summaryState = "NO_DEPLOYMENTS";
   else if (verified.length === 0) summaryState = "NO_VERIFIED_DEPLOYMENTS";
   else if (ambiguous) summaryState = "MULTIPLE_VERIFIED_DEPLOYMENTS";
-  else summaryState = "VERIFIED_TEST_DEPLOYMENTS";
+  else if (onlyVerifiedIsTestnet) summaryState = "VERIFIED_TEST_DEPLOYMENTS";
+  else if (onlyVerifiedIsProduction) summaryState = "VERIFIED_PRODUCTION_DEPLOYMENT";
+  else summaryState = "VERIFIED_DEPLOYMENT";
 
-  // Ambiguity never resolves itself: more than one eligible candidate blocks
-  // every candidate rather than selecting one.
+  // Ambiguity never resolves itself. Each qualifying deployment REMAINS
+  // individually eligible — being one of several is not an evidence defect —
+  // but no candidate is ever selected automatically. Selection is an explicit
+  // owner action, and the database re-derives every predicate regardless.
   const eligible = evaluated.filter((d) => d.officialRegistrationEligible);
   if (eligible.length > 1) {
-    for (const d of eligible) {
-      d.officialRegistrationEligible = false;
-      d.ambiguous = true;
-      d.registrationBlockReasons.push(
-        "More than one deployment qualifies. No candidate is selected automatically.",
-      );
-      d.registrationChecks.push(
-        check(
-          "single_candidate",
-          "Exactly one qualifying deployment",
-          "BLOCKED",
-          `${eligible.length} deployments qualify for this launch. Resolve the ambiguity before registering.`,
-        ),
-      );
-    }
+    for (const d of eligible) d.ambiguous = true;
   }
   const registrationCandidate =
     eligible.length === 1 ? (eligible[0] as DeploymentEvidenceResult) : null;
-  const eligibleForOfficialRegistration = registrationCandidate ? 1 : 0;
+  const eligibleForOfficialRegistration = eligible.length;
 
   const summaryLabel =
     summaryState === "NO_DEPLOYMENTS"
@@ -664,8 +674,12 @@ export function evaluateLaunchDeploymentEvidence(
       : summaryState === "NO_VERIFIED_DEPLOYMENTS"
         ? `${evaluated.length} recorded deployment${evaluated.length === 1 ? "" : "s"}, none with complete evidence`
         : summaryState === "MULTIPLE_VERIFIED_DEPLOYMENTS"
-          ? `Multiple confirmed deployments detected (${verified.length}). No candidate is selected.`
-          : `${verified.length} verified deployment${verified.length === 1 ? "" : "s"} recorded`;
+          ? `Multiple confirmed deployments detected (${verified.length}). No candidate is selected automatically.`
+          : summaryState === "VERIFIED_TEST_DEPLOYMENTS"
+            ? "1 verified test network deployment recorded"
+            : summaryState === "VERIFIED_PRODUCTION_DEPLOYMENT"
+              ? "1 verified production deployment recorded"
+              : "1 verified deployment recorded";
 
   return {
     launchId: context.launchId,
