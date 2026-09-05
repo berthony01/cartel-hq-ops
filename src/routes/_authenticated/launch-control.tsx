@@ -2022,6 +2022,25 @@ function LaunchControlPage() {
                   onNotify={() => notifyContractMutation.mutate()}
                 />
 
+                <OfficialContractGroupBroadcastPanel
+                  launchStatus={status}
+                  registrationComplete={contractRegistered}
+                  officialContractAddress={selected.official_contract_address}
+                  chain={selected.chain}
+                  isWorkspaceOwner={isWorkspaceOwner}
+                  groups={broadcastGroupsQuery.data ?? []}
+                  groupsLoading={broadcastGroupsQuery.isLoading}
+                  disabled={readOnly}
+                  pending={broadcastContractMutation.isPending}
+                  result={broadcastOutcomeForSelected?.result ?? null}
+                  error={broadcastOutcomeForSelected?.error ?? null}
+                  onBroadcast={(groupConnectionId) =>
+                    broadcastContractMutation.mutate(groupConnectionId)
+                  }
+                />
+
+
+
 
 
 
