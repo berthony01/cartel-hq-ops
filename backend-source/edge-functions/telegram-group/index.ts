@@ -1262,6 +1262,399 @@ Deno.serve(async (req: Request) => {
       return ledgerResponse(finalRow, false);
     }
 
+    /**
+     * C8.7E — explicit OFFICIAL CONTRACT CORRECTION group broadcast.
+     *
+     * Strictly separate from the C8.7D original official-contract broadcast,
+     * which is left exactly as it was. The browser supplies identity only:
+     * workspace, community, launch, correction ledger event and request id.
+     * It never supplies an address, a reason or any message text — every posted
+     * value is re-derived server-side from the append-only registration ledger
+     * and from the CURRENT bound deployment evidence.
+     *
+     * All authorization, tenant, ledger and evidence validation completes BEFORE
+     * `verifyGroup` and before any Telegram transport call.
+     */
+    if (action === "send_official_contract_correction_broadcast") {
+      const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+      // 1) Owner-only. Admin is deliberately insufficient for C8.7 contract actions.
+      const { data: wsRow } = await admin.from("workspaces").select("id,owner_id").eq("id", workspaceId).maybeSingle();
+      if (!wsRow || String(wsRow.owner_id ?? "") !== String(user.id)) {
+        return respond({ error: "FORBIDDEN", message: "Only the project owner can broadcast an official contract correction to a Telegram community." }, 403);
+      }
+
+      // 2) Identity validation.
+      if (!groupConnectionId || !UUID_RE.test(groupConnectionId)) {
+        return respond({ error: "GROUP_REQUIRED", message: "Choose a connected Telegram community." }, 400);
+      }
+      const launchId = String(body.launchId ?? "").trim();
+      if (!UUID_RE.test(launchId)) {
+        return respond({ error: "LAUNCH_REQUIRED", message: "Choose the launch whose official contract correction should be posted." }, 400);
+      }
+      const registrationEventId = String(body.registrationEventId ?? "").trim();
+      if (!UUID_RE.test(registrationEventId)) {
+        return respond({ error: "CORRECTION_REQUIRED", message: "Choose the recorded official contract correction to post." }, 400);
+      }
+      const clientRequestId = String(body.clientRequestId ?? "").trim();
+      if (!UUID_RE.test(clientRequestId)) {
+        return respond({ error: "INVALID_REQUEST_ID", message: "Invalid official contract correction broadcast request id." }, 400);
+      }
+
+      // 3) Authoritative launch re-read, scoped to the caller's workspace.
+      const { data: launch } = await admin.from("launches")
+        .select("id,workspace_id,project_profile_id,token_name,ticker,chain,status,official_contract_address,official_contract_deployment_id,contract_registered_at,contract_registered_by")
+        .eq("id", launchId).maybeSingle();
+      if (!launch || String(launch.workspace_id) !== String(workspaceId)) {
+        return respond({ error: "LAUNCH_NOT_FOUND", message: "That launch does not belong to this workspace." }, 404);
+      }
+
+      // 4) A correction is postable across the whole registered lifecycle.
+      const CORRECTABLE_STATUSES = ["OFFICIAL_CONTRACT_REGISTERED", "LIVE", "COMPLETED"];
+      if (!CORRECTABLE_STATUSES.includes(String(launch.status ?? ""))) {
+        return respond({ error: "LAUNCH_NOT_REGISTERED", message: "An official contract correction can only be broadcast once the launch has a registered official contract." }, 409);
+      }
+
+      // 5) Complete official registration state is mandatory.
+      const storedAddress = String(launch.official_contract_address ?? "").trim();
+      if (!storedAddress || !launch.official_contract_deployment_id || !launch.contract_registered_at || !launch.contract_registered_by) {
+        return respond({ error: "REGISTRATION_INCOMPLETE", message: "This launch does not carry a complete evidence-bound official contract registration." }, 409);
+      }
+
+      // 6) The correction ledger event itself.
+      const ledgerEventSelect = "id,workspace_id,launch_id,deployment_id,action,contract_address,correction_reason,superseded_event_id,created_at";
+      const { data: correctionEvent } = await admin.from("launch_contract_registration_events")
+        .select(ledgerEventSelect).eq("id", registrationEventId).maybeSingle();
+      if (!correctionEvent
+        || String(correctionEvent.workspace_id ?? "") !== String(workspaceId)
+        || String(correctionEvent.launch_id ?? "") !== String(launch.id)) {
+        return respond({ error: "CORRECTION_NOT_FOUND", message: "That official contract correction does not belong to this launch and workspace." }, 404);
+      }
+      if (String(correctionEvent.action ?? "") !== "CORRECTED"
+        || !correctionEvent.superseded_event_id
+        || !String(correctionEvent.correction_reason ?? "").trim()) {
+        return respond({ error: "CORRECTION_MALFORMED", message: "That registration event is not a complete recorded official contract correction." }, 409);
+      }
+
+      // 7) The predecessor event supplies the previously registered address.
+      const { data: predecessorEvent } = await admin.from("launch_contract_registration_events")
+        .select(ledgerEventSelect).eq("id", correctionEvent.superseded_event_id).maybeSingle();
+      if (!predecessorEvent
+        || String(predecessorEvent.workspace_id ?? "") !== String(workspaceId)
+        || String(predecessorEvent.launch_id ?? "") !== String(launch.id)) {
+        return respond({ error: "CORRECTION_MALFORMED", message: "The superseded registration event for this correction is missing or belongs to another launch." }, 409);
+      }
+      const previousContractAddress = String(predecessorEvent.contract_address ?? "").trim();
+      if (!previousContractAddress) {
+        return respond({ error: "CORRECTION_MALFORMED", message: "The superseded registration event does not carry a recorded contract address." }, 409);
+      }
+
+      // 8) A correction that has itself been superseded is never broadcast.
+      const { data: supersedingRows } = await admin.from("launch_contract_registration_events")
+        .select("id").eq("launch_id", launch.id).eq("workspace_id", workspaceId)
+        .eq("superseded_event_id", correctionEvent.id).limit(1);
+      if (Array.isArray(supersedingRows) && supersedingRows.length > 0) {
+        return respond({ error: "CORRECTION_SUPERSEDED", message: "A later correction has already superseded this one. Nothing was posted." }, 409);
+      }
+
+      // 9) The correction must be the CURRENT registration state of the launch.
+      if (String(correctionEvent.deployment_id ?? "") !== String(launch.official_contract_deployment_id)
+        || String(correctionEvent.contract_address ?? "").trim().toLowerCase() !== storedAddress.toLowerCase()) {
+        return respond({ error: "CORRECTION_NOT_CURRENT", message: "This correction no longer matches the launch's current official contract registration. Nothing was posted." }, 409);
+      }
+
+      /**
+       * 10) Re-derivation of the authoritative address from the CURRENT bound
+       * deployment evidence. `public.assert_launch_contract_evidence` has EXECUTE
+       * revoked from every role except its owner, so it cannot be called over
+       * PostgREST; these checks mirror the C8.7D branch exactly, in the same
+       * order, against the same authoritative rows. Any divergence refuses the
+       * send — never warns.
+       */
+      const ROBINHOOD_MAINNET_LABELS = ["robinhood chain", "robinhood chain mainnet", "4663"];
+      const chainLabelIsRobinhoodMainnet = (value: unknown) =>
+        ROBINHOOD_MAINNET_LABELS.includes(String(value ?? "").trim().replace(/\s+/g, " ").toLowerCase());
+
+      const { data: evidence } = await admin.from("launch_chain_deployments")
+        .select("*").eq("id", launch.official_contract_deployment_id).maybeSingle();
+
+      const evidenceFailure = (() => {
+        if (!evidence) return "Deployment evidence record not found.";
+        if (String(evidence.launch_id ?? "") !== String(launch.id) || String(evidence.workspace_id ?? "") !== String(workspaceId)) {
+          return "Deployment evidence does not belong to this launch and workspace.";
+        }
+        if (String(evidence.deployment_kind ?? "") !== "FIXED_SUPPLY_ERC20") return "Only a fixed-supply token deployment can become an official contract.";
+        if (String(evidence.artifact_id ?? "") !== "cartel-fixed-erc20-v1") return "Deployment evidence does not carry the approved frozen artifact.";
+        if (String(evidence.network_environment ?? "") !== "PRODUCTION" || Number(evidence.chain_id) !== 4663) {
+          return "Only a production Robinhood Chain (4663) deployment can become an official contract.";
+        }
+        if (!chainLabelIsRobinhoodMainnet(launch.chain)) return "The declared launch chain does not clearly match Robinhood Chain mainnet.";
+        if (String(evidence.status ?? "") !== "CONFIRMED") return "Deployment evidence is not CONFIRMED.";
+        if (!/^0x[0-9a-f]{64}$/.test(String(evidence.tx_hash ?? ""))) return "Deployment evidence has no well-formed transaction hash.";
+        if (!/^0x[0-9a-f]{40}$/.test(String(evidence.contract_address ?? ""))) return "Deployment evidence has no well-formed contract address.";
+        if (Number(evidence.confirmations ?? 0) < 5) return "Deployment evidence has fewer than 5 confirmations.";
+        if (evidence.block_number === null || evidence.block_number === undefined || !evidence.verified_at) {
+          return "Deployment evidence is missing a mined block or verification timestamp.";
+        }
+        if (evidence.failure_code || evidence.failure_detail) return "Deployment evidence records a failure state.";
+        if (String(evidence.verified_token_name ?? "") !== String(evidence.token_name ?? "")
+          || String(evidence.verified_token_symbol ?? "") !== String(evidence.token_symbol ?? "")
+          || Number(evidence.verified_token_decimals) !== Number(evidence.token_decimals)
+          || Number(evidence.verified_token_decimals) !== 18) {
+          return "Verified token identity does not match the recorded deployment intent.";
+        }
+        const intendedSupply = evidence.token_total_supply_text ?? null;
+        const verifiedSupply = evidence.verified_total_supply_text ?? null;
+        const recipientBalance = evidence.verified_recipient_balance_text ?? null;
+        if (!intendedSupply || verifiedSupply !== intendedSupply || recipientBalance !== intendedSupply) {
+          return "Verified token supply or recipient balance does not match the recorded deployment intent.";
+        }
+        return null;
+      })();
+
+      if (evidenceFailure) {
+        return respond({ error: "EVIDENCE_INVALID", message: evidenceFailure }, 409);
+      }
+      const derivedAddress = String(evidence?.contract_address ?? "").trim();
+      if (derivedAddress.toLowerCase() !== storedAddress.toLowerCase()
+        || derivedAddress.toLowerCase() !== String(correctionEvent.contract_address ?? "").trim().toLowerCase()) {
+        return respond({ error: "EVIDENCE_MISMATCH", message: "The corrected official contract no longer matches its bound deployment evidence. Nothing was posted." }, 409);
+      }
+      if (derivedAddress.toLowerCase() === previousContractAddress.toLowerCase()) {
+        return respond({ error: "CORRECTION_MALFORMED", message: "The recorded correction does not change the registered official contract address. Nothing was posted." }, 409);
+      }
+
+      // 11) Published Project Profile precondition, identical to the C8.7C/D rule.
+      const { data: profileRow } = await admin.from("project_profiles")
+        .select("id,project_name,ticker,discovery_status").eq("id", launch.project_profile_id).maybeSingle();
+      if (!profileRow || String(profileRow.discovery_status ?? "") !== "published") {
+        return respond({ error: "PROFILE_NOT_PUBLISHED", message: "Publish the Project Profile before broadcasting an official contract correction." }, 409);
+      }
+
+      const rawGroup = await getGroup();
+      if (!rawGroup) return respond({ error: "GROUP_NOT_FOUND", message: "That Telegram community is no longer connected." }, 404);
+
+      /** Server-authored correction packet. Factual and non-endorsing by construction. */
+      const projectName = String(profileRow.project_name ?? "").trim() || String(launch.token_name ?? "").trim();
+      const ticker = String(profileRow.ticker ?? launch.ticker ?? "").trim();
+      const correctionReason = String(correctionEvent.correction_reason ?? "").trim();
+      const packetText = [
+        `${projectName}${ticker ? " · " + ticker : ""}`,
+        "OFFICIAL CONTRACT CORRECTION",
+        "",
+        `Chain: ${String(launch.chain ?? "").trim()}`,
+        `Previously registered contract: ${previousContractAddress}`,
+        `Corrected official contract: ${derivedAddress}`,
+        "",
+        `Reason: ${escapeHtml(correctionReason)}`,
+        "",
+        "The corrected official contract supersedes the previously registered official contract reference for this launch.",
+        "Messages that were already delivered cannot be retracted. Use the corrected official contract going forward.",
+        "Cartel verified the specific deployment evidence bound to this registration. It is not a token or project safety review, an audit, a guarantee, an endorsement, or an investment recommendation.",
+        "",
+        "Official communication through @PepeCartelHQBot",
+      ].join("\n");
+
+      const ledgerSelect = "id,status,telegram_message_id,message_text,group_title,group_connection_id,telegram_chat_id,last_error,requested_at,sent_at,delivery_kind,delivered_text_snapshot,announcement_kind,launch_id,contract_registration_event_id";
+      const outcomeMessage = (status: string, title: string) =>
+        status === "SENT"
+          ? `Official contract correction posted to ${title}.`
+          : status === "FAILED"
+            ? `The official contract correction was not posted to ${title}.`
+            : `Delivery to ${title} could not be confirmed. Check the community before posting again — CARTEL HQ will not resend this automatically.`;
+      const ledgerResponse = (row: any, duplicate: boolean) => {
+        // A durable row still marked SENDING is surfaced as uncertain, never resent.
+        const status = row.status === "SENDING" ? "AMBIGUOUS" : row.status;
+        return respond({
+          status,
+          duplicate,
+          announcementId: row.id,
+          announcementKind: row.announcement_kind ?? "OFFICIAL_CONTRACT_CORRECTION",
+          launchId: row.launch_id ?? launch.id,
+          contractRegistrationEventId: row.contract_registration_event_id ?? correctionEvent.id,
+          groupConnectionId: row.group_connection_id ?? rawGroup.id,
+          groupTitle: row.group_title ?? rawGroup.title,
+          messageId: row.telegram_message_id ?? null,
+          sentAt: row.sent_at ?? null,
+          deliveryKind: "TEXT",
+          deliveredText: row.delivered_text_snapshot ?? packetText,
+          previousContractAddress,
+          contractAddress: derivedAddress,
+          technical: row.last_error ?? null,
+          message: outcomeMessage(status, String(row.group_title ?? rawGroup.title)),
+        });
+      };
+
+      /**
+       * Request-id idempotency, resolved before any Telegram call. One exact
+       * intent = same launch, same correction event and same target community.
+       * A reused id never sends again for ANY prior state, including FAILED.
+       */
+      const { data: existing } = await admin.from("telegram_group_announcements").select(ledgerSelect)
+        .eq("workspace_id", workspaceId).eq("client_request_id", clientRequestId).maybeSingle();
+      if (existing) {
+        const sameIntent = String(existing.announcement_kind ?? "") === "OFFICIAL_CONTRACT_CORRECTION"
+          && String(existing.launch_id ?? "") === String(launch.id)
+          && String(existing.contract_registration_event_id ?? "") === String(correctionEvent.id)
+          && !!existing.group_connection_id && String(existing.group_connection_id) === String(rawGroup.id);
+        if (!sameIntent) {
+          return respond({ error: "IDEMPOTENCY_CONFLICT", message: "This broadcast id was already used for a different launch, correction, community or broadcast type. Start a new official contract correction broadcast." }, 409);
+        }
+        return ledgerResponse(existing, true);
+      }
+
+      // Claim the durable ledger row BEFORE live verification and before sending.
+      let announcementId: string | null = null;
+      {
+        const { data: inserted, error: insertError } = await admin.from("telegram_group_announcements").insert({
+          workspace_id: workspaceId,
+          group_connection_id: rawGroup.id,
+          telegram_chat_id: rawGroup.telegram_chat_id,
+          group_title: String(rawGroup.title ?? "Telegram community").slice(0, 512),
+          requested_by: user.id,
+          client_request_id: clientRequestId,
+          message_text: packetText,
+          status: "SENDING",
+          delivery_kind: "TEXT",
+          delivered_text_snapshot: packetText,
+          announcement_kind: "OFFICIAL_CONTRACT_CORRECTION",
+          launch_id: launch.id,
+          contract_registration_event_id: correctionEvent.id,
+        }).select(ledgerSelect).maybeSingle();
+        if (insertError) {
+          if (String((insertError as any).code) === "23505") {
+            /**
+             * Either the same request id raced, or this exact correction was
+             * ALREADY posted to this community (semantic partial unique index on
+             * `(contract_registration_event_id, group_connection_id)`).
+             * Both resolve without a second Telegram call.
+             */
+            const { data: raced } = await admin.from("telegram_group_announcements").select(ledgerSelect)
+              .eq("workspace_id", workspaceId).eq("client_request_id", clientRequestId).maybeSingle();
+            if (raced) return ledgerResponse(raced, true);
+            const { data: priorCorrectionBroadcast } = await admin.from("telegram_group_announcements").select(ledgerSelect)
+              .eq("workspace_id", workspaceId).eq("contract_registration_event_id", correctionEvent.id)
+              .eq("group_connection_id", rawGroup.id).eq("announcement_kind", "OFFICIAL_CONTRACT_CORRECTION").maybeSingle();
+            if (priorCorrectionBroadcast) {
+              return respond({
+                error: "ALREADY_BROADCAST",
+                message: `This official contract correction was already posted to ${String(priorCorrectionBroadcast.group_title ?? rawGroup.title)}. Nothing was posted again.`,
+                announcementId: priorCorrectionBroadcast.id,
+                announcementKind: "OFFICIAL_CONTRACT_CORRECTION",
+                launchId: launch.id,
+                contractRegistrationEventId: correctionEvent.id,
+                previousContractAddress,
+                contractAddress: derivedAddress,
+                status: priorCorrectionBroadcast.status === "SENDING" ? "AMBIGUOUS" : priorCorrectionBroadcast.status,
+                duplicate: true,
+              }, 409);
+            }
+          }
+          throw insertError;
+        }
+        announcementId = inserted?.id ?? null;
+      }
+      if (!announcementId) throw new Error("Could not record this official contract correction broadcast. Nothing was posted.");
+
+      const markFailed = async (reason: string) => {
+        const { error } = await admin.from("telegram_group_announcements")
+          .update({ status: "FAILED", last_error: reason.slice(0, 1000) })
+          .eq("id", announcementId).eq("status", "SENDING");
+        if (error) console.error("[telegram-group] official contract correction failure record", error.message);
+      };
+
+      let group: any;
+      try {
+        group = await verifyGroup(rawGroup);
+      } catch (verifyError) {
+        const reason = verifyError instanceof Error ? verifyError.message : "Community verification failed.";
+        await markFailed(reason);
+        if (verifyError instanceof BotRemovedError) throw verifyError;
+        if (verifyError instanceof Error && isBotRemovedMessage(verifyError.message)) throw verifyError;
+        return ledgerResponse({
+          id: announcementId,
+          status: "FAILED",
+          telegram_message_id: null,
+          group_title: rawGroup.title,
+          group_connection_id: rawGroup.id,
+          last_error: reason,
+          sent_at: null,
+          delivered_text_snapshot: packetText,
+        }, false);
+      }
+
+      if (String(group.title ?? "") && String(group.title) !== String(rawGroup.title ?? "")) {
+        try {
+          await admin.from("telegram_group_announcements")
+            .update({ group_title: String(group.title).slice(0, 512) })
+            .eq("id", announcementId);
+        } catch (e) { console.error("[telegram-group] official contract correction title sync", e instanceof Error ? e.message : "unknown"); }
+      }
+
+      /** Exactly ONE Telegram transport call per claimed ledger row. */
+      let outcome: "SENT" | "FAILED" | "AMBIGUOUS" = "AMBIGUOUS";
+      let telegramMessageId: number | null = null;
+      let lastError: string | null = null;
+      try {
+        const res = await fetch(`${TG_BASE}/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: String(group.telegram_chat_id),
+            text: packetText,
+            disable_web_page_preview: true,
+          }),
+          signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
+        });
+        const payload = await res.json().catch(() => null) as any;
+        if (payload?.ok === true && typeof payload?.result?.message_id === "number") {
+          outcome = "SENT";
+          telegramMessageId = payload.result.message_id;
+        } else if (res.status >= 500 || !payload) {
+          outcome = "AMBIGUOUS";
+          lastError = `Telegram response was inconclusive (${res.status}).`;
+        } else if (payload?.ok === false) {
+          outcome = "FAILED";
+          lastError = String(payload?.description ?? `Telegram rejected the official contract correction broadcast (${res.status}).`);
+        } else {
+          outcome = "AMBIGUOUS";
+          lastError = "Telegram did not confirm a message id.";
+        }
+      } catch (e) {
+        outcome = "AMBIGUOUS";
+        lastError = e instanceof Error && e.name === "TimeoutError"
+          ? "Telegram did not respond in time."
+          : "Could not reach Telegram.";
+      }
+
+      const patch: Record<string, unknown> = outcome === "SENT"
+        ? { status: "SENT", telegram_message_id: telegramMessageId, sent_at: new Date().toISOString(), last_error: null }
+        : { status: outcome, last_error: lastError ? lastError.slice(0, 1000) : null };
+      const { data: finalRow, error: finalError } = await admin.from("telegram_group_announcements")
+        .update(patch).eq("id", announcementId).select(ledgerSelect).maybeSingle();
+
+      if (finalError || !finalRow) {
+        console.error("[telegram-group] official contract correction ledger update", finalError?.message ?? "no row returned");
+        return respond({
+          status: "AMBIGUOUS",
+          duplicate: false,
+          announcementId,
+          announcementKind: "OFFICIAL_CONTRACT_CORRECTION",
+          launchId: launch.id,
+          contractRegistrationEventId: correctionEvent.id,
+          previousContractAddress,
+          contractAddress: derivedAddress,
+          groupConnectionId: rawGroup.id,
+          groupTitle: group.title,
+          messageId: telegramMessageId ?? null,
+          sentAt: null,
+          technical: "Telegram outcome was obtained, but CARTEL HQ could not finalize the durable delivery record. Check the Telegram community before taking any action.",
+          message: `Delivery to ${group.title} could not be confirmed. Check the community before posting again — CARTEL HQ will not resend this automatically.`,
+        });
+      }
+
+      return ledgerResponse(finalRow, false);
+    }
 
 
     return respond({ error: "UNKNOWN_ACTION", message: "Unknown Telegram group action." }, 400);
