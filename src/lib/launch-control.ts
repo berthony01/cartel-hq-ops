@@ -853,3 +853,105 @@ export async function getLaunchAccess(
   const canManage = isOwner || role === "owner" || role === "admin";
   return { role, canManage, isWorkspaceOwner: isOwner };
 }
+
+// ---------------------------------------------------------------------------
+// C8.7E — official contract correction (client contract only).
+//
+// The append-only ledger `launch_contract_registration_events` records the one
+// ACCEPTED registration decision and every later CORRECTED decision. Rows are
+// read-only for the browser (workspace-member SELECT via RLS); every write is
+// performed by the owner-only, evidence-bound SECURITY DEFINER RPCs below.
+// ---------------------------------------------------------------------------
+
+export type LaunchContractRegistrationEvent =
+  Database["public"]["Tables"]["launch_contract_registration_events"]["Row"];
+
+/**
+ * Chronological, immutable registration chain for one launch (oldest first).
+ * RLS is authoritative: only rows in workspaces the signed-in user belongs to
+ * are ever returned, and no other workspace is queried.
+ */
+export async function listLaunchContractRegistrationEvents(
+  launchId: string,
+): Promise<LaunchContractRegistrationEvent[]> {
+  const { data, error } = await supabase
+    .from("launch_contract_registration_events")
+    .select("*")
+    .eq("launch_id", launchId)
+    .order("created_at", { ascending: true });
+  if (error) rethrow(error);
+  return data ?? [];
+}
+
+export const launchContractRegistrationEventsQueryKey = (launchId: string | null) =>
+  ["launch-contract-registration-events", launchId] as const;
+
+/** Mirrors the authoritative DB check on `correction_reason` (1–1000 chars). */
+export const CONTRACT_CORRECTION_REASON_MAX = 1000;
+
+/** Both shapes returned by `correct_verified_launch_contract`. */
+export type OfficialContractCorrectionResult = {
+  status: "unchanged" | "corrected";
+  launch_id: string;
+  registration_event_id: string;
+  superseded_event_id?: string | null;
+  previous_contract_address?: string | null;
+  contract_address: string;
+  deployment_id: string;
+  created_at?: string | null;
+};
+
+/**
+ * C8.7E — corrects an already-registered official contract.
+ *
+ * Owner-only and evidence-bound server-side: the new address is derived by the
+ * database from the selected verified deployment evidence, never supplied by
+ * the browser, and `expectedContractAddress` is only a typed human confirmation
+ * that must match. The lifecycle status and the original registration anchor
+ * (`contract_registered_at` / `contract_registered_by`) stay unchanged, and a
+ * correction sends nothing automatically — notifying subscribers and posting to
+ * communities are separate explicit actions.
+ */
+export async function correctVerifiedLaunchContract(input: {
+  launchId: string;
+  deploymentId: string;
+  expectedContractAddress: string;
+  reason: string;
+}): Promise<OfficialContractCorrectionResult> {
+  const { data, error } = await supabase.rpc("correct_verified_launch_contract", {
+    _launch_id: input.launchId,
+    _deployment_id: input.deploymentId,
+    _expected_contract_address: input.expectedContractAddress.trim(),
+    _reason: input.reason.trim(),
+  });
+  if (error) rethrow(error);
+  return data as unknown as OfficialContractCorrectionResult;
+}
+
+export type OfficialContractCorrectionNotifyResult = {
+  status: "queued" | "already_notified";
+  event_id: string;
+  registration_event_id: string;
+  delivery_count: number;
+};
+
+/**
+ * C8.7E — explicit watcher notification for a contract CORRECTION.
+ *
+ * Distinct from the C8.7C original-registration notifier; there is no fallback
+ * between them. A correction never notifies anyone on its own. The database
+ * refuses a stale or superseded correction event, refuses one that no longer
+ * matches the current registration state, and is idempotent per correction
+ * event, so a retry reports the queued event again instead of sending twice.
+ */
+export async function notifyLaunchWatchersOfficialContractCorrection(
+  launchId: string,
+  registrationEventId: string,
+): Promise<OfficialContractCorrectionNotifyResult> {
+  const { data, error } = await supabase.rpc(
+    "notify_launch_watchers_official_contract_correction",
+    { _launch_id: launchId, _registration_event_id: registrationEventId },
+  );
+  if (error) rethrow(error);
+  return data as unknown as OfficialContractCorrectionNotifyResult;
+}
