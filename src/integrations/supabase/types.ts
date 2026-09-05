@@ -619,6 +619,7 @@ export type Database = {
           launch_window_start: string | null
           live_at: string | null
           official_contract_address: string | null
+          official_contract_deployment_id: string | null
           project_profile_id: string
           public_slug: string
           status: string
@@ -650,6 +651,7 @@ export type Database = {
           launch_window_start?: string | null
           live_at?: string | null
           official_contract_address?: string | null
+          official_contract_deployment_id?: string | null
           project_profile_id: string
           public_slug: string
           status?: string
@@ -681,6 +683,7 @@ export type Database = {
           launch_window_start?: string | null
           live_at?: string | null
           official_contract_address?: string | null
+          official_contract_deployment_id?: string | null
           project_profile_id?: string
           public_slug?: string
           status?: string
@@ -706,6 +709,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launches_official_contract_deployment_id_fkey"
+            columns: ["official_contract_deployment_id"]
+            isOneToOne: false
+            referencedRelation: "launch_chain_deployments"
             referencedColumns: ["id"]
           },
           {
@@ -2980,6 +2990,15 @@ export type Database = {
         }
       }
       archive_sticker_pack: { Args: { _pack_id: string }; Returns: Json }
+      assert_launch_contract_evidence: {
+        Args: {
+          _declared_chain: string
+          _deployment_id: string
+          _launch_id: string
+          _workspace_id: string
+        }
+        Returns: string
+      }
       authorize_launch_chain_deployment: {
         Args: { _launch_id: string }
         Returns: string
@@ -3652,6 +3671,10 @@ export type Database = {
         Args: { _user_id: string; _workspace_id: string }
         Returns: boolean
       }
+      launch_chain_label_is_robinhood_mainnet: {
+        Args: { _chain: string }
+        Returns: boolean
+      }
       launch_notification_payload: {
         Args: { _launch_id: string }
         Returns: Json
@@ -3772,6 +3795,51 @@ export type Database = {
         }
         Returns: undefined
       }
+      register_verified_launch_contract: {
+        Args: {
+          _deployment_id: string
+          _expected_contract_address: string
+          _launch_id: string
+        }
+        Returns: {
+          announced_at: string | null
+          chain: string
+          completed_at: string | null
+          contract_pending_at: string | null
+          contract_registered_at: string | null
+          contract_registered_by: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          internal_notes: string | null
+          launch_approaching_at: string | null
+          launch_at: string | null
+          launch_watch_token: string | null
+          launch_watch_token_created_at: string | null
+          launch_window_end: string | null
+          launch_window_start: string | null
+          live_at: string | null
+          official_contract_address: string | null
+          official_contract_deployment_id: string | null
+          project_profile_id: string
+          public_slug: string
+          status: string
+          status_changed_at: string
+          status_changed_by: string | null
+          ticker: string
+          timezone: string
+          token_name: string
+          updated_at: string
+          watchlist_opened_at: string | null
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launches"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       request_project_verification: {
         Args: { _project_profile_id: string }
         Returns: {
@@ -3826,6 +3894,7 @@ export type Database = {
           launch_window_start: string | null
           live_at: string | null
           official_contract_address: string | null
+          official_contract_deployment_id: string | null
           project_profile_id: string
           public_slug: string
           status: string
@@ -4017,6 +4086,7 @@ export type Database = {
           launch_window_start: string | null
           live_at: string | null
           official_contract_address: string | null
+          official_contract_deployment_id: string | null
           project_profile_id: string
           public_slug: string
           status: string
