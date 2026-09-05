@@ -101,6 +101,13 @@ export type ChainCompatibilityResult = {
   networkLabel: string;
 };
 
+/**
+ * Registration metadata only. Robinhood Chain mainnet is a LABEL here — this
+ * project declares no mainnet RPC, no mainnet wallet target and no mainnet
+ * deployment path. `src/lib/chain-registry.ts` remains testnet-only.
+ */
+export const ROBINHOOD_MAINNET_CHAIN_ID = 4663 as const;
+
 const KNOWN_CHAINS: Record<
   number,
   { label: string; testnet: boolean; aliases: readonly string[] }
@@ -109,6 +116,11 @@ const KNOWN_CHAINS: Record<
     label: "Robinhood Chain Testnet",
     testnet: true,
     aliases: ["robinhood chain testnet", "robinhood testnet", `${ROBINHOOD_TESTNET_CHAIN_ID}`],
+  },
+  [ROBINHOOD_MAINNET_CHAIN_ID]: {
+    label: "Robinhood Chain",
+    testnet: false,
+    aliases: ["robinhood chain", "robinhood chain mainnet", `${ROBINHOOD_MAINNET_CHAIN_ID}`],
   },
 };
 
