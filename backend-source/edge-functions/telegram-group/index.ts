@@ -1446,7 +1446,7 @@ Deno.serve(async (req: Request) => {
         `Previously registered contract: ${previousContractAddress}`,
         `Corrected official contract: ${derivedAddress}`,
         "",
-        `Reason: ${escapeHtml(correctionReason)}`,
+        `Reason: ${correctionReason}`,
         "",
         "The corrected official contract supersedes the previously registered official contract reference for this launch.",
         "Messages that were already delivered cannot be retracted. Use the corrected official contract going forward.",
@@ -1524,14 +1524,22 @@ Deno.serve(async (req: Request) => {
         if (insertError) {
           if (String((insertError as any).code) === "23505") {
             /**
-             * Either the same request id raced, or this exact correction was
-             * ALREADY posted to this community (semantic partial unique index on
-             * `(contract_registration_event_id, group_connection_id)`).
-             * Both resolve without a second Telegram call.
+             * A unique constraint raced. The request-id index is the most likely
+             * conflict, so recheck intent there first; only fall back to the
+             * semantic correction+community duplicate if no request-id row exists.
              */
             const { data: raced } = await admin.from("telegram_group_announcements").select(ledgerSelect)
               .eq("workspace_id", workspaceId).eq("client_request_id", clientRequestId).maybeSingle();
-            if (raced) return ledgerResponse(raced, true);
+            if (raced) {
+              const sameIntent = String(raced.announcement_kind ?? "") === "OFFICIAL_CONTRACT_CORRECTION"
+                && String(raced.launch_id ?? "") === String(launch.id)
+                && String(raced.contract_registration_event_id ?? "") === String(correctionEvent.id)
+                && !!raced.group_connection_id && String(raced.group_connection_id) === String(rawGroup.id);
+              if (!sameIntent) {
+                return respond({ error: "IDEMPOTENCY_CONFLICT", message: "This broadcast id was already used for a different launch, correction, community or broadcast type. Start a new official contract correction broadcast." }, 409);
+              }
+              return ledgerResponse(raced, true);
+            }
             const { data: priorCorrectionBroadcast } = await admin.from("telegram_group_announcements").select(ledgerSelect)
               .eq("workspace_id", workspaceId).eq("contract_registration_event_id", correctionEvent.id)
               .eq("group_connection_id", rawGroup.id).eq("announcement_kind", "OFFICIAL_CONTRACT_CORRECTION").maybeSingle();
