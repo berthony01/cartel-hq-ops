@@ -1141,7 +1141,43 @@ Deno.serve(async (req: Request) => {
     );
   };
 
+  /**
+   * C7.3 — team alert after a CONFIRMED member capture. Best effort only:
+   * a failure here can never roll back or invalidate the captured message.
+   * The member's Telegram identity is never included; only member_ref.
+   */
+  const notifyTeamOfCapture = async (updateId: number) => {
+    try {
+      const { data, error } = await admin.rpc("bot_inbox_capture_alert_targets", {
+        _telegram_update_id: updateId,
+      });
+      if (error) return;
+      const targets = Array.isArray(data) ? data : [];
+      for (const target of targets) {
+        const operatorId = Number(target.operator_telegram_user_id);
+        if (!Number.isSafeInteger(operatorId) || operatorId <= 0) continue;
+        const heading = target.is_new_conversation === true
+          ? "🆕 NEW PROJECT INBOX MESSAGE"
+          : "📥 PROJECT INBOX MESSAGE";
+        await sendMessage(
+          TELEGRAM_BOT_TOKEN,
+          String(operatorId),
+          `<b>${heading}</b>\n\nFrom <b>${escapeHtml(String(target.member_ref ?? "Member"))}</b>\n\n${escapeHtml(String(target.body ?? ""))}`,
+          {
+            parse_mode: "HTML",
+            reply_markup: {
+              inline_keyboard: [[{ text: "📖 Open conversation", callback_data: `pi_c_${String(target.conversation_id)}` }]],
+            },
+          },
+        );
+      }
+    } catch (alertError) {
+      console.error("[telegram-webhook] inbox alert", alertError instanceof Error ? alertError.message : "unknown error");
+    }
+  };
+
   try {
+
 
     const callback = update?.callback_query;
     if (callback?.id && callback?.from?.id) {
