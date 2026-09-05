@@ -668,7 +668,7 @@ function LaunchControlPage() {
       deploymentEvidenceQuery.data ?? [],
     );
   }, [selected, deploymentEvidenceQuery.data]);
-  const registrationCandidate = deploymentEvidence?.registrationCandidate ?? null;
+  
 
   // ---- countdown + reminder readiness (saved launch fields only) -----------
   const nowMs = useClientNow(30_000);
@@ -737,8 +737,8 @@ function LaunchControlPage() {
   const blockedReason =
     next === "LAUNCH_APPROACHING" && !scheduleReady
       ? "Set an exact launch time or a complete launch window before you can arm countdowns."
-      : next === "OFFICIAL_CONTRACT_REGISTERED" && !contractSaved
-        ? "Save the official contract address before registering it."
+      : next === "OFFICIAL_CONTRACT_REGISTERED" && !contractRegistered
+        ? "Complete evidence-bound contract registration first. This launch must be bound to a verified deployment record — address, deployment and registration time — before the verified contract can be published."
         : null;
 
   const saveButton =
@@ -1023,7 +1023,7 @@ function LaunchControlPage() {
                     <div className="min-w-0">
                       <dt className="type-meta text-muted-foreground">Official contract</dt>
                       <dd className="mt-1 text-xs leading-relaxed text-foreground">
-                        {contractSaved
+                        {contractRegistered
                           ? "Registered"
                           : status === "CONTRACT_PENDING"
                             ? "Pending registration"
