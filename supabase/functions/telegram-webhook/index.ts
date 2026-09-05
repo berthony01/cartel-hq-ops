@@ -1150,6 +1150,36 @@ Deno.serve(async (req: Request) => {
       const callbackChat = callback.message?.chat;
       const callbackChatId = callbackChat?.id != null ? String(callbackChat.id) : String(from.id);
       const linked = await getLinkedUser(String(from.id));
+
+      // C7.3 — Project Inbox console callbacks. Private chat only; every one
+      // re-authorizes inside the service-only RPC before exposing anything.
+      const piWorkspace = callbackData.match(/^pi_w_([0-9a-f-]{36})$/i);
+      const piConversation = callbackData.match(/^pi_c_([0-9a-f-]{36})$/i);
+      if ((piWorkspace || piConversation || callbackData === "pi_x") && callbackChat?.type === "private") {
+        const operatorId = Number(from.id);
+        if (callbackData === "pi_x") {
+          await admin.rpc("bot_inbox_set_session", { _telegram_user_id: operatorId, _mode: "NONE", _workspace_id: null });
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Inbox closed.");
+          return json({ ok: true });
+        }
+        if (piWorkspace) {
+          const workspaceId = String(piWorkspace[1]);
+          const { data: wsData } = await admin.rpc("bot_inbox_operator_workspaces", { _telegram_user_id: operatorId });
+          const match = (Array.isArray(wsData) ? wsData : []).find((w: any) => String(w.workspace_id) === workspaceId);
+          if (!match) {
+            await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "That workspace is not available.");
+            return json({ ok: true });
+          }
+          await admin.rpc("bot_inbox_set_session", { _telegram_user_id: operatorId, _mode: "INBOX", _workspace_id: workspaceId });
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, String(match.workspace_name ?? "Workspace"));
+          await renderInboxList(operatorId, callbackChatId, workspaceId, String(match.workspace_name ?? "Workspace"));
+          return json({ ok: true });
+        }
+        await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Opening conversation…");
+        await openInboxConversation(operatorId, callbackChatId, String(piConversation![1]));
+        return json({ ok: true });
+      }
+
       if (callbackData === "beta_join") {
         if (linked?.user_id) {
           const existing = await getUserBetaContact(String(from.id));
