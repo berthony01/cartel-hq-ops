@@ -595,7 +595,6 @@ function LaunchControlPage() {
   const notifyOutcomeForSelected =
     notifyOutcome && selected && notifyOutcome.launchId === selected.id ? notifyOutcome : null;
 
-
   const [confirmDelete, setConfirmDelete] = useState(false);
   const deleteMutation = useMutation({
     mutationFn: async () => {
