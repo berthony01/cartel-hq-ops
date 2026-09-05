@@ -649,16 +649,15 @@ function LaunchControlPage() {
       }
     },
     onError: (err: unknown) => {
-      const message =
-        err instanceof Error ? err.message : "Could not post the official contract.";
+      const message = err instanceof Error ? err.message : "Could not post the official contract.";
       setBroadcastOutcome({ launchId: selected?.id ?? "", result: null, error: message });
       toast.error(message);
     },
   });
   const broadcastOutcomeForSelected =
-    broadcastOutcome && selected && broadcastOutcome.launchId === selected.id
-      ? broadcastOutcome
-      : null;
+    broadcastOutcome && selected && broadcastOutcome.launchId === selected.id ? broadcastOutcome : null;
+
+
 
 
 
