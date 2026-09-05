@@ -171,7 +171,7 @@ function startMenuText(linked: boolean) {
     : `<b>WELCOME TO CARTEL HQ 🐸</b>\n\nThe Telegram command bot for the growing PEPECARTEL ecosystem.\n\nSticker creation, Telegram sticker-pack publishing, native sticker delivery and multi-group distribution are live in <b>Private Beta</b>. More community tools are on the way.\n\n<b>What would you like to do?</b>`;
 }
 function roadmapText() {
-  return `<b>CARTEL HQ BOT • PRIVATE BETA ROADMAP</b>\n\n<b>LIVE NOW</b>\n✅ AI Sticker Lab\n✅ Telegram sticker-pack publishing\n✅ Native Telegram sticker delivery\n✅ Multi-group sticker distribution\n✅ Community join welcomes with optional auto-delete\n✅ Launch Watch opt-ins\n✅ Controlled 24h &amp; 1h launch countdown reminders\n✅ Official-contract alerts with the Verified Launch Packet\n✅ Launch-live alerts\n\n<b>IN DEVELOPMENT</b>\n🚧 <b>Telegram Community Tools</b>\n• Sticker Pack Manager\n• Cartel Sticker Drops — scheduled branded sticker posts\n• Scheduled announcements, polls &amp; giveaways\n• Community analytics\n\n🚧 <b>Cartel Launch Network</b>\n• Public Cartel Network project &amp; launch pages\n• My Watchlist\n• Cartel Signals project-event feed\n\n🚧 Operations &amp; Missions\n🚧 Project Verification\n🚧 Distribution expansion\n🚧 Cartel Shield\n🚧 Reputation &amp; analytics\n\nLaunch Watch messages are opt-in and can be muted or stopped at any time. They are not token safety checks, audits, verification or endorsements. Cartel Sticker Drops will be admin-controlled with scheduling, quiet hours and post limits. More capabilities will roll out progressively through Cartel HQ. Public Cartel HQ web access will be added here when it is ready.\n\n<b>Want early access to what's coming next?</b>`;
+  return `<b>CARTEL HQ BOT • PRIVATE BETA ROADMAP</b>\n\n<b>LIVE NOW</b>\n✅ AI Sticker Lab\n✅ Telegram sticker-pack publishing\n✅ Native Telegram sticker delivery\n✅ Multi-group sticker distribution\n✅ Community join welcomes with optional auto-delete\n✅ Launch Watch opt-ins\n✅ Controlled 24h &amp; 1h launch countdown reminders\n✅ Official-contract registration alerts\n✅ Launch-live alerts\n\n<b>IN DEVELOPMENT</b>\n🚧 <b>Telegram Community Tools</b>\n• Sticker Pack Manager\n• Cartel Sticker Drops — scheduled branded sticker posts\n• Scheduled announcements, polls &amp; giveaways\n• Community analytics\n\n🚧 <b>Cartel Launch Network</b>\n• Public Cartel Network project &amp; launch pages\n• My Watchlist\n• Cartel Signals project-event feed\n\n🚧 Operations &amp; Missions\n🚧 Project Verification\n🚧 Distribution expansion\n🚧 Cartel Shield\n🚧 Reputation &amp; analytics\n\nLaunch Watch messages are opt-in and can be muted or stopped at any time. They are not token safety checks, audits, verification or endorsements. Cartel Sticker Drops will be admin-controlled with scheduling, quiet hours and post limits. More capabilities will roll out progressively through Cartel HQ. Public Cartel HQ web access will be added here when it is ready.\n\n<b>Want early access to what's coming next?</b>`;
 }
 function helpText(isGroup: boolean) {
   return isGroup
@@ -359,7 +359,7 @@ Deno.serve(async (req: Request) => {
     `<b>🔔 LAUNCH WATCH</b>\n\n<b>${escapeHtml(String(profile?.project_name ?? "Project"))}</b>\n${escapeHtml(String(launch.token_name ?? ""))} • ${escapeHtml(String(launch.ticker ?? ""))} • ${escapeHtml(String(launch.chain ?? ""))}\nStatus: ${escapeHtml(LAUNCH_STATUS_LABELS[String(launch.status)] ?? String(launch.status))}`;
 
   const launchWatchDisclaimer =
-    `\n\nWhile you are watching, this bot can send you:\n• a controlled <b>24-hour</b> and <b>1-hour</b> countdown reminder\n• the <b>official-contract Verified Launch Packet</b>\n• the <b>launch-live alert</b>\n• <b>project updates</b> sent by the authenticated project team\n\nYou can mute the countdowns, mute project updates, or stop watching at any time with the buttons below. Each of those is a separate choice.\n\nThis is not a safety check, audit, verification or endorsement of any token.`;
+    `\n\nWhile you are watching, this bot can send you:\n• a controlled <b>24-hour</b> and <b>1-hour</b> countdown reminder\n• the <b>official-contract registration notice</b>\n• the <b>launch-live alert</b>\n• <b>project updates</b> sent by the authenticated project team\n\nYou can mute the countdowns, mute project updates, or stop watching at any time with the buttons below. Each of those is a separate choice.\n\nThis is not a safety check, audit, verification or endorsement of any token.`;
 
   const isHttpUrl = (value: unknown): value is string => {
     if (typeof value !== "string" || !value.trim()) return false;
@@ -401,19 +401,19 @@ Deno.serve(async (req: Request) => {
   };
 
   /**
-   * Immediate Verified Launch Packet for someone who joins after the official
+   * Immediate official-contract notice for someone who joins after the official
    * contract has already been registered. This is a direct confirmation only —
    * it never creates a launch_notification_deliveries row.
    */
-  const verifiedLaunchPacket = (launch: any, profile: any): string => {
+  const officialContractNotice = (launch: any, profile: any): string => {
     const lines: string[] = [
-      `\n\n<b>📦 VERIFIED LAUNCH PACKET</b>\n`,
+      `\n\n<b>📦 OFFICIAL CONTRACT REGISTERED</b>\n`,
       `<b>${escapeHtml(String(profile?.project_name ?? "Project"))}</b>`,
       `${escapeHtml(String(launch.token_name ?? ""))} • ${escapeHtml(String(launch.ticker ?? ""))} • ${escapeHtml(String(launch.chain ?? ""))}`,
     ];
     if (launch.official_contract_address) {
       lines.push(
-        `\nOfficial contract registered by the authenticated project:\n<code>${escapeHtml(String(launch.official_contract_address))}</code>`,
+        `\nThis is the project's registered official contract reference:\n<code>${escapeHtml(String(launch.official_contract_address))}</code>`,
       );
     }
     const timing = launchTimingLine(launch);
@@ -424,7 +424,7 @@ Deno.serve(async (req: Request) => {
     if (isHttpUrl(profile?.x_url)) links.push(`X: ${escapeHtml(profile.x_url.trim())}`);
     if (links.length) lines.push(`\n<b>Official project links</b>\n${links.join("\n")}`);
     lines.push(
-      `\n<b>What "verified" means:</b> this information was supplied by the authenticated Cartel HQ project that controls this launch. It is <b>not</b> a safety audit, token safety verification, rug-proof guarantee or investment endorsement. Always do your own research.`,
+      `\n<b>What "verified" means:</b> Cartel verified the specific deployment evidence bound to this registration. It is <b>not</b> a token or project safety audit, guarantee, endorsement or investment recommendation. Always do your own research.`,
     );
     return lines.join("\n");
   };
@@ -1022,7 +1022,7 @@ Deno.serve(async (req: Request) => {
           );
           const body = enable
             ? "📣 Project updates are on. The project team can send you occasional updates about this launch."
-            : "🔇 Project updates are muted. You will still get your countdown reminders (if enabled), the official-contract Verified Launch Packet and the launch-live alert while you are watching.";
+            : "🔇 Project updates are muted. You will still get your countdown reminders (if enabled), the official-contract registration notice and the launch-live alert while you are watching.";
           await renderLaunchWatch(
             `${launchWatchIntro(launch, profile)}\n\n${body}`,
             true,
@@ -1068,7 +1068,7 @@ Deno.serve(async (req: Request) => {
           );
           const body = enable
             ? "⏳ Countdown reminders are on. You will get the 24-hour and 1-hour reminders, plus the official-contract packet and the launch-live alert."
-            : "🔇 Countdown reminders are muted. You will still get the official-contract Verified Launch Packet and the launch-live alert while you are watching.";
+            : "🔇 Countdown reminders are muted. You will still get the official-contract registration notice and the launch-live alert while you are watching.";
           await renderLaunchWatch(
             `${launchWatchIntro(launch, profile)}\n\n${body}`,
             true,
@@ -1110,7 +1110,7 @@ Deno.serve(async (req: Request) => {
         await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "You're watching this launch again.");
         const packet =
           String(launch.status) === "OFFICIAL_CONTRACT_REGISTERED"
-            ? verifiedLaunchPacket(launch, profile)
+            ? officialContractNotice(launch, profile)
             : "";
         const text = `${launchWatchIntro(launch, profile)}\n\n🔔 You are watching this launch again.${launchWatchDisclaimer}${packet}`;
         await renderLaunchWatch(text, true, rewatched.remindersEnabled, rewatched.updatesEnabled);
@@ -1542,7 +1542,7 @@ Deno.serve(async (req: Request) => {
       // message only — no launch_notification_deliveries row is created.
       const packet =
         String(launch.status) === "OFFICIAL_CONTRACT_REGISTERED"
-          ? verifiedLaunchPacket(launch, profile)
+          ? officialContractNotice(launch, profile)
           : "";
       const confirmationAttemptedAt = new Date().toISOString();
       const confirmation = await sendMessageWithOutcome(
