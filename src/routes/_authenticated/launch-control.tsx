@@ -176,7 +176,7 @@ const LIFECYCLE_GUIDE: Record<LaunchStatus, { title: string; body: string }> = {
   CONTRACT_PENDING: {
     title: "Contract Pending",
     body:
-      "Contract-address entry becomes available. Save the official contract address before advancing.",
+      "Evidence-bound contract registration becomes available. Bind this launch to one verified deployment record before advancing. The address is never typed in freehand.",
   },
   OFFICIAL_CONTRACT_REGISTERED: {
     title: "Official Contract Registered",
@@ -227,15 +227,15 @@ const NEXT_ACTION_GUIDE: Record<
       "Schedule is confirmed and countdown delivery is armed. Eligible 24h and 1h reminders can be created when due for active watchers who allow countdowns.",
     nextAction: "Open contract registration",
     after:
-      "Contract Pending: the official contract address field becomes editable.",
+      "Contract Pending: evidence-bound contract registration opens for a qualifying verified deployment.",
   },
   CONTRACT_PENDING: {
     current: "Contract Pending",
     means:
-      "Contract-address entry is open. Save the official contract address, then register it.",
-    nextAction: "Register official contract",
+      "Evidence-bound registration is open. Bind this launch to one qualifying verified deployment record. Registering sends nothing and does not advance the lifecycle on its own.",
+    nextAction: "Publish verified contract",
     after:
-      "Official Contract Registered: active watchers receive the Verified Launch Packet.",
+      "Official Contract Registered: advancing can queue the Verified Launch Packet to active watchers through the existing notification engine.",
   },
   OFFICIAL_CONTRACT_REGISTERED: {
     current: "Official Contract Registered",
@@ -264,7 +264,7 @@ const TRANSITION_BUTTON_LABEL: Record<LaunchStatus, string> = {
   ANNOUNCED: "Open Launch Watch",
   WATCHLIST_OPEN: "Confirm schedule & arm countdowns",
   LAUNCH_APPROACHING: "Open contract registration",
-  CONTRACT_PENDING: "Register official contract",
+  CONTRACT_PENDING: "Publish verified contract",
   OFFICIAL_CONTRACT_REGISTERED: "Mark launch live",
   LIVE: "Complete launch",
   COMPLETED: "No further action",
@@ -534,22 +534,23 @@ function LaunchControlPage() {
   });
 
   // C8.7B — evidence-bound registration. The operator never supplies the
-  // address: it comes from the selected verified deployment evidence and is
-  // re-derived server side. This field is a typed confirmation only.
-  const [contractConfirmInput, setContractConfirmInput] = useState("");
-  useEffect(() => {
-    setContractConfirmInput("");
-  }, [selected?.id]);
-
+  // address: the dedicated registration panel derives it from verified
+  // deployment evidence, and the database re-derives it again server side.
   const registerContractMutation = useMutation({
-    mutationFn: async (deploymentId: string) => {
+    mutationFn: async (input: { deploymentId: string; expectedAddress: string }) => {
       if (!selected) throw new Error("No launch selected.");
-      return registerVerifiedLaunchContract(selected.id, deploymentId, contractConfirmInput);
+      return registerVerifiedLaunchContract(
+        selected.id,
+        input.deploymentId,
+        input.expectedAddress,
+      );
     },
     onSuccess: () => {
       toast.success("Official contract registered from verified deployment evidence");
-      setContractConfirmInput("");
       void invalidate();
+      void queryClient.invalidateQueries({
+        queryKey: chainDeploymentsQueryKey(selected?.id ?? null),
+      });
     },
     onError: (err: unknown) =>
       toast.error(
@@ -575,7 +576,13 @@ function LaunchControlPage() {
 
   const next = nextLaunchStatus(status);
   const scheduleReady = selected ? hasSchedule(selected) : false;
-  const contractSaved = Boolean(selected?.official_contract_address);
+  // Registration is only complete when all three binding fields are present.
+  // An address alone is never treated as a registered official contract.
+  const contractRegistered = Boolean(
+    (selected?.official_contract_address ?? "").trim() !== "" &&
+      selected?.official_contract_deployment_id &&
+      selected?.contract_registered_at,
+  );
 
   // Launch Watch (read-only). Aggregate counts only — never subscriber identities.
   const watchToken = selected?.launch_watch_token ?? null;
