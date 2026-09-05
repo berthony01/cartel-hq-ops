@@ -657,10 +657,6 @@ function LaunchControlPage() {
     );
   }, [selected, deploymentEvidenceQuery.data]);
 
-
-
-
-
   // ---- countdown + reminder readiness (saved launch fields only) -----------
   const nowMs = useClientNow(30_000);
   const anchorIso = selected?.launch_at ?? selected?.launch_window_start ?? null;
@@ -1956,8 +1952,6 @@ function LaunchControlPage() {
                       : null
                   }
                 />
-
-
 
                 <Section
                   variant="surface"
