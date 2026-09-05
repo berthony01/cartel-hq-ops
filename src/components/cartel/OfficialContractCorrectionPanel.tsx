@@ -182,12 +182,17 @@ export function OfficialContractCorrectionPanel({
 }: OfficialContractCorrectionPanelProps) {
   // Candidates reuse the existing evaluator verdicts. A deployment qualifies
   // when every registration gate passes except the two that only describe the
-  // launch already being registered and past Contract Pending.
+  // launch already being registered and past Contract Pending, and when the
+  // evaluator has also marked the chain as production (not testnet). That
+  // boolean mirrors the `!compatibility.isTestnet` predicate inside
+  // `officialRegistrationEligible`, so the UI offer stays fail-closed even
+  // though the database will reject an ineligible deployment as well.
   const candidates = (evaluation?.deployments ?? []).filter(
     (d) =>
       d.contractAddress != null &&
       d.contractAddress.trim() !== "" &&
       d.deploymentId !== officialContractDeploymentId &&
+      !d.chainCompatibility.isTestnet &&
       d.registrationChecks.every(
         (c) => c.state === "PASS" || REGISTRATION_STATE_CHECK_IDS.includes(c.id),
       ),
