@@ -1,124 +1,78 @@
-# C8.7D Controlled Surgical Audit — Official Group Broadcast of the Registered Contract
+# C8.7E Build-Contract Validation (plan only)
 
-Audit only. Zero code, schema, data, migration, Telegram send, or publish change. All DB access was SELECT-only.
+Read-only validation of the proposed C8.7E contract against HEAD `d115af70ce097e44e477eb83674485e826aedbd1` (tree clean). No code, migration, data, deploy, send, or publish action was taken.
 
-## 0. Start gate
+## G. Contract defects found (fix before build)
 
-- Current HEAD `ac31b3d73a77a70beda424d4812323a89933f41d`; working tree clean; unpublished.
-- `git diff eb977cbf5064c25f34e91c0ab2b28612b007eabe HEAD` is **empty** — `ac31b3d` is a platform merge commit (`gpt-engineer-app[bot]`, "Cleaned up C8.7C audit items", edit id `edt-d04d7218…`) whose tree is byte-identical to the C8.7C closure commit. Drift is platform metadata only; **no product-code drift**.
-- C8.7A (`launch-verified-eligibility.ts`, `VerifiedDeploymentEvidencePanel.tsx`), C8.7B (`register_verified_launch_contract`, `assert_launch_contract_evidence`, `VerifiedContractRegistrationPanel.tsx`) and C8.7C (`notify_launch_watchers_official_contract`, `OfficialContractNotifyPanel.tsx`) are present, unchanged and closed.
-- Live invariants unchanged: deployments 5, launch_events 3, deliveries 4, group announcements 7; PEPECARTEL `WATCHLIST_OPEN` / `official_contract_address` NULL / `official_contract_deployment_id` NULL.
+1. **Correction must NOT move `contract_registered_at`.** C8.7C idempotency anchors the watcher event at `scheduled_for = launches.contract_registered_at` (`on conflict (launch_id, event_type, scheduled_for)`). If a correction rewrites that timestamp, a **second** `OFFICIAL_CONTRACT_REGISTERED` DM can be queued to every watcher. Required: a correction updates only `official_contract_deployment_id` (address re-derived); `contract_registered_at` / `contract_registered_by` stay at the original registration. Correction actor/time live in the ledger only. This is safe because the C8.7C RPC re-derives the address from bound evidence at send time.
+2. **`launch_events_event_type_check` blocks the new type.** The CHECK allows only `REMINDER_24H, REMINDER_1H, OFFICIAL_CONTRACT_REGISTERED, LAUNCH_LIVE, WATCHER_UPDATE`. `OFFICIAL_CONTRACT_CORRECTED` must be added in the same migration or every insert fails.
+3. **The notification worker silently drops unknown types.** `launch-notifications` falls through to `skip(deliveryId, "unknown_event_type")`. Without a new copy branch **and a redeploy**, correction deliveries are created and then discarded. Deploy authorization is a build prerequisite, not an afterthought.
+4. **Status gates in existing comms paths are narrower than the correction contract.** Both `notify_launch_watchers_official_contract` and the `send_official_contract_broadcast` edge action hard-require status `OFFICIAL_CONTRACT_REGISTERED`. If correction is allowed at `LIVE`/`COMPLETED`, the *new* correction RPC and *new* edge action must accept all three statuses, otherwise a correction after go-live can never be communicated. Recommendation: allow correction and correction-comms at `OFFICIAL_CONTRACT_REGISTERED`, `LIVE`, `COMPLETED`; leave the C8.7C/D originals untouched at `OFFICIAL_CONTRACT_REGISTERED`.
+5. **Session-flag trigger guard is unnecessary.** `authenticated` holds no UPDATE privilege on the four protected columns, so any update necessarily arrives through a postgres-owned SECURITY DEFINER path. The trigger stays the invariant enforcer (owner + status + evidence + always re-derive address + never clear) and needs no GUC. Do not add a session flag; do not disable triggers.
+6. **Do not reuse `launch_notification_payload` for corrections.** Add a separate `launch_contract_correction_payload(_launch_id, _registration_event_id)` so C8.7C payload composition is byte-identically preserved.
+7. **Do not add `contract_corrected_at` / `corrected_by` columns to `launches`.** The ledger is the history; extra denormalized columns invite a second source of truth.
+8. Everything else in the proposed contract is safe and appropriately scoped.
 
-## 0b. Queue safety check — stale C8.7C recovery card
+## C. Final file allowlist
 
-Server-side state shows the C8.7C work completed and closed at `eb977cb`, with the follow-up cleanup merged as `ac31b3d`. No C8.7C recovery/build is active or pending; nothing is mid-flight. The queued UI card beginning "RECOVERY CONTINUATION ONLY…" is **stale and superseded** — it refers to a run that already completed. It was **not executed, re-run, or revived** in this turn, and it should be dismissed rather than accepted.
+CREATE
+- `src/components/cartel/OfficialContractCorrectionPanel.tsx` — correction + its two separate comms actions + optional compact history. One new file so C8.7D's panel is not touched.
+- one new migration file (written by the migration tool only).
 
-## 1. Recovered original C8.7D contract
+MODIFY
+- `src/lib/launch-control.ts` — correction/ledger types, RPC wrappers, correction-notify wrapper, copy.
+- `src/lib/telegram-group.ts` — `send_official_contract_correction_broadcast` wrapper + types.
+- `src/routes/_authenticated/launch-control.tsx` — mount panel, ledger/eligibility query reuse, cache invalidation, terminology.
+- `backend-source/edge-functions/launch-notifications/index.ts` — `OFFICIAL_CONTRACT_CORRECTED` copy branch; terminology.
+- `backend-source/edge-functions/telegram-group/index.ts` — new correction action, `announcement_kind='OFFICIAL_CONTRACT_CORRECTION'`, ledger select adds `contract_registration_event_id`.
+- `backend-source/edge-functions/telegram-webhook/index.ts` — terminology only (E4; requires its own deploy).
+- `src/integrations/supabase/types.ts` — schema-corresponding regeneration only.
 
-From this project's own history (C8.7 architecture audit, message #839, build-slice list G, and the archived plan section G):
+Not in scope: eligibility evaluator, `VerifiedDeploymentEvidencePanel`, `OfficialContractNotifyPanel`, `OfficialContractGroupBroadcastPanel`, `VerifiedContractRegistrationPanel` (except copy if terminology requires), any prior migration, `.lovable/plan.md`.
 
-> **C8.7D — group broadcast integration reusing `telegram-group`.**
+## D. Single additive migration — objects required
 
-Binding principles carried from the same authoritative prompt: reuse existing send engines rather than creating new ones; no automatic lifecycle transition, watcher notification, Telegram send, group broadcast, or public visibility in the same DB transaction as registration; owner-only and fail-closed; tenant isolation preserved at DB and server boundaries; "verified" means evidence was verified, never that the project is safe/endorsed. No broader C8.7D scope exists in history — nothing here is inferred beyond that.
+- `public.launch_contract_registration_events`: `id`, `workspace_id`, `launch_id` (FK cascade — launches are deletable only in DRAFT, so history cannot orphan), `action` CHECK in (`ACCEPTED`,`CORRECTED`), `deployment_id` FK **ON DELETE RESTRICT** (evidence referenced by a decision cannot be deleted), `contract_address`, `evidence_snapshot jsonb not null`, `correction_reason`, `superseded_event_id` self-FK RESTRICT, `actor_id`, `created_at`.
+- CHECKs: reason NULL iff `ACCEPTED` (non-empty, length-bounded for `CORRECTED`); `superseded_event_id` NULL iff `ACCEPTED`.
+- Unique partial: one `ACCEPTED` per launch; one `CORRECTED` per `superseded_event_id` (blocks branched history).
+- Index: `(launch_id, created_at desc)`; `(workspace_id)`.
+- `alter ... launch_events_event_type_check` to add `OFFICIAL_CONTRACT_CORRECTED`.
+- Partial unique index `launch_events (launch_id, (payload->>'registration_event_id')) where event_type='OFFICIAL_CONTRACT_CORRECTED'`, plus `scheduled_for` anchored to the ledger event's `created_at` (dual idempotency).
+- `telegram_group_announcements.contract_registration_event_id uuid null` FK RESTRICT + partial unique `(contract_registration_event_id, group_connection_id) where announcement_kind='OFFICIAL_CONTRACT_CORRECTION'`. Existing `OFFICIAL_CONTRACT` index untouched.
+- `public.launch_contract_correction_payload(uuid, uuid)`.
+- `public.correct_verified_launch_contract(_launch_id, _deployment_id, _expected_contract_address, _reason)` — SECURITY DEFINER, `search_path='public'`, row lock, owner check, status set, evidence assertion, typed-address match, reason normalization, same-deployment no-op returning `unchanged`, atomic update + `CORRECTED` append linked to current effective event.
+- `public.notify_launch_watchers_official_contract_correction(_launch_id, _registration_event_id)`.
+- Amend `register_verified_launch_contract` to append exactly one `ACCEPTED` event (guarded so the existing idempotent early-return path appends nothing); no other semantic change.
+- Amend `enforce_launch_contract_update` to permit deployment-only correction under the invariants in defect 5; direct clearing and free-text address remain refused; `set_launch_contract_address` stays retired.
 
-## 2. Current Telegram / group architecture
+## E. Security / grants / RLS
 
-| Layer | Authoritative object |
-|---|---|
-| Send engine | Edge function `telegram-group` (v11 live, `verify_jwt = true`), snapshot `backend-source/edge-functions/telegram-group/index.ts` |
-| Broadcast action | `action: "send_group_announcement"` — authorize → validate → resolve group in workspace → resolve idempotency → CLAIM ledger row → live-verify → send |
-| Ledger | `public.telegram_group_announcements` (29 columns) with `status` vocabulary `SENT` / `FAILED` / `AMBIGUOUS` (+ transient `SENDING`) |
-| Idempotency | unique index `telegram_group_announcements_idempotency_idx (workspace_id, client_request_id)`; a repeated id never re-sends for any prior state, and reusing an id with a different target/text/CTA is a *conflict*, not a duplicate |
-| ACL | RLS enabled, **zero policies, zero grants** — service-role only. Browsers cannot read or write it. |
-| Authorization | `workspace_members.role in ('owner','admin')` → `canManageCommunity`, checked inside the edge function against the caller's JWT |
-| Client | `src/lib/telegram-group.ts` → `sendGroupAnnouncement({ workspaceId, groupConnectionId, message, clientRequestId, branding?, ctaLaunchId? })`, plus `fetchBroadcastLaunchOptions` |
-| UI | `src/routes/_authenticated/telegram.tsx` → `BroadcastsPanel.tsx` → `GroupAnnouncementComposer.tsx` (both still authoritative) |
-| Branding | `telegram_photo_v1` caption assembled server-side from the saved Project Profile; client copy is preview-only |
-| Launch Watch CTA | server resolves the deep link; `launch_watch_token` never reaches the browser; immutable CTA snapshot columns on the ledger row |
-| C8.7B registration | `register_verified_launch_contract(_launch_id, _deployment_id, _expected_contract_address)`, owner-only, evidence-derived |
-| C8.7C watcher notify | `notify_launch_watchers_official_contract(_launch_id)`, owner-only, re-derives the address via `assert_launch_contract_evidence`, idempotent on `(launch_id, event_type, scheduled_for = contract_registered_at)` |
+- `launch_contract_registration_events`: RLS ENABLED. `GRANT SELECT TO authenticated` only, policy `USING (public.is_workspace_member(workspace_id, auth.uid()))`. No INSERT/UPDATE/DELETE grant or policy to anyone. `GRANT SELECT TO service_role` (telegram-group reads it); no anon.
+- New functions: postgres-owned SECURITY DEFINER, `revoke all ... from public, anon`, `grant execute ... to authenticated`. No service_role execute unless an edge function calls them.
+- `launch_contract_correction_payload`: revoke from public/anon; no authenticated grant (internal only).
+- Column privileges on the four protected `launches` columns remain unchanged.
 
-Confirmed: registration does **not** post to Telegram, the `OFFICIAL_CONTRACT_REGISTERED` transition does **not** post to Telegram, and C8.7C fans out DM deliveries only. No group post happens anywhere without an explicit authenticated operator call.
+## F. Build sequence and QA matrix
 
-## 3. What can be reused as-is
+- **E1** migration (schema + ledger + functions + trigger amendment) → linter clean, generated-types diff inspected for schema-only drift.
+- **E2** client contracts (`launch-control.ts`, `telegram-group.ts`).
+- **E3** UI panel + route mount.
+- **E4** edge functions (notification copy, correction broadcast, terminology) — requires explicit deploy authorization.
+- **E5** verification: `bunx tsgo --noEmit`, `bun run build`, read-only DB inspection of grants/policies/indexes/proconfig.
 
-1. `telegram-group` edge function and its whole claim-then-send ordering. No second send engine is needed.
-2. `telegram_group_announcements` as the durable ledger, including its `SENT/FAILED/AMBIGUOUS` vocabulary and the never-auto-resend rule.
-3. `(workspace_id, client_request_id)` unique index for double-click / retry idempotency.
-4. Group resolution + live bot verification + `reconnectRequired` handling.
-5. `telegram_photo_v1` branding and the existing Launch Watch CTA keyboard resolution.
-6. `assert_launch_contract_evidence` for server-side re-derivation of the authoritative address from bound evidence.
-7. `is_workspace_owner` for the owner-only C8.7 boundary.
-8. `sendGroupAnnouncement` client shape and `GroupAnnouncementComposer` UX patterns.
+QA (no sends; SQL-level with rollback):
+1. Initial registration appends exactly one `ACCEPTED`; repeat registration appends none.
+2. Correction to a different eligible deployment appends one `CORRECTED` linked to the prior effective event; `contract_registered_at`/`_by` unchanged.
+3. Correction to the same deployment = no-op, no second ledger row.
+4. Two sequential corrections form a linear chain; a second `CORRECTED` against an already-superseded event is refused.
+5. Non-owner member and cross-workspace actor refused `42501`.
+6. Wrong typed address, empty reason, ineligible/foreign deployment refused `22023`.
+7. Direct `UPDATE launches SET official_contract_address=...` as authenticated still refused.
+8. Correction does not change status and creates no `launch_events` row and no announcement row.
+9. Correction notify: stale/superseded `registration_event_id` refused; valid event queues exactly one `OFFICIAL_CONTRACT_CORRECTED`; repeat returns `already_notified`.
+10. Correction broadcast: one correction event postable once per community; C8.7D `OFFICIAL_CONTRACT` uniqueness and no-auto-resend semantics unchanged.
+11. Authenticated SELECT on the ledger returns only same-workspace rows; INSERT/UPDATE/DELETE denied.
 
-## 4. What is genuinely missing
+## H. Confirmation
 
-1. **No contract-aware broadcast path.** `send_group_announcement` takes free client text. Nothing derives the message body from the registered, evidence-bound contract, so today an operator could type any string and label it official.
-2. **No registration precondition on the send.** The broadcast action never checks launch status, `official_contract_deployment_id`, `contract_registered_at/by`, or address/evidence agreement.
-3. **No launch binding on the ledger row.** `telegram_group_announcements` has `cta_launch_id text` (a CTA pointer only) but no `announcement_kind` and no bound `launch_id` for the contract packet, so "has this launch's official contract already been broadcast to this group?" is not answerable and cannot be deduped server-side beyond the per-request-id key.
-4. **No owner-only tightening for this specific action.** Group broadcasts are owner *or admin*; C8.7B/C are owner-only. The contract broadcast must match C8.7's stronger boundary.
-5. **No Launch Control surface.** The registered-contract broadcast belongs next to the C8.7C notify panel; Community Command's composer is a generic free-text tool.
-
-## 5. Smallest safe implementation delta
-
-**One new action on the existing edge function, one narrow ledger extension, one panel.**
-
-1. **Migration (single, additive):** add `announcement_kind text not null default 'OPERATOR_TEXT'` and `launch_id uuid null references public.launches(id)` to `telegram_group_announcements`; add a partial unique index `(launch_id, group_connection_id) where announcement_kind = 'OFFICIAL_CONTRACT'` so one launch can be broadcast to one group exactly once. No RLS/grant change — the table stays service-role only.
-2. **Edge function `telegram-group`:** new `action: "send_official_contract_broadcast"` taking `{ workspaceId, groupConnectionId, launchId, clientRequestId }` and **no message text**. It calls a new owner-only SECURITY DEFINER read RPC (or reuses `assert_launch_contract_evidence` via service role plus an explicit `is_workspace_owner` check) to fail closed on: non-owner, wrong workspace, status not `OFFICIAL_CONTRACT_REGISTERED`, any NULL among address / `official_contract_deployment_id` / `contract_registered_at` / `contract_registered_by`, address ≠ evidence-derived address, unpublished project profile. It then assembles the packet text server-side from the derived values and reuses the existing claim → verify → send → ledger-update path.
-3. **Client `src/lib/telegram-group.ts`:** one thin `sendOfficialContractBroadcast(...)` wrapper mirroring `sendGroupAnnouncement`.
-4. **UI:** new `src/components/cartel/OfficialContractGroupBroadcastPanel.tsx` mounted in `src/routes/_authenticated/launch-control.tsx` beside `OfficialContractNotifyPanel`, arm-then-confirm, owner-only presentation hint, non-endorsement copy, server-derived preview only.
-
-Terminology: "Official contract registered by the authenticated project, derived from its verified deployment record." Never safe / audited / guaranteed / brokerage- or Robinhood-listed.
-
-## 6. Strict allowlist for the C8.7D build slice
-
-**Create:** `src/components/cartel/OfficialContractGroupBroadcastPanel.tsx`; exactly one migration.
-**Modify:** `backend-source/edge-functions/telegram-group/index.ts` (+ deploy that one function, `verify_jwt = true` preserved), `src/lib/telegram-group.ts`, `src/routes/_authenticated/launch-control.tsx` (mount + handler only).
-**Prohibited:** any other edge function; `telegram-webhook`; `launch-notifications`; `notify_launch_watchers_official_contract`; `register_verified_launch_contract`; `set_launch_contract_address`; `transition_launch_status`; any lifecycle trigger; `launch_events` / `launch_notification_deliveries` / `launch_watch_subscriptions`; `BroadcastsPanel.tsx`; `GroupAnnouncementComposer.tsx`; chain / deployment / wallet / custody / artifact / liquidity files; mainnet 4663; RLS or grant changes on `telegram_group_announcements`; packages; secrets; publish.
-
-## 7. Authorization, isolation, evidence, idempotency, race findings
-
-- **Authorization gap:** existing broadcast = owner **or** admin. C8.7D must be owner-only to match C8.7B/C. Decision required, but owner-only is the fail-closed default.
-- **Tenant isolation:** already enforced twice — `workspace_members` lookup in the edge function and group-in-workspace resolution. The new action must additionally assert `launches.workspace_id = workspaceId`.
-- **Evidence binding:** must re-derive via `assert_launch_contract_evidence` and compare case-insensitively to `official_contract_address`, exactly as C8.7C does. Client text must never be trusted for the address.
-- **Idempotency:** `(workspace_id, client_request_id)` covers double-click. The proposed partial unique index adds semantic dedupe (one contract broadcast per launch per group) that the current schema cannot express.
-- **Race:** the ledger row is claimed as `SENDING` before any Telegram call, so an interrupted run surfaces as `AMBIGUOUS`, never as silent success. The new action should take `select … for update` on the launch row, mirroring C8.7C.
-- **Stale registration:** if the address later diverges from its bound evidence the send must be refused, not warned about.
-
-## 8. Rollback-safe / no-send verification matrix
-
-All negative cases fail before any Telegram call, so none of them sends a message; the positive path is proven with a transaction-rolled-back ledger claim and a stubbed transport.
-
-| # | Case | Expected |
-|---|---|---|
-| 1 | Non-member caller | 403, no ledger row |
-| 2 | Workspace admin (non-owner) | 403 (owner-only), no ledger row |
-| 3 | Launch from another workspace | 403/404, no ledger row |
-| 4 | Status `WATCHLIST_OPEN` (PEPECARTEL today) | refused, no send |
-| 5 | Address present, `official_contract_deployment_id` NULL | refused (partial registration) |
-| 6 | Address ≠ evidence-derived address | refused (stale registration) |
-| 7 | Unpublished project profile | refused |
-| 8 | Group not connected / bot removed | refused, `reconnectRequired` |
-| 9 | Same `clientRequestId` twice | `duplicate: true`, exactly one ledger row, one send |
-| 10 | Fresh id, same launch + group already broadcast | refused by partial unique index, no second send |
-| 11 | Transport failure | `FAILED` recorded, never auto-resent |
-| 12 | Transport uncertainty | `AMBIGUOUS`, never auto-resent |
-| 13 | Copy scan | no "safe", "audited", "guaranteed", "listed" |
-| 14 | Live invariants after suite | deployments 5, events 3, deliveries 4, announcements 7, PEPECARTEL unchanged |
-
-Plus `eslint`, `bunx tsgo --noEmit`, `bun run build`, and re-read of the deployed `telegram-group` version/hash/`verify_jwt` per the snapshot workflow.
-
-## 9. GO / NO-GO decisions
-
-Blockers: none technical. Three decisions are required before build:
-1. **Owner-only vs owner+admin** for the contract broadcast. Recommendation: owner-only.
-2. **Authorize the additive migration** on `telegram_group_announcements` (two columns + one partial unique index). Without it, semantic dedupe and audit binding are impossible; refusing it means accepting request-id-only idempotency.
-3. **Authorize modifying and redeploying the live `telegram-group` edge function** (v11 → v12, `verify_jwt = true` preserved, snapshot + inventory updated in the same session).
-
-Also note: PEPECARTEL currently has no registered contract, so C8.7D cannot be end-to-end proven against real production data — verification will be rollback-safe and no-send by construction.
-
-## 10. Verdict
-
-**C8.7D READY TO BUILD** — pending the three authorizations in section 9.
-
-No application code, schema, data, migration, secret, Telegram message, or publish state was changed in this turn.
+No files were created or modified, no SQL executed, no migration created, no edge function deployed, no Telegram message sent, no publish. `.lovable/plan.md` is the only write this turn, as required by plan mode.
