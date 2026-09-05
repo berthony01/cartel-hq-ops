@@ -1955,7 +1955,6 @@ function LaunchControlPage() {
 
                 <Section
                   variant="surface"
-
                   title="Launch preview"
                   description="How this launch appears to operators, plus its public Cartel Network page once it is out of Draft."
                 >
