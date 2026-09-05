@@ -85,7 +85,8 @@ export function OfficialContractGroupBroadcastPanel({
     body = (
       <Note>
         Posting to a community becomes available once this launch reaches Official Contract
-        Registered. It is {launchStatus}. Moving the launch into that stage posts nothing on its own.
+        Registered. It is {launchStatus}. Moving the launch into that stage posts nothing on its
+        own.
       </Note>
     );
   } else if (!isWorkspaceOwner) {
