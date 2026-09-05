@@ -636,6 +636,30 @@ export function evaluateLaunchDeploymentEvidence(
   else if (ambiguous) summaryState = "MULTIPLE_VERIFIED_DEPLOYMENTS";
   else summaryState = "VERIFIED_TEST_DEPLOYMENTS";
 
+  // Ambiguity never resolves itself: more than one eligible candidate blocks
+  // every candidate rather than selecting one.
+  const eligible = evaluated.filter((d) => d.officialRegistrationEligible);
+  if (eligible.length > 1) {
+    for (const d of eligible) {
+      d.officialRegistrationEligible = false;
+      d.ambiguous = true;
+      d.registrationBlockReasons.push(
+        "More than one deployment qualifies. No candidate is selected automatically.",
+      );
+      d.registrationChecks.push(
+        check(
+          "single_candidate",
+          "Exactly one qualifying deployment",
+          "BLOCKED",
+          `${eligible.length} deployments qualify for this launch. Resolve the ambiguity before registering.`,
+        ),
+      );
+    }
+  }
+  const registrationCandidate =
+    eligible.length === 1 ? (eligible[0] as DeploymentEvidenceResult) : null;
+  const eligibleForOfficialRegistration = registrationCandidate ? 1 : 0;
+
   const summaryLabel =
     summaryState === "NO_DEPLOYMENTS"
       ? "No recorded deployments for this launch"
@@ -654,7 +678,9 @@ export function evaluateLaunchDeploymentEvidence(
     totalDeployments: evaluated.length,
     verifiedCount: verified.length,
     testnetVerifiedCount,
-    eligibleForOfficialRegistration: 0,
+    eligibleForOfficialRegistration,
+    registrationCandidate,
+    alreadyRegistered: !isBlank(context.officialContractAddress),
     ambiguous,
     summaryState,
     summaryLabel,
