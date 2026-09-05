@@ -62,6 +62,9 @@ import {
   nullableText,
   scheduleLocked,
   registerVerifiedLaunchContract,
+  correctVerifiedLaunchContract,
+  listLaunchContractRegistrationEvents,
+  launchContractRegistrationEventsQueryKey,
   slugifyLaunch,
   toLaunchStatus,
   transitionLaunchStatus,
@@ -69,7 +72,9 @@ import {
   type LaunchRow,
   type LaunchStatus,
   type OfficialContractNotifyResult,
+  type OfficialContractCorrectionResult,
 } from "@/lib/launch-control";
+
 
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
