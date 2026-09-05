@@ -260,8 +260,14 @@ export function OfficialContractCorrectionPanel({
   // one stops being communicable immediately. The server revalidates all of
   // this independently; everything below is presentation only.
   const latestEvent = events.length > 0 ? events[events.length - 1]! : null;
+  const latestSupersededEvent =
+    latestEvent?.superseded_event_id
+      ? (events.find((e) => e.id === latestEvent.superseded_event_id) ?? null)
+      : null;
+
   const currentCorrection =
     registrationComplete &&
+    atCorrectableStage &&
     !eventsLoading &&
     !eventsError &&
     latestEvent != null &&
@@ -272,12 +278,15 @@ export function OfficialContractCorrectionPanel({
     (latestEvent.contract_address ?? "").trim().toLowerCase() ===
       officialContractAddress.trim().toLowerCase() &&
     (latestEvent.superseded_event_id ?? "").trim() !== "" &&
-    (latestEvent.correction_reason ?? "").trim() !== ""
+    (latestEvent.correction_reason ?? "").trim() !== "" &&
+    latestSupersededEvent != null &&
+    latestSupersededEvent.contract_address != null &&
+    latestSupersededEvent.contract_address.trim() !== "" &&
+    latestSupersededEvent.contract_address.trim().toLowerCase() !==
+      (latestEvent.contract_address ?? "").trim().toLowerCase()
       ? latestEvent
       : null;
-  const supersededEvent = currentCorrection
-    ? (events.find((e) => e.id === currentCorrection.superseded_event_id) ?? null)
-    : null;
+  const supersededEvent = currentCorrection ? latestSupersededEvent : null;
 
   // Armed confirmations and the selected community are keyed to the current
   // correction, so they re-arm automatically whenever the launch changes or a
@@ -296,6 +305,9 @@ export function OfficialContractCorrectionPanel({
       : { key: commKey, notifyArmed: false, groupId: null, groupArmed: false };
   const patchComm = (next: Partial<typeof commState>) =>
     setComm({ ...commState, ...next, key: commKey });
+
+  const readyGroups = (groups ?? []).filter((g) => g.ready);
+  const selectedReadyGroup = readyGroups.find((g) => g.id === commState.groupId) ?? null;
 
 
 
@@ -634,17 +646,24 @@ export function OfficialContractCorrectionPanel({
                   <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     Notify Launch Watch subscribers
                   </p>
-                  <Note>
-                    This correction notice reaches active watchers even if they muted countdowns or
-                    ordinary project updates. People who stopped watching are excluded by the
-                    server.
-                  </Note>
-                  {commState.notifyArmed ? (
+                  {!onNotifyCorrection ? (
+                    <Note>Subscriber correction notification is not available in this context.</Note>
+                  ) : (
+                    <Note>
+                      This correction notice reaches active watchers even if they muted countdowns
+                      or ordinary project updates. People who stopped watching are excluded by the
+                      server.
+                    </Note>
+                  )}
+                  {onNotifyCorrection && commState.notifyArmed ? (
                     <div className="flex flex-wrap gap-2">
                       <Button
                         className="min-h-11"
                         disabled={disabled || correctionNotifyPending}
-                        onClick={() => onNotifyCorrection?.(currentCorrection.id)}
+                        onClick={() => {
+                          if (!onNotifyCorrection) return;
+                          onNotifyCorrection(currentCorrection.id);
+                        }}
                       >
                         {correctionNotifyPending ? (
                           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -662,7 +681,7 @@ export function OfficialContractCorrectionPanel({
                         Cancel
                       </Button>
                     </div>
-                  ) : (
+                  ) : onNotifyCorrection ? (
                     <Button
                       variant="outline"
                       className="min-h-11"
@@ -672,7 +691,7 @@ export function OfficialContractCorrectionPanel({
                       <Send className="size-4" aria-hidden="true" />
                       Notify subscribers about this correction
                     </Button>
-                  )}
+                  ) : null}
                   {correctionNotifyResult ? (
                     <div
                       role="status"
@@ -712,21 +731,26 @@ export function OfficialContractCorrectionPanel({
                 {/* B — one connected Telegram community */}
                 <div className="space-y-2 border-t border-border pt-3">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    Post this correction to one community
+                    Post this correction to one ready community
                   </p>
-                  {groupsLoading ? (
+                  {!onBroadcastCorrection ? (
+                    <Note>Community correction broadcast is not available in this context.</Note>
+                  ) : groupsLoading ? (
                     <Note>Loading connected communities…</Note>
-                  ) : (groups ?? []).length === 0 ? (
-                    <Note>No connected Telegram community is available for this project.</Note>
+                  ) : readyGroups.length === 0 ? (
+                    <Note>
+                      No connected Telegram community is ready to receive a correction post. The
+                      bot must be an administrator.
+                    </Note>
                   ) : (
                     <ul className="space-y-2">
-                      {(groups ?? []).map((group) => {
-                        const active = group.id === commState.groupId;
+                      {readyGroups.map((group) => {
+                        const active = group.id === selectedReadyGroup?.id;
                         return (
                           <li key={group.id}>
                             <button
                               type="button"
-                              disabled={disabled || !group.ready || correctionBroadcastPending}
+                              disabled={disabled || correctionBroadcastPending}
                               aria-pressed={active}
                               onClick={() => patchComm({ groupId: group.id, groupArmed: false })}
                               className={`min-h-11 w-full rounded-md border px-3 py-2 text-left disabled:opacity-60 ${
@@ -738,26 +762,22 @@ export function OfficialContractCorrectionPanel({
                               <span className="block truncate text-xs text-foreground">
                                 {group.title}
                               </span>
-                              {!group.ready ? (
-                                <span className="mt-1 block text-[11px] text-muted-foreground">
-                                  The bot is not an administrator in this community yet.
-                                </span>
-                              ) : null}
                             </button>
                           </li>
                         );
                       })}
                     </ul>
                   )}
-                  {commState.groupId ? (
+                  {selectedReadyGroup ? (
                     commState.groupArmed ? (
                       <div className="flex flex-wrap gap-2">
                         <Button
                           className="min-h-11"
                           disabled={disabled || correctionBroadcastPending}
-                          onClick={() =>
-                            onBroadcastCorrection?.(commState.groupId!, currentCorrection.id)
-                          }
+                          onClick={() => {
+                            if (!onBroadcastCorrection || !selectedReadyGroup) return;
+                            onBroadcastCorrection(selectedReadyGroup.id, currentCorrection.id);
+                          }}
                         >
                           {correctionBroadcastPending ? (
                             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -787,7 +807,7 @@ export function OfficialContractCorrectionPanel({
                       </Button>
                     )
                   ) : (
-                    <Note>Select one community to continue.</Note>
+                    <Note>Select one ready community to continue.</Note>
                   )}
                   {correctionBroadcastResult ? (
                     <div
