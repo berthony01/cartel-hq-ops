@@ -661,6 +661,7 @@ function LaunchControlPage() {
       deploymentEvidenceQuery.data ?? [],
     );
   }, [selected, deploymentEvidenceQuery.data]);
+  const registrationCandidate = deploymentEvidence?.registrationCandidate ?? null;
 
   // ---- countdown + reminder readiness (saved launch fields only) -----------
   const nowMs = useClientNow(30_000);
@@ -749,7 +750,6 @@ function LaunchControlPage() {
         Save launch details
       </Button>
     ) : null;
-
 
   return (
     <div className="space-y-6 pb-24 sm:space-y-8 lg:pb-0">
