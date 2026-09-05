@@ -104,8 +104,8 @@ function HistoryList({
   error,
 }: {
   events: LaunchContractRegistrationEvent[];
-  loading?: boolean;
-  error?: string | null;
+  loading: boolean | undefined;
+  error: string | null;
 }) {
   if (error) {
     return (
