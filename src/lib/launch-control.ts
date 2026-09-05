@@ -266,13 +266,24 @@ export async function transitionLaunchStatus(
   return data as unknown as LaunchRow;
 }
 
-export async function setLaunchContractAddress(
+/**
+ * C8.7B — evidence-bound official contract registration.
+ *
+ * The address is NOT supplied by the caller: the database derives it from the
+ * selected verified deployment evidence row. `expectedContractAddress` is a
+ * typed human confirmation and must match, or the call is refused. The RPC is
+ * owner-only, refuses outside Contract Pending, is immutable once registered,
+ * changes no lifecycle status and sends no notification.
+ */
+export async function registerVerifiedLaunchContract(
   launchId: string,
-  contractAddress: string,
+  deploymentId: string,
+  expectedContractAddress: string,
 ): Promise<LaunchRow> {
-  const { data, error } = await supabase.rpc("set_launch_contract_address", {
+  const { data, error } = await supabase.rpc("register_verified_launch_contract", {
     _launch_id: launchId,
-    _contract_address: contractAddress.trim(),
+    _deployment_id: deploymentId,
+    _expected_contract_address: expectedContractAddress.trim(),
   });
   if (error) rethrow(error);
   return data as unknown as LaunchRow;
