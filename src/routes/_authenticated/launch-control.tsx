@@ -726,6 +726,14 @@ function LaunchControlPage() {
       ? correctionOutcome
       : null;
 
+  // Identity of the newest immutable registration event for the selected
+  // launch. Communication outcomes are matched against it so a durable result
+  // is never displayed against a later, superseding correction.
+  const latestRegistrationEventId =
+    (registrationEventsQuery.data ?? []).at(-1)?.id ?? null;
+
+
+
   // C8.7E E4B — two independent, explicit post-correction communications.
   // Neither is ever called from `correctContractMutation.onSuccess`: recording
   // a correction still sends nothing. Both are keyed to launch + registration
