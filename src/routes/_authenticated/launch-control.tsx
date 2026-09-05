@@ -661,7 +661,6 @@ function LaunchControlPage() {
   const nowMs = useClientNow(30_000);
   const anchorIso = selected?.launch_at ?? selected?.launch_window_start ?? null;
   const anchorIsWindowStart = !selected?.launch_at && !!selected?.launch_window_start;
-
   const anchorMs = anchorIso ? new Date(anchorIso).getTime() : null;
   const anchorValid = anchorMs !== null && !Number.isNaN(anchorMs);
   const countdownLabel = anchorIsWindowStart ? "Window opens in" : "Launch in";
