@@ -80,6 +80,12 @@ import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
 import { VerifiedDeploymentEvidencePanel } from "@/components/cartel/VerifiedDeploymentEvidencePanel";
 import { VerifiedContractRegistrationPanel } from "@/components/cartel/VerifiedContractRegistrationPanel";
 import { OfficialContractNotifyPanel } from "@/components/cartel/OfficialContractNotifyPanel";
+import { OfficialContractGroupBroadcastPanel } from "@/components/cartel/OfficialContractGroupBroadcastPanel";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  sendOfficialContractBroadcast,
+  type OfficialContractBroadcastResult,
+} from "@/lib/telegram-group";
 import { evaluateLaunchDeploymentEvidence } from "@/lib/launch-verified-eligibility";
 import { chainDeploymentsQueryKey, listChainDeployments } from "@/lib/chain-launcher";
 
@@ -594,6 +600,64 @@ function LaunchControlPage() {
   });
   const notifyOutcomeForSelected =
     notifyOutcome && selected && notifyOutcome.launchId === selected.id ? notifyOutcome : null;
+
+  // C8.7D — explicit official-contract community broadcast. Read-only group
+  // list (the webhook owns these rows); the server derives the posted packet and
+  // the contract address, enforces owner-only authority and keeps the durable
+  // broadcast ledger idempotent.
+  const broadcastGroupsQuery = useQuery({
+    queryKey: ["telegram-group-connections", workspaceId],
+    enabled: !!workspaceId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("telegram_group_connections")
+        .select("id,title,bot_is_admin")
+        .eq("workspace_id", workspaceId!)
+        .order("connected_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []).map((row) => ({
+        id: row.id as string,
+        title: String(row.title ?? "Telegram community"),
+        ready: row.bot_is_admin === true,
+      }));
+    },
+  });
+
+  const [broadcastOutcome, setBroadcastOutcome] = useState<{
+    launchId: string;
+    result: OfficialContractBroadcastResult | null;
+    error: string | null;
+  } | null>(null);
+  const broadcastContractMutation = useMutation({
+    mutationFn: async (groupConnectionId: string) => {
+      if (!selected || !workspaceId) throw new Error("No launch selected.");
+      return sendOfficialContractBroadcast({
+        workspaceId,
+        groupConnectionId,
+        launchId: selected.id,
+        clientRequestId: crypto.randomUUID(),
+      });
+    },
+    onSuccess: (result) => {
+      setBroadcastOutcome({ launchId: selected?.id ?? "", result, error: null });
+      if (result.status === "SENT" && !result.duplicate) {
+        toast.success("Official contract posted to the community");
+      } else if (result.status === "SENT") {
+        toast.success("Already posted — nothing was posted again");
+      } else {
+        toast.warning(result.message ?? "The community post outcome could not be confirmed.");
+      }
+    },
+    onError: (err: unknown) => {
+      const message = err instanceof Error ? err.message : "Could not post the official contract.";
+      setBroadcastOutcome({ launchId: selected?.id ?? "", result: null, error: message });
+      toast.error(message);
+    },
+  });
+  const broadcastOutcomeForSelected =
+    broadcastOutcome && selected && broadcastOutcome.launchId === selected.id
+      ? broadcastOutcome
+      : null;
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const deleteMutation = useMutation({
@@ -1953,6 +2017,23 @@ function LaunchControlPage() {
                   result={notifyOutcomeForSelected?.result ?? null}
                   error={notifyOutcomeForSelected?.error ?? null}
                   onNotify={() => notifyContractMutation.mutate()}
+                />
+
+                <OfficialContractGroupBroadcastPanel
+                  launchStatus={status}
+                  registrationComplete={contractRegistered}
+                  officialContractAddress={selected.official_contract_address}
+                  chain={selected.chain}
+                  isWorkspaceOwner={isWorkspaceOwner}
+                  groups={broadcastGroupsQuery.data ?? []}
+                  groupsLoading={broadcastGroupsQuery.isLoading}
+                  disabled={readOnly}
+                  pending={broadcastContractMutation.isPending}
+                  result={broadcastOutcomeForSelected?.result ?? null}
+                  error={broadcastOutcomeForSelected?.error ?? null}
+                  onBroadcast={(groupConnectionId) =>
+                    broadcastContractMutation.mutate(groupConnectionId)
+                  }
                 />
 
 
