@@ -86,6 +86,8 @@ import { VerifiedDeploymentEvidencePanel } from "@/components/cartel/VerifiedDep
 import { VerifiedContractRegistrationPanel } from "@/components/cartel/VerifiedContractRegistrationPanel";
 import { OfficialContractNotifyPanel } from "@/components/cartel/OfficialContractNotifyPanel";
 import { OfficialContractGroupBroadcastPanel } from "@/components/cartel/OfficialContractGroupBroadcastPanel";
+import { OfficialContractCorrectionPanel } from "@/components/cartel/OfficialContractCorrectionPanel";
+
 import { supabase } from "@/integrations/supabase/client";
 import {
   sendOfficialContractBroadcast,
