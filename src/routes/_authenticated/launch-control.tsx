@@ -666,6 +666,64 @@ function LaunchControlPage() {
       ? broadcastOutcome
       : null;
 
+  // C8.7E E3 — append-only registration ledger (read-only; RLS authoritative)
+  // and the owner-only, evidence-bound correction RPC. A correction sends
+  // nothing: watcher and community communications remain separate actions.
+  const registrationEventsQuery = useQuery({
+    queryKey: launchContractRegistrationEventsQueryKey(selected?.id ?? null),
+    enabled: !!selected?.id,
+    queryFn: () => listLaunchContractRegistrationEvents(selected!.id),
+  });
+
+  const [correctionOutcome, setCorrectionOutcome] = useState<{
+    launchId: string;
+    result: OfficialContractCorrectionResult | null;
+    error: string | null;
+  } | null>(null);
+  const correctContractMutation = useMutation({
+    mutationFn: async (input: {
+      deploymentId: string;
+      expectedAddress: string;
+      reason: string;
+    }) => {
+      if (!selected) throw new Error("No launch selected.");
+      return correctVerifiedLaunchContract({
+        launchId: selected.id,
+        deploymentId: input.deploymentId,
+        expectedContractAddress: input.expectedAddress,
+        reason: input.reason,
+      });
+    },
+    onSuccess: (result) => {
+      const launchId = selected?.id ?? "";
+      setCorrectionOutcome({ launchId, result, error: null });
+      if (result.status === "corrected") {
+        toast.success("Official contract correction recorded");
+        void queryClient.invalidateQueries({ queryKey: ["launches", workspaceId] });
+        void queryClient.invalidateQueries({
+          queryKey: launchContractRegistrationEventsQueryKey(launchId),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: chainDeploymentsQueryKey(launchId),
+        });
+      } else {
+        toast.info("This launch is already bound to that deployment — nothing was recorded");
+      }
+    },
+    onError: (err: unknown) => {
+      const message =
+        err instanceof Error ? err.message : "Could not correct the official contract.";
+      setCorrectionOutcome({ launchId: selected?.id ?? "", result: null, error: message });
+      toast.error(message);
+    },
+  });
+  const correctionOutcomeForSelected =
+    correctionOutcome && selected && correctionOutcome.launchId === selected.id
+      ? correctionOutcome
+      : null;
+
+
+
   const [confirmDelete, setConfirmDelete] = useState(false);
   const deleteMutation = useMutation({
     mutationFn: async () => {
