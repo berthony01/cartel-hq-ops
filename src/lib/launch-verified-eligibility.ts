@@ -594,7 +594,7 @@ function evaluateDeployment(
     evidenceVerified,
     evidenceClass: evidenceVerified ? "VERIFIED_DEPLOYMENT" : "INELIGIBLE",
     evidenceChecks,
-    officialRegistrationEligible: false,
+    officialRegistrationEligible,
     registrationChecks,
     registrationBlockReasons,
     ambiguous: false,
