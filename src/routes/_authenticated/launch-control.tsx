@@ -74,6 +74,7 @@ import {
   type LaunchStatus,
   type OfficialContractNotifyResult,
   type OfficialContractCorrectionResult,
+  type OfficialContractCorrectionNotifyResult,
 } from "@/lib/launch-control";
 
 
