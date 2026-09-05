@@ -1995,7 +1995,7 @@ Deno.serve(async (req: Request) => {
       text.length >= 1 && text.length <= 4096;
 
     if (bareDmCapturable) {
-      const { error: memberCaptureError } = await admin.rpc(
+      const { data: memberCaptureData, error: memberCaptureError } = await admin.rpc(
         "capture_project_inbox_member_message",
         {
           _telegram_update_id: inboundUpdateId,
@@ -2006,8 +2006,12 @@ Deno.serve(async (req: Request) => {
         },
       );
       if (memberCaptureError) throw memberCaptureError;
+      if (String(memberCaptureData ?? "") === "captured") {
+        await notifyTeamOfCapture(inboundUpdateId);
+      }
       return json({ ok: true });
     }
+
 
 
 
