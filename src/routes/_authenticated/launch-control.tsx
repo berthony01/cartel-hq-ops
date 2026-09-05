@@ -2101,9 +2101,27 @@ function LaunchControlPage() {
                   }
                 />
 
-
-
-
+                <OfficialContractCorrectionPanel
+                  launchId={selected.id}
+                  launchStatus={status}
+                  registrationComplete={contractRegistered}
+                  officialContractAddress={selected.official_contract_address}
+                  officialContractDeploymentId={selected.official_contract_deployment_id}
+                  isWorkspaceOwner={isWorkspaceOwner}
+                  evaluation={deploymentEvidence}
+                  events={registrationEventsQuery.data ?? []}
+                  eventsLoading={registrationEventsQuery.isLoading}
+                  eventsError={
+                    registrationEventsQuery.isError
+                      ? "Could not load the registration history for this launch."
+                      : null
+                  }
+                  disabled={readOnly}
+                  pending={correctContractMutation.isPending}
+                  result={correctionOutcomeForSelected?.result ?? null}
+                  error={correctionOutcomeForSelected?.error ?? null}
+                  onCorrect={(input) => correctContractMutation.mutate(input)}
+                />
 
 
                 <VerifiedDeploymentEvidencePanel
