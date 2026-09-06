@@ -618,4 +618,6 @@ All executed inside a single transaction deliberately rolled back; zero rows per
 18. With runtime execution disabled, emergency stop engaged and zero eligible production deployments, the issuance RPC independently refuses today even if every compile-time switch were flipped.
 19. No wallet, signer, browser provider, broadcast, testnet path, secret change, Edge Function, Telegram, liquidity, lifecycle or UI surface was touched; no real transaction, signature or ETH movement occurred; project remains PRIVATE / UNPUBLISHED.
 20. Known deferred item: the security linter reports pre-existing categories (RLS-enabled-with-no-policy, SECURITY DEFINER reachable-by-role checks); the new table's policy-free state is intentional and remediation was not attempted because a second migration is outside this contract.
-21. Next allowed step: READ-ONLY audit of bounded runtime re-arm / zero-money rehearsal architecture only.
+21. Known unexecuted QA: rollback-only fixture integration QA of the candidate verifier was NOT executed, because no safe fixture transaction could be established under the zero-production baseline (0 production deployments, 0 presign authorizations). No claim of passing integration QA is made for that path; only type-check, build and static/read-only inspection were performed.
+22. Next allowed step: READ-ONLY audit of bounded runtime re-arm / zero-money rehearsal architecture only.
+
