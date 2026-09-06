@@ -454,12 +454,16 @@ export const claimMainnetDeploymentHandoff = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<MainnetHandoffClaimResult> => {
     const { deploymentId, authorizationId } = data;
 
-    // ---- GATE 1 (authoritative): no envelope may exist while sends are off. --
-    // Placed before the RLS read, before the CLAIM RPC, and before any payload
-    // reconstruction, so nothing claimable ever leaves this function.
+    // ---- GATE 1 (authoritative): nothing may proceed while sends are off. ----
+    // Placed before the RLS read, before the CLAIM RPC, before any service-role
+    // import and before any runtime-control DB call.
     if (PRODUCTION_SEND_ENABLED !== true) {
       return claimFail(deploymentId, "PRODUCTION_TX_DISABLED");
     }
+
+    // ---- GATE 2: server-authoritative runtime control. Fails closed. ----
+    const runtimeGate = await readRuntimeExecutionGate();
+    if (runtimeGate !== null) return claimFail(deploymentId, runtimeGate);
 
     // ---- Tenancy: RLS through the caller's own client is the first gate. ----
     const { data: rawDeployment, error: deploymentError } = await context.supabase
