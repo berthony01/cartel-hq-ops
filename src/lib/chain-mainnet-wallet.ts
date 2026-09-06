@@ -48,6 +48,8 @@ export type MainnetWalletNotice =
   | "ACCOUNT_MISMATCH"
   | "CHAIN_MISMATCH"
   | "INVALID_ENVELOPE"
+  | "INVALID_SEND_WINDOW"
+  | "SEND_WINDOW_EXPIRED"
   | "AMBIGUOUS_SEND_OUTCOME"
   | "INVALID_TX_HASH";
 
@@ -294,26 +296,55 @@ function sendFail(notice: MainnetWalletNotice, phase: MainnetSendPhase): Mainnet
 }
 
 /**
- * Sends the server-issued envelope verbatim. Exactly one `eth_sendTransaction`
- * call, no retry, no field recomputation, no chain switching.
+ * Sends the FINAL server-issued envelope verbatim. Exactly one
+ * `eth_sendTransaction` call, no retry, no field recomputation, no chain
+ * switching.
+ *
+ * P3C-C3: the argument is the result of `authorizeMainnetSendWindow`, NOT the
+ * CLAIM result — CLAIM no longer produces anything sendable. The envelope and
+ * its `sendWindowExpiresAt` are server-derived and are passed through
+ * untouched.
+ *
+ * The local-clock check below is DEFENCE IN DEPTH ONLY. The authoritative
+ * freshness decision was already made on the server clock at the moment the
+ * envelope was issued; a browser clock is trivially forgeable and is never the
+ * security boundary. It only shortens the window in the common case.
  *
  * The caller is responsible for handing any returned hash to
  * `persistMainnetDeploymentTxHash`. On `AMBIGUOUS_SEND_OUTCOME` the caller must
  * freeze the attempt for reconciliation: it must not resend and must not treat
  * the failure as proof that nothing was broadcast.
  */
-export async function sendClaimedMainnetDeployment(
-  envelope: MainnetWalletEnvelope,
-): Promise<MainnetSendResult> {
+export async function sendClaimedMainnetDeployment(sendWindow: {
+  envelope: MainnetWalletEnvelope;
+  sendWindowExpiresAt: string;
+}): Promise<MainnetSendResult> {
   // Argument presence/type only — nothing that could touch a provider.
-  if (!envelope || typeof envelope !== "object") {
-    return sendFail("INVALID_ENVELOPE", "PRE_SEND");
+  if (!sendWindow || typeof sendWindow !== "object" || Array.isArray(sendWindow)) {
+    return sendFail("INVALID_SEND_WINDOW", "PRE_SEND");
   }
 
   // HARD GATE. First executable check. Before provider access, before any
   // provider request, before any validation that could probe the environment.
   if (PRODUCTION_SEND_ENABLED !== true) {
     return sendFail("PRODUCTION_TX_DISABLED", "PRE_SEND");
+  }
+
+  const envelope = sendWindow.envelope;
+  if (!envelope || typeof envelope !== "object") {
+    return sendFail("INVALID_ENVELOPE", "PRE_SEND");
+  }
+
+  // Defence in depth: a malformed or already-passed server deadline refuses.
+  const deadline =
+    typeof sendWindow.sendWindowExpiresAt === "string"
+      ? Date.parse(sendWindow.sendWindowExpiresAt)
+      : NaN;
+  if (!Number.isFinite(deadline)) {
+    return sendFail("INVALID_SEND_WINDOW", "PRE_SEND");
+  }
+  if (!(Date.now() < deadline)) {
+    return sendFail("SEND_WINDOW_EXPIRED", "PRE_SEND");
   }
 
   if (!validateMainnetEnvelope(envelope)) {

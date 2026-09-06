@@ -336,6 +336,72 @@ export type Database = {
           },
         ]
       }
+      launch_chain_production_execution_control_events: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          id: string
+          new_emergency_stop_engaged: boolean
+          new_execution_enabled: boolean
+          previous_emergency_stop_engaged: boolean | null
+          previous_execution_enabled: boolean | null
+          reason: string
+          revision: number
+        }
+        Insert: {
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          new_emergency_stop_engaged: boolean
+          new_execution_enabled: boolean
+          previous_emergency_stop_engaged?: boolean | null
+          previous_execution_enabled?: boolean | null
+          reason: string
+          revision: number
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          new_emergency_stop_engaged?: boolean
+          new_execution_enabled?: boolean
+          previous_emergency_stop_engaged?: boolean | null
+          previous_execution_enabled?: boolean | null
+          reason?: string
+          revision?: number
+        }
+        Relationships: []
+      }
+      launch_chain_production_execution_controls: {
+        Row: {
+          control_key: string
+          emergency_stop_engaged: boolean
+          execution_enabled: boolean
+          reason: string
+          revision: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          control_key: string
+          emergency_stop_engaged?: boolean
+          execution_enabled?: boolean
+          reason: string
+          revision?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          control_key?: string
+          emergency_stop_engaged?: boolean
+          execution_enabled?: boolean
+          reason?: string
+          revision?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       launch_chain_production_presign_authorizations: {
         Row: {
           chain_id: number
@@ -3910,6 +3976,18 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      engage_launch_chain_production_emergency_stop: {
+        Args: { _operator_user_id: string; _reason: string }
+        Returns: {
+          control_key: string
+          emergency_stop_engaged: boolean
+          execution_enabled: boolean
+          reason: string
+          revision: number
+          updated_at: string
+          updated_by: string
+        }[]
+      }
       enqueue_due_launch_reminder_events: {
         Args: { _now?: string }
         Returns: number
@@ -4109,6 +4187,18 @@ export type Database = {
           total_watchers: number
           updates_enabled_watchers: number
           updates_muted_watchers: number
+        }[]
+      }
+      get_launch_chain_production_execution_state: {
+        Args: never
+        Returns: {
+          control_key: string
+          emergency_stop_engaged: boolean
+          execution_enabled: boolean
+          reason: string
+          revision: number
+          updated_at: string
+          updated_by: string
         }[]
       }
       get_launch_chain_production_presign_authorization: {

@@ -61,12 +61,16 @@ import {
 
 export type HandoffNotice =
   | "PRODUCTION_TX_DISABLED"
+  | "PRODUCTION_RUNTIME_DISABLED"
+  | "PRODUCTION_RUNTIME_CONTROL_UNAVAILABLE"
   | "NOT_AUTHORIZED"
   | "UNSUPPORTED_DEPLOYMENT"
   | "PRESIGN_NOT_FOUND"
   | "PRESIGN_NOT_ISSUED"
+  | "PRESIGN_NOT_CLAIMED"
   | "PRESIGN_TOO_CLOSE_TO_EXPIRY"
   | "PRESIGN_BINDING_MISMATCH"
+  | "SEND_WINDOW_EXPIRED"
   | "INIT_CODE_HASH_MISMATCH"
   | "INTENT_FINGERPRINT_MISMATCH"
   | "INVALID_ECONOMIC_EVIDENCE"
@@ -102,6 +106,12 @@ export type MainnetLegacyEnvelope = {
 
 export type MainnetWalletEnvelope = MainnetEip1559Envelope | MainnetLegacyEnvelope;
 
+/**
+ * P3C-C3: the CLAIM result is metadata ONLY. It deliberately carries no
+ * transaction envelope — nothing sendable is emitted at CLAIM time. The
+ * envelope is issued exclusively by `authorizeMainnetSendWindow`, immediately
+ * before wallet invocation, under a fresh server-time freshness decision.
+ */
 export type MainnetHandoffClaimResult = {
   ok: boolean;
   notice: HandoffNotice | null;
@@ -109,7 +119,24 @@ export type MainnetHandoffClaimResult = {
   authorizationId: string | null;
   chainId: typeof ROBINHOOD_MAINNET_CHAIN_ID;
   expiresAt: string | null;
+  claimedAt: string | null;
   feeModel: "EIP1559" | "LEGACY" | null;
+  authorizationStatus: string | null;
+};
+
+/**
+ * The ONLY sendable artifact in the system. Issued by
+ * `authorizeMainnetSendWindow` and consumed verbatim by the wallet helper.
+ */
+export type MainnetSendWindowResult = {
+  ok: boolean;
+  notice: HandoffNotice | null;
+  deploymentId: string;
+  authorizationId: string | null;
+  chainId: typeof ROBINHOOD_MAINNET_CHAIN_ID;
+  feeModel: "EIP1559" | "LEGACY" | null;
+  /** Server-derived ISO deadline: min(expires_at, claimed_at + 10s). */
+  sendWindowExpiresAt: string | null;
   envelope: MainnetWalletEnvelope | null;
 };
 
@@ -137,11 +164,68 @@ export type MainnetHandoffPersistResult = {
 const PRODUCTION_SEND_ENABLED: boolean = Boolean(MAINNET_DEPLOYMENT_TX_ENABLED as boolean);
 
 /**
- * A claimed envelope must not be handed to a wallet with a near-dead TTL: the
- * operator still has to review and confirm in the wallet UI. Below this margin
- * we refuse to claim at all rather than burn the authorization.
+ * A CLAIM must not be burned on an authorization that cannot realistically
+ * reach the final send window. Raised from 5s to 15s in P3C-C3 so a successful
+ * CLAIM normally has room for operator review plus the final window. The A2
+ * expiry itself is never extended.
  */
-const HANDOFF_MIN_REMAINING_MS = 5_000;
+const HANDOFF_MIN_REMAINING_MS = 15_000;
+
+/**
+ * FROZEN. Maximum age of a CLAIM at final envelope issuance, measured on the
+ * SERVER clock. The effective emission deadline is
+ * `min(expires_at, claimed_at + FINAL_SEND_WINDOW_MS)`. At or after it we
+ * refuse and freeze for reconciliation — never auto-cancel, never reissue.
+ */
+const FINAL_SEND_WINDOW_MS = 10_000;
+
+/* ------------------------------------------------------------------ */
+/* P3C-C3 — server-authoritative runtime execution control             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Reads the singleton runtime control through the service-role-only RPC.
+ *
+ * Returns `null` when — and only when — production execution is runtime
+ * enabled AND no emergency stop is engaged. Every other outcome (RPC error,
+ * missing row, malformed shape, non-boolean members, any ambiguity) returns a
+ * refusal notice. There is no default-enabled path anywhere in this function,
+ * and raw DB error text is never surfaced.
+ *
+ * Callers MUST have already refused on the compile-time switch, so no
+ * service-role import happens while `MAINNET_DEPLOYMENT_TX_ENABLED` is false.
+ */
+async function readRuntimeExecutionGate(): Promise<HandoffNotice | null> {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin.rpc(
+      "get_launch_chain_production_execution_state",
+    );
+    if (error) return "PRODUCTION_RUNTIME_CONTROL_UNAVAILABLE";
+
+    const row = (Array.isArray(data) ? data[0] : data) as
+      | { execution_enabled?: unknown; emergency_stop_engaged?: unknown }
+      | null
+      | undefined;
+    if (!row || typeof row !== "object") return "PRODUCTION_RUNTIME_CONTROL_UNAVAILABLE";
+    if (Array.isArray(data) && data.length !== 1) {
+      return "PRODUCTION_RUNTIME_CONTROL_UNAVAILABLE";
+    }
+    if (
+      typeof row.execution_enabled !== "boolean" ||
+      typeof row.emergency_stop_engaged !== "boolean"
+    ) {
+      return "PRODUCTION_RUNTIME_CONTROL_UNAVAILABLE";
+    }
+
+    if (row.execution_enabled !== true || row.emergency_stop_engaged !== false) {
+      return "PRODUCTION_RUNTIME_DISABLED";
+    }
+    return null;
+  } catch {
+    return "PRODUCTION_RUNTIME_CONTROL_UNAVAILABLE";
+  }
+}
 
 /** Canonical P2 fingerprint domain and separator. Byte-identical to P3C-B. */
 const FINGERPRINT_DOMAIN = "cartel-mainnet-sim-v1";
@@ -394,8 +478,9 @@ function claimBase(deploymentId: string): MainnetHandoffClaimResult {
     authorizationId: null,
     chainId: ROBINHOOD_MAINNET_CHAIN_ID,
     expiresAt: null,
+    claimedAt: null,
     feeModel: null,
-    envelope: null,
+    authorizationStatus: null,
   };
 }
 
@@ -417,12 +502,16 @@ export const claimMainnetDeploymentHandoff = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<MainnetHandoffClaimResult> => {
     const { deploymentId, authorizationId } = data;
 
-    // ---- GATE 1 (authoritative): no envelope may exist while sends are off. --
-    // Placed before the RLS read, before the CLAIM RPC, and before any payload
-    // reconstruction, so nothing claimable ever leaves this function.
+    // ---- GATE 1 (authoritative): nothing may proceed while sends are off. ----
+    // Placed before the RLS read, before the CLAIM RPC, before any service-role
+    // import and before any runtime-control DB call.
     if (PRODUCTION_SEND_ENABLED !== true) {
       return claimFail(deploymentId, "PRODUCTION_TX_DISABLED");
     }
+
+    // ---- GATE 2: server-authoritative runtime control. Fails closed. ----
+    const runtimeGate = await readRuntimeExecutionGate();
+    if (runtimeGate !== null) return claimFail(deploymentId, runtimeGate);
 
     // ---- Tenancy: RLS through the caller's own client is the first gate. ----
     const { data: rawDeployment, error: deploymentError } = await context.supabase
@@ -515,23 +604,7 @@ export const claimMainnetDeploymentHandoff = createServerFn({ method: "POST" })
       return claimFail(deploymentId, "PRESIGN_BINDING_MISMATCH");
     }
 
-    // ---- Bounded envelope. No `to` member exists on either variant. ----
-    const common = {
-      from: derived.deployer,
-      data: derived.initCode as string,
-      value: "0x0" as const,
-      gas: gasHex,
-    };
-
-    let envelope: MainnetWalletEnvelope;
-    if (feeModel === "EIP1559") {
-      const priorityHex = decimalToHexQuantity(claimed.max_priority_fee_per_gas_wei_text);
-      if (!priorityHex) return claimFail(deploymentId, "INVALID_ECONOMIC_EVIDENCE");
-      envelope = { ...common, maxFeePerGas: maxFeeHex, maxPriorityFeePerGas: priorityHex };
-    } else {
-      envelope = { ...common, gasPrice: maxFeeHex };
-    }
-
+    // ---- Metadata only. No envelope is emitted at CLAIM time (P3C-C3). ----
     return {
       ok: true,
       notice: null,
@@ -539,8 +612,9 @@ export const claimMainnetDeploymentHandoff = createServerFn({ method: "POST" })
       authorizationId,
       chainId: ROBINHOOD_MAINNET_CHAIN_ID,
       expiresAt: claimed.expires_at,
+      claimedAt: claimed.claimed_at,
       feeModel,
-      envelope,
+      authorizationStatus: claimed.status,
     };
   });
 
@@ -698,5 +772,178 @@ export const persistMainnetDeploymentTxHash = createServerFn({ method: "POST" })
       deploymentStatus: submitted.status ?? null,
       authorizationStatus: "CONSUMED",
       recoveredExisting: lostResponsePath,
+    };
+  });
+
+/* ------------------------------------------------------------------ */
+/* C) FINAL SEND WINDOW — the only envelope issuer (P3C-C3)            */
+/* ------------------------------------------------------------------ */
+
+type SendWindowInput = { deploymentId: string; authorizationId: string };
+
+function windowBase(deploymentId: string): MainnetSendWindowResult {
+  return {
+    ok: false,
+    notice: null,
+    deploymentId,
+    authorizationId: null,
+    chainId: ROBINHOOD_MAINNET_CHAIN_ID,
+    feeModel: null,
+    sendWindowExpiresAt: null,
+    envelope: null,
+  };
+}
+
+function windowFail(deploymentId: string, notice: HandoffNotice): MainnetSendWindowResult {
+  return { ...windowBase(deploymentId), ok: false, notice };
+}
+
+/**
+ * FINAL server-authoritative pre-send authorization.
+ *
+ * This is the ONLY function in the system that emits a `MainnetWalletEnvelope`.
+ * It is intended to be called immediately before wallet invocation, so the
+ * exposure window between envelope issuance and `eth_sendTransaction` is a few
+ * seconds rather than the whole authorization TTL.
+ *
+ * Order of authority: compile-time switch, then server runtime control, then
+ * tenancy/binding/state, then SERVER-clock freshness. Browser time is never
+ * consulted and never trusted. Nothing here mutates the database: a refusal
+ * freezes the attempt for later operator reconciliation and never cancels,
+ * expires, or reissues an authorization.
+ */
+export const authorizeMainnetSendWindow = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: SendWindowInput) => {
+    if (!input || typeof input.deploymentId !== "string" || !UUID.test(input.deploymentId)) {
+      throw new Error("Invalid deployment id");
+    }
+    if (typeof input.authorizationId !== "string" || !UUID.test(input.authorizationId)) {
+      throw new Error("Invalid authorization id");
+    }
+    return { deploymentId: input.deploymentId, authorizationId: input.authorizationId };
+  })
+  .handler(async ({ data, context }): Promise<MainnetSendWindowResult> => {
+    const { deploymentId, authorizationId } = data;
+
+    // ---- GATE 1: compile-time switch, before any service-role import. ----
+    if (PRODUCTION_SEND_ENABLED !== true) {
+      return windowFail(deploymentId, "PRODUCTION_TX_DISABLED");
+    }
+
+    // ---- GATE 2: server-authoritative runtime control. Fails closed. ----
+    const runtimeGate = await readRuntimeExecutionGate();
+    if (runtimeGate !== null) return windowFail(deploymentId, runtimeGate);
+
+    // ---- Tenancy through the caller's own RLS-bound client. ----
+    const { data: rawDeployment, error: deploymentError } = await context.supabase
+      .from("launch_chain_deployments")
+      .select(DEPLOYMENT_COLUMNS)
+      .eq("id", deploymentId)
+      .maybeSingle();
+
+    if (deploymentError || !rawDeployment) return windowFail(deploymentId, "NOT_AUTHORIZED");
+    const deployment = rawDeployment as unknown as DeploymentRow;
+
+    if (deployment.status !== "DRAFT" || deployment.tx_hash !== null) {
+      return windowFail(deploymentId, "UNSUPPORTED_DEPLOYMENT");
+    }
+
+    // ---- Independent re-derivation from the live row alone. ----
+    const derived = deriveIntent(deployment);
+    if (typeof derived === "string") return windowFail(deploymentId, derived);
+
+    const { data: rawAuthorization, error: authorizationError } = await context.supabase.rpc(
+      "get_launch_chain_production_presign_authorization",
+      { _deployment_id: deploymentId },
+    );
+    if (authorizationError) return windowFail(deploymentId, "NOT_AUTHORIZED");
+
+    const authorization = firstRow(rawAuthorization);
+    if (!authorization || authorization.id !== authorizationId) {
+      return windowFail(deploymentId, "PRESIGN_NOT_FOUND");
+    }
+    if (!bindingMatches(authorization, deployment, derived, context.userId)) {
+      return windowFail(deploymentId, "PRESIGN_BINDING_MISMATCH");
+    }
+
+    // ---- Exactly one acceptable state: CLAIMED and unconsumed. ----
+    if (
+      authorization.status !== "CLAIMED" ||
+      authorization.claimed_at === null ||
+      authorization.consumed_at !== null ||
+      authorization.consumed_tx_hash !== null
+    ) {
+      return windowFail(deploymentId, "PRESIGN_NOT_CLAIMED");
+    }
+
+    // ---- SERVER-clock freshness: min(expires_at, claimed_at + 10s). ----
+    const nowMs = Date.now();
+    const expiresAtMs = Date.parse(authorization.expires_at);
+    const claimedAtMs = Date.parse(authorization.claimed_at);
+    if (!Number.isFinite(expiresAtMs) || !Number.isFinite(claimedAtMs)) {
+      return windowFail(deploymentId, "SEND_WINDOW_EXPIRED");
+    }
+    const deadlineMs = Math.min(expiresAtMs, claimedAtMs + FINAL_SEND_WINDOW_MS);
+    if (!(nowMs < expiresAtMs) || !(nowMs < deadlineMs)) {
+      // Freeze for reconciliation. No cancellation, no reissue, no mutation.
+      return windowFail(deploymentId, "SEND_WINDOW_EXPIRED");
+    }
+
+    // ---- Economic evidence revalidated exactly as at CLAIM time. ----
+    const feeModel = authorization.fee_model === "LEGACY" ? "LEGACY" : "EIP1559";
+    if (authorization.fee_model !== "LEGACY" && authorization.fee_model !== "EIP1559") {
+      return windowFail(deploymentId, "INVALID_ECONOMIC_EVIDENCE");
+    }
+    if (
+      !isCanonicalDecimal(authorization.gas_limit_text) ||
+      !isCanonicalDecimal(authorization.max_fee_per_gas_wei_text) ||
+      !isCanonicalDecimal(authorization.tx_value_wei) ||
+      authorization.tx_value_wei.trim() !== "0"
+    ) {
+      return windowFail(deploymentId, "INVALID_ECONOMIC_EVIDENCE");
+    }
+    if (
+      feeModel === "EIP1559" &&
+      !isCanonicalDecimal(authorization.max_priority_fee_per_gas_wei_text)
+    ) {
+      return windowFail(deploymentId, "INVALID_ECONOMIC_EVIDENCE");
+    }
+    if (feeModel === "LEGACY" && authorization.max_priority_fee_per_gas_wei_text !== null) {
+      return windowFail(deploymentId, "INVALID_ECONOMIC_EVIDENCE");
+    }
+
+    const gasHex = decimalToHexQuantity(authorization.gas_limit_text);
+    const maxFeeHex = decimalToHexQuantity(authorization.max_fee_per_gas_wei_text);
+    if (!gasHex || gasHex === "0x0" || !maxFeeHex) {
+      return windowFail(deploymentId, "INVALID_ECONOMIC_EVIDENCE");
+    }
+
+    // ---- Bounded envelope. No `to` member exists on either variant. ----
+    const common = {
+      from: derived.deployer,
+      data: derived.initCode as string,
+      value: "0x0" as const,
+      gas: gasHex,
+    };
+
+    let envelope: MainnetWalletEnvelope;
+    if (feeModel === "EIP1559") {
+      const priorityHex = decimalToHexQuantity(authorization.max_priority_fee_per_gas_wei_text);
+      if (!priorityHex) return windowFail(deploymentId, "INVALID_ECONOMIC_EVIDENCE");
+      envelope = { ...common, maxFeePerGas: maxFeeHex, maxPriorityFeePerGas: priorityHex };
+    } else {
+      envelope = { ...common, gasPrice: maxFeeHex };
+    }
+
+    return {
+      ok: true,
+      notice: null,
+      deploymentId,
+      authorizationId,
+      chainId: ROBINHOOD_MAINNET_CHAIN_ID,
+      feeModel,
+      sendWindowExpiresAt: new Date(deadlineMs).toISOString(),
+      envelope,
     };
   });
