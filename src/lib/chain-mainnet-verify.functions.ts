@@ -735,7 +735,8 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
           finalizedBlockHashConfirmed: true,
         });
       } catch {
-        // FINALIZED did not land, so CONFIRMED must not be attempted.
+        // FINALIZED did not land, so CONFIRMED must not be attempted. The
+        // deployment status stays at PENDING, the last status that landed.
         result.notice = STATE_WRITE_FAILED_RETRYABLE;
         return result;
       }
@@ -743,10 +744,12 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
       /**
        * STEP C — FINALIZED -> CONFIRMED, reusing the identical immutable
        * mined/token evidence already recorded at PENDING. Unreachable unless
-       * the FINALIZED apply above succeeded.
+       * the FINALIZED apply above succeeded. Status is only promoted to
+       * CONFIRMED after this RPC actually succeeds.
        */
       try {
         await applyProductionDeploymentVerification({ ...minedEvidence, status: "CONFIRMED" });
+        result.status = "CONFIRMED";
       } catch {
         result.notice = STATE_WRITE_FAILED_RETRYABLE;
         return result;
