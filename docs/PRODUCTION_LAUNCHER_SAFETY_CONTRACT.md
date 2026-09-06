@@ -421,4 +421,34 @@ A future assistant must:
 - P3C broadcast/signing and any UI remain later, separate slices.
 - P3D real-money canary remains NO-GO until the managed provider exists and finality behavior is proven.
 
+## P3B Completion Checkpoint — 2026-09-06
+
+- **P3B Production Verifier + Finality Checker:** COMPLETE as a code foundation.
+- **P3B authoritative Lovable HEAD before this documentation-only checkpoint:** `4de08fd312f77757100cf9836048e9414c85ae23`.
+- New production-only source file created:
+  - `src/lib/chain-mainnet-verify.functions.ts`
+- P3B was first built as a one-new-file slice, then independently reviewed and corrected in a one-file hardening pass.
+- Managed-RPC-only authority: the verifier reads the managed production endpoint only from the server-only secret/env name `ROBINHOOD_MAINNET_RPC_URL`; there is no public diagnostic fallback and no client-side RPC URL exposure.
+- Managed endpoint chain id is independently pinned to `4663` before any deployment evidence is read; any chain-id mismatch returns `MANAGED_RPC_CHAIN_MISMATCH` and writes nothing.
+- The verifier independently checks exact contract-creation transaction shape (`to === null`, `value === 0n`), deployer address, frozen init-code byte equality, successful receipt, contract address, canonical block hash continuity, frozen runtime bytecode hash, and exact ERC-20 name/symbol/decimals/total supply/recipient balance.
+- Stored mined evidence (`contract_address`, `block_number`, `block_hash`) is treated as immutable; when already present, incoming evidence must match exactly or the verification is rejected.
+- Finality uses only the managed provider's `finalized` block tag; any fixed L2 confirmation count is observational only and never authorizes finality promotion.
+- Finality logic detects retreating finalized heads, performs a second canonical deployment-block hash re-read after obtaining the finalized head, and classifies the result fail-closed as `FINALITY_PENDING`, `FINALIZED_CANDIDATE`, or `PROVIDER_INCONSISTENT`.
+- Local write-gate `MAINNET_VERIFICATION_STATE_WRITES_ENABLED = false` keeps the P3A service-role apply helpers inert; those helpers are module-private and the main handler does not call them today.
+- `MAINNET_DEPLOYMENT_TX_ENABLED = false` and `MAINNET_LIQUIDITY_TX_ENABLED = false` remain unchanged.
+- Typecheck passed and production build passed after the P3B correction pass.
+- Supabase post-build read-only check: zero 4663/PRODUCTION deployment rows; zero testnet rows with non-default production finality state; P3A production apply RPCs remain present.
+- `ROBINHOOD_MAINNET_RPC_URL` remains NOT configured in the Lovable runtime, so live managed-provider verification/finality proof remains blocked.
+- No schema/migration change, database write, secret/env change, Edge Function deploy, Telegram send, wallet action, blockchain transaction, or web publish occurred in P3B.
+- Project remains private and unpublished.
+
+### P3B Remaining Gates / Next Allowed Step
+
+- Do NOT mark real-money mainnet safe or enabled.
+- Before P3C, managed RPC configuration and live finality semantics proof should be addressed in a separately controlled step, or P3C must remain fully kill-switched/inert.
+- **P3C broadcast/signing and any UI remain NOT STARTED.**
+- **P3D real-money canary remains NO-GO.**
+
+
+
 
