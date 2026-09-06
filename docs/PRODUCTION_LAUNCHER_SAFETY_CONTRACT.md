@@ -311,3 +311,38 @@ A future assistant must:
 - **Telegram sends in P0:** NONE
 - **Web app publish/deploy in P0:** NONE
 - **Next allowed step after verification:** P1 read-only audit/design only, unless separately authorized to build.
+
+## P1 Completion Checkpoint — 2026-09-06
+
+- **P1 Mainnet Read-Only Infrastructure:** COMPLETE.
+- **P1 authoritative Lovable HEAD:** `4a39ab48845fe4bb6d4b1bc59c0bd1a27638513f`.
+- P1 created exactly two source files:
+  - `src/lib/chain-mainnet-registry.ts`
+  - `src/lib/chain-mainnet-health.functions.ts`
+- Robinhood Chain production identity is now represented separately as chain `4663`, environment `PRODUCTION`, native asset `ETH`, with Blockscout explorer metadata and the Robinhood public RPC explicitly labeled diagnostic-only.
+- Server-only managed production RPC hook name is `ROBINHOOD_MAINNET_RPC_URL`. No secret value is stored in source.
+- `MAINNET_DEPLOYMENT_TX_ENABLED = false` and `MAINNET_LIQUIDITY_TX_ENABLED = false` are frozen in the P1 mainnet registry.
+- The P1 server health probe is authenticated and read-only. It permits only `eth_chainId`, `eth_blockNumber`, and `eth_getBlockByNumber` for `latest`, `safe`, and `finalized`.
+- Managed provider and public diagnostic results are kept separate; the public endpoint never substitutes for the managed provider.
+- `productionFinalitySemanticsVerified` remains `false`; `finalityGate` remains `UNRESOLVED`.
+- The existing testnet launcher, testnet verifier, testnet 5-confirmation rule, deployment RPCs, receipt/eligibility gates, and liquidity-plan behavior were not changed.
+- No mainnet wallet switch/add-network path exists.
+- No mainnet sign/broadcast/deployment path exists.
+- No liquidity approval/Permit2/Uniswap transaction path exists.
+- Typecheck passed and production build passed after P1.
+- Supabase state remains unchanged by P1: no migration, no schema change, no new production deployment row, no liquidity-attempt table, and no Edge Function deploy.
+- Project remains private and unpublished.
+
+### P1 Remaining Gates Before P2/P3
+
+- A managed Robinhood Chain production RPC endpoint still needs to be configured under the server-only secret/env name `ROBINHOOD_MAINNET_RPC_URL` before managed-provider parity can be proven.
+- Public RPC observation confirmed chain 4663 and support for `latest`, `safe`, and `finalized`, but this is capability evidence only, not semantic proof of production finality.
+- Production finality semantics must still be verified against authoritative Robinhood/Arbitrum documentation and the selected managed provider before P3 can enable any deployment transaction.
+- Existing production database verification/registration logic still contains the legacy `>= 5 confirmations` rule. That rule must not be interpreted as production finality and must be separated/strengthened before production deployment can be accepted as finalized.
+- Real-money execution remains NO-GO.
+
+### Next Allowed Step
+
+- **P2 audit/design first:** Mainnet Deployment Simulation and production-finality contract design, with no `eth_sendTransaction` and both mainnet transaction switches still OFF.
+- Before any P2 build, audit current Lovable HEAD, recent message/diff history, live Supabase state, managed-RPC configuration status, and current authoritative Robinhood/Arbitrum finality documentation.
+- Do not infer P2 completion from this checkpoint.
