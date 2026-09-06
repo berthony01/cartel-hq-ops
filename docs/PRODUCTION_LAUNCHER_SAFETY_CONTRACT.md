@@ -382,3 +382,43 @@ A future assistant must:
 - No P3 transaction path may be enabled until the managed production RPC exists, provider parity/finality behavior is verified, database changes are separately audited and tested, and an explicit controlled build authorization is given.
 - Real-money execution remains NO-GO.
 
+## P3A Completion Checkpoint — 2026-09-06
+
+- **P3A Database Finality / Evidence Foundation:** COMPLETE.
+- Repository migration files added:
+  - `supabase/migrations/20260906063000_production_launcher_finality_evidence.sql`
+  - `supabase/migrations/20260906063600_production_verifier_generated_column_fix.sql`
+- First migration added eight production-finality evidence columns to `launch_chain_deployments`, production-only/fail-closed CHECK constraints, service-role-only `apply_launch_chain_production_finality`, service-role-only `apply_launch_chain_production_token_deployment_verification`, and strengthened `assert_launch_contract_evidence` so official-contract registration requires managed FINALIZED evidence in addition to all prior checks.
+- Independent audit caught and hardened mined-evidence immutability before/while applying P3A: once contract address/block number/block hash are recorded, later production verification cannot replace them; finalized evidence cannot be rewound by a PENDING replay; CONFIRMED no longer rewrites mined/token evidence.
+- Rollback-safe runtime testing then caught that `verified_total_supply_text` and `verified_recipient_balance_text` are GENERATED ALWAYS columns. A separate corrective migration removed direct assignments to those columns. Generated text values now derive automatically from the numeric verified fields.
+- Supabase migration history confirms both migrations applied successfully:
+  - `production_launcher_finality_evidence`
+  - `production_verifier_generated_column_fix`
+- Rollback-safe P3A database tests PASS, including:
+  - default NOT_APPLICABLE finality state
+  - production PENDING mined/token evidence path
+  - generated verified text values derive correctly
+  - mined block-hash immutability rejection
+  - finalized-head-behind rejection
+  - managed FINALIZED positive path
+  - PENDING replay cannot rewind FINALIZED
+  - CONFIRMED promotion only after FINALIZED evidence
+  - finalized official-contract evidence positive path
+  - 5-confirmation/no-finality negative tripwire rejected
+  - TESTNET row cannot enter a production finality state
+- Post-test state is clean: zero 4663/PRODUCTION deployment rows remain; all rollback fixtures removed; TESTNET rows remain NOT_APPLICABLE.
+- Production apply functions are executable by `service_role` and NOT executable by `authenticated`.
+- Existing testnet verifier and testnet 5-confirmation behavior were not modified.
+- `MAINNET_DEPLOYMENT_TX_ENABLED=false` and `MAINNET_LIQUIDITY_TX_ENABLED=false` remain unchanged.
+- No wallet, signature, blockchain transaction, liquidity action, Telegram action, Edge deploy, or web publish occurred.
+- Project remains private and unpublished.
+
+### P3A Remaining Gates / Next Allowed Step
+
+- `ROBINHOOD_MAINNET_RPC_URL` is still not configured in the Lovable runtime.
+- P3A does not prove managed-provider finality semantics and does not enable any real-money transaction.
+- **Next allowed step: P3B audit/build for the separate production verifier + finality checker**, still fail-closed with `MANAGED_RPC_UNCONFIGURED` while the managed endpoint is absent, and still with both mainnet transaction switches OFF.
+- P3C broadcast/signing and any UI remain later, separate slices.
+- P3D real-money canary remains NO-GO until the managed provider exists and finality behavior is proven.
+
+
