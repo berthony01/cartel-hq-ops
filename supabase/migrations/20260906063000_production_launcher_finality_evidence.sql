@@ -197,7 +197,23 @@ begin
     raise exception 'Verified token supply or recipient balance does not match the recorded deployment intent.' using errcode = '22023';
   end if;
 
+  -- Immutable mined evidence: once recorded, address/block/hash cannot change.
+  if d.contract_address is not null and lower(d.contract_address) is distinct from addr then
+    raise exception 'Mined contract address cannot change.' using errcode = '22023';
+  end if;
+  if d.block_number is not null and d.block_number is distinct from _block_number then
+    raise exception 'Mined deployment block number cannot change.' using errcode = '22023';
+  end if;
+  if d.block_hash is not null and lower(d.block_hash) is distinct from bhash then
+    raise exception 'Mined deployment block hash cannot change.' using errcode = '22023';
+  end if;
+
   if requested_status = 'PENDING' then
+    -- FINALIZED evidence is immutable; do not rewrite mined/token evidence or revert status.
+    if d.finality_state = 'FINALIZED' then
+      return d;
+    end if;
+
     -- Never downgrade an existing finality observation.
     if d.finality_state = 'NOT_APPLICABLE' then
       next_finality := 'FINALITY_PENDING';
@@ -230,27 +246,28 @@ begin
   end if;
 
   -- requested_status = 'CONFIRMED'
+  -- Require complete, matching mined evidence already stored.
+  if d.contract_address is null or lower(d.contract_address) is distinct from addr
+     or d.block_number is null or d.block_number is distinct from _block_number
+     or d.block_hash is null or lower(d.block_hash) is distinct from bhash then
+    raise exception 'Confirmed production deployment requires matching mined evidence.' using errcode = '22023';
+  end if;
+
   if d.finality_state is distinct from 'FINALIZED'
      or d.finalized_block_hash_confirmed is not true
      or d.finality_provider_kind is distinct from 'MANAGED'
+     or d.finalized_block_number is null
+     or d.finalized_block_number is distinct from d.block_number
      or d.finalized_head_block_number is null
      or d.finalized_head_block_number < _block_number then
     raise exception 'Production deployment cannot be confirmed without managed finalized evidence.' using errcode = '22023';
   end if;
 
+  -- Confirmation only updates status/confirmations/failure null timestamps;
+  -- mined and verified token evidence remain immutable.
   update public.launch_chain_deployments
   set status = 'CONFIRMED',
-      contract_address = addr,
-      block_number = _block_number,
-      block_hash = bhash,
       confirmations = coalesce(_observed_confirmations, 0),
-      verified_token_name = _verified_token_name,
-      verified_token_symbol = _verified_token_symbol,
-      verified_token_decimals = _verified_token_decimals,
-      verified_total_supply = _verified_total_supply,
-      verified_total_supply_text = _verified_total_supply::text,
-      verified_recipient_balance = _verified_recipient_balance,
-      verified_recipient_balance_text = _verified_recipient_balance::text,
       failure_code = null,
       failure_detail = null,
       verified_at = now(),
