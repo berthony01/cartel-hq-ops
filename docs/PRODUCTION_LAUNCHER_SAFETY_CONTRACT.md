@@ -346,3 +346,39 @@ A future assistant must:
 - **P2 audit/design first:** Mainnet Deployment Simulation and production-finality contract design, with no `eth_sendTransaction` and both mainnet transaction switches still OFF.
 - Before any P2 build, audit current Lovable HEAD, recent message/diff history, live Supabase state, managed-RPC configuration status, and current authoritative Robinhood/Arbitrum finality documentation.
 - Do not infer P2 completion from this checkpoint.
+
+## P2 Completion Checkpoint — 2026-09-06
+
+- **P2 Mainnet Deployment Simulation:** COMPLETE.
+- **P2 authoritative Lovable HEAD before this documentation-only checkpoint:** `432ff85a6daf7264f98a19818b8f7514d3e147e0`.
+- P2 added exactly one source file:
+  - `src/lib/chain-mainnet-simulation.ts`
+- Existing testnet `src/lib/chain-simulation.ts` remained unchanged.
+- P2 mainnet simulation is isolated from testnet and binds `PRODUCTION`, Robinhood Chain `4663`, the frozen `cartel-fixed-erc20-v1` artifact/runtime hash, deployer, recipient, token identity/supply, exact init code/hash, and zero transaction value into a mainnet-specific fingerprint domain `cartel-mainnet-sim-v1`.
+- Production simulation quote TTL is 60 seconds.
+- Mainnet preflight performs read-only wallet/provider checks only: chain id, current account, balance, exact creation `eth_call`, exact creation `eth_estimateGas`, fee data, and sufficient ETH.
+- All token/gas/balance arithmetic remains bigint/exact decimal-string based.
+- `simulationPassed` does NOT authorize deployment. `deploymentAuthorized` remains literal `false` and is blocked by `MAINNET_DEPLOYMENT_TX_ENABLED`.
+- No mainnet wallet add/switch path, signing path, send/broadcast path, production deployment-row creation path, database mutation, verifier mutation, liquidity/Permit2/Uniswap path, finality promotion, Telegram action, or UI was added by P2.
+- `MAINNET_DEPLOYMENT_TX_ENABLED = false` and `MAINNET_LIQUIDITY_TX_ENABLED = false` remain frozen.
+- Typecheck passed and production build passed after P2.
+- Supabase state remained unchanged by P2: zero 4663/PRODUCTION deployment rows, no liquidity-attempt table, no migration/schema/RPC/Edge change.
+- Project remains private and unpublished.
+
+### P2 Finality Conclusion
+
+- P2 confirmed that the legacy testnet `confirmations >= 5` rule MUST NOT represent Robinhood Chain production finality.
+- Authoritative Robinhood Chain documentation states high-value/irreversible actions should wait for Ethereum posting/finality.
+- Authoritative Arbitrum documentation for Dedicated Blockchains states standard RPC tags represent `latest` soft confirmation, `safe` parent-chain-safe, and `finalized` parent-chain-final; irreversible actions should wait for `finalized`, and fixed child-block confirmation counts should not be used as a substitute.
+- Robinhood Chain public RPC capability previously accepted `latest`, `safe`, and `finalized`, but public RPC is diagnostic only.
+- Production finality promotion remains blocked until the configured MANAGED Robinhood Chain provider is probed and its `finalized` behavior is proven consistent with the documented model.
+
+### P3 Hard Gate / Next Allowed Step
+
+- **P3 audit/design only comes next before any P3 build.**
+- `ROBINHOOD_MAINNET_RPC_URL` is currently not configured in the Lovable runtime. This is a hard blocker for managed-provider-authoritative P3 finality verification.
+- P3 must design a separate 4663/PRODUCTION deployment attempt creation path, production verifier, explicit finality evidence/state, idempotent recovery, and a production pre-sign/send handoff without loosening the existing 46630/TESTNET path.
+- Future production finality evidence must remain separate from the legacy `confirmations` column and must fail closed to `FINALITY_PENDING` on missing/malformed/inconsistent managed-provider data.
+- No P3 transaction path may be enabled until the managed production RPC exists, provider parity/finality behavior is verified, database changes are separately audited and tested, and an explicit controlled build authorization is given.
+- Real-money execution remains NO-GO.
+
