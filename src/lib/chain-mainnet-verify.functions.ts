@@ -23,8 +23,12 @@ import {
  *    import `chain-verify.functions.ts`, `chain-registry.ts`, or
  *    `chain-launcher.ts`, so no testnet constant (notably the legacy fixed
  *    confirmation count) can ever leak in as authority here.
- *  - READ-ONLY. There is no signer, no wallet access, no transaction builder,
- *    no approval / liquidity path. Every chain call is an `eth_call`-class read.
+ *  - CHAIN ACCESS IS READ-ONLY. There is no signer, no wallet access, no
+ *    transaction builder, no approval / liquidity path. Every chain call is an
+ *    `eth_call`-class read. DATABASE STATE WRITES ARE PRESENT in this module
+ *    but are hard-locked off (see STATE-WRITE LOCK below): while the lock is
+ *    false no service-role client is imported and no row is mutated.
+
  *  - The ONLY transport permitted is the server-only managed provider named by
  *    `ROBINHOOD_MAINNET_MANAGED_RPC_ENV`. The public diagnostic endpoint is
  *    deliberately NOT imported: a rate-limited public endpoint can be censored
