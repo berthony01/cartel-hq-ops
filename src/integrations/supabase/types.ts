@@ -512,6 +512,75 @@ export type Database = {
           },
         ]
       }
+      launch_chain_production_send_window_issuances: {
+        Row: {
+          authorization_expires_at: string
+          authorization_id: string
+          chain_id: number
+          claimed_at: string
+          control_revision: number
+          deployment_id: string
+          id: string
+          init_code_hash: string
+          issued_at: string
+          launch_id: string
+          network_environment: string
+          operator_user_id: string
+          review_fingerprint: string
+          send_window_expires_at: string
+          workspace_id: string
+        }
+        Insert: {
+          authorization_expires_at: string
+          authorization_id: string
+          chain_id: number
+          claimed_at: string
+          control_revision: number
+          deployment_id: string
+          id?: string
+          init_code_hash: string
+          issued_at?: string
+          launch_id: string
+          network_environment: string
+          operator_user_id: string
+          review_fingerprint: string
+          send_window_expires_at: string
+          workspace_id: string
+        }
+        Update: {
+          authorization_expires_at?: string
+          authorization_id?: string
+          chain_id?: number
+          claimed_at?: string
+          control_revision?: number
+          deployment_id?: string
+          id?: string
+          init_code_hash?: string
+          issued_at?: string
+          launch_id?: string
+          network_environment?: string
+          operator_user_id?: string
+          review_fingerprint?: string
+          send_window_expires_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launch_chain_production_send_window_issua_authorization_id_fkey"
+            columns: ["authorization_id"]
+            isOneToOne: true
+            referencedRelation: "launch_chain_production_presign_authorizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_chain_production_send_window_issuance_deployment_id_fkey"
+            columns: ["deployment_id"]
+            isOneToOne: false
+            referencedRelation: "launch_chain_deployments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       launch_contract_registration_events: {
         Row: {
           action: string
@@ -3471,6 +3540,36 @@ export type Database = {
         Args: { _launch_id: string }
         Returns: string
       }
+      authorize_launch_chain_production_send_window_issuance: {
+        Args: {
+          _authorization_id: string
+          _deployment_id: string
+          _operator_user_id: string
+        }
+        Returns: {
+          authorization_expires_at: string
+          authorization_id: string
+          chain_id: number
+          claimed_at: string
+          control_revision: number
+          deployment_id: string
+          id: string
+          init_code_hash: string
+          issued_at: string
+          launch_id: string
+          network_environment: string
+          operator_user_id: string
+          review_fingerprint: string
+          send_window_expires_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_chain_production_send_window_issuances"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       bot_inbox_active_reply_session: {
         Args: { _telegram_user_id: number }
         Returns: {
@@ -4242,6 +4341,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      get_launch_chain_production_reconciliation_snapshot: {
+        Args: { _deployment_id: string; _operator_user_id: string }
+        Returns: Json
       }
       get_launch_notification_summary: {
         Args: { _launch_id: string }
