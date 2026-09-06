@@ -577,3 +577,21 @@ All executed inside a single transaction deliberately rolled back; zero rows per
 - **Independent post-build state:** 4663/PRODUCTION deployment rows = 0; production presign rows = 0; execution-control rows = 1; execution-control event rows = 1; control state `execution_enabled = false`, `emergency_stop_engaged = true`, `revision = 1`, `reason = INITIAL_DEFAULT_OFF`. Project remains private/unpublished. No real wallet, signature, transaction, ETH, liquidity, Telegram, Edge Function deploy, or web publish occurred.
 - **All three hard switches remain literal `false`:** `MAINNET_DEPLOYMENT_TX_ENABLED = false`, `MAINNET_LIQUIDITY_TX_ENABLED = false`, `MAINNET_VERIFICATION_STATE_WRITES_ENABLED = false`.
 - **Next allowed step is READ-ONLY next-boundary audit only.** Do not automatically start P3C-D, P3C-UI, P3D canary, liquidity, verifier-write activation, or any real-money action.
+
+## P3C-D1 Disabled Verifier State-Write Wiring Checkpoint — 2026-09-06
+
+1. Scope: `src/lib/chain-mainnet-verify.functions.ts` only. No migration, no schema/RPC/grant/policy/data change, no generated type drift, no secret, no Edge Function, no Telegram, no publish.
+2. The exported production verifier is now wired to the pre-existing service-role apply helpers as a DISABLED FOUNDATION. Ordering is explicit: complete mined/token evidence -> `PENDING`; managed `finalized` head only -> `FINALITY_PENDING` / `PROVIDER_INCONSISTENT` / `FINALIZED`; `CONFIRMED` only after a successful `FINALIZED` apply, reusing the identical immutable evidence.
+3. `MAINNET_VERIFICATION_STATE_WRITES_ENABLED` remains literally `false as const`. A widened runtime mirror exists solely for dead-code-safe typechecking; each helper still refuses before any service-role import.
+4. `MAINNET_DEPLOYMENT_TX_ENABLED` and `MAINNET_LIQUIDITY_TX_ENABLED` remain literally `false`.
+5. No verifier database state write occurred. While the lock is false there is zero admin-client import and zero row mutation on the apply paths; output still reports `stateWritesEnabled: false` with the `STATE_WRITES_DISABLED` notice.
+6. `PROVIDER_INCONSISTENT` is recordable only against a `PENDING` row established in the same run; a `PENDING` row is never fabricated to carry an inconsistency.
+7. No path persists `FAILED`. Mismatches stay observational and fail-closed; terminal-failure policy is deferred to reconciliation/operator work.
+8. Retryable managed-provider/transport failures never become `FAILED` or `CONFIRMED`. State-write failures surface only the sanitized code `STATE_WRITE_FAILED_RETRYABLE`; no raw database or provider error text is returned.
+9. Confirmations remain diagnostic only, never a finality gate, and are omitted rather than coerced when outside the safe database integer domain.
+10. Chain access remains read-only: no signer, wallet, browser provider, raw send, signing, router, pool, liquidity, or transaction builder was added, and no testnet module is imported.
+11. The audit-only `mainnetApplyHelpersInternal` reference was removed now that the helpers are genuinely called.
+12. Verification: `bunx tsgo --noEmit` PASS; `bun run build` PASS; diff from start gate `97aaafd020b23c883462454d89126c088cb184be` contains only the verifier file plus this checkpoint.
+13. Live database re-read after build: production deployment rows 0; production presign authorization rows 0; one execution-control row with `execution_enabled=false`, `emergency_stop_engaged=true`, revision 1; one execution-control event.
+14. Project remains PRIVATE / UNPUBLISHED. No activation, canary, re-arm, or real-money action occurred.
+15. Next allowed step: READ-ONLY operator/reconciliation boundary audit only.

@@ -23,8 +23,12 @@ import {
  *    import `chain-verify.functions.ts`, `chain-registry.ts`, or
  *    `chain-launcher.ts`, so no testnet constant (notably the legacy fixed
  *    confirmation count) can ever leak in as authority here.
- *  - READ-ONLY. There is no signer, no wallet access, no transaction builder,
- *    no approval / liquidity path. Every chain call is an `eth_call`-class read.
+ *  - CHAIN ACCESS IS READ-ONLY. There is no signer, no wallet access, no
+ *    transaction builder, no approval / liquidity path. Every chain call is an
+ *    `eth_call`-class read. DATABASE STATE WRITES ARE PRESENT in this module
+ *    but are hard-locked off (see STATE-WRITE LOCK below): while the lock is
+ *    false no service-role client is imported and no row is mutated.
+
  *  - The ONLY transport permitted is the server-only managed provider named by
  *    `ROBINHOOD_MAINNET_MANAGED_RPC_ENV`. The public diagnostic endpoint is
  *    deliberately NOT imported: a rate-limited public endpoint can be censored
@@ -39,12 +43,27 @@ import {
  * STATE-WRITE LOCK
  * ----------------
  * `MAINNET_VERIFICATION_STATE_WRITES_ENABLED` is a local, independent lock
- * (separate from the registry's deployment/liquidity switches). While it is
- * false this module performs verification reads but mutates nothing. Enabling
- * it requires a separately authorized slice, after managed finality semantics
- * are proven live.
+ * (separate from the registry's deployment/liquidity switches). The exported
+ * verifier IS wired to the guarded service-role apply helpers, but every one
+ * of those call sites sits behind this lock, and each helper additionally
+ * refuses before importing the admin client. While the lock is false this
+ * module performs verification reads and mutates nothing. Enabling it requires
+ * a separately authorized slice, after managed finality semantics are proven
+ * live.
  */
 const MAINNET_VERIFICATION_STATE_WRITES_ENABLED = false as const;
+
+/**
+ * Widened runtime mirror of the lock. Its ONLY purpose is dead-code-safe
+ * typechecking of the wired-but-disabled write path; the authoritative literal
+ * above stays exactly `false`, and every helper re-checks it at runtime before
+ * any service-role import.
+ */
+const STATE_WRITES_ENABLED: boolean = Boolean(MAINNET_VERIFICATION_STATE_WRITES_ENABLED as boolean);
+
+/** Deterministic, sanitized code. Raw DB/provider error text never escapes. */
+const STATE_WRITE_FAILED_RETRYABLE = "STATE_WRITE_FAILED_RETRYABLE" as const;
+
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TX_HASH = /^0x[0-9a-f]{64}$/;
@@ -127,16 +146,19 @@ function buildInitCode(intent: {
 }
 
 /* -------------------------------------------------------------------------
- * P3A service-role apply helpers — PRESENT BUT GUARDED OFF.
+ * P3A service-role apply helpers — WIRED INTO THE VERIFIER, GUARDED OFF.
  *
- * Intended activation order in a later authorized slice:
- *   1. record PENDING mined + token evidence (production verification RPC);
- *   2. record FINALITY_PENDING / PROVIDER_INCONSISTENT / FINALIZED from
- *      managed evidence only (production finality RPC);
- *   3. only after FINALIZED, record CONFIRMED with the exact same immutable
- *      mined/token evidence.
- * All three are refused today by the local lock, before any admin import.
+ * The exported verifier calls these in exactly this order, and only inside
+ * `if (STATE_WRITES_ENABLED)` branches:
+ *   1. PENDING with complete, independently observed mined + token evidence;
+ *   2. managed finality only — FINALITY_PENDING / PROVIDER_INCONSISTENT /
+ *      FINALIZED (production finality RPC, `MANAGED` authority);
+ *   3. CONFIRMED only after a FINALIZED apply succeeded, reusing the exact
+ *      same immutable mined/token evidence recorded at PENDING.
+ * No path persists FAILED in this slice. Every call is refused today by the
+ * local lock, before any admin import.
  * ---------------------------------------------------------------------- */
+
 
 function assertStateWritesEnabled(): void {
   if (!MAINNET_VERIFICATION_STATE_WRITES_ENABLED) {
@@ -531,13 +553,47 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
 
     // Observational confirmations from `latest`. DIAGNOSTIC DISPLAY ONLY —
     // deliberately computed after all evidence checks and never consulted by
-    // any branch below. A depth count cannot settle an L2.
+    // any branch below. A depth count cannot settle an L2. Values outside the
+    // DB integer domain are omitted rather than coerced into an unsafe Number.
     try {
       const latest = await client.getBlockNumber();
       const diff = latest - receiptBlockNumber + 1n;
-      result.observationalConfirmations = diff > 0n ? Number(diff) : 0;
+      const bounded = diff > 0n ? diff : 0n;
+      result.observationalConfirmations =
+        bounded <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(bounded) : null;
     } catch {
       result.observationalConfirmations = null;
+    }
+    const diagnosticConfirmations = result.observationalConfirmations;
+
+    /**
+     * STEP A — MINED / TOKEN EVIDENCE -> PENDING.
+     * Every mined and token check above has passed, so the evidence recorded
+     * here is fully independent of the browser. This exact evidence object is
+     * reused verbatim by the CONFIRMED apply in step C; nothing re-reads or
+     * re-derives it. Confirmations travel as a diagnostic field only.
+     */
+    const minedEvidence = {
+      deploymentId: data.deploymentId,
+      contractAddress,
+      blockNumber: receiptBlockNumber,
+      blockHash: receiptBlockHash,
+      verifiedToken: token,
+      ...(diagnosticConfirmations !== null
+        ? { observedConfirmations: diagnosticConfirmations }
+        : {}),
+    } as const;
+
+    let pendingRowEstablished = false;
+    if (STATE_WRITES_ENABLED) {
+      try {
+        await applyProductionDeploymentVerification({ ...minedEvidence, status: "PENDING" });
+        pendingRowEstablished = true;
+      } catch {
+        // Sanitized and retryable: never FAILED, never CONFIRMED.
+        result.notice = STATE_WRITE_FAILED_RETRYABLE;
+        return result;
+      }
     }
 
     // ---- Finality: MANAGED provider `finalized` tag only. ----
@@ -553,7 +609,8 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
       finalizedHead = null;
     }
     if (finalizedHead === null) {
-      // Unsupported tag / malformed / provider error: retryable, no promotion.
+      // Unsupported tag / malformed / provider error: retryable, no promotion,
+      // and deliberately no finality write — an absent head is not evidence.
       result.finality = "FINALITY_PENDING";
       result.notice = "FINALIZED_HEAD_UNAVAILABLE_RETRYABLE";
       return result;
@@ -568,6 +625,21 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
       // A retreating finalized head is never legitimate.
       result.finality = "PROVIDER_INCONSISTENT";
       result.notice = "FINALIZED_HEAD_RETREATED";
+      // Only recordable against a PENDING row this run established. A PENDING
+      // row is never fabricated merely to carry an inconsistency.
+      if (STATE_WRITES_ENABLED && pendingRowEstablished) {
+        try {
+          await applyProductionFinality({
+            deploymentId: data.deploymentId,
+            finalityState: "PROVIDER_INCONSISTENT",
+            finalizedHeadBlockNumber: finalizedHead,
+            finalizedBlockHashConfirmed: false,
+            finalityNotice: "FINALIZED_HEAD_RETREATED",
+          });
+        } catch {
+          result.notice = STATE_WRITE_FAILED_RETRYABLE;
+        }
+      }
       return result;
     }
 
@@ -582,6 +654,7 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
       finalityBlockHash = null;
     }
     if (!finalityBlockHash) {
+      // Transport failure, not evidence: retryable, no finality write.
       result.finality = "FINALITY_PENDING";
       result.notice = "FINALITY_BLOCK_REREAD_UNAVAILABLE_RETRYABLE";
       return result;
@@ -589,12 +662,41 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
     if (finalityBlockHash !== receiptBlockHash) {
       result.finality = "PROVIDER_INCONSISTENT";
       result.notice = "FINALITY_BLOCK_HASH_CHANGED";
+      if (STATE_WRITES_ENABLED && pendingRowEstablished) {
+        try {
+          await applyProductionFinality({
+            deploymentId: data.deploymentId,
+            finalityState: "PROVIDER_INCONSISTENT",
+            finalizedHeadBlockNumber: finalizedHead,
+            finalizedBlockHashConfirmed: false,
+            finalityNotice: "FINALITY_BLOCK_HASH_CHANGED",
+          });
+        } catch {
+          result.notice = STATE_WRITE_FAILED_RETRYABLE;
+        }
+      }
       return result;
     }
 
+    /**
+     * STEP B — MANAGED FINALITY. Clean canonical deployment block, but the
+     * managed finalized head has not reached it yet: FINALITY_PENDING only.
+     */
     if (finalizedHead < receiptBlockNumber) {
       result.finality = "FINALITY_PENDING";
       result.notice = MAINNET_VERIFICATION_STATE_WRITES_ENABLED ? null : "STATE_WRITES_DISABLED";
+      if (STATE_WRITES_ENABLED) {
+        try {
+          await applyProductionFinality({
+            deploymentId: data.deploymentId,
+            finalityState: "FINALITY_PENDING",
+            finalizedHeadBlockNumber: finalizedHead,
+            finalizedBlockHashConfirmed: true,
+          });
+        } catch {
+          result.notice = STATE_WRITE_FAILED_RETRYABLE;
+        }
+      }
       return result;
     }
 
@@ -603,14 +705,38 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
     // and never a claim of DEPLOYMENT_VERIFIED or CONFIRMED.
     result.finality = "FINALIZED_CANDIDATE";
     result.notice = MAINNET_VERIFICATION_STATE_WRITES_ENABLED ? null : "STATE_WRITES_DISABLED";
+
+    if (STATE_WRITES_ENABLED) {
+      /**
+       * STEP B (cont.) — FINALIZED must be applied FIRST, with the finalized
+       * block exactly equal to the deployment block.
+       */
+      try {
+        await applyProductionFinality({
+          deploymentId: data.deploymentId,
+          finalityState: "FINALIZED",
+          finalizedBlockNumber: receiptBlockNumber,
+          finalizedHeadBlockNumber: finalizedHead,
+          finalizedBlockHashConfirmed: true,
+        });
+      } catch {
+        // FINALIZED did not land, so CONFIRMED must not be attempted.
+        result.notice = STATE_WRITE_FAILED_RETRYABLE;
+        return result;
+      }
+
+      /**
+       * STEP C — FINALIZED -> CONFIRMED, reusing the identical immutable
+       * mined/token evidence already recorded at PENDING. Unreachable unless
+       * the FINALIZED apply above succeeded.
+       */
+      try {
+        await applyProductionDeploymentVerification({ ...minedEvidence, status: "CONFIRMED" });
+      } catch {
+        result.notice = STATE_WRITE_FAILED_RETRYABLE;
+        return result;
+      }
+    }
+
     return result;
   });
-
-// Module-private, non-exported reference: keeps the guarded write path
-// type-checked and audit-visible while the local lock keeps it unreachable.
-// These helpers are deliberately NOT part of this module's public API.
-const mainnetApplyHelpersInternal = {
-  applyProductionDeploymentVerification,
-  applyProductionFinality,
-} as const;
-void mainnetApplyHelpersInternal;
