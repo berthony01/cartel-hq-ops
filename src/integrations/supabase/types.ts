@@ -336,6 +336,78 @@ export type Database = {
           },
         ]
       }
+      launch_chain_production_canary_permits: {
+        Row: {
+          authorization_expires_at: string
+          authorization_id: string
+          chain_id: number
+          control_revision: number
+          deployer_address: string
+          deployment_id: string
+          expires_at: string
+          id: string
+          init_code_hash: string
+          issued_at: string
+          launch_id: string
+          network_environment: string
+          operator_user_id: string
+          reason: string
+          review_fingerprint: string
+          workspace_id: string
+        }
+        Insert: {
+          authorization_expires_at: string
+          authorization_id: string
+          chain_id: number
+          control_revision: number
+          deployer_address: string
+          deployment_id: string
+          expires_at: string
+          id?: string
+          init_code_hash: string
+          issued_at?: string
+          launch_id: string
+          network_environment: string
+          operator_user_id: string
+          reason: string
+          review_fingerprint: string
+          workspace_id: string
+        }
+        Update: {
+          authorization_expires_at?: string
+          authorization_id?: string
+          chain_id?: number
+          control_revision?: number
+          deployer_address?: string
+          deployment_id?: string
+          expires_at?: string
+          id?: string
+          init_code_hash?: string
+          issued_at?: string
+          launch_id?: string
+          network_environment?: string
+          operator_user_id?: string
+          reason?: string
+          review_fingerprint?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launch_chain_production_canary_permits_authorization_id_fkey"
+            columns: ["authorization_id"]
+            isOneToOne: true
+            referencedRelation: "launch_chain_production_presign_authorizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_chain_production_canary_permits_deployment_id_fkey"
+            columns: ["deployment_id"]
+            isOneToOne: false
+            referencedRelation: "launch_chain_deployments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       launch_chain_production_execution_control_events: {
         Row: {
           changed_by: string | null
@@ -516,6 +588,7 @@ export type Database = {
         Row: {
           authorization_expires_at: string
           authorization_id: string
+          canary_permit_id: string
           chain_id: number
           claimed_at: string
           control_revision: number
@@ -533,6 +606,7 @@ export type Database = {
         Insert: {
           authorization_expires_at: string
           authorization_id: string
+          canary_permit_id: string
           chain_id: number
           claimed_at: string
           control_revision: number
@@ -550,6 +624,7 @@ export type Database = {
         Update: {
           authorization_expires_at?: string
           authorization_id?: string
+          canary_permit_id?: string
           chain_id?: number
           claimed_at?: string
           control_revision?: number
@@ -570,6 +645,13 @@ export type Database = {
             columns: ["authorization_id"]
             isOneToOne: true
             referencedRelation: "launch_chain_production_presign_authorizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_chain_production_send_window_issua_canary_permit_id_fkey"
+            columns: ["canary_permit_id"]
+            isOneToOne: true
+            referencedRelation: "launch_chain_production_canary_permits"
             referencedColumns: ["id"]
           },
           {
@@ -3549,6 +3631,7 @@ export type Database = {
         Returns: {
           authorization_expires_at: string
           authorization_id: string
+          canary_permit_id: string
           chain_id: number
           claimed_at: string
           control_revision: number
