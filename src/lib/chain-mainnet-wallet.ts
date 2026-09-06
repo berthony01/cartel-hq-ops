@@ -141,41 +141,83 @@ export function hexQuantityToBigInt(value: unknown): bigint | null {
 }
 
 /**
+ * Strict canonical hex quantity -> bigint. Unlike `hexQuantityToBigInt` this
+ * performs NO trimming and NO lowercasing: the value must already be a minimal
+ * lowercase RPC quantity, otherwise it is refused rather than repaired.
+ */
+function canonicalQuantity(value: unknown): bigint | null {
+  if (typeof value !== "string") return null;
+  if (!HEX_QUANTITY.test(value)) return null;
+  try {
+    return BigInt(value);
+  } catch {
+    return null;
+  }
+}
+
+/** The only two key sets a contract-creation envelope may ever have. */
+const EIP1559_KEYS = [
+  "from",
+  "data",
+  "value",
+  "gas",
+  "maxFeePerGas",
+  "maxPriorityFeePerGas",
+] as const;
+const LEGACY_KEYS = ["from", "data", "value", "gas", "gasPrice"] as const;
+
+function hasExactKeys(candidate: Record<string, unknown>, allowed: readonly string[]): boolean {
+  const keys = Object.keys(candidate);
+  if (keys.length !== allowed.length) return false;
+  for (const key of keys) {
+    if (!allowed.includes(key)) return false;
+  }
+  for (const key of allowed) {
+    if (!Object.prototype.hasOwnProperty.call(candidate, key)) return false;
+  }
+  return true;
+}
+
+/**
  * Exact contract-creation shape check. Nothing is repaired or widened here —
  * a non-conforming envelope is refused, never normalized into a sendable one.
+ *
+ * The envelope must carry EXACTLY the EIP-1559 key set or EXACTLY the LEGACY
+ * key set. Any additional own enumerable member — `to`, `nonce`, `chainId`,
+ * `input`, `type`, `accessList`, blob or authorization fields, or an unknown
+ * custom key — is a rejection, so the browser can never widen the bounded
+ * server-issued envelope on its way to `eth_sendTransaction`.
  */
 export function validateMainnetEnvelope(envelope: unknown): envelope is MainnetWalletEnvelope {
   if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) return false;
   const candidate = envelope as Record<string, unknown>;
 
-  // Contract creation: the recipient key must be absent entirely.
-  if ("to" in candidate) return false;
-  // No raw-transaction or signature smuggling through extra members.
-  if ("nonce" in candidate || "chainId" in candidate || "input" in candidate) return false;
+  const isEip1559 = hasExactKeys(candidate, EIP1559_KEYS);
+  const isLegacy = hasExactKeys(candidate, LEGACY_KEYS);
+  // Exactly one fee model, no extra keys, no missing keys, `to` always absent.
+  if (isEip1559 === isLegacy) return false;
 
-  if (typeof candidate['from'] !== "string" || !ADDRESS.test(lower(candidate['from']))) return false;
+  // Already-canonical values only. Nothing is lowercased or trimmed here.
+  if (typeof candidate['from'] !== "string" || !ADDRESS.test(candidate['from'])) return false;
   if (candidate['value'] !== "0x0") return false;
-  if (typeof candidate['data'] !== "string" || !HEX_DATA.test(lower(candidate['data']))) return false;
+  if (typeof candidate['data'] !== "string" || !HEX_DATA.test(candidate['data'])) return false;
 
-  const gas = hexQuantityToBigInt(candidate['gas']);
+  const gas = canonicalQuantity(candidate['gas']);
   if (gas === null || gas <= 0n) return false;
 
-  const hasEip1559 = "maxFeePerGas" in candidate || "maxPriorityFeePerGas" in candidate;
-  const hasLegacy = "gasPrice" in candidate;
-  if (hasEip1559 === hasLegacy) return false; // exactly one fee model, never both
-
-  if (hasEip1559) {
-    const maxFee = hexQuantityToBigInt(candidate['maxFeePerGas']);
-    const priority = hexQuantityToBigInt(candidate['maxPriorityFeePerGas']);
+  if (isEip1559) {
+    const maxFee = canonicalQuantity(candidate['maxFeePerGas']);
+    const priority = canonicalQuantity(candidate['maxPriorityFeePerGas']);
     if (maxFee === null || priority === null) return false;
     if (priority > maxFee) return false;
   } else {
-    const gasPrice = hexQuantityToBigInt(candidate['gasPrice']);
+    const gasPrice = canonicalQuantity(candidate['gasPrice']);
     if (gasPrice === null) return false;
   }
 
   return true;
 }
+
 
 /* ------------------------------------------------------------------ */
 /* Read-only wallet inspection                                         */
