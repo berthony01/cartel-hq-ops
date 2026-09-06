@@ -341,6 +341,8 @@ export type Database = {
           chain_id: number
           claimed_at: string | null
           client_request_id: string
+          consumed_at: string | null
+          consumed_tx_hash: string | null
           created_at: string
           deployer_address: string
           deployment_id: string
@@ -372,6 +374,8 @@ export type Database = {
           chain_id: number
           claimed_at?: string | null
           client_request_id: string
+          consumed_at?: string | null
+          consumed_tx_hash?: string | null
           created_at?: string
           deployer_address: string
           deployment_id: string
@@ -403,6 +407,8 @@ export type Database = {
           chain_id?: number
           claimed_at?: string | null
           client_request_id?: string
+          consumed_at?: string | null
+          consumed_tx_hash?: string | null
           created_at?: string
           deployer_address?: string
           deployment_id?: string
@@ -3477,6 +3483,52 @@ export type Database = {
         Args: { _workspace_id: string }
         Returns: boolean
       }
+      cancel_claimed_launch_chain_production_presign_authorization: {
+        Args: {
+          _authorization_id: string
+          _operator_user_id: string
+          _reason: string
+        }
+        Returns: {
+          chain_id: number
+          claimed_at: string | null
+          client_request_id: string
+          consumed_at: string | null
+          consumed_tx_hash: string | null
+          created_at: string
+          deployer_address: string
+          deployment_id: string
+          estimated_cost_wei_text: string
+          expires_at: string
+          fee_model: string
+          gas_estimate_text: string
+          gas_limit_text: string
+          id: string
+          init_code_hash: string
+          invalidated_at: string | null
+          invalidated_reason: string | null
+          issued_at: string
+          launch_id: string
+          max_fee_per_gas_wei_text: string
+          max_priority_fee_per_gas_wei_text: string | null
+          max_total_cost_wei_text: string
+          network_environment: string
+          observed_fee_per_gas_wei_text: string
+          operator_user_id: string
+          review_fingerprint: string
+          status: string
+          ttl_seconds: number
+          tx_value_wei: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_chain_production_presign_authorizations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       capture_project_inbox_launch_reply: {
         Args: {
           _body: string
@@ -3513,6 +3565,8 @@ export type Database = {
           chain_id: number
           claimed_at: string | null
           client_request_id: string
+          consumed_at: string | null
+          consumed_tx_hash: string | null
           created_at: string
           deployer_address: string
           deployment_id: string
@@ -4063,6 +4117,8 @@ export type Database = {
           chain_id: number
           claimed_at: string | null
           client_request_id: string
+          consumed_at: string | null
+          consumed_tx_hash: string | null
           created_at: string
           deployer_address: string
           deployment_id: string
@@ -4304,6 +4360,8 @@ export type Database = {
           chain_id: number
           claimed_at: string | null
           client_request_id: string
+          consumed_at: string | null
+          consumed_tx_hash: string | null
           created_at: string
           deployer_address: string
           deployment_id: string
@@ -4377,6 +4435,8 @@ export type Database = {
           chain_id: number
           claimed_at: string | null
           client_request_id: string
+          consumed_at: string | null
+          consumed_tx_hash: string | null
           created_at: string
           deployer_address: string
           deployment_id: string
@@ -4777,6 +4837,69 @@ export type Database = {
       }
       submit_launch_chain_deployment_tx: {
         Args: { _deployment_id: string; _tx_hash: string }
+        Returns: {
+          artifact_id: string | null
+          attempt_number: number
+          block_hash: string | null
+          block_number: number | null
+          chain_id: number
+          client_request_id: string
+          confirmations: number
+          contract_address: string | null
+          created_at: string
+          created_by: string | null
+          deployer_address: string
+          deployment_kind: string
+          failure_code: string | null
+          failure_detail: string | null
+          finality_last_checked_at: string | null
+          finality_notice: string | null
+          finality_provider_kind: string | null
+          finality_state: string
+          finalized_at: string | null
+          finalized_block_hash_confirmed: boolean | null
+          finalized_block_number: number | null
+          finalized_head_block_number: number | null
+          id: string
+          init_code_hash: string | null
+          last_checked_at: string | null
+          launch_id: string
+          network_environment: string
+          review_fingerprint: string | null
+          status: string
+          submitted_at: string | null
+          token_decimals: number | null
+          token_name: string | null
+          token_recipient: string | null
+          token_symbol: string | null
+          token_total_supply: number | null
+          token_total_supply_text: string | null
+          tx_hash: string | null
+          updated_at: string
+          verified_at: string | null
+          verified_recipient_balance: number | null
+          verified_recipient_balance_text: string | null
+          verified_token_decimals: number | null
+          verified_token_name: string | null
+          verified_token_symbol: string | null
+          verified_total_supply: number | null
+          verified_total_supply_text: string | null
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_chain_deployments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      submit_launch_chain_production_deployment_tx: {
+        Args: {
+          _authorization_id: string
+          _deployment_id: string
+          _operator_user_id: string
+          _tx_hash: string
+        }
         Returns: {
           artifact_id: string | null
           attempt_number: number
