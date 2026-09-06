@@ -144,6 +144,19 @@ function assertStateWritesEnabled(): void {
   }
 }
 
+/**
+ * Fail-closed bigint -> DB integer conversion. A block height outside the
+ * IEEE-754 safe-integer range would silently lose precision on the way to the
+ * RPC, so it is refused deterministically before any service-role call.
+ */
+function toSafeDbInteger(value: bigint, field: string): number {
+  if (value < 0n || value > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error(`UNSAFE_DB_INTEGER:${field}`);
+  }
+  return Number(value);
+}
+
+
 async function applyProductionDeploymentVerification(payload: {
   deploymentId: string;
   status: "PENDING" | "CONFIRMED" | "FAILED";
