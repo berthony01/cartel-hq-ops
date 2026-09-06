@@ -81,7 +81,7 @@ export type MainnetSendResult = {
  * a `false` literal to `true` is a type error. Widening keeps the guard a real
  * runtime check and keeps the guarded path type-checked.
  */
-const PRODUCTION_SEND_ENABLED: boolean = MAINNET_DEPLOYMENT_TX_ENABLED;
+const PRODUCTION_SEND_ENABLED: boolean = Boolean(MAINNET_DEPLOYMENT_TX_ENABLED as boolean);
 
 const ADDRESS = /^0x[0-9a-f]{40}$/;
 const HASH32 = /^0x[0-9a-f]{64}$/;
