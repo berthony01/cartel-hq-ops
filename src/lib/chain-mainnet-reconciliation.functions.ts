@@ -593,34 +593,54 @@ export const verifyMainnetCandidateTransaction = createServerFn({ method: "POST"
     // From here the EXACT frozen production intent is proven broadcast.
     result.exactIntentObserved = true;
 
-    let receipt: Awaited<ReturnType<typeof client.getTransactionReceipt>> | null = null;
-    try {
-      receipt = await client.getTransactionReceipt({ hash: txHash as `0x${string}` });
-    } catch {
-      receipt = null;
+    // Receipt lookup via the same managed endpoint, read raw so that a
+    // provider failure can never be confused with "positively no receipt".
+    const receiptRead = await readManagedReceipt(endpoint, txHash);
+
+    if (receiptRead.kind === "UNAVAILABLE") {
+      return {
+        ...candidateFail(
+          deploymentId,
+          txHash,
+          "RECEIPT_UNAVAILABLE_RETRYABLE",
+          "RECEIPT_UNAVAILABLE_RETRYABLE",
+        ),
+        exactIntentObserved: true,
+      };
     }
-    if (!receipt) {
+    if (receiptRead.kind === "MALFORMED") {
+      return {
+        ...candidateFail(
+          deploymentId,
+          txHash,
+          "RECEIPT_MALFORMED_RETRYABLE",
+          "RECEIPT_UNAVAILABLE_RETRYABLE",
+        ),
+        exactIntentObserved: true,
+      };
+    }
+    if (receiptRead.kind === "ABSENT") {
+      // Provider answered successfully with result: null — genuinely unmined.
       result.ok = true;
       result.notice = "EXACT_INTENT_UNMINED";
       result.classification = "EXACT_INTENT_UNMINED";
       return result;
     }
-    if (lower(String(receipt.transactionHash)) !== txHash) {
+
+    const receipt = receiptRead.receipt;
+    if (receipt.transactionHash !== txHash) {
       return {
         ...candidateFail(deploymentId, txHash, "MISMATCH_RECEIPT_TX_HASH", "MISMATCH"),
         exactIntentObserved: true,
       };
     }
 
-    const succeeded = receipt.status === "success";
+    const succeeded = receipt.status === "0x1";
     result.receiptStatus = succeeded ? "SUCCESS" : "REVERTED";
-    result.contractAddress =
-      receipt.contractAddress && ADDRESS.test(lower(receipt.contractAddress))
-        ? lower(receipt.contractAddress)
-        : null;
+    result.contractAddress = receipt.contractAddress;
 
-    const receiptBlockNumber = receipt.blockNumber ?? null;
-    const receiptBlockHash = receipt.blockHash ? lower(receipt.blockHash) : null;
+    const receiptBlockNumber = receipt.blockNumber === null ? null : BigInt(receipt.blockNumber);
+    const receiptBlockHash = receipt.blockHash;
     result.blockNumber = receiptBlockNumber === null ? null : receiptBlockNumber.toString();
     result.blockHash = receiptBlockHash;
 
@@ -635,6 +655,7 @@ export const verifyMainnetCandidateTransaction = createServerFn({ method: "POST"
         result.blockHashConsistent = null;
       }
     }
+
 
     // A revert is still proof of broadcast. It is never reported as "no send".
     result.ok = true;
