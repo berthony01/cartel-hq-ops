@@ -185,7 +185,10 @@ async function applyProductionDeploymentVerification(payload: {
       ? { _observed_confirmations: payload.observedConfirmations }
       : {}),
     ...(payload.contractAddress ? { _contract_address: payload.contractAddress } : {}),
-    ...(payload.blockNumber !== undefined ? { _block_number: Number(payload.blockNumber) } : {}),
+    ...(payload.blockNumber !== undefined
+      ? { _block_number: toSafeDbInteger(payload.blockNumber, "block_number") }
+      : {}),
+
     ...(payload.blockHash ? { _block_hash: payload.blockHash } : {}),
     ...(payload.failureCode ? { _failure_code: payload.failureCode } : {}),
     ...(payload.failureDetail ? { _failure_detail: payload.failureDetail } : {}),
