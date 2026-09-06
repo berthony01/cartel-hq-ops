@@ -146,16 +146,19 @@ function buildInitCode(intent: {
 }
 
 /* -------------------------------------------------------------------------
- * P3A service-role apply helpers — PRESENT BUT GUARDED OFF.
+ * P3A service-role apply helpers — WIRED INTO THE VERIFIER, GUARDED OFF.
  *
- * Intended activation order in a later authorized slice:
- *   1. record PENDING mined + token evidence (production verification RPC);
- *   2. record FINALITY_PENDING / PROVIDER_INCONSISTENT / FINALIZED from
- *      managed evidence only (production finality RPC);
- *   3. only after FINALIZED, record CONFIRMED with the exact same immutable
- *      mined/token evidence.
- * All three are refused today by the local lock, before any admin import.
+ * The exported verifier calls these in exactly this order, and only inside
+ * `if (STATE_WRITES_ENABLED)` branches:
+ *   1. PENDING with complete, independently observed mined + token evidence;
+ *   2. managed finality only — FINALITY_PENDING / PROVIDER_INCONSISTENT /
+ *      FINALIZED (production finality RPC, `MANAGED` authority);
+ *   3. CONFIRMED only after a FINALIZED apply succeeded, reusing the exact
+ *      same immutable mined/token evidence recorded at PENDING.
+ * No path persists FAILED in this slice. Every call is refused today by the
+ * local lock, before any admin import.
  * ---------------------------------------------------------------------- */
+
 
 function assertStateWritesEnabled(): void {
   if (!MAINNET_VERIFICATION_STATE_WRITES_ENABLED) {
