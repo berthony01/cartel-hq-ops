@@ -575,7 +575,7 @@ export const verifyMainnetCandidateTransaction = createServerFn({ method: "POST"
     }
 
     if (lower(String(tx.hash)) !== txHash) {
-      return candidateFail(deploymentId, txHash, "MISMATCH_RECEIPT_TX_HASH", "MISMATCH");
+      return candidateFail(deploymentId, txHash, "MISMATCH_TX_HASH", "MISMATCH");
     }
     if (tx.to !== null && tx.to !== undefined) {
       return candidateFail(deploymentId, txHash, "MISMATCH_NOT_CONTRACT_CREATION", "MISMATCH");
