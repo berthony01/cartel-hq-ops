@@ -491,3 +491,71 @@ A future assistant must:
 ### Next allowed step
 - **P3C-A2 AUDIT/DESIGN FIRST** for short-lived, single-use, replay-resistant pre-sign authorization evidence/state. A2 is NOT built.
 - P3C-B / P3C-C / P3C-D, UI, P3D canary, and all real-money execution remain NOT STARTED / NO-GO.
+
+## P3C-A2 Completion Checkpoint — 2026-09-06
+
+**P3C-A2 Production Pre-Sign Authorization Evidence: COMPLETE / APPLIED / VERIFIED.**
+
+### Change of record
+- Migration file: `supabase/migrations/20260906140331_1867ed4b-c438-4414-85a6-2d012a544fd2.sql`
+- Supabase live migration version `20260906140331`, migration name `1867ed4b-c438-4414-85a6-2d012a544fd2`
+- Post-sync pre-checkpoint HEAD: `951010bde9a2d4e7136cbfea0cef1c0e24973c13`
+- Diff from P3C-A2 audit checkpoint `e575d855e902ac1316aa9296d517ba8d58c34d03`: the migration file plus auto-generated `src/integrations/supabase/types.ts` (schema/RPC typing only, no behavioral code). No other file changed.
+
+### Table: `public.launch_chain_production_presign_authorizations`
+- Chain `4663` / `PRODUCTION` only, enforced by CHECK and by trigger against the live deployment row.
+- Deployment FK uses `ON DELETE RESTRICT` so authorization evidence is preserved.
+- Strict exact binding to deployment id, workspace, launch, deployer address, operator user, `review_fingerprint`, and `init_code_hash`; all must equal the live deployment row at insert time.
+- Economic evidence stored as exact unsigned-decimal text: gas estimate, gas limit, observed fee per gas, max fee per gas, max priority fee per gas, estimated cost, max total cost. Signs, decimals, hex, spaces, and empty strings are rejected.
+- `tx_value_wei` is constrained to exactly `'0'`.
+- `ttl_seconds` is immutable, constrained to 30..300, default issue TTL 60; `expires_at` derived server-side from `now()` and bounded to `issued_at + 30s .. issued_at + 5 minutes`.
+- States: `ISSUED`, `CLAIMED`, `INVALIDATED`, `EXPIRED`. Partial unique unresolved index covers BOTH `ISSUED` and `CLAIMED`, so at most one unresolved authorization exists per deployment.
+- `CLAIMED` is frozen in A2 and blocks reissue; no recovery of `CLAIMED` exists yet.
+- Deployment eligibility required at insert and at claim: `FIXED_SUPPLY_ERC20`, artifact `cartel-fixed-erc20-v1`, status `DRAFT`, `tx_hash IS NULL`.
+
+### Access boundary
+- RLS ENABLED and FORCED; zero policies.
+- Zero direct table grants — `PUBLIC`, `anon`, `authenticated`, and `service_role` all revoked. All access flows through SECURITY DEFINER RPCs, removing the direct-insert bypass around economic-coherence checks.
+- `issue_launch_chain_production_presign_authorization(...)`: SECURITY DEFINER, EXECUTE granted to `service_role` ONLY; `authenticated` and `anon` cannot issue. The browser cannot mint authoritative authorization.
+- `claim_launch_chain_production_presign_authorization(...)`, `invalidate_launch_chain_production_presign_authorization(...)`, `get_launch_chain_production_presign_authorization(...)`: `authenticated` only, authorized through `authorize_launch_chain_deployment` (platform owner AND workspace operator); `anon` EXECUTE false.
+- Claim and invalidate use one consistent lock order: read `deployment_id` unlocked, lock the DEPLOYMENT `FOR UPDATE` first, then lock/re-read the AUTHORIZATION `FOR UPDATE` and re-verify ownership. Issue already locks the deployment first.
+- `INVALIDATE` operates only on `ISSUED`, is idempotent when already `INVALIDATED`, and REFUSES `CLAIMED`.
+
+### Economic coherence
+- Required economic arguments are required RPC parameters; only `_ttl_seconds` defaults (60).
+- Strict unsigned-decimal validation runs BEFORE any numeric cast.
+- `EIP1559` requires a non-null max priority fee and enforces `max_priority <= max_fee`; `LEGACY` forbids a priority fee.
+- Enforced: gas estimate > 0, gas limit >= gas estimate, max fee >= observed fee, max total cost >= estimated cost, max total cost >= gas limit * max fee.
+- Exact-replay idempotency compares every bound field INCLUDING `ttl_seconds`; any mismatch raises `22023` on both the pre-read and unique-violation re-read paths.
+
+### Non-capability statement
+- A2 authorizes only a later wallet-handoff step. It does NOT sign, assemble, submit, broadcast, or record any blockchain transaction, and adds no transaction capability.
+
+### Independent live verification
+- Table exists; `rows = 0`; 4663/PRODUCTION deployment rows = 0 before and after.
+- RLS `enabled/forced`, policies = 0, table grants = none, 22 CHECK constraints live, FK delete action `RESTRICT`, indexes `lcppa_deployment_request_uidx` and `lcppa_deployment_unresolved_uidx` present.
+- Privilege probes: issue → `service_role` true, `authenticated` false, `anon` false; claim/invalidate/get → `authenticated` true, `anon` false; table SELECT/INSERT false for `authenticated`, `anon`, and `service_role`.
+
+### Rollback-safe negative QA — PASS
+All executed inside a single transaction deliberately rolled back; zero rows persisted.
+- Unknown deployment → rejected
+- TTL out of range (900) → rejected
+- `LEGACY` with priority fee → rejected
+- `EIP1559` missing priority fee → rejected
+- Malformed decimals (hex / padded whitespace) → rejected
+- Max total cost below `gas_limit * max_fee` → rejected
+- Short `client_request_id` → rejected
+- Existing non-production deployment → rejected as ineligible
+- Direct table insert bypass → rejected by trigger
+
+### Build validation
+- `bunx tsgo --noEmit` PASS.
+- `bun run build` PASS.
+
+### Safety state
+- No real ETH moved; no wallet signature; no blockchain transaction; no liquidity action; no Telegram send; no Edge Function deploy; no secret change; no publish. Project remains private/unpublished.
+- `MAINNET_DEPLOYMENT_TX_ENABLED`, `MAINNET_LIQUIDITY_TX_ENABLED`, and `MAINNET_VERIFICATION_STATE_WRITES_ENABLED` all remain literal `false`.
+
+### Next allowed step
+- **P3C-B AUDIT/DESIGN FIRST ONLY** for the managed server-side pre-sign gate: independently reconstruct the exact production transaction from stored intent and the frozen artifact, use managed Alchemy chain 4663 simulation/gas/fees/balance, and issue the A2 authorization through the service-role-only RPC. No wallet signing or broadcast in B.
+- P3C-C, P3C-D, UI, and P3D canary remain NOT STARTED / NO-GO.
