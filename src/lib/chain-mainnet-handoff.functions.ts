@@ -774,3 +774,176 @@ export const persistMainnetDeploymentTxHash = createServerFn({ method: "POST" })
       recoveredExisting: lostResponsePath,
     };
   });
+
+/* ------------------------------------------------------------------ */
+/* C) FINAL SEND WINDOW — the only envelope issuer (P3C-C3)            */
+/* ------------------------------------------------------------------ */
+
+type SendWindowInput = { deploymentId: string; authorizationId: string };
+
+function windowBase(deploymentId: string): MainnetSendWindowResult {
+  return {
+    ok: false,
+    notice: null,
+    deploymentId,
+    authorizationId: null,
+    chainId: ROBINHOOD_MAINNET_CHAIN_ID,
+    feeModel: null,
+    sendWindowExpiresAt: null,
+    envelope: null,
+  };
+}
+
+function windowFail(deploymentId: string, notice: HandoffNotice): MainnetSendWindowResult {
+  return { ...windowBase(deploymentId), ok: false, notice };
+}
+
+/**
+ * FINAL server-authoritative pre-send authorization.
+ *
+ * This is the ONLY function in the system that emits a `MainnetWalletEnvelope`.
+ * It is intended to be called immediately before wallet invocation, so the
+ * exposure window between envelope issuance and `eth_sendTransaction` is a few
+ * seconds rather than the whole authorization TTL.
+ *
+ * Order of authority: compile-time switch, then server runtime control, then
+ * tenancy/binding/state, then SERVER-clock freshness. Browser time is never
+ * consulted and never trusted. Nothing here mutates the database: a refusal
+ * freezes the attempt for later operator reconciliation and never cancels,
+ * expires, or reissues an authorization.
+ */
+export const authorizeMainnetSendWindow = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: SendWindowInput) => {
+    if (!input || typeof input.deploymentId !== "string" || !UUID.test(input.deploymentId)) {
+      throw new Error("Invalid deployment id");
+    }
+    if (typeof input.authorizationId !== "string" || !UUID.test(input.authorizationId)) {
+      throw new Error("Invalid authorization id");
+    }
+    return { deploymentId: input.deploymentId, authorizationId: input.authorizationId };
+  })
+  .handler(async ({ data, context }): Promise<MainnetSendWindowResult> => {
+    const { deploymentId, authorizationId } = data;
+
+    // ---- GATE 1: compile-time switch, before any service-role import. ----
+    if (PRODUCTION_SEND_ENABLED !== true) {
+      return windowFail(deploymentId, "PRODUCTION_TX_DISABLED");
+    }
+
+    // ---- GATE 2: server-authoritative runtime control. Fails closed. ----
+    const runtimeGate = await readRuntimeExecutionGate();
+    if (runtimeGate !== null) return windowFail(deploymentId, runtimeGate);
+
+    // ---- Tenancy through the caller's own RLS-bound client. ----
+    const { data: rawDeployment, error: deploymentError } = await context.supabase
+      .from("launch_chain_deployments")
+      .select(DEPLOYMENT_COLUMNS)
+      .eq("id", deploymentId)
+      .maybeSingle();
+
+    if (deploymentError || !rawDeployment) return windowFail(deploymentId, "NOT_AUTHORIZED");
+    const deployment = rawDeployment as unknown as DeploymentRow;
+
+    if (deployment.status !== "DRAFT" || deployment.tx_hash !== null) {
+      return windowFail(deploymentId, "UNSUPPORTED_DEPLOYMENT");
+    }
+
+    // ---- Independent re-derivation from the live row alone. ----
+    const derived = deriveIntent(deployment);
+    if (typeof derived === "string") return windowFail(deploymentId, derived);
+
+    const { data: rawAuthorization, error: authorizationError } = await context.supabase.rpc(
+      "get_launch_chain_production_presign_authorization",
+      { _deployment_id: deploymentId },
+    );
+    if (authorizationError) return windowFail(deploymentId, "NOT_AUTHORIZED");
+
+    const authorization = firstRow(rawAuthorization);
+    if (!authorization || authorization.id !== authorizationId) {
+      return windowFail(deploymentId, "PRESIGN_NOT_FOUND");
+    }
+    if (!bindingMatches(authorization, deployment, derived, context.userId)) {
+      return windowFail(deploymentId, "PRESIGN_BINDING_MISMATCH");
+    }
+
+    // ---- Exactly one acceptable state: CLAIMED and unconsumed. ----
+    if (
+      authorization.status !== "CLAIMED" ||
+      authorization.claimed_at === null ||
+      authorization.consumed_at !== null ||
+      authorization.consumed_tx_hash !== null
+    ) {
+      return windowFail(deploymentId, "PRESIGN_NOT_CLAIMED");
+    }
+
+    // ---- SERVER-clock freshness: min(expires_at, claimed_at + 10s). ----
+    const nowMs = Date.now();
+    const expiresAtMs = Date.parse(authorization.expires_at);
+    const claimedAtMs = Date.parse(authorization.claimed_at);
+    if (!Number.isFinite(expiresAtMs) || !Number.isFinite(claimedAtMs)) {
+      return windowFail(deploymentId, "SEND_WINDOW_EXPIRED");
+    }
+    const deadlineMs = Math.min(expiresAtMs, claimedAtMs + FINAL_SEND_WINDOW_MS);
+    if (!(nowMs < expiresAtMs) || !(nowMs < deadlineMs)) {
+      // Freeze for reconciliation. No cancellation, no reissue, no mutation.
+      return windowFail(deploymentId, "SEND_WINDOW_EXPIRED");
+    }
+
+    // ---- Economic evidence revalidated exactly as at CLAIM time. ----
+    const feeModel = authorization.fee_model === "LEGACY" ? "LEGACY" : "EIP1559";
+    if (authorization.fee_model !== "LEGACY" && authorization.fee_model !== "EIP1559") {
+      return windowFail(deploymentId, "INVALID_ECONOMIC_EVIDENCE");
+    }
+    if (
+      !isCanonicalDecimal(authorization.gas_limit_text) ||
+      !isCanonicalDecimal(authorization.max_fee_per_gas_wei_text) ||
+      !isCanonicalDecimal(authorization.tx_value_wei) ||
+      authorization.tx_value_wei.trim() !== "0"
+    ) {
+      return windowFail(deploymentId, "INVALID_ECONOMIC_EVIDENCE");
+    }
+    if (
+      feeModel === "EIP1559" &&
+      !isCanonicalDecimal(authorization.max_priority_fee_per_gas_wei_text)
+    ) {
+      return windowFail(deploymentId, "INVALID_ECONOMIC_EVIDENCE");
+    }
+    if (feeModel === "LEGACY" && authorization.max_priority_fee_per_gas_wei_text !== null) {
+      return windowFail(deploymentId, "INVALID_ECONOMIC_EVIDENCE");
+    }
+
+    const gasHex = decimalToHexQuantity(authorization.gas_limit_text);
+    const maxFeeHex = decimalToHexQuantity(authorization.max_fee_per_gas_wei_text);
+    if (!gasHex || gasHex === "0x0" || !maxFeeHex) {
+      return windowFail(deploymentId, "INVALID_ECONOMIC_EVIDENCE");
+    }
+
+    // ---- Bounded envelope. No `to` member exists on either variant. ----
+    const common = {
+      from: derived.deployer,
+      data: derived.initCode as string,
+      value: "0x0" as const,
+      gas: gasHex,
+    };
+
+    let envelope: MainnetWalletEnvelope;
+    if (feeModel === "EIP1559") {
+      const priorityHex = decimalToHexQuantity(authorization.max_priority_fee_per_gas_wei_text);
+      if (!priorityHex) return windowFail(deploymentId, "INVALID_ECONOMIC_EVIDENCE");
+      envelope = { ...common, maxFeePerGas: maxFeeHex, maxPriorityFeePerGas: priorityHex };
+    } else {
+      envelope = { ...common, gasPrice: maxFeeHex };
+    }
+
+    return {
+      ok: true,
+      notice: null,
+      deploymentId,
+      authorizationId,
+      chainId: ROBINHOOD_MAINNET_CHAIN_ID,
+      feeModel,
+      sendWindowExpiresAt: new Date(deadlineMs).toISOString(),
+      envelope,
+    };
+  });
