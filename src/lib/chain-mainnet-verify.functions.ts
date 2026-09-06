@@ -740,13 +740,3 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
 
     return result;
   });
-
-
-// Module-private, non-exported reference: keeps the guarded write path
-// type-checked and audit-visible while the local lock keeps it unreachable.
-// These helpers are deliberately NOT part of this module's public API.
-const mainnetApplyHelpersInternal = {
-  applyProductionDeploymentVerification,
-  applyProductionFinality,
-} as const;
-void mainnetApplyHelpersInternal;
