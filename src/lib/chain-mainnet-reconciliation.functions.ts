@@ -70,18 +70,23 @@ export type CandidateNotice =
   | "MISMATCH_NONZERO_VALUE"
   | "MISMATCH_SENDER"
   | "MISMATCH_INIT_CODE"
+  | "MISMATCH_TX_HASH"
   | "MISMATCH_RECEIPT_TX_HASH"
+  | "RECEIPT_UNAVAILABLE_RETRYABLE"
+  | "RECEIPT_MALFORMED_RETRYABLE"
   | "EXACT_INTENT_UNMINED"
   | "EXACT_INTENT_MINED_SUCCESS"
   | "EXACT_INTENT_MINED_REVERTED";
 
 export type CandidateClassification =
   | "NOT_VISIBLE_RETRYABLE"
+  | "RECEIPT_UNAVAILABLE_RETRYABLE"
   | "EXACT_INTENT_UNMINED"
   | "EXACT_INTENT_MINED_SUCCESS"
   | "EXACT_INTENT_MINED_REVERTED"
   | "MISMATCH"
   | "REFUSED";
+
 
 /** JSON-serializable snapshot payload returned verbatim from the read-only RPC. */
 export type ReconciliationJson =
