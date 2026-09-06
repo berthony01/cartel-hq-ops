@@ -14,22 +14,43 @@ import {
 } from "./chain-mainnet-registry";
 
 /**
- * P3C-C2 — Robinhood Chain PRODUCTION (4663) HANDOFF CONTRACT (server side).
+ * P3C-C2 / C3 / D2 / D3 — Robinhood Chain PRODUCTION (4663) HANDOFF CONTRACT
+ * (server side).
  *
  * SCOPE AND SAFETY
  * ----------------
- * Two authenticated server functions and nothing else:
+ * Three authenticated server functions and nothing else:
  *
  *   1. `claimMainnetDeploymentHandoff` — re-derives the exact creation payload
  *      from stored intent + frozen artifact, verifies it against the stored
  *      `init_code_hash` / `review_fingerprint`, CLAIMs the P3C-A2 authorization
- *      through the AUTHENTICATED claim RPC (never service role), and returns a
- *      bounded, non-editable wallet transaction envelope.
+ *      through the AUTHENTICATED claim RPC (never service role), and returns
+ *      NOTHING sendable. No wallet envelope is emitted here.
  *
- *   2. `persistMainnetDeploymentTxHash` — persists a canonical transaction hash
+ *   2. `authorizeMainnetSendWindow` — the FINAL pre-send authorization and the
+ *      only emitter of a `MainnetWalletEnvelope`. It mints durable, immutable
+ *      database issuance evidence BEFORE returning an envelope.
+ *
+ *   3. `persistMainnetDeploymentTxHash` — persists a canonical transaction hash
  *      for the SAME attempt and SAME authorization through the service-role-only
  *      atomic P3C-C1 RPC, after re-validating every caller/tenant/binding rule.
  *
+ * Database-authoritative gates (independent of anything TypeScript checks):
+ *   - The AUTHENTICATED claim RPC and the service-role final issuance RPC EACH
+ *     independently require, inside their own locked transaction, that the
+ *     global runtime control `ROBINHOOD_MAINNET_DEPLOYMENT` has
+ *     `execution_enabled = true` AND `emergency_stop_engaged = false`, AND that
+ *     a matching P3C-D3 canary permit exists for that exact authorization:
+ *     exact deployment/workspace/launch/operator/chain/environment/deployer/
+ *     review fingerprint/init-code-hash binding, `control_revision` equal to the
+ *     current control revision, unexpired on DATABASE time, and not already
+ *     consumed. A missing, expired, stale-revision, mismatched, or consumed
+ *     permit fails closed without mutating the authorization.
+ *   - The immutable send-window issuance row carries `canary_permit_id` and is
+ *     the one-time consumption evidence for that permit. Permits themselves are
+ *     append-only; there is no reset, reissue, or arming path anywhere in the
+ *     application.
+
  * Deliberate omissions — absence, not a flag, is the safety property:
  *   - No cancellation wrapper of any kind. Once a CLAIMED envelope has left the
  *     server, no application evidence can prove `eth_sendTransaction` was never
@@ -810,10 +831,15 @@ function windowFail(deploymentId: string, notice: HandoffNotice): MainnetSendWin
  * seconds rather than the whole authorization TTL.
  *
  * Order of authority: compile-time switch, then server runtime control, then
- * tenancy/binding/state, then SERVER-clock freshness. Browser time is never
- * consulted and never trusted. Nothing here mutates the database: a refusal
- * freezes the attempt for later operator reconciliation and never cancels,
- * expires, or reissues an authorization.
+ * tenancy/binding/state, then the database-authoritative canary-permit and
+ * runtime re-check inside the issuance RPC, then SERVER-clock freshness.
+ * Browser time is never consulted and never trusted. On success this DOES
+ * mutate the database: it inserts exactly one immutable send-window issuance
+ * row (the one-time consumption evidence for the bound canary permit) before
+ * any envelope is returned. A refusal writes nothing and freezes the attempt
+ * for later operator reconciliation; it never cancels, expires, or reissues an
+ * authorization, and a duplicate issuance is an explicit refusal.
+
  */
 export const authorizeMainnetSendWindow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
