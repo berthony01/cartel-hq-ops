@@ -336,6 +336,110 @@ export type Database = {
           },
         ]
       }
+      launch_chain_production_presign_authorizations: {
+        Row: {
+          chain_id: number
+          claimed_at: string | null
+          client_request_id: string
+          created_at: string
+          deployer_address: string
+          deployment_id: string
+          estimated_cost_wei_text: string
+          expires_at: string
+          fee_model: string
+          gas_estimate_text: string
+          gas_limit_text: string
+          id: string
+          init_code_hash: string
+          invalidated_at: string | null
+          invalidated_reason: string | null
+          issued_at: string
+          launch_id: string
+          max_fee_per_gas_wei_text: string
+          max_priority_fee_per_gas_wei_text: string | null
+          max_total_cost_wei_text: string
+          network_environment: string
+          observed_fee_per_gas_wei_text: string
+          operator_user_id: string
+          review_fingerprint: string
+          status: string
+          ttl_seconds: number
+          tx_value_wei: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          chain_id: number
+          claimed_at?: string | null
+          client_request_id: string
+          created_at?: string
+          deployer_address: string
+          deployment_id: string
+          estimated_cost_wei_text: string
+          expires_at: string
+          fee_model: string
+          gas_estimate_text: string
+          gas_limit_text: string
+          id?: string
+          init_code_hash: string
+          invalidated_at?: string | null
+          invalidated_reason?: string | null
+          issued_at?: string
+          launch_id: string
+          max_fee_per_gas_wei_text: string
+          max_priority_fee_per_gas_wei_text?: string | null
+          max_total_cost_wei_text: string
+          network_environment: string
+          observed_fee_per_gas_wei_text: string
+          operator_user_id: string
+          review_fingerprint: string
+          status?: string
+          ttl_seconds: number
+          tx_value_wei?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          chain_id?: number
+          claimed_at?: string | null
+          client_request_id?: string
+          created_at?: string
+          deployer_address?: string
+          deployment_id?: string
+          estimated_cost_wei_text?: string
+          expires_at?: string
+          fee_model?: string
+          gas_estimate_text?: string
+          gas_limit_text?: string
+          id?: string
+          init_code_hash?: string
+          invalidated_at?: string | null
+          invalidated_reason?: string | null
+          issued_at?: string
+          launch_id?: string
+          max_fee_per_gas_wei_text?: string
+          max_priority_fee_per_gas_wei_text?: string | null
+          max_total_cost_wei_text?: string
+          network_environment?: string
+          observed_fee_per_gas_wei_text?: string
+          operator_user_id?: string
+          review_fingerprint?: string
+          status?: string
+          ttl_seconds?: number
+          tx_value_wei?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launch_chain_production_presign_authorizatio_deployment_id_fkey"
+            columns: ["deployment_id"]
+            isOneToOne: false
+            referencedRelation: "launch_chain_deployments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       launch_contract_registration_events: {
         Row: {
           action: string
@@ -3399,6 +3503,50 @@ export type Database = {
         }
         Returns: string
       }
+      claim_launch_chain_production_presign_authorization: {
+        Args: {
+          _authorization_id: string
+          _expected_init_code_hash: string
+          _expected_review_fingerprint: string
+        }
+        Returns: {
+          chain_id: number
+          claimed_at: string | null
+          client_request_id: string
+          created_at: string
+          deployer_address: string
+          deployment_id: string
+          estimated_cost_wei_text: string
+          expires_at: string
+          fee_model: string
+          gas_estimate_text: string
+          gas_limit_text: string
+          id: string
+          init_code_hash: string
+          invalidated_at: string | null
+          invalidated_reason: string | null
+          issued_at: string
+          launch_id: string
+          max_fee_per_gas_wei_text: string
+          max_priority_fee_per_gas_wei_text: string | null
+          max_total_cost_wei_text: string
+          network_environment: string
+          observed_fee_per_gas_wei_text: string
+          operator_user_id: string
+          review_fingerprint: string
+          status: string
+          ttl_seconds: number
+          tx_value_wei: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_chain_production_presign_authorizations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       claim_launch_notification_deliveries: {
         Args: { _limit?: number }
         Returns: {
@@ -3909,6 +4057,46 @@ export type Database = {
           updates_muted_watchers: number
         }[]
       }
+      get_launch_chain_production_presign_authorization: {
+        Args: { _deployment_id: string }
+        Returns: {
+          chain_id: number
+          claimed_at: string | null
+          client_request_id: string
+          created_at: string
+          deployer_address: string
+          deployment_id: string
+          estimated_cost_wei_text: string
+          expires_at: string
+          fee_model: string
+          gas_estimate_text: string
+          gas_limit_text: string
+          id: string
+          init_code_hash: string
+          invalidated_at: string | null
+          invalidated_reason: string | null
+          issued_at: string
+          launch_id: string
+          max_fee_per_gas_wei_text: string
+          max_priority_fee_per_gas_wei_text: string | null
+          max_total_cost_wei_text: string
+          network_environment: string
+          observed_fee_per_gas_wei_text: string
+          operator_user_id: string
+          review_fingerprint: string
+          status: string
+          ttl_seconds: number
+          tx_value_wei: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_chain_production_presign_authorizations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       get_launch_notification_summary: {
         Args: { _launch_id: string }
         Returns: {
@@ -4110,6 +4298,46 @@ export type Database = {
         Args: { _user_id: string }
         Returns: boolean
       }
+      invalidate_launch_chain_production_presign_authorization: {
+        Args: { _authorization_id: string; _reason: string }
+        Returns: {
+          chain_id: number
+          claimed_at: string | null
+          client_request_id: string
+          created_at: string
+          deployer_address: string
+          deployment_id: string
+          estimated_cost_wei_text: string
+          expires_at: string
+          fee_model: string
+          gas_estimate_text: string
+          gas_limit_text: string
+          id: string
+          init_code_hash: string
+          invalidated_at: string | null
+          invalidated_reason: string | null
+          issued_at: string
+          launch_id: string
+          max_fee_per_gas_wei_text: string
+          max_priority_fee_per_gas_wei_text: string | null
+          max_total_cost_wei_text: string
+          network_environment: string
+          observed_fee_per_gas_wei_text: string
+          operator_user_id: string
+          review_fingerprint: string
+          status: string
+          ttl_seconds: number
+          tx_value_wei: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_chain_production_presign_authorizations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       invoke_launch_notification_scheduler: { Args: never; Returns: number }
       invoke_project_inbox_delivery_scheduler: { Args: never; Returns: number }
       invoke_sticker_drop_scheduler: { Args: never; Returns: number }
@@ -4129,6 +4357,59 @@ export type Database = {
       is_workspace_owner: {
         Args: { _user_id: string; _workspace_id: string }
         Returns: boolean
+      }
+      issue_launch_chain_production_presign_authorization: {
+        Args: {
+          _client_request_id: string
+          _deployment_id: string
+          _estimated_cost_wei_text: string
+          _fee_model: string
+          _gas_estimate_text: string
+          _gas_limit_text: string
+          _max_fee_per_gas_wei_text: string
+          _max_priority_fee_per_gas_wei_text: string
+          _max_total_cost_wei_text: string
+          _observed_fee_per_gas_wei_text: string
+          _operator_user_id: string
+          _ttl_seconds?: number
+        }
+        Returns: {
+          chain_id: number
+          claimed_at: string | null
+          client_request_id: string
+          created_at: string
+          deployer_address: string
+          deployment_id: string
+          estimated_cost_wei_text: string
+          expires_at: string
+          fee_model: string
+          gas_estimate_text: string
+          gas_limit_text: string
+          id: string
+          init_code_hash: string
+          invalidated_at: string | null
+          invalidated_reason: string | null
+          issued_at: string
+          launch_id: string
+          max_fee_per_gas_wei_text: string
+          max_priority_fee_per_gas_wei_text: string | null
+          max_total_cost_wei_text: string
+          network_environment: string
+          observed_fee_per_gas_wei_text: string
+          operator_user_id: string
+          review_fingerprint: string
+          status: string
+          ttl_seconds: number
+          tx_value_wei: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_chain_production_presign_authorizations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       launch_chain_label_is_robinhood_mainnet: {
         Args: { _chain: string }
