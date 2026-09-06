@@ -64,6 +64,14 @@ const STATE_WRITES_ENABLED: boolean = Boolean(MAINNET_VERIFICATION_STATE_WRITES_
 /** Deterministic, sanitized code. Raw DB/provider error text never escapes. */
 const STATE_WRITE_FAILED_RETRYABLE = "STATE_WRITE_FAILED_RETRYABLE" as const;
 
+/**
+ * Exact upper bound of the PostgreSQL signed `integer` domain. The RPC column
+ * `_observed_confirmations` is `integer`, NOT `bigint`, so a diagnostic
+ * confirmation value is only convertible when it fits here. Anything outside
+ * `[0, 2_147_483_647]` is omitted rather than sent.
+ */
+const POSTGRES_INTEGER_MAX = 2_147_483_647n;
+
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TX_HASH = /^0x[0-9a-f]{64}$/;
@@ -554,13 +562,14 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
     // Observational confirmations from `latest`. DIAGNOSTIC DISPLAY ONLY —
     // deliberately computed after all evidence checks and never consulted by
     // any branch below. A depth count cannot settle an L2. Values outside the
-    // DB integer domain are omitted rather than coerced into an unsafe Number.
+    // PostgreSQL signed INTEGER domain [0, 2_147_483_647] are omitted rather
+    // than coerced, because `_observed_confirmations` is an `integer` column.
     try {
       const latest = await client.getBlockNumber();
       const diff = latest - receiptBlockNumber + 1n;
       const bounded = diff > 0n ? diff : 0n;
       result.observationalConfirmations =
-        bounded <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(bounded) : null;
+        bounded >= 0n && bounded <= POSTGRES_INTEGER_MAX ? Number(bounded) : null;
     } catch {
       result.observationalConfirmations = null;
     }
@@ -589,12 +598,18 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
       try {
         await applyProductionDeploymentVerification({ ...minedEvidence, status: "PENDING" });
         pendingRowEstablished = true;
+        // The PENDING apply landed, so the reported DB status is now PENDING.
+        // Status only ever advances after the corresponding RPC succeeded.
+        result.status = "PENDING";
       } catch {
-        // Sanitized and retryable: never FAILED, never CONFIRMED.
+        // Sanitized and retryable: never FAILED, never CONFIRMED. The last
+        // status known to have landed (the RLS read) is preserved.
         result.notice = STATE_WRITE_FAILED_RETRYABLE;
         return result;
       }
     }
+
+
 
     // ---- Finality: MANAGED provider `finalized` tag only. ----
     // No `safe`, no `latest - N`, no fixed confirmation count, no public
@@ -720,7 +735,8 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
           finalizedBlockHashConfirmed: true,
         });
       } catch {
-        // FINALIZED did not land, so CONFIRMED must not be attempted.
+        // FINALIZED did not land, so CONFIRMED must not be attempted. The
+        // deployment status stays at PENDING, the last status that landed.
         result.notice = STATE_WRITE_FAILED_RETRYABLE;
         return result;
       }
@@ -728,10 +744,12 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
       /**
        * STEP C — FINALIZED -> CONFIRMED, reusing the identical immutable
        * mined/token evidence already recorded at PENDING. Unreachable unless
-       * the FINALIZED apply above succeeded.
+       * the FINALIZED apply above succeeded. Status is only promoted to
+       * CONFIRMED after this RPC actually succeeds.
        */
       try {
         await applyProductionDeploymentVerification({ ...minedEvidence, status: "CONFIRMED" });
+        result.status = "CONFIRMED";
       } catch {
         result.notice = STATE_WRITE_FAILED_RETRYABLE;
         return result;
