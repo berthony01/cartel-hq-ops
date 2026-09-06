@@ -70,18 +70,23 @@ export type CandidateNotice =
   | "MISMATCH_NONZERO_VALUE"
   | "MISMATCH_SENDER"
   | "MISMATCH_INIT_CODE"
+  | "MISMATCH_TX_HASH"
   | "MISMATCH_RECEIPT_TX_HASH"
+  | "RECEIPT_UNAVAILABLE_RETRYABLE"
+  | "RECEIPT_MALFORMED_RETRYABLE"
   | "EXACT_INTENT_UNMINED"
   | "EXACT_INTENT_MINED_SUCCESS"
   | "EXACT_INTENT_MINED_REVERTED";
 
 export type CandidateClassification =
   | "NOT_VISIBLE_RETRYABLE"
+  | "RECEIPT_UNAVAILABLE_RETRYABLE"
   | "EXACT_INTENT_UNMINED"
   | "EXACT_INTENT_MINED_SUCCESS"
   | "EXACT_INTENT_MINED_REVERTED"
   | "MISMATCH"
   | "REFUSED";
+
 
 /** JSON-serializable snapshot payload returned verbatim from the read-only RPC. */
 export type ReconciliationJson =
@@ -132,10 +137,118 @@ const TOKEN_NAME = /^[\x20-\x7e]{1,32}$/;
 const TOKEN_SYMBOL = /^[A-Z0-9]{2,11}$/;
 const BASE_UNIT_SCALE = 10n ** BigInt(CARTEL_FIXED_ERC20_DECIMALS);
 const MANAGED_CALL_TIMEOUT_MS = 8_000;
+const QUANTITY = /^0x(0|[1-9a-f][0-9a-f]*)$/;
 
 function lower(value: string): string {
   return value.trim().toLowerCase();
 }
+
+/* ------------------------------------------------------------------ */
+/* Managed receipt read — provider failure is NEVER "unmined"          */
+/* ------------------------------------------------------------------ */
+
+type RawReceipt = {
+  transactionHash: string;
+  status: "0x0" | "0x1";
+  contractAddress: string | null;
+  blockNumber: string | null;
+  blockHash: string | null;
+};
+
+type ReceiptRead =
+  /** Provider answered successfully and positively reported no receipt. */
+  | { kind: "ABSENT" }
+  /** Provider answered with a structurally valid receipt. */
+  | { kind: "PRESENT"; receipt: RawReceipt }
+  /** Transport/timeout/JSON-RPC error. Retryable — NOT proof of unmined. */
+  | { kind: "UNAVAILABLE" }
+  /** Successful transport but unusable payload. Retryable, never mined. */
+  | { kind: "MALFORMED" };
+
+function parseRawReceipt(value: unknown): ReceiptRead {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { kind: "MALFORMED" };
+  const raw = value as Record<string, unknown>;
+
+  const transactionHash = typeof raw["transactionHash"] === "string" ? lower(raw["transactionHash"]) : "";
+  if (!HASH32.test(transactionHash)) return { kind: "MALFORMED" };
+
+  const status = typeof raw["status"] === "string" ? lower(raw["status"]) : "";
+  if (status !== "0x0" && status !== "0x1") return { kind: "MALFORMED" };
+
+  let contractAddress: string | null = null;
+  if (raw["contractAddress"] !== null && raw["contractAddress"] !== undefined) {
+    if (typeof raw["contractAddress"] !== "string") return { kind: "MALFORMED" };
+    const candidate = lower(raw["contractAddress"]);
+    if (!ADDRESS.test(candidate)) return { kind: "MALFORMED" };
+    contractAddress = candidate;
+  }
+
+  let blockNumber: string | null = null;
+  if (raw["blockNumber"] !== null && raw["blockNumber"] !== undefined) {
+    if (typeof raw["blockNumber"] !== "string") return { kind: "MALFORMED" };
+    const candidate = lower(raw["blockNumber"]);
+    if (!QUANTITY.test(candidate)) return { kind: "MALFORMED" };
+    blockNumber = candidate;
+  }
+
+  let blockHash: string | null = null;
+  if (raw["blockHash"] !== null && raw["blockHash"] !== undefined) {
+    if (typeof raw["blockHash"] !== "string") return { kind: "MALFORMED" };
+    const candidate = lower(raw["blockHash"]);
+    if (!HASH32.test(candidate)) return { kind: "MALFORMED" };
+    blockHash = candidate;
+  }
+
+  return {
+    kind: "PRESENT",
+    receipt: { transactionHash, status: status as "0x0" | "0x1", contractAddress, blockNumber, blockHash },
+  };
+}
+
+/**
+ * Raw managed `eth_getTransactionReceipt`. The ONLY way this reports "no
+ * receipt" is a successful JSON-RPC response carrying `result: null`. Any
+ * transport, timeout, HTTP or JSON-RPC error is UNAVAILABLE (retryable).
+ * Raw provider text and the endpoint never escape this function.
+ */
+async function readManagedReceipt(endpoint: string, txHash: string): Promise<ReceiptRead> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MANAGED_CALL_TIMEOUT_MS);
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_getTransactionReceipt",
+        params: [txHash],
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) return { kind: "UNAVAILABLE" };
+
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      return { kind: "UNAVAILABLE" };
+    }
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return { kind: "UNAVAILABLE" };
+    }
+    const body = payload as Record<string, unknown>;
+    if (body["error"] !== null && body["error"] !== undefined) return { kind: "UNAVAILABLE" };
+    if (!("result" in body)) return { kind: "UNAVAILABLE" };
+    if (body["result"] === null) return { kind: "ABSENT" };
+    return parseRawReceipt(body["result"]);
+  } catch {
+    return { kind: "UNAVAILABLE" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 
 /** Canonical P2 fingerprint pre-image. 14 fields, trailing tx value "0". */
 function fingerprintPreimage(fields: {
@@ -462,7 +575,7 @@ export const verifyMainnetCandidateTransaction = createServerFn({ method: "POST"
     }
 
     if (lower(String(tx.hash)) !== txHash) {
-      return candidateFail(deploymentId, txHash, "MISMATCH_RECEIPT_TX_HASH", "MISMATCH");
+      return candidateFail(deploymentId, txHash, "MISMATCH_TX_HASH", "MISMATCH");
     }
     if (tx.to !== null && tx.to !== undefined) {
       return candidateFail(deploymentId, txHash, "MISMATCH_NOT_CONTRACT_CREATION", "MISMATCH");
@@ -480,34 +593,54 @@ export const verifyMainnetCandidateTransaction = createServerFn({ method: "POST"
     // From here the EXACT frozen production intent is proven broadcast.
     result.exactIntentObserved = true;
 
-    let receipt: Awaited<ReturnType<typeof client.getTransactionReceipt>> | null = null;
-    try {
-      receipt = await client.getTransactionReceipt({ hash: txHash as `0x${string}` });
-    } catch {
-      receipt = null;
+    // Receipt lookup via the same managed endpoint, read raw so that a
+    // provider failure can never be confused with "positively no receipt".
+    const receiptRead = await readManagedReceipt(endpoint, txHash);
+
+    if (receiptRead.kind === "UNAVAILABLE") {
+      return {
+        ...candidateFail(
+          deploymentId,
+          txHash,
+          "RECEIPT_UNAVAILABLE_RETRYABLE",
+          "RECEIPT_UNAVAILABLE_RETRYABLE",
+        ),
+        exactIntentObserved: true,
+      };
     }
-    if (!receipt) {
+    if (receiptRead.kind === "MALFORMED") {
+      return {
+        ...candidateFail(
+          deploymentId,
+          txHash,
+          "RECEIPT_MALFORMED_RETRYABLE",
+          "RECEIPT_UNAVAILABLE_RETRYABLE",
+        ),
+        exactIntentObserved: true,
+      };
+    }
+    if (receiptRead.kind === "ABSENT") {
+      // Provider answered successfully with result: null — genuinely unmined.
       result.ok = true;
       result.notice = "EXACT_INTENT_UNMINED";
       result.classification = "EXACT_INTENT_UNMINED";
       return result;
     }
-    if (lower(String(receipt.transactionHash)) !== txHash) {
+
+    const receipt = receiptRead.receipt;
+    if (receipt.transactionHash !== txHash) {
       return {
         ...candidateFail(deploymentId, txHash, "MISMATCH_RECEIPT_TX_HASH", "MISMATCH"),
         exactIntentObserved: true,
       };
     }
 
-    const succeeded = receipt.status === "success";
+    const succeeded = receipt.status === "0x1";
     result.receiptStatus = succeeded ? "SUCCESS" : "REVERTED";
-    result.contractAddress =
-      receipt.contractAddress && ADDRESS.test(lower(receipt.contractAddress))
-        ? lower(receipt.contractAddress)
-        : null;
+    result.contractAddress = receipt.contractAddress;
 
-    const receiptBlockNumber = receipt.blockNumber ?? null;
-    const receiptBlockHash = receipt.blockHash ? lower(receipt.blockHash) : null;
+    const receiptBlockNumber = receipt.blockNumber === null ? null : BigInt(receipt.blockNumber);
+    const receiptBlockHash = receipt.blockHash;
     result.blockNumber = receiptBlockNumber === null ? null : receiptBlockNumber.toString();
     result.blockHash = receiptBlockHash;
 
@@ -522,6 +655,7 @@ export const verifyMainnetCandidateTransaction = createServerFn({ method: "POST"
         result.blockHashConsistent = null;
       }
     }
+
 
     // A revert is still proof of broadcast. It is never reported as "no send".
     result.ok = true;
