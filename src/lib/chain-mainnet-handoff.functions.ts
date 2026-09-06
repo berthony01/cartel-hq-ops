@@ -179,6 +179,54 @@ const HANDOFF_MIN_REMAINING_MS = 15_000;
  */
 const FINAL_SEND_WINDOW_MS = 10_000;
 
+/* ------------------------------------------------------------------ */
+/* P3C-C3 — server-authoritative runtime execution control             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Reads the singleton runtime control through the service-role-only RPC.
+ *
+ * Returns `null` when — and only when — production execution is runtime
+ * enabled AND no emergency stop is engaged. Every other outcome (RPC error,
+ * missing row, malformed shape, non-boolean members, any ambiguity) returns a
+ * refusal notice. There is no default-enabled path anywhere in this function,
+ * and raw DB error text is never surfaced.
+ *
+ * Callers MUST have already refused on the compile-time switch, so no
+ * service-role import happens while `MAINNET_DEPLOYMENT_TX_ENABLED` is false.
+ */
+async function readRuntimeExecutionGate(): Promise<HandoffNotice | null> {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin.rpc(
+      "get_launch_chain_production_execution_state",
+    );
+    if (error) return "PRODUCTION_RUNTIME_CONTROL_UNAVAILABLE";
+
+    const row = (Array.isArray(data) ? data[0] : data) as
+      | { execution_enabled?: unknown; emergency_stop_engaged?: unknown }
+      | null
+      | undefined;
+    if (!row || typeof row !== "object") return "PRODUCTION_RUNTIME_CONTROL_UNAVAILABLE";
+    if (Array.isArray(data) && data.length !== 1) {
+      return "PRODUCTION_RUNTIME_CONTROL_UNAVAILABLE";
+    }
+    if (
+      typeof row.execution_enabled !== "boolean" ||
+      typeof row.emergency_stop_engaged !== "boolean"
+    ) {
+      return "PRODUCTION_RUNTIME_CONTROL_UNAVAILABLE";
+    }
+
+    if (row.execution_enabled !== true || row.emergency_stop_engaged !== false) {
+      return "PRODUCTION_RUNTIME_DISABLED";
+    }
+    return null;
+  } catch {
+    return "PRODUCTION_RUNTIME_CONTROL_UNAVAILABLE";
+  }
+}
+
 /** Canonical P2 fingerprint domain and separator. Byte-identical to P3C-B. */
 const FINGERPRINT_DOMAIN = "cartel-mainnet-sim-v1";
 const FIELD_SEPARATOR = "\u001f";
