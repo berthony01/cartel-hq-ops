@@ -83,11 +83,20 @@ export type CandidateClassification =
   | "MISMATCH"
   | "REFUSED";
 
+/** JSON-serializable snapshot payload returned verbatim from the read-only RPC. */
+export type ReconciliationJson =
+  | string
+  | number
+  | boolean
+  | null
+  | ReconciliationJson[]
+  | { [key: string]: ReconciliationJson };
+
 export type MainnetReconciliationSnapshotResult = {
   ok: boolean;
   notice: ReconciliationNotice | null;
   deploymentId: string;
-  snapshot: unknown | null;
+  snapshot: ReconciliationJson | null;
 };
 
 export type MainnetCandidateVerificationResult = {
@@ -338,7 +347,7 @@ export const getMainnetDeploymentReconciliationSnapshot = createServerFn({ metho
       return snapshotFail(deploymentId, "SNAPSHOT_UNAVAILABLE");
     }
 
-    return { ok: true, notice: null, deploymentId, snapshot };
+    return { ok: true, notice: null, deploymentId, snapshot: snapshot as ReconciliationJson };
   });
 
 /* ------------------------------------------------------------------ */
