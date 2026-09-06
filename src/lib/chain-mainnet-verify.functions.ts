@@ -562,13 +562,14 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
     // Observational confirmations from `latest`. DIAGNOSTIC DISPLAY ONLY —
     // deliberately computed after all evidence checks and never consulted by
     // any branch below. A depth count cannot settle an L2. Values outside the
-    // DB integer domain are omitted rather than coerced into an unsafe Number.
+    // PostgreSQL signed INTEGER domain [0, 2_147_483_647] are omitted rather
+    // than coerced, because `_observed_confirmations` is an `integer` column.
     try {
       const latest = await client.getBlockNumber();
       const diff = latest - receiptBlockNumber + 1n;
       const bounded = diff > 0n ? diff : 0n;
       result.observationalConfirmations =
-        bounded <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(bounded) : null;
+        bounded >= 0n && bounded <= POSTGRES_INTEGER_MAX ? Number(bounded) : null;
     } catch {
       result.observationalConfirmations = null;
     }
