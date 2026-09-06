@@ -598,12 +598,18 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
       try {
         await applyProductionDeploymentVerification({ ...minedEvidence, status: "PENDING" });
         pendingRowEstablished = true;
+        // The PENDING apply landed, so the reported DB status is now PENDING.
+        // Status only ever advances after the corresponding RPC succeeded.
+        result.status = "PENDING";
       } catch {
-        // Sanitized and retryable: never FAILED, never CONFIRMED.
+        // Sanitized and retryable: never FAILED, never CONFIRMED. The last
+        // status known to have landed (the RLS read) is preserved.
         result.notice = STATE_WRITE_FAILED_RETRYABLE;
         return result;
       }
     }
+
+
 
     // ---- Finality: MANAGED provider `finalized` tag only. ----
     // No `safe`, no `latest - N`, no fixed confirmation count, no public
