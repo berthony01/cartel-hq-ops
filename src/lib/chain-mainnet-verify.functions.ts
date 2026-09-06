@@ -64,6 +64,14 @@ const STATE_WRITES_ENABLED: boolean = Boolean(MAINNET_VERIFICATION_STATE_WRITES_
 /** Deterministic, sanitized code. Raw DB/provider error text never escapes. */
 const STATE_WRITE_FAILED_RETRYABLE = "STATE_WRITE_FAILED_RETRYABLE" as const;
 
+/**
+ * Exact upper bound of the PostgreSQL signed `integer` domain. The RPC column
+ * `_observed_confirmations` is `integer`, NOT `bigint`, so a diagnostic
+ * confirmation value is only convertible when it fits here. Anything outside
+ * `[0, 2_147_483_647]` is omitted rather than sent.
+ */
+const POSTGRES_INTEGER_MAX = 2_147_483_647n;
+
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TX_HASH = /^0x[0-9a-f]{64}$/;
