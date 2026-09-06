@@ -831,10 +831,15 @@ function windowFail(deploymentId: string, notice: HandoffNotice): MainnetSendWin
  * seconds rather than the whole authorization TTL.
  *
  * Order of authority: compile-time switch, then server runtime control, then
- * tenancy/binding/state, then SERVER-clock freshness. Browser time is never
- * consulted and never trusted. Nothing here mutates the database: a refusal
- * freezes the attempt for later operator reconciliation and never cancels,
- * expires, or reissues an authorization.
+ * tenancy/binding/state, then the database-authoritative canary-permit and
+ * runtime re-check inside the issuance RPC, then SERVER-clock freshness.
+ * Browser time is never consulted and never trusted. On success this DOES
+ * mutate the database: it inserts exactly one immutable send-window issuance
+ * row (the one-time consumption evidence for the bound canary permit) before
+ * any envelope is returned. A refusal writes nothing and freezes the attempt
+ * for later operator reconciliation; it never cancels, expires, or reissues an
+ * authorization, and a duplicate issuance is an explicit refusal.
+
  */
 export const authorizeMainnetSendWindow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
