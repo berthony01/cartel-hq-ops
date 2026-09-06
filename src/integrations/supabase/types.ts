@@ -3609,6 +3609,16 @@ export type Database = {
         }
       }
       archive_sticker_pack: { Args: { _pack_id: string }; Returns: Json }
+      arm_launch_chain_production_canary_execution: {
+        Args: {
+          _authorization_id: string
+          _deployment_id: string
+          _expected_control_revision: number
+          _operator_user_id: string
+          _reason: string
+        }
+        Returns: Json
+      }
       assert_launch_contract_evidence: {
         Args: {
           _declared_chain: string
