@@ -43,12 +43,27 @@ import {
  * STATE-WRITE LOCK
  * ----------------
  * `MAINNET_VERIFICATION_STATE_WRITES_ENABLED` is a local, independent lock
- * (separate from the registry's deployment/liquidity switches). While it is
- * false this module performs verification reads but mutates nothing. Enabling
- * it requires a separately authorized slice, after managed finality semantics
- * are proven live.
+ * (separate from the registry's deployment/liquidity switches). The exported
+ * verifier IS wired to the guarded service-role apply helpers, but every one
+ * of those call sites sits behind this lock, and each helper additionally
+ * refuses before importing the admin client. While the lock is false this
+ * module performs verification reads and mutates nothing. Enabling it requires
+ * a separately authorized slice, after managed finality semantics are proven
+ * live.
  */
 const MAINNET_VERIFICATION_STATE_WRITES_ENABLED = false as const;
+
+/**
+ * Widened runtime mirror of the lock. Its ONLY purpose is dead-code-safe
+ * typechecking of the wired-but-disabled write path; the authoritative literal
+ * above stays exactly `false`, and every helper re-checks it at runtime before
+ * any service-role import.
+ */
+const STATE_WRITES_ENABLED: boolean = Boolean(MAINNET_VERIFICATION_STATE_WRITES_ENABLED as boolean);
+
+/** Deterministic, sanitized code. Raw DB/provider error text never escapes. */
+const STATE_WRITE_FAILED_RETRYABLE = "STATE_WRITE_FAILED_RETRYABLE" as const;
+
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TX_HASH = /^0x[0-9a-f]{64}$/;
