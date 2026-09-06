@@ -71,6 +71,9 @@ export type HandoffNotice =
   | "PRESIGN_TOO_CLOSE_TO_EXPIRY"
   | "PRESIGN_BINDING_MISMATCH"
   | "SEND_WINDOW_EXPIRED"
+  | "SEND_WINDOW_ALREADY_ISSUED"
+  | "SEND_WINDOW_ISSUANCE_REFUSED"
+  | "SEND_WINDOW_ISSUANCE_FAILED"
   | "INIT_CODE_HASH_MISMATCH"
   | "INTENT_FINGERPRINT_MISMATCH"
   | "INVALID_ECONOMIC_EVIDENCE"
@@ -936,6 +939,74 @@ export const authorizeMainnetSendWindow = createServerFn({ method: "POST" })
       envelope = { ...common, gasPrice: maxFeeHex };
     }
 
+    /* -------------------------------------------------------------- *
+     * P3C-D2 — DURABLE ONE-TIME ISSUANCE, BEFORE ANY ENVELOPE RETURN.
+     *
+     * The service-role RPC is the authoritative second gate: it re-locks
+     * deployment -> authorization -> runtime control inside one transaction,
+     * re-checks `execution_enabled = true AND emergency_stop_engaged = false`
+     * (closing the TOCTOU against the read above), recomputes the deadline on
+     * DATABASE time, and inserts exactly one immutable issuance row. A second
+     * issuance for the same authorization is an explicit refusal, never an
+     * idempotent success — a repeat success could release a second envelope.
+     *
+     * If anything below fails, no envelope is returned. A durable issuance is
+     * NEVER deleted or rolled back after the fact: the authorization freezes
+     * for reconciliation, which is strictly safer than reissuing.
+     * -------------------------------------------------------------- */
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: rawIssuance, error: issuanceError } = await supabaseAdmin.rpc(
+      "authorize_launch_chain_production_send_window_issuance",
+      {
+        _deployment_id: deploymentId,
+        _authorization_id: authorizationId,
+        _operator_user_id: context.userId,
+      },
+    );
+
+    if (issuanceError) {
+      // Raw DB text never escapes. Only deterministic sanitized codes.
+      const code = (issuanceError as { code?: string }).code;
+      const notice: HandoffNotice =
+        code === "23505"
+          ? "SEND_WINDOW_ALREADY_ISSUED"
+          : code === "42501" || code === "22023"
+            ? "SEND_WINDOW_ISSUANCE_REFUSED"
+            : "SEND_WINDOW_ISSUANCE_FAILED";
+      return windowFail(deploymentId, notice);
+    }
+
+    const issuance = (Array.isArray(rawIssuance) ? rawIssuance[0] : rawIssuance) as
+      | {
+          authorization_id?: string;
+          deployment_id?: string;
+          send_window_expires_at?: string;
+        }
+      | null
+      | undefined;
+
+    if (
+      !issuance ||
+      issuance.authorization_id !== authorizationId ||
+      issuance.deployment_id !== deploymentId ||
+      typeof issuance.send_window_expires_at !== "string"
+    ) {
+      return windowFail(deploymentId, "SEND_WINDOW_ISSUANCE_FAILED");
+    }
+
+    // The DB deadline is authoritative. It must agree with the server-computed
+    // semantics `min(expires_at, claimed_at + 10s)`; any drift beyond a small
+    // clock allowance, or a malformed value, fails closed with no envelope.
+    const durableDeadlineMs = Date.parse(issuance.send_window_expires_at);
+    if (
+      !Number.isFinite(durableDeadlineMs) ||
+      Math.abs(durableDeadlineMs - deadlineMs) > 1_000 ||
+      !(Date.now() < durableDeadlineMs)
+    ) {
+      return windowFail(deploymentId, "SEND_WINDOW_ISSUANCE_FAILED");
+    }
+
     return {
       ok: true,
       notice: null,
@@ -943,7 +1014,7 @@ export const authorizeMainnetSendWindow = createServerFn({ method: "POST" })
       authorizationId,
       chainId: ROBINHOOD_MAINNET_CHAIN_ID,
       feeModel,
-      sendWindowExpiresAt: new Date(deadlineMs).toISOString(),
+      sendWindowExpiresAt: new Date(durableDeadlineMs).toISOString(),
       envelope,
     };
   });
