@@ -134,7 +134,7 @@ export type MainnetHandoffPersistResult = {
  * activation silently narrow away the guard. Widening keeps the runtime check
  * real and the whole guarded path type-checked.
  */
-const PRODUCTION_SEND_ENABLED: boolean = MAINNET_DEPLOYMENT_TX_ENABLED;
+const PRODUCTION_SEND_ENABLED: boolean = Boolean(MAINNET_DEPLOYMENT_TX_ENABLED as boolean);
 
 /**
  * A claimed envelope must not be handed to a wallet with a near-dead TTL: the
