@@ -559,3 +559,21 @@ All executed inside a single transaction deliberately rolled back; zero rows per
 ### Next allowed step
 - **P3C-B AUDIT/DESIGN FIRST ONLY** for the managed server-side pre-sign gate: independently reconstruct the exact production transaction from stored intent and the frozen artifact, use managed Alchemy chain 4663 simulation/gas/fees/balance, and issue the A2 authorization through the service-role-only RPC. No wallet signing or broadcast in B.
 - P3C-C, P3C-D, UI, and P3D canary remain NOT STARTED / NO-GO.
+
+## P3C-C3 Completion Checkpoint — 2026-09-06
+
+- **P3C-C3 Runtime Emergency Stop + Final Send-Window Hardening:** COMPLETE as a safety foundation, while real-money execution remains disabled.
+- **P3C-C3 migration file:** `supabase/migrations/20260906160112_34aaaf53-0408-40c1-8a1f-92b6b6a52704.sql`.
+- **Runtime singleton seeded default deny:** `execution_enabled = false`, `emergency_stop_engaged = true`, `revision = 1`, `reason = INITIAL_DEFAULT_OFF`.
+- **Append-only immutable execution-control event history** exists in `public.launch_chain_production_execution_control_events`.
+- **`get_launch_chain_production_execution_state()`** is service-role only and fails closed on missing or ambiguous state.
+- **`engage_launch_chain_production_emergency_stop(uuid, text)`** is service-role only, platform-owner validated, and one-way stop only. It cannot enable execution and cannot clear the emergency stop.
+- **There is intentionally NO RPC in C3 that can enable production execution or clear the emergency stop.** Enabling execution or lifting the stop is a later, separately authorized, fail-closed operation.
+- **CLAIM no longer emits a sendable wallet envelope.** `claimMainnetDeploymentHandoff` returns a claim receipt only. `authorizeMainnetSendWindow` is the only server-side envelope issuer.
+- **Final server-authoritative send window** uses server time and is `min(original expires_at, claimed_at + 10 seconds)`. Expired or invalid windows freeze the attempt for reconciliation with no auto-cancel, no auto-reissue, and no client-side extension.
+- **Browser wallet helper** consumes only the final server-issued envelope, keeps exact-envelope validation, re-reads account and chain immediately before its single future `eth_sendTransaction`, and never retries.
+- **Known same-hash persistence/recovery remains available even after execution is stopped.** The emergency stop gates new send-window issuance; it does not erase or alter existing deployment attempt/intent records needed for incident recovery.
+- **Incident-response limitation:** an emergency stop cannot cryptographically recall an envelope that was already delivered to a browser, nor cancel a wallet prompt or transaction already in flight. The server-side final 10-second window minimizes that exposure, and no automatic rebroadcast is allowed. A stop prevents new issuance; reconciliation of in-flight or already-broadcast transactions remains a manual, evidence-driven process.
+- **Independent post-build state:** 4663/PRODUCTION deployment rows = 0; production presign rows = 0; execution-control rows = 1; execution-control event rows = 1; control state `execution_enabled = false`, `emergency_stop_engaged = true`, `revision = 1`, `reason = INITIAL_DEFAULT_OFF`. Project remains private/unpublished. No real wallet, signature, transaction, ETH, liquidity, Telegram, Edge Function deploy, or web publish occurred.
+- **All three hard switches remain literal `false`:** `MAINNET_DEPLOYMENT_TX_ENABLED = false`, `MAINNET_LIQUIDITY_TX_ENABLED = false`, `MAINNET_VERIFICATION_STATE_WRITES_ENABLED = false`.
+- **Next allowed step is READ-ONLY next-boundary audit only.** Do not automatically start P3C-D, P3C-UI, P3D canary, liquidity, verifier-write activation, or any real-money action.
