@@ -137,10 +137,118 @@ const TOKEN_NAME = /^[\x20-\x7e]{1,32}$/;
 const TOKEN_SYMBOL = /^[A-Z0-9]{2,11}$/;
 const BASE_UNIT_SCALE = 10n ** BigInt(CARTEL_FIXED_ERC20_DECIMALS);
 const MANAGED_CALL_TIMEOUT_MS = 8_000;
+const QUANTITY = /^0x(0|[1-9a-f][0-9a-f]*)$/;
 
 function lower(value: string): string {
   return value.trim().toLowerCase();
 }
+
+/* ------------------------------------------------------------------ */
+/* Managed receipt read — provider failure is NEVER "unmined"          */
+/* ------------------------------------------------------------------ */
+
+type RawReceipt = {
+  transactionHash: string;
+  status: "0x0" | "0x1";
+  contractAddress: string | null;
+  blockNumber: string | null;
+  blockHash: string | null;
+};
+
+type ReceiptRead =
+  /** Provider answered successfully and positively reported no receipt. */
+  | { kind: "ABSENT" }
+  /** Provider answered with a structurally valid receipt. */
+  | { kind: "PRESENT"; receipt: RawReceipt }
+  /** Transport/timeout/JSON-RPC error. Retryable — NOT proof of unmined. */
+  | { kind: "UNAVAILABLE" }
+  /** Successful transport but unusable payload. Retryable, never mined. */
+  | { kind: "MALFORMED" };
+
+function parseRawReceipt(value: unknown): ReceiptRead {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { kind: "MALFORMED" };
+  const raw = value as Record<string, unknown>;
+
+  const transactionHash = typeof raw.transactionHash === "string" ? lower(raw.transactionHash) : "";
+  if (!HASH32.test(transactionHash)) return { kind: "MALFORMED" };
+
+  const status = typeof raw.status === "string" ? lower(raw.status) : "";
+  if (status !== "0x0" && status !== "0x1") return { kind: "MALFORMED" };
+
+  let contractAddress: string | null = null;
+  if (raw.contractAddress !== null && raw.contractAddress !== undefined) {
+    if (typeof raw.contractAddress !== "string") return { kind: "MALFORMED" };
+    const candidate = lower(raw.contractAddress);
+    if (!ADDRESS.test(candidate)) return { kind: "MALFORMED" };
+    contractAddress = candidate;
+  }
+
+  let blockNumber: string | null = null;
+  if (raw.blockNumber !== null && raw.blockNumber !== undefined) {
+    if (typeof raw.blockNumber !== "string") return { kind: "MALFORMED" };
+    const candidate = lower(raw.blockNumber);
+    if (!QUANTITY.test(candidate)) return { kind: "MALFORMED" };
+    blockNumber = candidate;
+  }
+
+  let blockHash: string | null = null;
+  if (raw.blockHash !== null && raw.blockHash !== undefined) {
+    if (typeof raw.blockHash !== "string") return { kind: "MALFORMED" };
+    const candidate = lower(raw.blockHash);
+    if (!HASH32.test(candidate)) return { kind: "MALFORMED" };
+    blockHash = candidate;
+  }
+
+  return {
+    kind: "PRESENT",
+    receipt: { transactionHash, status: status as "0x0" | "0x1", contractAddress, blockNumber, blockHash },
+  };
+}
+
+/**
+ * Raw managed `eth_getTransactionReceipt`. The ONLY way this reports "no
+ * receipt" is a successful JSON-RPC response carrying `result: null`. Any
+ * transport, timeout, HTTP or JSON-RPC error is UNAVAILABLE (retryable).
+ * Raw provider text and the endpoint never escape this function.
+ */
+async function readManagedReceipt(endpoint: string, txHash: string): Promise<ReceiptRead> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MANAGED_CALL_TIMEOUT_MS);
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_getTransactionReceipt",
+        params: [txHash],
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) return { kind: "UNAVAILABLE" };
+
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      return { kind: "UNAVAILABLE" };
+    }
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return { kind: "UNAVAILABLE" };
+    }
+    const body = payload as Record<string, unknown>;
+    if (body.error !== null && body.error !== undefined) return { kind: "UNAVAILABLE" };
+    if (!("result" in body)) return { kind: "UNAVAILABLE" };
+    if (body.result === null) return { kind: "ABSENT" };
+    return parseRawReceipt(body.result);
+  } catch {
+    return { kind: "UNAVAILABLE" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 
 /** Canonical P2 fingerprint pre-image. 14 fields, trailing tx value "0". */
 function fingerprintPreimage(fields: {
