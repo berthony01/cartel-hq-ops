@@ -452,3 +452,42 @@ A future assistant must:
 
 
 
+## P3C-A1 Completion Checkpoint — 2026-09-06
+
+**P3C-A1 Production Attempt DB Foundation: COMPLETE.**
+
+### Artifacts
+- Repository migration: `supabase/migrations/20260906133800_p3c_a1_production_token_attempt_intent.sql`.
+- Migration commit: `419a359381fb1b7aad51770d0b5989ed37ae37c3`.
+- Supabase applied migration: `p3c_a1_production_token_attempt_intent`, live migration version `20260906134001`.
+- After application, Lovable automatically regenerated `src/integrations/supabase/types.ts`. Independent diff inspection confirmed generated schema/RPC typing only (`review_fingerprint`, `init_code_hash`, and `create_launch_chain_production_token_deployment_attempt` args/returns) with no behavioral code. Post-sync pre-checkpoint HEAD: `bfc06a62b8bdc9e8c5435440dadbea01f66c499d`.
+
+### Schema and function changes
+- Added nullable `review_fingerprint` and `init_code_hash`, with strict lowercase 32-byte hex constraints, and a production `FIXED_SUPPLY_ERC20` requirement for both fields.
+- Extended `enforce_launch_chain_token_intent_immutable()` so the binding fields are immutable, preserving all prior token intent protections.
+- Added `create_launch_chain_production_token_deployment_attempt`, hard-coded to chain 4663 / `PRODUCTION` / `DRAFT` / `FIXED_SUPPLY_ERC20` / `cartel-fixed-erc20-v1` / 18 decimals, reusing the existing platform-owner + workspace-operator authorization and performing full immutable-field idempotency conflict checks.
+- Permissions verified: `authenticated` execute = true, `anon` = false, `service_role` = false. Existing testnet RPC permissions unchanged.
+
+### QA (rollback-safe) — PASS
+- Valid normalized row shape.
+- Exact replay idempotency.
+- Conflicting idempotency rejection.
+- Malformed fingerprint rejection.
+- Binding immutability rejection.
+- Missing binding constraint rejection.
+- Unauthorized-user rejection.
+- After rollback: zero 4663/`PRODUCTION` deployment rows, and zero `TESTNET` rows with non-default production finality.
+
+### Repository verification this turn
+- `bunx tsgo --noEmit`: PASS.
+- `bun run build`: PASS.
+
+### Safety state (unchanged)
+- No production transaction submission, signing, or broadcast capability was added.
+- `MAINNET_DEPLOYMENT_TX_ENABLED = false`, `MAINNET_LIQUIDITY_TX_ENABLED = false`, `MAINNET_VERIFICATION_STATE_WRITES_ENABLED = false`.
+- Managed Alchemy RPC configured by secret name only; the secret value is never recorded.
+- Project private/unpublished. No wallet signature, blockchain transaction, ETH movement, liquidity action, Telegram send, or Edge deploy occurred.
+
+### Next allowed step
+- **P3C-A2 AUDIT/DESIGN FIRST** for short-lived, single-use, replay-resistant pre-sign authorization evidence/state. A2 is NOT built.
+- P3C-B / P3C-C / P3C-D, UI, P3D canary, and all real-money execution remain NOT STARTED / NO-GO.
