@@ -228,10 +228,15 @@ async function applyProductionFinality(payload: {
     // MANAGED is the only permitted finality authority.
     _finality_provider_kind: "MANAGED",
     ...(payload.finalizedBlockNumber !== undefined
-      ? { _finalized_block_number: Number(payload.finalizedBlockNumber) }
+      ? { _finalized_block_number: toSafeDbInteger(payload.finalizedBlockNumber, "finalized_block_number") }
       : {}),
     ...(payload.finalizedHeadBlockNumber !== undefined
-      ? { _finalized_head_block_number: Number(payload.finalizedHeadBlockNumber) }
+      ? {
+          _finalized_head_block_number: toSafeDbInteger(
+            payload.finalizedHeadBlockNumber,
+            "finalized_head_block_number",
+          ),
+        }
       : {}),
     ...(payload.finalizedBlockHashConfirmed !== undefined
       ? { _finalized_block_hash_confirmed: payload.finalizedBlockHashConfirmed }
@@ -264,10 +269,10 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
 
     if (error || !row) throw new Error("Not authorized");
 
+    // Observed evidence fields stay null until this module reads them from the
+    // managed provider itself. Stored DB values are never presented as
+    // independently observed.
     const result = baseResult(String(row.status));
-    result.contractAddress = row.contract_address ?? null;
-    result.blockNumber = row.block_number === null ? null : String(row.block_number);
-    result.blockHash = row.block_hash ?? null;
 
     // Safe early returns: no chain read, no write.
     if (
@@ -322,6 +327,24 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
       chain: mainnetChain(endpoint),
       transport: http(endpoint),
     });
+
+    // Independently pin the managed endpoint's own chain id before any
+    // evidence read. A misconfigured managed provider pointed at another
+    // network must never produce production evidence. No fallback endpoint.
+    let observedChainId: number | null = null;
+    try {
+      observedChainId = await client.getChainId();
+    } catch {
+      observedChainId = null;
+    }
+    if (observedChainId === null) {
+      result.notice = "MANAGED_RPC_CHAIN_ID_UNAVAILABLE_RETRYABLE";
+      return result;
+    }
+    if (observedChainId !== ROBINHOOD_MAINNET_CHAIN_ID) {
+      result.notice = "MANAGED_RPC_CHAIN_MISMATCH";
+      return result;
+    }
 
     const expectedSupply = BigInt(supplyText);
     const expectedInitCode = lower(
@@ -398,6 +421,27 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
     result.blockNumber = receiptBlockNumber.toString();
     result.blockHash = receiptBlockHash;
 
+    // Stored mined evidence is immutable. It is compared to, never trusted
+    // over, and never overwritten by this read-only module.
+    if (row.contract_address && lower(String(row.contract_address)) !== contractAddress) {
+      result.notice = "MISMATCH_RECORDED_CONTRACT_ADDRESS";
+      return result;
+    }
+    if (
+      row.block_number !== null &&
+      row.block_number !== undefined &&
+      BigInt(row.block_number) !== receiptBlockNumber
+    ) {
+      result.notice = "MISMATCH_RECORDED_BLOCK_NUMBER";
+      return result;
+    }
+    if (row.block_hash && lower(String(row.block_hash)) !== receiptBlockHash) {
+      result.finality = "PROVIDER_INCONSISTENT";
+      result.finalityAuthority = "MANAGED";
+      result.notice = "MISMATCH_RECORDED_BLOCK_HASH";
+      return result;
+    }
+
     // Re-read the deployment block by exact number: mined evidence is only
     // stable if the canonical block at that height still carries that hash.
     let minedBlockHash: string | null = null;
@@ -416,13 +460,6 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
       result.finality = "PROVIDER_INCONSISTENT";
       result.finalityAuthority = "MANAGED";
       result.notice = "MISMATCH_BLOCK_HASH_REORG";
-      return result;
-    }
-    // If a hash was previously recorded, it is immutable evidence.
-    if (row.block_hash && lower(String(row.block_hash)) !== receiptBlockHash) {
-      result.finality = "PROVIDER_INCONSISTENT";
-      result.finalityAuthority = "MANAGED";
-      result.notice = "MISMATCH_RECORDED_BLOCK_HASH";
       return result;
     }
 
@@ -531,6 +568,27 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
       return result;
     }
 
+    // Second canonical deployment-block re-read AFTER the finalized head was
+    // obtained: closes the time-of-check / time-of-finality-check gap where a
+    // reorg lands between the first continuity check and the head read.
+    let finalityBlockHash: string | null = null;
+    try {
+      const reread = await client.getBlock({ blockNumber: receiptBlockNumber });
+      finalityBlockHash = reread.hash ? lower(reread.hash) : null;
+    } catch {
+      finalityBlockHash = null;
+    }
+    if (!finalityBlockHash) {
+      result.finality = "FINALITY_PENDING";
+      result.notice = "FINALITY_BLOCK_REREAD_UNAVAILABLE_RETRYABLE";
+      return result;
+    }
+    if (finalityBlockHash !== receiptBlockHash) {
+      result.finality = "PROVIDER_INCONSISTENT";
+      result.notice = "FINALITY_BLOCK_HASH_CHANGED";
+      return result;
+    }
+
     if (finalizedHead < receiptBlockNumber) {
       result.finality = "FINALITY_PENDING";
       result.notice = MAINNET_VERIFICATION_STATE_WRITES_ENABLED ? null : "STATE_WRITES_DISABLED";
@@ -545,9 +603,11 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
     return result;
   });
 
-// Referenced so the guarded write path stays type-checked and audit-visible
-// while the local lock keeps it unreachable.
-export const __mainnetApplyHelpers = {
+// Module-private, non-exported reference: keeps the guarded write path
+// type-checked and audit-visible while the local lock keeps it unreachable.
+// These helpers are deliberately NOT part of this module's public API.
+const mainnetApplyHelpersInternal = {
   applyProductionDeploymentVerification,
   applyProductionFinality,
 } as const;
+void mainnetApplyHelpersInternal;
