@@ -169,32 +169,32 @@ function parseRawReceipt(value: unknown): ReceiptRead {
   if (!value || typeof value !== "object" || Array.isArray(value)) return { kind: "MALFORMED" };
   const raw = value as Record<string, unknown>;
 
-  const transactionHash = typeof raw.transactionHash === "string" ? lower(raw.transactionHash) : "";
+  const transactionHash = typeof raw["transactionHash"] === "string" ? lower(raw["transactionHash"]) : "";
   if (!HASH32.test(transactionHash)) return { kind: "MALFORMED" };
 
-  const status = typeof raw.status === "string" ? lower(raw.status) : "";
+  const status = typeof raw["status"] === "string" ? lower(raw["status"]) : "";
   if (status !== "0x0" && status !== "0x1") return { kind: "MALFORMED" };
 
   let contractAddress: string | null = null;
-  if (raw.contractAddress !== null && raw.contractAddress !== undefined) {
-    if (typeof raw.contractAddress !== "string") return { kind: "MALFORMED" };
-    const candidate = lower(raw.contractAddress);
+  if (raw["contractAddress"] !== null && raw["contractAddress"] !== undefined) {
+    if (typeof raw["contractAddress"] !== "string") return { kind: "MALFORMED" };
+    const candidate = lower(raw["contractAddress"]);
     if (!ADDRESS.test(candidate)) return { kind: "MALFORMED" };
     contractAddress = candidate;
   }
 
   let blockNumber: string | null = null;
-  if (raw.blockNumber !== null && raw.blockNumber !== undefined) {
-    if (typeof raw.blockNumber !== "string") return { kind: "MALFORMED" };
-    const candidate = lower(raw.blockNumber);
+  if (raw["blockNumber"] !== null && raw["blockNumber"] !== undefined) {
+    if (typeof raw["blockNumber"] !== "string") return { kind: "MALFORMED" };
+    const candidate = lower(raw["blockNumber"]);
     if (!QUANTITY.test(candidate)) return { kind: "MALFORMED" };
     blockNumber = candidate;
   }
 
   let blockHash: string | null = null;
-  if (raw.blockHash !== null && raw.blockHash !== undefined) {
-    if (typeof raw.blockHash !== "string") return { kind: "MALFORMED" };
-    const candidate = lower(raw.blockHash);
+  if (raw["blockHash"] !== null && raw["blockHash"] !== undefined) {
+    if (typeof raw["blockHash"] !== "string") return { kind: "MALFORMED" };
+    const candidate = lower(raw["blockHash"]);
     if (!HASH32.test(candidate)) return { kind: "MALFORMED" };
     blockHash = candidate;
   }
@@ -238,10 +238,10 @@ async function readManagedReceipt(endpoint: string, txHash: string): Promise<Rec
       return { kind: "UNAVAILABLE" };
     }
     const body = payload as Record<string, unknown>;
-    if (body.error !== null && body.error !== undefined) return { kind: "UNAVAILABLE" };
+    if (body["error"] !== null && body["error"] !== undefined) return { kind: "UNAVAILABLE" };
     if (!("result" in body)) return { kind: "UNAVAILABLE" };
-    if (body.result === null) return { kind: "ABSENT" };
-    return parseRawReceipt(body.result);
+    if (body["result"] === null) return { kind: "ABSENT" };
+    return parseRawReceipt(body["result"]);
   } catch {
     return { kind: "UNAVAILABLE" };
   } finally {
