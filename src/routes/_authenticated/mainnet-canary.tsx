@@ -79,8 +79,7 @@ function useBusy() {
 }
 
 function CanaryConsole() {
-  const { activeWorkspace } = useWorkspace();
-  const workspaceId = activeWorkspace?.id ?? null;
+  const { workspaceId } = useWorkspace();
 
   const launches = useQuery({
     queryKey: ["canary-launches", workspaceId],
