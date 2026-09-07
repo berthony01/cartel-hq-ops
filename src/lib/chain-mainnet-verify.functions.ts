@@ -53,7 +53,6 @@ import {
  * service-role import, so turning the gate off again fails closed.
  */
 import {
-  MAINNET_VERIFICATION_STATE_WRITES_ENABLED,
   POSTGRES_INTEGER_MAX,
   STATE_WRITES_ENABLED,
   STATE_WRITE_FAILED_RETRYABLE,
@@ -61,6 +60,12 @@ import {
   applyProductionFinality,
 } from "./chain-mainnet-verify-apply";
 import { readManagedReceipt } from "./chain-mainnet-verify-receipt";
+import {
+  baseResult,
+  buildInitCode,
+  mainnetChain,
+  type MainnetVerifyResult,
+} from "./chain-mainnet-verify-shape";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TX_HASH = /^0x[0-9a-f]{64}$/;
