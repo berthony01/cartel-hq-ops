@@ -552,21 +552,29 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
       return result;
     }
 
-    let receipt: Awaited<ReturnType<typeof client.getTransactionReceipt>> | null = null;
-    try {
-      receipt = await client.getTransactionReceipt({ hash: txHash });
-    } catch {
-      receipt = null;
-    }
-    if (!receipt) {
+    // Truthful receipt classification (P3C Pre-Canary Hardening A). Provider
+    // uncertainty is retryable and NEVER promotes status/finality/CONFIRMED,
+    // never marks FAILED, and performs no state write.
+    const receiptRead = await readManagedReceipt(endpoint, txHash);
+    if (receiptRead.kind === "ABSENT") {
+      // Authoritative JSON-RPC `result: null` — genuinely not mined yet.
       result.notice = "RECEIPT_NOT_MINED_RETRYABLE";
       return result;
     }
+    if (receiptRead.kind === "UNAVAILABLE") {
+      result.notice = "RECEIPT_UNAVAILABLE_RETRYABLE";
+      return result;
+    }
+    if (receiptRead.kind === "MALFORMED") {
+      result.notice = "RECEIPT_MALFORMED_RETRYABLE";
+      return result;
+    }
+    const receipt = receiptRead.receipt;
     if (lower(String(receipt.transactionHash)) !== txHash) {
       result.notice = "MISMATCH_RECEIPT_TX_HASH";
       return result;
     }
-    if (receipt.status !== "success") {
+    if (receipt.status !== "0x1") {
       result.notice = "MISMATCH_RECEIPT_REVERTED";
       return result;
     }
@@ -575,12 +583,13 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
       result.notice = "MISMATCH_NO_CREATED_CONTRACT";
       return result;
     }
-    const receiptBlockNumber = receipt.blockNumber;
     const receiptBlockHash = receipt.blockHash ? lower(receipt.blockHash) : null;
-    if (receiptBlockNumber === null || receiptBlockNumber === undefined || !receiptBlockHash) {
+    if (receipt.blockNumber === null || !receiptBlockHash) {
       result.notice = "RECEIPT_BLOCK_UNAVAILABLE_RETRYABLE";
       return result;
     }
+    const receiptBlockNumber = BigInt(receipt.blockNumber);
+
 
     result.contractAddress = contractAddress;
     result.blockNumber = receiptBlockNumber.toString();
