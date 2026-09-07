@@ -92,6 +92,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Owner Console", to: "/admin", icon: ShieldHalf, ownerOnly: true },
       { label: "Chain Launcher", to: "/chain-launcher", icon: FlaskConical, ownerOnly: true },
+      { label: "Mainnet Canary", to: "/mainnet-canary", icon: Radiation, ownerOnly: true },
     ],
   },
 
