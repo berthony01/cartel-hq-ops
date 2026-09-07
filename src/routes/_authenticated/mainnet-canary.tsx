@@ -9,6 +9,13 @@ import { EmptyState } from "@/components/cartel/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  ARM_PHRASE,
+  Readout,
+  ReadoutLine,
+  SEND_PHRASE,
+  useBusy,
+} from "@/components/cartel/CanaryReadout";
 import { usePlatformAccess } from "@/hooks/usePlatformAccess";
 import { useWorkspace } from "@/lib/workspace-context";
 import { listLaunches } from "@/lib/launch-control";
@@ -47,36 +54,6 @@ import { sendClaimedMainnetDeployment } from "@/lib/chain-mainnet-wallet";
  * no batch mode, no liquidity and no registration action. Owner visibility is
  * a convenience; the server wrappers and RLS are the boundary.
  */
-
-const ARM_PHRASE = "ARM MAINNET CANARY";
-const SEND_PHRASE = "SEND ONE MAINNET DEPLOYMENT";
-
-type Json = unknown;
-
-function line(label: string, value: Json) {
-  return (
-    <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border/40 py-1 last:border-0">
-      <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</span>
-      <span className="break-all font-mono text-xs text-foreground">
-        {value === null || value === undefined || value === "" ? "—" : String(value)}
-      </span>
-    </div>
-  );
-}
-
-function useBusy() {
-  const [busy, setBusy] = useState<string | null>(null);
-  const run = async (key: string, fn: () => Promise<void>) => {
-    if (busy) return;
-    setBusy(key);
-    try {
-      await fn();
-    } finally {
-      setBusy(null);
-    }
-  };
-  return { busy, run };
-}
 
 function CanaryConsole() {
   const { workspaceId } = useWorkspace();
@@ -179,12 +156,12 @@ function CanaryConsole() {
         description="Every stage below is manual. Nothing here runs automatically, retries, rebroadcasts or adds liquidity."
       >
         <div className="grid gap-1 sm:grid-cols-2">
-          {line("Deployment capability", MAINNET_DEPLOYMENT_TX_ENABLED ? "COMPILED IN" : "OFF")}
-          {line("Liquidity capability", MAINNET_LIQUIDITY_TX_ENABLED ? "ON" : "OFF")}
-          {line("Runtime execution", control?.executionEnabled ?? "unknown")}
-          {line("Emergency stop", control?.emergencyStopEngaged ?? "unknown")}
-          {line("Control revision", control?.revision ?? "unknown")}
-          {line("Control reason", control?.reason ?? "unknown")}
+          <ReadoutLine label={"Deployment capability"} value={MAINNET_DEPLOYMENT_TX_ENABLED ? "COMPILED IN" : "OFF"} />
+          <ReadoutLine label={"Liquidity capability"} value={MAINNET_LIQUIDITY_TX_ENABLED ? "ON" : "OFF"} />
+          <ReadoutLine label={"Runtime execution"} value={control?.executionEnabled ?? "unknown"} />
+          <ReadoutLine label={"Emergency stop"} value={control?.emergencyStopEngaged ?? "unknown"} />
+          <ReadoutLine label={"Control revision"} value={control?.revision ?? "unknown"} />
+          <ReadoutLine label={"Control reason"} value={control?.reason ?? "unknown"} />
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button
@@ -333,14 +310,14 @@ function CanaryConsole() {
 
         {intent ? (
           <div className="mt-3 grid gap-1 sm:grid-cols-2">
-            {line("Deployer", intent.deployer)}
-            {line("Recipient", intent.recipient)}
-            {line("Supply (whole)", intent.supplyWhole)}
-            {line("Base units", intent.totalSupplyBaseUnits)}
-            {line("Init code hash", intent.initCodeHash)}
-            {line("Review fingerprint", intent.fingerprint)}
-            {line("Launch", selected?.public_slug ?? "—")}
-            {line("Deployment id", deploymentId)}
+            <ReadoutLine label={"Deployer"} value={intent.deployer} />
+            <ReadoutLine label={"Recipient"} value={intent.recipient} />
+            <ReadoutLine label={"Supply (whole)"} value={intent.supplyWhole} />
+            <ReadoutLine label={"Base units"} value={intent.totalSupplyBaseUnits} />
+            <ReadoutLine label={"Init code hash"} value={intent.initCodeHash} />
+            <ReadoutLine label={"Review fingerprint"} value={intent.fingerprint} />
+            <ReadoutLine label={"Launch"} value={selected?.public_slug ?? "—"} />
+            <ReadoutLine label={"Deployment id"} value={deploymentId} />
           </div>
         ) : null}
       </Section>
@@ -368,11 +345,7 @@ function CanaryConsole() {
           {busy === "presign" ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
           Run managed pre-sign
         </Button>
-        {quote ? (
-          <pre className="mt-3 max-h-56 overflow-auto rounded-md bg-surface-raised/40 p-2 text-[11px]">
-            {JSON.stringify(quote, null, 2)}
-          </pre>
-        ) : null}
+        <Readout value={quote} />
       </Section>
 
       <Section
@@ -432,11 +405,7 @@ function CanaryConsole() {
             Arm this authorization
           </Button>
         </div>
-        {claimed ? (
-          <pre className="mt-3 max-h-40 overflow-auto rounded-md bg-surface-raised/40 p-2 text-[11px]">
-            {JSON.stringify({ claimed, armed }, null, 2)}
-          </pre>
-        ) : null}
+        <Readout value={{ claimed, armed }} />
       </Section>
 
       <Section
@@ -499,11 +468,7 @@ function CanaryConsole() {
         >
           Send one mainnet deployment
         </Button>
-        {sendResult ? (
-          <pre className="mt-3 max-h-40 overflow-auto rounded-md bg-surface-raised/40 p-2 text-[11px]">
-            {JSON.stringify(sendResult, null, 2)}
-          </pre>
-        ) : null}
+        <Readout value={sendResult} />
       </Section>
 
       <Section
@@ -556,11 +521,7 @@ function CanaryConsole() {
             Verify and finalize
           </Button>
         </div>
-        {tail ? (
-          <pre className="mt-3 max-h-56 overflow-auto rounded-md bg-surface-raised/40 p-2 text-[11px]">
-            {JSON.stringify(tail, null, 2)}
-          </pre>
-        ) : null}
+        <Readout value={tail} />
       </Section>
 
       {log.length ? (
