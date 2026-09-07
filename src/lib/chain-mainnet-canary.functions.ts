@@ -303,7 +303,7 @@ export const armCanaryExecution = createServerFn({ method: "POST" })
     const base = {
       deploymentId: data.deploymentId,
       authorizationId: data.authorizationId,
-      payload: null as unknown,
+      payload: null as string | null,
     };
     if (!(await isPlatformOwner(context.supabase as unknown as SupabaseLike, context.userId))) {
       return { ...base, ok: false, notice: "NOT_AUTHORIZED" };
