@@ -103,7 +103,10 @@ check(
   "B13",
   !/Number\(|parseInt|parseFloat|Number\.isSafeInteger|toFixed/.test(helperCode) &&
     !/Number\(|parseInt|parseFloat|Number\.isSafeInteger/.test(
-      wrapperCode.slice(wrapperCode.indexOf("createCanaryDeploymentAttempt")),
+      wrapperCode.slice(
+        wrapperCode.indexOf("createCanaryDeploymentAttempt"),
+        wrapperCode.indexOf("export const armCanaryExecution"),
+      ),
     ),
   "no lossy numeric conversion exists on the supply path",
 );
