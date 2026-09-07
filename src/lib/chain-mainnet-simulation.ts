@@ -316,12 +316,12 @@ export async function runMainnetPreflight(
     estimatedCostWei: null,
     sufficientBalance: null,
     txValueWei: "0",
-    deploymentKillSwitchOff: MAINNET_DEPLOYMENT_TX_ENABLED === false,
+    deploymentTxCapabilityEnabled: MAINNET_DEPLOYMENT_TX_ENABLED === true,
     errors,
     quotedAtMs: Date.now(),
     simulationPassed: false,
     deploymentAuthorized: false,
-    authorizationBlockedBy: "MAINNET_DEPLOYMENT_TX_ENABLED",
+    authorizationBlockedBy: "RUNTIME_EXECUTION_CONTROL_AND_SEND_WINDOW",
   };
 
   if (!provider) {
