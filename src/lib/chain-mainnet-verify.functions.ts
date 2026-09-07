@@ -149,130 +149,20 @@ function buildInitCode(intent: {
 }
 
 /* -------------------------------------------------------------------------
- * P3A service-role apply helpers — WIRED INTO THE VERIFIER, GUARDED OFF.
+ * Service-role apply helpers live in `./chain-mainnet-verify-apply`.
  *
- * The exported verifier calls these in exactly this order, and only inside
+ * The exported verifier calls them in exactly this order, and only inside
  * `if (STATE_WRITES_ENABLED)` branches:
  *   1. PENDING with complete, independently observed mined + token evidence;
  *   2. managed finality only — FINALITY_PENDING / PROVIDER_INCONSISTENT /
  *      FINALIZED (production finality RPC, `MANAGED` authority);
  *   3. CONFIRMED only after a FINALIZED apply succeeded, reusing the exact
  *      same immutable mined/token evidence recorded at PENDING.
- * No path persists FAILED in this slice. Every call is refused today by the
- * local lock, before any admin import.
+ * No path persists FAILED in this slice. Each helper re-asserts the gate
+ * before importing the admin client, so a future gate-off fails closed.
  * ---------------------------------------------------------------------- */
 
 
-function assertStateWritesEnabled(): void {
-  if (!MAINNET_VERIFICATION_STATE_WRITES_ENABLED) {
-    throw new Error("STATE_WRITES_DISABLED");
-  }
-}
-
-/**
- * Fail-closed bigint -> DB integer conversion. A block height outside the
- * IEEE-754 safe-integer range would silently lose precision on the way to the
- * RPC, so it is refused deterministically before any service-role call.
- */
-function toSafeDbInteger(value: bigint, field: string): number {
-  if (value < 0n || value > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new Error(`UNSAFE_DB_INTEGER:${field}`);
-  }
-  return Number(value);
-}
-
-
-async function applyProductionDeploymentVerification(payload: {
-  deploymentId: string;
-  status: "PENDING" | "CONFIRMED" | "FAILED";
-  observedConfirmations?: number;
-  contractAddress?: string;
-  blockNumber?: bigint;
-  blockHash?: string;
-  failureCode?: string;
-  failureDetail?: string;
-  verifiedToken?: {
-    name: string;
-    symbol: string;
-    decimals: number;
-    totalSupply: bigint;
-    recipientBalance: bigint;
-  };
-}): Promise<void> {
-  // Refuse BEFORE importing the service-role client or touching the network.
-  assertStateWritesEnabled();
-
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const args = {
-    _deployment_id: payload.deploymentId,
-    _status: payload.status,
-    ...(payload.observedConfirmations !== undefined
-      ? { _observed_confirmations: payload.observedConfirmations }
-      : {}),
-    ...(payload.contractAddress ? { _contract_address: payload.contractAddress } : {}),
-    ...(payload.blockNumber !== undefined
-      ? { _block_number: toSafeDbInteger(payload.blockNumber, "block_number") }
-      : {}),
-
-    ...(payload.blockHash ? { _block_hash: payload.blockHash } : {}),
-    ...(payload.failureCode ? { _failure_code: payload.failureCode } : {}),
-    ...(payload.failureDetail ? { _failure_detail: payload.failureDetail } : {}),
-    ...(payload.verifiedToken
-      ? {
-          _verified_token_name: payload.verifiedToken.name,
-          _verified_token_symbol: payload.verifiedToken.symbol,
-          _verified_token_decimals: payload.verifiedToken.decimals,
-          // Exact decimal strings: base units exceed IEEE-754 safe integers.
-          _verified_total_supply: payload.verifiedToken.totalSupply.toString(),
-          _verified_recipient_balance: payload.verifiedToken.recipientBalance.toString(),
-        }
-      : {}),
-  } as unknown as Parameters<
-    typeof supabaseAdmin.rpc<"apply_launch_chain_production_token_deployment_verification">
-  >[1];
-
-  const { error } = await supabaseAdmin.rpc(
-    "apply_launch_chain_production_token_deployment_verification",
-    args,
-  );
-  if (error) throw new Error("Verification could not be recorded");
-}
-
-async function applyProductionFinality(payload: {
-  deploymentId: string;
-  finalityState: "FINALITY_PENDING" | "FINALIZED" | "PROVIDER_INCONSISTENT";
-  finalizedBlockNumber?: bigint;
-  finalizedHeadBlockNumber?: bigint;
-  finalizedBlockHashConfirmed?: boolean;
-  finalityNotice?: string;
-}): Promise<void> {
-  // Refuse BEFORE importing the service-role client or touching the network.
-  assertStateWritesEnabled();
-
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { error } = await supabaseAdmin.rpc("apply_launch_chain_production_finality", {
-    _deployment_id: payload.deploymentId,
-    _finality_state: payload.finalityState,
-    // MANAGED is the only permitted finality authority.
-    _finality_provider_kind: "MANAGED",
-    ...(payload.finalizedBlockNumber !== undefined
-      ? { _finalized_block_number: toSafeDbInteger(payload.finalizedBlockNumber, "finalized_block_number") }
-      : {}),
-    ...(payload.finalizedHeadBlockNumber !== undefined
-      ? {
-          _finalized_head_block_number: toSafeDbInteger(
-            payload.finalizedHeadBlockNumber,
-            "finalized_head_block_number",
-          ),
-        }
-      : {}),
-    ...(payload.finalizedBlockHashConfirmed !== undefined
-      ? { _finalized_block_hash_confirmed: payload.finalizedBlockHashConfirmed }
-      : {}),
-    ...(payload.finalityNotice ? { _finality_notice: payload.finalityNotice } : {}),
-  });
-  if (error) throw new Error("Finality could not be recorded");
-}
 
 type VerifyInput = { deploymentId: string };
 
