@@ -40,174 +40,34 @@ import {
  *    is not a settlement proof; only the provider's `finalized` head is. No
  *    count anywhere in this file authorizes finality or CONFIRMED status.
  *
- * STATE-WRITE LOCK
- * ----------------
- * `MAINNET_VERIFICATION_STATE_WRITES_ENABLED` is a local, independent lock
- * (separate from the registry's deployment/liquidity switches). The exported
- * verifier IS wired to the guarded service-role apply helpers, but every one
- * of those call sites sits behind this lock, and each helper additionally
- * refuses before importing the admin client. While the lock is false this
- * module performs verification reads and mutates nothing. Enabling it requires
- * a separately authorized slice, after managed finality semantics are proven
- * live.
+ * STATE-WRITE GATE (P3C-E: ACTIVATED)
+ * -----------------------------------
+ * `MAINNET_VERIFICATION_STATE_WRITES_ENABLED` lives in
+ * `./chain-mainnet-verify-apply` and is now literal `true`: this verifier may
+ * persist independently observed evidence and managed finality. It remains a
+ * local, independent gate — it grants NOTHING to the registry's
+ * deployment/liquidity switches (both still literal `false`) or to the
+ * Supabase runtime execution control (still stopped). Writes are
+ * invocation-bound: importing this module writes nothing, and every apply call
+ * still sits behind the gate and re-asserts inside the helper before any
+ * service-role import, so turning the gate off again fails closed.
  */
-const MAINNET_VERIFICATION_STATE_WRITES_ENABLED = false as const;
-
-/**
- * Widened runtime mirror of the lock. Its ONLY purpose is dead-code-safe
- * typechecking of the wired-but-disabled write path; the authoritative literal
- * above stays exactly `false`, and every helper re-checks it at runtime before
- * any service-role import.
- */
-const STATE_WRITES_ENABLED: boolean = Boolean(MAINNET_VERIFICATION_STATE_WRITES_ENABLED as boolean);
-
-/** Deterministic, sanitized code. Raw DB/provider error text never escapes. */
-const STATE_WRITE_FAILED_RETRYABLE = "STATE_WRITE_FAILED_RETRYABLE" as const;
-
-/**
- * Exact upper bound of the PostgreSQL signed `integer` domain. The RPC column
- * `_observed_confirmations` is `integer`, NOT `bigint`, so a diagnostic
- * confirmation value is only convertible when it fits here. Anything outside
- * `[0, 2_147_483_647]` is omitted rather than sent.
- */
-const POSTGRES_INTEGER_MAX = 2_147_483_647n;
-
+import {
+  MAINNET_VERIFICATION_STATE_WRITES_ENABLED,
+  POSTGRES_INTEGER_MAX,
+  STATE_WRITES_ENABLED,
+  STATE_WRITE_FAILED_RETRYABLE,
+  applyProductionDeploymentVerification,
+  applyProductionFinality,
+} from "./chain-mainnet-verify-apply";
+import { readManagedReceipt } from "./chain-mainnet-verify-receipt";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TX_HASH = /^0x[0-9a-f]{64}$/;
 const ADDRESS = /^0x[0-9a-f]{40}$/;
 const DIGITS = /^[0-9]+$/;
-/** JSON-RPC QUANTITY: minimal hex, no leading zeroes. */
-const QUANTITY = /^0x(0|[1-9a-f][0-9a-f]*)$/;
-const MANAGED_RECEIPT_TIMEOUT_MS = 8_000;
 
-/* ------------------------------------------------------------------ */
-/* P3C Pre-Canary Hardening A — truthful receipt classification        */
-/*                                                                     */
-/* viem's `getTransactionReceipt` throws for BOTH a genuine not-found  */
-/* receipt and a transport/RPC failure, so a caught error cannot       */
-/* distinguish "not mined yet" from "provider unavailable". Production */
-/* evidence must never collapse those. The receipt is therefore read   */
-/* with a raw managed `eth_getTransactionReceipt` (same pattern already*/
-/* proven in the D2 reconciliation verifier, duplicated here minimally */
-/* and module-privately to keep this change inside one file).          */
-/*                                                                     */
-/* The ONLY signal accepted as true absence is a successful JSON-RPC   */
-/* response carrying `result: null`. Every other uncertainty is        */
-/* retryable and never promotes status, finality or CONFIRMED, and     */
-/* never writes state. The managed endpoint and raw provider text      */
-/* never escape these helpers.                                         */
-/* ------------------------------------------------------------------ */
 
-type RawManagedReceipt = {
-  transactionHash: string;
-  status: "0x0" | "0x1";
-  contractAddress: string | null;
-  blockNumber: string | null;
-  blockHash: string | null;
-};
-
-type ManagedReceiptRead =
-  /** Provider answered successfully and positively reported no receipt. */
-  | { kind: "ABSENT" }
-  /** Provider answered with a structurally valid receipt. */
-  | { kind: "PRESENT"; receipt: RawManagedReceipt }
-  /** Transport/timeout/HTTP/JSON-RPC error. Retryable — NOT proof of unmined. */
-  | { kind: "UNAVAILABLE" }
-  /** Successful transport but unusable payload. Retryable, never mined. */
-  | { kind: "MALFORMED" };
-
-function parseManagedReceipt(value: unknown): ManagedReceiptRead {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return { kind: "MALFORMED" };
-  const raw = value as Record<string, unknown>;
-
-  const transactionHash =
-    typeof raw["transactionHash"] === "string" ? lower(raw["transactionHash"]) : "";
-  if (!TX_HASH.test(transactionHash)) return { kind: "MALFORMED" };
-
-  const status = typeof raw["status"] === "string" ? lower(raw["status"]) : "";
-  if (status !== "0x0" && status !== "0x1") return { kind: "MALFORMED" };
-
-  let contractAddress: string | null = null;
-  if (raw["contractAddress"] !== null && raw["contractAddress"] !== undefined) {
-    if (typeof raw["contractAddress"] !== "string") return { kind: "MALFORMED" };
-    const candidate = lower(raw["contractAddress"]);
-    if (!ADDRESS.test(candidate)) return { kind: "MALFORMED" };
-    contractAddress = candidate;
-  }
-
-  let blockNumber: string | null = null;
-  if (raw["blockNumber"] !== null && raw["blockNumber"] !== undefined) {
-    if (typeof raw["blockNumber"] !== "string") return { kind: "MALFORMED" };
-    const candidate = lower(raw["blockNumber"]);
-    if (!QUANTITY.test(candidate)) return { kind: "MALFORMED" };
-    blockNumber = candidate;
-  }
-
-  let blockHash: string | null = null;
-  if (raw["blockHash"] !== null && raw["blockHash"] !== undefined) {
-    if (typeof raw["blockHash"] !== "string") return { kind: "MALFORMED" };
-    const candidate = lower(raw["blockHash"]);
-    if (!TX_HASH.test(candidate)) return { kind: "MALFORMED" };
-    blockHash = candidate;
-  }
-
-  return {
-    kind: "PRESENT",
-    receipt: {
-      transactionHash,
-      status: status as "0x0" | "0x1",
-      contractAddress,
-      blockNumber,
-      blockHash,
-    },
-  };
-}
-
-/**
- * Raw managed `eth_getTransactionReceipt`. Managed provider is the ONLY
- * production evidence authority; there is no public diagnostic fallback.
- */
-async function readManagedReceipt(
-  endpoint: string,
-  txHash: string,
-): Promise<ManagedReceiptRead> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), MANAGED_RECEIPT_TIMEOUT_MS);
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "eth_getTransactionReceipt",
-        params: [txHash],
-      }),
-      signal: controller.signal,
-    });
-    if (!response.ok) return { kind: "UNAVAILABLE" };
-
-    let payload: unknown;
-    try {
-      payload = await response.json();
-    } catch {
-      return { kind: "UNAVAILABLE" };
-    }
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-      return { kind: "UNAVAILABLE" };
-    }
-    const body = payload as Record<string, unknown>;
-    if (body["error"] !== null && body["error"] !== undefined) return { kind: "UNAVAILABLE" };
-    if (!("result" in body)) return { kind: "UNAVAILABLE" };
-    if (body["result"] === null) return { kind: "ABSENT" };
-    return parseManagedReceipt(body["result"]);
-  } catch {
-    return { kind: "UNAVAILABLE" };
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 
 export type MainnetFinalityClassification =
