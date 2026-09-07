@@ -37,14 +37,16 @@ check(
   "MAINNET_VERIFICATION_STATE_WRITES_ENABLED is literal `true as const`",
 );
 
-/* B / C — transaction execution switches remain literal false. */
+/* B — re-pinned at P3C-F: the DEPLOYMENT capability switch is literal true.
+   This is a compile-time capability only; runtime execution control, canary
+   permit and send window remain the authority. */
 check(
   "B",
-  (MAINNET_DEPLOYMENT_TX_ENABLED as boolean) === false &&
-    /export const MAINNET_DEPLOYMENT_TX_ENABLED = false as const;/.test(
+  (MAINNET_DEPLOYMENT_TX_ENABLED as boolean) === true &&
+    /export const MAINNET_DEPLOYMENT_TX_ENABLED = true as const;/.test(
       read("src/lib/chain-mainnet-registry.ts"),
     ),
-  "MAINNET_DEPLOYMENT_TX_ENABLED is literal `false as const`",
+  "MAINNET_DEPLOYMENT_TX_ENABLED is literal `true as const` (P3C-F)",
 );
 check(
   "C",

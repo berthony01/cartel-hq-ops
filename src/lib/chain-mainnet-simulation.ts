@@ -43,7 +43,9 @@ import {
  *   - provider output is untrusted, strictly parsed, and can never influence
  *     the immutable intent fingerprint;
  *   - a passing simulation authorizes nothing. `deploymentAuthorized` is the
- *     literal `false` and the production execution switch remains off.
+ *     literal `false`: read-only correctness is never execution permission,
+ *     which remains with the runtime execution control, the canary permit and
+ *     the server-issued final send window.
  */
 
 /** Domain separator for the production fingerprint pre-image. */
@@ -95,15 +97,27 @@ export type MainnetPreflightResult = {
   estimatedCostWei: string | null;
   sufficientBalance: boolean | null;
   txValueWei: "0";
-  /** True when the production execution switch is off, as it must be. */
-  deploymentKillSwitchOff: boolean;
+  /**
+   * Compile-time capability mirror only: whether the production deployment
+   * transaction code path is compiled in. It is NOT permission and it is NOT
+   * part of `simulationPassed`.
+   */
+  deploymentTxCapabilityEnabled: boolean;
   errors: string[];
   quotedAtMs: number;
-  /** True only when every hard read-only check passed. Authorizes nothing. */
+  /**
+   * True only when every hard READ-ONLY check passed: chain, account,
+   * recipient, init-code call, gas, fees and balance. It is correctness only
+   * and it authorizes nothing.
+   */
   simulationPassed: boolean;
-  /** Always literal false in this module. */
+  /** Always literal false in this module. Simulation never authorizes. */
   deploymentAuthorized: false;
-  authorizationBlockedBy: "MAINNET_DEPLOYMENT_TX_ENABLED";
+  /**
+   * The gates that still stand between a passing simulation and a send. Never
+   * claims the compile-time capability switch is the blocker.
+   */
+  authorizationBlockedBy: "RUNTIME_EXECUTION_CONTROL_AND_SEND_WINDOW";
 };
 
 export type MainnetSimulation = {
@@ -310,12 +324,12 @@ export async function runMainnetPreflight(
     estimatedCostWei: null,
     sufficientBalance: null,
     txValueWei: "0",
-    deploymentKillSwitchOff: MAINNET_DEPLOYMENT_TX_ENABLED === false,
+    deploymentTxCapabilityEnabled: MAINNET_DEPLOYMENT_TX_ENABLED === true,
     errors,
     quotedAtMs: Date.now(),
     simulationPassed: false,
     deploymentAuthorized: false,
-    authorizationBlockedBy: "MAINNET_DEPLOYMENT_TX_ENABLED",
+    authorizationBlockedBy: "RUNTIME_EXECUTION_CONTROL_AND_SEND_WINDOW",
   };
 
   if (!provider) {
@@ -418,8 +432,7 @@ export async function runMainnetPreflight(
     result.gasEstimate !== null &&
     result.feeWeiPerGas !== null &&
     result.estimatedCostWei !== null &&
-    result.sufficientBalance === true &&
-    result.deploymentKillSwitchOff === true;
+    result.sufficientBalance === true;
 
   return result;
 }

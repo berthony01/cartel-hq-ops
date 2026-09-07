@@ -51,10 +51,15 @@ export const ROBINHOOD_MAINNET_PUBLIC_DIAGNOSTIC_RPC_URL =
 export const ROBINHOOD_MAINNET_MANAGED_RPC_ENV = "ROBINHOOD_MAINNET_RPC_URL" as const;
 
 /**
- * Frozen production execution gates. P1 ships them OFF and never reads them
- * as anything other than a refusal condition.
+ * Frozen production execution gates.
+ *
+ * P3C-F: the DEPLOYMENT capability switch is ON. It is a COMPILE-TIME
+ * capability only — it authorizes nothing by itself. Every send still requires
+ * the server-authoritative runtime execution control, an unexpired canary
+ * permit, a claimed presign authorization and a fresh 10-second server send
+ * window. LIQUIDITY remains OFF and is not part of this checkpoint.
  */
-export const MAINNET_DEPLOYMENT_TX_ENABLED = false as const;
+export const MAINNET_DEPLOYMENT_TX_ENABLED = true as const;
 export const MAINNET_LIQUIDITY_TX_ENABLED = false as const;
 
 /** Read-only explorer link helper. */

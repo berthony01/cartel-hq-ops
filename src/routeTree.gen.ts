@@ -23,6 +23,7 @@ import { Route as AuthenticatedClearanceRouteImport } from './routes/_authentica
 import { Route as AuthenticatedCommandTerminalRouteImport } from './routes/_authenticated/command-terminal'
 import { Route as AuthenticatedDistributionRouteImport } from './routes/_authenticated/distribution'
 import { Route as AuthenticatedLaunchControlRouteImport } from './routes/_authenticated/launch-control'
+import { Route as AuthenticatedMainnetCanaryRouteImport } from './routes/_authenticated/mainnet-canary'
 import { Route as AuthenticatedMissionsRouteImport } from './routes/_authenticated/missions'
 import { Route as AuthenticatedOperationsRouteImport } from './routes/_authenticated/operations'
 import { Route as AuthenticatedOperativesRouteImport } from './routes/_authenticated/operatives'
@@ -115,6 +116,12 @@ const AuthenticatedLaunchControlRoute =
   AuthenticatedLaunchControlRouteImport.update({
     id: '/launch-control',
     path: '/launch-control',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedMainnetCanaryRoute =
+  AuthenticatedMainnetCanaryRouteImport.update({
+    id: '/mainnet-canary',
+    path: '/mainnet-canary',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedMissionsRoute = AuthenticatedMissionsRouteImport.update({
@@ -232,6 +239,7 @@ export interface FileRoutesByFullPath {
   '/command-terminal': typeof AuthenticatedCommandTerminalRoute
   '/distribution': typeof AuthenticatedDistributionRoute
   '/launch-control': typeof AuthenticatedLaunchControlRoute
+  '/mainnet-canary': typeof AuthenticatedMainnetCanaryRoute
   '/missions': typeof AuthenticatedMissionsRoute
   '/operations': typeof AuthenticatedOperationsRoute
   '/operatives': typeof AuthenticatedOperativesRoute
@@ -264,6 +272,7 @@ export interface FileRoutesByTo {
   '/command-terminal': typeof AuthenticatedCommandTerminalRoute
   '/distribution': typeof AuthenticatedDistributionRoute
   '/launch-control': typeof AuthenticatedLaunchControlRoute
+  '/mainnet-canary': typeof AuthenticatedMainnetCanaryRoute
   '/missions': typeof AuthenticatedMissionsRoute
   '/operations': typeof AuthenticatedOperationsRoute
   '/operatives': typeof AuthenticatedOperativesRoute
@@ -299,6 +308,7 @@ export interface FileRoutesById {
   '/_authenticated/command-terminal': typeof AuthenticatedCommandTerminalRoute
   '/_authenticated/distribution': typeof AuthenticatedDistributionRoute
   '/_authenticated/launch-control': typeof AuthenticatedLaunchControlRoute
+  '/_authenticated/mainnet-canary': typeof AuthenticatedMainnetCanaryRoute
   '/_authenticated/missions': typeof AuthenticatedMissionsRoute
   '/_authenticated/operations': typeof AuthenticatedOperationsRoute
   '/_authenticated/operatives': typeof AuthenticatedOperativesRoute
@@ -336,6 +346,7 @@ export interface FileRouteTypes {
     | '/command-terminal'
     | '/distribution'
     | '/launch-control'
+    | '/mainnet-canary'
     | '/missions'
     | '/operations'
     | '/operatives'
@@ -368,6 +379,7 @@ export interface FileRouteTypes {
     | '/command-terminal'
     | '/distribution'
     | '/launch-control'
+    | '/mainnet-canary'
     | '/missions'
     | '/operations'
     | '/operatives'
@@ -402,6 +414,7 @@ export interface FileRouteTypes {
     | '/_authenticated/command-terminal'
     | '/_authenticated/distribution'
     | '/_authenticated/launch-control'
+    | '/_authenticated/mainnet-canary'
     | '/_authenticated/missions'
     | '/_authenticated/operations'
     | '/_authenticated/operatives'
@@ -529,6 +542,13 @@ declare module '@tanstack/react-router' {
       path: '/launch-control'
       fullPath: '/launch-control'
       preLoaderRoute: typeof AuthenticatedLaunchControlRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/mainnet-canary': {
+      id: '/_authenticated/mainnet-canary'
+      path: '/mainnet-canary'
+      fullPath: '/mainnet-canary'
+      preLoaderRoute: typeof AuthenticatedMainnetCanaryRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/missions': {
@@ -696,6 +716,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCommandTerminalRoute: typeof AuthenticatedCommandTerminalRoute
   AuthenticatedDistributionRoute: typeof AuthenticatedDistributionRoute
   AuthenticatedLaunchControlRoute: typeof AuthenticatedLaunchControlRoute
+  AuthenticatedMainnetCanaryRoute: typeof AuthenticatedMainnetCanaryRoute
   AuthenticatedMissionsRoute: typeof AuthenticatedMissionsRoute
   AuthenticatedOperationsRoute: typeof AuthenticatedOperationsRoute
   AuthenticatedOperativesRoute: typeof AuthenticatedOperativesRoute
@@ -719,6 +740,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCommandTerminalRoute: AuthenticatedCommandTerminalRoute,
   AuthenticatedDistributionRoute: AuthenticatedDistributionRoute,
   AuthenticatedLaunchControlRoute: AuthenticatedLaunchControlRoute,
+  AuthenticatedMainnetCanaryRoute: AuthenticatedMainnetCanaryRoute,
   AuthenticatedMissionsRoute: AuthenticatedMissionsRoute,
   AuthenticatedOperationsRoute: AuthenticatedOperationsRoute,
   AuthenticatedOperativesRoute: AuthenticatedOperativesRoute,
