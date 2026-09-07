@@ -92,18 +92,18 @@ function CanaryConsole() {
   const [intentError, setIntentError] = useState<string | null>(null);
   const [deploymentId, setDeploymentId] = useState<string | null>(null);
   const [authorizationId, setAuthorizationId] = useState<string | null>(null);
-  const [quote, setQuote] = useState<Json>(null);
-  const [claimed, setClaimed] = useState<Json>(null);
-  const [armed, setArmed] = useState<Json>(null);
+  const [quote, setQuote] = useState<unknown>(null);
+  const [claimed, setClaimed] = useState<unknown>(null);
+  const [armed, setArmed] = useState<unknown>(null);
   const [windowResult, setWindowResult] = useState<{
     envelope: unknown;
     sendWindowExpiresAt: string | null;
     ok: boolean;
     notice: string | null;
   } | null>(null);
-  const [sendResult, setSendResult] = useState<Json>(null);
+  const [sendResult, setSendResult] = useState<unknown>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
-  const [tail, setTail] = useState<Json>(null);
+  const [tail, setTail] = useState<unknown>(null);
   const [log, setLog] = useState<string[]>([]);
 
   const note = (message: string) =>

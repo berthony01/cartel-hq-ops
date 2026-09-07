@@ -232,8 +232,12 @@ check(
 );
 check(
   "K6",
-  /ARM_PHRASE = "ARM MAINNET CANARY"/.test(routeSrc) &&
-    /SEND_PHRASE = "SEND ONE MAINNET DEPLOYMENT"/.test(routeSrc),
+  /export const ARM_PHRASE = "ARM MAINNET CANARY";/.test(
+    read("src/components/cartel/CanaryReadout.tsx"),
+  ) &&
+    /export const SEND_PHRASE = "SEND ONE MAINNET DEPLOYMENT";/.test(
+      read("src/components/cartel/CanaryReadout.tsx"),
+    ),
   "both confirmation phrases are exact",
 );
 
