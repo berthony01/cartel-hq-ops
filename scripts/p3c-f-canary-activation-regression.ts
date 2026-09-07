@@ -183,7 +183,7 @@ check(
 const added = [canaryCode, stripComments(routeSrc)].join("\n");
 for (const term of [
   "add_?liquidity",
-  "liquidity_?(tx|pool|position|attempt)",
+  "liquidity_?(pool|position|attempt|provision)",
   "MAINNET_LIQUIDITY_TX_ENABLED\\s*===\\s*true",
   "register_official_contract",
   "set_launch_contract_address",
