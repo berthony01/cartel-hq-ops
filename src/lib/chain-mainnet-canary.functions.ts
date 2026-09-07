@@ -1,6 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ROBINHOOD_MAINNET_CHAIN_ID } from "./chain-mainnet-registry";
+import {
+  checkBaseUnitSupply,
+  isRobinhoodChainLaunchMetadata,
+} from "./chain-mainnet-canary-intent";
+
 
 /**
  * P3C-F — OWNER-ONLY canary orchestration wrappers.
@@ -27,12 +32,13 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ADDRESS = /^0x[0-9a-f]{40}$/;
 const HASH32 = /^0x[0-9a-f]{64}$/;
 const REQUEST_ID = /^[A-Za-z0-9._:-]+$/;
-const DIGITS = /^[1-9][0-9]{0,29}$/;
+const SYMBOL = /^[A-Z0-9]{2,11}$/;
 
 export type CanaryNotice =
   | "NOT_AUTHORIZED"
   | "INVALID_INPUT"
   | "SUPPLY_OUT_OF_RANGE"
+  | "LAUNCH_CHAIN_MISMATCH"
   | "RPC_REFUSED"
   | "CONTROL_STATE_UNAVAILABLE";
 
@@ -164,8 +170,11 @@ type AttemptInput = {
   tokenRecipient: string;
   tokenName: string;
   tokenSymbol: string;
-  /** Exact WHOLE-token supply as a decimal string. Never a float. */
-  tokenTotalSupply: string;
+  /**
+   * Exact supply in BASE UNITS (10^18 per whole token), as a decimal string.
+   * This is NOT a whole-token count and is never converted through Number.
+   */
+  tokenTotalSupplyBaseUnits: string;
   initCodeHash: string;
   reviewFingerprint: string;
   clientRequestId: string;
@@ -194,7 +203,8 @@ export const createCanaryDeploymentAttempt = createServerFn({ method: "POST" })
       tokenRecipient: text(input.tokenRecipient).toLowerCase(),
       tokenName: text(input.tokenName),
       tokenSymbol: text(input.tokenSymbol),
-      tokenTotalSupply: text(input.tokenTotalSupply),
+      // Kept BYTE-IDENTICAL. No trim, no normalization, no numeric coercion.
+      tokenTotalSupplyBaseUnits: text(input.tokenTotalSupplyBaseUnits),
       initCodeHash: text(input.initCodeHash).toLowerCase(),
       reviewFingerprint: text(input.reviewFingerprint).toLowerCase(),
       clientRequestId: text(input.clientRequestId),
@@ -213,8 +223,7 @@ export const createCanaryDeploymentAttempt = createServerFn({ method: "POST" })
       !HASH32.test(data.reviewFingerprint) ||
       data.tokenName.length < 1 ||
       data.tokenName.length > 120 ||
-      data.tokenSymbol.length < 1 ||
-      data.tokenSymbol.length > 32 ||
+      !SYMBOL.test(data.tokenSymbol) ||
       data.clientRequestId.length < 8 ||
       data.clientRequestId.length > 128 ||
       !REQUEST_ID.test(data.clientRequestId)
@@ -222,15 +231,25 @@ export const createCanaryDeploymentAttempt = createServerFn({ method: "POST" })
       return attemptFail("INVALID_INPUT");
     }
 
-    // The RPC argument is numeric. Refuse anything that cannot be represented
-    // EXACTLY; a lossy supply must never reach an immutable attempt row.
-    if (!DIGITS.test(data.tokenTotalSupply)) return attemptFail("INVALID_INPUT");
-    const supply = Number(data.tokenTotalSupply);
-    if (
-      !Number.isSafeInteger(supply) ||
-      String(supply) !== data.tokenTotalSupply
-    ) {
-      return attemptFail("SUPPLY_OUT_OF_RANGE");
+    // Supply is validated EXACTLY, in base units, with BigInt only. The RPC
+    // requires an integer >= 10^18, <= 10^30 and divisible by 10^18; a lossy
+    // supply must never reach an immutable production attempt row.
+    const supply = checkBaseUnitSupply(data.tokenTotalSupplyBaseUnits);
+    if (!supply.ok) {
+      return attemptFail(
+        supply.notice === "NOT_A_DECIMAL_INTEGER" ? "INVALID_INPUT" : "SUPPLY_OUT_OF_RANGE",
+      );
+    }
+
+    // Fail CLOSED on launch metadata: only a launch that clearly records
+    // Robinhood Chain may produce a production attempt. This never writes.
+    const { data: launch, error: launchError } = await context.supabase
+      .from("launches")
+      .select("id, chain")
+      .eq("id", data.launchId)
+      .maybeSingle();
+    if (launchError || !launch || !isRobinhoodChainLaunchMetadata(launch.chain)) {
+      return attemptFail("LAUNCH_CHAIN_MISMATCH");
     }
 
     const { data: raw, error } = await context.supabase.rpc(
@@ -244,9 +263,12 @@ export const createCanaryDeploymentAttempt = createServerFn({ method: "POST" })
         _token_name: data.tokenName,
         _token_recipient: data.tokenRecipient,
         _token_symbol: data.tokenSymbol,
-        _token_total_supply: supply,
+        // EXACT decimal string on the wire. The cast satisfies the generated
+        // numeric typing only; the runtime value is the untouched string.
+        _token_total_supply: supply.exact as unknown as number,
       },
     );
+
 
     const row = error ? null : firstRow(raw);
     if (!row) return attemptFail("RPC_REFUSED");
