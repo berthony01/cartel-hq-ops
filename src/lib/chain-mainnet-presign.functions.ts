@@ -10,7 +10,9 @@ import {
   ROBINHOOD_MAINNET_ENVIRONMENT,
   ROBINHOOD_MAINNET_MANAGED_RPC_ENV,
 } from "./chain-mainnet-registry";
+import type { MainnetPresignResult, PresignNotice } from "./chain-mainnet-presign.helpers";
 import {
+
   ADDRESS,
   BASE_UNIT_SCALE,
   DIGITS,
