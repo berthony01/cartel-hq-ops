@@ -1,17 +1,22 @@
 /**
- * P3C-F2 — LAUNCH CHAIN METADATA RECONCILIATION regression.
+ * P3C-F2 — LAUNCH CHAIN METADATA RECONCILIATION regression (APPLIED/parity state).
  *
  * SOURCE/TEXT-LEVEL ONLY. This script never connects to a database, never
- * executes SQL and never applies the migration. It parses the staged artifact
- * and proves its shape, its guards and — just as importantly — the absence of
- * everything the checkpoint forbids.
+ * executes SQL and never applies anything. It parses the reference artifact and
+ * the source-control parity migration, proves they carry identical safety
+ * semantics, and proves the absence of everything the checkpoint forbids.
  */
 import { readFileSync, readdirSync } from "node:fs";
 
 const SQL = "docs/sql/20260907062000_reconcile_pepecartel_launch_chain_to_robinhood.sql";
+const PARITY_VERSION = "20260907135738";
+const PARITY_NAME = "reconcile_pepecartel_launch_chain_to_robinhood";
+const PARITY = `supabase/migrations/${PARITY_VERSION}_${PARITY_NAME}.sql`;
 const sql = readFileSync(SQL, "utf8");
+const parity = readFileSync(PARITY, "utf8");
 /** Statement text with SQL line comments removed, so prose cannot pass a check. */
 const code = sql.replace(/^\s*--.*$/gm, "");
+const parityCode = parity.replace(/^\s*--.*$/gm, "");
 
 let failures = 0;
 function check(id: string, ok: boolean, detail: string) {
@@ -22,13 +27,31 @@ function check(id: string, ok: boolean, detail: string) {
   }
 }
 
-/* A — staged, not applied. */
-check(
-  "A1",
-  !readdirSync("supabase/migrations").some((f) => /pepecartel_launch_chain/i.test(f)),
-  "no equivalent migration has been placed in supabase/migrations by this task",
+/* A — applied, with exactly one parity migration at the real live version. */
+const f2Migrations = readdirSync("supabase/migrations").filter((f) =>
+  /pepecartel_launch_chain/i.test(f),
 );
-check("A2", /PREPARED, NOT APPLIED/.test(sql), "the artifact is explicitly marked prepared-not-applied");
+check("A1", f2Migrations.length === 1, `exactly one F2 migration file exists (found ${f2Migrations.length})`);
+check("A2", f2Migrations[0] === `${PARITY_VERSION}_${PARITY_NAME}.sql`, "it is at the actual live version/name");
+check(
+  "A3",
+  !readdirSync("supabase/migrations").some((f) => f.startsWith("20260907062000")),
+  "no second executable migration exists at the old staged version",
+);
+check("A4", /APPLIED EXTERNALLY/.test(parity), "the parity record is marked APPLIED EXTERNALLY");
+check(
+  "A5",
+  parity.includes(PARITY_VERSION) && parity.includes(PARITY_NAME),
+  "the parity record states the live migration version and name",
+);
+check(
+  "A6",
+  /^-- APPLIED\./m.test(sql) && sql.includes(PARITY_VERSION) && sql.includes(PARITY),
+  "the reference copy is marked APPLIED and points at the parity path",
+);
+check("A7", !/PREPARED, NOT APPLIED/.test(sql), "the reference copy no longer claims prepared-not-applied");
+check("A8", parityCode.trim() === code.trim(), "reference and parity SQL bodies are semantically identical");
+
 
 /* B — concurrency: the lock precedes any bypass. */
 const lockAt = code.indexOf("LOCK TABLE public.launches IN ACCESS EXCLUSIVE MODE");
