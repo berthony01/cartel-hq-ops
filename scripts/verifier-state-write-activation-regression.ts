@@ -117,7 +117,10 @@ check(
 );
 
 /* G — no execution/broadcast/registration path added to the touched modules. */
-const touched = `${applySrc}\n${verifySrc}\n${shapeSrc}`;
+/** Comments describe the safety boundary; only executable code is scanned. */
+const stripComments = (s: string) =>
+  s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+const touched = [applySrc, verifySrc, shapeSrc].map(stripComments).join("\n");
 const forbidden = [
   "eth_sendTransaction",
   "eth_sendRawTransaction",
