@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { createPublicClient, defineChain, encodeAbiParameters, http, keccak256 } from "viem";
+import { createPublicClient, http, keccak256 } from "viem";
 import {
   ROBINHOOD_MAINNET_CHAIN_ID,
   ROBINHOOD_MAINNET_ENVIRONMENT,
@@ -9,7 +9,6 @@ import {
 import {
   CARTEL_FIXED_ERC20_ABI,
   CARTEL_FIXED_ERC20_ARTIFACT_ID,
-  CARTEL_FIXED_ERC20_CREATION_BYTECODE,
   CARTEL_FIXED_ERC20_DECIMALS,
   CARTEL_FIXED_ERC20_RUNTIME_BYTECODE_HASH,
 } from "./cartel-fixed-erc20.artifact";
@@ -40,376 +39,64 @@ import {
  *    is not a settlement proof; only the provider's `finalized` head is. No
  *    count anywhere in this file authorizes finality or CONFIRMED status.
  *
- * STATE-WRITE LOCK
- * ----------------
- * `MAINNET_VERIFICATION_STATE_WRITES_ENABLED` is a local, independent lock
- * (separate from the registry's deployment/liquidity switches). The exported
- * verifier IS wired to the guarded service-role apply helpers, but every one
- * of those call sites sits behind this lock, and each helper additionally
- * refuses before importing the admin client. While the lock is false this
- * module performs verification reads and mutates nothing. Enabling it requires
- * a separately authorized slice, after managed finality semantics are proven
- * live.
+ * STATE-WRITE GATE (P3C-E: ACTIVATED)
+ * -----------------------------------
+ * `MAINNET_VERIFICATION_STATE_WRITES_ENABLED` lives in
+ * `./chain-mainnet-verify-apply` and is now literal `true`: this verifier may
+ * persist independently observed evidence and managed finality. It remains a
+ * local, independent gate — it grants NOTHING to the registry's
+ * deployment/liquidity switches (both still literal `false`) or to the
+ * Supabase runtime execution control (still stopped). Writes are
+ * invocation-bound: importing this module writes nothing, and every apply call
+ * still sits behind the gate and re-asserts inside the helper before any
+ * service-role import, so turning the gate off again fails closed.
  */
-const MAINNET_VERIFICATION_STATE_WRITES_ENABLED = false as const;
-
-/**
- * Widened runtime mirror of the lock. Its ONLY purpose is dead-code-safe
- * typechecking of the wired-but-disabled write path; the authoritative literal
- * above stays exactly `false`, and every helper re-checks it at runtime before
- * any service-role import.
- */
-const STATE_WRITES_ENABLED: boolean = Boolean(MAINNET_VERIFICATION_STATE_WRITES_ENABLED as boolean);
-
-/** Deterministic, sanitized code. Raw DB/provider error text never escapes. */
-const STATE_WRITE_FAILED_RETRYABLE = "STATE_WRITE_FAILED_RETRYABLE" as const;
-
-/**
- * Exact upper bound of the PostgreSQL signed `integer` domain. The RPC column
- * `_observed_confirmations` is `integer`, NOT `bigint`, so a diagnostic
- * confirmation value is only convertible when it fits here. Anything outside
- * `[0, 2_147_483_647]` is omitted rather than sent.
- */
-const POSTGRES_INTEGER_MAX = 2_147_483_647n;
-
+import {
+  POSTGRES_INTEGER_MAX,
+  STATE_WRITES_ENABLED,
+  STATE_WRITE_FAILED_RETRYABLE,
+  applyProductionDeploymentVerification,
+  applyProductionFinality,
+} from "./chain-mainnet-verify-apply";
+import { readManagedReceipt } from "./chain-mainnet-verify-receipt";
+import {
+  baseResult,
+  buildInitCode,
+  mainnetChain,
+  type MainnetVerifyResult,
+} from "./chain-mainnet-verify-shape";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TX_HASH = /^0x[0-9a-f]{64}$/;
 const ADDRESS = /^0x[0-9a-f]{40}$/;
 const DIGITS = /^[0-9]+$/;
-/** JSON-RPC QUANTITY: minimal hex, no leading zeroes. */
-const QUANTITY = /^0x(0|[1-9a-f][0-9a-f]*)$/;
-const MANAGED_RECEIPT_TIMEOUT_MS = 8_000;
-
-/* ------------------------------------------------------------------ */
-/* P3C Pre-Canary Hardening A — truthful receipt classification        */
-/*                                                                     */
-/* viem's `getTransactionReceipt` throws for BOTH a genuine not-found  */
-/* receipt and a transport/RPC failure, so a caught error cannot       */
-/* distinguish "not mined yet" from "provider unavailable". Production */
-/* evidence must never collapse those. The receipt is therefore read   */
-/* with a raw managed `eth_getTransactionReceipt` (same pattern already*/
-/* proven in the D2 reconciliation verifier, duplicated here minimally */
-/* and module-privately to keep this change inside one file).          */
-/*                                                                     */
-/* The ONLY signal accepted as true absence is a successful JSON-RPC   */
-/* response carrying `result: null`. Every other uncertainty is        */
-/* retryable and never promotes status, finality or CONFIRMED, and     */
-/* never writes state. The managed endpoint and raw provider text      */
-/* never escape these helpers.                                         */
-/* ------------------------------------------------------------------ */
-
-type RawManagedReceipt = {
-  transactionHash: string;
-  status: "0x0" | "0x1";
-  contractAddress: string | null;
-  blockNumber: string | null;
-  blockHash: string | null;
-};
-
-type ManagedReceiptRead =
-  /** Provider answered successfully and positively reported no receipt. */
-  | { kind: "ABSENT" }
-  /** Provider answered with a structurally valid receipt. */
-  | { kind: "PRESENT"; receipt: RawManagedReceipt }
-  /** Transport/timeout/HTTP/JSON-RPC error. Retryable — NOT proof of unmined. */
-  | { kind: "UNAVAILABLE" }
-  /** Successful transport but unusable payload. Retryable, never mined. */
-  | { kind: "MALFORMED" };
-
-function parseManagedReceipt(value: unknown): ManagedReceiptRead {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return { kind: "MALFORMED" };
-  const raw = value as Record<string, unknown>;
-
-  const transactionHash =
-    typeof raw["transactionHash"] === "string" ? lower(raw["transactionHash"]) : "";
-  if (!TX_HASH.test(transactionHash)) return { kind: "MALFORMED" };
-
-  const status = typeof raw["status"] === "string" ? lower(raw["status"]) : "";
-  if (status !== "0x0" && status !== "0x1") return { kind: "MALFORMED" };
-
-  let contractAddress: string | null = null;
-  if (raw["contractAddress"] !== null && raw["contractAddress"] !== undefined) {
-    if (typeof raw["contractAddress"] !== "string") return { kind: "MALFORMED" };
-    const candidate = lower(raw["contractAddress"]);
-    if (!ADDRESS.test(candidate)) return { kind: "MALFORMED" };
-    contractAddress = candidate;
-  }
-
-  let blockNumber: string | null = null;
-  if (raw["blockNumber"] !== null && raw["blockNumber"] !== undefined) {
-    if (typeof raw["blockNumber"] !== "string") return { kind: "MALFORMED" };
-    const candidate = lower(raw["blockNumber"]);
-    if (!QUANTITY.test(candidate)) return { kind: "MALFORMED" };
-    blockNumber = candidate;
-  }
-
-  let blockHash: string | null = null;
-  if (raw["blockHash"] !== null && raw["blockHash"] !== undefined) {
-    if (typeof raw["blockHash"] !== "string") return { kind: "MALFORMED" };
-    const candidate = lower(raw["blockHash"]);
-    if (!TX_HASH.test(candidate)) return { kind: "MALFORMED" };
-    blockHash = candidate;
-  }
-
-  return {
-    kind: "PRESENT",
-    receipt: {
-      transactionHash,
-      status: status as "0x0" | "0x1",
-      contractAddress,
-      blockNumber,
-      blockHash,
-    },
-  };
-}
-
-/**
- * Raw managed `eth_getTransactionReceipt`. Managed provider is the ONLY
- * production evidence authority; there is no public diagnostic fallback.
- */
-async function readManagedReceipt(
-  endpoint: string,
-  txHash: string,
-): Promise<ManagedReceiptRead> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), MANAGED_RECEIPT_TIMEOUT_MS);
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "eth_getTransactionReceipt",
-        params: [txHash],
-      }),
-      signal: controller.signal,
-    });
-    if (!response.ok) return { kind: "UNAVAILABLE" };
-
-    let payload: unknown;
-    try {
-      payload = await response.json();
-    } catch {
-      return { kind: "UNAVAILABLE" };
-    }
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-      return { kind: "UNAVAILABLE" };
-    }
-    const body = payload as Record<string, unknown>;
-    if (body["error"] !== null && body["error"] !== undefined) return { kind: "UNAVAILABLE" };
-    if (!("result" in body)) return { kind: "UNAVAILABLE" };
-    if (body["result"] === null) return { kind: "ABSENT" };
-    return parseManagedReceipt(body["result"]);
-  } catch {
-    return { kind: "UNAVAILABLE" };
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 
-export type MainnetFinalityClassification =
-  | "NOT_CHECKED"
-  | "FINALITY_PENDING"
-  | "FINALIZED_CANDIDATE"
-  | "PROVIDER_INCONSISTENT";
 
-export type MainnetVerifyResult = {
-  /** Current DB status. Never promoted by this module while writes are locked. */
-  status: string;
-  /** Independently observed from the managed provider, never from the browser. */
-  contractAddress: string | null;
-  blockNumber: string | null;
-  blockHash: string | null;
-  /**
-   * Diagnostic only. NEVER a gate: see the file header. Present purely for
-   * display parity with the testnet console.
-   */
-  observationalConfirmations: number | null;
-  finality: MainnetFinalityClassification;
-  finalizedHeadBlockNumber: string | null;
-  finalityAuthority: "MANAGED" | null;
-  /** Deterministic, non-secret code. Includes retryable and mismatch codes. */
-  notice: string | null;
-  stateWritesEnabled: false;
-};
+
+export type {
+  MainnetFinalityClassification,
+  MainnetVerifyResult,
+} from "./chain-mainnet-verify-shape";
 
 const lower = (v: string) => v.toLowerCase();
 
-function baseResult(status: string): MainnetVerifyResult {
-  return {
-    status,
-    contractAddress: null,
-    blockNumber: null,
-    blockHash: null,
-    observationalConfirmations: null,
-    finality: "NOT_CHECKED",
-    finalizedHeadBlockNumber: null,
-    finalityAuthority: null,
-    notice: null,
-    stateWritesEnabled: false,
-  };
-}
-
-/** Production chain descriptor built locally; no testnet registry import. */
-function mainnetChain(rpcUrl: string) {
-  return defineChain({
-    id: ROBINHOOD_MAINNET_CHAIN_ID,
-    name: "Robinhood Chain",
-    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-    rpcUrls: { default: { http: [rpcUrl] } },
-  });
-}
-
-/**
- * Rebuilds the frozen creation init code from stored intent. The transaction
- * input must equal this byte-for-byte: the browser never supplies bytecode.
- */
-function buildInitCode(intent: {
-  name: string;
-  symbol: string;
-  totalSupply: bigint;
-  recipient: `0x${string}`;
-}): `0x${string}` {
-  const args = encodeAbiParameters(
-    [
-      { type: "string", name: "name_" },
-      { type: "string", name: "symbol_" },
-      { type: "uint256", name: "totalSupply_" },
-      { type: "address", name: "recipient_" },
-    ],
-    [intent.name, intent.symbol, intent.totalSupply, intent.recipient],
-  );
-  return `${CARTEL_FIXED_ERC20_CREATION_BYTECODE}${args.slice(2)}` as `0x${string}`;
-}
 
 /* -------------------------------------------------------------------------
- * P3A service-role apply helpers — WIRED INTO THE VERIFIER, GUARDED OFF.
+ * Service-role apply helpers live in `./chain-mainnet-verify-apply`.
  *
- * The exported verifier calls these in exactly this order, and only inside
+ * The exported verifier calls them in exactly this order, and only inside
  * `if (STATE_WRITES_ENABLED)` branches:
  *   1. PENDING with complete, independently observed mined + token evidence;
  *   2. managed finality only — FINALITY_PENDING / PROVIDER_INCONSISTENT /
  *      FINALIZED (production finality RPC, `MANAGED` authority);
  *   3. CONFIRMED only after a FINALIZED apply succeeded, reusing the exact
  *      same immutable mined/token evidence recorded at PENDING.
- * No path persists FAILED in this slice. Every call is refused today by the
- * local lock, before any admin import.
+ * No path persists FAILED in this slice. Each helper re-asserts the gate
+ * before importing the admin client, so a future gate-off fails closed.
  * ---------------------------------------------------------------------- */
 
 
-function assertStateWritesEnabled(): void {
-  if (!MAINNET_VERIFICATION_STATE_WRITES_ENABLED) {
-    throw new Error("STATE_WRITES_DISABLED");
-  }
-}
-
-/**
- * Fail-closed bigint -> DB integer conversion. A block height outside the
- * IEEE-754 safe-integer range would silently lose precision on the way to the
- * RPC, so it is refused deterministically before any service-role call.
- */
-function toSafeDbInteger(value: bigint, field: string): number {
-  if (value < 0n || value > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new Error(`UNSAFE_DB_INTEGER:${field}`);
-  }
-  return Number(value);
-}
-
-
-async function applyProductionDeploymentVerification(payload: {
-  deploymentId: string;
-  status: "PENDING" | "CONFIRMED" | "FAILED";
-  observedConfirmations?: number;
-  contractAddress?: string;
-  blockNumber?: bigint;
-  blockHash?: string;
-  failureCode?: string;
-  failureDetail?: string;
-  verifiedToken?: {
-    name: string;
-    symbol: string;
-    decimals: number;
-    totalSupply: bigint;
-    recipientBalance: bigint;
-  };
-}): Promise<void> {
-  // Refuse BEFORE importing the service-role client or touching the network.
-  assertStateWritesEnabled();
-
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const args = {
-    _deployment_id: payload.deploymentId,
-    _status: payload.status,
-    ...(payload.observedConfirmations !== undefined
-      ? { _observed_confirmations: payload.observedConfirmations }
-      : {}),
-    ...(payload.contractAddress ? { _contract_address: payload.contractAddress } : {}),
-    ...(payload.blockNumber !== undefined
-      ? { _block_number: toSafeDbInteger(payload.blockNumber, "block_number") }
-      : {}),
-
-    ...(payload.blockHash ? { _block_hash: payload.blockHash } : {}),
-    ...(payload.failureCode ? { _failure_code: payload.failureCode } : {}),
-    ...(payload.failureDetail ? { _failure_detail: payload.failureDetail } : {}),
-    ...(payload.verifiedToken
-      ? {
-          _verified_token_name: payload.verifiedToken.name,
-          _verified_token_symbol: payload.verifiedToken.symbol,
-          _verified_token_decimals: payload.verifiedToken.decimals,
-          // Exact decimal strings: base units exceed IEEE-754 safe integers.
-          _verified_total_supply: payload.verifiedToken.totalSupply.toString(),
-          _verified_recipient_balance: payload.verifiedToken.recipientBalance.toString(),
-        }
-      : {}),
-  } as unknown as Parameters<
-    typeof supabaseAdmin.rpc<"apply_launch_chain_production_token_deployment_verification">
-  >[1];
-
-  const { error } = await supabaseAdmin.rpc(
-    "apply_launch_chain_production_token_deployment_verification",
-    args,
-  );
-  if (error) throw new Error("Verification could not be recorded");
-}
-
-async function applyProductionFinality(payload: {
-  deploymentId: string;
-  finalityState: "FINALITY_PENDING" | "FINALIZED" | "PROVIDER_INCONSISTENT";
-  finalizedBlockNumber?: bigint;
-  finalizedHeadBlockNumber?: bigint;
-  finalizedBlockHashConfirmed?: boolean;
-  finalityNotice?: string;
-}): Promise<void> {
-  // Refuse BEFORE importing the service-role client or touching the network.
-  assertStateWritesEnabled();
-
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { error } = await supabaseAdmin.rpc("apply_launch_chain_production_finality", {
-    _deployment_id: payload.deploymentId,
-    _finality_state: payload.finalityState,
-    // MANAGED is the only permitted finality authority.
-    _finality_provider_kind: "MANAGED",
-    ...(payload.finalizedBlockNumber !== undefined
-      ? { _finalized_block_number: toSafeDbInteger(payload.finalizedBlockNumber, "finalized_block_number") }
-      : {}),
-    ...(payload.finalizedHeadBlockNumber !== undefined
-      ? {
-          _finalized_head_block_number: toSafeDbInteger(
-            payload.finalizedHeadBlockNumber,
-            "finalized_head_block_number",
-          ),
-        }
-      : {}),
-    ...(payload.finalizedBlockHashConfirmed !== undefined
-      ? { _finalized_block_hash_confirmed: payload.finalizedBlockHashConfirmed }
-      : {}),
-    ...(payload.finalityNotice ? { _finality_notice: payload.finalityNotice } : {}),
-  });
-  if (error) throw new Error("Finality could not be recorded");
-}
 
 type VerifyInput = { deploymentId: string };
 
@@ -840,7 +527,7 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
      */
     if (finalizedHead < receiptBlockNumber) {
       result.finality = "FINALITY_PENDING";
-      result.notice = MAINNET_VERIFICATION_STATE_WRITES_ENABLED ? null : "STATE_WRITES_DISABLED";
+      result.notice = STATE_WRITES_ENABLED ? null : "STATE_WRITES_DISABLED";
       if (STATE_WRITES_ENABLED) {
         try {
           await applyProductionFinality({
@@ -860,7 +547,7 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
     // matches. Under the local lock this is a CANDIDATE only: no DB promotion,
     // and never a claim of DEPLOYMENT_VERIFIED or CONFIRMED.
     result.finality = "FINALIZED_CANDIDATE";
-    result.notice = MAINNET_VERIFICATION_STATE_WRITES_ENABLED ? null : "STATE_WRITES_DISABLED";
+    result.notice = STATE_WRITES_ENABLED ? null : "STATE_WRITES_DISABLED";
 
     if (STATE_WRITES_ENABLED) {
       /**

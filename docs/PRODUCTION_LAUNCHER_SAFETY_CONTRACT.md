@@ -50,6 +50,8 @@ Require independent hard gates, default OFF:
 
 - MAINNET_DEPLOYMENT_TX_ENABLED = false
 - MAINNET_LIQUIDITY_TX_ENABLED = false
+- MAINNET_VERIFICATION_STATE_WRITES_ENABLED = true (P3C-E, ACTIVATED): authorizes production verifier DATABASE evidence/finality writes ONLY. It grants nothing to transaction execution; deployment and liquidity remain OFF and the Supabase runtime execution control remains physically stopped (execution_enabled=false, emergency_stop_engaged=true). Setting it back to false fails closed before any service-role import.
+
 
 Rules:
 
