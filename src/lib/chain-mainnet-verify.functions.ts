@@ -77,7 +77,7 @@ export type MainnetFinalityClassification =
   | "PROVIDER_INCONSISTENT";
 
 export type MainnetVerifyResult = {
-  /** Current DB status. Never promoted by this module while writes are locked. */
+  /** Current DB status. Only ever promoted after the matching apply landed. */
   status: string;
   /** Independently observed from the managed provider, never from the browser. */
   contractAddress: string | null;
@@ -93,7 +93,8 @@ export type MainnetVerifyResult = {
   finalityAuthority: "MANAGED" | null;
   /** Deterministic, non-secret code. Includes retryable and mismatch codes. */
   notice: string | null;
-  stateWritesEnabled: false;
+  /** Truthful mirror of the authoritative verifier state-write gate. */
+  stateWritesEnabled: boolean;
 };
 
 const lower = (v: string) => v.toLowerCase();
@@ -109,9 +110,11 @@ function baseResult(status: string): MainnetVerifyResult {
     finalizedHeadBlockNumber: null,
     finalityAuthority: null,
     notice: null,
-    stateWritesEnabled: false,
+    // Reports the actual gate state; never hardcoded.
+    stateWritesEnabled: STATE_WRITES_ENABLED,
   };
 }
+
 
 /** Production chain descriptor built locally; no testnet registry import. */
 function mainnetChain(rpcUrl: string) {
