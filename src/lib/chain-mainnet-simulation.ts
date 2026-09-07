@@ -105,11 +105,19 @@ export type MainnetPreflightResult = {
   deploymentTxCapabilityEnabled: boolean;
   errors: string[];
   quotedAtMs: number;
-  /** True only when every hard read-only check passed. Authorizes nothing. */
+  /**
+   * True only when every hard READ-ONLY check passed: chain, account,
+   * recipient, init-code call, gas, fees and balance. It is correctness only
+   * and it authorizes nothing.
+   */
   simulationPassed: boolean;
-  /** Always literal false in this module. */
+  /** Always literal false in this module. Simulation never authorizes. */
   deploymentAuthorized: false;
-  authorizationBlockedBy: "MAINNET_DEPLOYMENT_TX_ENABLED";
+  /**
+   * The gates that still stand between a passing simulation and a send. Never
+   * claims the compile-time capability switch is the blocker.
+   */
+  authorizationBlockedBy: "RUNTIME_EXECUTION_CONTROL_AND_SEND_WINDOW";
 };
 
 export type MainnetSimulation = {
