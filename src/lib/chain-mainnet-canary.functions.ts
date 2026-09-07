@@ -32,12 +32,13 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ADDRESS = /^0x[0-9a-f]{40}$/;
 const HASH32 = /^0x[0-9a-f]{64}$/;
 const REQUEST_ID = /^[A-Za-z0-9._:-]+$/;
-const DIGITS = /^[1-9][0-9]{0,29}$/;
+const SYMBOL = /^[A-Z0-9]{2,11}$/;
 
 export type CanaryNotice =
   | "NOT_AUTHORIZED"
   | "INVALID_INPUT"
   | "SUPPLY_OUT_OF_RANGE"
+  | "LAUNCH_CHAIN_MISMATCH"
   | "RPC_REFUSED"
   | "CONTROL_STATE_UNAVAILABLE";
 
