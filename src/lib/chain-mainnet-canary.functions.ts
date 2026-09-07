@@ -62,8 +62,8 @@ export type CanaryArmResult = {
   notice: CanaryNotice | null;
   deploymentId: string;
   authorizationId: string;
-  /** Raw authoritative RPC payload, passed through unmodified. */
-  payload: unknown;
+  /** Authoritative RPC payload, serialized as-is for owner display only. */
+  payload: string | null;
 };
 
 export type CanaryStopResult = {
