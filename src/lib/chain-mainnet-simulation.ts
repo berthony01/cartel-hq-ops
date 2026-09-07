@@ -97,8 +97,12 @@ export type MainnetPreflightResult = {
   estimatedCostWei: string | null;
   sufficientBalance: boolean | null;
   txValueWei: "0";
-  /** True when the production execution switch is off, as it must be. */
-  deploymentKillSwitchOff: boolean;
+  /**
+   * Compile-time capability mirror only: whether the production deployment
+   * transaction code path is compiled in. It is NOT permission and it is NOT
+   * part of `simulationPassed`.
+   */
+  deploymentTxCapabilityEnabled: boolean;
   errors: string[];
   quotedAtMs: number;
   /** True only when every hard read-only check passed. Authorizes nothing. */
