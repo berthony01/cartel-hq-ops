@@ -1,11 +1,17 @@
 -- =====================================================================
 -- P3C-F2 — ONE-TIME PEPECARTEL LAUNCH CHAIN METADATA RECONCILIATION
 -- =====================================================================
--- PREPARED, NOT APPLIED. Staged here for external review and deliberate
--- application; the Lovable task that authored it did not run it.
+-- APPLIED. This is the reviewed reference copy. The reconciliation it
+-- describes was deliberately applied to the live CARTEL HQ database
+-- (Supabase project ocoinbnjgstkmnwwvnhi).
 --
--- INTENDED MIGRATION FILENAME (move verbatim, do not edit on the way):
---   supabase/migrations/20260907062000_reconcile_pepecartel_launch_chain_to_robinhood.sql
+--   live migration version : 20260907135738
+--   live migration name    : reconcile_pepecartel_launch_chain_to_robinhood
+--   parity record in repo  : supabase/migrations/20260907135738_reconcile_pepecartel_launch_chain_to_robinhood.sql
+--
+-- This reference copy is NOT executed by the migration runner; the parity
+-- file above is the executable record. The SQL body below is unchanged.
+
 --
 -- It performs a single auditable correction of ONE column on ONE row:
 --
