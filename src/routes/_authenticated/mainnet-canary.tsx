@@ -6,9 +6,13 @@ import { AlertTriangle, Loader2, Lock, ShieldAlert } from "lucide-react";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { EmptyState } from "@/components/cartel/EmptyState";
+import { CanaryIntentForm } from "@/components/cartel/CanaryIntentForm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  deriveCanaryOnchainSymbol,
+  isRobinhoodChainLaunchMetadata,
+} from "@/lib/chain-mainnet-canary-intent";
 import {
   ARM_PHRASE,
   Readout,
@@ -113,6 +117,8 @@ function CanaryConsole() {
     () => (launches.data ?? []).find((row) => row.id === launchId) ?? null,
     [launches.data, launchId],
   );
+
+  const chainEligible = isRobinhoodChainLaunchMetadata(selected?.chain);
 
   const hasActiveState = !!deploymentId || !!authorizationId;
   const armReady = armPhrase === ARM_PHRASE;
