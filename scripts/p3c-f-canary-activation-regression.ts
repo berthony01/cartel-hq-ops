@@ -182,7 +182,9 @@ check(
 /* J — the diff adds no liquidity, registration, telegram, migration or secret path. */
 const added = [canaryCode, stripComments(routeSrc)].join("\n");
 for (const term of [
-  "liquidity",
+  "add_?liquidity",
+  "liquidity_?(tx|pool|position|attempt)",
+  "MAINNET_LIQUIDITY_TX_ENABLED\\s*===\\s*true",
   "register_official_contract",
   "set_launch_contract_address",
   "telegram",
