@@ -70,83 +70,13 @@ const DIGITS = /^[0-9]+$/;
 
 
 
-export type MainnetFinalityClassification =
-  | "NOT_CHECKED"
-  | "FINALITY_PENDING"
-  | "FINALIZED_CANDIDATE"
-  | "PROVIDER_INCONSISTENT";
-
-export type MainnetVerifyResult = {
-  /** Current DB status. Only ever promoted after the matching apply landed. */
-  status: string;
-  /** Independently observed from the managed provider, never from the browser. */
-  contractAddress: string | null;
-  blockNumber: string | null;
-  blockHash: string | null;
-  /**
-   * Diagnostic only. NEVER a gate: see the file header. Present purely for
-   * display parity with the testnet console.
-   */
-  observationalConfirmations: number | null;
-  finality: MainnetFinalityClassification;
-  finalizedHeadBlockNumber: string | null;
-  finalityAuthority: "MANAGED" | null;
-  /** Deterministic, non-secret code. Includes retryable and mismatch codes. */
-  notice: string | null;
-  /** Truthful mirror of the authoritative verifier state-write gate. */
-  stateWritesEnabled: boolean;
-};
+export type {
+  MainnetFinalityClassification,
+  MainnetVerifyResult,
+} from "./chain-mainnet-verify-shape";
 
 const lower = (v: string) => v.toLowerCase();
 
-function baseResult(status: string): MainnetVerifyResult {
-  return {
-    status,
-    contractAddress: null,
-    blockNumber: null,
-    blockHash: null,
-    observationalConfirmations: null,
-    finality: "NOT_CHECKED",
-    finalizedHeadBlockNumber: null,
-    finalityAuthority: null,
-    notice: null,
-    // Reports the actual gate state; never hardcoded.
-    stateWritesEnabled: STATE_WRITES_ENABLED,
-  };
-}
-
-
-/** Production chain descriptor built locally; no testnet registry import. */
-function mainnetChain(rpcUrl: string) {
-  return defineChain({
-    id: ROBINHOOD_MAINNET_CHAIN_ID,
-    name: "Robinhood Chain",
-    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-    rpcUrls: { default: { http: [rpcUrl] } },
-  });
-}
-
-/**
- * Rebuilds the frozen creation init code from stored intent. The transaction
- * input must equal this byte-for-byte: the browser never supplies bytecode.
- */
-function buildInitCode(intent: {
-  name: string;
-  symbol: string;
-  totalSupply: bigint;
-  recipient: `0x${string}`;
-}): `0x${string}` {
-  const args = encodeAbiParameters(
-    [
-      { type: "string", name: "name_" },
-      { type: "string", name: "symbol_" },
-      { type: "uint256", name: "totalSupply_" },
-      { type: "address", name: "recipient_" },
-    ],
-    [intent.name, intent.symbol, intent.totalSupply, intent.recipient],
-  );
-  return `${CARTEL_FIXED_ERC20_CREATION_BYTECODE}${args.slice(2)}` as `0x${string}`;
-}
 
 /* -------------------------------------------------------------------------
  * Service-role apply helpers live in `./chain-mainnet-verify-apply`.
