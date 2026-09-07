@@ -324,7 +324,7 @@ export const armCanaryExecution = createServerFn({ method: "POST" })
     );
 
     if (error) return { ...base, ok: false, notice: "RPC_REFUSED" };
-    return { ...base, ok: true, notice: null, payload };
+    return { ...base, ok: true, notice: null, payload: JSON.stringify(payload ?? null) };
   });
 
 /* ------------------------------------------------------------------ */
