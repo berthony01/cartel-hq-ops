@@ -685,3 +685,21 @@ All executed inside a single transaction deliberately rolled back; zero rows per
 21. No real wallet or provider connection, signature, `eth_sendTransaction`, `eth_sendRawTransaction`, broadcast, candidate-hash persistence, ETH movement, liquidity action, Telegram action, lifecycle or official-contract registration, verifier state-write activation, migration, DDL, grant, policy, trigger, generated-types edit, source edit, package/lockfile edit, secret/env change, Edge Function deploy, UI edit, cron, or publish occurred. No `REHEARSAL_MODE`, bypass, alternate send path, or reset/reissue capability was created.
 22. Unexecuted / inconclusive: permit expiry by elapsed wall-clock time was not exercised (the rollback harness observes a single transaction timestamp); the duplicate-issuance `23505` branch was masked by the earlier relock gate (item 13); no production-path behaviour beyond the rollback harness and the mocked-provider refusal was observed.
 23. Next allowed step: READ-ONLY pre-canary hardening audit ONLY — main verifier receipt-error classification and the mainnet official-registration legacy five-confirmation liveness mismatch. Not started in this turn.
+
+## P3C Pre-Canary Hardening A — Receipt Classification Checkpoint — 2026-09-06
+
+1. Start HEAD `a24a7aef9c29d479645e641625efb071568c44d0`, tree clean. Scope: pre-canary finding A only. Finding B (mainnet official-registration legacy five-confirmation liveness mismatch) was NOT touched.
+2. Defect: the main production verifier read the receipt via viem `getTransactionReceipt`, which throws for BOTH a genuine not-found receipt and a transport/RPC failure. The single `catch` collapsed both into `RECEIPT_NOT_MINED_RETRYABLE`, asserting "not mined" on evidence that did not prove it.
+3. Fix: the receipt is now read with a module-private raw managed `eth_getTransactionReceipt` (the pattern already proven in the D2 reconciliation verifier, duplicated minimally inside the single allowlisted file; the D2 source was not edited).
+4. Classifications now implemented:
+   - `RECEIPT_NOT_MINED_RETRYABLE` — ONLY on a successful JSON-RPC response whose `result` is `null` (authoritative absence).
+   - `RECEIPT_UNAVAILABLE_RETRYABLE` — HTTP/transport/timeout/JSON-RPC-error/non-object payload/missing `result`.
+   - `RECEIPT_MALFORMED_RETRYABLE` — successful transport, structurally unusable receipt payload (bad hash, status not `0x0`/`0x1`, bad address/quantity/block hash).
+   - PRESENT — continues unchanged through exact tx-hash binding, revert check, created-contract check, block number/hash checks and every downstream evidence, finality and ordering rule.
+5. Managed provider remains the only production evidence authority; no public diagnostic fallback was added. The endpoint value and raw provider error text are never returned, logged or serialized; callers receive deterministic non-secret codes only.
+6. Provider uncertainty never promotes status, finality, `CONFIRMED` or `FAILED`, and performs no state write. No persisted FAILED path was introduced for receipt uncertainty. Finality authority, confirmations logic, PENDING/FINALIZED/CONFIRMED ordering, early terminal-state handling and state-write lock semantics are unchanged.
+7. Validation: `bunx tsgo --noEmit` PASS; `bun run build` PASS. Static branch proof confirmed all four classifications are reachable and distinct; no signer/send/retry/rebroadcast code exists in the file.
+8. `MAINNET_DEPLOYMENT_TX_ENABLED`, `MAINNET_LIQUIDITY_TX_ENABLED` and `MAINNET_VERIFICATION_STATE_WRITES_ENABLED` all remain literal `false as const`.
+9. No migration, schema, generated-types, package/lockfile, registry, wallet, handoff, reconciliation, UI, testnet, Edge Function or secret change. No Supabase data write, no runtime control mutation, no official registration, no liquidity, no Telegram, no transaction, no publish/deploy. Project remains private/unpublished.
+10. Diff from start HEAD before this append contained exactly `src/lib/chain-mainnet-verify.functions.ts`.
+11. STOP point: finding B is NOT started and requires separate explicit authorization.
