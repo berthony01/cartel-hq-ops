@@ -312,3 +312,35 @@ A future assistant must:
 - **Web app publish/deploy in P0:** NONE
 - **Next allowed step after verification:** P1 read-only audit/design only, unless separately authorized to build.
 
+
+## 20. Hardening B — production confirmation depth is diagnostic, managed finality is mandatory
+
+Supersedes any earlier reading of this document that implied a separate fixed
+five-confirmation depth is required for PRODUCTION official-contract registration.
+
+- Production (Robinhood Chain, chain id 4663): `confirmations` is DIAGNOSTIC ONLY.
+  It remains stored, displayed and unchanged in meaning, but it is not an
+  eligibility gate and a low value alone never blocks official registration.
+- Production official-contract registration REQUIRES managed finalized evidence,
+  unchanged and mandatory: `finality_state = FINALIZED`,
+  `finalized_block_hash_confirmed = true`, `finality_provider_kind = MANAGED`,
+  `finalized_at` present, `finalized_block_number = block_number`, and
+  `finalized_head_block_number >= block_number`.
+- Every other registration requirement is unchanged: launch/workspace binding,
+  FIXED_SUPPLY_ERC20, frozen artifact `cartel-fixed-erc20-v1`, PRODUCTION +
+  chain id 4663, declared Robinhood mainnet label, status CONFIRMED, canonical
+  transaction hash and contract address, mined block and `verified_at`, no
+  failure state, and verified token identity/supply/recipient parity.
+- TESTNET is unchanged: the fixed 5-confirmation rule
+  (`REQUIRED_CONFIRMATIONS`) remains the testnet evidence rule and is never a
+  production finality definition (sections 1, 6 and 11 above still apply).
+- Server authority: `public.assert_launch_contract_evidence` no longer contains
+  an independent `confirmations < 5` rejection. All other checks and its
+  SECURITY DEFINER / `search_path` / grant properties are preserved verbatim.
+- Client evaluator: `src/lib/launch-verified-eligibility.ts` (with
+  `src/lib/launch-evidence-checks.ts` and
+  `src/lib/launch-production-finality.ts`) mirrors the same predicates. It
+  remains read-only and advisory; the database re-derives everything and fails
+  closed independently.
+- Phase completion checkpoints have moved to
+  [PRODUCTION_LAUNCHER_SAFETY_CHECKPOINTS.md](./PRODUCTION_LAUNCHER_SAFETY_CHECKPOINTS.md).
