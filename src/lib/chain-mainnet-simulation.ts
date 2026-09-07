@@ -43,7 +43,9 @@ import {
  *   - provider output is untrusted, strictly parsed, and can never influence
  *     the immutable intent fingerprint;
  *   - a passing simulation authorizes nothing. `deploymentAuthorized` is the
- *     literal `false` and the production execution switch remains off.
+ *     literal `false`: read-only correctness is never execution permission,
+ *     which remains with the runtime execution control, the canary permit and
+ *     the server-issued final send window.
  */
 
 /** Domain separator for the production fingerprint pre-image. */
