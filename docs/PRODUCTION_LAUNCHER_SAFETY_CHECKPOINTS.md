@@ -410,3 +410,16 @@ All executed inside a single transaction deliberately rolled back; zero rows per
 9. Post-apply counts remain zero: open production presign authorizations, send-window issuances, unexpired canary permits, production deployments with a tx hash, confirmed production deployments, contract-registration events, and launches with an official contract.
 10. No real-value action occurred: no transaction, signing, broadcast, presign/canary/send-window issuance, verifier state write, official contract registration, liquidity action, secret/env change, Telegram message, or publish/deploy. CARTEL HQ remains private and unpublished.
 11. STOP point: Hardening B is closed. Any canary or execution-arming step requires separate explicit authorization.
+
+## P3C-E — Verifier State-Write Activation Checkpoint — 2026-09-07
+
+1. Activation: the authoritative verifier state-write gate `MAINNET_VERIFICATION_STATE_WRITES_ENABLED` is now literal `true as const`, relocated verbatim into `src/lib/chain-mainnet-verify-apply.ts`. Production verifier database evidence and managed-finality writes are ENABLED.
+2. Scope: this gate authorizes DATABASE writes only. It grants nothing to transaction execution. `MAINNET_DEPLOYMENT_TX_ENABLED` and `MAINNET_LIQUIDITY_TX_ENABLED` remain literal `false as const`, and the Supabase runtime execution control remains physically stopped (`execution_enabled=false`, `emergency_stop_engaged=true`, `revision=1`, reason `INITIAL_DEFAULT_OFF`).
+3. Fail-closed preserved: each apply helper still calls `assertStateWritesEnabled()` before any dynamic service-role import. Setting the gate back to false refuses every write before the admin client is loaded.
+4. Invocation-bound: importing the verifier performs zero I/O and zero writes. Writes occur only inside the authenticated `verifyMainnetChainDeployment` handler after its existing independent evidence validation. No UI caller was added; the server function still has no caller.
+5. Truthful API: `MainnetVerifyResult.stateWritesEnabled` is now `boolean` and `baseResult()` reports the actual gate state instead of a hardcoded `false`.
+6. Oversized-file requirement: `chain-mainnet-verify.functions.ts` reduced 901 -> 588 LOC by verbatim extraction into `chain-mainnet-verify-apply.ts` (161), `chain-mainnet-verify-receipt.ts` (136) and `chain-mainnet-verify-shape.ts` (85). Behavior, evidence predicates, receipt classification, finality semantics, confirmation semantics, PENDING/FINALIZED/CONFIRMED ordering, retryable error codes and RPC names are unchanged.
+7. Validation: `bun run scripts/verifier-state-write-activation-regression.ts` A–G ALL CHECKS PASSED; `bun run scripts/hardening-b-regression.ts` PASS; `bunx tsgo --noEmit` PASS; `bun run build` PASS.
+8. No production data write occurred: zero production deployments exist and the verifier was not invoked in this checkpoint.
+9. No migration, schema, RPC, grant, policy, generated-types, secret/env, package or Edge Function change. No wallet action, signing, broadcast, transaction, ETH movement, presign/canary/send-window issuance, official contract registration, liquidity action, Telegram message, or publish/deploy. CARTEL HQ remains private and unpublished.
+10. STOP point: canary and production execution arming remain unauthorized and require a separate explicit checkpoint.
