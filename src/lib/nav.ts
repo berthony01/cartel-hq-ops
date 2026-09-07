@@ -10,6 +10,7 @@ import {
   Globe,
   Eye,
   FlaskConical,
+  Radiation,
 
 
   ShieldHalf,
