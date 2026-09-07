@@ -21,6 +21,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { ROBINHOOD_TESTNET_CHAIN_ID } from "../src/lib/chain-registry";
 import {
   evaluateLaunchDeploymentEvidence,
   type DeploymentEvidenceInput,
