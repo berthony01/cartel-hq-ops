@@ -2,17 +2,16 @@
 -- Hardening B — production official-contract registration: managed finality is
 -- authoritative, observed confirmations are diagnostic.
 --
--- STAGED, NOT APPLIED.
+-- APPLIED. This SQL was applied externally through the Supabase migration API
+-- to project ocoinbnjgstkmnwwvnhi.
+--   Live migration version: 20260907045317
+--   Live migration name:    hardening_b_production_registration_managed_finality
 --
--- Intended filename when applied as an additive Supabase migration:
---   supabase/migrations/20260907050000_hardening_b_production_registration_managed_finality.sql
+-- Repository parity copy of the applied SQL:
+--   supabase/migrations/20260907045317_hardening_b_production_registration_managed_finality.sql
 --
--- This file lives under docs/sql/ because this environment refuses direct
--- authoring of files under supabase/migrations/ (that directory is only
--- writable by the migration tool, which would APPLY the SQL in this turn —
--- explicitly prohibited by the Hardening B contract). The SQL below is the
--- exact text to apply, additively, after independent inspection and approval.
 -- No historical migration is edited or replaced.
+
 --
 -- Source of truth: the current LIVE definition of
 -- public.assert_launch_contract_evidence in Supabase project

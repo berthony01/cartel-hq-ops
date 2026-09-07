@@ -396,3 +396,17 @@ All executed inside a single transaction deliberately rolled back; zero rows per
 9. No migration, schema, generated-types, package/lockfile, registry, wallet, handoff, reconciliation, UI, testnet, Edge Function or secret change. No Supabase data write, no runtime control mutation, no official registration, no liquidity, no Telegram, no transaction, no publish/deploy. Project remains private/unpublished.
 10. Diff from start HEAD before this append contained exactly `src/lib/chain-mainnet-verify.functions.ts`.
 11. STOP point: finding B is NOT started and requires separate explicit authorization.
+
+## Hardening B — Production Registration Managed-Finality Completion Checkpoint — 2026-09-07
+
+1. Client/server correction complete: production official-contract registration no longer applies a separate fixed five-confirmation depth gate. Managed FINALIZED evidence is authoritative; the confirmations column remains stored and diagnostic only.
+2. Testnet semantics unchanged: the fixed five-confirmation rule (`REQUIRED_CONFIRMATIONS` / `EVIDENCE_REQUIRED_CONFIRMATIONS`) continues to apply to Robinhood Chain Testnet.
+3. QA fixture corrected: regression case H now uses `ROBINHOOD_TESTNET_CHAIN_ID` (46630) instead of a hardcoded incompatible chain id, so it genuinely proves the testnet confirmation check FAILs at 4 confirmations while official production registration stays false.
+4. Validation: `bun run scripts/hardening-b-regression.ts` cases A–H PASS; `bunx tsgo --noEmit` PASS; `bun run build` PASS.
+5. Live migration applied externally through the Supabase migration API to project `ocoinbnjgstkmnwwvnhi`: version `20260907045317`, name `hardening_b_production_registration_managed_finality`. Repository parity copy stored at `supabase/migrations/20260907045317_hardening_b_production_registration_managed_finality.sql`; no migration was applied or re-applied from Lovable.
+6. Live post-apply audit: the fixed five-confirmation branch and its message are ABSENT from `public.assert_launch_contract_evidence`; every managed-finality predicate is retained (FINALIZED state, MANAGED provider kind, confirmed finalized block hash, `finalized_at`, finalized block number equal to the deployment block, finalized head at or beyond the deployment block); function remains SECURITY DEFINER with pinned `search_path`; EXECUTE granted to `authenticated` only (anon false, PUBLIC false).
+7. Runtime safety state unchanged and physically stopped: `ROBINHOOD_MAINNET_DEPLOYMENT` `execution_enabled=false`, `emergency_stop_engaged=true`, `revision=1`, reason `INITIAL_DEFAULT_OFF`.
+8. `MAINNET_DEPLOYMENT_TX_ENABLED`, `MAINNET_LIQUIDITY_TX_ENABLED` and `MAINNET_VERIFICATION_STATE_WRITES_ENABLED` all remain literal `false as const`.
+9. Post-apply counts remain zero: open production presign authorizations, send-window issuances, unexpired canary permits, production deployments with a tx hash, confirmed production deployments, contract-registration events, and launches with an official contract.
+10. No real-value action occurred: no transaction, signing, broadcast, presign/canary/send-window issuance, verifier state write, official contract registration, liquidity action, secret/env change, Telegram message, or publish/deploy. CARTEL HQ remains private and unpublished.
+11. STOP point: Hardening B is closed. Any canary or execution-arming step requires separate explicit authorization.
