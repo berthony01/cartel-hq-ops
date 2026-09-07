@@ -424,8 +424,7 @@ export async function runMainnetPreflight(
     result.gasEstimate !== null &&
     result.feeWeiPerGas !== null &&
     result.estimatedCostWei !== null &&
-    result.sufficientBalance === true &&
-    result.deploymentKillSwitchOff === true;
+    result.sufficientBalance === true;
 
   return result;
 }
