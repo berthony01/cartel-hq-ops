@@ -226,52 +226,31 @@ function CanaryConsole() {
         title="A — Exact production intent"
         description="One launch only. Identity is bound immutably to the attempt row."
       >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="canary-launch">Launch</Label>
-            <select
-              id="canary-launch"
-              className="h-9 w-full rounded-md border border-border bg-surface-raised px-2 text-sm"
-              value={launchId}
-              onChange={(event) => {
-                const id = event.target.value;
-                setLaunchId(id);
-                const row = (launches.data ?? []).find((item) => item.id === id);
-                if (row) {
-                  setName(row.token_name ?? "");
-                  setSymbol(row.ticker ?? "");
-                }
-              }}
-            >
-              <option value="">Select a launch…</option>
-              {(launches.data ?? []).map((row) => (
-                <option key={row.id} value={row.id}>
-                  {row.token_name} · {row.ticker} · {row.status}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="canary-deployer">Deployer wallet</Label>
-            <Input id="canary-deployer" value={deployer} onChange={(e) => setDeployer(e.target.value)} placeholder="0x…" />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="canary-recipient">Initial recipient</Label>
-            <Input id="canary-recipient" value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder="0x…" />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="canary-name">Token name</Label>
-            <Input id="canary-name" value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="canary-symbol">Token symbol</Label>
-            <Input id="canary-symbol" value={symbol} onChange={(e) => setSymbol(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="canary-supply">Total supply (whole tokens)</Label>
-            <Input id="canary-supply" value={supply} onChange={(e) => setSupply(e.target.value)} placeholder="1000000" />
-          </div>
-        </div>
+        <CanaryIntentForm
+          launches={launches.data ?? []}
+          launchId={launchId}
+          onSelectLaunch={(id) => {
+            setLaunchId(id);
+            const row = (launches.data ?? []).find((item) => item.id === id);
+            if (row) {
+              setName(row.token_name ?? "");
+              // Display ticker is NEVER mutated; only this input is prefilled.
+              setSymbol(deriveCanaryOnchainSymbol(row.ticker));
+            }
+          }}
+          deployer={deployer}
+          onDeployer={setDeployer}
+          recipient={recipient}
+          onRecipient={setRecipient}
+          name={name}
+          onName={setName}
+          symbol={symbol}
+          onSymbol={setSymbol}
+          supplyWhole={supply}
+          onSupplyWhole={setSupply}
+          selectedChain={selected?.chain ?? null}
+          chainEligible={chainEligible}
+        />
 
         {intentError ? <p className="mt-2 text-xs text-danger">{intentError}</p> : null}
 
@@ -281,10 +260,10 @@ function CanaryConsole() {
           </Button>
           <Button
             size="sm"
-            disabled={busy !== null || !intent || !launchId || !!deploymentId}
+            disabled={busy !== null || !intent || !launchId || !chainEligible || !!deploymentId}
             onClick={() =>
               run("attempt", async () => {
-                if (!intent) return;
+                if (!intent || !chainEligible) return;
                 const result = await createAttempt({
                   data: {
                     launchId,
@@ -292,7 +271,8 @@ function CanaryConsole() {
                     tokenRecipient: intent.recipient,
                     tokenName: intent.name,
                     tokenSymbol: intent.symbol,
-                    tokenTotalSupply: intent.supplyWhole,
+                    // BASE UNITS. Exact decimal string, never whole tokens.
+                    tokenTotalSupplyBaseUnits: intent.totalSupplyBaseUnits,
                     initCodeHash: intent.initCodeHash,
                     reviewFingerprint: intent.fingerprint,
                     clientRequestId: `canary-${crypto.randomUUID()}`,
@@ -307,6 +287,7 @@ function CanaryConsole() {
             Create production attempt
           </Button>
         </div>
+
 
         {intent ? (
           <div className="mt-3 grid gap-1 sm:grid-cols-2">
