@@ -206,7 +206,7 @@ run("H: testnet keeps the fixed 5-confirmation evidence rule", () => {
   const shallow = evaluateOne(
     productionRow({
       network_environment: "TESTNET",
-      chain_id: 6666,
+      chain_id: ROBINHOOD_TESTNET_CHAIN_ID,
       confirmations: 4,
     }),
     testnetContext,
