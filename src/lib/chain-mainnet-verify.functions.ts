@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { createPublicClient, defineChain, encodeAbiParameters, http, keccak256 } from "viem";
+import { createPublicClient, http, keccak256 } from "viem";
 import {
   ROBINHOOD_MAINNET_CHAIN_ID,
   ROBINHOOD_MAINNET_ENVIRONMENT,
@@ -9,7 +9,6 @@ import {
 import {
   CARTEL_FIXED_ERC20_ABI,
   CARTEL_FIXED_ERC20_ARTIFACT_ID,
-  CARTEL_FIXED_ERC20_CREATION_BYTECODE,
   CARTEL_FIXED_ERC20_DECIMALS,
   CARTEL_FIXED_ERC20_RUNTIME_BYTECODE_HASH,
 } from "./cartel-fixed-erc20.artifact";
