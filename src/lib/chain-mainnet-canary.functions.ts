@@ -1,6 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ROBINHOOD_MAINNET_CHAIN_ID } from "./chain-mainnet-registry";
+import {
+  checkBaseUnitSupply,
+  isRobinhoodChainLaunchMetadata,
+} from "./chain-mainnet-canary-intent";
+
 
 /**
  * P3C-F — OWNER-ONLY canary orchestration wrappers.
