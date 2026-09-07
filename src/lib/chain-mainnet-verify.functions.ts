@@ -528,7 +528,7 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
      */
     if (finalizedHead < receiptBlockNumber) {
       result.finality = "FINALITY_PENDING";
-      result.notice = MAINNET_VERIFICATION_STATE_WRITES_ENABLED ? null : "STATE_WRITES_DISABLED";
+      result.notice = STATE_WRITES_ENABLED ? null : "STATE_WRITES_DISABLED";
       if (STATE_WRITES_ENABLED) {
         try {
           await applyProductionFinality({
@@ -548,7 +548,7 @@ export const verifyMainnetChainDeployment = createServerFn({ method: "POST" })
     // matches. Under the local lock this is a CANDIDATE only: no DB promotion,
     // and never a claim of DEPLOYMENT_VERIFIED or CONFIRMED.
     result.finality = "FINALIZED_CANDIDATE";
-    result.notice = MAINNET_VERIFICATION_STATE_WRITES_ENABLED ? null : "STATE_WRITES_DISABLED";
+    result.notice = STATE_WRITES_ENABLED ? null : "STATE_WRITES_DISABLED";
 
     if (STATE_WRITES_ENABLED) {
       /**
