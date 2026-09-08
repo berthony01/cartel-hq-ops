@@ -345,8 +345,8 @@ function CanaryConsole() {
 
       <Section
         variant="surface"
-        title="C–E — Typed confirmation, claim and arm"
-        description={`Type exactly "${ARM_PHRASE}" to unlock CLAIM and ARM. Each is a separate explicit click.`}
+        title="C–E — Typed confirmation: ARM first, then CLAIM"
+        description={`Type exactly "${ARM_PHRASE}" to unlock ARM. A successful ARM enables CLAIM. Each is a separate explicit click.`}
       >
         <Input
           value={armPhrase}
@@ -354,22 +354,11 @@ function CanaryConsole() {
           placeholder={ARM_PHRASE}
           className="max-w-md font-mono"
         />
+        <p className="mt-2 text-xs text-muted-foreground">
+          Required order: ARM the authorization, then immediately CLAIM it. The final send window
+          after a successful CLAIM is intentionally very short (approximately 10 seconds).
+        </p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            disabled={busy !== null || !armReady || !deploymentId || !authorizationId}
-            onClick={() =>
-              run("claim", async () => {
-                if (!deploymentId || !authorizationId) return;
-                const result = await claim({ data: { deploymentId, authorizationId } });
-                setClaimed(result);
-                note(`Claim: ${result.notice ?? "claimed"}.`);
-              })
-            }
-          >
-            {busy === "claim" ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-            Claim authorization
-          </Button>
           <Button
             size="sm"
             variant="secondary"
@@ -392,6 +381,7 @@ function CanaryConsole() {
                   },
                 });
                 setArmed(result);
+                setArmSuccess(result.ok === true);
                 note(`Arm: ${result.notice ?? "requested"}.`);
               })
             }
@@ -399,8 +389,30 @@ function CanaryConsole() {
             {busy === "arm" ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
             Arm this authorization
           </Button>
+          <Button
+            size="sm"
+            disabled={
+              busy !== null ||
+              !armReady ||
+              !deploymentId ||
+              !authorizationId ||
+              !armSuccess
+            }
+            onClick={() =>
+              run("claim", async () => {
+                if (!deploymentId || !authorizationId) return;
+                const result = await claim({ data: { deploymentId, authorizationId } });
+                setClaimed(result);
+                setClaimSuccess(result.ok === true);
+                note(`Claim: ${result.notice ?? "claimed"}.`);
+              })
+            }
+          >
+            {busy === "claim" ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+            Claim authorization
+          </Button>
         </div>
-        <Readout value={{ claimed, armed }} />
+        <Readout value={{ armed, claimed }} />
       </Section>
 
       <Section
