@@ -181,7 +181,7 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
           ) : (
             <Smartphone className="mr-2 h-3.5 w-3.5" />
           )}
-          Robinhood Wallet / WalletConnect
+          Mobile wallet / WalletConnect
         </Button>
 
         <Button
