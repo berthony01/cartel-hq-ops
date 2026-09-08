@@ -127,7 +127,22 @@ function CanaryConsole() {
 
   const chainEligible = isRobinhoodChainLaunchMetadata(selected?.chain);
 
+  /**
+   * READ-ONLY awareness of an existing nonterminal production attempt for the
+   * selected launch. Nothing here creates, mutates or advances any stage, and
+   * nothing is auto-resumed: the operator must click Resume explicitly.
+   */
+  const readExisting = useServerFn(readCanaryExistingAttempt);
+  const existing = useQuery({
+    queryKey: ["canary-existing-attempt", launchId],
+    queryFn: () => readExisting({ data: { launchId } }),
+    enabled: !!launchId,
+  });
+  const existingAttempt = existing.data?.attempt ?? null;
+  const attemptBlocksCreation = existingAttempt !== null;
+
   const hasActiveState = !!deploymentId || !!authorizationId;
+
   const armReady = armPhrase === ARM_PHRASE;
   const sendReady =
     sendPhrase === SEND_PHRASE &&
