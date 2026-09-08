@@ -1,7 +1,4 @@
-import {
-  ROBINHOOD_MAINNET_CHAIN_ID,
-  ROBINHOOD_MAINNET_PUBLIC_DIAGNOSTIC_RPC_URL,
-} from "./chain-mainnet-registry";
+import { ROBINHOOD_MAINNET_CHAIN_ID } from "./chain-mainnet-registry";
 
 /**
  * P3C-G — DEPLOYMENT WALLET CONNECTOR ABSTRACTION (browser only).
@@ -474,25 +471,25 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
   // STAGE 2 — provider initialization (config, storage, relay/modal setup).
   let provider: Eip1193Provider;
   try {
+    // MODAL BASELINE RESTORE (rollback of init OPTIONS only). These are the
+    // exact options from the last revision where the wallet chooser modal was
+    // observed to open (pre mobile-hardening). The later-added `rpcMap`,
+    // `qrModalOptions.enableMobileFullScreen` and favicon metadata icon are
+    // intentionally NOT present here. Every later connection-correctness fix
+    // (optional 4663 proposal, post-connect CAIP-10 evidence, stale-session
+    // teardown, bounded handshake, listener cleanup, split diagnostics) is
+    // preserved outside this option set.
     const initialized = await EthereumProvider.init({
       projectId,
       optionalChains: [ROBINHOOD_MAINNET_CHAIN_ID as number],
-      // Public DIAGNOSTIC endpoint only: client transport/ping for a custom
-      // chain the WalletConnect default RPC does not know. Never authoritative
-      // for production verification, finality or evidence, and never the
-      // managed server RPC.
-      rpcMap: {
-        [String(ROBINHOOD_MAINNET_CHAIN_ID as number)]: ROBINHOOD_MAINNET_PUBLIC_DIAGNOSTIC_RPC_URL,
-      },
       showQrModal: true,
-      qrModalOptions: { enableMobileFullScreen: true },
       methods: ["eth_sendTransaction"],
       events: ["accountsChanged", "chainChanged"],
       metadata: {
         name: "CARTEL HQ",
         description: "CARTEL HQ deployment wallet connection",
         url: window.location.origin,
-        icons: [`${window.location.origin}/favicon.ico`],
+        icons: [],
       },
     });
     provider = initialized as unknown as Eip1193Provider;
