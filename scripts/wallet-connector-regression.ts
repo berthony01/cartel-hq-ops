@@ -196,6 +196,16 @@ check(
   !/DeploymentWalletConnect[\s\S]{0,400}onConnected|autoAdvance/.test(routeSrc),
   "connecting a wallet cannot auto-advance the sequence",
 );
+check(
+  "H5",
+  routeSrc.indexOf("<DeploymentWalletConnect") < routeSrc.indexOf("A — Exact production intent"),
+  "the wallet panel renders before section A — Exact production intent",
+);
+check(
+  "H6",
+  /title="Connect Deployment Wallet"/.test(panelCode),
+  "the panel is titled 'Connect Deployment Wallet'",
+);
 
 /* I — no secret material is ever stored by the connector. */
 check(
@@ -203,6 +213,67 @@ check(
   !/localStorage|sessionStorage|privateKey|mnemonic|seedPhrase/.test(connectorCode),
   "connector stores no key material and writes no browser storage of its own",
 );
+
+/* J — EXPLICIT CONNECT ONLY. Rendering must never touch a provider. */
+const activeProviderBody = /export function getActiveProvider\(\)[^{]*\{([\s\S]*?)\n\}/.exec(
+  connectorCode,
+)?.[1];
+check(
+  "J1",
+  activeProviderBody !== undefined &&
+    !/readInjectedProvider|window/.test(activeProviderBody) &&
+    /return activeProvider;/.test(activeProviderBody),
+  "getActiveProvider returns only an explicitly activated provider (no window.ethereum fallback)",
+);
+const activeKindBody = /export function getActiveConnectorKind\(\)[^{]*\{([\s\S]*?)\n\}/.exec(
+  connectorCode,
+)?.[1];
+check(
+  "J2",
+  activeKindBody !== undefined &&
+    !/readInjectedProvider|injected"/.test(activeKindBody) &&
+    /return activeKind;/.test(activeKindBody),
+  "getActiveConnectorKind never infers 'injected' from mere provider presence",
+);
+const requestAccounts = connectorCode.match(/eth_requestAccounts/g) ?? [];
+const connectInjectedBody = /export async function connectInjected\(\)[\s\S]*?\n\}/.exec(
+  connectorCode,
+)?.[0];
+check(
+  "J3",
+  requestAccounts.length === 1 &&
+    connectInjectedBody !== undefined &&
+    /eth_requestAccounts/.test(connectInjectedBody),
+  "eth_requestAccounts exists only inside the explicit connectInjected path",
+);
+const connectWcBody = /export async function connectWalletConnect\(\)[\s\S]*?\n\}/.exec(
+  connectorCode,
+)?.[0];
+check(
+  "J4",
+  connectWcBody !== undefined &&
+    /EthereumProvider\.init/.test(connectWcBody) &&
+    (connectorCode.match(/EthereumProvider\.init/g) ?? []).length === 1 &&
+    (connectorCode.match(/\.connect\(\)/g) ?? []).length === 1,
+  "EthereumProvider.init and WalletConnect connect() are reachable only via explicit connectWalletConnect",
+);
+const panelEffect = /useEffect\(\(\) => \{[\s\S]*?\}, \[[^\]]*\]\);/.exec(panelCode)?.[0];
+check(
+  "J5",
+  panelEffect !== undefined && !/inspectMainnetWalletForHandoff|refresh\(\)/.test(panelEffect),
+  "panel mount effect performs availability detection only, never an inspection call",
+);
+check(
+  "J6",
+  /const active = refreshAvailability\(\);[\s\S]{0,120}if \(!active\)/.test(panelCode),
+  "panel inspection is gated on an explicitly active connector",
+);
+check(
+  "J7",
+  !/eth_accounts|eth_chainId|eth_requestAccounts/.test(panelCode),
+  "the panel itself issues no provider request",
+);
+
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
