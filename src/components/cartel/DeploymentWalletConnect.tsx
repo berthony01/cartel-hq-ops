@@ -47,13 +47,21 @@ type Props = {
 const NOTICE_COPY: Record<WalletConnectorNotice, string> = {
   NO_INJECTED_PROVIDER: "No browser wallet detected on this device.",
   WALLETCONNECT_NOT_CONFIGURED:
-    "WalletConnect is not configured for this deployment. A public WalletConnect project id must be present in the environment before mobile connection is possible.",
-  WALLETCONNECT_LIBRARY_LOAD_FAILED:
-    "Diagnostic code WALLETCONNECT_LIBRARY_LOAD_FAILED — the WalletConnect component could not be loaded in this browser. Nothing was connected. Try a standalone browser tab, or report this code.",
-  WALLETCONNECT_MODAL_CHUNK_FAILED:
-    "Diagnostic code WALLETCONNECT_MODAL_CHUNK_FAILED — the wallet chooser component could not be loaded in this browser. Nothing was connected. Try a standalone browser tab or a different network, or report this code.",
-  WALLETCONNECT_INIT_FAILED:
-    "Diagnostic code WALLETCONNECT_INIT_FAILED — WalletConnect and the wallet chooser both loaded, but the connection component could not start. Nothing was connected. Report this code.",
+    "The wallet chooser is not configured for this deployment. A public project id must be present in the environment before mobile connection is possible.",
+  REOWN_LIBRARY_LOAD_FAILED:
+    "Diagnostic code REOWN_LIBRARY_LOAD_FAILED — the wallet chooser component could not be downloaded in this browser. Nothing was connected. Try a standalone browser tab or a different network, or report this code.",
+  REOWN_ORIGIN_NOT_ALLOWED:
+    "Diagnostic code REOWN_ORIGIN_NOT_ALLOWED — the wallet service refused this website address. Nothing was connected. The exact origin shown below must be listed under Project Domains in the Reown dashboard; this is external configuration and cannot be fixed in the app code.",
+  REOWN_PROJECT_ID_INVALID_OR_MISSING:
+    "Diagnostic code REOWN_PROJECT_ID_INVALID_OR_MISSING — the wallet service rejected the public project identifier. Nothing was connected. Report this code.",
+  REOWN_CONFIG_SERVER_ERROR:
+    "Diagnostic code REOWN_CONFIG_SERVER_ERROR — the wallet service configuration endpoint failed. Nothing was connected. This is usually temporary; report this code if it persists.",
+  REOWN_RATE_LIMITED:
+    "Diagnostic code REOWN_RATE_LIMITED — the wallet service is rate limiting this project. Nothing was connected. Wait and try again.",
+  REOWN_APPKIT_INIT_FAILED:
+    "Diagnostic code REOWN_APPKIT_INIT_FAILED — the wallet chooser loaded but could not start. Nothing was connected. Report this code.",
+  REOWN_CONNECT_FAILED:
+    "Diagnostic code REOWN_CONNECT_FAILED — the wallet chooser could not be opened. Nothing was connected. Report this code.",
   WALLETCONNECT_TIMEOUT: `The wallet never completed the connection within ${Math.round(
     WALLETCONNECT_CONNECT_TIMEOUT_MS / 1000,
   )} seconds, so the attempt was cancelled and nothing was connected. This usually means the wallet hand-off could not return to this page. Open CARTEL HQ in a standalone browser tab, or inside the wallet's own browser, and choose the wallet again.`,
