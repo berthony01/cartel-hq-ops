@@ -11,11 +11,14 @@ import { ROBINHOOD_MAINNET_CHAIN_ID } from "./chain-mainnet-registry";
  *   - NO module-scope browser access. `window` is only read inside functions.
  *   - The WalletConnect package is loaded by DYNAMIC import inside a
  *     browser-executed function, so SSR never evaluates it.
- *   - This module NEVER signs, never sends, never estimates, never switches or
- *     adds a network. It resolves an EIP-1193 provider and nothing else.
- *     `wallet_switchEthereumChain` / `wallet_addEthereumChain` are absent on
- *     purpose: a wrong network fails closed and the operator fixes it in the
- *     wallet.
+ *   - This module NEVER signs, never sends, never estimates and never ADDS a
+ *     network. It resolves an EIP-1193 provider, and exposes exactly one
+ *     explicit, user-gesture-only `wallet_switchEthereumChain` helper
+ *     (`requestRobinhoodChainSwitch`) that is never called on mount, connect,
+ *     re-check or any provider event. `wallet_addEthereumChain` is absent on
+ *     purpose: an unknown network fails closed and the operator adds it in the
+ *     wallet itself.
+
  *   - No key material, seed, password, signed payload, transaction envelope or
  *     server authorization is ever stored here or anywhere else in the client.
  *   - The WalletConnect project id is a PUBLIC client identifier read from the
@@ -589,3 +592,64 @@ export async function disconnect(): Promise<void> {
   clearLocalConnectionState();
   emit();
 }
+
+/* ------------------------------------------------------------------ */
+/* Explicit, user-gesture-only network switch                          */
+/* ------------------------------------------------------------------ */
+
+export type WalletSwitchNotice =
+  | "NO_ACTIVE_CONNECTOR"
+  | "NETWORK_SWITCH_REJECTED"
+  | "NETWORK_SWITCH_UNSUPPORTED"
+  | "NETWORK_UNKNOWN_TO_WALLET"
+  | "NETWORK_SWITCH_FAILED";
+
+export type WalletSwitchResult = { ok: boolean; notice: WalletSwitchNotice | null };
+
+/**
+ * The single canonical switch parameter. Derived from the frozen chain id, so
+ * it can never drift from `ROBINHOOD_MAINNET_CHAIN_ID` (4663 => `0x1237`).
+ */
+export const ROBINHOOD_MAINNET_SWITCH_CHAIN_ID_HEX = ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL;
+
+function readProviderErrorCode(error: unknown): number | null {
+  if (!error || typeof error !== "object") return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "number" ? code : null;
+}
+
+/**
+ * EXPLICIT USER GESTURE ONLY. This is the ONLY place in the entire client that
+ * may call `wallet_switchEthereumChain`, and it is invoked exclusively from the
+ * operator's click on the "Switch to Robinhood Chain" button. It is never
+ * called on mount, on connect, on re-check, or from any provider event handler.
+ *
+ * It NEVER calls `wallet_addEthereumChain`: a wallet that does not already know
+ * Robinhood Chain fails closed with `NETWORK_UNKNOWN_TO_WALLET`. There is no
+ * retry, no loop and no fallback. Only sanitized codes are produced — the
+ * caught error's message, data and stack are never read, logged or returned.
+ */
+export async function requestRobinhoodChainSwitch(): Promise<WalletSwitchResult> {
+  const provider = getActiveProvider();
+  if (!provider) return { ok: false, notice: "NO_ACTIVE_CONNECTOR" };
+  try {
+    await provider.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: ROBINHOOD_MAINNET_SWITCH_CHAIN_ID_HEX }],
+    });
+  } catch (error) {
+    const code = readProviderErrorCode(error);
+    const notice: WalletSwitchNotice =
+      code === 4001
+        ? "NETWORK_SWITCH_REJECTED"
+        : code === 4902
+          ? "NETWORK_UNKNOWN_TO_WALLET"
+          : code === 4200 || code === -32601
+            ? "NETWORK_SWITCH_UNSUPPORTED"
+            : "NETWORK_SWITCH_FAILED";
+    return { ok: false, notice };
+  }
+  emit();
+  return { ok: true, notice: null };
+}
+

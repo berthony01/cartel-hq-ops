@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ExternalLink, Loader2, Smartphone, Wallet } from "lucide-react";
+import { ExternalLink, Loader2, Network, Smartphone, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Section } from "@/components/cartel/Section";
 import { ReadoutLine } from "@/components/cartel/CanaryReadout";
@@ -12,9 +12,11 @@ import {
   isEmbeddedBrowserContext,
   isInjectedWalletAvailable,
   isWalletConnectConfigured,
+  requestRobinhoodChainSwitch,
   subscribeWalletConnector,
   WALLETCONNECT_CONNECT_TIMEOUT_MS,
   type WalletConnectorNotice,
+  type WalletSwitchNotice,
 } from "@/lib/wallet-connector";
 import { inspectMainnetWalletForHandoff } from "@/lib/chain-mainnet-wallet";
 
@@ -27,9 +29,14 @@ import { inspectMainnetWalletForHandoff } from "@/lib/chain-mainnet-wallet";
  * (eth_accounts / eth_chainId) runs only once a connector has been explicitly
  * activated by the operator clicking one of the two connect buttons.
  *
+ * The network switch is likewise EXPLICIT: it is reachable only from the
+ * operator's click on "Switch to Robinhood Chain". Nothing on mount, on
+ * connect, on re-check or in an event handler requests a network change, and no
+ * network is ever added automatically.
+ *
  * Connection only. This panel never signs, never sends, and never advances the
- * canary sequence: connecting cannot trigger Presign, Arm, Claim, Send Window
- * or Send.
+ * canary sequence: connecting or switching cannot trigger Presign, Arm, Claim,
+ * Send Window or Send.
  */
 
 type Props = {
@@ -54,12 +61,26 @@ const NOTICE_COPY: Record<WalletConnectorNotice, string> = {
   NO_ACCOUNT: "The wallet is reachable but exposed no account.",
 };
 
+const SWITCH_NOTICE_COPY: Record<WalletSwitchNotice, string> = {
+  NO_ACTIVE_CONNECTOR: "No wallet is connected, so no network change was requested.",
+  NETWORK_SWITCH_REJECTED:
+    "Diagnostic code NETWORK_SWITCH_REJECTED — the network change was declined in the wallet. Nothing changed and nothing advanced.",
+  NETWORK_SWITCH_UNSUPPORTED:
+    "Diagnostic code NETWORK_SWITCH_UNSUPPORTED — this wallet cannot change networks from a website. Select Robinhood Chain inside the wallet itself, then re-check.",
+  NETWORK_UNKNOWN_TO_WALLET:
+    "Diagnostic code NETWORK_UNKNOWN_TO_WALLET — Robinhood Chain is not present in this wallet. CARTEL HQ never adds a network for you: add Robinhood Chain (chain id 4663) in the wallet yourself, then re-check.",
+  NETWORK_SWITCH_FAILED:
+    "Diagnostic code NETWORK_SWITCH_FAILED — the network change did not complete. Nothing changed and nothing advanced.",
+};
+
 export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: Props) {
-  const [busy, setBusy] = useState<"injected" | "walletconnect" | "refresh" | "disconnect" | null>(
-    null,
-  );
+  const [busy, setBusy] = useState<
+    "injected" | "walletconnect" | "refresh" | "disconnect" | "switch" | null
+  >(null);
   const [notice, setNotice] = useState<WalletConnectorNotice | null>(null);
+  const [switchNotice, setSwitchNotice] = useState<WalletSwitchNotice | null>(null);
   const [kind, setKind] = useState<string | null>(null);
+
   const [walletLabel, setWalletLabel] = useState<string | null>(null);
   const [account, setAccount] = useState<string | null>(null);
   const [chainId, setChainId] = useState<string | null>(null);
@@ -232,7 +253,9 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
             try {
               await disconnect();
               setNotice(null);
+              setSwitchNotice(null);
               setWalletLabel(null);
+
               clearInspection();
               refreshAvailability();
             } finally {
@@ -243,6 +266,47 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
           Disconnect
         </Button>
       </div>
+
+      {account && !chainMatches ? (
+        <div className="mt-3 rounded-md border border-danger/40 bg-danger/5 p-3">
+          <p className="text-xs text-danger">
+            This wallet is connected on a different network. Robinhood Chain mainnet (chain id{" "}
+            {expectedChainId}) is required. Nothing can be signed or sent until the wallet itself is
+            on that network.
+          </p>
+          <Button
+            className="mt-2"
+            size="sm"
+            variant="outline"
+            disabled={busy !== null}
+            onClick={async () => {
+              // EXPLICIT USER GESTURE. The only switch call in the app, and it
+              // never adds a network and never retries.
+              setBusy("switch");
+              setSwitchNotice(null);
+              try {
+                const result = await requestRobinhoodChainSwitch();
+                setSwitchNotice(result.notice);
+                // Approved switch: re-read account + chain exactly once. No
+                // sequence stage runs, nothing is persisted.
+                if (result.ok) await refresh();
+              } finally {
+                setBusy(null);
+              }
+            }}
+          >
+            {busy === "switch" ? (
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Network className="mr-2 h-3.5 w-3.5" />
+            )}
+            Switch to Robinhood Chain
+          </Button>
+          {switchNotice ? (
+            <p className="mt-2 text-xs text-danger">{SWITCH_NOTICE_COPY[switchNotice]}</p>
+          ) : null}
+        </div>
+      ) : null}
 
       {kind === null ? (
         <p className="mt-3 text-xs text-foreground">Not connected — choose a wallet above.</p>
@@ -259,9 +323,10 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
         Any EVM wallet is supported. Robinhood Wallet is recommended because it supports Robinhood
         Chain natively, but it is not required: MetaMask and other EVM wallets work too, as long as
         Robinhood Chain (chain id {expectedChainId}) is already available and approved in that
-        wallet. CARTEL HQ never adds or switches a network for you, and never asks for a private
-        key, seed phrase or wallet password.
+        wallet. CARTEL HQ never adds a network for you, only asks the wallet to switch when you
+        press the button above, and never asks for a private key, seed phrase or wallet password.
       </p>
+
 
       <div className="mt-3 grid gap-1 sm:grid-cols-2">
         <ReadoutLine
