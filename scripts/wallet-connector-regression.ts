@@ -12,15 +12,21 @@ import {
 } from "../src/lib/chain-mainnet-registry";
 import { MAINNET_VERIFICATION_STATE_WRITES_ENABLED } from "../src/lib/chain-mainnet-verify-apply";
 import { LIQUIDITY_TX_ENABLED } from "../src/lib/chain-registry";
-import { normalizeChainId } from "../src/lib/wallet-connector";
+import {
+  normalizeChainId,
+  ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL,
+  ROBINHOOD_MAINNET_SWITCH_CHAIN_ID_HEX,
+} from "../src/lib/wallet-connector";
 
 const CONNECTOR = "src/lib/wallet-connector.ts";
 const WALLET = "src/lib/chain-mainnet-wallet.ts";
 const PANEL = "src/components/cartel/DeploymentWalletConnect.tsx";
+const FORM = "src/components/cartel/CanaryIntentForm.tsx";
 const ROUTE = "src/routes/_authenticated/mainnet-canary.tsx";
 const REGISTRY = "src/lib/chain-mainnet-registry.ts";
 const CHAIN_REGISTRY = "src/lib/chain-registry.ts";
 const VERIFY_APPLY = "src/lib/chain-mainnet-verify-apply.ts";
+
 
 const read = (p: string) => readFileSync(p, "utf8");
 const stripComments = (s: string) =>
