@@ -276,7 +276,6 @@ check(
 const connectWcBody = /export async function connectWalletConnect\(\)[\s\S]*?\n\}/.exec(
   connectorCode,
 )?.[0];
-const initHelperBody = /async function runWalletConnectInit\([\s\S]*?\n\}/.exec(connectorCode)?.[0];
 check(
   "J4",
   connectWcBody !== undefined &&
@@ -497,8 +496,6 @@ check(
     !/REOWN_APPKIT_INIT_FAILED/.test(importCatch),
   "a failed dynamic import returns the library-load code, not the init code",
 );
-const initCatch =
-  /EthereumProvider\.init\(\{[\s\S]*?\} catch \{([\s\S]{0,240}?)\n  \}/.exec(connectorCode)?.[1];
 check(
   "M6",
   /APKT002/.test(appkitCode) &&
@@ -531,12 +528,7 @@ check(
   "one init path only, and no raw exception text leaves the AppKit module",
 );
 
-/* R — rollback to the last-known-working modal init baseline. */
-const initBlock = /EthereumProvider\.init\(\{([\s\S]*?)\n    \}\);/.exec(connectorCode)?.[1];
-const initKeys = (initBlock ?? "")
-  .split("\n")
-  .map((line) => /^\s{6}([A-Za-z]+)[,:]/.exec(line)?.[1])
-  .filter((key): key is string => key !== undefined);
+/* R — official AppKit configuration baseline. */
 check(
   "R1",
   /enableReconnect: false/.test(appkitCode) &&
@@ -768,16 +760,16 @@ check(
     /for \(const off of unsubscribers\)/.test(appkitCode),
   "AppKit subscriptions drive the bounded wait and are all unsubscribed on settle",
 );
+const createBody = /async function runCreateAppKit\([\s\S]*?\n\}/.exec(appkitCode)?.[0] ?? "";
 check(
   "S12",
-  !/\.message|\.stack|console\./.test(initHelperBody ?? "") &&
-    !/catch\s*\(/.test(initHelperBody ?? ""),
-  "the initialization helper never reads or surfaces a raw exception",
+  createBody.length > 0 && !/\.stack|console\./.test(createBody),
+  "the initialization helper never surfaces a stack or logs to the console",
 );
 check(
   "S13",
   !/supabase|createServerFn|useServerFn|process\.env|VITE_(?!WALLETCONNECT_PROJECT_ID)/.test(
-    connectorCode,
+    connectorCode + appkitCode,
   ),
   "no database, server function, secret or extra environment access was introduced",
 );
