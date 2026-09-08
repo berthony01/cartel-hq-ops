@@ -62,6 +62,8 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
   const [chainMatches, setChainMatches] = useState(false);
   const [injectedAvailable, setInjectedAvailable] = useState(false);
   const [walletConnectReady, setWalletConnectReady] = useState(false);
+  const [embedded, setEmbedded] = useState(false);
+  const [standaloneUrl, setStandaloneUrl] = useState<string | null>(null);
 
   const clearInspection = useCallback(() => {
     setAccount(null);
