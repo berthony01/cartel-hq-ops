@@ -260,9 +260,13 @@ check(
 const panelEffect = /useEffect\(\(\) => \{[\s\S]*?\}, \[[^\]]*\]\);/.exec(panelCode)?.[0];
 check(
   "J5",
-  panelEffect !== undefined && !/inspectMainnetWalletForHandoff|refresh\(\)/.test(panelEffect),
+  panelEffect !== undefined &&
+    !/inspectMainnetWalletForHandoff/.test(panelEffect) &&
+    /^[\s\S]*?refreshAvailability\(\);\s*return subscribeWalletConnector/.test(panelEffect) &&
+    !/refresh\(\)/.test(panelEffect.slice(0, panelEffect.indexOf("return subscribeWalletConnector"))),
   "panel mount effect performs availability detection only, never an inspection call",
 );
+
 check(
   "J6",
   /const active = refreshAvailability\(\);[\s\S]{0,120}if \(!active\)/.test(panelCode),
