@@ -523,6 +523,137 @@ check(
   "the chooser modal stays enabled and 4663 is proposed as optional, never as a required chain",
 );
 
+/* N — explicit Robinhood Chain switch + safe deployer binding. */
+const formCode = stripComments(read(FORM));
+const switchBody = /export async function requestRobinhoodChainSwitch\(\)[\s\S]*?\n\}/.exec(
+  connectorCode,
+)?.[0];
+
+check(
+  "N1",
+  ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL === "0x1237" &&
+    ROBINHOOD_MAINNET_SWITCH_CHAIN_ID_HEX === "0x1237" &&
+    normalizeChainId(ROBINHOOD_MAINNET_CHAIN_ID as number) === "0x1237" &&
+    !/["']0x1237["']/.test(connectorCode),
+  "the switch parameter is the derived canonical hex 0x1237, never a hardcoded literal",
+);
+check(
+  "N2",
+  switchBody !== undefined &&
+    (switchBody.match(/wallet_switchEthereumChain/g) ?? []).length === 1 &&
+    (connectorCode.match(/wallet_switchEthereumChain/g) ?? []).length === 1,
+  "exactly one wallet_switchEthereumChain call exists, inside requestRobinhoodChainSwitch",
+);
+check(
+  "N3",
+  /requestRobinhoodChainSwitch\(\)/.test(panelCode) &&
+    /setBusy\("switch"\)/.test(panelCode) &&
+    /Switch to Robinhood Chain/.test(panelCode) &&
+    !/(useEffect|attachEvents|refreshAvailability|subscribeWalletConnector)[\s\S]{0,300}requestRobinhoodChainSwitch/.test(
+      panelCode,
+    ) &&
+    !/requestRobinhoodChainSwitch/.test(connectorCode.replace(switchBody ?? "", "")),
+  "the switch is reachable only from the explicit Switch button handler, never mount/connect/re-check/events",
+);
+check(
+  "N4",
+  !/wallet_addEthereumChain/.test(connectorCode) &&
+    !/wallet_addEthereumChain/.test(panelCode) &&
+    !/wallet_addEthereumChain/.test(walletCode) &&
+    !/wallet_addEthereumChain/.test(formCode),
+  "no wallet_addEthereumChain exists anywhere on the wallet path",
+);
+check(
+  "N5",
+  switchBody !== undefined &&
+    !/while\s*\(|for\s*\(|setTimeout|setInterval|retry|again/i.test(switchBody) &&
+    (switchBody.match(/provider\.request/g) ?? []).length === 1,
+  "the switch helper performs a single request with no retry, loop or timer",
+);
+check(
+  "N6",
+  switchBody !== undefined &&
+    /code === 4001[\s\S]{0,80}NETWORK_SWITCH_REJECTED/.test(switchBody) &&
+    /code === 4902[\s\S]{0,120}NETWORK_UNKNOWN_TO_WALLET/.test(switchBody) &&
+    /NETWORK_SWITCH_UNSUPPORTED/.test(switchBody) &&
+    /NETWORK_SWITCH_FAILED/.test(switchBody) &&
+    !/\.message|\.stack|String\(error\)/.test(switchBody) &&
+    ["NETWORK_SWITCH_REJECTED", "NETWORK_UNKNOWN_TO_WALLET", "NETWORK_SWITCH_UNSUPPORTED", "NETWORK_SWITCH_FAILED", "NO_ACTIVE_CONNECTOR"].every(
+      (code) => panelCode.includes(code),
+    ),
+  "rejection / unknown-chain / unsupported / failure fail closed with distinct sanitized notices and UI copy",
+);
+check(
+  "N7",
+  /if \(result\.ok\) await refresh\(\);/.test(panelCode) &&
+    !/presign|arm|claim|sendWindow|eth_sendTransaction/i.test(panelCode),
+  "an approved switch re-reads account+chain exactly once and no sequence stage can auto-run",
+);
+check(
+  "N8",
+  /const provider = getActiveProvider\(\);/.test(switchBody ?? "") &&
+    /NO_ACTIVE_CONNECTOR/.test(switchBody ?? ""),
+  "the switch uses the shared active EIP-1193 provider abstraction (WalletConnect or injected)",
+);
+check(
+  "N9",
+  /state\.chainId === ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL/.test(formCode) &&
+    /state\.account !== null/.test(formCode) &&
+    /getActiveConnectorKind\(\) === null/.test(formCode),
+  "deployer auto-binds only when a connector is active and the chain is exactly 4663",
+);
+check(
+  "N10",
+  /readOnly=\{deployerLocked\}/.test(formCode) &&
+    /if \(deployerLocked\) return;/.test(formCode) &&
+    /Source: Connected wallet on Robinhood Chain/.test(formCode),
+  "the deployer field is read-only while safely bound and labels its source",
+);
+check(
+  "N11",
+  /latest\.recipient\.trim\(\) === ""/.test(formCode) &&
+    /id="canary-recipient"[\s\S]{0,200}onChange=\{\(event\) => props\.onRecipient/.test(formCode) &&
+    !/id="canary-recipient"[\s\S]{0,200}readOnly/.test(formCode),
+  "the recipient defaults only when empty and stays editable",
+);
+check(
+  "N12",
+  /if \(current\.deployer\.trim\(\)\.toLowerCase\(\) === previous\) current\.onDeployer\(""\);/.test(
+    formCode,
+  ) && /if \(previous === null\) return;/.test(formCode),
+  "disconnect / wrong chain clears only the provisional binding this component set",
+);
+check(
+  "N13",
+  /attemptBoundDeployer/.test(formCode) &&
+    /const attemptDeployer = props\.attemptBoundDeployer\?\.trim\(\) \|\| null;/.test(formCode) &&
+    /const deployerValue = attemptDeployer \?\? props\.deployer;/.test(formCode) &&
+    /if \(attemptDeployer\) \{[\s\S]{0,200}return;/.test(formCode),
+  "an immutable attempt-bound deployer wins over any connected-wallet default",
+);
+check(
+  "N14",
+  (walletCode.match(/eth_sendTransaction/g) ?? []).length === 1 &&
+    !/eth_sendTransaction|eth_sign|personal_sign/.test(formCode),
+  "still exactly one eth_sendTransaction, and the intent form signs and sends nothing",
+);
+check(
+  "N15",
+  !/supabase|createServerFn|useServerFn|\.rpc\(/i.test(formCode) &&
+    !/supabase|createServerFn|useServerFn|\.rpc\(/i.test(panelCode) &&
+    !/supabase|import\.meta\.env\[/i.test(
+      connectorCode.replace(/VITE_WALLETCONNECT_PROJECT_ID/g, "X"),
+    ),
+  "no database, server function or extra environment access was introduced by the binding",
+);
+check(
+  "N16",
+  routeSrc.includes("Intent → Attempt → Presign → Arm → Claim → Send Window → Send → Persist/Verify") &&
+    !/wallet_switchEthereumChain|wallet_addEthereumChain/.test(routeSrc),
+  "the canary route is unchanged and contains no network-switching call",
+);
+
+
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
