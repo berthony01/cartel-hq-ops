@@ -265,13 +265,17 @@ check(
 const connectWcBody = /export async function connectWalletConnect\(\)[\s\S]*?\n\}/.exec(
   connectorCode,
 )?.[0];
+const initHelperBody = /async function runWalletConnectInit\([\s\S]*?\n\}/.exec(connectorCode)?.[0];
 check(
   "J4",
   connectWcBody !== undefined &&
-    /EthereumProvider\.init/.test(connectWcBody) &&
+    initHelperBody !== undefined &&
+    /EthereumProvider\.init/.test(initHelperBody) &&
+    !/EthereumProvider\.init/.test(connectWcBody) &&
     (connectorCode.match(/EthereumProvider\.init/g) ?? []).length === 1 &&
+    /ensureWalletConnectProvider\(projectId\)/.test(connectWcBody) &&
     (connectorCode.match(/\.connect\(\)/g) ?? []).length === 1,
-  "EthereumProvider.init and WalletConnect connect() are reachable only via explicit connectWalletConnect",
+  "EthereumProvider.init lives only in the cached init helper; connect() is reachable only via explicit connectWalletConnect",
 );
 const panelEffect = /useEffect\(\(\) => \{[\s\S]*?\}, \[[^\]]*\]\);/.exec(panelCode)?.[0];
 check(
@@ -517,8 +521,9 @@ const initKeys = (initBlock ?? "")
 check(
   "R1",
   initBlock !== undefined &&
-    initKeys.join(",") === "projectId,optionalChains,showQrModal,methods,events,metadata",
-  "init options exactly match the last-known-working modal baseline option set, in order",
+    initKeys.join(",") ===
+      "projectId,customStoragePrefix,optionalChains,showQrModal,methods,events,metadata",
+  "init options are the last-known-working modal baseline plus the stable storage prefix, in order",
 );
 check(
   "R2",
@@ -659,7 +664,119 @@ check(
   "the canary route is unchanged and contains no network-switching call",
 );
 
+/* S — reconnect reliability: stable storage namespace + cached single init. */
+const disconnectWcBody = /export async function disconnectWalletConnect\(\)[\s\S]*?\n\}/.exec(
+  connectorCode,
+)?.[0];
+const ensureBody = /async function ensureWalletConnectProvider\([\s\S]*?\n\}/.exec(
+  connectorCode,
+)?.[0];
 
+check(
+  "S1",
+  /export const WALLETCONNECT_STORAGE_PREFIX = "cartel-hq-mainnet-canary-v1";/.test(connectorCode) &&
+    (connectorCode.match(/customStoragePrefix/g) ?? []).length === 1 &&
+    /customStoragePrefix: WALLETCONNECT_STORAGE_PREFIX,/.test(initBlock ?? "") &&
+    !/Math\.random|Date\.now|crypto\.randomUUID/.test(connectorCode),
+  "a single stable customStoragePrefix constant is passed exactly once to EthereumProvider.init",
+);
+check(
+  "S2",
+  !/localStorage|sessionStorage|indexedDB|removeItem|deleteDatabase|wc@2/.test(connectorCode),
+  "no manual localStorage / IndexedDB / WalletConnect key deletion exists",
+);
+check(
+  "S3",
+  /let initializedWalletConnectProvider: Eip1193Provider \| null = null;/.test(connectorCode) &&
+    /let walletConnectInitPromise: Promise<WalletConnectInit> \| null = null;/.test(connectorCode) &&
+    ensureBody !== undefined &&
+    /if \(!walletConnectInitPromise\) \{\s*walletConnectInitPromise = runWalletConnectInit\(projectId\);/.test(
+      ensureBody,
+    ),
+  "an initialized-provider cache and a single in-flight init promise both exist",
+);
+check(
+  "S4",
+  initHelperBody !== undefined &&
+    (connectorCode.match(/runWalletConnectInit\(/g) ?? []).length === 2 &&
+    (connectorCode.match(/EthereumProvider\.init/g) ?? []).length === 1,
+  "EthereumProvider.init is reachable only inside the explicit cached initialization helper",
+);
+check(
+  "S5",
+  ensureBody !== undefined &&
+    /if \(initializedWalletConnectProvider\) \{\s*return \{ provider: initializedWalletConnectProvider, notice: null \};/.test(
+      ensureBody,
+    ) &&
+    /const init = await ensureWalletConnectProvider\(projectId\);/.test(connectWcBody ?? ""),
+  "a repeated connectWalletConnect reuses the cached provider instead of reinitializing",
+);
+check(
+  "S6",
+  disconnectWcBody !== undefined &&
+    /clearLocalConnectionState\(\);/.test(disconnectWcBody) &&
+    !/initializedWalletConnectProvider|walletConnectInitPromise/.test(disconnectWcBody) &&
+    !/initializedWalletConnectProvider|walletConnectInitPromise/.test(
+      /function clearLocalConnectionState\(\)[\s\S]*?\n\}/.exec(connectorCode)?.[0] ?? "",
+    ),
+  "disconnect clears active session state and never destroys the initialized provider cache",
+);
+check(
+  "S7",
+  connectWcBody !== undefined &&
+    /WALLETCONNECT_TIMEOUT/.test(connectWcBody) &&
+    /WRONG_CHAIN_APPROVED/.test(connectWcBody) &&
+    !/initializedWalletConnectProvider|walletConnectInitPromise/.test(connectWcBody),
+  "rejection, timeout and wrong-chain teardown leave the initialized provider cache intact",
+);
+check(
+  "S8",
+  ensureBody !== undefined &&
+    /initializedWalletConnectProvider = null;\s*walletConnectInitPromise = null;/.test(ensureBody),
+  "a failed initialization clears the cache and the in-flight promise so an explicit retry is possible",
+);
+check(
+  "S9",
+  initHelperBody !== undefined &&
+    initHelperBody.indexOf('await import("@reown/appkit/core")') > -1 &&
+    initHelperBody.indexOf('await import("@reown/appkit/core")') <
+      initHelperBody.indexOf("EthereumProvider.init") &&
+    (connectorCode.match(/WALLETCONNECT_MODAL_CHUNK_FAILED/g) ?? []).length === 2 &&
+    /await import\("@reown\/appkit\/core"\);\s*\} catch \{\s*return \{ provider: null, notice: "WALLETCONNECT_MODAL_CHUNK_FAILED" \};/.test(
+      initHelperBody,
+    ),
+  "the AppKit chooser chunk is pre-imported before init and its failure maps only to WALLETCONNECT_MODAL_CHUNK_FAILED",
+);
+check(
+  "S10",
+  initHelperBody !== undefined &&
+    /await import\("@walletconnect\/ethereum-provider"\)\);\s*\} catch \{\s*return \{ provider: null, notice: "WALLETCONNECT_LIBRARY_LOAD_FAILED" \};/.test(
+      initHelperBody,
+    ),
+  "the outer provider chunk failure still maps only to WALLETCONNECT_LIBRARY_LOAD_FAILED",
+);
+check(
+  "S11",
+  initHelperBody !== undefined &&
+    initHelperBody.indexOf("WALLETCONNECT_INIT_FAILED") >
+      initHelperBody.indexOf("WALLETCONNECT_MODAL_CHUNK_FAILED") &&
+    /WALLETCONNECT_MODAL_CHUNK_FAILED/.test(panelCode) &&
+    /wallet chooser component could not be loaded/.test(panelCode),
+  "INIT_FAILED now covers initialization after both chunks loaded, and the chunk failure has its own UI copy",
+);
+check(
+  "S12",
+  !/\.message|\.stack|console\./.test(initHelperBody ?? "") &&
+    !/catch\s*\(/.test(initHelperBody ?? ""),
+  "the initialization helper never reads or surfaces a raw exception",
+);
+check(
+  "S13",
+  !/supabase|createServerFn|useServerFn|process\.env|VITE_(?!WALLETCONNECT_PROJECT_ID)/.test(
+    connectorCode,
+  ),
+  "no database, server function, secret or extra environment access was introduced",
+);
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

@@ -69,6 +69,7 @@ export type WalletConnectorNotice =
   | "NO_INJECTED_PROVIDER"
   | "WALLETCONNECT_NOT_CONFIGURED"
   | "WALLETCONNECT_LIBRARY_LOAD_FAILED"
+  | "WALLETCONNECT_MODAL_CHUNK_FAILED"
   | "WALLETCONNECT_INIT_FAILED"
   | "WALLETCONNECT_TIMEOUT"
   | "WRONG_CHAIN_APPROVED"
@@ -101,6 +102,34 @@ let walletConnectProvider: Eip1193Provider | null = null;
 let walletName: string | null = null;
 /** Canonical hex chain ids proven by the active WalletConnect session. */
 let sessionChainEvidence: string[] | null = null;
+
+/**
+ * RECONNECT INFRASTRUCTURE (separate from session state, on purpose).
+ *
+ * `EthereumProvider.init()` builds Core / SignClient / persisted storage and
+ * the AppKit modal. Doing that again on a second explicit connect click is what
+ * produced `WALLETCONNECT_INIT_FAILED` after a disconnect. The initialized
+ * provider is therefore cached for the page lifecycle and REUSED for every
+ * later explicit connect. A disconnect, a rejection, a timeout and a wrong
+ * chain tear down the SESSION only and deliberately keep this cache. A full
+ * page reload resets it naturally.
+ */
+let initializedWalletConnectProvider: Eip1193Provider | null = null;
+/** Single in-flight init, so a double tap can never start two initializations. */
+let walletConnectInitPromise: Promise<WalletConnectInit> | null = null;
+
+type WalletConnectInit = {
+  provider: Eip1193Provider | null;
+  notice: WalletConnectorNotice | null;
+};
+
+/**
+ * Stable, explicit WalletConnect storage namespace. A one-time namespace
+ * migration away from any malformed legacy WalletConnect state. It is a fixed
+ * constant — never random, never per-connect — and no localStorage or
+ * IndexedDB key is ever read or deleted by this module.
+ */
+export const WALLETCONNECT_STORAGE_PREFIX = "cartel-hq-mainnet-canary-v1";
 
 const listeners = new Set<() => void>();
 
@@ -426,6 +455,81 @@ async function tearDownWalletConnect(provider: Eip1193Provider): Promise<void> {
 }
 
 /**
+ * The ONLY place `EthereumProvider.init()` may run. Three separately reported
+ * stages, sanitized codes only — no exception message, stack, URL, endpoint,
+ * source path or project id ever leaves this function:
+ *
+ *   1. outer `@walletconnect/ethereum-provider` chunk  -> LIBRARY_LOAD_FAILED
+ *   2. nested AppKit chooser chunk (`@reown/appkit/core`) -> MODAL_CHUNK_FAILED
+ *   3. provider / Core / storage initialization        -> INIT_FAILED
+ *
+ * The AppKit chunk is eagerly imported here on purpose: the provider imports it
+ * internally, so pre-loading it both distinguishes a broken chooser bundle from
+ * a broken initialization and lets the provider resolve it from module cache.
+ */
+async function runWalletConnectInit(projectId: string): Promise<WalletConnectInit> {
+  let EthereumProvider: typeof import("@walletconnect/ethereum-provider").EthereumProvider;
+  try {
+    ({ EthereumProvider } = await import("@walletconnect/ethereum-provider"));
+  } catch {
+    return { provider: null, notice: "WALLETCONNECT_LIBRARY_LOAD_FAILED" };
+  }
+
+  try {
+    await import("@reown/appkit/core");
+  } catch {
+    return { provider: null, notice: "WALLETCONNECT_MODAL_CHUNK_FAILED" };
+  }
+
+  try {
+    // MODAL BASELINE (last revision where the chooser was observed to open),
+    // plus the stable storage namespace. `rpcMap`, `qrModalOptions` and a
+    // favicon metadata icon remain intentionally absent.
+    const initialized = await EthereumProvider.init({
+      projectId,
+      customStoragePrefix: WALLETCONNECT_STORAGE_PREFIX,
+      optionalChains: [ROBINHOOD_MAINNET_CHAIN_ID as number],
+      showQrModal: true,
+      methods: ["eth_sendTransaction"],
+      events: ["accountsChanged", "chainChanged"],
+      metadata: {
+        name: "CARTEL HQ",
+        description: "CARTEL HQ deployment wallet connection",
+        url: window.location.origin,
+        icons: [],
+      },
+    });
+    return { provider: initialized as unknown as Eip1193Provider, notice: null };
+  } catch {
+    return { provider: null, notice: "WALLETCONNECT_INIT_FAILED" };
+  }
+}
+
+/**
+ * At most ONE initialization per page lifecycle, reused by every later explicit
+ * connect. A failed initialization clears both the cache and the in-flight
+ * promise so a later explicit click may retry.
+ */
+async function ensureWalletConnectProvider(projectId: string): Promise<WalletConnectInit> {
+  if (initializedWalletConnectProvider) {
+    return { provider: initializedWalletConnectProvider, notice: null };
+  }
+  if (!walletConnectInitPromise) {
+    walletConnectInitPromise = runWalletConnectInit(projectId);
+  }
+  const outcome = await walletConnectInitPromise;
+  if (outcome.provider) {
+    initializedWalletConnectProvider = outcome.provider;
+  } else {
+    initializedWalletConnectProvider = null;
+    walletConnectInitPromise = null;
+  }
+  return outcome;
+}
+
+
+
+/**
  * Robinhood Wallet, MetaMask and any other EVM wallet connect over
  * WalletConnect.
  *
@@ -455,54 +559,15 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
     };
   }
 
-  // STAGE 1 — browser bundle load only. A failure here means the WalletConnect
-  // / modal chunk could not be loaded or evaluated in this browser, which is a
-  // different defect from a provider that fails to initialize. Only a
-  // sanitized code is produced: the caught error is never read, formatted,
-  // logged or returned.
-  let EthereumProvider: typeof import("@walletconnect/ethereum-provider").EthereumProvider;
-  try {
-    ({ EthereumProvider } = await import("@walletconnect/ethereum-provider"));
-  } catch {
-    return {
-      ok: false,
-      notice: "WALLETCONNECT_LIBRARY_LOAD_FAILED",
-      state: emptyState("WALLETCONNECT_LIBRARY_LOAD_FAILED"),
-    };
+  // INFRASTRUCTURE — initialize at most once per page, then reuse. A repeat
+  // connect after a disconnect calls `connect()` on the cached provider and
+  // never re-runs `EthereumProvider.init()`.
+  const init = await ensureWalletConnectProvider(projectId);
+  if (!init.provider) {
+    const notice = init.notice ?? "WALLETCONNECT_INIT_FAILED";
+    return { ok: false, notice, state: emptyState(notice) };
   }
-
-  // STAGE 2 — provider initialization (config, storage, relay/modal setup).
-  let provider: Eip1193Provider;
-  try {
-    // MODAL BASELINE RESTORE (rollback of init OPTIONS only). These are the
-    // exact options from the last revision where the wallet chooser modal was
-    // observed to open (pre mobile-hardening). The later-added `rpcMap`,
-    // `qrModalOptions.enableMobileFullScreen` and favicon metadata icon are
-    // intentionally NOT present here. Every later connection-correctness fix
-    // (optional 4663 proposal, post-connect CAIP-10 evidence, stale-session
-    // teardown, bounded handshake, listener cleanup, split diagnostics) is
-    // preserved outside this option set.
-    const initialized = await EthereumProvider.init({
-      projectId,
-      optionalChains: [ROBINHOOD_MAINNET_CHAIN_ID as number],
-      showQrModal: true,
-      methods: ["eth_sendTransaction"],
-      events: ["accountsChanged", "chainChanged"],
-      metadata: {
-        name: "CARTEL HQ",
-        description: "CARTEL HQ deployment wallet connection",
-        url: window.location.origin,
-        icons: [],
-      },
-    });
-    provider = initialized as unknown as Eip1193Provider;
-  } catch {
-    return {
-      ok: false,
-      notice: "WALLETCONNECT_INIT_FAILED",
-      state: emptyState("WALLETCONNECT_INIT_FAILED"),
-    };
-  }
+  const provider = init.provider;
 
   // STALE SESSION HARDENING. `init()` restores any persisted pairing. A canary
   // connection must be explicit and fresh, so an inherited session is torn
@@ -572,6 +637,12 @@ function readPeerWalletName(provider: Eip1193Provider): string | null {
   return typeof name === "string" && name.trim().length > 0 ? name.trim() : null;
 }
 
+/**
+ * SESSION teardown only. The initialized provider / Core / AppKit
+ * infrastructure stays cached on purpose so a later explicit reconnect on the
+ * same page reuses it instead of re-initializing. Nothing here closes the
+ * global transport, removes the modal element or deletes any storage key.
+ */
 export async function disconnectWalletConnect(): Promise<void> {
   const provider = walletConnectProvider;
   clearLocalConnectionState();
