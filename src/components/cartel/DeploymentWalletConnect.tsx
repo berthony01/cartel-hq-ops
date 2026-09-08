@@ -5,7 +5,7 @@ import { Section } from "@/components/cartel/Section";
 import { ReadoutLine } from "@/components/cartel/CanaryReadout";
 import {
   connectInjected,
-  connectWalletConnect,
+  connectWalletConnectOnRobinhoodChain,
   disconnect,
   getActiveConnectorKind,
   getConnectorOrigin,
@@ -141,12 +141,23 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
   }, [clearInspection, expectedDeployer, refreshAvailability]);
 
   useEffect(() => {
-    // Mount does availability detection only — never an inspection.
-    refreshAvailability();
+    // Mount does availability detection only — never an inspection. The
+    // read-only inspection re-runs ONLY when a connector is already explicitly
+    // active, which is also what keeps the displayed account check in step with
+    // a changed `expectedDeployer` instead of showing a stale verdict.
+    const active = refreshAvailability();
+    if (active) void refresh();
     return subscribeWalletConnector(() => {
       void refresh();
     });
   }, [refresh, refreshAvailability]);
+
+  /**
+   * An expected deployer only exists once it is a well-formed address. Without
+   * one there is nothing to compare, so the readout says "—" rather than
+   * claiming a MISMATCH against an empty expectation.
+   */
+  const expectedDeployerValid = /^0x[0-9a-fA-F]{40}$/.test((expectedDeployer ?? "").trim());
 
   const chainIdDecimal = (() => {
     if (!chainId) return null;
