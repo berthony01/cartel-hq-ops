@@ -259,10 +259,22 @@ async function readAccountAndChain(
   }
   try {
     const raw = (await provider.request({ method: "eth_chainId" })) as unknown;
-    if (typeof raw === "string") chainId = lower(raw);
+    // WalletConnect 2.24 answers with a NUMBER, injected wallets with a hex
+    // string. One strict parser accepts both and refuses everything else.
+    chainId = normalizeChainId(raw);
   } catch {
     chainId = null;
   }
+
+  // FAIL-CLOSED SESSION CROSS-CHECK. When the active connector is a
+  // WalletConnect session, the negotiated CAIP-10 accounts are authoritative:
+  // a reported chain the session never approved is discarded, so the connector
+  // and this pre-send guard cannot disagree.
+  const evidence = getActiveSessionChainEvidence();
+  if (evidence !== null && (chainId === null || !evidence.includes(chainId))) {
+    chainId = null;
+  }
+
   return { account, chainId };
 }
 
