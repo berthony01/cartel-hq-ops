@@ -99,17 +99,19 @@ type Eip1193Provider = {
 };
 
 /**
- * Read `window.ethereum` only inside a function call. Module evaluation must
- * stay side-effect free and SSR-safe.
+ * Resolve the operator's provider through the connector abstraction, which
+ * supports an explicitly connected WalletConnect session (Robinhood Wallet on
+ * mobile) and falls back to injected `window.ethereum` exactly as before.
+ *
+ * The connector reads browser globals inside function calls only, so module
+ * evaluation here stays side-effect free and SSR-safe. No safety check below is
+ * relaxed by the wider provider surface: account and chain are still
+ * revalidated live against whatever provider is returned.
  */
 function getProvider(): Eip1193Provider | null {
-  if (typeof window === "undefined") return null;
-  const injected = (window as unknown as { ethereum?: unknown }).ethereum;
-  if (!injected || typeof injected !== "object") return null;
-  const candidate = injected as { request?: unknown };
-  if (typeof candidate.request !== "function") return null;
-  return injected as Eip1193Provider;
+  return getActiveProvider();
 }
+
 
 /* ------------------------------------------------------------------ */
 /* Pure helpers — bigint only, never Number for chain quantities       */
