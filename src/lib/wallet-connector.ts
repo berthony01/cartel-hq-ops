@@ -637,6 +637,12 @@ function readPeerWalletName(provider: Eip1193Provider): string | null {
   return typeof name === "string" && name.trim().length > 0 ? name.trim() : null;
 }
 
+/**
+ * SESSION teardown only. The initialized provider / Core / AppKit
+ * infrastructure stays cached on purpose so a later explicit reconnect on the
+ * same page reuses it instead of re-initializing. Nothing here closes the
+ * global transport, removes the modal element or deletes any storage key.
+ */
 export async function disconnectWalletConnect(): Promise<void> {
   const provider = walletConnectProvider;
   clearLocalConnectionState();
