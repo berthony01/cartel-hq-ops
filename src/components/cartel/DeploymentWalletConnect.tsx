@@ -208,8 +208,11 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
           disabled={busy !== null || kind === null}
           onClick={async () => {
             setBusy("refresh");
-            await refresh();
-            setBusy(null);
+            try {
+              await refresh();
+            } finally {
+              setBusy(null);
+            }
           }}
         >
           Re-check wallet
