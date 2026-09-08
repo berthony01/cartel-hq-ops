@@ -62,7 +62,71 @@ export type CanaryIntentFormProps = {
 
 
 export function CanaryIntentForm(props: CanaryIntentFormProps) {
+  const propsRef = useRef(props);
+  propsRef.current = props;
+  /** Address currently auto-bound from the connected wallet, if any. */
+  const [boundWallet, setBoundWallet] = useState<string | null>(null);
+  const boundRef = useRef<string | null>(null);
+
+  const unbind = useCallback(() => {
+    const previous = boundRef.current;
+    boundRef.current = null;
+    setBoundWallet(null);
+    if (previous === null) return;
+    const current = propsRef.current;
+    // Only ever clear the value this component provisionally set. A manually
+    // typed address, or an attempt-bound one, is never touched.
+    if (current.deployer.trim().toLowerCase() === previous) current.onDeployer("");
+  }, []);
+
+  /**
+   * Reads the already-active connector only. It never connects, never prompts,
+   * never switches a network and never advances the canary sequence.
+   */
+  const syncBinding = useCallback(async () => {
+    const current = propsRef.current;
+    const attemptDeployer = current.attemptBoundDeployer?.trim();
+    if (attemptDeployer) {
+      // Immutable backend state wins outright.
+      boundRef.current = null;
+      setBoundWallet(null);
+      return;
+    }
+    if (getActiveConnectorKind() === null) {
+      unbind();
+      return;
+    }
+    const state = await readWalletConnectorState();
+    const matched =
+      state.account !== null && state.chainId === ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL
+        ? state.account
+        : null;
+    if (matched === null) {
+      unbind();
+      return;
+    }
+    boundRef.current = matched;
+    setBoundWallet(matched);
+    const latest = propsRef.current;
+    if (latest.deployer.trim().toLowerCase() !== matched) latest.onDeployer(matched);
+    if (latest.recipient.trim() === "" && !latest.attemptBoundRecipient?.trim()) {
+      latest.onRecipient(matched);
+    }
+  }, [unbind]);
+
+  useEffect(() => {
+    void syncBinding();
+    return subscribeWalletConnector(() => {
+      void syncBinding();
+    });
+  }, [syncBinding]);
+
+  const attemptDeployer = props.attemptBoundDeployer?.trim() || null;
+  const deployerValue = attemptDeployer ?? props.deployer;
+  const deployerLocked = attemptDeployer !== null || boundWallet !== null;
+
   return (
+
     <div className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5 sm:col-span-2">
