@@ -429,116 +429,59 @@ function readSessionChainEvidence(provider: Eip1193Provider): string[] {
   return found;
 }
 
-function hasPersistedSession(provider: Eip1193Provider): boolean {
+/** True only when the resolved provider really carries a WalletConnect session. */
+function hasWalletConnectSession(provider: Eip1193Provider): boolean {
   return Boolean((provider as unknown as { session?: unknown }).session);
 }
 
-async function tearDownWalletConnect(provider: Eip1193Provider): Promise<void> {
-  try {
-    await (provider as unknown as { disconnect: () => Promise<void> }).disconnect();
-  } catch {
-    // Best-effort teardown only. Local state is cleared regardless.
+/** Maps a sanitized AppKit code onto the connector's notice union. */
+function mapAppKitNotice(notice: AppKitNotice): WalletConnectorNotice {
+  switch (notice) {
+    case "REOWN_NOT_CONFIGURED":
+      return "WALLETCONNECT_NOT_CONFIGURED";
+    case "REOWN_LIBRARY_LOAD_FAILED":
+      return "REOWN_LIBRARY_LOAD_FAILED";
+    case "REOWN_ORIGIN_NOT_ALLOWED":
+      return "REOWN_ORIGIN_NOT_ALLOWED";
+    case "REOWN_PROJECT_ID_INVALID_OR_MISSING":
+      return "REOWN_PROJECT_ID_INVALID_OR_MISSING";
+    case "REOWN_CONFIG_SERVER_ERROR":
+      return "REOWN_CONFIG_SERVER_ERROR";
+    case "REOWN_RATE_LIMITED":
+      return "REOWN_RATE_LIMITED";
+    case "REOWN_CONNECT_FAILED":
+      return "REOWN_CONNECT_FAILED";
+    default:
+      return "REOWN_APPKIT_INIT_FAILED";
   }
 }
 
 /**
- * The ONLY place `EthereumProvider.init()` may run. Three separately reported
- * stages, sanitized codes only — no exception message, stack, URL, endpoint,
- * source path or project id ever leaves this function:
+ * OFFICIAL REOWN APPKIT CONNECT — Robinhood Wallet, MetaMask, Trust and every
+ * other supported EVM wallet stay discoverable. Explicit click only: the AppKit
+ * `Connect` view is opened scoped to the `eip155` namespace, and the connector
+ * waits through AppKit's own subscriptions with a bounded timeout, no polling
+ * and no automatic retry.
  *
- *   1. outer `@walletconnect/ethereum-provider` chunk  -> LIBRARY_LOAD_FAILED
- *   2. nested AppKit chooser chunk (`@reown/appkit/core`) -> MODAL_CHUNK_FAILED
- *   3. provider / Core / storage initialization        -> INIT_FAILED
- *
- * The AppKit chunk is eagerly imported here on purpose: the provider imports it
- * internally, so pre-loading it both distinguishes a broken chooser bundle from
- * a broken initialization and lets the provider resolve it from module cache.
- */
-async function runWalletConnectInit(projectId: string): Promise<WalletConnectInit> {
-  let EthereumProvider: typeof import("@walletconnect/ethereum-provider").EthereumProvider;
-  try {
-    ({ EthereumProvider } = await import("@walletconnect/ethereum-provider"));
-  } catch {
-    return { provider: null, notice: "WALLETCONNECT_LIBRARY_LOAD_FAILED" };
-  }
-
-  try {
-    await import("@reown/appkit/core");
-  } catch {
-    return { provider: null, notice: "WALLETCONNECT_MODAL_CHUNK_FAILED" };
-  }
-
-  try {
-    // MODAL BASELINE (last revision where the chooser was observed to open),
-    // plus the stable storage namespace. `rpcMap`, `qrModalOptions` and a
-    // favicon metadata icon remain intentionally absent.
-    const initialized = await EthereumProvider.init({
-      projectId,
-      customStoragePrefix: WALLETCONNECT_STORAGE_PREFIX,
-      optionalChains: [ROBINHOOD_MAINNET_CHAIN_ID as number],
-      showQrModal: true,
-      methods: ["eth_sendTransaction"],
-      events: ["accountsChanged", "chainChanged"],
-      metadata: {
-        name: "CARTEL HQ",
-        description: "CARTEL HQ deployment wallet connection",
-        url: window.location.origin,
-        icons: [],
-      },
-    });
-    return { provider: initialized as unknown as Eip1193Provider, notice: null };
-  } catch {
-    return { provider: null, notice: "WALLETCONNECT_INIT_FAILED" };
-  }
-}
-
-/**
- * At most ONE initialization per page lifecycle, reused by every later explicit
- * connect. A failed initialization clears both the cache and the in-flight
- * promise so a later explicit click may retry.
- */
-async function ensureWalletConnectProvider(projectId: string): Promise<WalletConnectInit> {
-  if (initializedWalletConnectProvider) {
-    return { provider: initializedWalletConnectProvider, notice: null };
-  }
-  if (!walletConnectInitPromise) {
-    walletConnectInitPromise = runWalletConnectInit(projectId);
-  }
-  const outcome = await walletConnectInitPromise;
-  if (outcome.provider) {
-    initializedWalletConnectProvider = outcome.provider;
-  } else {
-    initializedWalletConnectProvider = null;
-    walletConnectInitPromise = null;
-  }
-  return outcome;
-}
-
-
-
-/**
- * Robinhood Wallet, MetaMask and any other EVM wallet connect over
- * WalletConnect.
- *
- * Chain 4663 is proposed as an OPTIONAL namespace so wallet discovery is not
- * hard-gated on a custom chain: the modal opens for every EVM wallet, and the
- * installed 2.24 provider still negotiates the requested `eth_sendTransaction`
- * method and the account/chain events through the optional namespace. The
- * strict requirement is enforced AFTER connection by the CAIP-10 evidence gate
- * below: a session that does not actually include `eip155:4663` is torn down
- * and never activated. The connector still never asks a wallet to add or
- * switch a network.
+ * The chain requirement is NOT weakened. Robinhood Chain 4663 is never inferred
+ * from the configured default network:
+ *   - a WalletConnect session must actually carry a CAIP-10 `eip155:4663`
+ *     account, or it is torn down and never activated;
+ *   - an injected AppKit connection must have BOTH the AppKit-reported chain id
+ *     and a live `eth_chainId` normalize to 4663 before chain evidence is
+ *     recorded. Wrong chain stays connected only so the operator can use the
+ *     explicit switch button; without proven 4663 it carries no evidence and
+ *     stays unusable for the canary send path.
  */
 export async function connectWalletConnect(): Promise<WalletConnectorResult> {
   if (typeof window === "undefined") {
     return {
       ok: false,
-      notice: "WALLETCONNECT_INIT_FAILED",
-      state: emptyState("WALLETCONNECT_INIT_FAILED"),
+      notice: "REOWN_APPKIT_INIT_FAILED",
+      state: emptyState("REOWN_APPKIT_INIT_FAILED"),
     };
   }
-  const projectId = getWalletConnectProjectId();
-  if (!projectId) {
+  if (!isWalletConnectConfigured()) {
     return {
       ok: false,
       notice: "WALLETCONNECT_NOT_CONFIGURED",
@@ -546,59 +489,47 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
     };
   }
 
-  // INFRASTRUCTURE — initialize at most once per page, then reuse. A repeat
-  // connect after a disconnect calls `connect()` on the cached provider and
-  // never re-runs `EthereumProvider.init()`.
-  const init = await ensureWalletConnectProvider(projectId);
-  if (!init.provider) {
-    const notice = init.notice ?? "WALLETCONNECT_INIT_FAILED";
+  const outcome = await openAppKitConnect(WALLETCONNECT_CONNECT_TIMEOUT_MS);
+  if (outcome.status !== "connected") {
+    clearLocalConnectionState();
+    await disconnectAppKit();
+    await closeAppKit();
+    emit();
+    const notice: WalletConnectorNotice =
+      outcome.status === "timeout"
+        ? "WALLETCONNECT_TIMEOUT"
+        : outcome.status === "rejected"
+          ? "CONNECTION_REJECTED_OR_FAILED"
+          : mapAppKitNotice(outcome.notice);
     return { ok: false, notice, state: emptyState(notice) };
   }
-  const provider = init.provider;
 
-  // STALE SESSION HARDENING. `init()` restores any persisted pairing. A canary
-  // connection must be explicit and fresh, so an inherited session is torn
-  // down before the handshake instead of being silently trusted.
-  if (hasPersistedSession(provider)) {
-    await tearDownWalletConnect(provider);
-    clearLocalConnectionState();
-  }
+  const provider = outcome.provider as Eip1193Provider;
 
-  // Bounded handshake. On timeout the connector fails closed and stays
-  // disconnected: it never re-attempts, never re-establishes, never sends.
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    // Opens the WalletConnect QR / mobile deep-link surface. Connection only.
-    const handshake = (provider as unknown as { connect: () => Promise<void> }).connect();
-    const timeout = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => reject(new Error("WALLETCONNECT_TIMEOUT")), WALLETCONNECT_CONNECT_TIMEOUT_MS);
-    });
-    await Promise.race([handshake, timeout]);
-  } catch (error) {
-    const timedOut = error instanceof Error && error.message === "WALLETCONNECT_TIMEOUT";
-    clearLocalConnectionState();
-    await tearDownWalletConnect(provider);
-    emit();
-    const notice: WalletConnectorNotice = timedOut
-      ? "WALLETCONNECT_TIMEOUT"
-      : "CONNECTION_REJECTED_OR_FAILED";
-    return { ok: false, notice, state: emptyState(notice) };
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
-
-  // CHAIN EVIDENCE GATE. The provider's default chain value is not trusted:
-  // only real CAIP-10 accounts in the negotiated session count.
-  const evidence = readSessionChainEvidence(provider);
-  if (!evidence.includes(ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL)) {
-    clearLocalConnectionState();
-    await tearDownWalletConnect(provider);
-    emit();
-    return {
-      ok: false,
-      notice: "WRONG_CHAIN_APPROVED",
-      state: emptyState("WRONG_CHAIN_APPROVED"),
-    };
+  // CHAIN EVIDENCE GATE — real session / live provider only.
+  let evidence: string[] | null = null;
+  if (hasWalletConnectSession(provider)) {
+    const sessionEvidence = readSessionChainEvidence(provider);
+    if (!sessionEvidence.includes(ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL)) {
+      clearLocalConnectionState();
+      await disconnectAppKit();
+      emit();
+      return {
+        ok: false,
+        notice: "WRONG_CHAIN_APPROVED",
+        state: emptyState("WRONG_CHAIN_APPROVED"),
+      };
+    }
+    evidence = sessionEvidence;
+  } else {
+    const appKitChain = normalizeChainId(getAppKitChainId());
+    const liveRaw = await provider.request({ method: "eth_chainId" }).catch(() => null);
+    const liveChain = normalizeChainId(liveRaw);
+    evidence =
+      appKitChain === ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL &&
+      liveChain === ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL
+        ? [ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL]
+        : null;
   }
 
   walletConnectProvider = provider;
