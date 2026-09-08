@@ -321,10 +321,6 @@ function CanaryConsole() {
         ) : null}
       </Section>
 
-      <DeploymentWalletConnect
-        expectedDeployer={intent?.deployer ?? null}
-        expectedChainId={ROBINHOOD_MAINNET_CHAIN_ID}
-      />
 
       <Section
 
