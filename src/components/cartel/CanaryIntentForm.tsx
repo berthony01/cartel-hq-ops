@@ -1,13 +1,29 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CANARY_REQUIRED_LAUNCH_CHAIN } from "@/lib/chain-mainnet-canary-intent";
+import {
+  getActiveConnectorKind,
+  ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL,
+  readWalletConnectorState,
+  subscribeWalletConnector,
+} from "@/lib/wallet-connector";
 
 /**
  * P3C-F1 — presentation only for the canary's exact production intent.
  *
  * This component holds no authority, calls nothing and decides nothing: the
  * owner-only server wrappers and the authoritative RPCs remain the boundary.
+ *
+ * SAFE DEPLOYER BINDING (UX only). When a wallet has been EXPLICITLY connected
+ * and its chain is actually Robinhood Chain mainnet, the deployer field is
+ * bound to that address and shown read-only. This is form state only: it never
+ * creates an attempt, never presigns, arms, claims, sends, verifies or writes
+ * any backend state, and it never switches or adds a network. When the wallet
+ * disconnects or moves to another chain the provisional binding is cleared.
+ * An immutable attempt-bound deployer supplied by the backend always wins and
+ * is never overwritten.
  */
 
 export type CanaryLaunchOption = {
@@ -34,7 +50,16 @@ export type CanaryIntentFormProps = {
   onSupplyWhole: (value: string) => void;
   selectedChain: string | null;
   chainEligible: boolean;
+  /**
+   * Authoritative, immutable deployer already bound to an existing attempt
+   * row. When present it always wins: no connected-wallet binding is applied
+   * and nothing is cleared.
+   */
+  attemptBoundDeployer?: string | null;
+  /** Authoritative recipient already bound to an existing attempt row. */
+  attemptBoundRecipient?: string | null;
 };
+
 
 export function CanaryIntentForm(props: CanaryIntentFormProps) {
   return (
