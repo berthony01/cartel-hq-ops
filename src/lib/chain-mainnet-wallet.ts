@@ -1,5 +1,7 @@
 import { MAINNET_DEPLOYMENT_TX_ENABLED, ROBINHOOD_MAINNET_CHAIN_ID } from "./chain-mainnet-registry";
+import { getActiveProvider } from "./wallet-connector";
 import type { MainnetWalletEnvelope } from "./chain-mainnet-handoff.functions";
+
 
 /**
  * P3C-C2 — Robinhood Chain PRODUCTION (4663) WALLET HELPER (browser side).
