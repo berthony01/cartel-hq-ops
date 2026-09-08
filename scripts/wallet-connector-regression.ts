@@ -313,7 +313,7 @@ check(
 check(
   "K6",
   wcBody.length > 0 &&
-    !/connectWalletConnect\(\)/.test(wcBody.slice(1)) &&
+    !/connectWalletConnect\(\)/.test(wcBody.slice(wcBody.indexOf("{"))) &&
     (connectorCode.match(/\.connect\(\)/g) ?? []).length === 1 &&
     !/setInterval|retry|reconnect/i.test(connectorCode),
   "timeout path never retries, never reconnects, never re-invokes connect()",
