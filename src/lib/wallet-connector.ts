@@ -1,4 +1,13 @@
 import { ROBINHOOD_MAINNET_CHAIN_ID } from "./chain-mainnet-registry";
+import {
+  closeAppKit,
+  disconnectAppKit,
+  getAppKitChainId,
+  getCurrentOrigin,
+  isReownConfigured,
+  openAppKitConnect,
+  type AppKitNotice,
+} from "./reown-appkit-wallet";
 
 /**
  * P3C-G — DEPLOYMENT WALLET CONNECTOR ABSTRACTION (browser only).
