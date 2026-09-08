@@ -269,7 +269,40 @@ function CanaryConsole() {
         </Section>
       ) : null}
 
+      {launchId && !existingAttempt ? (
+        <Section
+          variant="surface"
+          leading={
+            existingUnverified ? (
+              <AlertTriangle className="h-4 w-4 text-danger" />
+            ) : (
+              <ShieldCheck className="h-4 w-4 text-success" />
+            )
+          }
+          title={
+            existing.isPending || existing.isFetching
+              ? "Checking existing production attempt…"
+              : existingVerified
+                ? "No existing production attempt for this launch"
+                : "Existing-attempt check could not be verified"
+          }
+          description={
+            existingVerified
+              ? "Verified read: no nonterminal Robinhood Chain production attempt exists for this launch."
+              : "Fail closed: an unverified lookup is never treated as “no attempt”. Creating a production attempt stays blocked."
+          }
+        >
+          {existingUnverified ? (
+            <div className="grid gap-1 sm:grid-cols-2">
+              <ReadoutLine label={"Lookup state"} value={existingNotice ?? "PENDING"} />
+              <ReadoutLine label={"Detail"} value={existingDetail} />
+            </div>
+          ) : null}
+        </Section>
+      ) : null}
+
       {existingAttempt ? (
+
         <Section
           variant="surface"
           leading={<AlertTriangle className="h-4 w-4 text-danger" />}
