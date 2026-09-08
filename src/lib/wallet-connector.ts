@@ -313,15 +313,34 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
     };
   }
 
+  // Bounded handshake. On timeout the connector fails closed and stays
+  // disconnected: it never re-attempts, never reconnects, never sends.
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     // Opens the WalletConnect QR / mobile deep-link surface. Connection only.
-    await (provider as unknown as { connect: () => Promise<void> }).connect();
-  } catch {
-    return {
-      ok: false,
-      notice: "CONNECTION_REJECTED_OR_FAILED",
-      state: emptyState("CONNECTION_REJECTED_OR_FAILED"),
-    };
+    const handshake = (provider as unknown as { connect: () => Promise<void> }).connect();
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error("WALLETCONNECT_TIMEOUT")), WALLETCONNECT_CONNECT_TIMEOUT_MS);
+    });
+    await Promise.race([handshake, timeout]);
+  } catch (error) {
+    const timedOut = error instanceof Error && error.message === "WALLETCONNECT_TIMEOUT";
+    walletConnectProvider = null;
+    activeProvider = null;
+    activeKind = null;
+    walletName = null;
+    try {
+      await (provider as unknown as { disconnect: () => Promise<void> }).disconnect();
+    } catch {
+      // Best-effort teardown only.
+    }
+    emit();
+    const notice: WalletConnectorNotice = timedOut
+      ? "WALLETCONNECT_TIMEOUT"
+      : "CONNECTION_REJECTED_OR_FAILED";
+    return { ok: false, notice, state: emptyState(notice) };
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
 
   walletConnectProvider = provider;
