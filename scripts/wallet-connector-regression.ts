@@ -291,9 +291,14 @@ check(
   "J5",
   panelEffect !== undefined &&
     !/inspectMainnetWalletForHandoff/.test(panelEffect) &&
-    /^[\s\S]*?refreshAvailability\(\);\s*return subscribeWalletConnector/.test(panelEffect) &&
-    !/refresh\(\)/.test(panelEffect.slice(0, panelEffect.indexOf("return subscribeWalletConnector"))),
-  "panel mount effect performs availability detection only, never an inspection call",
+    // Availability detection first; the read-only inspection runs ONLY when a
+    // connector is already explicitly active (which is also what refreshes a
+    // changed expectedDeployer verdict). An unconnected mount still touches no
+    // provider.
+    /const active = refreshAvailability\(\);\s*if \(active\) void refresh\(\);\s*return subscribeWalletConnector/.test(
+      panelEffect,
+    ),
+  "panel mount effect detects availability and inspects only an already-active connector",
 );
 
 check(
@@ -569,6 +574,10 @@ check(
     (connectorCode.match(/wallet_switchEthereumChain/g) ?? []).length === 1,
   "exactly one wallet_switchEthereumChain call exists, inside requestRobinhoodChainSwitch",
 );
+const sameClickBody =
+  /export async function connectWalletConnectOnRobinhoodChain\(\)[\s\S]*?\n\}/.exec(
+    connectorCode,
+  )?.[0];
 check(
   "N3",
   /requestRobinhoodChainSwitch\(\)/.test(panelCode) &&
@@ -577,8 +586,14 @@ check(
     !/(useEffect|attachEvents|refreshAvailability|subscribeWalletConnector)[\s\S]{0,300}requestRobinhoodChainSwitch/.test(
       panelCode,
     ) &&
-    !/requestRobinhoodChainSwitch/.test(connectorCode.replace(switchBody ?? "", "")),
-  "the switch is reachable only from the explicit Switch button handler, never mount/connect/re-check/events",
+    // Exactly two call sites in the connector: the definition, and the single
+    // same-explicit-click alignment inside connectWalletConnectOnRobinhoodChain.
+    sameClickBody !== undefined &&
+    (sameClickBody.match(/requestRobinhoodChainSwitch\(\)/g) ?? []).length === 1 &&
+    !/requestRobinhoodChainSwitch/.test(
+      connectorCode.replace(switchBody ?? "", "").replace(sameClickBody, ""),
+    ),
+  "the switch is reachable only from the explicit Switch button handler or the same explicit connect click, never mount/re-check/events",
 );
 check(
   "N4",
