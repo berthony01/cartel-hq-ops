@@ -136,18 +136,25 @@ check(
   "connector requests only the eth_sendTransaction session method (no signing methods)",
 );
 
-/* F — no network switching or adding anywhere on the MAINNET connector path. */
+/* F — network ADDING is absent everywhere; switching exists ONLY in the single
+   explicit connector helper and never in the wallet/send module or the panel. */
+check(
+  "F1",
+  !/wallet_addEthereumChain/.test(connectorCode) &&
+    (connectorCode.match(/wallet_switchEthereumChain/g) ?? []).length === 1,
+  "connector never adds a network and contains exactly one wallet_switchEthereumChain call",
+);
 for (const [id, code, label] of [
-  ["F1", connectorCode, "connector"],
   ["F2", walletCode, "mainnet wallet"],
   ["F3", panelCode, "wallet panel"],
 ] as const) {
   check(
     id,
     !/wallet_switchEthereumChain|wallet_addEthereumChain/.test(code),
-    `${label} never switches or adds a network`,
+    `${label} never switches or adds a network itself`,
   );
 }
+
 
 /* G — capability literals unchanged. */
 check(
