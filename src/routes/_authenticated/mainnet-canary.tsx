@@ -137,9 +137,25 @@ function CanaryConsole() {
     queryKey: ["canary-existing-attempt", launchId],
     queryFn: () => readExisting({ data: { launchId } }),
     enabled: !!launchId,
+    retry: false,
   });
   const existingAttempt = existing.data?.attempt ?? null;
-  const attemptBlocksCreation = existingAttempt !== null;
+  /**
+   * FAIL CLOSED. Only an explicit successful lookup (ok === true) counts as a
+   * verified answer. Loading, errors, refused reads and notices are all treated
+   * as "unverified", which BLOCKS creating a new production attempt.
+   */
+  const existingVerified = !!launchId && existing.isSuccess && existing.data?.ok === true;
+  const existingUnverified = !!launchId && !existingVerified;
+  const existingNotice =
+    existing.data && existing.data.ok !== true
+      ? (existing.data.notice ?? "LOOKUP_REFUSED")
+      : existing.isError
+        ? "LOOKUP_ERROR"
+        : null;
+  const existingDetail = existing.data?.detail ?? null;
+  const attemptBlocksCreation = existingUnverified || existingAttempt !== null;
+
 
   const hasActiveState = !!deploymentId || !!authorizationId;
 
