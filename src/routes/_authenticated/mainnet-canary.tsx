@@ -418,7 +418,7 @@ function CanaryConsole() {
           launches={launches.data ?? []}
           launchId={launchId}
           onSelectLaunch={(id) => {
-            setLaunchId(id);
+            selectLaunch(id);
             const row = (launches.data ?? []).find((item) => item.id === id);
             if (row) {
               setName(row.token_name ?? "");
