@@ -150,10 +150,21 @@ export function CanaryIntentForm(props: CanaryIntentFormProps) {
           <Label htmlFor="canary-deployer">Deployer wallet</Label>
           <Input
             id="canary-deployer"
-            value={props.deployer}
-            onChange={(event) => props.onDeployer(event.target.value)}
+            value={deployerValue}
+            readOnly={deployerLocked}
+            onChange={(event) => {
+              if (deployerLocked) return;
+              props.onDeployer(event.target.value);
+            }}
             placeholder="0x…"
           />
+          <p className="text-[11px] text-muted-foreground">
+            {attemptDeployer
+              ? "Source: existing attempt — immutable and never overwritten."
+              : boundWallet
+                ? "Source: Connected wallet on Robinhood Chain. Read-only while that wallet stays connected and matched. Disconnecting or changing network clears it."
+                : "Source: typed by you. Connect a wallet on Robinhood Chain to bind it automatically."}
+          </p>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="canary-recipient">Initial recipient</Label>
@@ -163,7 +174,13 @@ export function CanaryIntentForm(props: CanaryIntentFormProps) {
             onChange={(event) => props.onRecipient(event.target.value)}
             placeholder="0x…"
           />
+          <p className="text-[11px] text-muted-foreground">
+            {boundWallet && props.recipient.trim().toLowerCase() === boundWallet
+              ? "Default only: the connected wallet. Editable — choose another recipient before creating the attempt."
+              : "Always editable. Defaults to the connected wallet only while empty."}
+          </p>
         </div>
+
         <div className="space-y-1.5">
           <Label htmlFor="canary-name">Token name</Label>
           <Input
