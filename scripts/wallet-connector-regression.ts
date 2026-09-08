@@ -465,9 +465,9 @@ check(
 /* M — multi-wallet correction: neutral naming, sanitized split diagnostics. */
 check(
   "M1",
-  /Mobile wallet \/ WalletConnect/.test(panelCode) &&
-    !/Robinhood Wallet \/ WalletConnect/.test(panelCode),
-  "the WalletConnect button uses generic multi-wallet naming",
+  /Connect wallet on Robinhood Chain/.test(panelCode) &&
+    !/Robinhood Wallet|MetaMask/.test(panelCode.replace(/Robinhood Chain/g, "X")),
+  "the WalletConnect button names the required network, never a single wallet brand",
 );
 check(
   "M2",
@@ -575,7 +575,7 @@ check(
   "exactly one wallet_switchEthereumChain call exists, inside requestRobinhoodChainSwitch",
 );
 const sameClickBody =
-  /export async function connectWalletConnectOnRobinhoodChain\(\)[\s\S]*?\n\}/.exec(
+  /export async function connectWalletConnectOnRobinhoodChain\(\)[\s\S]*?\n\}\n/.exec(
     connectorCode,
   )?.[0];
 check(
