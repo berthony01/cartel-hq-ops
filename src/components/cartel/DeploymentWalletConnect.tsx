@@ -8,6 +8,7 @@ import {
   connectWalletConnect,
   disconnect,
   getActiveConnectorKind,
+  getConnectorOrigin,
   getStandaloneAppUrl,
   isEmbeddedBrowserContext,
   isInjectedWalletAvailable,
