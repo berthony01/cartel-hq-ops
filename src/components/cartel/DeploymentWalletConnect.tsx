@@ -79,6 +79,8 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
   const refreshAvailability = useCallback(() => {
     setInjectedAvailable(isInjectedWalletAvailable());
     setWalletConnectReady(isWalletConnectConfigured());
+    setEmbedded(isEmbeddedBrowserContext());
+    setStandaloneUrl(getStandaloneAppUrl());
     const active = getActiveConnectorKind();
     setKind(active);
     return active;
