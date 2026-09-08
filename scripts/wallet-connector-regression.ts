@@ -63,11 +63,12 @@ function hasModuleScopeWindow(code: string): boolean {
 check("A1", !hasModuleScopeWindow(connectorCode), "connector reads `window` inside functions only");
 check("A2", !/window/.test(walletCode), "mainnet wallet module no longer touches `window` at all");
 
-/* B — WalletConnect init uses optionalChains including 4663, never `chains`. */
+/* B — WalletConnect init REQUIRES Robinhood Chain 4663 (installed 2.24 API:
+   only a required namespace makes the requested methods/events effective). */
 check(
   "B1",
-  /optionalChains:\s*\[ROBINHOOD_MAINNET_CHAIN_ID as number\]/.test(connectorCode),
-  "WalletConnect init declares optionalChains from the mainnet chain constant",
+  /(^|[^l])chains:\s*\[ROBINHOOD_MAINNET_CHAIN_ID as number\]/.test(connectorCode),
+  "WalletConnect init declares required `chains` from the mainnet chain constant",
 );
 check(
   "B2",
@@ -76,8 +77,8 @@ check(
 );
 check(
   "B3",
-  !/(^|[^l])\bchains:\s*\[/.test(connectorCode),
-  "deprecated `chains` init option is not used",
+  !/optionalChains/.test(connectorCode),
+  "optional-only chain configuration is no longer used (it did not enforce 4663)",
 );
 
 /* C — the WalletConnect package is loaded by dynamic import only. */
