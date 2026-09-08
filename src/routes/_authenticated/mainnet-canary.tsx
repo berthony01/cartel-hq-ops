@@ -424,7 +424,7 @@ function CanaryConsole() {
           <Button
             size="sm"
             variant="outline"
-            disabled={busy !== null || !deploymentId || !authorizationId}
+            disabled={busy !== null || !deploymentId || !authorizationId || !claimSuccess}
             onClick={() =>
               run("window", async () => {
                 if (!deploymentId || !authorizationId) return;
@@ -451,8 +451,9 @@ function CanaryConsole() {
           className="mt-3 max-w-md font-mono"
         />
         <p className="mt-2 text-xs text-muted-foreground">
-          One wallet request. No retry and no rebroadcast: if the outcome is ambiguous the attempt
-          freezes for reconciliation.
+          Issue the final send window only after CLAIM succeeds. The envelope expires on a short
+          server clock (approximately 10 seconds from CLAIM). One wallet request. No retry and no
+          rebroadcast: if the outcome is ambiguous the attempt freezes for reconciliation.
         </p>
         <Button
           variant="destructive"
