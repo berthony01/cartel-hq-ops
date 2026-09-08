@@ -34,14 +34,23 @@ import {
  *     accounts under `session.namespaces.eip155.accounts`), never from the
  *     provider's default chain value. A session without `eip155:4663` fails
  *     closed with a distinct notice and the provider is NOT activated.
- *   - Robinhood Chain mainnet is a REQUIRED namespace (`chains: [4663]`) so the
- *     requested `methods` / `events` are actually negotiated by the installed
- *     2.24 API. An earlier comment claiming `chains` is deprecated was wrong
- *     for this package version and has been corrected.
+ *   - WALLET-AGNOSTIC DISCOVERY. Robinhood Chain mainnet is proposed as an
+ *     OPTIONAL namespace (`optionalChains: [4663]`) so the WalletConnect modal
+ *     starts and every EVM wallet stays discoverable. `eth_sendTransaction`
+ *     and the account/chain events are still negotiated: the installed 2.24
+ *     provider merges the requested `methods` / `events` into the optional
+ *     namespace. Robinhood Wallet is RECOMMENDED, never required — strictness
+ *     lives entirely in the post-connect evidence gate below, which refuses any
+ *     session that does not actually include `eip155:4663`.
  *   - A persisted session restored by `init()` is torn down before a fresh
  *     explicit connect, so a canary connection can never silently inherit
  *     stale approval state. WalletConnect storage keys are never touched
  *     directly.
+ *   - Failure diagnostics are SANITIZED CODES ONLY. A dynamic-import failure
+ *     and a provider-init failure are reported as two distinct notices so a
+ *     mobile test can tell a broken browser bundle apart from a provider /
+ *     relay initialization problem. No exception message, stack, URL, endpoint
+ *     or project id ever reaches the UI.
  */
 
 /* ------------------------------------------------------------------ */
