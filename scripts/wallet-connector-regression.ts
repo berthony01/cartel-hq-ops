@@ -774,5 +774,58 @@ check(
   "no database, server function, secret or extra environment access was introduced",
 );
 
+/* T — RUNTIME-API COMPATIBILITY. Every AppKit instance method this app invokes
+   must be a real public member of the INSTALLED @reown/appkit 1.8.23 client
+   declaration. A hand-written interface can invent a name that only fails in
+   the browser, so the names are proven against the package itself. */
+const APPKIT_CLIENT_DTS = "node_modules/@reown/appkit/dist/types/src/client/appkit-base-client.d.ts";
+const appKitClientDts = read(APPKIT_CLIENT_DTS);
+const declaresMember = (name: string) =>
+  new RegExp(`^\\s{4}(?!private |protected )${name}\\s*[(:<]`, "m").test(appKitClientDts);
+
+const invokedAppKitMethods = Array.from(
+  appkitCode.matchAll(/\b(?:appKit|instance)\.([A-Za-z0-9_]+)\s*\(/g),
+  (m) => m[1] as string,
+);
+check(
+  "T1",
+  invokedAppKitMethods.length >= 8 && invokedAppKitMethods.every((name) => declaresMember(name)),
+  `every invoked AppKit method is declared public in the installed client (${Array.from(new Set(invokedAppKitMethods)).sort().join(", ")})`,
+);
+check(
+  "T2",
+  declaresMember("getIsConnectedState") &&
+    !/getIsConnected\s*[(:<]/.test(appKitClientDts.replace(/getIsConnectedState/g, "")) &&
+    /getIsConnectedState\(\)/.test(appkitCode) &&
+    !/\bgetIsConnected\(/.test(appkitCode),
+  "connection state is read with the installed getIsConnectedState(); the documented-but-absent getIsConnected() can never be reintroduced",
+);
+check(
+  "T3",
+  /type AppKitHandle = import\("@reown\/appkit"\)\.AppKit;/.test(appkitCode) &&
+    !/type AppKitHandle = \{/.test(appkitCode),
+  "the AppKit instance is typed from the installed package, not from a hand-written interface",
+);
+check(
+  "T4",
+  declaresMember("ready") &&
+    /await instance\.ready\(\);/.test(appkitCode) &&
+    appkitCode.indexOf("await instance.ready()") < appkitCode.indexOf("appKit.open("),
+  "the chooser is opened only after the installed public ready() readiness promise resolves",
+);
+check(
+  "T5",
+  !/as never/.test(appkitCode.replace(/new EthersAdapter\(\) as never/, "")) &&
+    /ROBINHOOD_APPKIT_NETWORK: import\("@reown\/appkit-common"\)\.CaipNetwork/.test(appkitCode) &&
+    /networks: \[ROBINHOOD_APPKIT_NETWORK\]/.test(appkitCode),
+  "the custom network is typed against the installed CaipNetwork contract with no unsafe cast hiding a required property",
+);
+check(
+  "T6",
+  /disconnect\(chainNamespace\?: ChainNamespace\): Promise<void>;/.test(appKitClientDts) &&
+    /appKit\.disconnect\("eip155"\)/.test(appkitCode),
+  "disconnect uses the installed namespace-scoped signature",
+);
+
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
