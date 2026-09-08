@@ -144,8 +144,8 @@ async function runCreateAppKit(
     const instance = createAppKit({
       adapters: [new EthersAdapter() as never],
       projectId,
-      networks: [ROBINHOOD_APPKIT_NETWORK as never],
-      defaultNetwork: ROBINHOOD_APPKIT_NETWORK as never,
+      networks: [ROBINHOOD_APPKIT_NETWORK],
+      defaultNetwork: ROBINHOOD_APPKIT_NETWORK,
       // Never restore a wallet on its own, and never move the network itself.
       enableReconnect: false,
       enableNetworkSwitch: false,
