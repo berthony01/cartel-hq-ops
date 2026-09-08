@@ -327,12 +327,98 @@ check(
 );
 check(
   "K8",
-  /walletConnectProvider = null;[\s\S]{0,120}activeProvider = null;[\s\S]{0,80}activeKind = null;/.test(
-    wcBody,
-  ),
-  "timeout/failure clears the local active provider, kind and session references",
+  /clearLocalConnectionState\(\);[\s\S]{0,200}tearDownWalletConnect\(provider\)/.test(wcBody) &&
+    /function clearLocalConnectionState\(\)[\s\S]{0,400}activeProvider = null;[\s\S]{0,200}activeKind = null;[\s\S]{0,200}sessionChainEvidence = null;/.test(
+      connectorCode,
+    ),
+  "timeout/failure clears the local active provider, kind, name and session evidence",
 );
 
+/* L — mobile WalletConnect hardening (chain evidence, config, teardown). */
+check(
+  "L1",
+  normalizeChainId(4663) === "0x1237" &&
+    normalizeChainId("0x1237") === "0x1237" &&
+    normalizeChainId("0X01237") === "0x1237" &&
+    normalizeChainId(0) === "0x0",
+  "numeric and hex-string chain ids both normalize to canonical lowercase hex",
+);
+check(
+  "L2",
+  [4663.5, -1, Number.MAX_SAFE_INTEGER + 1, "4663", "abc", "0x", "", null, undefined, {}].every(
+    (value) => normalizeChainId(value) === null,
+  ),
+  "malformed, negative, unsafe, decimal-string and non-scalar chain ids fail closed",
+);
+check(
+  "L3",
+  /session\?\.namespaces\?\.\["eip155"\]\?\.accounts/.test(connectorCode) &&
+    /readSessionChainEvidence\(provider\)/.test(wcBody) &&
+    /evidence\.includes\(ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL\)/.test(wcBody),
+  "WalletConnect chain evidence comes from CAIP-10 session accounts and must include eip155:4663",
+);
+const wrongChainAt = wcBody.indexOf("WRONG_CHAIN_APPROVED");
+check(
+  "L4",
+  wrongChainAt > -1 &&
+    wrongChainAt < wcBody.indexOf("activeProvider = provider;") &&
+    /WRONG_CHAIN_APPROVED/.test(panelCode),
+  "a session without Robinhood Chain returns the distinct WRONG_CHAIN_APPROVED notice without activating the provider",
+);
+check(
+  "L5",
+  /methods:\s*\["eth_sendTransaction"\]/.test(connectorCode) &&
+    /events:\s*\["accountsChanged", "chainChanged"\]/.test(connectorCode),
+  "the required-chain session negotiates eth_sendTransaction plus account/chain events",
+);
+check(
+  "L6",
+  /rpcMap:\s*\{[\s\S]{0,240}ROBINHOOD_MAINNET_PUBLIC_DIAGNOSTIC_RPC_URL/.test(connectorCode) &&
+    !/ROBINHOOD_MAINNET_MANAGED_RPC_ENV|ROBINHOOD_MAINNET_RPC_URL/.test(connectorCode),
+  "rpcMap uses the public diagnostic RPC constant only; the managed server RPC is never referenced",
+);
+check(
+  "L7",
+  /icons:\s*\[`\$\{window\.location\.origin\}\/favicon\.ico`\]/.test(connectorCode) &&
+    /qrModalOptions:\s*\{\s*enableMobileFullScreen:\s*true\s*\}/.test(connectorCode),
+  "WalletConnect metadata carries a real icon and the mobile fullscreen modal option is set",
+);
+check(
+  "L8",
+  (panelCode.match(/\|\| embedded\}/g) ?? []).length >= 2,
+  "both connect buttons are disabled in an embedded preview / in-app browser",
+);
+check(
+  "L9",
+  wcBody.indexOf("hasPersistedSession(provider)") > -1 &&
+    wcBody.indexOf("hasPersistedSession(provider)") < wcBody.indexOf(".connect()"),
+  "a persisted WalletConnect session is torn down before a fresh explicit connect",
+);
+check(
+  "L10",
+  !/localStorage|sessionStorage|wc@2/.test(connectorCode) &&
+    /export async function disconnectWalletConnect\(\)[\s\S]{0,400}clearLocalConnectionState\(\);/.test(
+      connectorCode,
+    ),
+  "explicit disconnect clears local state without touching WalletConnect storage keys directly",
+);
+const attachBody = /function attachEvents\(provider: Eip1193Provider\): void \{([\s\S]*?)\n\}/.exec(
+  connectorCode,
+)?.[1];
+check(
+  "L11",
+  attachBody !== undefined &&
+    /detachEvents\(\);/.test(attachBody) &&
+    /removeListener\("accountsChanged"/.test(connectorCode),
+  "listeners are named and detached before re-attachment, so they cannot accumulate",
+);
+check(
+  "L12",
+  /chainId = normalizeChainId\(raw\);/.test(walletCode) &&
+    /getActiveSessionChainEvidence\(\)/.test(walletCode) &&
+    /evidence\.includes\(chainId\)/.test(walletCode),
+  "the mainnet pre-send guard accepts numeric chain ids and cross-checks them against session evidence",
+);
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
