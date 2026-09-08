@@ -167,7 +167,26 @@ check(
 
 /* I — server-side owner authorization on every wrapper. */
 const ownerChecks = canaryCode.match(/isPlatformOwner\(context\.supabase/g) ?? [];
-check("I1", ownerChecks.length === 4, "all four wrappers re-check ownership server-side");
+const exportedWrappers = canaryCode.match(/export const \w+ = createServerFn\(/g) ?? [];
+const EXPECTED_CANARY_WRAPPERS = [
+  "readCanaryExecutionState",
+  "createCanaryDeploymentAttempt",
+  "armCanaryExecution",
+  "engageCanaryEmergencyStop",
+  // READ-ONLY existing-attempt lookup: owner-gated exactly like the others.
+  "readCanaryExistingAttempt",
+] as const;
+check(
+  "I1",
+  exportedWrappers.length === EXPECTED_CANARY_WRAPPERS.length &&
+    EXPECTED_CANARY_WRAPPERS.every((name) =>
+      new RegExp(`export const ${name} = createServerFn\\(`).test(canaryCode),
+    ) &&
+    // Structural invariant: EVERY exported wrapper independently re-checks
+    // platform ownership. A new wrapper without an owner check fails here.
+    ownerChecks.length === exportedWrappers.length,
+  "every exported canary wrapper re-checks ownership server-side",
+);
 check(
   "I2",
   /is_platform_owner/.test(canaryCode) && /return !error && data === true;/.test(canaryCode),
