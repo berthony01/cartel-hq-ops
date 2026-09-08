@@ -34,14 +34,23 @@ import {
  *     accounts under `session.namespaces.eip155.accounts`), never from the
  *     provider's default chain value. A session without `eip155:4663` fails
  *     closed with a distinct notice and the provider is NOT activated.
- *   - Robinhood Chain mainnet is a REQUIRED namespace (`chains: [4663]`) so the
- *     requested `methods` / `events` are actually negotiated by the installed
- *     2.24 API. An earlier comment claiming `chains` is deprecated was wrong
- *     for this package version and has been corrected.
+ *   - WALLET-AGNOSTIC DISCOVERY. Robinhood Chain mainnet is proposed as an
+ *     OPTIONAL namespace (`optionalChains: [4663]`) so the WalletConnect modal
+ *     starts and every EVM wallet stays discoverable. `eth_sendTransaction`
+ *     and the account/chain events are still negotiated: the installed 2.24
+ *     provider merges the requested `methods` / `events` into the optional
+ *     namespace. Robinhood Wallet is RECOMMENDED, never required — strictness
+ *     lives entirely in the post-connect evidence gate below, which refuses any
+ *     session that does not actually include `eip155:4663`.
  *   - A persisted session restored by `init()` is torn down before a fresh
  *     explicit connect, so a canary connection can never silently inherit
  *     stale approval state. WalletConnect storage keys are never touched
  *     directly.
+ *   - Failure diagnostics are SANITIZED CODES ONLY. A dynamic-import failure
+ *     and a provider-init failure are reported as two distinct notices so a
+ *     mobile test can tell a broken browser bundle apart from a provider /
+ *     relay initialization problem. No exception message, stack, URL, endpoint
+ *     or project id ever reaches the UI.
  */
 
 /* ------------------------------------------------------------------ */
@@ -59,6 +68,7 @@ export type WalletConnectorKind = "injected" | "walletconnect";
 export type WalletConnectorNotice =
   | "NO_INJECTED_PROVIDER"
   | "WALLETCONNECT_NOT_CONFIGURED"
+  | "WALLETCONNECT_LIBRARY_LOAD_FAILED"
   | "WALLETCONNECT_INIT_FAILED"
   | "WALLETCONNECT_TIMEOUT"
   | "WRONG_CHAIN_APPROVED"
@@ -416,13 +426,17 @@ async function tearDownWalletConnect(provider: Eip1193Provider): Promise<void> {
 }
 
 /**
- * Robinhood Wallet and other mobile wallets connect over WalletConnect.
+ * Robinhood Wallet, MetaMask and any other EVM wallet connect over
+ * WalletConnect.
  *
- * Chain 4663 is a REQUIRED namespace for the installed 2.24 provider: that is
- * what makes the requested `eth_sendTransaction` method and the chain/account
- * events actually negotiated in the session. A wallet that cannot approve
- * Robinhood Chain fails closed here — the connector still never asks a wallet
- * to add or switch a network.
+ * Chain 4663 is proposed as an OPTIONAL namespace so wallet discovery is not
+ * hard-gated on a custom chain: the modal opens for every EVM wallet, and the
+ * installed 2.24 provider still negotiates the requested `eth_sendTransaction`
+ * method and the account/chain events through the optional namespace. The
+ * strict requirement is enforced AFTER connection by the CAIP-10 evidence gate
+ * below: a session that does not actually include `eip155:4663` is torn down
+ * and never activated. The connector still never asks a wallet to add or
+ * switch a network.
  */
 export async function connectWalletConnect(): Promise<WalletConnectorResult> {
   if (typeof window === "undefined") {
@@ -441,12 +455,28 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
     };
   }
 
+  // STAGE 1 — browser bundle load only. A failure here means the WalletConnect
+  // / modal chunk could not be loaded or evaluated in this browser, which is a
+  // different defect from a provider that fails to initialize. Only a
+  // sanitized code is produced: the caught error is never read, formatted,
+  // logged or returned.
+  let EthereumProvider: typeof import("@walletconnect/ethereum-provider").EthereumProvider;
+  try {
+    ({ EthereumProvider } = await import("@walletconnect/ethereum-provider"));
+  } catch {
+    return {
+      ok: false,
+      notice: "WALLETCONNECT_LIBRARY_LOAD_FAILED",
+      state: emptyState("WALLETCONNECT_LIBRARY_LOAD_FAILED"),
+    };
+  }
+
+  // STAGE 2 — provider initialization (config, storage, relay/modal setup).
   let provider: Eip1193Provider;
   try {
-    const { EthereumProvider } = await import("@walletconnect/ethereum-provider");
     const initialized = await EthereumProvider.init({
       projectId,
-      chains: [ROBINHOOD_MAINNET_CHAIN_ID as number],
+      optionalChains: [ROBINHOOD_MAINNET_CHAIN_ID as number],
       // Public DIAGNOSTIC endpoint only: client transport/ping for a custom
       // chain the WalletConnect default RPC does not know. Never authoritative
       // for production verification, finality or evidence, and never the

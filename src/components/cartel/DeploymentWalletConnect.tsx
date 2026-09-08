@@ -41,7 +41,10 @@ const NOTICE_COPY: Record<WalletConnectorNotice, string> = {
   NO_INJECTED_PROVIDER: "No browser wallet detected on this device.",
   WALLETCONNECT_NOT_CONFIGURED:
     "WalletConnect is not configured for this deployment. A public WalletConnect project id must be present in the environment before mobile connection is possible.",
-  WALLETCONNECT_INIT_FAILED: "WalletConnect could not start. Nothing was connected.",
+  WALLETCONNECT_LIBRARY_LOAD_FAILED:
+    "Diagnostic code WALLETCONNECT_LIBRARY_LOAD_FAILED — the WalletConnect component could not be loaded in this browser. Nothing was connected. Try a standalone browser tab, or report this code.",
+  WALLETCONNECT_INIT_FAILED:
+    "Diagnostic code WALLETCONNECT_INIT_FAILED — WalletConnect loaded but could not start. Nothing was connected. Report this code.",
   WALLETCONNECT_TIMEOUT: `The wallet never completed the connection within ${Math.round(
     WALLETCONNECT_CONNECT_TIMEOUT_MS / 1000,
   )} seconds, so the attempt was cancelled and nothing was connected. This usually means the wallet hand-off could not return to this page. Open CARTEL HQ in a standalone browser tab, or inside the wallet's own browser, and choose the wallet again.`,
@@ -178,7 +181,7 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
           ) : (
             <Smartphone className="mr-2 h-3.5 w-3.5" />
           )}
-          Robinhood Wallet / WalletConnect
+          Mobile wallet / WalletConnect
         </Button>
 
         <Button
@@ -253,10 +256,11 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
       {notice ? <p className="mt-2 text-xs text-danger">{NOTICE_COPY[notice]}</p> : null}
 
       <p className="mt-3 text-[11px] text-muted-foreground">
-        Robinhood Wallet is the preferred wallet for this canary because it supports Robinhood Chain
-        natively. MetaMask can only be used if Robinhood Chain (chain id {expectedChainId}) has
-        already been added inside MetaMask yourself — CARTEL HQ never adds or switches a network for
-        you. CARTEL HQ never asks for a private key, seed phrase or wallet password.
+        Any EVM wallet is supported. Robinhood Wallet is recommended because it supports Robinhood
+        Chain natively, but it is not required: MetaMask and other EVM wallets work too, as long as
+        Robinhood Chain (chain id {expectedChainId}) is already available and approved in that
+        wallet. CARTEL HQ never adds or switches a network for you, and never asks for a private
+        key, seed phrase or wallet password.
       </p>
 
       <div className="mt-3 grid gap-1 sm:grid-cols-2">

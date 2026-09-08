@@ -64,12 +64,13 @@ function hasModuleScopeWindow(code: string): boolean {
 check("A1", !hasModuleScopeWindow(connectorCode), "connector reads `window` inside functions only");
 check("A2", !/window/.test(walletCode), "mainnet wallet module no longer touches `window` at all");
 
-/* B — WalletConnect init REQUIRES Robinhood Chain 4663 (installed 2.24 API:
-   only a required namespace makes the requested methods/events effective). */
+/* B — WalletConnect PROPOSES 4663 as OPTIONAL so wallet discovery stays broad
+   across EVM wallets. The strict 4663 requirement lives in the post-connect
+   CAIP-10 evidence gate (checks L3/L4), never in modal discovery. */
 check(
   "B1",
-  /(^|[^l])chains:\s*\[ROBINHOOD_MAINNET_CHAIN_ID as number\]/.test(connectorCode),
-  "WalletConnect init declares required `chains` from the mainnet chain constant",
+  /optionalChains:\s*\[ROBINHOOD_MAINNET_CHAIN_ID as number\]/.test(connectorCode),
+  "WalletConnect init declares `optionalChains` from the mainnet chain constant",
 );
 check(
   "B2",
@@ -78,8 +79,8 @@ check(
 );
 check(
   "B3",
-  !/optionalChains/.test(connectorCode),
-  "optional-only chain configuration is no longer used (it did not enforce 4663)",
+  !/(^|[^l])chains:\s*\[/.test(connectorCode),
+  "no required `chains` namespace: wallet discovery is not hard-gated on chain 4663",
 );
 
 /* C — the WalletConnect package is loaded by dynamic import only. */
@@ -370,7 +371,7 @@ check(
   "L5",
   /methods:\s*\["eth_sendTransaction"\]/.test(connectorCode) &&
     /events:\s*\["accountsChanged", "chainChanged"\]/.test(connectorCode),
-  "the required-chain session negotiates eth_sendTransaction plus account/chain events",
+  "the session still negotiates eth_sendTransaction plus account/chain events",
 );
 check(
   "L6",
@@ -419,6 +420,77 @@ check(
     /getActiveSessionChainEvidence\(\)/.test(walletCode) &&
     /evidence\.includes\(chainId\)/.test(walletCode),
   "the mainnet pre-send guard accepts numeric chain ids and cross-checks them against session evidence",
+);
+
+
+/* M — multi-wallet correction: neutral naming, sanitized split diagnostics. */
+check(
+  "M1",
+  /Mobile wallet \/ WalletConnect/.test(panelCode) &&
+    !/Robinhood Wallet \/ WalletConnect/.test(panelCode),
+  "the WalletConnect button uses generic multi-wallet naming",
+);
+check(
+  "M2",
+  /Browser wallet/.test(panelCode),
+  "the injected connector is still offered as 'Browser wallet'",
+);
+check(
+  "M3",
+  /Robinhood Wallet is recommended/.test(panelCode) &&
+    /not required/.test(panelCode) &&
+    /MetaMask and other EVM wallets/.test(panelCode),
+  "panel copy recommends Robinhood Wallet rather than requiring it and names other EVM wallets",
+);
+check(
+  "M4",
+  /WALLETCONNECT_LIBRARY_LOAD_FAILED/.test(connectorCode) &&
+    /WALLETCONNECT_INIT_FAILED/.test(connectorCode) &&
+    /WALLETCONNECT_LIBRARY_LOAD_FAILED/.test(panelCode) &&
+    /WALLETCONNECT_INIT_FAILED/.test(panelCode),
+  "library-load and provider-init failures have distinct notice codes with distinct UI copy",
+);
+const importCatch =
+  /await import\("@walletconnect\/ethereum-provider"\)[\s\S]{0,200}?\} catch \{([\s\S]{0,240}?)\n  \}/.exec(
+    connectorCode,
+  )?.[1];
+check(
+  "M5",
+  importCatch !== undefined &&
+    /WALLETCONNECT_LIBRARY_LOAD_FAILED/.test(importCatch) &&
+    !/WALLETCONNECT_INIT_FAILED/.test(importCatch),
+  "a failed dynamic import returns the library-load code, not the init code",
+);
+const initCatch =
+  /EthereumProvider\.init\(\{[\s\S]*?\} catch \{([\s\S]{0,240}?)\n  \}/.exec(connectorCode)?.[1];
+check(
+  "M6",
+  initCatch !== undefined &&
+    /WALLETCONNECT_INIT_FAILED/.test(initCatch) &&
+    !/WALLETCONNECT_LIBRARY_LOAD_FAILED/.test(initCatch),
+  "a failed EthereumProvider.init returns the init code, not the library-load code",
+);
+check(
+  "M7",
+  !/catch\s*\(\s*[A-Za-z_$][\w$]*\s*\)\s*\{[\s\S]{0,400}?(\.message|\.stack|String\(\s*[A-Za-z_$][\w$]*\s*\))/.test(
+    connectorCode.replace(
+      /const timedOut = error instanceof Error && error\.message === "WALLETCONNECT_TIMEOUT";/,
+      "",
+    ),
+  ) && !/console\.(log|error|warn|debug)/.test(connectorCode),
+  "no raw exception message, stack or console output leaves the connector",
+);
+check(
+  "M8",
+  !/http(s)?:\/\//.test(stripComments(read(PANEL))) &&
+    !/projectId|VITE_WALLETCONNECT_PROJECT_ID|relay/i.test(panelCode),
+  "the panel surfaces no URL, relay endpoint or project id",
+);
+check(
+  "M9",
+  /notice: "WALLETCONNECT_LIBRARY_LOAD_FAILED"/.test(connectorCode) &&
+    (connectorCode.match(/EthereumProvider\.init/g) ?? []).length === 1,
+  "the split diagnostics did not introduce a second init path",
 );
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
