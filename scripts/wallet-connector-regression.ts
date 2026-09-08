@@ -12,6 +12,7 @@ import {
 } from "../src/lib/chain-mainnet-registry";
 import { MAINNET_VERIFICATION_STATE_WRITES_ENABLED } from "../src/lib/chain-mainnet-verify-apply";
 import { LIQUIDITY_TX_ENABLED } from "../src/lib/chain-registry";
+import { normalizeChainId } from "../src/lib/wallet-connector";
 
 const CONNECTOR = "src/lib/wallet-connector.ts";
 const WALLET = "src/lib/chain-mainnet-wallet.ts";
