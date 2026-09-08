@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Smartphone, Wallet } from "lucide-react";
+import { ExternalLink, Loader2, Smartphone, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Section } from "@/components/cartel/Section";
 import { ReadoutLine } from "@/components/cartel/CanaryReadout";
@@ -8,9 +8,12 @@ import {
   connectWalletConnect,
   disconnect,
   getActiveConnectorKind,
+  getStandaloneAppUrl,
+  isEmbeddedBrowserContext,
   isInjectedWalletAvailable,
   isWalletConnectConfigured,
   subscribeWalletConnector,
+  WALLETCONNECT_CONNECT_TIMEOUT_MS,
   type WalletConnectorNotice,
 } from "@/lib/wallet-connector";
 import { inspectMainnetWalletForHandoff } from "@/lib/chain-mainnet-wallet";
