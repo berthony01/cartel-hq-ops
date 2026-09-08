@@ -42,6 +42,9 @@ const NOTICE_COPY: Record<WalletConnectorNotice, string> = {
   WALLETCONNECT_NOT_CONFIGURED:
     "WalletConnect is not configured for this deployment. A public WalletConnect project id must be present in the environment before mobile connection is possible.",
   WALLETCONNECT_INIT_FAILED: "WalletConnect could not start. Nothing was connected.",
+  WALLETCONNECT_TIMEOUT: `The wallet never completed the connection within ${Math.round(
+    WALLETCONNECT_CONNECT_TIMEOUT_MS / 1000,
+  )} seconds, so the attempt was cancelled and nothing was connected. This usually means the wallet hand-off could not return to this page. Open CARTEL HQ in a standalone browser tab, or inside the wallet's own browser, and choose the wallet again.`,
   CONNECTION_REJECTED_OR_FAILED: "The wallet connection was rejected or failed. Nothing changed.",
   NO_ACCOUNT: "The wallet is reachable but exposed no account.",
 };
