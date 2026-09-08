@@ -224,12 +224,15 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
           disabled={busy !== null || kind === null}
           onClick={async () => {
             setBusy("disconnect");
-            await disconnect();
-            setNotice(null);
-            setWalletLabel(null);
-            clearInspection();
-            refreshAvailability();
-            setBusy(null);
+            try {
+              await disconnect();
+              setNotice(null);
+              setWalletLabel(null);
+              clearInspection();
+              refreshAvailability();
+            } finally {
+              setBusy(null);
+            }
           }}
         >
           Disconnect
