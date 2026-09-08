@@ -91,6 +91,9 @@ function CanaryConsole() {
   const [sendPhrase, setSendPhrase] = useState("");
   const [stopReason, setStopReason] = useState("");
 
+  const [armSuccess, setArmSuccess] = useState(false);
+  const [claimSuccess, setClaimSuccess] = useState(false);
+
   const [control, setControl] = useState<CanaryExecutionStateResult | null>(null);
   const [intent, setIntent] = useState<MainnetSimulationIntent | null>(null);
   const [intentError, setIntentError] = useState<string | null>(null);
