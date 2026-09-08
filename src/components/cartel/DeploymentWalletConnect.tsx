@@ -250,6 +250,13 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
       ) : null}
       {notice ? <p className="mt-2 text-xs text-danger">{NOTICE_COPY[notice]}</p> : null}
 
+      <p className="mt-3 text-[11px] text-muted-foreground">
+        Robinhood Wallet is the preferred wallet for this canary because it supports Robinhood Chain
+        natively. MetaMask can only be used if Robinhood Chain (chain id {expectedChainId}) has
+        already been added inside MetaMask yourself — CARTEL HQ never adds or switches a network for
+        you. CARTEL HQ never asks for a private key, seed phrase or wallet password.
+      </p>
+
       <div className="mt-3 grid gap-1 sm:grid-cols-2">
         <ReadoutLine
           label={"Connector"}
