@@ -8,9 +8,9 @@ import { readFileSync } from "node:fs";
 import {
   MAINNET_DEPLOYMENT_TX_ENABLED,
   MAINNET_LIQUIDITY_TX_ENABLED,
-  MAINNET_VERIFICATION_STATE_WRITES_ENABLED,
   ROBINHOOD_MAINNET_CHAIN_ID,
 } from "../src/lib/chain-mainnet-registry";
+import { MAINNET_VERIFICATION_STATE_WRITES_ENABLED } from "../src/lib/chain-mainnet-verify-apply";
 import { LIQUIDITY_TX_ENABLED } from "../src/lib/chain-registry";
 
 const CONNECTOR = "src/lib/wallet-connector.ts";
@@ -19,6 +19,7 @@ const PANEL = "src/components/cartel/DeploymentWalletConnect.tsx";
 const ROUTE = "src/routes/_authenticated/mainnet-canary.tsx";
 const REGISTRY = "src/lib/chain-mainnet-registry.ts";
 const CHAIN_REGISTRY = "src/lib/chain-registry.ts";
+const VERIFY_APPLY = "src/lib/chain-mainnet-verify-apply.ts";
 
 const read = (p: string) => readFileSync(p, "utf8");
 const stripComments = (s: string) =>
@@ -32,6 +33,7 @@ const panelCode = stripComments(read(PANEL));
 const routeSrc = read(ROUTE);
 const registrySrc = read(REGISTRY);
 const chainRegistrySrc = read(CHAIN_REGISTRY);
+const verifyApplySrc = read(VERIFY_APPLY);
 
 let failures = 0;
 function check(id: string, ok: boolean, detail: string) {
@@ -162,7 +164,7 @@ check(
 check(
   "G4",
   (MAINNET_VERIFICATION_STATE_WRITES_ENABLED as boolean) === true &&
-    /export const MAINNET_VERIFICATION_STATE_WRITES_ENABLED = true as const;/.test(registrySrc),
+    /export const MAINNET_VERIFICATION_STATE_WRITES_ENABLED = true as const;/.test(verifyApplySrc),
   "MAINNET_VERIFICATION_STATE_WRITES_ENABLED is still literal `true as const`",
 );
 
