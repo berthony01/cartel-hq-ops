@@ -26,6 +26,8 @@ const ROUTE = "src/routes/_authenticated/mainnet-canary.tsx";
 const REGISTRY = "src/lib/chain-mainnet-registry.ts";
 const CHAIN_REGISTRY = "src/lib/chain-registry.ts";
 const VERIFY_APPLY = "src/lib/chain-mainnet-verify-apply.ts";
+const APPKIT = "src/lib/reown-appkit-wallet.ts";
+const PKG = "package.json";
 
 
 const read = (p: string) => readFileSync(p, "utf8");
@@ -41,6 +43,9 @@ const routeSrc = read(ROUTE);
 const registrySrc = read(REGISTRY);
 const chainRegistrySrc = read(CHAIN_REGISTRY);
 const verifyApplySrc = read(VERIFY_APPLY);
+const appkitSrc = read(APPKIT);
+const appkitCode = stripComments(appkitSrc);
+const pkgSrc = read(PKG);
 
 let failures = 0;
 function check(id: string, ok: boolean, detail: string) {
@@ -70,13 +75,15 @@ function hasModuleScopeWindow(code: string): boolean {
 check("A1", !hasModuleScopeWindow(connectorCode), "connector reads `window` inside functions only");
 check("A2", !/window/.test(walletCode), "mainnet wallet module no longer touches `window` at all");
 
-/* B — WalletConnect PROPOSES 4663 as OPTIONAL so wallet discovery stays broad
-   across EVM wallets. The strict 4663 requirement lives in the post-connect
-   CAIP-10 evidence gate (checks L3/L4), never in modal discovery. */
+/* B — the OFFICIAL AppKit singleton owns wallet discovery. 4663 is the only
+   declared network, but the strict runtime requirement still lives in the
+   post-connect CAIP-10 / live-chain evidence gate (L3/L4), never in the modal. */
 check(
   "B1",
-  /optionalChains:\s*\[ROBINHOOD_MAINNET_CHAIN_ID as number\]/.test(connectorCode),
-  "WalletConnect init declares `optionalChains` from the mainnet chain constant",
+  /caipNetworkId: `eip155:\$\{ROBINHOOD_MAINNET_CHAIN_ID\}`/.test(appkitCode) &&
+    /id: ROBINHOOD_MAINNET_CHAIN_ID as number/.test(appkitCode) &&
+    /networks: \[ROBINHOOD_APPKIT_NETWORK as never\]/.test(appkitCode),
+  "AppKit declares exactly one custom network, built from the mainnet chain constant",
 );
 check(
   "B2",
@@ -85,32 +92,34 @@ check(
 );
 check(
   "B3",
-  !/(^|[^l])chains:\s*\[/.test(connectorCode),
-  "no required `chains` namespace: wallet discovery is not hard-gated on chain 4663",
+  /enableNetworkSwitch: false/.test(appkitCode) && !/wallet_switchEthereumChain/.test(appkitCode),
+  "AppKit never switches networks: the only switch stays the explicit connector helper",
 );
 
-/* C — the WalletConnect package is loaded by dynamic import only. */
 check(
   "C1",
-  /await import\("@walletconnect\/ethereum-provider"\)/.test(connectorCode),
-  "WalletConnect package is dynamically imported inside a browser-executed function",
+  /await import\("@reown\/appkit"\)/.test(appkitCode) &&
+    /await import\("@reown\/appkit-adapter-ethers"\)/.test(appkitCode),
+  "AppKit packages are dynamically imported inside a browser-executed function",
 );
 check(
   "C2",
-  !/^import .*@walletconnect\/ethereum-provider/m.test(connectorCode),
-  "no static top-level import of the WalletConnect package",
+  !/^import .*@reown\/appkit/m.test(appkitCode) &&
+    !/@walletconnect\/ethereum-provider/.test(appkitCode + connectorCode) &&
+    !/"@walletconnect\/ethereum-provider"/.test(pkgSrc),
+  "no static AppKit import and no direct low-level WalletConnect provider dependency remains",
 );
 
-/* D — public project id is read from env and never hardcoded. */
 check(
   "D1",
-  /VITE_WALLETCONNECT_PROJECT_ID/.test(connectorCode),
-  "connector reads VITE_WALLETCONNECT_PROJECT_ID from client env",
+  /VITE_WALLETCONNECT_PROJECT_ID/.test(appkitCode) &&
+    !/VITE_WALLETCONNECT_PROJECT_ID/.test(connectorCode),
+  "the public project id is read from client env in the AppKit module only",
 );
 check(
   "D2",
-  !/projectId\s*[:=]\s*["'`][0-9a-zA-Z]{8,}["'`]/.test(connectorCode),
-  "no literal WalletConnect project id is hardcoded",
+  !/projectId\s*[:=]\s*["'`][0-9a-zA-Z]{8,}["'`]/.test(appkitCode + connectorCode),
+  "no literal project id is hardcoded",
 );
 check(
   "D3",
@@ -138,8 +147,10 @@ check(
 );
 check(
   "E4",
-  /methods:\s*\["eth_sendTransaction"\]/.test(connectorCode),
-  "connector requests only the eth_sendTransaction session method (no signing methods)",
+  !/eth_sign|personal_sign|eth_signTypedData|eth_sendTransaction/.test(
+    connectorCode + appkitCode,
+  ),
+  "neither the connector nor the AppKit module ever signs or sends",
 );
 
 /* F — network ADDING is absent everywhere; switching exists ONLY in the single
@@ -265,17 +276,15 @@ check(
 const connectWcBody = /export async function connectWalletConnect\(\)[\s\S]*?\n\}/.exec(
   connectorCode,
 )?.[0];
-const initHelperBody = /async function runWalletConnectInit\([\s\S]*?\n\}/.exec(connectorCode)?.[0];
 check(
   "J4",
   connectWcBody !== undefined &&
-    initHelperBody !== undefined &&
-    /EthereumProvider\.init/.test(initHelperBody) &&
-    !/EthereumProvider\.init/.test(connectWcBody) &&
-    (connectorCode.match(/EthereumProvider\.init/g) ?? []).length === 1 &&
-    /ensureWalletConnectProvider\(projectId\)/.test(connectWcBody) &&
-    (connectorCode.match(/\.connect\(\)/g) ?? []).length === 1,
-  "EthereumProvider.init lives only in the cached init helper; connect() is reachable only via explicit connectWalletConnect",
+    (appkitCode.match(/createAppKit\(\{/g) ?? []).length === 1 &&
+    /async function runCreateAppKit\([\s\S]*?createAppKit\(\{/.test(appkitCode) &&
+    !/createAppKit/.test(connectorCode) &&
+    (connectorCode.match(/openAppKitConnect\(/g) ?? []).length === 1 &&
+    /openAppKitConnect\(/.test(connectWcBody),
+  "createAppKit runs exactly once inside the singleton helper; the chooser opens only from the explicit connect handler",
 );
 const panelEffect = /useEffect\(\(\) => \{[\s\S]*?\}, \[[^\]]*\]\);/.exec(panelCode)?.[0];
 check(
@@ -320,10 +329,10 @@ check(
 const wcBody = connectWcBody ?? "";
 check(
   "K4",
-  /WALLETCONNECT_CONNECT_TIMEOUT_MS/.test(connectorCode) &&
-    /export const WALLETCONNECT_CONNECT_TIMEOUT_MS = 45_000;/.test(connectorCode) &&
-    /Promise\.race\(\[handshake, timeout\]\)/.test(connectorCode),
-  "WalletConnect handshake is bounded by a fixed client timeout",
+  /export const WALLETCONNECT_CONNECT_TIMEOUT_MS = 45_000;/.test(connectorCode) &&
+    /openAppKitConnect\(WALLETCONNECT_CONNECT_TIMEOUT_MS\)/.test(connectorCode) &&
+    /timer = setTimeout\(\(\) => finish\(\{ status: "timeout" \}\), timeoutMs\);/.test(appkitCode),
+  "the AppKit connect handshake is bounded by the same fixed client timeout",
 );
 check(
   "K5",
@@ -334,9 +343,10 @@ check(
   "K6",
   wcBody.length > 0 &&
     !/connectWalletConnect\(\)/.test(wcBody.slice(wcBody.indexOf("{"))) &&
-    (connectorCode.match(/\.connect\(\)/g) ?? []).length === 1 &&
-    !/setInterval|retry|reconnect/i.test(connectorCode),
-  "timeout path never retries, never reconnects, never re-invokes connect()",
+    (connectorCode.match(/openAppKitConnect\(/g) ?? []).length === 1 &&
+    /enableReconnect: false/.test(appkitCode) &&
+    !/setInterval|retry|reconnect(?!: false)/i.test(connectorCode),
+  "timeout path never retries, never reconnects, and AppKit never restores a session on its own",
 );
 check(
   "K7",
@@ -346,7 +356,7 @@ check(
 );
 check(
   "K8",
-  /clearLocalConnectionState\(\);[\s\S]{0,200}tearDownWalletConnect\(provider\)/.test(wcBody) &&
+  /clearLocalConnectionState\(\);[\s\S]{0,200}disconnectAppKit\(\)/.test(wcBody) &&
     /function clearLocalConnectionState\(\)[\s\S]{0,400}activeProvider = null;[\s\S]{0,200}activeKind = null;[\s\S]{0,200}sessionChainEvidence = null;/.test(
       connectorCode,
     ),
@@ -373,8 +383,8 @@ check(
   "L3",
   /session\?\.namespaces\?\.\["eip155"\]\?\.accounts/.test(connectorCode) &&
     /readSessionChainEvidence\(provider\)/.test(wcBody) &&
-    /evidence\.includes\(ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL\)/.test(wcBody),
-  "WalletConnect chain evidence comes from CAIP-10 session accounts and must include eip155:4663",
+    /sessionEvidence\.includes\(ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL\)/.test(wcBody),
+  "WalletConnect chain evidence still comes from CAIP-10 session accounts and must include eip155:4663",
 );
 const wrongChainAt = wcBody.indexOf("WRONG_CHAIN_APPROVED");
 check(
@@ -386,9 +396,10 @@ check(
 );
 check(
   "L5",
-  /methods:\s*\["eth_sendTransaction"\]/.test(connectorCode) &&
-    /events:\s*\["accountsChanged", "chainChanged"\]/.test(connectorCode),
-  "the session still negotiates eth_sendTransaction plus account/chain events",
+  /const liveChain = normalizeChainId\(liveRaw\);/.test(wcBody) &&
+    /appKitChain === ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL &&/.test(wcBody) &&
+    /liveChain === ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL/.test(wcBody),
+  "an injected AppKit connection records chain evidence only when AppKit and a live eth_chainId both prove 4663",
 );
 check(
   "L6",
@@ -399,10 +410,14 @@ check(
 );
 check(
   "L7",
-  !/qrModalOptions/.test(connectorCode) &&
-    !/favicon\.ico/.test(connectorCode) &&
-    /icons:\s*\[\]/.test(connectorCode),
-  "modal baseline restore: no qrModalOptions and an empty metadata icons array, exactly as in the last-known-working modal revision",
+  !/qrModalOptions/.test(appkitCode) &&
+    /features: \{/.test(appkitCode) &&
+    /swaps: false/.test(appkitCode) &&
+    /onramp: false/.test(appkitCode) &&
+    /send: false/.test(appkitCode) &&
+    /email: false/.test(appkitCode) &&
+    /socials: false/.test(appkitCode),
+  "no low-level modal options remain and every non-wallet AppKit feature is disabled",
 );
 check(
   "L8",
@@ -411,9 +426,9 @@ check(
 );
 check(
   "L9",
-  wcBody.indexOf("hasPersistedSession(provider)") > -1 &&
-    wcBody.indexOf("hasPersistedSession(provider)") < wcBody.indexOf(".connect()"),
-  "a persisted WalletConnect session is torn down before a fresh explicit connect",
+  /enableReconnect: false/.test(appkitCode) &&
+    !/localStorage|sessionStorage|wc@2/.test(appkitCode),
+  "no silent session restoration, and the AppKit module never reads or deletes storage keys itself",
 );
 check(
   "L10",
@@ -463,31 +478,32 @@ check(
 );
 check(
   "M4",
-  /WALLETCONNECT_LIBRARY_LOAD_FAILED/.test(connectorCode) &&
-    /WALLETCONNECT_INIT_FAILED/.test(connectorCode) &&
-    /WALLETCONNECT_LIBRARY_LOAD_FAILED/.test(panelCode) &&
-    /WALLETCONNECT_INIT_FAILED/.test(panelCode),
-  "library-load and provider-init failures have distinct notice codes with distinct UI copy",
+  /REOWN_LIBRARY_LOAD_FAILED/.test(appkitCode) &&
+    /REOWN_APPKIT_INIT_FAILED/.test(appkitCode) &&
+    /REOWN_LIBRARY_LOAD_FAILED/.test(panelCode) &&
+    /REOWN_APPKIT_INIT_FAILED/.test(panelCode) &&
+    /REOWN_CONNECT_FAILED/.test(panelCode),
+  "chunk-load, init and connect failures have distinct sanitized codes with distinct UI copy",
 );
 const importCatch =
-  /await import\("@walletconnect\/ethereum-provider"\)[\s\S]{0,200}?\} catch \{([\s\S]{0,240}?)\n  \}/.exec(
-    connectorCode,
+  /await import\("@reown\/appkit-adapter-ethers"\)[\s\S]{0,200}?\} catch \{([\s\S]{0,240}?)\n  \}/.exec(
+    appkitCode,
   )?.[1];
 check(
   "M5",
   importCatch !== undefined &&
-    /WALLETCONNECT_LIBRARY_LOAD_FAILED/.test(importCatch) &&
-    !/WALLETCONNECT_INIT_FAILED/.test(importCatch),
+    /REOWN_LIBRARY_LOAD_FAILED/.test(importCatch) &&
+    !/REOWN_APPKIT_INIT_FAILED/.test(importCatch),
   "a failed dynamic import returns the library-load code, not the init code",
 );
-const initCatch =
-  /EthereumProvider\.init\(\{[\s\S]*?\} catch \{([\s\S]{0,240}?)\n  \}/.exec(connectorCode)?.[1];
 check(
   "M6",
-  initCatch !== undefined &&
-    /WALLETCONNECT_INIT_FAILED/.test(initCatch) &&
-    !/WALLETCONNECT_LIBRARY_LOAD_FAILED/.test(initCatch),
-  "a failed EthereumProvider.init returns the init code, not the library-load code",
+  /APKT002/.test(appkitCode) &&
+    /REOWN_ORIGIN_NOT_ALLOWED/.test(appkitCode) &&
+    /REOWN_PROJECT_ID_INVALID_OR_MISSING/.test(appkitCode) &&
+    /REOWN_RATE_LIMITED/.test(appkitCode) &&
+    /return "REOWN_APPKIT_INIT_FAILED";/.test(appkitCode),
+  "AppKit error tokens map onto sanitized codes with an init-failure default",
 );
 check(
   "M7",
@@ -507,31 +523,29 @@ check(
 );
 check(
   "M9",
-  /notice: "WALLETCONNECT_LIBRARY_LOAD_FAILED"/.test(connectorCode) &&
-    (connectorCode.match(/EthereumProvider\.init/g) ?? []).length === 1,
-  "the split diagnostics did not introduce a second init path",
+  (appkitCode.match(/createAppKit\(\{/g) ?? []).length === 1 &&
+    !/\.message|\.stack|console\./.test(appkitCode.replace(/error instanceof Error \? error\.message : String\(error \?\? ""\)/, "")),
+  "one init path only, and no raw exception text leaves the AppKit module",
 );
 
-/* R — rollback to the last-known-working modal init baseline. */
-const initBlock = /EthereumProvider\.init\(\{([\s\S]*?)\n    \}\);/.exec(connectorCode)?.[1];
-const initKeys = (initBlock ?? "")
-  .split("\n")
-  .map((line) => /^\s{6}([A-Za-z]+)[,:]/.exec(line)?.[1])
-  .filter((key): key is string => key !== undefined);
+/* R — official AppKit configuration baseline. */
 check(
   "R1",
-  initBlock !== undefined &&
-    initKeys.join(",") ===
-      "projectId,customStoragePrefix,optionalChains,showQrModal,methods,events,metadata",
-  "init options are the last-known-working modal baseline plus the stable storage prefix, in order",
+  /enableReconnect: false/.test(appkitCode) &&
+    /enableNetworkSwitch: false/.test(appkitCode) &&
+    /enableWalletConnect: true/.test(appkitCode) &&
+    /enableInjected: true/.test(appkitCode) &&
+    /enableEIP6963: true/.test(appkitCode) &&
+    /enableCoinbase: true/.test(appkitCode) &&
+    /allWallets: true/.test(appkitCode),
+  "AppKit is configured for broad explicit wallet discovery with no auto-reconnect and no network switching",
 );
 check(
   "R2",
-  initBlock !== undefined &&
-    /showQrModal:\s*true/.test(initBlock) &&
-    /optionalChains:\s*\[ROBINHOOD_MAINNET_CHAIN_ID as number\]/.test(initBlock) &&
-    !/\bchains:/.test(initBlock),
-  "the chooser modal stays enabled and 4663 is proposed as optional, never as a required chain",
+  /open\(\{ view: "Connect", namespace: "eip155" \}\)/.test(appkitCode) &&
+    /"@reown\/appkit": "\^?1\.8\.23"/.test(pkgSrc) &&
+    /"@reown\/appkit-adapter-ethers": "\^?1\.8\.23"/.test(pkgSrc),
+  "the chooser opens scoped to eip155 through the pinned official AppKit 1.8.23 packages",
 );
 
 /* N — explicit Robinhood Chain switch + safe deployer binding. */
@@ -674,11 +688,9 @@ const ensureBody = /async function ensureWalletConnectProvider\([\s\S]*?\n\}/.ex
 
 check(
   "S1",
-  /export const WALLETCONNECT_STORAGE_PREFIX = "cartel-hq-mainnet-canary-v1";/.test(connectorCode) &&
-    (connectorCode.match(/customStoragePrefix/g) ?? []).length === 1 &&
-    /customStoragePrefix: WALLETCONNECT_STORAGE_PREFIX,/.test(initBlock ?? "") &&
-    !/Math\.random|Date\.now|crypto\.randomUUID/.test(connectorCode),
-  "a single stable customStoragePrefix constant is passed exactly once to EthereumProvider.init",
+  /let appKitHandle: AppKitHandle \| null = null;/.test(appkitCode) &&
+    /let appKitInitPromise/.test(appkitCode),
+  "the AppKit singleton keeps both a cached handle and a single in-flight init promise",
 );
 check(
   "S2",
@@ -687,29 +699,20 @@ check(
 );
 check(
   "S3",
-  /let initializedWalletConnectProvider: Eip1193Provider \| null = null;/.test(connectorCode) &&
-    /let walletConnectInitPromise: Promise<WalletConnectInit> \| null = null;/.test(connectorCode) &&
-    ensureBody !== undefined &&
-    /if \(!walletConnectInitPromise\) \{\s*walletConnectInitPromise = runWalletConnectInit\(projectId\);/.test(
-      ensureBody,
-    ),
-  "an initialized-provider cache and a single in-flight init promise both exist",
+  /if \(appKitHandle\) return \{ appKit: appKitHandle, notice: null \};/.test(appkitCode) &&
+    /if \(!appKitInitPromise\) appKitInitPromise = runCreateAppKit\(projectId\);/.test(appkitCode),
+  "a repeated connect reuses the cached AppKit instance instead of re-initializing",
 );
 check(
   "S4",
-  initHelperBody !== undefined &&
-    (connectorCode.match(/runWalletConnectInit\(/g) ?? []).length === 2 &&
-    (connectorCode.match(/EthereumProvider\.init/g) ?? []).length === 1,
-  "EthereumProvider.init is reachable only inside the explicit cached initialization helper",
+  /if \(typeof window === "undefined"\)/.test(appkitCode) &&
+    !/^\s*(const|let)\s+\w+\s*=\s*window/m.test(appkitCode),
+  "AppKit initialization is browser-only and never runs during SSR",
 );
 check(
   "S5",
-  ensureBody !== undefined &&
-    /if \(initializedWalletConnectProvider\) \{\s*return \{ provider: initializedWalletConnectProvider, notice: null \};/.test(
-      ensureBody,
-    ) &&
-    /const init = await ensureWalletConnectProvider\(projectId\);/.test(connectWcBody ?? ""),
-  "a repeated connectWalletConnect reuses the cached provider instead of reinitializing",
+  /appKitHandle = null;\s*appKitInitPromise = null;/.test(appkitCode),
+  "a failed initialization clears the cache and the in-flight promise so an explicit retry is possible",
 );
 check(
   "S6",
@@ -731,49 +734,42 @@ check(
 );
 check(
   "S8",
-  ensureBody !== undefined &&
-    /initializedWalletConnectProvider = null;\s*walletConnectInitPromise = null;/.test(ensureBody),
-  "a failed initialization clears the cache and the in-flight promise so an explicit retry is possible",
+  /export async function disconnectAppKit\(\)[\s\S]{0,400}appKit\.disconnect\("eip155"\)/.test(
+    appkitCode,
+  ) && !/appKitHandle = null/.test(/export async function disconnectAppKit\(\)[\s\S]*?\n\}/.exec(appkitCode)?.[0] ?? ""),
+  "disconnect is the official AppKit disconnect and never destroys the singleton",
 );
 check(
   "S9",
-  initHelperBody !== undefined &&
-    initHelperBody.indexOf('await import("@reown/appkit/core")') > -1 &&
-    initHelperBody.indexOf('await import("@reown/appkit/core")') <
-      initHelperBody.indexOf("EthereumProvider.init") &&
-    (connectorCode.match(/WALLETCONNECT_MODAL_CHUNK_FAILED/g) ?? []).length === 2 &&
-    /await import\("@reown\/appkit\/core"\);\s*\} catch \{\s*return \{ provider: null, notice: "WALLETCONNECT_MODAL_CHUNK_FAILED" \};/.test(
-      initHelperBody,
-    ),
-  "the AppKit chooser chunk is pre-imported before init and its failure maps only to WALLETCONNECT_MODAL_CHUNK_FAILED",
+  /REOWN_NOT_CONFIGURED/.test(appkitCode) &&
+    /WALLETCONNECT_NOT_CONFIGURED/.test(connectorCode) &&
+    /isReownConfigured\(\)/.test(connectorCode),
+  "a missing project id still fails closed through the connector notice union",
 );
 check(
   "S10",
-  initHelperBody !== undefined &&
-    /await import\("@walletconnect\/ethereum-provider"\)\);\s*\} catch \{\s*return \{ provider: null, notice: "WALLETCONNECT_LIBRARY_LOAD_FAILED" \};/.test(
-      initHelperBody,
-    ),
-  "the outer provider chunk failure still maps only to WALLETCONNECT_LIBRARY_LOAD_FAILED",
+  /getAppKitWalletProvider\(\)/.test(appkitCode) &&
+    /appKit\.getIsConnectedState\(\)/.test(appkitCode),
+  "connection is confirmed from the real AppKit provider and connection state, never assumed",
 );
 check(
   "S11",
-  initHelperBody !== undefined &&
-    initHelperBody.indexOf("WALLETCONNECT_INIT_FAILED") >
-      initHelperBody.indexOf("WALLETCONNECT_MODAL_CHUNK_FAILED") &&
-    /WALLETCONNECT_MODAL_CHUNK_FAILED/.test(panelCode) &&
-    /wallet chooser component could not be loaded/.test(panelCode),
-  "INIT_FAILED now covers initialization after both chunks loaded, and the chunk failure has its own UI copy",
+  /subscribeProviders\(/.test(appkitCode) &&
+    /subscribeAccount\(/.test(appkitCode) &&
+    /subscribeState\(/.test(appkitCode) &&
+    /for \(const off of unsubscribers\)/.test(appkitCode),
+  "AppKit subscriptions drive the bounded wait and are all unsubscribed on settle",
 );
+const createBody = /async function runCreateAppKit\([\s\S]*?\n\}/.exec(appkitCode)?.[0] ?? "";
 check(
   "S12",
-  !/\.message|\.stack|console\./.test(initHelperBody ?? "") &&
-    !/catch\s*\(/.test(initHelperBody ?? ""),
-  "the initialization helper never reads or surfaces a raw exception",
+  createBody.length > 0 && !/\.stack|console\./.test(createBody),
+  "the initialization helper never surfaces a stack or logs to the console",
 );
 check(
   "S13",
   !/supabase|createServerFn|useServerFn|process\.env|VITE_(?!WALLETCONNECT_PROJECT_ID)/.test(
-    connectorCode,
+    connectorCode + appkitCode,
   ),
   "no database, server function, secret or extra environment access was introduced",
 );
