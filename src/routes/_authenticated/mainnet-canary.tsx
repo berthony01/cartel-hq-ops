@@ -158,22 +158,8 @@ function CanaryConsole() {
         status={`Chain ${ROBINHOOD_MAINNET_CHAIN_ID}`}
       />
 
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-border/40 bg-surface-raised/40 p-2 text-[11px] text-muted-foreground">
-        <span className="font-mono text-foreground">Intent</span>
-        <span>→</span>
-        <span className="font-mono text-foreground">Attempt</span>
-        <span>→</span>
-        <span className="font-mono text-foreground">Presign</span>
-        <span>→</span>
-        <span className="font-mono text-foreground">Arm</span>
-        <span>→</span>
-        <span className="font-mono text-foreground">Claim</span>
-        <span>→</span>
-        <span className="font-mono text-foreground">Send Window</span>
-        <span>→</span>
-        <span className="font-mono text-foreground">Send</span>
-        <span>→</span>
-        <span className="font-mono text-foreground">Persist/Verify</span>
+      <div className="rounded-md border border-border/40 bg-surface-raised/40 p-2 text-[11px] font-mono text-foreground">
+        Intent → Attempt → Presign → Arm → Claim → Send Window → Send → Persist/Verify
       </div>
 
       <Section
