@@ -186,11 +186,16 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
           onClick={async () => {
             setBusy("injected");
             setNotice(null);
-            const result = await connectInjected();
-            setNotice(result.notice);
-            setWalletLabel(null);
-            await refresh();
-            setBusy(null);
+            try {
+              const result = await connectInjected();
+              setNotice(result.notice);
+              setWalletLabel(null);
+              await refresh();
+            } catch {
+              setNotice("CONNECTION_REJECTED_OR_FAILED");
+            } finally {
+              setBusy(null);
+            }
           }}
         >
           {busy === "injected" ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
