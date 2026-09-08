@@ -218,7 +218,11 @@ check(
       /\.eq\("chain_id", ROBINHOOD_MAINNET_CHAIN_ID\)/.test(body) &&
       /\.eq\("network_environment", "PRODUCTION"\)/.test(body) &&
       /\.eq\("deployment_kind", "FIXED_SUPPLY_ERC20"\)/.test(body) &&
-      /\.not\("status", "in", `\(\$\{TERMINAL_ATTEMPT_STATUSES\.join\(","\)\}\)`\)/.test(body) &&
+      /for \(const terminal of TERMINAL_ATTEMPT_STATUSES\) \{\s*\n\s*query = query\.not\("status", "eq", terminal\);/.test(
+        body,
+      ) &&
+      !/\.not\("status", "in"/.test(body) &&
+
       /TERMINAL_ATTEMPT_STATUSES = \["FAILED", "ABANDONED"\] as const/.test(wrapperCode),
     "the lookup is scoped to chain 4663 PRODUCTION fixed-supply nonterminal rows",
   );
