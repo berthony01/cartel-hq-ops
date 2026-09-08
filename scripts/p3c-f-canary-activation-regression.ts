@@ -216,7 +216,20 @@ for (const term of [
 }
 
 /* K — nothing state-changing runs on render or import. */
-check("K1", !/useEffect/.test(routeSrc), "no effect can trigger an action on render");
+// Exactly one effect exists: the local-only restore of a previously selected
+// launch id after a mobile wallet hand-off. It must remain incapable of
+// invoking any stage, mutation, wallet or network action on render.
+const routeEffects = routeSrc.match(/useEffect\(\(\) => \{[\s\S]*?\}, \[[^\]]*\]\);/g) ?? [];
+check(
+  "K1",
+  routeEffects.length === 1 &&
+    /if \(launchId\) return;/.test(routeEffects[0]!) &&
+    /sessionStorage\.getItem\(LAUNCH_SELECTION_STORAGE_KEY\)/.test(routeEffects[0]!) &&
+    !/mutate|mutateAsync|useServerFn|\.rpc\(|connect|switch|presign|arm|claim|send|persist|verify/i.test(
+      routeEffects[0]!,
+    ),
+  "the only effect restores a launch id locally and can trigger no action on render",
+);
 check(
   "K2",
   !/setInterval|setTimeout|refetchInterval/.test(routeSrc),
