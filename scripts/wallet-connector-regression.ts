@@ -499,7 +499,7 @@ check(
 const initBlock = /EthereumProvider\.init\(\{([\s\S]*?)\n    \}\);/.exec(connectorCode)?.[1];
 const initKeys = (initBlock ?? "")
   .split("\n")
-  .map((line) => /^\s{6}([A-Za-z]+):/.exec(line)?.[1])
+  .map((line) => /^\s{6}([A-Za-z]+)[,:]/.exec(line)?.[1])
   .filter((key): key is string => key !== undefined);
 check(
   "R1",
