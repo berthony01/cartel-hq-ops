@@ -260,5 +260,45 @@ check(
   "both confirmation phrases are exact",
 );
 
+
+/* ------------------------------------------------------------------ */
+/* K7–K11 — existing-attempt lookup must FAIL CLOSED                    */
+/* ------------------------------------------------------------------ */
+
+const lookupSrc = canarySrc;
+
+check(
+  "K7",
+  /const existingVerified = !!launchId && existing\.isSuccess && existing\.data\?\.ok === true;/.test(
+    routeSrc,
+  ) && /const existingUnverified = !!launchId && !existingVerified;/.test(routeSrc),
+  "only an explicit ok:true lookup counts as a verified existing-attempt answer",
+);
+check(
+  "K8",
+  /const attemptBlocksCreation = existingUnverified \|\| existingAttempt !== null;/.test(routeSrc),
+  "loading/error/refused lookups block Create production attempt (fail closed)",
+);
+check(
+  "K9",
+  /Checking existing production attempt/.test(routeSrc) &&
+    /Existing-attempt check could not be verified/.test(routeSrc),
+  "operator sees explicit checking and unverified states, never a silent no-attempt",
+);
+check(
+  "K10",
+  /notice: "CONTROL_STATE_UNAVAILABLE"/.test(lookupSrc) &&
+    /catch \(caught\)/.test(lookupSrc) &&
+    !/\.not\("status", "in"/.test(lookupSrc),
+  "lookup catches throws and uses explicit per-status negation, not a serialized IN list",
+);
+check(
+  "K11",
+  /readCanaryExistingAttempt[\s\S]*?insert|readCanaryExistingAttempt[\s\S]*?\.rpc\(/.test(
+    lookupSrc.slice(lookupSrc.indexOf("readCanaryExistingAttempt")),
+  ) === false,
+  "existing-attempt lookup performs no insert and no RPC mutation",
+);
+
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

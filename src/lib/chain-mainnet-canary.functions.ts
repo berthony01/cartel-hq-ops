@@ -420,11 +420,19 @@ export type CanaryExistingAttempt = {
 export type CanaryExistingAttemptResult = {
   ok: boolean;
   notice: CanaryNotice | null;
+  /** Sanitized, truncated diagnostic for the owner-only console. Never secrets. */
+  detail: string | null;
   attempt: CanaryExistingAttempt | null;
 };
 
 /** Terminal statuses are NOT blocking: a new attempt is legitimate after them. */
 const TERMINAL_ATTEMPT_STATUSES = ["FAILED", "ABANDONED"] as const;
+
+function sanitizeDetail(value: unknown): string | null {
+  const text = typeof value === "string" ? value : value instanceof Error ? value.message : "";
+  const trimmed = text.replace(/\s+/g, " ").trim();
+  return trimmed ? trimmed.slice(0, 200) : null;
+}
 
 export const readCanaryExistingAttempt = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -435,43 +443,71 @@ export const readCanaryExistingAttempt = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }): Promise<CanaryExistingAttemptResult> => {
     if (!(await isPlatformOwner(context.supabase as unknown as SupabaseLike, context.userId))) {
-      return { ok: false, notice: "NOT_AUTHORIZED", attempt: null };
+      return { ok: false, notice: "NOT_AUTHORIZED", detail: null, attempt: null };
     }
 
-    // READ ONLY. Exact chain, exact environment, exact deployment kind.
-    const { data: rows, error } = await context.supabase
-      .from("launch_chain_deployments")
-      .select(
-        "id, attempt_number, status, deployer_address, token_recipient, token_name, token_symbol, token_total_supply_text, tx_hash, contract_address, created_at",
-      )
-      .eq("launch_id", data.launchId)
-      .eq("chain_id", ROBINHOOD_MAINNET_CHAIN_ID)
-      .eq("network_environment", "PRODUCTION")
-      .eq("deployment_kind", "FIXED_SUPPLY_ERC20")
-      .not("status", "in", `(${TERMINAL_ATTEMPT_STATUSES.join(",")})`)
-      .order("attempt_number", { ascending: false })
-      .limit(1);
+    try {
+      // READ ONLY. Exact chain, exact environment, exact deployment kind.
+      // Terminal statuses are excluded with explicit per-status negations rather
+      // than a serialized IN list, so no list encoding can silently mis-filter.
+      let query = context.supabase
+        .from("launch_chain_deployments")
+        .select(
+          "id, attempt_number, status, deployer_address, token_recipient, token_name, token_symbol, token_total_supply_text, tx_hash, contract_address, created_at",
+        )
+        .eq("launch_id", data.launchId)
+        .eq("chain_id", ROBINHOOD_MAINNET_CHAIN_ID)
+        .eq("network_environment", "PRODUCTION")
+        .eq("deployment_kind", "FIXED_SUPPLY_ERC20");
 
-    if (error) return { ok: false, notice: "RPC_REFUSED", attempt: null };
+      for (const terminal of TERMINAL_ATTEMPT_STATUSES) {
+        query = query.not("status", "eq", terminal);
+      }
 
-    const row = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
-    if (!row) return { ok: true, notice: null, attempt: null };
+      const { data: rows, error } = await query
+        .order("attempt_number", { ascending: false })
+        .limit(1);
 
-    return {
-      ok: true,
-      notice: null,
-      attempt: {
-        deploymentId: row.id,
-        attemptNumber: row.attempt_number,
-        status: row.status,
-        deployerAddress: row.deployer_address,
-        tokenRecipient: row.token_recipient,
-        tokenName: row.token_name,
-        tokenSymbol: row.token_symbol,
-        tokenTotalSupplyBaseUnits: row.token_total_supply_text,
-        txHash: row.tx_hash,
-        contractAddress: row.contract_address,
-        createdAt: row.created_at,
-      },
-    };
+      if (error) {
+        console.error("[canary] existing-attempt lookup failed", error.message);
+        return {
+          ok: false,
+          notice: "RPC_REFUSED",
+          detail: sanitizeDetail(error.message),
+          attempt: null,
+        };
+      }
+
+      const row = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+      if (!row) return { ok: true, notice: null, detail: null, attempt: null };
+
+      return {
+        ok: true,
+        notice: null,
+        detail: null,
+        attempt: {
+          deploymentId: row.id,
+          attemptNumber: row.attempt_number,
+          status: row.status,
+          deployerAddress: row.deployer_address,
+          tokenRecipient: row.token_recipient,
+          tokenName: row.token_name,
+          tokenSymbol: row.token_symbol,
+          tokenTotalSupplyBaseUnits: row.token_total_supply_text,
+          txHash: row.tx_hash,
+          contractAddress: row.contract_address,
+          createdAt: row.created_at,
+        },
+      };
+    } catch (caught) {
+      // FAIL CLOSED: an unverified lookup is never reported as "no attempt".
+      console.error("[canary] existing-attempt lookup threw", caught);
+      return {
+        ok: false,
+        notice: "CONTROL_STATE_UNAVAILABLE",
+        detail: sanitizeDetail(caught),
+        attempt: null,
+      };
+    }
   });
+

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { AlertTriangle, Loader2, Lock, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Loader2, Lock, ShieldAlert, ShieldCheck } from "lucide-react";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { EmptyState } from "@/components/cartel/EmptyState";
@@ -137,9 +137,25 @@ function CanaryConsole() {
     queryKey: ["canary-existing-attempt", launchId],
     queryFn: () => readExisting({ data: { launchId } }),
     enabled: !!launchId,
+    retry: false,
   });
   const existingAttempt = existing.data?.attempt ?? null;
-  const attemptBlocksCreation = existingAttempt !== null;
+  /**
+   * FAIL CLOSED. Only an explicit successful lookup (ok === true) counts as a
+   * verified answer. Loading, errors, refused reads and notices are all treated
+   * as "unverified", which BLOCKS creating a new production attempt.
+   */
+  const existingVerified = !!launchId && existing.isSuccess && existing.data?.ok === true;
+  const existingUnverified = !!launchId && !existingVerified;
+  const existingNotice =
+    existing.data && existing.data.ok !== true
+      ? (existing.data.notice ?? "LOOKUP_REFUSED")
+      : existing.isError
+        ? "LOOKUP_ERROR"
+        : null;
+  const existingDetail = existing.data?.detail ?? null;
+  const attemptBlocksCreation = existingUnverified || existingAttempt !== null;
+
 
   const hasActiveState = !!deploymentId || !!authorizationId;
 
@@ -253,7 +269,40 @@ function CanaryConsole() {
         </Section>
       ) : null}
 
+      {launchId && !existingAttempt ? (
+        <Section
+          variant="surface"
+          leading={
+            existingUnverified ? (
+              <AlertTriangle className="h-4 w-4 text-danger" />
+            ) : (
+              <ShieldCheck className="h-4 w-4 text-success" />
+            )
+          }
+          title={
+            existing.isPending || existing.isFetching
+              ? "Checking existing production attempt…"
+              : existingVerified
+                ? "No existing production attempt for this launch"
+                : "Existing-attempt check could not be verified"
+          }
+          description={
+            existingVerified
+              ? "Verified read: no nonterminal Robinhood Chain production attempt exists for this launch."
+              : "Fail closed: an unverified lookup is never treated as “no attempt”. Creating a production attempt stays blocked."
+          }
+        >
+          {existingUnverified ? (
+            <div className="grid gap-1 sm:grid-cols-2">
+              <ReadoutLine label={"Lookup state"} value={existingNotice ?? "PENDING"} />
+              <ReadoutLine label={"Detail"} value={existingDetail} />
+            </div>
+          ) : null}
+        </Section>
+      ) : null}
+
       {existingAttempt ? (
+
         <Section
           variant="surface"
           leading={<AlertTriangle className="h-4 w-4 text-danger" />}
@@ -390,13 +439,20 @@ function CanaryConsole() {
           </Button>
         </div>
 
-        {attemptBlocksCreation ? (
+        {existingAttempt ? (
           <p className="mt-2 text-xs text-danger">
-            Blocked: production attempt #{existingAttempt?.attemptNumber} for this launch is still
-            nonterminal ({existingAttempt?.status}). Creating another attempt is refused here. Use
+            Blocked: production attempt #{existingAttempt.attemptNumber} for this launch is still
+            nonterminal ({existingAttempt.status}). Creating another attempt is refused here. Use
             Resume existing attempt above to continue with its immutable identity.
           </p>
+        ) : existingUnverified ? (
+          <p className="mt-2 text-xs text-danger">
+            Blocked: the existing-attempt check has not returned a verified result
+            {existingNotice ? ` (${existingNotice})` : " yet"}. Creating a production attempt stays
+            disabled until the check succeeds.
+          </p>
         ) : null}
+
 
 
 
