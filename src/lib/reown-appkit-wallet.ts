@@ -145,7 +145,7 @@ async function runCreateAppKit(
     const origin = getCurrentOrigin() ?? "";
     // THE ONLY `createAppKit` CALL IN THE APPLICATION.
     const instance = createAppKit({
-      adapters: [new EthersAdapter()],
+      adapters: [new EthersAdapter() as never],
       projectId,
       networks: [ROBINHOOD_APPKIT_NETWORK as never],
       defaultNetwork: ROBINHOOD_APPKIT_NETWORK as never,
