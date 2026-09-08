@@ -68,6 +68,7 @@ export type WalletConnectorKind = "injected" | "walletconnect";
 export type WalletConnectorNotice =
   | "NO_INJECTED_PROVIDER"
   | "WALLETCONNECT_NOT_CONFIGURED"
+  | "WALLETCONNECT_LIBRARY_LOAD_FAILED"
   | "WALLETCONNECT_INIT_FAILED"
   | "WALLETCONNECT_TIMEOUT"
   | "WRONG_CHAIN_APPROVED"
