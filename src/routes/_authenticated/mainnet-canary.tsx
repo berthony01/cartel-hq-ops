@@ -39,8 +39,10 @@ import {
   createCanaryDeploymentAttempt,
   engageCanaryEmergencyStop,
   readCanaryExecutionState,
+  readCanaryExistingAttempt,
   type CanaryExecutionStateResult,
 } from "@/lib/chain-mainnet-canary.functions";
+
 import { presignMainnetTokenDeployment } from "@/lib/chain-mainnet-presign.functions";
 import {
   authorizeMainnetSendWindow,
@@ -125,7 +127,22 @@ function CanaryConsole() {
 
   const chainEligible = isRobinhoodChainLaunchMetadata(selected?.chain);
 
+  /**
+   * READ-ONLY awareness of an existing nonterminal production attempt for the
+   * selected launch. Nothing here creates, mutates or advances any stage, and
+   * nothing is auto-resumed: the operator must click Resume explicitly.
+   */
+  const readExisting = useServerFn(readCanaryExistingAttempt);
+  const existing = useQuery({
+    queryKey: ["canary-existing-attempt", launchId],
+    queryFn: () => readExisting({ data: { launchId } }),
+    enabled: !!launchId,
+  });
+  const existingAttempt = existing.data?.attempt ?? null;
+  const attemptBlocksCreation = existingAttempt !== null;
+
   const hasActiveState = !!deploymentId || !!authorizationId;
+
   const armReady = armPhrase === ARM_PHRASE;
   const sendReady =
     sendPhrase === SEND_PHRASE &&
@@ -236,10 +253,60 @@ function CanaryConsole() {
         </Section>
       ) : null}
 
+      {existingAttempt ? (
+        <Section
+          variant="surface"
+          leading={<AlertTriangle className="h-4 w-4 text-danger" />}
+          title={`Existing production attempt #${existingAttempt.attemptNumber} found`}
+          description="A nonterminal Robinhood Chain production attempt already exists for this launch. Its identity is immutable and no new attempt may be created."
+        >
+          <div className="grid gap-1 sm:grid-cols-2">
+            <ReadoutLine label={"Status"} value={existingAttempt.status} />
+            <ReadoutLine label={"Deployment id"} value={existingAttempt.deploymentId} />
+            <ReadoutLine label={"Immutable deployer"} value={existingAttempt.deployerAddress} />
+            <ReadoutLine label={"Immutable recipient"} value={existingAttempt.tokenRecipient} />
+            <ReadoutLine label={"Token"} value={existingAttempt.tokenName} />
+            <ReadoutLine label={"Onchain symbol"} value={existingAttempt.tokenSymbol} />
+            <ReadoutLine
+              label={"Base units"}
+              value={existingAttempt.tokenTotalSupplyBaseUnits}
+            />
+            <ReadoutLine label={"Tx hash"} value={existingAttempt.txHash} />
+            <ReadoutLine label={"Contract"} value={existingAttempt.contractAddress} />
+            <ReadoutLine label={"Created"} value={existingAttempt.createdAt} />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy !== null || deploymentId === existingAttempt.deploymentId}
+              onClick={() => {
+                // LOCAL UI STATE ONLY. This loads the existing deployment id into
+                // the console. It never presigns, arms, claims, sends or verifies.
+                setDeploymentId(existingAttempt.deploymentId);
+                setAuthorizationId(null);
+                setArmSuccess(false);
+                setClaimSuccess(false);
+                note(`Resumed existing attempt #${existingAttempt.attemptNumber} (local state only).`);
+              }}
+            >
+              Resume existing attempt
+            </Button>
+          </div>
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Resuming only loads the deployment id below. Nothing is presigned, armed, claimed,
+            sent or verified by this action.
+          </p>
+        </Section>
+      ) : null}
+
       <DeploymentWalletConnect
-        expectedDeployer={intent?.deployer ?? null}
+        expectedDeployer={
+          existingAttempt?.deployerAddress ?? (deployer.trim() === "" ? null : deployer.trim())
+        }
         expectedChainId={ROBINHOOD_MAINNET_CHAIN_ID}
       />
+
 
       <Section
 
@@ -271,7 +338,10 @@ function CanaryConsole() {
           onSupplyWhole={setSupply}
           selectedChain={selected?.chain ?? null}
           chainEligible={chainEligible}
+          attemptBoundDeployer={existingAttempt?.deployerAddress ?? null}
+          attemptBoundRecipient={existingAttempt?.tokenRecipient ?? null}
         />
+
 
         {intentError ? <p className="mt-2 text-xs text-danger">{intentError}</p> : null}
 
@@ -281,10 +351,18 @@ function CanaryConsole() {
           </Button>
           <Button
             size="sm"
-            disabled={busy !== null || !intent || !launchId || !chainEligible || !!deploymentId}
+            disabled={
+              busy !== null ||
+              !intent ||
+              !launchId ||
+              !chainEligible ||
+              !!deploymentId ||
+              attemptBlocksCreation
+            }
             onClick={() =>
               run("attempt", async () => {
-                if (!intent || !chainEligible) return;
+                if (!intent || !chainEligible || attemptBlocksCreation) return;
+
                 const result = await createAttempt({
                   data: {
                     launchId,
@@ -311,6 +389,15 @@ function CanaryConsole() {
             Create production attempt
           </Button>
         </div>
+
+        {attemptBlocksCreation ? (
+          <p className="mt-2 text-xs text-danger">
+            Blocked: production attempt #{existingAttempt?.attemptNumber} for this launch is still
+            nonterminal ({existingAttempt?.status}). Creating another attempt is refused here. Use
+            Resume existing attempt above to continue with its immutable identity.
+          </p>
+        ) : null}
+
 
 
         {intent ? (
