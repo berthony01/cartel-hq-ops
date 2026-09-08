@@ -236,7 +236,13 @@ function CanaryConsole() {
         </Section>
       ) : null}
 
+      <DeploymentWalletConnect
+        expectedDeployer={intent?.deployer ?? null}
+        expectedChainId={ROBINHOOD_MAINNET_CHAIN_ID}
+      />
+
       <Section
+
         variant="surface"
         title="A — Exact production intent"
         description="One launch only. Identity is bound immutably to the attempt row."
