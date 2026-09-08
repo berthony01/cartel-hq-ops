@@ -103,6 +103,34 @@ let walletName: string | null = null;
 /** Canonical hex chain ids proven by the active WalletConnect session. */
 let sessionChainEvidence: string[] | null = null;
 
+/**
+ * RECONNECT INFRASTRUCTURE (separate from session state, on purpose).
+ *
+ * `EthereumProvider.init()` builds Core / SignClient / persisted storage and
+ * the AppKit modal. Doing that again on a second explicit connect click is what
+ * produced `WALLETCONNECT_INIT_FAILED` after a disconnect. The initialized
+ * provider is therefore cached for the page lifecycle and REUSED for every
+ * later explicit connect. A disconnect, a rejection, a timeout and a wrong
+ * chain tear down the SESSION only and deliberately keep this cache. A full
+ * page reload resets it naturally.
+ */
+let initializedWalletConnectProvider: Eip1193Provider | null = null;
+/** Single in-flight init, so a double tap can never start two initializations. */
+let walletConnectInitPromise: Promise<WalletConnectInit> | null = null;
+
+type WalletConnectInit = {
+  provider: Eip1193Provider | null;
+  notice: WalletConnectorNotice | null;
+};
+
+/**
+ * Stable, explicit WalletConnect storage namespace. A one-time namespace
+ * migration away from any malformed legacy WalletConnect state. It is a fixed
+ * constant — never random, never per-connect — and no localStorage or
+ * IndexedDB key is ever read or deleted by this module.
+ */
+export const WALLETCONNECT_STORAGE_PREFIX = "cartel-hq-mainnet-canary-v1";
+
 const listeners = new Set<() => void>();
 
 function emit(): void {
