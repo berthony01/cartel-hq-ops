@@ -82,7 +82,7 @@ check(
   "B1",
   /caipNetworkId: `eip155:\$\{ROBINHOOD_MAINNET_CHAIN_ID\}`/.test(appkitCode) &&
     /id: ROBINHOOD_MAINNET_CHAIN_ID as number/.test(appkitCode) &&
-    /networks: \[ROBINHOOD_APPKIT_NETWORK as never\]/.test(appkitCode),
+    /networks: \[ROBINHOOD_APPKIT_NETWORK\]/.test(appkitCode),
   "AppKit declares exactly one custom network, built from the mainnet chain constant",
 );
 check(
@@ -810,7 +810,7 @@ check(
   "T4",
   declaresMember("ready") &&
     /await instance\.ready\(\);/.test(appkitCode) &&
-    appkitCode.indexOf("await instance.ready()") < appkitCode.indexOf("appKit.open("),
+    appkitCode.indexOf("await instance.ready()") < appkitCode.indexOf('.open({ view: "Connect"'),
   "the chooser is opened only after the installed public ready() readiness promise resolves",
 );
 check(
