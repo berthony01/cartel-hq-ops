@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ExternalLink, Loader2, Smartphone, Wallet } from "lucide-react";
+import { ExternalLink, Loader2, Network, Smartphone, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Section } from "@/components/cartel/Section";
 import { ReadoutLine } from "@/components/cartel/CanaryReadout";
@@ -12,9 +12,11 @@ import {
   isEmbeddedBrowserContext,
   isInjectedWalletAvailable,
   isWalletConnectConfigured,
+  requestRobinhoodChainSwitch,
   subscribeWalletConnector,
   WALLETCONNECT_CONNECT_TIMEOUT_MS,
   type WalletConnectorNotice,
+  type WalletSwitchNotice,
 } from "@/lib/wallet-connector";
 import { inspectMainnetWalletForHandoff } from "@/lib/chain-mainnet-wallet";
 
@@ -27,9 +29,14 @@ import { inspectMainnetWalletForHandoff } from "@/lib/chain-mainnet-wallet";
  * (eth_accounts / eth_chainId) runs only once a connector has been explicitly
  * activated by the operator clicking one of the two connect buttons.
  *
+ * The network switch is likewise EXPLICIT: it is reachable only from the
+ * operator's click on "Switch to Robinhood Chain". Nothing on mount, on
+ * connect, on re-check or in an event handler requests a network change, and no
+ * network is ever added automatically.
+ *
  * Connection only. This panel never signs, never sends, and never advances the
- * canary sequence: connecting cannot trigger Presign, Arm, Claim, Send Window
- * or Send.
+ * canary sequence: connecting or switching cannot trigger Presign, Arm, Claim,
+ * Send Window or Send.
  */
 
 type Props = {
@@ -54,11 +61,18 @@ const NOTICE_COPY: Record<WalletConnectorNotice, string> = {
   NO_ACCOUNT: "The wallet is reachable but exposed no account.",
 };
 
-export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: Props) {
-  const [busy, setBusy] = useState<"injected" | "walletconnect" | "refresh" | "disconnect" | null>(
-    null,
-  );
-  const [notice, setNotice] = useState<WalletConnectorNotice | null>(null);
+const SWITCH_NOTICE_COPY: Record<WalletSwitchNotice, string> = {
+  NO_ACTIVE_CONNECTOR: "No wallet is connected, so no network change was requested.",
+  NETWORK_SWITCH_REJECTED:
+    "Diagnostic code NETWORK_SWITCH_REJECTED — the network change was declined in the wallet. Nothing changed and nothing advanced.",
+  NETWORK_SWITCH_UNSUPPORTED:
+    "Diagnostic code NETWORK_SWITCH_UNSUPPORTED — this wallet cannot change networks from a website. Select Robinhood Chain inside the wallet itself, then re-check.",
+  NETWORK_UNKNOWN_TO_WALLET:
+    "Diagnostic code NETWORK_UNKNOWN_TO_WALLET — Robinhood Chain is not present in this wallet. CARTEL HQ never adds a network for you: add Robinhood Chain (chain id 4663) in the wallet yourself, then re-check.",
+  NETWORK_SWITCH_FAILED:
+    "Diagnostic code NETWORK_SWITCH_FAILED — the network change did not complete. Nothing changed and nothing advanced.",
+};
+
   const [kind, setKind] = useState<string | null>(null);
   const [walletLabel, setWalletLabel] = useState<string | null>(null);
   const [account, setAccount] = useState<string | null>(null);
