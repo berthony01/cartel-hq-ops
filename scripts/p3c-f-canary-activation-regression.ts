@@ -265,7 +265,7 @@ check(
 /* K7–K11 — existing-attempt lookup must FAIL CLOSED                    */
 /* ------------------------------------------------------------------ */
 
-const canarySrc = read("src/lib/chain-mainnet-canary.functions.ts");
+const lookupSrc = canarySrc;
 
 check(
   "K7",
