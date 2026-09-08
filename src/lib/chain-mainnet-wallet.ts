@@ -1,5 +1,9 @@
 import { MAINNET_DEPLOYMENT_TX_ENABLED, ROBINHOOD_MAINNET_CHAIN_ID } from "./chain-mainnet-registry";
-import { getActiveProvider } from "./wallet-connector";
+import {
+  getActiveProvider,
+  getActiveSessionChainEvidence,
+  normalizeChainId,
+} from "./wallet-connector";
 import type { MainnetWalletEnvelope } from "./chain-mainnet-handoff.functions";
 
 
