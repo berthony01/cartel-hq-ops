@@ -521,8 +521,9 @@ const initKeys = (initBlock ?? "")
 check(
   "R1",
   initBlock !== undefined &&
-    initKeys.join(",") === "projectId,optionalChains,showQrModal,methods,events,metadata",
-  "init options exactly match the last-known-working modal baseline option set, in order",
+    initKeys.join(",") ===
+      "projectId,customStoragePrefix,optionalChains,showQrModal,methods,events,metadata",
+  "init options are the last-known-working modal baseline plus the stable storage prefix, in order",
 );
 check(
   "R2",
