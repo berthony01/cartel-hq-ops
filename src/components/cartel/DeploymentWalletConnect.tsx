@@ -265,6 +265,47 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
         </Button>
       </div>
 
+      {account && !chainMatches ? (
+        <div className="mt-3 rounded-md border border-danger/40 bg-danger/5 p-3">
+          <p className="text-xs text-danger">
+            This wallet is connected on a different network. Robinhood Chain mainnet (chain id{" "}
+            {expectedChainId}) is required. Nothing can be signed or sent until the wallet itself is
+            on that network.
+          </p>
+          <Button
+            className="mt-2"
+            size="sm"
+            variant="outline"
+            disabled={busy !== null}
+            onClick={async () => {
+              // EXPLICIT USER GESTURE. The only switch call in the app, and it
+              // never adds a network and never retries.
+              setBusy("switch");
+              setSwitchNotice(null);
+              try {
+                const result = await requestRobinhoodChainSwitch();
+                setSwitchNotice(result.notice);
+                // Approved switch: re-read account + chain exactly once. No
+                // sequence stage runs, nothing is persisted.
+                if (result.ok) await refresh();
+              } finally {
+                setBusy(null);
+              }
+            }}
+          >
+            {busy === "switch" ? (
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Network className="mr-2 h-3.5 w-3.5" />
+            )}
+            Switch to Robinhood Chain
+          </Button>
+          {switchNotice ? (
+            <p className="mt-2 text-xs text-danger">{SWITCH_NOTICE_COPY[switchNotice]}</p>
+          ) : null}
+        </div>
+      ) : null}
+
       {kind === null ? (
         <p className="mt-3 text-xs text-foreground">Not connected — choose a wallet above.</p>
       ) : null}
@@ -280,9 +321,10 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
         Any EVM wallet is supported. Robinhood Wallet is recommended because it supports Robinhood
         Chain natively, but it is not required: MetaMask and other EVM wallets work too, as long as
         Robinhood Chain (chain id {expectedChainId}) is already available and approved in that
-        wallet. CARTEL HQ never adds or switches a network for you, and never asks for a private
-        key, seed phrase or wallet password.
+        wallet. CARTEL HQ never adds a network for you, only asks the wallet to switch when you
+        press the button above, and never asks for a private key, seed phrase or wallet password.
       </p>
+
 
       <div className="mt-3 grid gap-1 sm:grid-cols-2">
         <ReadoutLine
