@@ -178,18 +178,21 @@ export const ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL = `0x${(
 /* Environment / availability                                          */
 /* ------------------------------------------------------------------ */
 
-/** PUBLIC client identifier. Absent => WalletConnect stays unavailable. */
-export function getWalletConnectProjectId(): string | null {
-  const raw = (import.meta.env as Record<string, string | undefined>)[
-    "VITE_WALLETCONNECT_PROJECT_ID"
-  ];
-  if (typeof raw !== "string") return null;
-  const value = raw.trim();
-  return value.length > 0 ? value : null;
+/**
+ * PUBLIC client identifier, owned by the AppKit module. Absent => the mobile /
+ * multi-wallet chooser stays unavailable and fails closed.
+ */
+export function isWalletConnectConfigured(): boolean {
+  return isReownConfigured();
 }
 
-export function isWalletConnectConfigured(): boolean {
-  return getWalletConnectProjectId() !== null;
+/**
+ * Current browser origin, exposed so the panel can name the exact origin that
+ * must be allow-listed in the Reown dashboard. Derived from
+ * `window.location.origin` only — never a secret and never a hardcoded domain.
+ */
+export function getConnectorOrigin(): string | null {
+  return getCurrentOrigin();
 }
 
 /** Reads `window.ethereum` inside a function call only. Never at module scope. */
