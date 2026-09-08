@@ -351,10 +351,18 @@ function CanaryConsole() {
           </Button>
           <Button
             size="sm"
-            disabled={busy !== null || !intent || !launchId || !chainEligible || !!deploymentId}
+            disabled={
+              busy !== null ||
+              !intent ||
+              !launchId ||
+              !chainEligible ||
+              !!deploymentId ||
+              attemptBlocksCreation
+            }
             onClick={() =>
               run("attempt", async () => {
-                if (!intent || !chainEligible) return;
+                if (!intent || !chainEligible || attemptBlocksCreation) return;
+
                 const result = await createAttempt({
                   data: {
                     launchId,
