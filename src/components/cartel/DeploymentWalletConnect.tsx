@@ -73,7 +73,14 @@ const SWITCH_NOTICE_COPY: Record<WalletSwitchNotice, string> = {
     "Diagnostic code NETWORK_SWITCH_FAILED — the network change did not complete. Nothing changed and nothing advanced.",
 };
 
+export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: Props) {
+  const [busy, setBusy] = useState<
+    "injected" | "walletconnect" | "refresh" | "disconnect" | "switch" | null
+  >(null);
+  const [notice, setNotice] = useState<WalletConnectorNotice | null>(null);
+  const [switchNotice, setSwitchNotice] = useState<WalletSwitchNotice | null>(null);
   const [kind, setKind] = useState<string | null>(null);
+
   const [walletLabel, setWalletLabel] = useState<string | null>(null);
   const [account, setAccount] = useState<string | null>(null);
   const [chainId, setChainId] = useState<string | null>(null);
