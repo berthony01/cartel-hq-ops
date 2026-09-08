@@ -178,7 +178,16 @@ async function runCreateAppKit(
         icons: origin ? [`${origin}/favicon.ico`] : [],
       },
     });
-    return { appKit: instance as unknown as AppKitHandle, notice: null };
+    /**
+     * PROVEN READINESS GAP. `createAppKit` returns before its internal
+     * `initialize()` promise settles, and the installed `open()` awaits only
+     * `injectModalUi()` — never that promise. The installed client exposes the
+     * public `ready(): Promise<void>` which awaits it, so the chooser is only
+     * ever opened after initialization has completed. This awaits readiness; it
+     * connects nothing, opens nothing and touches no wallet.
+     */
+    await instance.ready();
+    return { appKit: instance, notice: null };
   } catch (error) {
     return { appKit: null, notice: classifyAppKitError(error) };
   }
