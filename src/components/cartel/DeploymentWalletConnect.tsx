@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Smartphone, Wallet } from "lucide-react";
+import { ExternalLink, Loader2, Smartphone, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Section } from "@/components/cartel/Section";
 import { ReadoutLine } from "@/components/cartel/CanaryReadout";
@@ -8,9 +8,12 @@ import {
   connectWalletConnect,
   disconnect,
   getActiveConnectorKind,
+  getStandaloneAppUrl,
+  isEmbeddedBrowserContext,
   isInjectedWalletAvailable,
   isWalletConnectConfigured,
   subscribeWalletConnector,
+  WALLETCONNECT_CONNECT_TIMEOUT_MS,
   type WalletConnectorNotice,
 } from "@/lib/wallet-connector";
 import { inspectMainnetWalletForHandoff } from "@/lib/chain-mainnet-wallet";
@@ -39,6 +42,9 @@ const NOTICE_COPY: Record<WalletConnectorNotice, string> = {
   WALLETCONNECT_NOT_CONFIGURED:
     "WalletConnect is not configured for this deployment. A public WalletConnect project id must be present in the environment before mobile connection is possible.",
   WALLETCONNECT_INIT_FAILED: "WalletConnect could not start. Nothing was connected.",
+  WALLETCONNECT_TIMEOUT: `The wallet never completed the connection within ${Math.round(
+    WALLETCONNECT_CONNECT_TIMEOUT_MS / 1000,
+  )} seconds, so the attempt was cancelled and nothing was connected. This usually means the wallet hand-off could not return to this page. Open CARTEL HQ in a standalone browser tab, or inside the wallet's own browser, and choose the wallet again.`,
   CONNECTION_REJECTED_OR_FAILED: "The wallet connection was rejected or failed. Nothing changed.",
   NO_ACCOUNT: "The wallet is reachable but exposed no account.",
 };
@@ -56,6 +62,8 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
   const [chainMatches, setChainMatches] = useState(false);
   const [injectedAvailable, setInjectedAvailable] = useState(false);
   const [walletConnectReady, setWalletConnectReady] = useState(false);
+  const [embedded, setEmbedded] = useState(false);
+  const [standaloneUrl, setStandaloneUrl] = useState<string | null>(null);
 
   const clearInspection = useCallback(() => {
     setAccount(null);
@@ -71,6 +79,8 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
   const refreshAvailability = useCallback(() => {
     setInjectedAvailable(isInjectedWalletAvailable());
     setWalletConnectReady(isWalletConnectConfigured());
+    setEmbedded(isEmbeddedBrowserContext());
+    setStandaloneUrl(getStandaloneAppUrl());
     const active = getActiveConnectorKind();
     setKind(active);
     return active;
@@ -117,6 +127,30 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
       title="Connect Deployment Wallet"
       description="Choose a wallet below. Nothing is read from any wallet until you click one of these buttons, and connecting never signs, sends or advances the sequence."
     >
+      {embedded ? (
+        <div className="mb-3 rounded-md border border-danger/40 bg-danger/5 p-3">
+          <p className="text-xs text-danger">
+            This page appears to be running inside an embedded preview or in-app browser. Mobile
+            wallet hand-offs (deep links) often cannot return here, so a connection can appear to
+            load forever. For mobile testing, open CARTEL HQ in a standalone browser tab or inside
+            the wallet&apos;s own dapp browser.
+          </p>
+          {standaloneUrl ? (
+            <Button
+              className="mt-2"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                window.open(standaloneUrl, "_blank", "noopener,noreferrer");
+              }}
+            >
+              <ExternalLink className="mr-2 h-3.5 w-3.5" />
+              Open standalone preview
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap gap-2">
         <Button
           size="sm"
@@ -125,11 +159,16 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
           onClick={async () => {
             setBusy("walletconnect");
             setNotice(null);
-            const result = await connectWalletConnect();
-            setNotice(result.notice);
-            setWalletLabel(result.state.walletName);
-            await refresh();
-            setBusy(null);
+            try {
+              const result = await connectWalletConnect();
+              setNotice(result.notice);
+              setWalletLabel(result.state.walletName);
+              await refresh();
+            } catch {
+              setNotice("CONNECTION_REJECTED_OR_FAILED");
+            } finally {
+              setBusy(null);
+            }
           }}
         >
           {busy === "walletconnect" ? (
@@ -147,11 +186,16 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
           onClick={async () => {
             setBusy("injected");
             setNotice(null);
-            const result = await connectInjected();
-            setNotice(result.notice);
-            setWalletLabel(null);
-            await refresh();
-            setBusy(null);
+            try {
+              const result = await connectInjected();
+              setNotice(result.notice);
+              setWalletLabel(null);
+              await refresh();
+            } catch {
+              setNotice("CONNECTION_REJECTED_OR_FAILED");
+            } finally {
+              setBusy(null);
+            }
           }}
         >
           {busy === "injected" ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
@@ -164,8 +208,11 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
           disabled={busy !== null || kind === null}
           onClick={async () => {
             setBusy("refresh");
-            await refresh();
-            setBusy(null);
+            try {
+              await refresh();
+            } finally {
+              setBusy(null);
+            }
           }}
         >
           Re-check wallet
@@ -177,12 +224,15 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
           disabled={busy !== null || kind === null}
           onClick={async () => {
             setBusy("disconnect");
-            await disconnect();
-            setNotice(null);
-            setWalletLabel(null);
-            clearInspection();
-            refreshAvailability();
-            setBusy(null);
+            try {
+              await disconnect();
+              setNotice(null);
+              setWalletLabel(null);
+              clearInspection();
+              refreshAvailability();
+            } finally {
+              setBusy(null);
+            }
           }}
         >
           Disconnect
@@ -199,6 +249,13 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
         <p className="mt-1 text-xs text-muted-foreground">{NOTICE_COPY.NO_INJECTED_PROVIDER}</p>
       ) : null}
       {notice ? <p className="mt-2 text-xs text-danger">{NOTICE_COPY[notice]}</p> : null}
+
+      <p className="mt-3 text-[11px] text-muted-foreground">
+        Robinhood Wallet is the preferred wallet for this canary because it supports Robinhood Chain
+        natively. MetaMask can only be used if Robinhood Chain (chain id {expectedChainId}) has
+        already been added inside MetaMask yourself — CARTEL HQ never adds or switches a network for
+        you. CARTEL HQ never asks for a private key, seed phrase or wallet password.
+      </p>
 
       <div className="mt-3 grid gap-1 sm:grid-cols-2">
         <ReadoutLine
