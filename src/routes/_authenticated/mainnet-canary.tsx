@@ -331,6 +331,8 @@ function CanaryConsole() {
               });
               setQuote(result);
               setAuthorizationId(result.authorizationId);
+              setArmSuccess(false);
+              setClaimSuccess(false);
               note(`Presign: ${result.notice ?? "issued"}.`);
             })
           }
