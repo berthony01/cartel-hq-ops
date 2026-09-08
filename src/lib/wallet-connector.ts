@@ -11,11 +11,14 @@ import { ROBINHOOD_MAINNET_CHAIN_ID } from "./chain-mainnet-registry";
  *   - NO module-scope browser access. `window` is only read inside functions.
  *   - The WalletConnect package is loaded by DYNAMIC import inside a
  *     browser-executed function, so SSR never evaluates it.
- *   - This module NEVER signs, never sends, never estimates, never switches or
- *     adds a network. It resolves an EIP-1193 provider and nothing else.
- *     `wallet_switchEthereumChain` / `wallet_addEthereumChain` are absent on
- *     purpose: a wrong network fails closed and the operator fixes it in the
- *     wallet.
+ *   - This module NEVER signs, never sends, never estimates and never ADDS a
+ *     network. It resolves an EIP-1193 provider, and exposes exactly one
+ *     explicit, user-gesture-only `wallet_switchEthereumChain` helper
+ *     (`requestRobinhoodChainSwitch`) that is never called on mount, connect,
+ *     re-check or any provider event. `wallet_addEthereumChain` is absent on
+ *     purpose: an unknown network fails closed and the operator adds it in the
+ *     wallet itself.
+
  *   - No key material, seed, password, signed payload, transaction envelope or
  *     server authorization is ever stored here or anywhere else in the client.
  *   - The WalletConnect project id is a PUBLIC client identifier read from the
