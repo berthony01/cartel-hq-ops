@@ -39,8 +39,10 @@ import {
   createCanaryDeploymentAttempt,
   engageCanaryEmergencyStop,
   readCanaryExecutionState,
+  readCanaryExistingAttempt,
   type CanaryExecutionStateResult,
 } from "@/lib/chain-mainnet-canary.functions";
+
 import { presignMainnetTokenDeployment } from "@/lib/chain-mainnet-presign.functions";
 import {
   authorizeMainnetSendWindow,
