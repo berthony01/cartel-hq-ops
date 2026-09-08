@@ -127,6 +127,30 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
       title="Connect Deployment Wallet"
       description="Choose a wallet below. Nothing is read from any wallet until you click one of these buttons, and connecting never signs, sends or advances the sequence."
     >
+      {embedded ? (
+        <div className="mb-3 rounded-md border border-danger/40 bg-danger/5 p-3">
+          <p className="text-xs text-danger">
+            This page appears to be running inside an embedded preview or in-app browser. Mobile
+            wallet hand-offs (deep links) often cannot return here, so a connection can appear to
+            load forever. For mobile testing, open CARTEL HQ in a standalone browser tab or inside
+            the wallet&apos;s own dapp browser.
+          </p>
+          {standaloneUrl ? (
+            <Button
+              className="mt-2"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                window.open(standaloneUrl, "_blank", "noopener,noreferrer");
+              }}
+            >
+              <ExternalLink className="mr-2 h-3.5 w-3.5" />
+              Open standalone preview
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap gap-2">
         <Button
           size="sm"
@@ -135,11 +159,16 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
           onClick={async () => {
             setBusy("walletconnect");
             setNotice(null);
-            const result = await connectWalletConnect();
-            setNotice(result.notice);
-            setWalletLabel(result.state.walletName);
-            await refresh();
-            setBusy(null);
+            try {
+              const result = await connectWalletConnect();
+              setNotice(result.notice);
+              setWalletLabel(result.state.walletName);
+              await refresh();
+            } catch {
+              setNotice("CONNECTION_REJECTED_OR_FAILED");
+            } finally {
+              setBusy(null);
+            }
           }}
         >
           {busy === "walletconnect" ? (
