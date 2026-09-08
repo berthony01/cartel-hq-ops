@@ -1,7 +1,4 @@
-import {
-  ROBINHOOD_MAINNET_CHAIN_ID,
-  ROBINHOOD_MAINNET_PUBLIC_DIAGNOSTIC_RPC_URL,
-} from "./chain-mainnet-registry";
+import { ROBINHOOD_MAINNET_CHAIN_ID } from "./chain-mainnet-registry";
 
 /**
  * P3C-G — DEPLOYMENT WALLET CONNECTOR ABSTRACTION (browser only).
