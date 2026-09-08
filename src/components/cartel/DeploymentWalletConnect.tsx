@@ -157,7 +157,7 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
         <Button
           size="sm"
           variant="secondary"
-          disabled={busy !== null || !walletConnectReady}
+          disabled={busy !== null || !walletConnectReady || embedded}
           onClick={async () => {
             setBusy("walletconnect");
             setNotice(null);
@@ -184,7 +184,7 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
         <Button
           size="sm"
           variant="outline"
-          disabled={busy !== null || !injectedAvailable}
+          disabled={busy !== null || !injectedAvailable || embedded}
           onClick={async () => {
             setBusy("injected");
             setNotice(null);
