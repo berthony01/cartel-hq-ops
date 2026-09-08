@@ -50,8 +50,10 @@ const NOTICE_COPY: Record<WalletConnectorNotice, string> = {
     "WalletConnect is not configured for this deployment. A public WalletConnect project id must be present in the environment before mobile connection is possible.",
   WALLETCONNECT_LIBRARY_LOAD_FAILED:
     "Diagnostic code WALLETCONNECT_LIBRARY_LOAD_FAILED — the WalletConnect component could not be loaded in this browser. Nothing was connected. Try a standalone browser tab, or report this code.",
+  WALLETCONNECT_MODAL_CHUNK_FAILED:
+    "Diagnostic code WALLETCONNECT_MODAL_CHUNK_FAILED — the wallet chooser component could not be loaded in this browser. Nothing was connected. Try a standalone browser tab or a different network, or report this code.",
   WALLETCONNECT_INIT_FAILED:
-    "Diagnostic code WALLETCONNECT_INIT_FAILED — WalletConnect loaded but could not start. Nothing was connected. Report this code.",
+    "Diagnostic code WALLETCONNECT_INIT_FAILED — WalletConnect and the wallet chooser both loaded, but the connection component could not start. Nothing was connected. Report this code.",
   WALLETCONNECT_TIMEOUT: `The wallet never completed the connection within ${Math.round(
     WALLETCONNECT_CONNECT_TIMEOUT_MS / 1000,
   )} seconds, so the attempt was cancelled and nothing was connected. This usually means the wallet hand-off could not return to this page. Open CARTEL HQ in a standalone browser tab, or inside the wallet's own browser, and choose the wallet again.`,
