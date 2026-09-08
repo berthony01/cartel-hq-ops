@@ -329,6 +329,11 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
         <p className="mt-1 text-xs text-muted-foreground">{NOTICE_COPY.NO_INJECTED_PROVIDER}</p>
       ) : null}
       {notice ? <p className="mt-2 text-xs text-danger">{NOTICE_COPY[notice]}</p> : null}
+      {notice === "REOWN_ORIGIN_NOT_ALLOWED" && getConnectorOrigin() ? (
+        <p className="mt-1 text-xs text-danger">
+          Current origin: <span className="font-mono">{getConnectorOrigin()}</span>
+        </p>
+      ) : null}
 
       <p className="mt-3 text-[11px] text-muted-foreground">
         Any EVM wallet is supported. Robinhood Wallet is recommended because it supports Robinhood
