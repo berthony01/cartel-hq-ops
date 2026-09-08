@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -63,6 +63,9 @@ import { sendClaimedMainnetDeployment } from "@/lib/chain-mainnet-wallet";
  * a convenience; the server wrappers and RLS are the boundary.
  */
 
+/** Browser-tab-scoped, non-authoritative memory of the selected launch id only. */
+const LAUNCH_SELECTION_STORAGE_KEY = "cartel-hq:mainnet-canary:selected-launch";
+
 function CanaryConsole() {
   const { workspaceId } = useWorkspace();
 
@@ -126,6 +129,54 @@ function CanaryConsole() {
   );
 
   const chainEligible = isRobinhoodChainLaunchMetadata(selected?.chain);
+
+  /**
+   * LOCAL UI CONTEXT ONLY. A mobile wallet hand-off can remount this route, and
+   * losing the selected launch also silently loses the existing-attempt lookup.
+   * Only the launch id is remembered, only in this browser tab's sessionStorage,
+   * and only if it still exists in the operator's current launch list.
+   *
+   * Restoring is NOT resuming: it never builds intent, never creates, presigns,
+   * arms, claims, sends, persists or verifies anything, never touches the wallet
+   * account and never changes a network. It only re-enables the READ-ONLY
+   * existing-attempt lookup, whose immutable deployer/recipient still win.
+   */
+  const selectLaunch = (id: string) => {
+    setLaunchId(id);
+    if (typeof window === "undefined") return;
+    try {
+      if (id) window.sessionStorage.setItem(LAUNCH_SELECTION_STORAGE_KEY, id);
+      else window.sessionStorage.removeItem(LAUNCH_SELECTION_STORAGE_KEY);
+    } catch {
+      // Storage being unavailable is never fatal: selection stays in memory.
+    }
+  };
+
+  useEffect(() => {
+    if (launchId) return;
+    if (typeof window === "undefined") return;
+    const rows = launches.data;
+    if (!rows) return;
+    let stored: string | null = null;
+    try {
+      stored = window.sessionStorage.getItem(LAUNCH_SELECTION_STORAGE_KEY);
+    } catch {
+      stored = null;
+    }
+    if (!stored) return;
+    const row = rows.find((item) => item.id === stored) ?? null;
+    if (!row) {
+      try {
+        window.sessionStorage.removeItem(LAUNCH_SELECTION_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    setLaunchId(row.id);
+    setName(row.token_name ?? "");
+    setSymbol(deriveCanaryOnchainSymbol(row.ticker));
+  }, [launches.data, launchId]);
 
   /**
    * READ-ONLY awareness of an existing nonterminal production attempt for the
