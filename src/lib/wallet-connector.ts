@@ -556,19 +556,16 @@ function readPeerWalletName(provider: Eip1193Provider): string | null {
 }
 
 /**
- * SESSION teardown only. The initialized provider / Core / AppKit
- * infrastructure stays cached on purpose so a later explicit reconnect on the
- * same page reuses it instead of re-initializing. Nothing here closes the
- * global transport, removes the modal element or deletes any storage key.
+ * SESSION teardown through the OFFICIAL AppKit disconnect. The AppKit singleton
+ * itself stays alive so a later explicit reconnect on the same page reuses it
+ * instead of re-initializing, and nothing reconnects on its own
+ * (`enableReconnect: false`). No storage key is ever read or deleted.
  */
 export async function disconnectWalletConnect(): Promise<void> {
-  const provider = walletConnectProvider;
   clearLocalConnectionState();
-  if (provider) {
-    // A failed teardown must never leave the UI claiming a live session, so
-    // local state was already cleared above.
-    await tearDownWalletConnect(provider);
-  }
+  // A failed teardown must never leave the UI claiming a live session, so
+  // local state was already cleared above.
+  await disconnectAppKit();
   emit();
 }
 
