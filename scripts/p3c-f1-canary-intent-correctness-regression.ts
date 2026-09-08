@@ -149,8 +149,8 @@ check(
 );
 check(
   "D6",
-  /!chainEligible \|\| !!deploymentId/.test(routeCode) &&
-    /if \(!intent \|\| !chainEligible\) return;/.test(routeCode),
+  /!chainEligible \|\|\s*!!deploymentId \|\|\s*attemptBlocksCreation/.test(routeCode) &&
+    /if \(!intent \|\| !chainEligible \|\| attemptBlocksCreation\) return;/.test(routeCode),
   "the attempt button is disabled AND the handler re-checks chain eligibility",
 );
 check(
@@ -218,8 +218,8 @@ check(
       /\.eq\("chain_id", ROBINHOOD_MAINNET_CHAIN_ID\)/.test(body) &&
       /\.eq\("network_environment", "PRODUCTION"\)/.test(body) &&
       /\.eq\("deployment_kind", "FIXED_SUPPLY_ERC20"\)/.test(body) &&
-      /FAILED/.test(body) &&
-      /ABANDONED/.test(body),
+      /\.not\("status", "in", `\(\$\{TERMINAL_ATTEMPT_STATUSES\.join\(","\)\}\)`\)/.test(body) &&
+      /TERMINAL_ATTEMPT_STATUSES = \["FAILED", "ABANDONED"\] as const/.test(wrapperCode),
     "the lookup is scoped to chain 4663 PRODUCTION fixed-supply nonterminal rows",
   );
 }
