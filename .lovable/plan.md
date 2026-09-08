@@ -1,74 +1,110 @@
-# Mobile WalletConnect — Read-Only Root-Cause Audit (no fixes applied)
+# P3C-B Managed Server-Side Pre-Sign Gate — Audit / Design (READ-ONLY)
 
-## Start gate
+No product file was edited, no migration created, no DB write performed, no secret read or printed.
 
-- Actual HEAD: `2bbe0b18038304a3d80f0ce271a3153cccf63f9a`
-- `git status --porcelain`: empty (clean)
-- SHA drift disclosure: the last reported HEAD was `971a96086d952f27ed3f3cd994daf484b0df481f`. HEAD has since advanced by platform auto-commit. No prompt-declared expected SHA was supplied for this turn, so the audit proceeded on the clean tree.
+## 1. Authoritative audit findings
 
-## Verification run (source-only, no wallet/relay contact)
+- HEAD confirmed `b82e1eb` ("Revoke anon on P3C-A2 trigger"), working tree clean. Preceding commits `0c316a7`, `55db978`.
+- **P3C-B does not exist under any name.** Searching the whole repo for pre-sign wiring returns only: the two A2 migrations, and generated `src/integrations/supabase/types.ts`. No server function calls `issue_launch_chain_production_presign_authorization`. Genuinely missing — nothing to duplicate.
+- Live routines confirmed present in `public`, all SECURITY DEFINER: `issue_…`, `claim_…`, `invalidate_…`, `get_launch_chain_production_presign_authorization`, `create_launch_chain_production_token_deployment_attempt`, plus internal trigger `enforce_launch_chain_production_presign()`.
+- Live `issue_…` signature (exact, in order): `_deployment_id uuid, _operator_user_id uuid, _client_request_id text, _gas_estimate_text text, _gas_limit_text text, _fee_model text, _observed_fee_per_gas_wei_text text, _max_fee_per_gas_wei_text text, _max_priority_fee_per_gas_wei_text text, _estimated_cost_wei_text text, _max_total_cost_wei_text text, _ttl_seconds integer`.
+- Live `issue_…` body enforces: request id 8..128 chars; ttl 30..300 (default 60); fee model `EIP1559|LEGACY`; all economic values unsigned decimal `^(0|[1-9][0-9]{0,77})$`; EIP1559 requires priority, LEGACY forbids it; `gas_estimate > 0`; `gas_limit >= gas_estimate`; `max_fee >= observed_fee`; `priority <= max_fee`; `max_total_cost >= estimated_cost`; `max_total_cost >= gas_limit * max_fee`. Deployment must be chain 4663 / PRODUCTION / FIXED_SUPPLY_ERC20 / artifact `cartel-fixed-erc20-v1` / status DRAFT / `tx_hash IS NULL` / `review_fingerprint` and `init_code_hash` non-null. Expired ISSUED rows are swept to EXPIRED. Same `(deployment_id, client_request_id)` returns the identical row only when every authoritative field matches, otherwise `22023` conflict. Row values for fingerprint/init-code/deployer/workspace/launch/tx_value are copied from the deployment, not from parameters.
+- **Conclusion: no P3C-B migration is required.** A2 schema and RPC surface are sufficient. Default position: zero migrations.
+- Auth context: `requireSupabaseAuth` (`src/integrations/supabase/auth-middleware.ts`) provides `context.supabase` (RLS as caller), `context.userId` (JWT `sub`), `context.claims`. `src/start.ts` already registers `attachSupabaseAuth`, so the bearer is attached automatically.
+- Managed RPC env name: `ROBINHOOD_MAINNET_RPC_URL`, referenced only through `ROBINHOOD_MAINNET_MANAGED_RPC_ENV` in `src/lib/chain-mainnet-registry.ts`. Configured status checked by presence only — **present**; value never read, logged, or returned.
+- Frozen artifact reusable constants (`src/lib/cartel-fixed-erc20.artifact.ts`): `CARTEL_FIXED_ERC20_ARTIFACT_ID`, `_DECIMALS`, `_ABI`, `_CONSTRUCTOR_INPUTS`, `_CREATION_BYTECODE`, `_CREATION_BYTECODE_HASH`, `_RUNTIME_BYTECODE_HASH`.
+- Coupling assessment:
+  - `chain-launcher.ts` exports `getInjectedProvider` (browser `window.ethereum`) and testnet deployment/query surface. **Do not import into the server module** — browser + testnet coupling.
+  - `chain-mainnet-simulation.ts` imports `chain-launcher.ts` transitively, so it inherits the same coupling. **Do not import.** Its `mainnetFingerprintPreimage` field order and separator are the fingerprint contract and must be reproduced independently, byte-identically, in the server module (domain `cartel-mainnet-sim-v1`, `\u001f` separator, NFC-normalized name/symbol, lowercased hex fields, `txValueWei = "0"`).
+  - `chain-mainnet-registry.ts` is server-safe and must be reused.
+  - Precedent for structure: `chain-mainnet-verify.functions.ts` (RLS read via `context.supabase`, managed-endpoint-only transport, `supabaseAdmin` dynamically imported inside the handler).
 
-- `git diff --check` — PASS
-- `bunx tsgo --noEmit` — PASS
-- `bun run build` — PASS (client + server emitted)
-- `bun scripts/wallet-connector-regression.ts` — PASS (all checks, incl. J1–J7, K1–K8)
-- No wallet, provider, relay, modal, DB, secret, Telegram or transaction action occurred.
+## 2. Recommended P3C-B architecture and data flow
 
-## Installed package facts (read from node_modules, not memory)
+Single authenticated server function `presignMainnetTokenDeployment` in one new file `src/lib/chain-mainnet-presign.functions.ts`.
 
-- `@walletconnect/ethereum-provider` declared `^2.24.0`, lockfile pins `2.24.0`, dependencies include `@reown/appkit@1.8.19` and `@walletconnect/universal-provider@2.24.0`.
-- `getRpcConfig`: `methods` / `events` are applied **only when required `chains` is non-empty**. With `optionalChains` only, they resolve to `[]`.
-- `buildNamespaces`: with no required chains, `required` is `undefined` and the optional namespace gets the **full default OPTIONAL_METHODS / OPTIONAL_EVENTS sets**, not ours.
-- Omitted `rpcMap` → `buildRpcMap` assigns `https://rpc.walletconnect.org/v1/?chainId=eip155:4663&projectId=...` for 4663.
-- Request routing (`universal-provider` eip155): `eth_accounts` / `eth_requestAccounts` are answered **locally from session accounts**; `eth_chainId` returns `parseInt(getDefaultChain())`; only unhandled, non-namespace methods reach the HTTP RPC.
-- `disableProviderPing` defaults to `false`.
-- `showQrModal:true` path: `convertWCMToAppKitOptions` synthesizes a network for any CAIP id via `defineChain` — chain 4663 does **not** throw, but is created with `id: "4663"` (string), empty `name`, empty `nativeCurrency` and the generic `https://rpc.walletconnect.org/v1` RPC. Modal is created with `manualWCControl: true`, `enableInjected:false`, `enableEIP6963:false`, `enableMobileFullScreen` only when explicitly `true`.
-- `loadPersistedSession()` runs inside `init()`, before any `connect()` call.
+```text
+browser -> presignMainnetTokenDeployment({ deploymentId, clientRequestId })
+  1. requireSupabaseAuth -> context.userId (operator identity is NEVER an input)
+  2. context.supabase read of launch_chain_deployments (RLS = tenancy gate)
+  3. hard row pins: chain 4663, PRODUCTION, FIXED_SUPPLY_ERC20, artifact id,
+     status DRAFT, tx_hash null, review_fingerprint + init_code_hash present
+  4. independent server reconstruction of constructor args + init code from the
+     frozen artifact and stored token intent (no browser payload accepted)
+  5. recompute keccak256(initCode) == stored init_code_hash  (else fail closed)
+     recompute canonical fingerprint == stored review_fingerprint (else fail closed)
+  6. managed provider reads only (chain 4663 pinned)
+  7. deterministic gas/fee/cost derivation, bigint only
+  8. supabaseAdmin.rpc('issue_launch_chain_production_presign_authorization', ...)
+     with _operator_user_id = context.userId
+  9. return authorization id/status/expiry + evidence summary. Never the endpoint.
+```
 
-## Findings, severity-ranked
+`supabaseAdmin` is loaded with `await import("@/integrations/supabase/client.server")` **inside the handler**, after all authorization checks, matching the verifier.
 
-### CONFIRMED root causes (code-level, provable from installed source)
+No transaction is prepared, signed, or submitted. No deployment status transition, no tx-hash write, no liquidity, no kill-switch read other than as a refusal condition. The module must also refuse outright while `MAINNET_DEPLOYMENT_TX_ENABLED === false`, unless the build contract explicitly authorizes issuing authorizations with the execution switch still off (recommended: allow issuance, since A2 authorization is not execution — but state the chosen semantics as a literal constant `PRESIGN_REQUIRES_DEPLOYMENT_SWITCH`).
 
-1. **`eth_chainId` type mismatch breaks the WalletConnect path.** `src/lib/wallet-connector.ts` and `src/lib/chain-mainnet-wallet.ts` both accept the chain id only when `typeof raw === "string"`. Injected wallets return a hex string; the installed WalletConnect provider returns a **number**. Result: `chainId` is `null` after a *successful* WalletConnect session, `chainMatches` is false, the panel shows a wrong/unknown network, and `sendClaimedMainnetDeployment` would fail closed on the chain guard. This alone makes the mobile path look broken even when the wallet connected correctly.
-2. **Reported chain id is not evidence of the negotiated chain.** The provider defaults `chainId` to `optionalChains[0]` (4663) and only overwrites it from session accounts. A wallet approving a different chain can still surface as 4663 once finding 1 is fixed, unless the chain is derived from the session namespace/accounts.
-3. **Our `methods` / `events` init options are silently ignored** (optional-chains-only configuration). The negotiated proposal is the provider's full default optional set. Not a break today, but the current code comment implies a narrower proposal than is actually requested.
-4. **Optional-only namespace with no required chain.** Nothing forces `eip155:4663`. Wallets may approve a session containing none of the requested chain, producing a "connected but useless" state that the current UI cannot explain.
+## 3. Managed RPC method set and gas/fee/balance policy
 
-### HIGH-probability issues supported by installed behavior
+Managed endpoint only, no public-diagnostic fallback, 8s timeout per call, sequential-then-parallel like the health probe.
 
-5. **Empty `metadata.icons: []` and an unregistered origin.** WalletConnect/Reown Verify surfaces app metadata to the wallet; an empty icon array and an unverified domain commonly produce a "cannot verify" or degraded prompt that mobile wallets (Robinhood included) may refuse or that the operator abandons.
-6. **Synthetic chain descriptor for 4663.** Blank network name, blank native currency and the generic relay RPC mean AppKit's network chip and any chain-scoped wallet filtering degrade; wallet lists filtered on `eip155:4663` may exclude or mis-handle Robinhood Wallet.
-7. **Persisted-session load during `init()`.** Every explicit click runs `init()`, which restores a stale WC session before we call `connect()`. A previously paired wrong wallet/chain can therefore appear "active" after one click, and our `disconnect()` only tears down when a live session object exists.
-8. **No `qrModalOptions` at all.** `enableMobileFullScreen`, featured/explorer wallet ids and mobile link handling are entirely default; Robinhood Wallet is not featured, so same-device Android handoff depends on the operator finding it in the generic list.
-9. **Embedded preview remains the dominant environmental failure.** Detection and copy exist (K1–K3) but the connect buttons stay enabled inside an embedded context, so the hang is still reachable from the Lovable preview iframe.
+| Method | Purpose | Failure |
+|---|---|---|
+| `eth_chainId` | pin 4663 | `MANAGED_RPC_CHAIN_MISMATCH` / `..._UNAVAILABLE` |
+| `eth_call` (`{from: deployer, data: initCode, value: "0x0"}`, `latest`) | creation would not revert | `CREATION_SIMULATION_REVERTED` |
+| `eth_estimateGas` (same tx) | `gas_estimate_text` | `GAS_ESTIMATION_FAILED` |
+| `eth_getBlockByNumber("latest", false)` | `baseFeePerGas` | fee model fallback |
+| `eth_maxPriorityFeePerGas` | tip | tolerated 0 fallback only in EIP1559 |
+| `eth_gasPrice` | LEGACY fee | `FEE_DATA_UNAVAILABLE` |
+| `eth_getBalance(deployer, "latest")` | coverage | `BALANCE_UNAVAILABLE` |
 
-### EXTERNAL configuration that cannot be confirmed from this repo
+Fee model mapping:
+- **EIP1559** when `latest.baseFeePerGas` parses: `observed_fee_per_gas = baseFee + priority`; `max_priority_fee_per_gas = priority`; `max_fee_per_gas = baseFee * 2 + priority` (one-doubling headroom, matching the P2 review convention).
+- **LEGACY** only when no base fee is present: `observed = max_fee = eth_gasPrice`, priority omitted (A2 rejects it for LEGACY).
 
-- WalletConnect/Reown Cloud project `4c1936…` — allowlisted domains must include the current preview origin `https://id-preview--469fb83c-0f27-4aa7-bb99-c4125279c565.lovable.app` (and any standalone/published origin). Not inspectable here.
-- Whether Robinhood Wallet's WalletConnect build advertises `eip155:4663` support in the Reown explorer entry.
-- Robinhood Wallet's own domain-verification policy for unverified origins.
+Deterministic, cannot-understate policy constants (explicit, named in the module):
+- `PRESIGN_GAS_LIMIT_NUMERATOR = 125n`, `PRESIGN_GAS_LIMIT_DENOMINATOR = 100n` → `gas_limit = ceil(gas_estimate * 125 / 100)`. Integer ceiling division; a 25% margin absorbs state drift between quote and send while staying well inside block limits.
+- `PRESIGN_BASE_FEE_HEADROOM_MULTIPLIER = 2n` → the doubling above; covers roughly six consecutive maximal base-fee increases.
+- `estimated_cost = gas_estimate * observed_fee_per_gas`.
+- `max_total_cost = gas_limit * max_fee_per_gas` (exactly the A2 floor, never below).
+- Balance gate: refuse unless `balance >= max_total_cost` (strictly stronger than P2's estimated-cost check).
+- All arithmetic in `bigint`; serialization via `.toString()`. `Number()` appears nowhere for wei/gas/fee/cost. Provider hex parsed by a strict `^0x(0|[1-9a-f][0-9a-f]*)$` parser; malformed → fail closed, never a guess.
 
-### Environment / build correctness (all clear)
+## 4. Security, tenancy, idempotency, freshness
 
-- `.env` contains `VITE_WALLETCONNECT_PROJECT_ID` (value not printed here).
-- Bracket access on `import.meta.env` **is** statically resolved by this build: the literal project id appears in the emitted client chunks `assets/mainnet-canary-*.js` and `assets/chain-launcher-*.js`. It is not `undefined` and not an unresolved key. No unrelated secret was inspected or printed.
-- Not an env defect.
+- **Operator identity** is `context.userId` only. `operator_user_id` is not accepted from the browser.
+- **Tenancy**: the deployment is read through `context.supabase` so RLS decides visibility; a missing or foreign row returns a generic `Not authorized`. `supabaseAdmin` is only reached afterwards and only to call the service-role-only issue RPC.
+- **Payload integrity**: the browser supplies no bytecode, address, supply, gas, fee, or balance. Any mismatch of recomputed `initCodeHash` or `reviewFingerprint` against the stored A1 values is a hard refusal (`INTENT_FINGERPRINT_MISMATCH` / `INIT_CODE_HASH_MISMATCH`).
+- **Idempotency**: `clientRequestId` validated as 8..128 chars of `[A-Za-z0-9_-]`. The RPC returns the identical row when every authoritative field matches, and raises `22023` otherwise; the server function maps that to `PRESIGN_REQUEST_CONFLICT` without retry. Because fresh gas/fee reads normally differ between attempts, a genuine retry must reuse the same request id **and** will legitimately conflict if chain conditions moved — that is the intended fail-closed behaviour; a new quote requires a new request id.
+- **Freshness**: `ttl_seconds = 60` (`PRESIGN_TTL_SECONDS`, inside A2's 30..300). Expiry is `now()` server-side inside the RPC. The browser P2 quote is advisory display only and is never an input; the authoritative quote is the one derived in this handler. The handler additionally aborts if its own managed reads took longer than `PRESIGN_MAX_QUOTE_BUILD_MS = 15_000`, so a stale quote is never issued with a fresh expiry.
+- **Error hygiene**: a fixed union of notice codes only. Never include the endpoint, provider error text, revert data, or DB error detail. All provider failures collapse to `UNREACHABLE | TIMEOUT | RPC_ERROR | MALFORMED_RESPONSE` as in the health module.
 
-## Minimal fix plan (for a separate, approved build phase)
+## 5. Build allowlist (future authorized turn only)
 
-1. Accept both `string` and `number` chain-id replies in `readAccountAndChain` (both modules), normalising to a hex quantity; keep every existing guard.
-2. Derive the connected chain from the WalletConnect session accounts, not the provider default, and expose a distinct `WRONG_CHAIN_APPROVED` notice.
-3. Pass `rpcMap: { 4663: ROBINHOOD_MAINNET_PUBLIC_DIAGNOSTIC_RPC_URL }`, a real `metadata.icons` entry, and `qrModalOptions: { enableMobileFullScreen: true }`.
-4. Disable (not merely warn on) both connect buttons in an embedded context, keeping the manual standalone-open action.
-5. Make `disconnect()` unconditional teardown so stale persisted sessions cannot survive a reload.
-6. Correct the now-inaccurate comment about proposed `methods` / `events`.
+Allowed to create — exactly one file:
+- `src/lib/chain-mainnet-presign.functions.ts`
 
-**File allowlist:** `src/lib/wallet-connector.ts`, `src/lib/chain-mainnet-wallet.ts`, `src/components/cartel/DeploymentWalletConnect.tsx`, `scripts/wallet-connector-regression.ts`.
+Must stay untouched: `chain-mainnet-registry.ts`, `chain-mainnet-simulation.ts`, `chain-mainnet-health.functions.ts`, `chain-mainnet-verify.functions.ts`, `cartel-fixed-erc20.artifact.ts`, `chain-launcher.ts`, `chain-simulation.ts`, `chain-registry.ts`, `chain-verify.functions.ts`, all routes and UI, `src/start.ts`, all Supabase integration files, `supabase/migrations/**`, `supabase/config.toml`, `backend-source/**`, `package.json`, lockfiles, `docs/**`.
 
-**Regressions to add:** numeric-chain-id normalisation; session-derived chain; rpcMap/icons/qrModalOptions present; embedded context disables connect; unconditional disconnect teardown; unchanged single `eth_sendTransaction`, unchanged canary sequence, unchanged safety literals.
+Prohibited in the build turn: any migration or DB schema change; any DB write other than the A2 issue RPC itself; `eth_sendTransaction`, signing, `wallet_addEthereumChain`, `wallet_switchEthereumChain`, any injected-provider use; tx-hash recording; deployment status transition; liquidity or pool code; kill-switch changes; Telegram; UI wiring; package installs; edge deploy; publish.
 
-**Database/Supabase:** none required. No schema, RLS, RPC, grant, migration or data change is implicated.
+## 6. Acceptance tests
 
-## Final state
+Static/no-network:
+1. `bunx tsgo --noEmit` and `bun run build` pass.
+2. Grep proof: no `eth_sendTransaction`, `personal_sign`, `eth_signTransaction`, `wallet_`, `window.ethereum`, no import of `chain-launcher` or `chain-mainnet-simulation` in the new file.
+3. Grep proof: no `Number(` applied to any wei/gas/fee/cost value; `process.env` only inside the handler.
+4. Fingerprint parity: a pure unit check that the server pre-image for a fixed intent equals the P2 pre-image byte-for-byte.
+5. Ceiling-division and fee-derivation unit checks on bigint fixtures, including `gas_limit >= gas_estimate` and `max_total_cost >= gas_limit * max_fee` (the exact A2 invariants).
 
-HEAD `2bbe0b18038304a3d80f0ce271a3153cccf63f9a`, `git status --porcelain` empty. No file was created or modified in the project source. STOP.
+Integration, zero-persistence:
+6. Reject paths (unauthenticated, foreign deployment, non-DRAFT, testnet chain, missing fingerprint, mismatched init code) must return before any `supabaseAdmin` import — asserted by mocking the dynamic import and proving it is never called.
+7. ISSUE RPC integration exercised only inside an explicit transaction with `ROLLBACK`, or against a temporary DRAFT production deployment row that is removed in the same rolled-back transaction. No committed authorization row and no committed production deployment row.
+8. Post-test DB proof (must both be 0):
+   `select count(*) from public.launch_chain_production_presign_authorizations;`
+   `select count(*) from public.launch_chain_deployments where chain_id = 4663 and network_environment = 'PRODUCTION';`
+9. Confirm all three switches still `false` and the A2 trigger still attached with EXECUTE revoked.
+
+## 7. Verdict
+
+**GO** for a later, explicitly authorized P3C-B build, scoped to the single file above, with **no migration**. P3C-C/D, UI wiring, and P3D real-money canary remain **NO-GO** and out of scope.
