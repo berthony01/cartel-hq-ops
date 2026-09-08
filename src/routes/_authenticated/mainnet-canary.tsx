@@ -7,6 +7,8 @@ import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { CanaryIntentForm } from "@/components/cartel/CanaryIntentForm";
+import { DeploymentWalletConnect } from "@/components/cartel/DeploymentWalletConnect";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -319,7 +321,13 @@ function CanaryConsole() {
         ) : null}
       </Section>
 
+      <DeploymentWalletConnect
+        expectedDeployer={intent?.deployer ?? null}
+        expectedChainId={ROBINHOOD_MAINNET_CHAIN_ID}
+      />
+
       <Section
+
         variant="surface"
         title="B — Managed pre-sign and economic evidence"
         description="Server-side managed RPC simulation, gas, fees and balance. Issues an authorization; nothing is sendable yet."
