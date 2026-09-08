@@ -484,54 +484,15 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
     };
   }
 
-  // STAGE 1 — browser bundle load only. A failure here means the WalletConnect
-  // / modal chunk could not be loaded or evaluated in this browser, which is a
-  // different defect from a provider that fails to initialize. Only a
-  // sanitized code is produced: the caught error is never read, formatted,
-  // logged or returned.
-  let EthereumProvider: typeof import("@walletconnect/ethereum-provider").EthereumProvider;
-  try {
-    ({ EthereumProvider } = await import("@walletconnect/ethereum-provider"));
-  } catch {
-    return {
-      ok: false,
-      notice: "WALLETCONNECT_LIBRARY_LOAD_FAILED",
-      state: emptyState("WALLETCONNECT_LIBRARY_LOAD_FAILED"),
-    };
+  // INFRASTRUCTURE — initialize at most once per page, then reuse. A repeat
+  // connect after a disconnect calls `connect()` on the cached provider and
+  // never re-runs `EthereumProvider.init()`.
+  const init = await ensureWalletConnectProvider(projectId);
+  if (!init.provider) {
+    const notice = init.notice ?? "WALLETCONNECT_INIT_FAILED";
+    return { ok: false, notice, state: emptyState(notice) };
   }
-
-  // STAGE 2 — provider initialization (config, storage, relay/modal setup).
-  let provider: Eip1193Provider;
-  try {
-    // MODAL BASELINE RESTORE (rollback of init OPTIONS only). These are the
-    // exact options from the last revision where the wallet chooser modal was
-    // observed to open (pre mobile-hardening). The later-added `rpcMap`,
-    // `qrModalOptions.enableMobileFullScreen` and favicon metadata icon are
-    // intentionally NOT present here. Every later connection-correctness fix
-    // (optional 4663 proposal, post-connect CAIP-10 evidence, stale-session
-    // teardown, bounded handshake, listener cleanup, split diagnostics) is
-    // preserved outside this option set.
-    const initialized = await EthereumProvider.init({
-      projectId,
-      optionalChains: [ROBINHOOD_MAINNET_CHAIN_ID as number],
-      showQrModal: true,
-      methods: ["eth_sendTransaction"],
-      events: ["accountsChanged", "chainChanged"],
-      metadata: {
-        name: "CARTEL HQ",
-        description: "CARTEL HQ deployment wallet connection",
-        url: window.location.origin,
-        icons: [],
-      },
-    });
-    provider = initialized as unknown as Eip1193Provider;
-  } catch {
-    return {
-      ok: false,
-      notice: "WALLETCONNECT_INIT_FAILED",
-      state: emptyState("WALLETCONNECT_INIT_FAILED"),
-    };
-  }
+  const provider = init.provider;
 
   // STALE SESSION HARDENING. `init()` restores any persisted pairing. A canary
   // connection must be explicit and fresh, so an inherited session is torn
