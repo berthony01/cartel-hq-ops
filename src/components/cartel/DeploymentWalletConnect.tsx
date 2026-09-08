@@ -253,7 +253,9 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
             try {
               await disconnect();
               setNotice(null);
+              setSwitchNotice(null);
               setWalletLabel(null);
+
               clearInspection();
               refreshAvailability();
             } finally {
