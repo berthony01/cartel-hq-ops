@@ -5,7 +5,7 @@ import { Section } from "@/components/cartel/Section";
 import { ReadoutLine } from "@/components/cartel/CanaryReadout";
 import {
   connectInjected,
-  connectWalletConnect,
+  connectWalletConnectOnRobinhoodChain,
   disconnect,
   getActiveConnectorKind,
   getConnectorOrigin,
@@ -141,12 +141,23 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
   }, [clearInspection, expectedDeployer, refreshAvailability]);
 
   useEffect(() => {
-    // Mount does availability detection only — never an inspection.
-    refreshAvailability();
+    // Mount does availability detection only — never an inspection. The
+    // read-only inspection re-runs ONLY when a connector is already explicitly
+    // active, which is also what keeps the displayed account check in step with
+    // a changed `expectedDeployer` instead of showing a stale verdict.
+    const active = refreshAvailability();
+    if (active) void refresh();
     return subscribeWalletConnector(() => {
       void refresh();
     });
   }, [refresh, refreshAvailability]);
+
+  /**
+   * An expected deployer only exists once it is a well-formed address. Without
+   * one there is nothing to compare, so the readout says "—" rather than
+   * claiming a MISMATCH against an empty expectation.
+   */
+  const expectedDeployerValid = /^0x[0-9a-fA-F]{40}$/.test((expectedDeployer ?? "").trim());
 
   const chainIdDecimal = (() => {
     if (!chainId) return null;
@@ -194,12 +205,17 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
           variant="secondary"
           disabled={busy !== null || !walletConnectReady || embedded}
           onClick={async () => {
+            // EXPLICIT OPERATOR GESTURE. Connect, and — inside this same click
+            // only — ask the wallet once to move to Robinhood Chain if it came
+            // back on another network. The wallet still shows its own approval.
             setBusy("walletconnect");
             setNotice(null);
+            setSwitchNotice(null);
             try {
-              const result = await connectWalletConnect();
-              setNotice(result.notice);
-              setWalletLabel(result.state.walletName);
+              const result = await connectWalletConnectOnRobinhoodChain();
+              setNotice(result.connect.notice);
+              setSwitchNotice(result.switched?.notice ?? null);
+              setWalletLabel(result.connect.state.walletName);
               await refresh();
             } catch {
               setNotice("CONNECTION_REJECTED_OR_FAILED");
@@ -213,7 +229,7 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
           ) : (
             <Smartphone className="mr-2 h-3.5 w-3.5" />
           )}
-          Mobile wallet / WalletConnect
+          Connect wallet on Robinhood Chain
         </Button>
 
         <Button
@@ -362,7 +378,9 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
         <ReadoutLine label={"Expected deployer"} value={expectedDeployer ?? "—"} />
         <ReadoutLine
           label={"Account check"}
-          value={!account ? "—" : accountMatches ? "MATCH" : "MISMATCH"}
+          value={
+            !account || !expectedDeployerValid ? "—" : accountMatches ? "MATCH" : "MISMATCH"
+          }
         />
         <ReadoutLine
           label={"Detected chain"}

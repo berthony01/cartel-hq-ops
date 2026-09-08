@@ -291,9 +291,14 @@ check(
   "J5",
   panelEffect !== undefined &&
     !/inspectMainnetWalletForHandoff/.test(panelEffect) &&
-    /^[\s\S]*?refreshAvailability\(\);\s*return subscribeWalletConnector/.test(panelEffect) &&
-    !/refresh\(\)/.test(panelEffect.slice(0, panelEffect.indexOf("return subscribeWalletConnector"))),
-  "panel mount effect performs availability detection only, never an inspection call",
+    // Availability detection first; the read-only inspection runs ONLY when a
+    // connector is already explicitly active (which is also what refreshes a
+    // changed expectedDeployer verdict). An unconnected mount still touches no
+    // provider.
+    /const active = refreshAvailability\(\);\s*if \(active\) void refresh\(\);\s*return subscribeWalletConnector/.test(
+      panelEffect,
+    ),
+  "panel mount effect detects availability and inspects only an already-active connector",
 );
 
 check(
@@ -460,9 +465,9 @@ check(
 /* M — multi-wallet correction: neutral naming, sanitized split diagnostics. */
 check(
   "M1",
-  /Mobile wallet \/ WalletConnect/.test(panelCode) &&
-    !/Robinhood Wallet \/ WalletConnect/.test(panelCode),
-  "the WalletConnect button uses generic multi-wallet naming",
+  /Connect wallet on Robinhood Chain/.test(panelCode) &&
+    !/Robinhood Wallet \/ WalletConnect|MetaMask \/ WalletConnect/.test(panelCode),
+  "the WalletConnect button names the required network, never a single wallet brand",
 );
 check(
   "M2",
@@ -569,6 +574,10 @@ check(
     (connectorCode.match(/wallet_switchEthereumChain/g) ?? []).length === 1,
   "exactly one wallet_switchEthereumChain call exists, inside requestRobinhoodChainSwitch",
 );
+const sameClickBody =
+  /export async function connectWalletConnectOnRobinhoodChain\(\)[\s\S]*?\n\}\n/.exec(
+    connectorCode,
+  )?.[0];
 check(
   "N3",
   /requestRobinhoodChainSwitch\(\)/.test(panelCode) &&
@@ -577,8 +586,14 @@ check(
     !/(useEffect|attachEvents|refreshAvailability|subscribeWalletConnector)[\s\S]{0,300}requestRobinhoodChainSwitch/.test(
       panelCode,
     ) &&
-    !/requestRobinhoodChainSwitch/.test(connectorCode.replace(switchBody ?? "", "")),
-  "the switch is reachable only from the explicit Switch button handler, never mount/connect/re-check/events",
+    // Exactly two call sites in the connector: the definition, and the single
+    // same-explicit-click alignment inside connectWalletConnectOnRobinhoodChain.
+    sameClickBody !== undefined &&
+    (sameClickBody.match(/requestRobinhoodChainSwitch\(\)/g) ?? []).length === 1 &&
+    !/requestRobinhoodChainSwitch/.test(
+      connectorCode.replace(switchBody ?? "", "").replace(sameClickBody, ""),
+    ),
+  "the switch is reachable only from the explicit Switch button handler or the same explicit connect click, never mount/re-check/events",
 );
 check(
   "N4",
@@ -833,6 +848,76 @@ check(
   /disconnect\(chainNamespace\?: ChainNamespace\): Promise<void>;/.test(appKitClientDts) &&
     /appKit\.disconnect\("eip155"\)/.test(appkitCode),
   "disconnect uses the installed namespace-scoped signature",
+);
+
+/* U — mobile UX correction: one-click connect+align, non-stale account check,
+   and launch-selection survival across a wallet hand-off. */
+const routeCode = stripComments(routeSrc);
+
+check(
+  "U1",
+  /const expectedDeployerValid = \/\^0x\[0-9a-fA-F\]\{40\}\$\/\.test/.test(panelCode) &&
+    /!account \|\| !expectedDeployerValid \? "—" : accountMatches \? "MATCH" : "MISMATCH"/.test(
+      panelCode,
+    ),
+  "Account check reads — with no valid expected deployer, and only claims MISMATCH against a real expectation",
+);
+check(
+  "U2",
+  /const refresh = useCallback\([\s\S]*?\}, \[[^\]]*expectedDeployer[^\]]*\]\);/.test(panelCode) &&
+    /if \(active\) void refresh\(\);/.test(panelCode) &&
+    /inspectMainnetWalletForHandoff\(expectedDeployer \?\? ""\)/.test(panelCode),
+  "the read-only inspection depends on expectedDeployer, so a changed expectation cannot show a stale verdict",
+);
+check(
+  "U3",
+  sameClickBody !== undefined &&
+    /const connect = await connectWalletConnect\(\);/.test(sameClickBody) &&
+    /if \(!connect\.ok\) return \{ connect, switched: null \};/.test(sameClickBody) &&
+    /ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL\) \{\s*return \{ connect, switched: null \};/.test(
+      sameClickBody,
+    ) &&
+    !/wallet_addEthereumChain|setTimeout|while |for \(/.test(sameClickBody) &&
+    (sameClickBody.match(/requestRobinhoodChainSwitch\(\)/g) ?? []).length === 1,
+  "the same-click alignment connects first, switches at most once, never adds a network and never retries",
+);
+check(
+  "U4",
+  /connectWalletConnectOnRobinhoodChain\(\)/.test(panelCode) &&
+    /Connect wallet on Robinhood Chain/.test(panelCode) &&
+    !/(useEffect|subscribeWalletConnector|refreshAvailability)[\s\S]{0,300}connectWalletConnectOnRobinhoodChain/.test(
+      panelCode,
+    ),
+  "the combined connect+align runs only from the explicit connect button, never on mount, subscription or re-check",
+);
+const restoreEffect = /useEffect\(\(\) => \{\s*if \(launchId\) return;[\s\S]*?\}, \[launches\.data, launchId\]\);/.exec(
+  routeCode,
+)?.[0];
+check(
+  "U5",
+  restoreEffect !== undefined &&
+    /sessionStorage\.getItem\(LAUNCH_SELECTION_STORAGE_KEY\)/.test(restoreEffect) &&
+    /rows\.find\(\(item\) => item\.id === stored\)/.test(restoreEffect) &&
+    /if \(!row\)[\s\S]{0,160}removeItem\(LAUNCH_SELECTION_STORAGE_KEY\)/.test(restoreEffect),
+  "the restored launch id is accepted only when it still exists in the operator's current launch list, else cleared",
+);
+check(
+  "U6",
+  restoreEffect !== undefined &&
+    !/createAttempt|presign|claim|arm\(|sendWindow|persist|verify|reconcile|setDeploymentId|setAuthorizationId|connect|switch/i.test(
+      restoreEffect,
+    ),
+  "restoring a launch selection never resumes, creates, presigns, arms, claims, sends, persists, verifies, connects or switches",
+);
+check(
+  "U7",
+  (routeCode.match(/sessionStorage\.setItem\(/g) ?? []).length === 1 &&
+    /window\.sessionStorage\.setItem\(LAUNCH_SELECTION_STORAGE_KEY, id\)/.test(routeCode) &&
+    !/localStorage/.test(routeCode) &&
+    !/deployer|recipient|envelope|authorizationId|txHash/.test(
+      /const selectLaunch = \(id: string\) => \{[\s\S]*?\n  \};/.exec(routeCode)?.[0] ?? "x",
+    ),
+  "only the launch id is persisted, in sessionStorage, never an address, envelope, authorization or hash",
 );
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
