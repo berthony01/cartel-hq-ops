@@ -391,3 +391,87 @@ export const engageCanaryEmergencyStop = createServerFn({ method: "POST" })
       reason: str(row, "reason"),
     };
   });
+
+/* ------------------------------------------------------------------ */
+/* 5 — READ-ONLY existing nonterminal production attempt lookup        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * P3C-F3 — awareness only. This wrapper READS one row and nothing else: it
+ * never inserts, updates, abandons, presigns, arms, claims, sends, persists,
+ * verifies or calls any mutation RPC. It exists purely so the console can
+ * refuse to create a duplicate attempt and can display the immutable
+ * deployer/recipient already bound to an existing production attempt.
+ */
+export type CanaryExistingAttempt = {
+  deploymentId: string;
+  attemptNumber: number;
+  status: string;
+  deployerAddress: string;
+  tokenRecipient: string | null;
+  tokenName: string | null;
+  tokenSymbol: string | null;
+  tokenTotalSupplyBaseUnits: string | null;
+  txHash: string | null;
+  contractAddress: string | null;
+  createdAt: string;
+};
+
+export type CanaryExistingAttemptResult = {
+  ok: boolean;
+  notice: CanaryNotice | null;
+  attempt: CanaryExistingAttempt | null;
+};
+
+/** Terminal statuses are NOT blocking: a new attempt is legitimate after them. */
+const TERMINAL_ATTEMPT_STATUSES = ["FAILED", "ABANDONED"] as const;
+
+export const readCanaryExistingAttempt = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { launchId: string }) => {
+    const launchId = input && typeof input.launchId === "string" ? input.launchId : "";
+    if (!UUID.test(launchId)) throw new Error("Invalid launch id");
+    return { launchId };
+  })
+  .handler(async ({ data, context }): Promise<CanaryExistingAttemptResult> => {
+    if (!(await isPlatformOwner(context.supabase as unknown as SupabaseLike, context.userId))) {
+      return { ok: false, notice: "NOT_AUTHORIZED", attempt: null };
+    }
+
+    // READ ONLY. Exact chain, exact environment, exact deployment kind.
+    const { data: rows, error } = await context.supabase
+      .from("launch_chain_deployments")
+      .select(
+        "id, attempt_number, status, deployer_address, token_recipient, token_name, token_symbol, token_total_supply_text, tx_hash, contract_address, created_at",
+      )
+      .eq("launch_id", data.launchId)
+      .eq("chain_id", ROBINHOOD_MAINNET_CHAIN_ID)
+      .eq("network_environment", "PRODUCTION")
+      .eq("deployment_kind", "FIXED_SUPPLY_ERC20")
+      .not("status", "in", `(${TERMINAL_ATTEMPT_STATUSES.join(",")})`)
+      .order("attempt_number", { ascending: false })
+      .limit(1);
+
+    if (error) return { ok: false, notice: "RPC_REFUSED", attempt: null };
+
+    const row = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+    if (!row) return { ok: true, notice: null, attempt: null };
+
+    return {
+      ok: true,
+      notice: null,
+      attempt: {
+        deploymentId: row.id,
+        attemptNumber: row.attempt_number,
+        status: row.status,
+        deployerAddress: row.deployer_address,
+        tokenRecipient: row.token_recipient,
+        tokenName: row.token_name,
+        tokenSymbol: row.token_symbol,
+        tokenTotalSupplyBaseUnits: row.token_total_supply_text,
+        txHash: row.tx_hash,
+        contractAddress: row.contract_address,
+        createdAt: row.created_at,
+      },
+    };
+  });
