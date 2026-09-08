@@ -495,5 +495,27 @@ check(
   "the split diagnostics did not introduce a second init path",
 );
 
+/* R — rollback to the last-known-working modal init baseline. */
+const initBlock = /EthereumProvider\.init\(\{([\s\S]*?)\n    \}\);/.exec(connectorCode)?.[1];
+const initKeys = (initBlock ?? "")
+  .split("\n")
+  .map((line) => /^\s{6}([A-Za-z]+):/.exec(line)?.[1])
+  .filter((key): key is string => key !== undefined);
+check(
+  "R1",
+  initBlock !== undefined &&
+    initKeys.join(",") === "projectId,optionalChains,showQrModal,methods,events,metadata",
+  "init options exactly match the last-known-working modal baseline option set, in order",
+);
+check(
+  "R2",
+  initBlock !== undefined &&
+    /showQrModal:\s*true/.test(initBlock) &&
+    /optionalChains:\s*\[ROBINHOOD_MAINNET_CHAIN_ID as number\]/.test(initBlock) &&
+    !/\bchains:/.test(initBlock),
+  "the chooser modal stays enabled and 4663 is proposed as optional, never as a required chain",
+);
+
+
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
