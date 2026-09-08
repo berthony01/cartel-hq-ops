@@ -375,15 +375,17 @@ check(
 );
 check(
   "L6",
-  /rpcMap:\s*\{[\s\S]{0,240}ROBINHOOD_MAINNET_PUBLIC_DIAGNOSTIC_RPC_URL/.test(connectorCode) &&
+  !/rpcMap:/.test(connectorCode) &&
+    !/ROBINHOOD_MAINNET_PUBLIC_DIAGNOSTIC_RPC_URL/.test(connectorCode) &&
     !/ROBINHOOD_MAINNET_MANAGED_RPC_ENV|ROBINHOOD_MAINNET_RPC_URL/.test(connectorCode),
-  "rpcMap uses the public diagnostic RPC constant only; the managed server RPC is never referenced",
+  "modal baseline restore: no rpcMap at all, and no diagnostic or managed RPC reference in the connector",
 );
 check(
   "L7",
-  /icons:\s*\[`\$\{window\.location\.origin\}\/favicon\.ico`\]/.test(connectorCode) &&
-    /qrModalOptions:\s*\{\s*enableMobileFullScreen:\s*true\s*\}/.test(connectorCode),
-  "WalletConnect metadata carries a real icon and the mobile fullscreen modal option is set",
+  !/qrModalOptions/.test(connectorCode) &&
+    !/favicon\.ico/.test(connectorCode) &&
+    /icons:\s*\[\]/.test(connectorCode),
+  "modal baseline restore: no qrModalOptions and an empty metadata icons array, exactly as in the last-known-working modal revision",
 );
 check(
   "L8",
