@@ -116,19 +116,23 @@ export function isInjectedWalletAvailable(): boolean {
 /* ------------------------------------------------------------------ */
 
 /**
- * The single resolution point used by the mainnet wallet adapter. An explicitly
- * connected connector wins; otherwise the historical injected path is used, so
- * desktop behaviour is unchanged when nothing has been connected here.
+ * EXPLICIT OPT-IN ONLY. The single resolution point used by the mainnet wallet
+ * adapter returns a provider ONLY after the operator explicitly connected one
+ * through `connectInjected()` or `connectWalletConnect()`.
+ *
+ * There is deliberately NO fallback to `window.ethereum`: merely rendering a
+ * page must never make an injected wallet (Phantom, MetaMask, ...) the active
+ * provider, and must never cause a provider request. Injected wallets stay
+ * fully supported through `connectInjected()`.
  */
 export function getActiveProvider(): Eip1193Provider | null {
-  if (activeProvider) return activeProvider;
-  return readInjectedProvider();
+  return activeProvider;
 }
 
 export function getActiveConnectorKind(): WalletConnectorKind | null {
-  if (activeKind) return activeKind;
-  return readInjectedProvider() ? "injected" : null;
+  return activeKind;
 }
+
 
 function lower(value: string): string {
   return value.trim().toLowerCase();
