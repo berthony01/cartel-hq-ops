@@ -3737,6 +3737,7 @@ export type Database = {
         Args: { _pack_id: string; _user_id: string }
         Returns: boolean
       }
+      can_create_private_beta_workspace: { Args: never; Returns: boolean }
       can_read_launch_chain_deployment: {
         Args: { _workspace_id: string }
         Returns: boolean
