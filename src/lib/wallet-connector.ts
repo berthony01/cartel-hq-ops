@@ -112,6 +112,41 @@ export function isInjectedWalletAvailable(): boolean {
   return readInjectedProvider() !== null;
 }
 
+/**
+ * Conservative embedded-context detection. Browser-only, presence checks
+ * exclusively: no provider request, no navigation, no host identification
+ * claim beyond "this is very likely an iframe or an in-app browser".
+ */
+export function isEmbeddedBrowserContext(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    if (window.self !== window.top) return true;
+  } catch {
+    // Cross-origin access to window.top throwing is itself iframe evidence.
+    return true;
+  }
+  const ua = typeof navigator === "undefined" ? "" : String(navigator.userAgent ?? "");
+  if (!/Android/i.test(ua)) return false;
+  // Well-known Android in-app WebView markers. Deliberately not exhaustive.
+  return /\bwv\b|FBAN|FBAV|Instagram|Line\/|Twitter|TikTok|GSA\//.test(ua);
+}
+
+/** Current top-level app URL, for an explicit user-initiated standalone open. */
+export function getStandaloneAppUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.location.href;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Bounded wait for the WalletConnect handshake. A mobile deep-link that never
+ * returns must fail closed instead of spinning forever.
+ */
+export const WALLETCONNECT_CONNECT_TIMEOUT_MS = 45_000;
+
 /* ------------------------------------------------------------------ */
 /* Active provider resolution                                          */
 /* ------------------------------------------------------------------ */
