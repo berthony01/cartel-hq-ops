@@ -406,13 +406,20 @@ function CanaryConsole() {
           </Button>
         </div>
 
-        {attemptBlocksCreation ? (
+        {existingAttempt ? (
           <p className="mt-2 text-xs text-danger">
-            Blocked: production attempt #{existingAttempt?.attemptNumber} for this launch is still
-            nonterminal ({existingAttempt?.status}). Creating another attempt is refused here. Use
+            Blocked: production attempt #{existingAttempt.attemptNumber} for this launch is still
+            nonterminal ({existingAttempt.status}). Creating another attempt is refused here. Use
             Resume existing attempt above to continue with its immutable identity.
           </p>
+        ) : existingUnverified ? (
+          <p className="mt-2 text-xs text-danger">
+            Blocked: the existing-attempt check has not returned a verified result
+            {existingNotice ? ` (${existingNotice})` : " yet"}. Creating a production attempt stays
+            disabled until the check succeeds.
+          </p>
         ) : null}
+
 
 
 
