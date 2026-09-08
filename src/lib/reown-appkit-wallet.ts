@@ -43,28 +43,25 @@ export type MinimalEip1193 = {
   removeListener?: (event: string, listener: (...args: unknown[]) => void) => void;
 };
 
-type AppKitHandle = {
-  open: (options?: { view?: string; namespace?: string }) => Promise<void>;
-  close: () => Promise<void>;
-  disconnect: (namespace?: string) => Promise<void>;
-  getWalletProvider: () => unknown;
-  getAddress: (namespace?: string) => string | undefined;
-  getChainId: () => string | number | undefined;
-  getIsConnectedState: () => boolean;
-  subscribeAccount: (cb: (state: { address?: string; isConnected?: boolean }) => void) => () => void;
-  subscribeProviders: (cb: (providers: unknown) => void) => () => void;
-  subscribeState: (cb: (state: { open: boolean }) => void) => () => void;
-};
+/**
+ * The REAL AppKit instance type, taken from the installed package through a
+ * TYPE-ONLY import (erased at build time, so SSR still never evaluates AppKit).
+ * A hand-written interface is deliberately avoided here: it can silently invent
+ * a method name that does not exist at runtime.
+ */
+type AppKitHandle = import("@reown/appkit").AppKit;
 
 /**
- * Robinhood Chain mainnet, declared with the project's own frozen constants.
+ * Robinhood Chain mainnet, declared with the project's own frozen constants and
+ * typed against the installed `CaipNetwork` contract so a missing or misnamed
+ * required property is a compile error rather than a runtime surprise.
  * Declaring the network does NOT imply any automatic switch: it only lets the
  * chooser describe the chain the operator must already be on.
  */
-export const ROBINHOOD_APPKIT_NETWORK = {
+export const ROBINHOOD_APPKIT_NETWORK: import("@reown/appkit-common").CaipNetwork = {
   id: ROBINHOOD_MAINNET_CHAIN_ID as number,
-  caipNetworkId: `eip155:${ROBINHOOD_MAINNET_CHAIN_ID}` as const,
-  chainNamespace: "eip155" as const,
+  caipNetworkId: `eip155:${ROBINHOOD_MAINNET_CHAIN_ID}`,
+  chainNamespace: "eip155",
   name: "Robinhood Chain",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcUrls: { default: { http: [ROBINHOOD_MAINNET_PUBLIC_DIAGNOSTIC_RPC_URL] } },
@@ -147,8 +144,8 @@ async function runCreateAppKit(
     const instance = createAppKit({
       adapters: [new EthersAdapter() as never],
       projectId,
-      networks: [ROBINHOOD_APPKIT_NETWORK as never],
-      defaultNetwork: ROBINHOOD_APPKIT_NETWORK as never,
+      networks: [ROBINHOOD_APPKIT_NETWORK],
+      defaultNetwork: ROBINHOOD_APPKIT_NETWORK,
       // Never restore a wallet on its own, and never move the network itself.
       enableReconnect: false,
       enableNetworkSwitch: false,
@@ -181,7 +178,16 @@ async function runCreateAppKit(
         icons: origin ? [`${origin}/favicon.ico`] : [],
       },
     });
-    return { appKit: instance as unknown as AppKitHandle, notice: null };
+    /**
+     * PROVEN READINESS GAP. `createAppKit` returns before its internal
+     * `initialize()` promise settles, and the installed `open()` awaits only
+     * `injectModalUi()` — never that promise. The installed client exposes the
+     * public `ready(): Promise<void>` which awaits it, so the chooser is only
+     * ever opened after initialization has completed. This awaits readiness; it
+     * connects nothing, opens nothing and touches no wallet.
+     */
+    await instance.ready();
+    return { appKit: instance, notice: null };
   } catch (error) {
     return { appKit: null, notice: classifyAppKitError(error) };
   }
