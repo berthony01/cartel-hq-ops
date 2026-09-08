@@ -260,8 +260,6 @@ check(
   "both confirmation phrases are exact",
 );
 
-console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
-process.exit(failures === 0 ? 0 : 1);
 
 /* ------------------------------------------------------------------ */
 /* K7–K11 — existing-attempt lookup must FAIL CLOSED                    */
