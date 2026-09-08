@@ -338,7 +338,10 @@ function CanaryConsole() {
           onSupplyWhole={setSupply}
           selectedChain={selected?.chain ?? null}
           chainEligible={chainEligible}
+          attemptBoundDeployer={existingAttempt?.deployerAddress ?? null}
+          attemptBoundRecipient={existingAttempt?.tokenRecipient ?? null}
         />
+
 
         {intentError ? <p className="mt-2 text-xs text-danger">{intentError}</p> : null}
 
