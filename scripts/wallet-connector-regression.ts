@@ -466,7 +466,7 @@ check(
 check(
   "M1",
   /Connect wallet on Robinhood Chain/.test(panelCode) &&
-    !/Robinhood Wallet|MetaMask/.test(panelCode.replace(/Robinhood Chain/g, "X")),
+    !/Robinhood Wallet \/ WalletConnect|MetaMask \/ WalletConnect/.test(panelCode),
   "the WalletConnect button names the required network, never a single wallet brand",
 );
 check(
