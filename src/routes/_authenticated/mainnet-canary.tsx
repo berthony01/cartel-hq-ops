@@ -91,6 +91,9 @@ function CanaryConsole() {
   const [sendPhrase, setSendPhrase] = useState("");
   const [stopReason, setStopReason] = useState("");
 
+  const [armSuccess, setArmSuccess] = useState(false);
+  const [claimSuccess, setClaimSuccess] = useState(false);
+
   const [control, setControl] = useState<CanaryExecutionStateResult | null>(null);
   const [intent, setIntent] = useState<MainnetSimulationIntent | null>(null);
   const [intentError, setIntentError] = useState<string | null>(null);
@@ -154,6 +157,10 @@ function CanaryConsole() {
         description="One controlled Robinhood Chain production deployment. Real ETH is spent when the final send is executed."
         status={`Chain ${ROBINHOOD_MAINNET_CHAIN_ID}`}
       />
+
+      <div className="rounded-md border border-border/40 bg-surface-raised/40 p-2 text-[11px] font-mono text-foreground">
+        Intent → Attempt → Presign → Arm → Claim → Send Window → Send → Persist/Verify
+      </div>
 
       <Section
         variant="primary"
@@ -285,6 +292,9 @@ function CanaryConsole() {
                   },
                 });
                 setDeploymentId(result.deploymentId);
+                setAuthorizationId(null);
+                setArmSuccess(false);
+                setClaimSuccess(false);
                 note(`Attempt: ${result.notice ?? result.status ?? "created"}.`);
               })
             }
@@ -325,6 +335,8 @@ function CanaryConsole() {
               });
               setQuote(result);
               setAuthorizationId(result.authorizationId);
+              setArmSuccess(false);
+              setClaimSuccess(false);
               note(`Presign: ${result.notice ?? "issued"}.`);
             })
           }
@@ -337,8 +349,8 @@ function CanaryConsole() {
 
       <Section
         variant="surface"
-        title="C–E — Typed confirmation, claim and arm"
-        description={`Type exactly "${ARM_PHRASE}" to unlock CLAIM and ARM. Each is a separate explicit click.`}
+        title="C–E — Typed confirmation: ARM first, then CLAIM"
+        description={`Type exactly "${ARM_PHRASE}" to unlock ARM. A successful ARM enables CLAIM. Each is a separate explicit click.`}
       >
         <Input
           value={armPhrase}
@@ -346,22 +358,11 @@ function CanaryConsole() {
           placeholder={ARM_PHRASE}
           className="max-w-md font-mono"
         />
+        <p className="mt-2 text-xs text-muted-foreground">
+          Required order: ARM the authorization, then immediately CLAIM it. The final send window
+          after a successful CLAIM is intentionally very short (approximately 10 seconds).
+        </p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            disabled={busy !== null || !armReady || !deploymentId || !authorizationId}
-            onClick={() =>
-              run("claim", async () => {
-                if (!deploymentId || !authorizationId) return;
-                const result = await claim({ data: { deploymentId, authorizationId } });
-                setClaimed(result);
-                note(`Claim: ${result.notice ?? "claimed"}.`);
-              })
-            }
-          >
-            {busy === "claim" ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-            Claim authorization
-          </Button>
           <Button
             size="sm"
             variant="secondary"
@@ -384,6 +385,7 @@ function CanaryConsole() {
                   },
                 });
                 setArmed(result);
+                setArmSuccess(result.ok === true);
                 note(`Arm: ${result.notice ?? "requested"}.`);
               })
             }
@@ -391,8 +393,30 @@ function CanaryConsole() {
             {busy === "arm" ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
             Arm this authorization
           </Button>
+          <Button
+            size="sm"
+            disabled={
+              busy !== null ||
+              !armReady ||
+              !deploymentId ||
+              !authorizationId ||
+              !armSuccess
+            }
+            onClick={() =>
+              run("claim", async () => {
+                if (!deploymentId || !authorizationId) return;
+                const result = await claim({ data: { deploymentId, authorizationId } });
+                setClaimed(result);
+                setClaimSuccess(result.ok === true);
+                note(`Claim: ${result.notice ?? "claimed"}.`);
+              })
+            }
+          >
+            {busy === "claim" ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+            Claim authorization
+          </Button>
         </div>
-        <Readout value={{ claimed, armed }} />
+        <Readout value={{ armed, claimed }} />
       </Section>
 
       <Section
@@ -404,7 +428,7 @@ function CanaryConsole() {
           <Button
             size="sm"
             variant="outline"
-            disabled={busy !== null || !deploymentId || !authorizationId}
+            disabled={busy !== null || !deploymentId || !authorizationId || !claimSuccess}
             onClick={() =>
               run("window", async () => {
                 if (!deploymentId || !authorizationId) return;
@@ -431,8 +455,9 @@ function CanaryConsole() {
           className="mt-3 max-w-md font-mono"
         />
         <p className="mt-2 text-xs text-muted-foreground">
-          One wallet request. No retry and no rebroadcast: if the outcome is ambiguous the attempt
-          freezes for reconciliation.
+          Issue the final send window only after CLAIM succeeds. The envelope expires on a short
+          server clock (approximately 10 seconds from CLAIM). One wallet request. No retry and no
+          rebroadcast: if the outcome is ambiguous the attempt freezes for reconciliation.
         </p>
         <Button
           variant="destructive"
