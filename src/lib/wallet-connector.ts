@@ -108,32 +108,15 @@ let walletName: string | null = null;
 let sessionChainEvidence: string[] | null = null;
 
 /**
- * RECONNECT INFRASTRUCTURE (separate from session state, on purpose).
+ * RECONNECT INFRASTRUCTURE.
  *
- * `EthereumProvider.init()` builds Core / SignClient / persisted storage and
- * the AppKit modal. Doing that again on a second explicit connect click is what
- * produced `WALLETCONNECT_INIT_FAILED` after a disconnect. The initialized
- * provider is therefore cached for the page lifecycle and REUSED for every
- * later explicit connect. A disconnect, a rejection, a timeout and a wrong
- * chain tear down the SESSION only and deliberately keep this cache. A full
- * page reload resets it naturally.
+ * The low-level `@walletconnect/ethereum-provider` initialization path — the
+ * one that repeatedly produced `WALLETCONNECT_INIT_FAILED` on mobile — has been
+ * REMOVED. All multi-wallet connection infrastructure now lives in the official
+ * Reown AppKit singleton (`reown-appkit-wallet.ts`), which is created at most
+ * once per browser lifecycle and reused across disconnect/reconnect cycles.
+ * This module keeps SESSION state only.
  */
-let initializedWalletConnectProvider: Eip1193Provider | null = null;
-/** Single in-flight init, so a double tap can never start two initializations. */
-let walletConnectInitPromise: Promise<WalletConnectInit> | null = null;
-
-type WalletConnectInit = {
-  provider: Eip1193Provider | null;
-  notice: WalletConnectorNotice | null;
-};
-
-/**
- * Stable, explicit WalletConnect storage namespace. A one-time namespace
- * migration away from any malformed legacy WalletConnect state. It is a fixed
- * constant — never random, never per-connect — and no localStorage or
- * IndexedDB key is ever read or deleted by this module.
- */
-export const WALLETCONNECT_STORAGE_PREFIX = "cartel-hq-mainnet-canary-v1";
 
 const listeners = new Set<() => void>();
 
