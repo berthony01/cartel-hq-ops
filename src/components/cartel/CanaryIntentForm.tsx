@@ -122,8 +122,12 @@ export function CanaryIntentForm(props: CanaryIntentFormProps) {
   }, [syncBinding]);
 
   const attemptDeployer = props.attemptBoundDeployer?.trim() || null;
+  const attemptRecipient = props.attemptBoundRecipient?.trim() || null;
   const deployerValue = attemptDeployer ?? props.deployer;
   const deployerLocked = attemptDeployer !== null || boundWallet !== null;
+  const recipientValue = attemptRecipient ?? props.recipient;
+  const recipientLocked = attemptRecipient !== null;
+
 
   return (
 
@@ -170,16 +174,23 @@ export function CanaryIntentForm(props: CanaryIntentFormProps) {
           <Label htmlFor="canary-recipient">Initial recipient</Label>
           <Input
             id="canary-recipient"
-            value={props.recipient}
-            onChange={(event) => props.onRecipient(event.target.value)}
+            value={recipientValue}
+            readOnly={recipientLocked}
+            onChange={(event) => {
+              if (recipientLocked) return;
+              props.onRecipient(event.target.value);
+            }}
             placeholder="0x…"
           />
           <p className="text-[11px] text-muted-foreground">
-            {boundWallet && props.recipient.trim().toLowerCase() === boundWallet
-              ? "Default only: the connected wallet. Editable — choose another recipient before creating the attempt."
-              : "Always editable. Defaults to the connected wallet only while empty."}
+            {attemptRecipient
+              ? "Source: existing attempt — immutable and never overwritten."
+              : boundWallet && props.recipient.trim().toLowerCase() === boundWallet
+                ? "Default only: the connected wallet. Editable — choose another recipient before creating the attempt."
+                : "Always editable. Defaults to the connected wallet only while empty."}
           </p>
         </div>
+
 
         <div className="space-y-1.5">
           <Label htmlFor="canary-name">Token name</Label>
