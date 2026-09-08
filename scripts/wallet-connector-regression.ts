@@ -265,13 +265,17 @@ check(
 const connectWcBody = /export async function connectWalletConnect\(\)[\s\S]*?\n\}/.exec(
   connectorCode,
 )?.[0];
+const initHelperBody = /async function runWalletConnectInit\([\s\S]*?\n\}/.exec(connectorCode)?.[0];
 check(
   "J4",
   connectWcBody !== undefined &&
-    /EthereumProvider\.init/.test(connectWcBody) &&
+    initHelperBody !== undefined &&
+    /EthereumProvider\.init/.test(initHelperBody) &&
+    !/EthereumProvider\.init/.test(connectWcBody) &&
     (connectorCode.match(/EthereumProvider\.init/g) ?? []).length === 1 &&
+    /ensureWalletConnectProvider\(projectId\)/.test(connectWcBody) &&
     (connectorCode.match(/\.connect\(\)/g) ?? []).length === 1,
-  "EthereumProvider.init and WalletConnect connect() are reachable only via explicit connectWalletConnect",
+  "EthereumProvider.init lives only in the cached init helper; connect() is reachable only via explicit connectWalletConnect",
 );
 const panelEffect = /useEffect\(\(\) => \{[\s\S]*?\}, \[[^\]]*\]\);/.exec(panelCode)?.[0];
 check(
