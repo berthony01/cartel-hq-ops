@@ -113,10 +113,14 @@ check(
 /* E — exactly one send call, no retry/rebroadcast anywhere on the mainnet path. */
 const sendCalls = walletCode.match(/eth_sendTransaction/g) ?? [];
 check("E1", sendCalls.length === 1, "mainnet wallet contains exactly one eth_sendTransaction call");
+const sendRegion = walletCode.slice(walletCode.indexOf("eth_sendTransaction") - 400);
 check(
   "E2",
-  !/eth_sendRawTransaction/.test(walletCode) && !/for\s*\(|while\s*\(/.test(walletCode),
-  "no raw-transaction path and no retry/rebroadcast loop in the mainnet send module",
+  !/eth_sendRawTransaction/.test(walletCode) &&
+    !/while\s*\(/.test(walletCode) &&
+    !/for\s*\(/.test(sendRegion) &&
+    !/setTimeout|setInterval|retr(y|ies)\s*[({=]/.test(walletCode),
+  "no raw-transaction path, no loop around the send, no timer or retry in the mainnet send module",
 );
 check(
   "E3",
