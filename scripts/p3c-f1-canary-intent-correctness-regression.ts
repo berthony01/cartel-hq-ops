@@ -191,5 +191,78 @@ for (const term of [
   );
 }
 
+/* F — P3C-F3 existing-attempt awareness (read-only, no duplicate creation). */
+check(
+  "F1",
+  /export const readCanaryExistingAttempt = createServerFn/.test(wrapperCode) &&
+    /\.middleware\(\[requireSupabaseAuth\]\)/.test(wrapperCode),
+  "the existing-attempt lookup is an authenticated server function",
+);
+check(
+  "F2",
+  /readCanaryExistingAttempt[\s\S]*?isPlatformOwner\(/.test(wrapperCode),
+  "the lookup re-checks platform ownership server-side",
+);
+{
+  const start = wrapperCode.indexOf("export const readCanaryExistingAttempt");
+  const body = start >= 0 ? wrapperCode.slice(start) : "";
+  check(
+    "F3",
+    body.length > 0 &&
+      !/\.insert\(|\.update\(|\.upsert\(|\.delete\(|\.rpc\(\s*"(?!is_platform_owner)/.test(body),
+    "the lookup writes nothing and calls no mutation RPC",
+  );
+  check(
+    "F4",
+    /from\("launch_chain_deployments"\)/.test(body) &&
+      /\.eq\("chain_id", ROBINHOOD_MAINNET_CHAIN_ID\)/.test(body) &&
+      /\.eq\("network_environment", "PRODUCTION"\)/.test(body) &&
+      /\.eq\("deployment_kind", "FIXED_SUPPLY_ERC20"\)/.test(body) &&
+      /FAILED/.test(body) &&
+      /ABANDONED/.test(body),
+    "the lookup is scoped to chain 4663 PRODUCTION fixed-supply nonterminal rows",
+  );
+}
+check(
+  "F5",
+  /attemptBlocksCreation/.test(routeCode) &&
+    /disabled=\{[\s\S]{0,200}attemptBlocksCreation/.test(routeCode),
+  "the console refuses to create a duplicate attempt while one is nonterminal",
+);
+check(
+  "F6",
+  /attemptBoundDeployer=\{existingAttempt\?\.deployerAddress/.test(routeCode) &&
+    /attemptBoundRecipient=\{existingAttempt\?\.tokenRecipient/.test(routeCode),
+  "the immutable attempt deployer and recipient are passed to the intent form",
+);
+check(
+  "F7",
+  /expectedDeployer=\{[\s\S]{0,160}existingAttempt\?\.deployerAddress[\s\S]{0,160}deployer\.trim\(\)/.test(
+    routeCode,
+  ) && !/expectedDeployer=\{intent\?\.deployer/.test(routeCode),
+  "the wallet panel expects the attempt deployer, else the provisional form deployer",
+);
+check(
+  "F8",
+  /const recipientLocked = attemptRecipient !== null;/.test(formSrc) &&
+    /readOnly=\{recipientLocked\}/.test(formSrc),
+  "an attempt-bound recipient renders read-only exactly like the deployer",
+);
+check(
+  "F9",
+  /Resume existing attempt/.test(routeSrc) &&
+    !/Start new attempt anyway|abandonCanary|abandon_launch_chain/.test(routeSrc),
+  "resume exists and no abandon/overwrite action was added",
+);
+{
+  const start = routeCode.indexOf("Resume existing attempt");
+  const before = start >= 0 ? routeCode.slice(Math.max(0, start - 1200), start) : "";
+  check(
+    "F10",
+    before.length > 0 && !/presign\(|claim\(|arm\(|sendWindow\(|verify\(|persist\(/.test(before),
+    "resume only loads local console state and triggers no downstream stage",
+  );
+}
+
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
