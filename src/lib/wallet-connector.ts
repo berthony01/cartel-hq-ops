@@ -455,6 +455,81 @@ async function tearDownWalletConnect(provider: Eip1193Provider): Promise<void> {
 }
 
 /**
+ * The ONLY place `EthereumProvider.init()` may run. Three separately reported
+ * stages, sanitized codes only — no exception message, stack, URL, endpoint,
+ * source path or project id ever leaves this function:
+ *
+ *   1. outer `@walletconnect/ethereum-provider` chunk  -> LIBRARY_LOAD_FAILED
+ *   2. nested AppKit chooser chunk (`@reown/appkit/core`) -> MODAL_CHUNK_FAILED
+ *   3. provider / Core / storage initialization        -> INIT_FAILED
+ *
+ * The AppKit chunk is eagerly imported here on purpose: the provider imports it
+ * internally, so pre-loading it both distinguishes a broken chooser bundle from
+ * a broken initialization and lets the provider resolve it from module cache.
+ */
+async function runWalletConnectInit(projectId: string): Promise<WalletConnectInit> {
+  let EthereumProvider: typeof import("@walletconnect/ethereum-provider").EthereumProvider;
+  try {
+    ({ EthereumProvider } = await import("@walletconnect/ethereum-provider"));
+  } catch {
+    return { provider: null, notice: "WALLETCONNECT_LIBRARY_LOAD_FAILED" };
+  }
+
+  try {
+    await import("@reown/appkit/core");
+  } catch {
+    return { provider: null, notice: "WALLETCONNECT_MODAL_CHUNK_FAILED" };
+  }
+
+  try {
+    // MODAL BASELINE (last revision where the chooser was observed to open),
+    // plus the stable storage namespace. `rpcMap`, `qrModalOptions` and a
+    // favicon metadata icon remain intentionally absent.
+    const initialized = await EthereumProvider.init({
+      projectId,
+      customStoragePrefix: WALLETCONNECT_STORAGE_PREFIX,
+      optionalChains: [ROBINHOOD_MAINNET_CHAIN_ID as number],
+      showQrModal: true,
+      methods: ["eth_sendTransaction"],
+      events: ["accountsChanged", "chainChanged"],
+      metadata: {
+        name: "CARTEL HQ",
+        description: "CARTEL HQ deployment wallet connection",
+        url: window.location.origin,
+        icons: [],
+      },
+    });
+    return { provider: initialized as unknown as Eip1193Provider, notice: null };
+  } catch {
+    return { provider: null, notice: "WALLETCONNECT_INIT_FAILED" };
+  }
+}
+
+/**
+ * At most ONE initialization per page lifecycle, reused by every later explicit
+ * connect. A failed initialization clears both the cache and the in-flight
+ * promise so a later explicit click may retry.
+ */
+async function ensureWalletConnectProvider(projectId: string): Promise<WalletConnectInit> {
+  if (initializedWalletConnectProvider) {
+    return { provider: initializedWalletConnectProvider, notice: null };
+  }
+  if (!walletConnectInitPromise) {
+    walletConnectInitPromise = runWalletConnectInit(projectId);
+  }
+  const outcome = await walletConnectInitPromise;
+  if (outcome.provider) {
+    initializedWalletConnectProvider = outcome.provider;
+  } else {
+    initializedWalletConnectProvider = null;
+    walletConnectInitPromise = null;
+  }
+  return outcome;
+}
+
+
+
+/**
  * Robinhood Wallet, MetaMask and any other EVM wallet connect over
  * WalletConnect.
  *
