@@ -18,9 +18,15 @@ import { inspectMainnetWalletForHandoff } from "@/lib/chain-mainnet-wallet";
 /**
  * P3C-G — MAINNET deployment wallet panel.
  *
+ * EXPLICIT CONNECT ONLY. Rendering this panel performs NO provider request:
+ * mount-time work is limited to a presence check for an injected provider and a
+ * read of the already-active connector kind. `inspectMainnetWalletForHandoff`
+ * (eth_accounts / eth_chainId) runs only once a connector has been explicitly
+ * activated by the operator clicking one of the two connect buttons.
+ *
  * Connection only. This panel never signs, never sends, and never advances the
  * canary sequence: connecting cannot trigger Presign, Arm, Claim, Send Window
- * or Send. Every inspection is read-only (`eth_accounts` / `eth_chainId`).
+ * or Send.
  */
 
 type Props = {
@@ -51,23 +57,49 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
   const [injectedAvailable, setInjectedAvailable] = useState(false);
   const [walletConnectReady, setWalletConnectReady] = useState(false);
 
-  const refresh = useCallback(async () => {
+  const clearInspection = useCallback(() => {
+    setAccount(null);
+    setChainId(null);
+    setAccountMatches(false);
+    setChainMatches(false);
+  }, []);
+
+  /**
+   * Presence-only refresh. No provider request of any kind. Safe to run on
+   * mount and on connector events.
+   */
+  const refreshAvailability = useCallback(() => {
     setInjectedAvailable(isInjectedWalletAvailable());
     setWalletConnectReady(isWalletConnectConfigured());
-    setKind(getActiveConnectorKind());
+    const active = getActiveConnectorKind();
+    setKind(active);
+    return active;
+  }, []);
+
+  /**
+   * Read-only inspection. Runs ONLY when a connector is already explicitly
+   * active; otherwise it clears the readout and touches no provider.
+   */
+  const refresh = useCallback(async () => {
+    const active = refreshAvailability();
+    if (!active) {
+      clearInspection();
+      return;
+    }
     const inspection = await inspectMainnetWalletForHandoff(expectedDeployer ?? "");
     setAccount(inspection.account);
     setChainId(inspection.chainId);
     setAccountMatches(inspection.accountMatches);
     setChainMatches(inspection.chainMatches);
-  }, [expectedDeployer]);
+  }, [clearInspection, expectedDeployer, refreshAvailability]);
 
   useEffect(() => {
-    void refresh();
+    // Mount does availability detection only — never an inspection.
+    refreshAvailability();
     return subscribeWalletConnector(() => {
       void refresh();
     });
-  }, [refresh]);
+  }, [refresh, refreshAvailability]);
 
   const chainIdDecimal = (() => {
     if (!chainId) return null;
@@ -82,8 +114,8 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
     <Section
       variant="surface"
       leading={<Wallet className="h-4 w-4" />}
-      title="Deployment wallet connection"
-      description="Connect the deployer wallet before any transaction stage. Connecting never signs, sends or advances the sequence."
+      title="Connect Deployment Wallet"
+      description="Choose a wallet below. Nothing is read from any wallet until you click one of these buttons, and connecting never signs, sends or advances the sequence."
     >
       <div className="flex flex-wrap gap-2">
         <Button
@@ -129,7 +161,7 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
         <Button
           size="sm"
           variant="outline"
-          disabled={busy !== null}
+          disabled={busy !== null || kind === null}
           onClick={async () => {
             setBusy("refresh");
             await refresh();
@@ -148,7 +180,8 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
             await disconnect();
             setNotice(null);
             setWalletLabel(null);
-            await refresh();
+            clearInspection();
+            refreshAvailability();
             setBusy(null);
           }}
         >
@@ -156,6 +189,9 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
         </Button>
       </div>
 
+      {kind === null ? (
+        <p className="mt-3 text-xs text-foreground">Not connected — choose a wallet above.</p>
+      ) : null}
       {!walletConnectReady ? (
         <p className="mt-3 text-xs text-danger">{NOTICE_COPY.WALLETCONNECT_NOT_CONFIGURED}</p>
       ) : null}
