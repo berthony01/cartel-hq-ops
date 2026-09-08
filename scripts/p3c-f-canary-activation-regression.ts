@@ -287,15 +287,15 @@ check(
 );
 check(
   "K10",
-  /notice: "CONTROL_STATE_UNAVAILABLE"/.test(canarySrc) &&
-    /catch \(caught\)/.test(canarySrc) &&
-    !/\.not\("status", "in"/.test(canarySrc),
+  /notice: "CONTROL_STATE_UNAVAILABLE"/.test(lookupSrc) &&
+    /catch \(caught\)/.test(lookupSrc) &&
+    !/\.not\("status", "in"/.test(lookupSrc),
   "lookup catches throws and uses explicit per-status negation, not a serialized IN list",
 );
 check(
   "K11",
   /readCanaryExistingAttempt[\s\S]*?insert|readCanaryExistingAttempt[\s\S]*?\.rpc\(/.test(
-    canarySrc.slice(canarySrc.indexOf("readCanaryExistingAttempt")),
+    lookupSrc.slice(lookupSrc.indexOf("readCanaryExistingAttempt")),
   ) === false,
   "existing-attempt lookup performs no insert and no RPC mutation",
 );
