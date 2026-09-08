@@ -371,7 +371,7 @@ check(
   "L5",
   /methods:\s*\["eth_sendTransaction"\]/.test(connectorCode) &&
     /events:\s*\["accountsChanged", "chainChanged"\]/.test(connectorCode),
-  "the required-chain session negotiates eth_sendTransaction plus account/chain events",
+  "the session still negotiates eth_sendTransaction plus account/chain events",
 );
 check(
   "L6",
