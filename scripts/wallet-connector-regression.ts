@@ -278,6 +278,60 @@ check(
   "the panel itself issues no provider request",
 );
 
+/* K — mobile reliability: embedded-context warning + bounded handshake. */
+check(
+  "K1",
+  /export function isEmbeddedBrowserContext\(\)/.test(connectorCode) &&
+    /window\.self !== window\.top/.test(connectorCode),
+  "connector exposes a presence-only embedded-context detector",
+);
+check(
+  "K2",
+  /isEmbeddedBrowserContext/.test(panelCode) && /embedded \?/.test(panelCode),
+  "panel warns about embedded preview / in-app browser before connection",
+);
+check(
+  "K3",
+  /Open standalone preview/.test(panelCode) &&
+    /onClick=\{\(\) => \{\s*window\.open\(standaloneUrl/.test(panelCode) &&
+    !/location\.(href|replace|assign)\s*=/.test(panelCode),
+  "standalone open is an explicit manual action and never an automatic redirect",
+);
+const wcBody = connectWcBody ?? "";
+check(
+  "K4",
+  /WALLETCONNECT_CONNECT_TIMEOUT_MS/.test(connectorCode) &&
+    /export const WALLETCONNECT_CONNECT_TIMEOUT_MS = 45_000;/.test(connectorCode) &&
+    /Promise\.race\(\[handshake, timeout\]\)/.test(connectorCode),
+  "WalletConnect handshake is bounded by a fixed client timeout",
+);
+check(
+  "K5",
+  /WALLETCONNECT_TIMEOUT/.test(connectorCode) && /WALLETCONNECT_TIMEOUT/.test(panelCode),
+  "a distinct WALLETCONNECT_TIMEOUT notice exists with user-facing copy",
+);
+check(
+  "K6",
+  wcBody.length > 0 &&
+    !/connectWalletConnect\(\)/.test(wcBody.slice(1)) &&
+    (connectorCode.match(/\.connect\(\)/g) ?? []).length === 1 &&
+    !/setInterval|retry|reconnect/i.test(connectorCode),
+  "timeout path never retries, never reconnects, never re-invokes connect()",
+);
+check(
+  "K7",
+  (panelCode.match(/setBusy\(null\);/g) ?? []).length >= 4 &&
+    (panelCode.match(/\} finally \{/g) ?? []).length >= 4,
+  "every panel handler clears its busy state in a finally block",
+);
+check(
+  "K8",
+  /walletConnectProvider = null;[\s\S]{0,120}activeProvider = null;[\s\S]{0,80}activeKind = null;/.test(
+    wcBody,
+  ),
+  "timeout/failure clears the local active provider, kind and session references",
+);
+
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
