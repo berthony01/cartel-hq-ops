@@ -253,10 +253,60 @@ function CanaryConsole() {
         </Section>
       ) : null}
 
+      {existingAttempt ? (
+        <Section
+          variant="surface"
+          leading={<AlertTriangle className="h-4 w-4 text-danger" />}
+          title={`Existing production attempt #${existingAttempt.attemptNumber} found`}
+          description="A nonterminal Robinhood Chain production attempt already exists for this launch. Its identity is immutable and no new attempt may be created."
+        >
+          <div className="grid gap-1 sm:grid-cols-2">
+            <ReadoutLine label={"Status"} value={existingAttempt.status} />
+            <ReadoutLine label={"Deployment id"} value={existingAttempt.deploymentId} />
+            <ReadoutLine label={"Immutable deployer"} value={existingAttempt.deployerAddress} />
+            <ReadoutLine label={"Immutable recipient"} value={existingAttempt.tokenRecipient} />
+            <ReadoutLine label={"Token"} value={existingAttempt.tokenName} />
+            <ReadoutLine label={"Onchain symbol"} value={existingAttempt.tokenSymbol} />
+            <ReadoutLine
+              label={"Base units"}
+              value={existingAttempt.tokenTotalSupplyBaseUnits}
+            />
+            <ReadoutLine label={"Tx hash"} value={existingAttempt.txHash} />
+            <ReadoutLine label={"Contract"} value={existingAttempt.contractAddress} />
+            <ReadoutLine label={"Created"} value={existingAttempt.createdAt} />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy !== null || deploymentId === existingAttempt.deploymentId}
+              onClick={() => {
+                // LOCAL UI STATE ONLY. This loads the existing deployment id into
+                // the console. It never presigns, arms, claims, sends or verifies.
+                setDeploymentId(existingAttempt.deploymentId);
+                setAuthorizationId(null);
+                setArmSuccess(false);
+                setClaimSuccess(false);
+                note(`Resumed existing attempt #${existingAttempt.attemptNumber} (local state only).`);
+              }}
+            >
+              Resume existing attempt
+            </Button>
+          </div>
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Resuming only loads the deployment id below. Nothing is presigned, armed, claimed,
+            sent or verified by this action.
+          </p>
+        </Section>
+      ) : null}
+
       <DeploymentWalletConnect
-        expectedDeployer={intent?.deployer ?? null}
+        expectedDeployer={
+          existingAttempt?.deployerAddress ?? (deployer.trim() === "" ? null : deployer.trim())
+        }
         expectedChainId={ROBINHOOD_MAINNET_CHAIN_ID}
       />
+
 
       <Section
 
