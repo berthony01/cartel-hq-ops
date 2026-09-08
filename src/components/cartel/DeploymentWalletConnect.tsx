@@ -45,6 +45,8 @@ const NOTICE_COPY: Record<WalletConnectorNotice, string> = {
   WALLETCONNECT_TIMEOUT: `The wallet never completed the connection within ${Math.round(
     WALLETCONNECT_CONNECT_TIMEOUT_MS / 1000,
   )} seconds, so the attempt was cancelled and nothing was connected. This usually means the wallet hand-off could not return to this page. Open CARTEL HQ in a standalone browser tab, or inside the wallet's own browser, and choose the wallet again.`,
+  WRONG_CHAIN_APPROVED:
+    "The wallet connected, but Robinhood Chain mainnet (4663) was not approved. Nothing advanced and nothing stayed connected. Reconnect from a wallet or session that supports Robinhood Chain.",
   CONNECTION_REJECTED_OR_FAILED: "The wallet connection was rejected or failed. Nothing changed.",
   NO_ACCOUNT: "The wallet is reachable but exposed no account.",
 };
@@ -155,7 +157,7 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
         <Button
           size="sm"
           variant="secondary"
-          disabled={busy !== null || !walletConnectReady}
+          disabled={busy !== null || !walletConnectReady || embedded}
           onClick={async () => {
             setBusy("walletconnect");
             setNotice(null);
@@ -182,7 +184,7 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
         <Button
           size="sm"
           variant="outline"
-          disabled={busy !== null || !injectedAvailable}
+          disabled={busy !== null || !injectedAvailable || embedded}
           onClick={async () => {
             setBusy("injected");
             setNotice(null);

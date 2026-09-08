@@ -1,4 +1,7 @@
-import { ROBINHOOD_MAINNET_CHAIN_ID } from "./chain-mainnet-registry";
+import {
+  ROBINHOOD_MAINNET_CHAIN_ID,
+  ROBINHOOD_MAINNET_PUBLIC_DIAGNOSTIC_RPC_URL,
+} from "./chain-mainnet-registry";
 
 /**
  * P3C-G — DEPLOYMENT WALLET CONNECTOR ABSTRACTION (browser only).
@@ -21,6 +24,24 @@ import { ROBINHOOD_MAINNET_CHAIN_ID } from "./chain-mainnet-registry";
  *   - The WalletConnect project id is a PUBLIC client identifier read from the
  *     environment. It is never hardcoded. When it is absent the connector fails
  *     closed with a explicit notice instead of throwing.
+ *
+ * MOBILE HARDENING (this revision):
+ *   - Chain ids are normalized through a single strict helper: installed
+ *     `@walletconnect/ethereum-provider@2.24.0` answers `eth_chainId` with a
+ *     NUMBER, while injected wallets answer with a hex string. Both are
+ *     accepted; anything else is refused.
+ *   - The WalletConnect chain is decided from real SESSION EVIDENCE (CAIP-10
+ *     accounts under `session.namespaces.eip155.accounts`), never from the
+ *     provider's default chain value. A session without `eip155:4663` fails
+ *     closed with a distinct notice and the provider is NOT activated.
+ *   - Robinhood Chain mainnet is a REQUIRED namespace (`chains: [4663]`) so the
+ *     requested `methods` / `events` are actually negotiated by the installed
+ *     2.24 API. An earlier comment claiming `chains` is deprecated was wrong
+ *     for this package version and has been corrected.
+ *   - A persisted session restored by `init()` is torn down before a fresh
+ *     explicit connect, so a canary connection can never silently inherit
+ *     stale approval state. WalletConnect storage keys are never touched
+ *     directly.
  */
 
 /* ------------------------------------------------------------------ */
@@ -40,6 +61,7 @@ export type WalletConnectorNotice =
   | "WALLETCONNECT_NOT_CONFIGURED"
   | "WALLETCONNECT_INIT_FAILED"
   | "WALLETCONNECT_TIMEOUT"
+  | "WRONG_CHAIN_APPROVED"
   | "CONNECTION_REJECTED_OR_FAILED"
   | "NO_ACCOUNT";
 
@@ -67,6 +89,8 @@ let activeKind: WalletConnectorKind | null = null;
 let activeProvider: Eip1193Provider | null = null;
 let walletConnectProvider: Eip1193Provider | null = null;
 let walletName: string | null = null;
+/** Canonical hex chain ids proven by the active WalletConnect session. */
+let sessionChainEvidence: string[] | null = null;
 
 const listeners = new Set<() => void>();
 
@@ -80,6 +104,40 @@ export function subscribeWalletConnector(listener: () => void): () => void {
     listeners.delete(listener);
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* Strict chain-id normalization — the single accepted parser          */
+/* ------------------------------------------------------------------ */
+
+const CANONICAL_HEX = /^0x(0|[1-9a-f][0-9a-f]*)$/;
+
+/**
+ * Accepts either a hex quantity string (`0x1237`, any case, tolerant of
+ * leading zeros) or a safe non-negative integer NUMBER (WalletConnect 2.24
+ * answers `eth_chainId` with a number). Everything else — floats, negatives,
+ * unsafe integers, decimal strings, bigints, objects — is refused rather than
+ * repaired, so a malformed value can never satisfy a chain guard.
+ */
+export function normalizeChainId(raw: unknown): string | null {
+  if (typeof raw === "number") {
+    if (!Number.isSafeInteger(raw) || raw < 0) return null;
+    return `0x${raw.toString(16)}`;
+  }
+  if (typeof raw !== "string") return null;
+  const text = raw.trim().toLowerCase();
+  if (!/^0x[0-9a-f]+$/.test(text)) return null;
+  if (CANONICAL_HEX.test(text)) return text;
+  try {
+    return `0x${BigInt(text).toString(16)}`;
+  } catch {
+    return null;
+  }
+}
+
+/** Canonical hex form of the required Robinhood Chain mainnet id. */
+export const ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL = `0x${(
+  ROBINHOOD_MAINNET_CHAIN_ID as number
+).toString(16)}`;
 
 /* ------------------------------------------------------------------ */
 /* Environment / availability                                          */
@@ -169,6 +227,17 @@ export function getActiveConnectorKind(): WalletConnectorKind | null {
   return activeKind;
 }
 
+/**
+ * Canonical hex chain ids proven by the ACTIVE WalletConnect session, or null
+ * when the active connector is injected (an injected wallet has no session
+ * namespace to inspect and is checked live through `eth_chainId`). The mainnet
+ * wallet helper reads this so the connector and the pre-send guard cannot
+ * disagree about what the wallet actually approved.
+ */
+export function getActiveSessionChainEvidence(): string[] | null {
+  if (activeKind !== "walletconnect") return null;
+  return sessionChainEvidence;
+}
 
 function lower(value: string): string {
   return value.trim().toLowerCase();
@@ -187,26 +256,67 @@ async function readAccountAndChain(
   }
   try {
     const raw = (await provider.request({ method: "eth_chainId" })) as unknown;
-    if (typeof raw === "string") chainId = lower(raw);
+    chainId = normalizeChainId(raw);
   } catch {
     chainId = null;
   }
   return { account, chainId };
 }
 
+/* ------------------------------------------------------------------ */
+/* Event listeners — named handlers, never accumulated                 */
+/* ------------------------------------------------------------------ */
+
+type AttachedHandlers = {
+  provider: Eip1193Provider;
+  accountsChanged: () => void;
+  chainChanged: () => void;
+  disconnected: () => void;
+};
+
+let attachedHandlers: AttachedHandlers | null = null;
+
+function detachEvents(): void {
+  const attached = attachedHandlers;
+  attachedHandlers = null;
+  if (!attached) return;
+  const { provider } = attached;
+  if (typeof provider.removeListener !== "function") return;
+  provider.removeListener("accountsChanged", attached.accountsChanged);
+  provider.removeListener("chainChanged", attached.chainChanged);
+  provider.removeListener("disconnect", attached.disconnected);
+}
+
 function attachEvents(provider: Eip1193Provider): void {
+  // Always detach first: a fresh connect must never accumulate listeners.
+  detachEvents();
   if (typeof provider.on !== "function") return;
-  provider.on("accountsChanged", () => emit());
-  provider.on("chainChanged", () => emit());
-  provider.on("disconnect", () => {
-    if (activeKind === "walletconnect") {
-      walletConnectProvider = null;
-      walletName = null;
-    }
-    activeProvider = null;
-    activeKind = null;
-    emit();
-  });
+  const handlers: AttachedHandlers = {
+    provider,
+    accountsChanged: () => emit(),
+    chainChanged: () => emit(),
+    disconnected: () => {
+      clearLocalConnectionState();
+      emit();
+    },
+  };
+  provider.on("accountsChanged", handlers.accountsChanged);
+  provider.on("chainChanged", handlers.chainChanged);
+  provider.on("disconnect", handlers.disconnected);
+  attachedHandlers = handlers;
+}
+
+/**
+ * Drops every local handle and every piece of session evidence. Safe to call
+ * repeatedly and safe to call when module state is already partially stale.
+ */
+function clearLocalConnectionState(): void {
+  detachEvents();
+  walletConnectProvider = null;
+  activeProvider = null;
+  activeKind = null;
+  walletName = null;
+  sessionChainEvidence = null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -259,6 +369,7 @@ export async function connectInjected(): Promise<WalletConnectorResult> {
   activeProvider = provider;
   activeKind = "injected";
   walletName = null;
+  sessionChainEvidence = null;
   attachEvents(provider);
   const state = await readWalletConnectorState();
   emit();
@@ -266,10 +377,52 @@ export async function connectInjected(): Promise<WalletConnectorResult> {
 }
 
 /**
- * Robinhood Wallet and other mobile wallets connect over WalletConnect. Chain
- * 4663 is declared as an OPTIONAL chain (the deprecated `chains` option is
- * deliberately not used) so an unsupported-chain wallet fails closed instead of
- * being pushed into a network switch.
+ * CAIP-10 session evidence. Only accounts of the exact form
+ * `eip155:<decimal chain>:<0x address>` count, and the chain id is normalized
+ * through the same strict parser used everywhere else.
+ */
+function readSessionChainEvidence(provider: Eip1193Provider): string[] {
+  const session = (
+    provider as unknown as {
+      session?: { namespaces?: Record<string, { accounts?: unknown }> };
+    }
+  ).session;
+  const accounts = session?.namespaces?.["eip155"]?.accounts;
+  if (!Array.isArray(accounts)) return [];
+  const found: string[] = [];
+  for (const entry of accounts) {
+    if (typeof entry !== "string") continue;
+    const parts = entry.split(":");
+    if (parts.length !== 3) continue;
+    if (parts[0] !== "eip155") continue;
+    if (!/^(0|[1-9][0-9]*)$/.test(parts[1] ?? "")) continue;
+    if (!/^0x[0-9a-fA-F]{40}$/.test(parts[2] ?? "")) continue;
+    const hex = normalizeChainId(Number(parts[1]));
+    if (hex !== null && !found.includes(hex)) found.push(hex);
+  }
+  return found;
+}
+
+function hasPersistedSession(provider: Eip1193Provider): boolean {
+  return Boolean((provider as unknown as { session?: unknown }).session);
+}
+
+async function tearDownWalletConnect(provider: Eip1193Provider): Promise<void> {
+  try {
+    await (provider as unknown as { disconnect: () => Promise<void> }).disconnect();
+  } catch {
+    // Best-effort teardown only. Local state is cleared regardless.
+  }
+}
+
+/**
+ * Robinhood Wallet and other mobile wallets connect over WalletConnect.
+ *
+ * Chain 4663 is a REQUIRED namespace for the installed 2.24 provider: that is
+ * what makes the requested `eth_sendTransaction` method and the chain/account
+ * events actually negotiated in the session. A wallet that cannot approve
+ * Robinhood Chain fails closed here — the connector still never asks a wallet
+ * to add or switch a network.
  */
 export async function connectWalletConnect(): Promise<WalletConnectorResult> {
   if (typeof window === "undefined") {
@@ -293,15 +446,23 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
     const { EthereumProvider } = await import("@walletconnect/ethereum-provider");
     const initialized = await EthereumProvider.init({
       projectId,
-      optionalChains: [ROBINHOOD_MAINNET_CHAIN_ID as number],
+      chains: [ROBINHOOD_MAINNET_CHAIN_ID as number],
+      // Public DIAGNOSTIC endpoint only: client transport/ping for a custom
+      // chain the WalletConnect default RPC does not know. Never authoritative
+      // for production verification, finality or evidence, and never the
+      // managed server RPC.
+      rpcMap: {
+        [String(ROBINHOOD_MAINNET_CHAIN_ID as number)]: ROBINHOOD_MAINNET_PUBLIC_DIAGNOSTIC_RPC_URL,
+      },
       showQrModal: true,
+      qrModalOptions: { enableMobileFullScreen: true },
       methods: ["eth_sendTransaction"],
       events: ["accountsChanged", "chainChanged"],
       metadata: {
         name: "CARTEL HQ",
         description: "CARTEL HQ deployment wallet connection",
         url: window.location.origin,
-        icons: [],
+        icons: [`${window.location.origin}/favicon.ico`],
       },
     });
     provider = initialized as unknown as Eip1193Provider;
@@ -313,8 +474,16 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
     };
   }
 
+  // STALE SESSION HARDENING. `init()` restores any persisted pairing. A canary
+  // connection must be explicit and fresh, so an inherited session is torn
+  // down before the handshake instead of being silently trusted.
+  if (hasPersistedSession(provider)) {
+    await tearDownWalletConnect(provider);
+    clearLocalConnectionState();
+  }
+
   // Bounded handshake. On timeout the connector fails closed and stays
-  // disconnected: it never re-attempts, never reconnects, never sends.
+  // disconnected: it never re-attempts, never re-establishes, never sends.
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     // Opens the WalletConnect QR / mobile deep-link surface. Connection only.
@@ -325,15 +494,8 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
     await Promise.race([handshake, timeout]);
   } catch (error) {
     const timedOut = error instanceof Error && error.message === "WALLETCONNECT_TIMEOUT";
-    walletConnectProvider = null;
-    activeProvider = null;
-    activeKind = null;
-    walletName = null;
-    try {
-      await (provider as unknown as { disconnect: () => Promise<void> }).disconnect();
-    } catch {
-      // Best-effort teardown only.
-    }
+    clearLocalConnectionState();
+    await tearDownWalletConnect(provider);
     emit();
     const notice: WalletConnectorNotice = timedOut
       ? "WALLETCONNECT_TIMEOUT"
@@ -343,9 +505,24 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
     if (timer !== undefined) clearTimeout(timer);
   }
 
+  // CHAIN EVIDENCE GATE. The provider's default chain value is not trusted:
+  // only real CAIP-10 accounts in the negotiated session count.
+  const evidence = readSessionChainEvidence(provider);
+  if (!evidence.includes(ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL)) {
+    clearLocalConnectionState();
+    await tearDownWalletConnect(provider);
+    emit();
+    return {
+      ok: false,
+      notice: "WRONG_CHAIN_APPROVED",
+      state: emptyState("WRONG_CHAIN_APPROVED"),
+    };
+  }
+
   walletConnectProvider = provider;
   activeProvider = provider;
   activeKind = "walletconnect";
+  sessionChainEvidence = evidence;
   walletName = readPeerWalletName(provider);
   attachEvents(provider);
   const state = await readWalletConnectorState();
@@ -367,18 +544,11 @@ function readPeerWalletName(provider: Eip1193Provider): string | null {
 
 export async function disconnectWalletConnect(): Promise<void> {
   const provider = walletConnectProvider;
-  walletConnectProvider = null;
-  if (activeKind === "walletconnect") {
-    activeProvider = null;
-    activeKind = null;
-  }
-  walletName = null;
+  clearLocalConnectionState();
   if (provider) {
-    try {
-      await (provider as unknown as { disconnect: () => Promise<void> }).disconnect();
-    } catch {
-      // A failed teardown must never leave the UI claiming a live session.
-    }
+    // A failed teardown must never leave the UI claiming a live session, so
+    // local state was already cleared above.
+    await tearDownWalletConnect(provider);
   }
   emit();
 }
@@ -389,8 +559,6 @@ export async function disconnect(): Promise<void> {
     return;
   }
   // Injected wallets cannot be revoked from a dapp; drop the local handle only.
-  activeProvider = null;
-  activeKind = null;
-  walletName = null;
+  clearLocalConnectionState();
   emit();
 }
