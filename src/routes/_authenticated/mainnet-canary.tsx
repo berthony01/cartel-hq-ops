@@ -109,6 +109,9 @@ function CanaryConsole() {
   const [intentError, setIntentError] = useState<string | null>(null);
   const [deploymentId, setDeploymentId] = useState<string | null>(null);
   const [authorizationId, setAuthorizationId] = useState<string | null>(null);
+  /** Presentation-only expiry of the current presign authorization. */
+  const [authorizationExpiresAt, setAuthorizationExpiresAt] = useState<string | null>(null);
+
   const [quote, setQuote] = useState<unknown>(null);
   const [claimed, setClaimed] = useState<unknown>(null);
   const [armed, setArmed] = useState<unknown>(null);
