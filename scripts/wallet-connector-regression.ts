@@ -394,13 +394,12 @@ check(
     /sessionEvidence\.includes\(ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL\)/.test(wcBody),
   "WalletConnect chain evidence still comes from CAIP-10 session accounts and must include eip155:4663",
 );
-const wrongChainAt = wcBody.indexOf("WRONG_CHAIN_APPROVED");
 check(
   "L4",
-  wrongChainAt > -1 &&
-    wrongChainAt < wcBody.indexOf("activeProvider = provider;") &&
-    /WRONG_CHAIN_APPROVED/.test(panelCode),
-  "a session without Robinhood Chain returns the distinct WRONG_CHAIN_APPROVED notice without activating the provider",
+  !/WRONG_CHAIN_APPROVED/.test(connectorCode) &&
+    !/WRONG_CHAIN_APPROVED/.test(panelCode) &&
+    /evidence = sessionEvidence\.includes\(ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL\)/.test(wcBody),
+  "a session without Robinhood Chain stays connected (Gate 1) and simply records no chain evidence",
 );
 check(
   "L5",
