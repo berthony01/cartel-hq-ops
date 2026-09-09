@@ -207,8 +207,15 @@ function CanaryConsole() {
   const existingDetail = existing.data?.detail ?? null;
   const attemptBlocksCreation = existingUnverified || existingAttempt !== null;
 
+  /**
+   * DERIVED UI CONTEXT ONLY. A verified nonterminal existing attempt supplies its
+   * immutable deployment id for continuation, so the operator never lands on a
+   * dead-end after a wallet hand-off. This is pure derivation: no server call, no
+   * mutation, no stage advancement and no wallet action happens because of it.
+   */
+  const activeDeploymentId = deploymentId ?? existingAttempt?.deploymentId ?? null;
 
-  const hasActiveState = !!deploymentId || !!authorizationId;
+  const hasActiveState = !!activeDeploymentId || !!authorizationId;
 
   const armReady = armPhrase === ARM_PHRASE;
   const sendReady =
