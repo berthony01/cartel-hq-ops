@@ -85,7 +85,6 @@ export type WalletConnectorNotice =
   | "REOWN_APPKIT_INIT_FAILED"
   | "REOWN_CONNECT_FAILED"
   | "WALLETCONNECT_TIMEOUT"
-  | "WRONG_CHAIN_APPROVED"
   | "CONNECTION_REJECTED_OR_FAILED"
   | "NO_ACCOUNT";
 
@@ -271,9 +270,16 @@ export function getActiveConnectorKind(): WalletConnectorKind | null {
  * namespace to inspect and is checked live through `eth_chainId`). The mainnet
  * wallet helper reads this so the connector and the pre-send guard cannot
  * disagree about what the wallet actually approved.
+ *
+ * The live session is re-read on every call when the provider exposes one, so
+ * an operator-approved in-session chain change is reflected instead of a stale
+ * connect-time snapshot. It is never widened: an unproven chain still yields no
+ * evidence and the pre-send guard still fails closed.
  */
 export function getActiveSessionChainEvidence(): string[] | null {
   if (activeKind !== "walletconnect") return null;
+  const provider = activeProvider;
+  if (provider && hasWalletConnectSession(provider)) return readSessionChainEvidence(provider);
   return sessionChainEvidence;
 }
 
@@ -469,22 +475,25 @@ function mapAppKitNotice(notice: AppKitNotice): WalletConnectorNotice {
 }
 
 /**
- * OFFICIAL REOWN APPKIT CONNECT — Robinhood Wallet, MetaMask, Trust and every
- * other supported EVM wallet stay discoverable. Explicit click only: the AppKit
- * `Connect` view is opened scoped to the `eip155` namespace, and the connector
- * waits through AppKit's own subscriptions with a bounded timeout, no polling
- * and no automatic retry.
+ * OFFICIAL REOWN APPKIT CONNECT — GATE 1 (CONNECTION) ONLY.
  *
- * The chain requirement is NOT weakened. Robinhood Chain 4663 is never inferred
- * from the configured default network:
- *   - a WalletConnect session must actually carry a CAIP-10 `eip155:4663`
- *     account, or it is torn down and never activated;
- *   - an injected AppKit connection must have BOTH the AppKit-reported chain id
- *     and a live `eth_chainId` normalize to 4663 before chain evidence is
- *     recorded. Wrong chain stays connected only so the operator can use the
- *     explicit switch button; without proven 4663 it carries no evidence and
- *     stays unusable for the canary send path.
+ * Robinhood Wallet, MetaMask, Trust and every other supported EVM wallet stay
+ * discoverable. Explicit click only: the AppKit `Connect` view is opened scoped
+ * to the `eip155` namespace, and the connector waits through AppKit's own
+ * subscriptions with a bounded timeout, no polling and no automatic retry.
+ *
+ * Connection success is INDEPENDENT of Robinhood Chain eligibility. A session
+ * that carries no `eip155:4663` evidence, or a wallet sitting on another EVM
+ * network, stays connected and is reported through the separate Gate 2
+ * classification (`classifyWalletConnection`) so the operator can make an
+ * explicit switch decision. This function never switches, never adds a network
+ * and never signs or sends.
+ *
+ * The pre-send chain requirement is NOT weakened: session chain evidence is
+ * recorded only when 4663 is actually proven, and every downstream deployment
+ * guard keeps performing its own independent live chain check.
  */
+
 export async function connectWalletConnect(): Promise<WalletConnectorResult> {
   if (typeof window === "undefined") {
     return {
@@ -518,21 +527,24 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
 
   const provider = outcome.provider as Eip1193Provider;
 
-  // CHAIN EVIDENCE GATE — real session / live provider only.
+  /*
+   * GATE 1 ONLY — CONNECTION. A wallet that connects on another EVM network
+   * STAYS CONNECTED: chain eligibility is Gate 2 and is classified separately
+   * (`classifyWalletConnection`) from the live provider chain. Nothing here
+   * tears down a session for being on the wrong network, and nothing here
+   * requests a network change.
+   *
+   * The chain EVIDENCE recorded for the pre-send guard is unchanged and
+   * unweakened: it is set only when Robinhood Chain 4663 is actually proven,
+   * by CAIP-10 session accounts or by AppKit + a live `eth_chainId` agreeing.
+   * Absent proof it stays null, so the canary send path still fails closed.
+   */
   let evidence: string[] | null = null;
   if (hasWalletConnectSession(provider)) {
     const sessionEvidence = readSessionChainEvidence(provider);
-    if (!sessionEvidence.includes(ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL)) {
-      clearLocalConnectionState();
-      await disconnectAppKit();
-      emit();
-      return {
-        ok: false,
-        notice: "WRONG_CHAIN_APPROVED",
-        state: emptyState("WRONG_CHAIN_APPROVED"),
-      };
-    }
-    evidence = sessionEvidence;
+    evidence = sessionEvidence.includes(ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL)
+      ? sessionEvidence
+      : null;
   } else {
     const appKitChain = normalizeChainId(getAppKitChainId());
     const liveRaw = await provider.request({ method: "eth_chainId" }).catch(() => null);
@@ -554,6 +566,7 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
   emit();
   return { ok: state.connected, notice: state.notice, state };
 }
+
 
 /**
  * Only trust wallet metadata the peer actually supplied. If the session does
@@ -589,6 +602,56 @@ export async function disconnect(): Promise<void> {
   // Injected wallets cannot be revoked from a dapp; drop the local handle only.
   clearLocalConnectionState();
   emit();
+}
+
+/* ------------------------------------------------------------------ */
+/* GATE 2 — Robinhood Chain eligibility, classified separately          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The four wallet states, deliberately kept distinct and never collapsed:
+ *  - DISCONNECTED — no wallet session at all.
+ *  - CONNECTED_WRONG_CHAIN — connected, live chain is not 4663, and an explicit
+ *    switch may still be possible or has simply not been tried.
+ *  - CONNECTED_CHAIN_UNAVAILABLE — still connected, but an explicit
+ *    user-requested switch proved Robinhood Chain is unknown to, or unsupported
+ *    by, this wallet / session.
+ *  - CONNECTED_READY — connected AND the LIVE provider chain read is 4663.
+ */
+export type WalletConnectionStatus =
+  | "DISCONNECTED"
+  | "CONNECTED_WRONG_CHAIN"
+  | "CONNECTED_CHAIN_UNAVAILABLE"
+  | "CONNECTED_READY";
+
+/**
+ * PURE classification. No provider request, no switch, no side effect.
+ *
+ * `liveChainId` must come from an actual `eth_chainId` read of the connected
+ * provider. WalletConnect session evidence alone can NEVER produce
+ * CONNECTED_READY — session approval is not a live active-chain read. This
+ * status is presentation state only: every deployment / transaction guard keeps
+ * performing its own independent chain, deployer and authorization checks.
+ */
+export function classifyWalletConnection(input: {
+  connected: boolean;
+  liveChainId: string | null;
+  chainUnavailable: boolean;
+}): WalletConnectionStatus {
+  if (!input.connected) return "DISCONNECTED";
+  if (normalizeChainId(input.liveChainId) === ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL) {
+    return "CONNECTED_READY";
+  }
+  return input.chainUnavailable ? "CONNECTED_CHAIN_UNAVAILABLE" : "CONNECTED_WRONG_CHAIN";
+}
+
+/**
+ * The switch outcomes that prove Robinhood Chain is not reachable from this
+ * wallet / session. Nothing is added automatically: the operator must add the
+ * network in the wallet itself or choose another wallet.
+ */
+export function isChainUnavailableSwitchNotice(notice: WalletSwitchNotice | null): boolean {
+  return notice === "NETWORK_UNKNOWN_TO_WALLET" || notice === "NETWORK_SWITCH_UNSUPPORTED";
 }
 
 /* ------------------------------------------------------------------ */
@@ -652,21 +715,22 @@ export async function requestRobinhoodChainSwitch(): Promise<WalletSwitchResult>
 }
 
 /**
- * ONE EXPLICIT OPERATOR CLICK. This helper exists only so the phone operator
- * does not have to press a second CARTEL HQ button after the wallet returns on
- * the wrong network. It is invoked EXCLUSIVELY from the panel's explicit
- * "Connect wallet on Robinhood Chain" click handler — never on mount, never on
- * a provider event, never from a subscription and never from re-check.
+ * LEGACY HELPER — NOT part of the current Gate 1 / Gate 2 flow and NOT wired to
+ * any button. The deployment wallet panel now connects (Gate 1) and leaves the
+ * network decision to the operator's separate explicit "Switch to Robinhood
+ * Chain" click (Gate 2), so nothing in the app calls this function.
  *
- * It performs at most:
- *   1. the normal explicit connect, and
- *   2. if that connect succeeded but the live chain is not 4663, exactly ONE
- *      `wallet_switchEthereumChain` request through the single canonical helper.
+ * It is preserved unchanged for any future caller and behaves exactly as
+ * before: one explicit connect, then — only if that connect succeeded and the
+ * live chain is not 4663 — exactly ONE `wallet_switchEthereumChain` request
+ * through the single canonical helper. Never on mount, never on a provider
+ * event, never from a subscription, never from re-check.
  *
  * There is no retry, no loop, no `wallet_addEthereumChain`, and no weakening of
  * any chain evidence or pre-send guard: a declined or failed switch simply
  * returns its sanitized notice and the wallet stays on its own network.
  */
+
 export async function connectWalletConnectOnRobinhoodChain(): Promise<{
   connect: WalletConnectorResult;
   switched: WalletSwitchResult | null;

@@ -394,13 +394,12 @@ check(
     /sessionEvidence\.includes\(ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL\)/.test(wcBody),
   "WalletConnect chain evidence still comes from CAIP-10 session accounts and must include eip155:4663",
 );
-const wrongChainAt = wcBody.indexOf("WRONG_CHAIN_APPROVED");
 check(
   "L4",
-  wrongChainAt > -1 &&
-    wrongChainAt < wcBody.indexOf("activeProvider = provider;") &&
-    /WRONG_CHAIN_APPROVED/.test(panelCode),
-  "a session without Robinhood Chain returns the distinct WRONG_CHAIN_APPROVED notice without activating the provider",
+  !/WRONG_CHAIN_APPROVED/.test(connectorCode) &&
+    !/WRONG_CHAIN_APPROVED/.test(panelCode) &&
+    /evidence = sessionEvidence\.includes\(ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL\)/.test(wcBody),
+  "a session without Robinhood Chain stays connected (Gate 1) and simply records no chain evidence",
 );
 check(
   "L5",
@@ -468,9 +467,10 @@ check(
 /* M — multi-wallet correction: neutral naming, sanitized split diagnostics. */
 check(
   "M1",
-  /Connect wallet on Robinhood Chain/.test(panelCode) &&
+  /Connect Wallet/.test(panelCode) &&
+    !/Connect wallet on Robinhood Chain/.test(panelCode) &&
     !/Robinhood Wallet \/ WalletConnect|MetaMask \/ WalletConnect/.test(panelCode),
-  "the WalletConnect button names the required network, never a single wallet brand",
+  "one neutral Connect Wallet button: connection is not named after a network or a single wallet brand",
 );
 check(
   "M2",
@@ -754,9 +754,8 @@ check(
   "S7",
   connectWcBody !== undefined &&
     /WALLETCONNECT_TIMEOUT/.test(connectWcBody) &&
-    /WRONG_CHAIN_APPROVED/.test(connectWcBody) &&
     !/initializedWalletConnectProvider|walletConnectInitPromise/.test(connectWcBody),
-  "rejection, timeout and wrong-chain teardown leave the initialized provider cache intact",
+  "rejection and timeout leave the initialized provider cache intact",
 );
 check(
   "S8",
@@ -946,12 +945,12 @@ check(
 );
 check(
   "U4",
-  /connectWalletConnectOnRobinhoodChain\(\)/.test(panelCode) &&
-    /Connect wallet on Robinhood Chain/.test(panelCode) &&
-    !/(useEffect|subscribeWalletConnector|refreshAvailability)[\s\S]{0,300}connectWalletConnectOnRobinhoodChain/.test(
+  !/connectWalletConnectOnRobinhoodChain/.test(panelCode) &&
+    /connectWalletConnect\(\)/.test(panelCode) &&
+    !/(useEffect|subscribeWalletConnector|refreshAvailability)[\s\S]{0,300}runConnect\(\)/.test(
       panelCode,
     ),
-  "the combined connect+align runs only from the explicit connect button, never on mount, subscription or re-check",
+  "the panel connects through Gate 1 only, from the explicit button, never on mount, subscription or re-check",
 );
 const restoreEffect = /useEffect\(\(\) => \{\s*if \(launchId\) return;[\s\S]*?\}, \[launches\.data, launchId\]\);/.exec(
   routeCode,
@@ -959,7 +958,7 @@ const restoreEffect = /useEffect\(\(\) => \{\s*if \(launchId\) return;[\s\S]*?\}
 check(
   "U5",
   restoreEffect !== undefined &&
-    /sessionStorage\.getItem\(LAUNCH_SELECTION_STORAGE_KEY\)/.test(restoreEffect) &&
+    /localStorage\.getItem\(LAUNCH_SELECTION_STORAGE_KEY\)/.test(restoreEffect) &&
     /rows\.find\(\(item\) => item\.id === stored\)/.test(restoreEffect) &&
     /if \(!row\)[\s\S]{0,160}removeItem\(LAUNCH_SELECTION_STORAGE_KEY\)/.test(restoreEffect),
   "the restored launch id is accepted only when it still exists in the operator's current launch list, else cleared",
@@ -974,14 +973,72 @@ check(
 );
 check(
   "U7",
-  (routeCode.match(/sessionStorage\.setItem\(/g) ?? []).length === 1 &&
-    /window\.sessionStorage\.setItem\(LAUNCH_SELECTION_STORAGE_KEY, id\)/.test(routeCode) &&
-    !/localStorage/.test(routeCode) &&
+  (routeCode.match(/localStorage\.setItem\(/g) ?? []).length === 1 &&
+    /window\.localStorage\.setItem\(LAUNCH_SELECTION_STORAGE_KEY, id\)/.test(routeCode) &&
+    !/sessionStorage/.test(routeCode) &&
     !/deployer|recipient|envelope|authorizationId|txHash/.test(
       /const selectLaunch = \(id: string\) => \{[\s\S]*?\n  \};/.exec(routeCode)?.[0] ?? "x",
     ),
-  "only the launch id is persisted, in sessionStorage, never an address, envelope, authorization or hash",
+  "only the launch id is persisted, in localStorage, never an address, envelope, authorization or hash",
 );
+
+/* X — Gate 1 / Gate 2 separation (A–G). */
+const classifyBody = /export function classifyWalletConnection\([\s\S]*?\n\}\n/.exec(
+  connectorCode,
+)?.[0];
+const postConnectBody = wcBody?.slice(wcBody.indexOf("const provider = outcome.provider"));
+check(
+  "X1",
+  classifyBody !== undefined &&
+    /DISCONNECTED/.test(classifyBody) &&
+    /CONNECTED_WRONG_CHAIN/.test(classifyBody) &&
+    /CONNECTED_CHAIN_UNAVAILABLE/.test(classifyBody) &&
+    /CONNECTED_READY/.test(classifyBody),
+  "A — the four wallet states are classified explicitly and never collapsed",
+);
+check(
+  "X2",
+  classifyBody !== undefined &&
+    /normalizeChainId\(input\.liveChainId\) === ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL/.test(
+      classifyBody,
+    ),
+  "B — CONNECTED_READY requires a live 4663 chain read, never session approval alone",
+);
+check(
+  "X3",
+  classifyBody !== undefined &&
+    !/request\(|eth_chainId|switchEthereum|disconnect|await /.test(classifyBody),
+  "C — classification is pure: no provider request, no switch, no teardown, no side effect",
+);
+check(
+  "X4",
+  postConnectBody !== undefined &&
+    postConnectBody.length > 0 &&
+    !/disconnectAppKit|clearLocalConnectionState|WRONG_CHAIN_APPROVED/.test(postConnectBody),
+  "D — Gate 1 connect never tears down a connected session for being on another EVM network",
+);
+
+check(
+  "X5",
+  (panelCode.match(/requestRobinhoodChainSwitch\(\)/g) ?? []).length === 1 &&
+    /status === "CONNECTED_WRONG_CHAIN"/.test(panelCode) &&
+    !/wallet_addEthereumChain/.test(panelCode),
+  "E — exactly one explicit switch call site, only from the wrong-chain branch, never adding a network",
+);
+check(
+  "X6",
+  /status === "CONNECTED_CHAIN_UNAVAILABLE"/.test(panelCode) &&
+    /Robinhood Chain is unavailable in this wallet/.test(panelCode) &&
+    /isChainUnavailableSwitchNotice/.test(panelCode),
+  "F — a proven unavailable chain shows the connected-but-unavailable branch instead of disconnecting",
+);
+check(
+  "X7",
+  /NETWORK_SWITCH_REJECTED[\s\S]{0,200}stays connected/.test(panelCode) &&
+    /independent expected-deployer, live chain-id/.test(panelCode),
+  "G — a declined switch keeps the wallet connected, and downstream guards are stated as authoritative",
+);
+
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
