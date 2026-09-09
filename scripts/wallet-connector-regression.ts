@@ -982,12 +982,13 @@ check(
   "only the launch id is persisted, in localStorage, never an address, envelope, authorization or hash",
 );
 
-/* V — Gate 1 / Gate 2 separation (A–G). */
-const classifyBody = /export function classifyWalletConnection\(input: \{[\s\S]*?\n\}/.exec(
+/* X — Gate 1 / Gate 2 separation (A–G). */
+const classifyBody = /export function classifyWalletConnection\([\s\S]*?\n\}\n/.exec(
   connectorCode,
 )?.[0];
+const postConnectBody = wcBody?.slice(wcBody.indexOf("const provider = outcome.provider"));
 check(
-  "V1",
+  "X1",
   classifyBody !== undefined &&
     /DISCONNECTED/.test(classifyBody) &&
     /CONNECTED_WRONG_CHAIN/.test(classifyBody) &&
@@ -996,7 +997,7 @@ check(
   "A — the four wallet states are classified explicitly and never collapsed",
 );
 check(
-  "V2",
+  "X2",
   classifyBody !== undefined &&
     /normalizeChainId\(input\.liveChainId\) === ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL/.test(
       classifyBody,
@@ -1004,17 +1005,19 @@ check(
   "B — CONNECTED_READY requires a live 4663 chain read, never session approval alone",
 );
 check(
-  "V3",
+  "X3",
   classifyBody !== undefined &&
     !/request\(|eth_chainId|switchEthereum|disconnect|await /.test(classifyBody),
   "C — classification is pure: no provider request, no switch, no teardown, no side effect",
 );
 check(
-  "V4",
-  wcBody !== undefined &&
-    !/disconnectAppKit|clearLocalConnectionState|WRONG_CHAIN_APPROVED/.test(wcBody),
-  "D — Gate 1 connect never tears down a session for being on another EVM network",
+  "X4",
+  postConnectBody !== undefined &&
+    postConnectBody.length > 0 &&
+    !/disconnectAppKit|clearLocalConnectionState|WRONG_CHAIN_APPROVED/.test(postConnectBody),
+  "D — Gate 1 connect never tears down a connected session for being on another EVM network",
 );
+
 check(
   "V5",
   (panelCode.match(/requestRobinhoodChainSwitch\(\)/g) ?? []).length === 1 &&
