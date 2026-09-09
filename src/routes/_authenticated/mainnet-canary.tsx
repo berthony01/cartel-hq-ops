@@ -224,6 +224,9 @@ function CanaryConsole() {
   const hasActiveState = !!activeDeploymentId || !!authorizationId;
 
   const armReady = armPhrase === ARM_PHRASE;
+  /** PRESENTATION ONLY: local clock derived from the presign expiry. */
+  const armWindow = useArmWindow(authorizationExpiresAt);
+
   const sendReady =
     sendPhrase === SEND_PHRASE &&
     windowResult?.ok === true &&
