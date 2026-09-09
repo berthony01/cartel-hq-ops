@@ -506,7 +506,7 @@ function CanaryConsole() {
             <ReadoutLine label={"Init code hash"} value={intent.initCodeHash} />
             <ReadoutLine label={"Review fingerprint"} value={intent.fingerprint} />
             <ReadoutLine label={"Launch"} value={selected?.public_slug ?? "—"} />
-            <ReadoutLine label={"Deployment id"} value={deploymentId} />
+            <ReadoutLine label={"Deployment id"} value={activeDeploymentId} />
           </div>
         ) : null}
       </Section>
