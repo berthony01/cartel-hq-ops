@@ -715,21 +715,22 @@ export async function requestRobinhoodChainSwitch(): Promise<WalletSwitchResult>
 }
 
 /**
- * ONE EXPLICIT OPERATOR CLICK. This helper exists only so the phone operator
- * does not have to press a second CARTEL HQ button after the wallet returns on
- * the wrong network. It is invoked EXCLUSIVELY from the panel's explicit
- * "Connect wallet on Robinhood Chain" click handler — never on mount, never on
- * a provider event, never from a subscription and never from re-check.
+ * LEGACY HELPER — NOT part of the current Gate 1 / Gate 2 flow and NOT wired to
+ * any button. The deployment wallet panel now connects (Gate 1) and leaves the
+ * network decision to the operator's separate explicit "Switch to Robinhood
+ * Chain" click (Gate 2), so nothing in the app calls this function.
  *
- * It performs at most:
- *   1. the normal explicit connect, and
- *   2. if that connect succeeded but the live chain is not 4663, exactly ONE
- *      `wallet_switchEthereumChain` request through the single canonical helper.
+ * It is preserved unchanged for any future caller and behaves exactly as
+ * before: one explicit connect, then — only if that connect succeeded and the
+ * live chain is not 4663 — exactly ONE `wallet_switchEthereumChain` request
+ * through the single canonical helper. Never on mount, never on a provider
+ * event, never from a subscription, never from re-check.
  *
  * There is no retry, no loop, no `wallet_addEthereumChain`, and no weakening of
  * any chain evidence or pre-send guard: a declined or failed switch simply
  * returns its sanitized notice and the wallet stays on its own network.
  */
+
 export async function connectWalletConnectOnRobinhoodChain(): Promise<{
   connect: WalletConnectorResult;
   switched: WalletSwitchResult | null;
