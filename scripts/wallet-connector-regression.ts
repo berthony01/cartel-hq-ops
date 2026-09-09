@@ -945,12 +945,12 @@ check(
 );
 check(
   "U4",
-  /connectWalletConnectOnRobinhoodChain\(\)/.test(panelCode) &&
-    /Connect wallet on Robinhood Chain/.test(panelCode) &&
-    !/(useEffect|subscribeWalletConnector|refreshAvailability)[\s\S]{0,300}connectWalletConnectOnRobinhoodChain/.test(
+  !/connectWalletConnectOnRobinhoodChain/.test(panelCode) &&
+    /connectWalletConnect\(\)/.test(panelCode) &&
+    !/(useEffect|subscribeWalletConnector|refreshAvailability)[\s\S]{0,300}runConnect\(\)/.test(
       panelCode,
     ),
-  "the combined connect+align runs only from the explicit connect button, never on mount, subscription or re-check",
+  "the panel connects through Gate 1 only, from the explicit button, never on mount, subscription or re-check",
 );
 const restoreEffect = /useEffect\(\(\) => \{\s*if \(launchId\) return;[\s\S]*?\}, \[launches\.data, launchId\]\);/.exec(
   routeCode,
