@@ -113,8 +113,9 @@ check(
 check(
   "D1",
   /VITE_WALLETCONNECT_PROJECT_ID/.test(appkitCode) &&
-    !/VITE_WALLETCONNECT_PROJECT_ID/.test(connectorCode),
-  "the public project id is read from client env in the AppKit module only",
+    /VITE_WALLETCONNECT_PROJECT_ID/.test(connectorCode) &&
+    /await import\("\.\/reown-appkit-wallet"\)/.test(connectorCode),
+  "the public project id stays client-visible while AppKit runtime code remains dynamically isolated",
 );
 check(
   "D2",
@@ -768,7 +769,9 @@ check(
   "S9",
   /REOWN_NOT_CONFIGURED/.test(appkitCode) &&
     /WALLETCONNECT_NOT_CONFIGURED/.test(connectorCode) &&
-    /isReownConfigured\(\)/.test(connectorCode),
+    /export function isWalletConnectConfigured\(\)[\s\S]{0,300}VITE_WALLETCONNECT_PROJECT_ID/.test(
+      connectorCode,
+    ),
   "a missing project id still fails closed through the connector notice union",
 );
 check(

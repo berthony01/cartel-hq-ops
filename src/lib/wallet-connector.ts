@@ -1,13 +1,5 @@
 import { ROBINHOOD_MAINNET_CHAIN_ID } from "./chain-mainnet-registry";
-import {
-  closeAppKit,
-  disconnectAppKit,
-  getAppKitChainId,
-  getCurrentOrigin,
-  isReownConfigured,
-  openAppKitConnect,
-  type AppKitNotice,
-} from "./reown-appkit-wallet";
+import type { AppKitNotice } from "./reown-appkit-wallet";
 
 /**
  * P3C-G — DEPLOYMENT WALLET CONNECTOR ABSTRACTION (browser only).
@@ -182,7 +174,10 @@ export const ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL = `0x${(
  * multi-wallet chooser stays unavailable and fails closed.
  */
 export function isWalletConnectConfigured(): boolean {
-  return isReownConfigured();
+  const raw = (import.meta.env as Record<string, string | undefined>)[
+    "VITE_WALLETCONNECT_PROJECT_ID"
+  ];
+  return typeof raw === "string" && raw.trim().length > 0;
 }
 
 /**
@@ -191,7 +186,12 @@ export function isWalletConnectConfigured(): boolean {
  * `window.location.origin` only — never a secret and never a hardcoded domain.
  */
 export function getConnectorOrigin(): string | null {
-  return getCurrentOrigin();
+  if (typeof window === "undefined") return null;
+  try {
+    return window.location.origin;
+  } catch {
+    return null;
+  }
 }
 
 /** Reads `window.ethereum` inside a function call only. Never at module scope. */
@@ -510,11 +510,12 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
     };
   }
 
-  const outcome = await openAppKitConnect(WALLETCONNECT_CONNECT_TIMEOUT_MS);
+  const appKit = await import("./reown-appkit-wallet");
+  const outcome = await appKit.openAppKitConnect(WALLETCONNECT_CONNECT_TIMEOUT_MS);
   if (outcome.status !== "connected") {
     clearLocalConnectionState();
-    await disconnectAppKit();
-    await closeAppKit();
+    await appKit.disconnectAppKit();
+    await appKit.closeAppKit();
     emit();
     const notice: WalletConnectorNotice =
       outcome.status === "timeout"
@@ -546,7 +547,7 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
       ? sessionEvidence
       : null;
   } else {
-    const appKitChain = normalizeChainId(getAppKitChainId());
+    const appKitChain = normalizeChainId(appKit.getAppKitChainId());
     const liveRaw = await provider.request({ method: "eth_chainId" }).catch(() => null);
     const liveChain = normalizeChainId(liveRaw);
     evidence =
@@ -590,6 +591,7 @@ export async function disconnectWalletConnect(): Promise<void> {
   clearLocalConnectionState();
   // A failed teardown must never leave the UI claiming a live session, so
   // local state was already cleared above.
+  const { disconnectAppKit } = await import("./reown-appkit-wallet");
   await disconnectAppKit();
   emit();
 }
