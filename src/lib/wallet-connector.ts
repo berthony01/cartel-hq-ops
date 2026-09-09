@@ -469,22 +469,25 @@ function mapAppKitNotice(notice: AppKitNotice): WalletConnectorNotice {
 }
 
 /**
- * OFFICIAL REOWN APPKIT CONNECT — Robinhood Wallet, MetaMask, Trust and every
- * other supported EVM wallet stay discoverable. Explicit click only: the AppKit
- * `Connect` view is opened scoped to the `eip155` namespace, and the connector
- * waits through AppKit's own subscriptions with a bounded timeout, no polling
- * and no automatic retry.
+ * OFFICIAL REOWN APPKIT CONNECT — GATE 1 (CONNECTION) ONLY.
  *
- * The chain requirement is NOT weakened. Robinhood Chain 4663 is never inferred
- * from the configured default network:
- *   - a WalletConnect session must actually carry a CAIP-10 `eip155:4663`
- *     account, or it is torn down and never activated;
- *   - an injected AppKit connection must have BOTH the AppKit-reported chain id
- *     and a live `eth_chainId` normalize to 4663 before chain evidence is
- *     recorded. Wrong chain stays connected only so the operator can use the
- *     explicit switch button; without proven 4663 it carries no evidence and
- *     stays unusable for the canary send path.
+ * Robinhood Wallet, MetaMask, Trust and every other supported EVM wallet stay
+ * discoverable. Explicit click only: the AppKit `Connect` view is opened scoped
+ * to the `eip155` namespace, and the connector waits through AppKit's own
+ * subscriptions with a bounded timeout, no polling and no automatic retry.
+ *
+ * Connection success is INDEPENDENT of Robinhood Chain eligibility. A session
+ * that carries no `eip155:4663` evidence, or a wallet sitting on another EVM
+ * network, stays connected and is reported through the separate Gate 2
+ * classification (`classifyWalletConnection`) so the operator can make an
+ * explicit switch decision. This function never switches, never adds a network
+ * and never signs or sends.
+ *
+ * The pre-send chain requirement is NOT weakened: session chain evidence is
+ * recorded only when 4663 is actually proven, and every downstream deployment
+ * guard keeps performing its own independent live chain check.
  */
+
 export async function connectWalletConnect(): Promise<WalletConnectorResult> {
   if (typeof window === "undefined") {
     return {
