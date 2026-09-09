@@ -333,5 +333,44 @@ check(
   "section B explains why managed pre-sign is unavailable instead of a bare disabled button",
 );
 
+/* ------------------------------------------------------------------ */
+/* L1–L4 — presign click re-reads runtime state and fails closed        */
+/* ------------------------------------------------------------------ */
+
+const presignHandler = /run\("presign", async \(\) => \{[\s\S]*?\n {12}\}\)/.exec(routeSrc)?.[0] ?? "";
+
+check(
+  "L1",
+  /await readState\(\{ data: undefined \}\)[\s\S]*await presign\(/.test(presignHandler),
+  "presign handler performs the read-only runtime-state read before issuing presign",
+);
+check(
+  "L2",
+  /if \(state\.ok !== true \|\| typeof state\.revision !== "number"\) \{[\s\S]*?setAuthorizationId\(null\);[\s\S]*?return;/.test(
+    presignHandler,
+  ),
+  "unverified runtime state blocks presign, clears the authorization and returns",
+);
+check(
+  "L3",
+  (presignHandler.match(/await presign\(/g) ?? []).length === 1 &&
+    (presignHandler.match(/await readState\(/g) ?? []).length === 1 &&
+    !/retry|poll|setInterval|setTimeout/i.test(presignHandler),
+  "exactly one runtime read and one presign call, with no retry or polling",
+);
+check(
+  "L4",
+  /Presign NOT issued: runtime state could not be verified/.test(routeSrc) &&
+    /re-reads the authoritative runtime execution state read-only/i.test(routeSrc),
+  "operator sees why presign did not proceed and that the click includes the runtime refresh",
+);
+check(
+  "L5",
+  /typeof control\?\.revision !== "number"/.test(routeSrc) &&
+    /expectedControlRevision: control\.revision/.test(routeSrc),
+  "ARM still requires a numeric verified control revision and exact binding",
+);
+
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
+
