@@ -529,7 +529,7 @@ function CanaryConsole() {
 
         variant="surface"
         title="STEP 1 — Safety check (Managed Pre-sign)"
-        description="This single click first re-reads the authoritative runtime execution state read-only, then issues a short-lived authorization only if that read is verified with a numeric control revision."
+        description="Step B — Managed pre-sign and economic evidence. This single click first re-reads the authoritative runtime execution state read-only, then issues a short-lived authorization only if that read is verified with a numeric control revision."
       >
         <ul className="mb-3 space-y-1 text-xs text-muted-foreground">
           <li>Verifies the exact approved deployment and contract intent.</li>
