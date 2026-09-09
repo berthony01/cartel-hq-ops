@@ -372,6 +372,64 @@ check(
   "ARM still requires a numeric verified control revision and exact binding",
 );
 
+/* ------------------------------------------------------------------ */
+/* M1–M8 — UX correction safety invariants                              */
+/* ------------------------------------------------------------------ */
+
+const readoutSrc = read("src/components/cartel/CanaryReadout.tsx");
+
+check(
+  "M1",
+  /placeholder="Type confirmation here"/.test(routeSrc) &&
+    !/placeholder=\{ARM_PHRASE\}/.test(routeSrc) &&
+    /value=\{armPhrase\}/.test(routeSrc),
+  "ARM confirmation input is never prefilled and no longer uses the phrase as placeholder",
+);
+check(
+  "M2",
+  /Type this exact confirmation:/.test(routeSrc) && /<code[^>]*>\s*\{ARM_PHRASE\}/.test(routeSrc),
+  "the exact phrase is displayed as a separate code block, not inside the input",
+);
+check(
+  "M3",
+  /const armReady = armPhrase === ARM_PHRASE;/.test(routeSrc),
+  "exact typed phrase equality is still required",
+);
+const armButtonGuards =
+  /!armReady \|\|\s*\n?\s*!activeDeploymentId \|\|\s*\n?\s*!authorizationId \|\|\s*\n?\s*armWindow\.expired \|\|\s*\n?\s*typeof control\?\.revision !== "number"/;
+check("M4", armButtonGuards.test(routeSrc), "ARM requires authorization, numeric revision, exact phrase and an unexpired window");
+check(
+  "M5",
+  /export const ARM_WINDOW_LEAD_SECONDS = 30;/.test(readoutSrc) &&
+    /setInterval\(\(\) => setNow\(Date\.now\(\)\), 1000\)/.test(readoutSrc) &&
+    /clearInterval\(id\)/.test(readoutSrc) &&
+    !/useServerFn|\.rpc\(|fetch\(|eth_|mutate|presign|arm\(|claim\(|send/i.test(
+      stripComments(readoutSrc),
+    ),
+  "the countdown only updates a local clock, cleans up, and can invoke no server/wallet action",
+);
+check(
+  "M6",
+  /setArmPhrase\(""\);[\s\S]{0,200}setAuthorizationExpiresAt\(null\);[\s\S]{0,400}await readState\(/.test(
+    routeSrc,
+  ),
+  "a new presign clears the previously typed phrase and prior arm/claim state first",
+);
+check(
+  "M7",
+  /ARM window expired — run Managed Pre-sign again/.test(routeSrc) &&
+    /ARM window: \$\{armWindow\.secondsRemaining\} seconds remaining/.test(routeSrc),
+  "operator sees the real ARM deadline state",
+);
+check(
+  "M8",
+  /STEP 1 — Safety check \(Managed Pre-sign\)/.test(routeSrc) &&
+    /CLAIM locks this exact armed authorization/.test(routeSrc) &&
+    !/auto-?arm|auto-?claim|autoFocus/i.test(routeSrc),
+  "plain-English presign/claim copy exists with no automatic stage advancement",
+);
+
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
+
 process.exit(failures === 0 ? 0 : 1);
 
