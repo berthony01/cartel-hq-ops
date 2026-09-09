@@ -467,9 +467,10 @@ check(
 /* M — multi-wallet correction: neutral naming, sanitized split diagnostics. */
 check(
   "M1",
-  /Connect wallet on Robinhood Chain/.test(panelCode) &&
+  /Connect Wallet/.test(panelCode) &&
+    !/Connect wallet on Robinhood Chain/.test(panelCode) &&
     !/Robinhood Wallet \/ WalletConnect|MetaMask \/ WalletConnect/.test(panelCode),
-  "the WalletConnect button names the required network, never a single wallet brand",
+  "one neutral Connect Wallet button: connection is not named after a network or a single wallet brand",
 );
 check(
   "M2",
