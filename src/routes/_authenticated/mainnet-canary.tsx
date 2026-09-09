@@ -382,27 +382,10 @@ function CanaryConsole() {
             <ReadoutLine label={"Contract"} value={existingAttempt.contractAddress} />
             <ReadoutLine label={"Created"} value={existingAttempt.createdAt} />
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy !== null || deploymentId === existingAttempt.deploymentId}
-              onClick={() => {
-                // LOCAL UI STATE ONLY. This loads the existing deployment id into
-                // the console. It never presigns, arms, claims, sends or verifies.
-                setDeploymentId(existingAttempt.deploymentId);
-                setAuthorizationId(null);
-                setArmSuccess(false);
-                setClaimSuccess(false);
-                note(`Resumed existing attempt #${existingAttempt.attemptNumber} (local state only).`);
-              }}
-            >
-              Resume existing attempt
-            </Button>
-          </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">
-            Resuming only loads the deployment id below. Nothing is presigned, armed, claimed,
-            sent or verified by this action.
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            This attempt is automatically loaded for continuation: its immutable deployment id is
+            used by the manual stages below. Loading it presigns, arms, claims, sends, persists and
+            verifies nothing — every stage remains a separate explicit click.
           </p>
         </Section>
       ) : null}
