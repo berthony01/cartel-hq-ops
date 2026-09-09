@@ -518,14 +518,19 @@ function CanaryConsole() {
         title="B — Managed pre-sign and economic evidence"
         description="Server-side managed RPC simulation, gas, fees and balance. Issues an authorization; nothing is sendable yet."
       >
+        <ReadoutLine label={"Active deployment id"} value={activeDeploymentId} />
         <Button
+          className="mt-3"
           size="sm"
-          disabled={busy !== null || !deploymentId}
+          disabled={busy !== null || !activeDeploymentId}
           onClick={() =>
             run("presign", async () => {
-              if (!deploymentId) return;
+              if (!activeDeploymentId) return;
               const result = await presign({
-                data: { deploymentId, clientRequestId: `presign-${crypto.randomUUID()}` },
+                data: {
+                  deploymentId: activeDeploymentId,
+                  clientRequestId: `presign-${crypto.randomUUID()}`,
+                },
               });
               setQuote(result);
               setAuthorizationId(result.authorizationId);
@@ -538,6 +543,13 @@ function CanaryConsole() {
           {busy === "presign" ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
           Run managed pre-sign
         </Button>
+        {!activeDeploymentId ? (
+          <p className="mt-2 text-xs text-danger">
+            Managed pre-sign is unavailable because there is no active deployment context. Select
+            the launch in section A so its existing production attempt can be recovered, or create
+            a production attempt when none exists.
+          </p>
+        ) : null}
         <Readout value={quote} />
       </Section>
 
