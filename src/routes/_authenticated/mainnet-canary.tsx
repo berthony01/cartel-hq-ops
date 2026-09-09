@@ -63,7 +63,7 @@ import { sendClaimedMainnetDeployment } from "@/lib/chain-mainnet-wallet";
  * a convenience; the server wrappers and RLS are the boundary.
  */
 
-/** Browser-tab-scoped, non-authoritative memory of the selected launch id only. */
+/** Browser-local, non-authoritative memory of the selected launch id only. */
 const LAUNCH_SELECTION_STORAGE_KEY = "cartel-hq:mainnet-canary:selected-launch";
 
 function CanaryConsole() {
@@ -133,7 +133,7 @@ function CanaryConsole() {
   /**
    * LOCAL UI CONTEXT ONLY. A mobile wallet hand-off can remount this route, and
    * losing the selected launch also silently loses the existing-attempt lookup.
-   * Only the launch id is remembered, only in this browser tab's sessionStorage,
+   * Only the launch id is remembered, only in this browser's localStorage,
    * and only if it still exists in the operator's current launch list.
    *
    * Restoring is NOT resuming: it never builds intent, never creates, presigns,
@@ -145,8 +145,8 @@ function CanaryConsole() {
     setLaunchId(id);
     if (typeof window === "undefined") return;
     try {
-      if (id) window.sessionStorage.setItem(LAUNCH_SELECTION_STORAGE_KEY, id);
-      else window.sessionStorage.removeItem(LAUNCH_SELECTION_STORAGE_KEY);
+      if (id) window.localStorage.setItem(LAUNCH_SELECTION_STORAGE_KEY, id);
+      else window.localStorage.removeItem(LAUNCH_SELECTION_STORAGE_KEY);
     } catch {
       // Storage being unavailable is never fatal: selection stays in memory.
     }
@@ -159,7 +159,7 @@ function CanaryConsole() {
     if (!rows) return;
     let stored: string | null = null;
     try {
-      stored = window.sessionStorage.getItem(LAUNCH_SELECTION_STORAGE_KEY);
+      stored = window.localStorage.getItem(LAUNCH_SELECTION_STORAGE_KEY);
     } catch {
       stored = null;
     }
@@ -167,7 +167,7 @@ function CanaryConsole() {
     const row = rows.find((item) => item.id === stored) ?? null;
     if (!row) {
       try {
-        window.sessionStorage.removeItem(LAUNCH_SELECTION_STORAGE_KEY);
+        window.localStorage.removeItem(LAUNCH_SELECTION_STORAGE_KEY);
       } catch {
         /* ignore */
       }
@@ -207,8 +207,15 @@ function CanaryConsole() {
   const existingDetail = existing.data?.detail ?? null;
   const attemptBlocksCreation = existingUnverified || existingAttempt !== null;
 
+  /**
+   * DERIVED UI CONTEXT ONLY. A verified nonterminal existing attempt supplies its
+   * immutable deployment id for continuation, so the operator never lands on a
+   * dead-end after a wallet hand-off. This is pure derivation: no server call, no
+   * mutation, no stage advancement and no wallet action happens because of it.
+   */
+  const activeDeploymentId = deploymentId ?? existingAttempt?.deploymentId ?? null;
 
-  const hasActiveState = !!deploymentId || !!authorizationId;
+  const hasActiveState = !!activeDeploymentId || !!authorizationId;
 
   const armReady = armPhrase === ARM_PHRASE;
   const sendReady =
@@ -375,27 +382,10 @@ function CanaryConsole() {
             <ReadoutLine label={"Contract"} value={existingAttempt.contractAddress} />
             <ReadoutLine label={"Created"} value={existingAttempt.createdAt} />
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy !== null || deploymentId === existingAttempt.deploymentId}
-              onClick={() => {
-                // LOCAL UI STATE ONLY. This loads the existing deployment id into
-                // the console. It never presigns, arms, claims, sends or verifies.
-                setDeploymentId(existingAttempt.deploymentId);
-                setAuthorizationId(null);
-                setArmSuccess(false);
-                setClaimSuccess(false);
-                note(`Resumed existing attempt #${existingAttempt.attemptNumber} (local state only).`);
-              }}
-            >
-              Resume existing attempt
-            </Button>
-          </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">
-            Resuming only loads the deployment id below. Nothing is presigned, armed, claimed,
-            sent or verified by this action.
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            This attempt is automatically loaded for continuation: its immutable deployment id is
+            used by the manual stages below. Loading it presigns, arms, claims, sends, persists and
+            verifies nothing — every stage remains a separate explicit click.
           </p>
         </Section>
       ) : null}
@@ -493,8 +483,9 @@ function CanaryConsole() {
         {existingAttempt ? (
           <p className="mt-2 text-xs text-danger">
             Blocked: production attempt #{existingAttempt.attemptNumber} for this launch is still
-            nonterminal ({existingAttempt.status}). Creating another attempt is refused here. Use
-            Resume existing attempt above to continue with its immutable identity.
+            nonterminal ({existingAttempt.status}). Creating another attempt is refused here. That
+            attempt is already loaded above as the active deployment context, with its immutable
+            identity.
           </p>
         ) : existingUnverified ? (
           <p className="mt-2 text-xs text-danger">
@@ -516,7 +507,7 @@ function CanaryConsole() {
             <ReadoutLine label={"Init code hash"} value={intent.initCodeHash} />
             <ReadoutLine label={"Review fingerprint"} value={intent.fingerprint} />
             <ReadoutLine label={"Launch"} value={selected?.public_slug ?? "—"} />
-            <ReadoutLine label={"Deployment id"} value={deploymentId} />
+            <ReadoutLine label={"Deployment id"} value={activeDeploymentId} />
           </div>
         ) : null}
       </Section>
@@ -528,14 +519,19 @@ function CanaryConsole() {
         title="B — Managed pre-sign and economic evidence"
         description="Server-side managed RPC simulation, gas, fees and balance. Issues an authorization; nothing is sendable yet."
       >
+        <ReadoutLine label={"Active deployment id"} value={activeDeploymentId} />
         <Button
+          className="mt-3"
           size="sm"
-          disabled={busy !== null || !deploymentId}
+          disabled={busy !== null || !activeDeploymentId}
           onClick={() =>
             run("presign", async () => {
-              if (!deploymentId) return;
+              if (!activeDeploymentId) return;
               const result = await presign({
-                data: { deploymentId, clientRequestId: `presign-${crypto.randomUUID()}` },
+                data: {
+                  deploymentId: activeDeploymentId,
+                  clientRequestId: `presign-${crypto.randomUUID()}`,
+                },
               });
               setQuote(result);
               setAuthorizationId(result.authorizationId);
@@ -548,6 +544,13 @@ function CanaryConsole() {
           {busy === "presign" ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
           Run managed pre-sign
         </Button>
+        {!activeDeploymentId ? (
+          <p className="mt-2 text-xs text-danger">
+            Managed pre-sign is unavailable because there is no active deployment context. Select
+            the launch in section A so its existing production attempt can be recovered, or create
+            a production attempt when none exists.
+          </p>
+        ) : null}
         <Readout value={quote} />
       </Section>
 
@@ -573,16 +576,16 @@ function CanaryConsole() {
             disabled={
               busy !== null ||
               !armReady ||
-              !deploymentId ||
+              !activeDeploymentId ||
               !authorizationId ||
               typeof control?.revision !== "number"
             }
             onClick={() =>
               run("arm", async () => {
-                if (!deploymentId || !authorizationId || typeof control?.revision !== "number") return;
+                if (!activeDeploymentId || !authorizationId || typeof control?.revision !== "number") return;
                 const result = await arm({
                   data: {
-                    deploymentId,
+                    deploymentId: activeDeploymentId,
                     authorizationId,
                     expectedControlRevision: control.revision,
                     reason: "Owner-authorized first production canary.",
@@ -602,14 +605,14 @@ function CanaryConsole() {
             disabled={
               busy !== null ||
               !armReady ||
-              !deploymentId ||
+              !activeDeploymentId ||
               !authorizationId ||
               !armSuccess
             }
             onClick={() =>
               run("claim", async () => {
-                if (!deploymentId || !authorizationId) return;
-                const result = await claim({ data: { deploymentId, authorizationId } });
+                if (!activeDeploymentId || !authorizationId) return;
+                const result = await claim({ data: { deploymentId: activeDeploymentId, authorizationId } });
                 setClaimed(result);
                 setClaimSuccess(result.ok === true);
                 note(`Claim: ${result.notice ?? "claimed"}.`);
@@ -632,11 +635,11 @@ function CanaryConsole() {
           <Button
             size="sm"
             variant="outline"
-            disabled={busy !== null || !deploymentId || !authorizationId || !claimSuccess}
+            disabled={busy !== null || !activeDeploymentId || !authorizationId || !claimSuccess}
             onClick={() =>
               run("window", async () => {
-                if (!deploymentId || !authorizationId) return;
-                const result = await sendWindow({ data: { deploymentId, authorizationId } });
+                if (!activeDeploymentId || !authorizationId) return;
+                const result = await sendWindow({ data: { deploymentId: activeDeploymentId, authorizationId } });
                 setWindowResult({
                   ok: result.ok,
                   notice: result.notice,
@@ -695,11 +698,11 @@ function CanaryConsole() {
         <div className="flex flex-wrap gap-2">
           <Button
             size="sm"
-            disabled={busy !== null || !deploymentId || !authorizationId || !txHash}
+            disabled={busy !== null || !activeDeploymentId || !authorizationId || !txHash}
             onClick={() =>
               run("persist", async () => {
-                if (!deploymentId || !authorizationId || !txHash) return;
-                const result = await persist({ data: { deploymentId, authorizationId, txHash } });
+                if (!activeDeploymentId || !authorizationId || !txHash) return;
+                const result = await persist({ data: { deploymentId: activeDeploymentId, authorizationId, txHash } });
                 setTail(result);
                 note(`Persist: ${result.notice ?? "recorded"}.`);
               })
@@ -711,11 +714,11 @@ function CanaryConsole() {
           <Button
             size="sm"
             variant="outline"
-            disabled={busy !== null || !deploymentId}
+            disabled={busy !== null || !activeDeploymentId}
             onClick={() =>
               run("reconcile", async () => {
-                if (!deploymentId) return;
-                setTail(await reconcile({ data: { deploymentId } }));
+                if (!activeDeploymentId) return;
+                setTail(await reconcile({ data: { deploymentId: activeDeploymentId } }));
                 note("Reconciliation snapshot read.");
               })
             }
@@ -725,11 +728,11 @@ function CanaryConsole() {
           <Button
             size="sm"
             variant="outline"
-            disabled={busy !== null || !deploymentId}
+            disabled={busy !== null || !activeDeploymentId}
             onClick={() =>
               run("verify", async () => {
-                if (!deploymentId) return;
-                setTail(await verify({ data: { deploymentId } }));
+                if (!activeDeploymentId) return;
+                setTail(await verify({ data: { deploymentId: activeDeploymentId } }));
                 note("Verifier run.");
               })
             }
