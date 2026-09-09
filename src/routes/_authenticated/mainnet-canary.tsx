@@ -517,7 +517,7 @@ function CanaryConsole() {
 
         variant="surface"
         title="B — Managed pre-sign and economic evidence"
-        description="Server-side managed RPC simulation, gas, fees and balance. Issues an authorization; nothing is sendable yet."
+        description="Server-side managed RPC simulation, gas, fees and balance. This single click first re-reads the authoritative runtime execution state read-only, then issues an authorization only if that read is verified with a numeric control revision. Nothing is sendable yet, and Read runtime state in section A is no longer a separate prerequisite."
       >
         <ReadoutLine label={"Active deployment id"} value={activeDeploymentId} />
         <Button
@@ -527,6 +527,19 @@ function CanaryConsole() {
           onClick={() =>
             run("presign", async () => {
               if (!activeDeploymentId) return;
+              // READ-ONLY runtime-state refresh, exactly once, before any issuance.
+              const state = await readState({ data: undefined });
+              setControl(state);
+              if (state.ok !== true || typeof state.revision !== "number") {
+                setQuote(state);
+                setAuthorizationId(null);
+                setArmSuccess(false);
+                setClaimSuccess(false);
+                note(
+                  `Presign NOT issued: runtime state could not be verified (${state.notice ?? "unverified"}).`,
+                );
+                return;
+              }
               const result = await presign({
                 data: {
                   deploymentId: activeDeploymentId,
@@ -544,6 +557,7 @@ function CanaryConsole() {
           {busy === "presign" ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
           Run managed pre-sign
         </Button>
+
         {!activeDeploymentId ? (
           <p className="mt-2 text-xs text-danger">
             Managed pre-sign is unavailable because there is no active deployment context. Select
