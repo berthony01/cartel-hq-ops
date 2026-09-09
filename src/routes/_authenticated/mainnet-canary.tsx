@@ -478,6 +478,9 @@ function CanaryConsole() {
                 });
                 setDeploymentId(result.deploymentId);
                 setAuthorizationId(null);
+                setAuthorizationExpiresAt(null);
+                setArmPhrase("");
+
                 setArmSuccess(false);
                 setClaimSuccess(false);
                 note(`Attempt: ${result.notice ?? result.status ?? "created"}.`);
