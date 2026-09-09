@@ -270,9 +270,16 @@ export function getActiveConnectorKind(): WalletConnectorKind | null {
  * namespace to inspect and is checked live through `eth_chainId`). The mainnet
  * wallet helper reads this so the connector and the pre-send guard cannot
  * disagree about what the wallet actually approved.
+ *
+ * The live session is re-read on every call when the provider exposes one, so
+ * an operator-approved in-session chain change is reflected instead of a stale
+ * connect-time snapshot. It is never widened: an unproven chain still yields no
+ * evidence and the pre-send guard still fails closed.
  */
 export function getActiveSessionChainEvidence(): string[] | null {
   if (activeKind !== "walletconnect") return null;
+  const provider = activeProvider;
+  if (provider && hasWalletConnectSession(provider)) return readSessionChainEvidence(provider);
   return sessionChainEvidence;
 }
 
