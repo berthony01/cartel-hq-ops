@@ -63,7 +63,7 @@ import { sendClaimedMainnetDeployment } from "@/lib/chain-mainnet-wallet";
  * a convenience; the server wrappers and RLS are the boundary.
  */
 
-/** Browser-tab-scoped, non-authoritative memory of the selected launch id only. */
+/** Browser-local, non-authoritative memory of the selected launch id only. */
 const LAUNCH_SELECTION_STORAGE_KEY = "cartel-hq:mainnet-canary:selected-launch";
 
 function CanaryConsole() {
