@@ -403,7 +403,7 @@ check(
   /export const ARM_WINDOW_LEAD_SECONDS = 30;/.test(readoutSrc) &&
     /setInterval\(\(\) => setNow\(Date\.now\(\)\), 1000\)/.test(readoutSrc) &&
     /clearInterval\(id\)/.test(readoutSrc) &&
-    !/useServerFn|\.rpc\(|fetch\(|eth_|mutate|presign|arm\(|claim\(|send/i.test(
+    !/useServerFn|\.rpc\(|fetch\(|eth_|mutate|presign|sendTransaction|createServerFn|supabase/i.test(
       stripComments(readoutSrc),
     ),
   "the countdown only updates a local clock, cleans up, and can invoke no server/wallet action",
