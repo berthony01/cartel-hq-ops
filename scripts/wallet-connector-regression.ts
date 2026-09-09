@@ -958,7 +958,7 @@ const restoreEffect = /useEffect\(\(\) => \{\s*if \(launchId\) return;[\s\S]*?\}
 check(
   "U5",
   restoreEffect !== undefined &&
-    /sessionStorage\.getItem\(LAUNCH_SELECTION_STORAGE_KEY\)/.test(restoreEffect) &&
+    /localStorage\.getItem\(LAUNCH_SELECTION_STORAGE_KEY\)/.test(restoreEffect) &&
     /rows\.find\(\(item\) => item\.id === stored\)/.test(restoreEffect) &&
     /if \(!row\)[\s\S]{0,160}removeItem\(LAUNCH_SELECTION_STORAGE_KEY\)/.test(restoreEffect),
   "the restored launch id is accepted only when it still exists in the operator's current launch list, else cleared",
@@ -973,14 +973,69 @@ check(
 );
 check(
   "U7",
-  (routeCode.match(/sessionStorage\.setItem\(/g) ?? []).length === 1 &&
-    /window\.sessionStorage\.setItem\(LAUNCH_SELECTION_STORAGE_KEY, id\)/.test(routeCode) &&
-    !/localStorage/.test(routeCode) &&
+  (routeCode.match(/localStorage\.setItem\(/g) ?? []).length === 1 &&
+    /window\.localStorage\.setItem\(LAUNCH_SELECTION_STORAGE_KEY, id\)/.test(routeCode) &&
+    !/sessionStorage/.test(routeCode) &&
     !/deployer|recipient|envelope|authorizationId|txHash/.test(
       /const selectLaunch = \(id: string\) => \{[\s\S]*?\n  \};/.exec(routeCode)?.[0] ?? "x",
     ),
-  "only the launch id is persisted, in sessionStorage, never an address, envelope, authorization or hash",
+  "only the launch id is persisted, in localStorage, never an address, envelope, authorization or hash",
 );
+
+/* V — Gate 1 / Gate 2 separation (A–G). */
+const classifyBody = /export function classifyWalletConnection\(input: \{[\s\S]*?\n\}/.exec(
+  connectorCode,
+)?.[0];
+check(
+  "V1",
+  classifyBody !== undefined &&
+    /DISCONNECTED/.test(classifyBody) &&
+    /CONNECTED_WRONG_CHAIN/.test(classifyBody) &&
+    /CONNECTED_CHAIN_UNAVAILABLE/.test(classifyBody) &&
+    /CONNECTED_READY/.test(classifyBody),
+  "A — the four wallet states are classified explicitly and never collapsed",
+);
+check(
+  "V2",
+  classifyBody !== undefined &&
+    /normalizeChainId\(input\.liveChainId\) === ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL/.test(
+      classifyBody,
+    ),
+  "B — CONNECTED_READY requires a live 4663 chain read, never session approval alone",
+);
+check(
+  "V3",
+  classifyBody !== undefined &&
+    !/request\(|eth_chainId|switchEthereum|disconnect|await /.test(classifyBody),
+  "C — classification is pure: no provider request, no switch, no teardown, no side effect",
+);
+check(
+  "V4",
+  wcBody !== undefined &&
+    !/disconnectAppKit|clearLocalConnectionState|WRONG_CHAIN_APPROVED/.test(wcBody),
+  "D — Gate 1 connect never tears down a session for being on another EVM network",
+);
+check(
+  "V5",
+  (panelCode.match(/requestRobinhoodChainSwitch\(\)/g) ?? []).length === 1 &&
+    /status === "CONNECTED_WRONG_CHAIN"/.test(panelCode) &&
+    !/wallet_addEthereumChain/.test(panelCode),
+  "E — exactly one explicit switch call site, only from the wrong-chain branch, never adding a network",
+);
+check(
+  "F1_UNAVAILABLE" as unknown as string,
+  /status === "CONNECTED_CHAIN_UNAVAILABLE"/.test(panelCode) &&
+    /Robinhood Chain is unavailable in this wallet/.test(panelCode) &&
+    /isChainUnavailableSwitchNotice/.test(panelCode),
+  "F — a proven unavailable chain shows the connected-but-unavailable branch instead of disconnecting",
+);
+check(
+  "V7",
+  /NETWORK_SWITCH_REJECTED[\s\S]{0,200}stays connected/.test(panelCode) &&
+    /independent expected-deployer, live chain-id/.test(panelCode),
+  "G — a declined switch keeps the wallet connected, and downstream guards are stated as authoritative",
+);
+
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
