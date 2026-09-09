@@ -605,6 +605,56 @@ export async function disconnect(): Promise<void> {
 }
 
 /* ------------------------------------------------------------------ */
+/* GATE 2 — Robinhood Chain eligibility, classified separately          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The four wallet states, deliberately kept distinct and never collapsed:
+ *  - DISCONNECTED — no wallet session at all.
+ *  - CONNECTED_WRONG_CHAIN — connected, live chain is not 4663, and an explicit
+ *    switch may still be possible or has simply not been tried.
+ *  - CONNECTED_CHAIN_UNAVAILABLE — still connected, but an explicit
+ *    user-requested switch proved Robinhood Chain is unknown to, or unsupported
+ *    by, this wallet / session.
+ *  - CONNECTED_READY — connected AND the LIVE provider chain read is 4663.
+ */
+export type WalletConnectionStatus =
+  | "DISCONNECTED"
+  | "CONNECTED_WRONG_CHAIN"
+  | "CONNECTED_CHAIN_UNAVAILABLE"
+  | "CONNECTED_READY";
+
+/**
+ * PURE classification. No provider request, no switch, no side effect.
+ *
+ * `liveChainId` must come from an actual `eth_chainId` read of the connected
+ * provider. WalletConnect session evidence alone can NEVER produce
+ * CONNECTED_READY — session approval is not a live active-chain read. This
+ * status is presentation state only: every deployment / transaction guard keeps
+ * performing its own independent chain, deployer and authorization checks.
+ */
+export function classifyWalletConnection(input: {
+  connected: boolean;
+  liveChainId: string | null;
+  chainUnavailable: boolean;
+}): WalletConnectionStatus {
+  if (!input.connected) return "DISCONNECTED";
+  if (normalizeChainId(input.liveChainId) === ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL) {
+    return "CONNECTED_READY";
+  }
+  return input.chainUnavailable ? "CONNECTED_CHAIN_UNAVAILABLE" : "CONNECTED_WRONG_CHAIN";
+}
+
+/**
+ * The switch outcomes that prove Robinhood Chain is not reachable from this
+ * wallet / session. Nothing is added automatically: the operator must add the
+ * network in the wallet itself or choose another wallet.
+ */
+export function isChainUnavailableSwitchNotice(notice: WalletSwitchNotice | null): boolean {
+  return notice === "NETWORK_UNKNOWN_TO_WALLET" || notice === "NETWORK_SWITCH_UNSUPPORTED";
+}
+
+/* ------------------------------------------------------------------ */
 /* Explicit, user-gesture-only network switch                          */
 /* ------------------------------------------------------------------ */
 
