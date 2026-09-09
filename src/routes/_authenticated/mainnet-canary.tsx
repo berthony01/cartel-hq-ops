@@ -17,11 +17,14 @@ import {
 } from "@/lib/chain-mainnet-canary-intent";
 import {
   ARM_PHRASE,
+  ChecklistRow,
   Readout,
   ReadoutLine,
   SEND_PHRASE,
+  useArmWindow,
   useBusy,
 } from "@/components/cartel/CanaryReadout";
+
 import { usePlatformAccess } from "@/hooks/usePlatformAccess";
 import { useWorkspace } from "@/lib/workspace-context";
 import { listLaunches } from "@/lib/launch-control";
@@ -106,6 +109,9 @@ function CanaryConsole() {
   const [intentError, setIntentError] = useState<string | null>(null);
   const [deploymentId, setDeploymentId] = useState<string | null>(null);
   const [authorizationId, setAuthorizationId] = useState<string | null>(null);
+  /** Presentation-only expiry of the current presign authorization. */
+  const [authorizationExpiresAt, setAuthorizationExpiresAt] = useState<string | null>(null);
+
   const [quote, setQuote] = useState<unknown>(null);
   const [claimed, setClaimed] = useState<unknown>(null);
   const [armed, setArmed] = useState<unknown>(null);
@@ -218,6 +224,9 @@ function CanaryConsole() {
   const hasActiveState = !!activeDeploymentId || !!authorizationId;
 
   const armReady = armPhrase === ARM_PHRASE;
+  /** PRESENTATION ONLY: local clock derived from the presign expiry. */
+  const armWindow = useArmWindow(authorizationExpiresAt);
+
   const sendReady =
     sendPhrase === SEND_PHRASE &&
     windowResult?.ok === true &&
@@ -469,6 +478,9 @@ function CanaryConsole() {
                 });
                 setDeploymentId(result.deploymentId);
                 setAuthorizationId(null);
+                setAuthorizationExpiresAt(null);
+                setArmPhrase("");
+
                 setArmSuccess(false);
                 setClaimSuccess(false);
                 note(`Attempt: ${result.notice ?? result.status ?? "created"}.`);
@@ -516,9 +528,19 @@ function CanaryConsole() {
       <Section
 
         variant="surface"
-        title="B — Managed pre-sign and economic evidence"
-        description="Server-side managed RPC simulation, gas, fees and balance. This single click first re-reads the authoritative runtime execution state read-only, then issues an authorization only if that read is verified with a numeric control revision. Nothing is sendable yet, and Read runtime state in section A is no longer a separate prerequisite."
+        title="STEP 1 — Safety check (Managed Pre-sign)"
+        description="Step B — Managed pre-sign and economic evidence. This single click first re-reads the authoritative runtime execution state read-only, then issues a short-lived authorization only if that read is verified with a numeric control revision."
       >
+        <ul className="mb-3 space-y-1 text-xs text-muted-foreground">
+          <li>Verifies the exact approved deployment and contract intent.</li>
+          <li>Verifies Robinhood Chain {ROBINHOOD_MAINNET_CHAIN_ID} through the managed RPC.</li>
+          <li>Simulates contract creation and checks gas, fees and deployer balance.</li>
+          <li>Issues a short-lived authorization for the next manual step.</li>
+          <li>
+            Does NOT sign, open the wallet, spend ETH, ARM, CLAIM or send anything. Read runtime
+            state in section A is no longer a separate prerequisite.
+          </li>
+        </ul>
         <ReadoutLine label={"Active deployment id"} value={activeDeploymentId} />
         <Button
           className="mt-3"
@@ -527,6 +549,11 @@ function CanaryConsole() {
           onClick={() =>
             run("presign", async () => {
               if (!activeDeploymentId) return;
+              // A new presign always invalidates any previously typed confirmation.
+              setArmPhrase("");
+              setArmSuccess(false);
+              setClaimSuccess(false);
+              setAuthorizationExpiresAt(null);
               // READ-ONLY runtime-state refresh, exactly once, before any issuance.
               const state = await readState({ data: undefined });
               setControl(state);
@@ -548,6 +575,7 @@ function CanaryConsole() {
               });
               setQuote(result);
               setAuthorizationId(result.authorizationId);
+              setAuthorizationExpiresAt(result.expiresAt ?? null);
               setArmSuccess(false);
               setClaimSuccess(false);
               note(`Presign: ${result.notice ?? "issued"}.`);
@@ -573,12 +601,49 @@ function CanaryConsole() {
         title="C–E — Typed confirmation: ARM first, then CLAIM"
         description={`Type exactly "${ARM_PHRASE}" to unlock ARM. A successful ARM enables CLAIM. Each is a separate explicit click.`}
       >
+        <div className="grid gap-1 sm:grid-cols-2">
+          <ChecklistRow label="Deployment loaded" state={activeDeploymentId ? "ready" : "needed"} />
+          <ChecklistRow
+            label="Fresh presign authorization"
+            state={authorizationId ? "ready" : "needed"}
+          />
+          <ChecklistRow
+            label="Runtime control revision"
+            state={typeof control?.revision === "number" ? "ready" : "needed"}
+          />
+          <ChecklistRow label="Exact ARM phrase entered" state={armReady ? "ready" : "needed"} />
+          <ChecklistRow
+            label="ARM timing window"
+            state={!authorizationId ? "needed" : armWindow.expired ? "expired" : "ready"}
+          />
+        </div>
+
+        <p className="mt-3 text-xs text-muted-foreground">
+          ARM temporarily unlocks production for this one approved canary authorization. It does not
+          send a transaction or spend ETH.
+        </p>
+
+        <p className="mt-3 text-[11px] uppercase tracking-wider text-muted-foreground">
+          Type this exact confirmation:
+        </p>
+        <code className="mt-1 inline-block rounded-md border border-border/60 bg-surface-raised/60 px-2 py-1 font-mono text-xs text-foreground">
+          {ARM_PHRASE}
+        </code>
         <Input
           value={armPhrase}
           onChange={(event) => setArmPhrase(event.target.value)}
-          placeholder={ARM_PHRASE}
-          className="max-w-md font-mono"
+          placeholder="Type confirmation here"
+          className="mt-2 max-w-md font-mono"
         />
+
+        {authorizationId ? (
+          <p className={`mt-2 text-xs ${armWindow.expired ? "text-danger" : "text-muted-foreground"}`}>
+            {armWindow.expired
+              ? "ARM window expired — run Managed Pre-sign again"
+              : `ARM window: ${armWindow.secondsRemaining} seconds remaining`}
+          </p>
+        ) : null}
+
         <p className="mt-2 text-xs text-muted-foreground">
           Required order: ARM the authorization, then immediately CLAIM it. The final send window
           after a successful CLAIM is intentionally very short (approximately 10 seconds).
@@ -592,6 +657,7 @@ function CanaryConsole() {
               !armReady ||
               !activeDeploymentId ||
               !authorizationId ||
+              armWindow.expired ||
               typeof control?.revision !== "number"
             }
             onClick={() =>
@@ -612,7 +678,7 @@ function CanaryConsole() {
             }
           >
             {busy === "arm" ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-            Arm this authorization
+            ARM this fresh authorization
           </Button>
           <Button
             size="sm"
@@ -637,8 +703,14 @@ function CanaryConsole() {
             Claim authorization
           </Button>
         </div>
+        <p className={`mt-2 text-xs ${armSuccess ? "text-success" : "text-muted-foreground"}`}>
+          {armSuccess ? "ARM succeeded — CLAIM is now your next manual click. " : ""}
+          CLAIM locks this exact armed authorization as the one being used for the deployment
+          handoff. It still does not send a blockchain transaction or spend ETH.
+        </p>
         <Readout value={{ armed, claimed }} />
       </Section>
+
 
       <Section
         variant="surface"
