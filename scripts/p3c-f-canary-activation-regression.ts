@@ -233,8 +233,9 @@ check(
 check(
   "K2",
   !/setInterval|setTimeout|refetchInterval/.test(routeSrc),
-  "no polling or timer-driven invocation",
+  "no polling or timer-driven invocation in the route",
 );
+
 const guarded = [
   "createCanaryDeploymentAttempt",
   "presignMainnetTokenDeployment",
