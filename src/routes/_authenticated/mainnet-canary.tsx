@@ -167,7 +167,7 @@ function CanaryConsole() {
     const row = rows.find((item) => item.id === stored) ?? null;
     if (!row) {
       try {
-        window.sessionStorage.removeItem(LAUNCH_SELECTION_STORAGE_KEY);
+        window.localStorage.removeItem(LAUNCH_SELECTION_STORAGE_KEY);
       } catch {
         /* ignore */
       }
