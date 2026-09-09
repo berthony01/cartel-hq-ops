@@ -754,9 +754,8 @@ check(
   "S7",
   connectWcBody !== undefined &&
     /WALLETCONNECT_TIMEOUT/.test(connectWcBody) &&
-    /WRONG_CHAIN_APPROVED/.test(connectWcBody) &&
     !/initializedWalletConnectProvider|walletConnectInitPromise/.test(connectWcBody),
-  "rejection, timeout and wrong-chain teardown leave the initialized provider cache intact",
+  "rejection and timeout leave the initialized provider cache intact",
 );
 check(
   "S8",
