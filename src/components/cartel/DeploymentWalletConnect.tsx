@@ -4,12 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Section } from "@/components/cartel/Section";
 import { ReadoutLine } from "@/components/cartel/CanaryReadout";
 import {
+  classifyWalletConnection,
   connectInjected,
-  connectWalletConnectOnRobinhoodChain,
+  connectWalletConnect,
   disconnect,
   getActiveConnectorKind,
   getConnectorOrigin,
   getStandaloneAppUrl,
+  isChainUnavailableSwitchNotice,
   isEmbeddedBrowserContext,
   isInjectedWalletAvailable,
   isWalletConnectConfigured,
@@ -24,20 +26,26 @@ import { inspectMainnetWalletForHandoff } from "@/lib/chain-mainnet-wallet";
 /**
  * P3C-G — MAINNET deployment wallet panel.
  *
+ * TWO SEPARATE GATES, NEVER COLLAPSED:
+ *   GATE 1 — CONNECTION. One explicit "Connect Wallet" click opens the official
+ *   wallet chooser. A wallet that connects on another EVM network STAYS
+ *   CONNECTED; connecting alone never requests a network change.
+ *   GATE 2 — ROBINHOOD CHAIN ELIGIBILITY. Classified from a live chain read
+ *   into CONNECTED_WRONG_CHAIN, CONNECTED_CHAIN_UNAVAILABLE or CONNECTED_READY,
+ *   and only ever changed by the operator's separate explicit
+ *   "Switch to Robinhood Chain" click.
+ *
  * EXPLICIT CONNECT ONLY. Rendering this panel performs NO provider request:
  * mount-time work is limited to a presence check for an injected provider and a
  * read of the already-active connector kind. `inspectMainnetWalletForHandoff`
  * (eth_accounts / eth_chainId) runs only once a connector has been explicitly
- * activated by the operator clicking one of the two connect buttons.
- *
- * The network switch is likewise EXPLICIT: it is reachable only from the
- * operator's click on "Switch to Robinhood Chain". Nothing on mount, on
- * connect, on re-check or in an event handler requests a network change, and no
- * network is ever added automatically.
+ * activated by the operator.
  *
  * Connection only. This panel never signs, never sends, and never advances the
  * canary sequence: connecting or switching cannot trigger Presign, Arm, Claim,
- * Send Window or Send.
+ * Send Window or Send. Every downstream deployment guard keeps its own
+ * independent expected-deployer, live-chain, attempt-identity and authorization
+ * checks — none of them is ever replaced by the UI state below.
  */
 
 type Props = {
@@ -66,8 +74,6 @@ const NOTICE_COPY: Record<WalletConnectorNotice, string> = {
   WALLETCONNECT_TIMEOUT: `The wallet never completed the connection within ${Math.round(
     WALLETCONNECT_CONNECT_TIMEOUT_MS / 1000,
   )} seconds, so the attempt was cancelled and nothing was connected. This usually means the wallet hand-off could not return to this page. Open CARTEL HQ in a standalone browser tab, or inside the wallet's own browser, and choose the wallet again.`,
-  WRONG_CHAIN_APPROVED:
-    "The wallet connected, but Robinhood Chain mainnet (4663) was not approved. Nothing advanced and nothing stayed connected. Reconnect from a wallet or session that supports Robinhood Chain.",
   CONNECTION_REJECTED_OR_FAILED: "The wallet connection was rejected or failed. Nothing changed.",
   NO_ACCOUNT: "The wallet is reachable but exposed no account.",
 };
@@ -75,21 +81,28 @@ const NOTICE_COPY: Record<WalletConnectorNotice, string> = {
 const SWITCH_NOTICE_COPY: Record<WalletSwitchNotice, string> = {
   NO_ACTIVE_CONNECTOR: "No wallet is connected, so no network change was requested.",
   NETWORK_SWITCH_REJECTED:
-    "Diagnostic code NETWORK_SWITCH_REJECTED — the network change was declined in the wallet. Nothing changed and nothing advanced.",
+    "Diagnostic code NETWORK_SWITCH_REJECTED — the network change was declined in the wallet. Your wallet stays connected, still on its current network. Nothing advanced.",
   NETWORK_SWITCH_UNSUPPORTED:
     "Diagnostic code NETWORK_SWITCH_UNSUPPORTED — this wallet cannot change networks from a website. Select Robinhood Chain inside the wallet itself, then re-check.",
   NETWORK_UNKNOWN_TO_WALLET:
     "Diagnostic code NETWORK_UNKNOWN_TO_WALLET — Robinhood Chain is not present in this wallet. CARTEL HQ never adds a network for you: add Robinhood Chain (chain id 4663) in the wallet yourself, then re-check.",
   NETWORK_SWITCH_FAILED:
-    "Diagnostic code NETWORK_SWITCH_FAILED — the network change did not complete. Nothing changed and nothing advanced.",
+    "Diagnostic code NETWORK_SWITCH_FAILED — the network change did not complete. Your wallet stays connected and nothing advanced.",
 };
 
+/** Chooser-level failures that justify the injected fallback attempt. */
+const APPKIT_UNAVAILABLE_NOTICES: WalletConnectorNotice[] = [
+  "WALLETCONNECT_NOT_CONFIGURED",
+  "REOWN_LIBRARY_LOAD_FAILED",
+  "REOWN_APPKIT_INIT_FAILED",
+  "REOWN_CONNECT_FAILED",
+];
+
 export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: Props) {
-  const [busy, setBusy] = useState<
-    "injected" | "walletconnect" | "refresh" | "disconnect" | "switch" | null
-  >(null);
+  const [busy, setBusy] = useState<"connect" | "refresh" | "disconnect" | "switch" | null>(null);
   const [notice, setNotice] = useState<WalletConnectorNotice | null>(null);
   const [switchNotice, setSwitchNotice] = useState<WalletSwitchNotice | null>(null);
+  const [chainUnavailable, setChainUnavailable] = useState(false);
   const [kind, setKind] = useState<string | null>(null);
 
   const [walletLabel, setWalletLabel] = useState<string | null>(null);
@@ -153,6 +166,57 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
   }, [refresh, refreshAvailability]);
 
   /**
+   * GATE 1 ONLY. One explicit operator click opens the chooser. It never
+   * requests, implies or triggers a network change: `requestRobinhoodChainSwitch`
+   * is not reachable from here.
+   */
+  const runConnect = useCallback(async () => {
+    setBusy("connect");
+    setNotice(null);
+    setSwitchNotice(null);
+    setChainUnavailable(false);
+    try {
+      let result = await connectWalletConnect();
+      // Fallback ONLY when the chooser itself is unavailable, and only to the
+      // already-present injected wallet. Still one explicit operator click.
+      if (
+        !result.ok &&
+        result.notice !== null &&
+        APPKIT_UNAVAILABLE_NOTICES.includes(result.notice) &&
+        isInjectedWalletAvailable()
+      ) {
+        result = await connectInjected();
+      }
+      setNotice(result.notice);
+      setWalletLabel(result.state.walletName);
+      await refresh();
+    } catch {
+      setNotice("CONNECTION_REJECTED_OR_FAILED");
+    } finally {
+      setBusy(null);
+    }
+  }, [refresh]);
+
+  /**
+   * GATE 2 ONLY, EXPLICIT CLICK. The single switch call site in this panel. On
+   * approval the live chain is re-read exactly once; CONNECTED_READY follows
+   * only if the provider now really reports 4663. A rejection leaves the wallet
+   * connected.
+   */
+  const runSwitch = useCallback(async () => {
+    setBusy("switch");
+    setSwitchNotice(null);
+    try {
+      const result = await requestRobinhoodChainSwitch();
+      setSwitchNotice(result.notice);
+      setChainUnavailable(isChainUnavailableSwitchNotice(result.notice));
+      if (result.ok) await refresh();
+    } finally {
+      setBusy(null);
+    }
+  }, [refresh]);
+
+  /**
    * An expected deployer only exists once it is a well-formed address. Without
    * one there is nothing to compare, so the readout says "—" rather than
    * claiming a MISMATCH against an empty expectation.
@@ -168,12 +232,18 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
     }
   })();
 
+  const status = classifyWalletConnection({
+    connected: account !== null,
+    liveChainId: chainId,
+    chainUnavailable,
+  });
+
   return (
     <Section
       variant="surface"
       leading={<Wallet className="h-4 w-4" />}
       title="Connect Deployment Wallet"
-      description="Choose a wallet below. Nothing is read from any wallet until you click one of these buttons, and connecting never signs, sends or advances the sequence."
+      description="Connecting is one step; choosing Robinhood Chain is a separate step you control. Nothing is read from any wallet until you click Connect Wallet, and connecting never switches networks, signs, sends or advances the sequence."
     >
       {embedded ? (
         <div className="mb-3 rounded-md border border-danger/40 bg-danger/5 p-3">
@@ -203,56 +273,17 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
         <Button
           size="sm"
           variant="secondary"
-          disabled={busy !== null || !walletConnectReady || embedded}
-          onClick={async () => {
-            // EXPLICIT OPERATOR GESTURE. Connect, and — inside this same click
-            // only — ask the wallet once to move to Robinhood Chain if it came
-            // back on another network. The wallet still shows its own approval.
-            setBusy("walletconnect");
-            setNotice(null);
-            setSwitchNotice(null);
-            try {
-              const result = await connectWalletConnectOnRobinhoodChain();
-              setNotice(result.connect.notice);
-              setSwitchNotice(result.switched?.notice ?? null);
-              setWalletLabel(result.connect.state.walletName);
-              await refresh();
-            } catch {
-              setNotice("CONNECTION_REJECTED_OR_FAILED");
-            } finally {
-              setBusy(null);
-            }
+          disabled={busy !== null || (!walletConnectReady && !injectedAvailable) || embedded}
+          onClick={() => {
+            void runConnect();
           }}
         >
-          {busy === "walletconnect" ? (
+          {busy === "connect" ? (
             <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
           ) : (
             <Smartphone className="mr-2 h-3.5 w-3.5" />
           )}
-          Connect wallet on Robinhood Chain
-        </Button>
-
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={busy !== null || !injectedAvailable || embedded}
-          onClick={async () => {
-            setBusy("injected");
-            setNotice(null);
-            try {
-              const result = await connectInjected();
-              setNotice(result.notice);
-              setWalletLabel(null);
-              await refresh();
-            } catch {
-              setNotice("CONNECTION_REJECTED_OR_FAILED");
-            } finally {
-              setBusy(null);
-            }
-          }}
-        >
-          {busy === "injected" ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-          Browser wallet
+          Connect Wallet
         </Button>
 
         <Button
@@ -281,6 +312,7 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
               await disconnect();
               setNotice(null);
               setSwitchNotice(null);
+              setChainUnavailable(false);
               setWalletLabel(null);
 
               clearInspection();
@@ -294,32 +326,20 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
         </Button>
       </div>
 
-      {account && !chainMatches ? (
+      {status === "CONNECTED_WRONG_CHAIN" ? (
         <div className="mt-3 rounded-md border border-danger/40 bg-danger/5 p-3">
           <p className="text-xs text-danger">
-            This wallet is connected on a different network. Robinhood Chain mainnet (chain id{" "}
-            {expectedChainId}) is required. Nothing can be signed or sent until the wallet itself is
-            on that network.
+            This wallet is connected, but it is on a different network. Robinhood Chain mainnet
+            (chain id {expectedChainId}) is required before anything can be signed or sent. Your
+            wallet stays connected either way.
           </p>
           <Button
             className="mt-2"
             size="sm"
             variant="outline"
             disabled={busy !== null}
-            onClick={async () => {
-              // EXPLICIT USER GESTURE. The only switch call in the app, and it
-              // never adds a network and never retries.
-              setBusy("switch");
-              setSwitchNotice(null);
-              try {
-                const result = await requestRobinhoodChainSwitch();
-                setSwitchNotice(result.notice);
-                // Approved switch: re-read account + chain exactly once. No
-                // sequence stage runs, nothing is persisted.
-                if (result.ok) await refresh();
-              } finally {
-                setBusy(null);
-              }
+            onClick={() => {
+              void runSwitch();
             }}
           >
             {busy === "switch" ? (
@@ -335,14 +355,56 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
         </div>
       ) : null}
 
-      {kind === null ? (
-        <p className="mt-3 text-xs text-foreground">Not connected — choose a wallet above.</p>
+      {status === "CONNECTED_CHAIN_UNAVAILABLE" ? (
+        <div className="mt-3 rounded-md border border-danger/40 bg-danger/5 p-3">
+          <p className="text-xs text-danger">
+            This wallet is connected, but Robinhood Chain is unavailable in this wallet. Please
+            connect another compatible wallet to use Robinhood Chain features.
+          </p>
+          {switchNotice ? (
+            <p className="mt-2 text-xs text-danger">{SWITCH_NOTICE_COPY[switchNotice]}</p>
+          ) : null}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy !== null}
+              onClick={async () => {
+                setBusy("disconnect");
+                try {
+                  await disconnect();
+                  setNotice(null);
+                  setSwitchNotice(null);
+                  setChainUnavailable(false);
+                  setWalletLabel(null);
+                  clearInspection();
+                  refreshAvailability();
+                } finally {
+                  setBusy(null);
+                }
+              }}
+            >
+              Disconnect
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy !== null || embedded}
+              onClick={() => {
+                void runConnect();
+              }}
+            >
+              Choose another wallet
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {status === "DISCONNECTED" ? (
+        <p className="mt-3 text-xs text-foreground">Not connected — click Connect Wallet.</p>
       ) : null}
       {!walletConnectReady ? (
         <p className="mt-3 text-xs text-danger">{NOTICE_COPY.WALLETCONNECT_NOT_CONFIGURED}</p>
-      ) : null}
-      {!injectedAvailable ? (
-        <p className="mt-1 text-xs text-muted-foreground">{NOTICE_COPY.NO_INJECTED_PROVIDER}</p>
       ) : null}
       {notice ? <p className="mt-2 text-xs text-danger">{NOTICE_COPY[notice]}</p> : null}
       {notice === "REOWN_ORIGIN_NOT_ALLOWED" && getConnectorOrigin() ? (
@@ -359,7 +421,6 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
         press the button above, and never asks for a private key, seed phrase or wallet password.
       </p>
 
-
       <div className="mt-3 grid gap-1 sm:grid-cols-2">
         <ReadoutLine
           label={"Connector"}
@@ -374,13 +435,12 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
           }
         />
         <ReadoutLine label={"Session"} value={account ? "Connected" : "Disconnected"} />
+        <ReadoutLine label={"Wallet state"} value={status} />
         <ReadoutLine label={"Wallet address"} value={account ?? "—"} />
         <ReadoutLine label={"Expected deployer"} value={expectedDeployer ?? "—"} />
         <ReadoutLine
           label={"Account check"}
-          value={
-            !account || !expectedDeployerValid ? "—" : accountMatches ? "MATCH" : "MISMATCH"
-          }
+          value={!account || !expectedDeployerValid ? "—" : accountMatches ? "MATCH" : "MISMATCH"}
         />
         <ReadoutLine
           label={"Detected chain"}
@@ -398,8 +458,9 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
       </div>
 
       <p className="mt-3 text-[11px] text-muted-foreground">
-        A wrong network or wrong account fails closed. Switch networks or accounts inside the wallet
-        itself — CARTEL HQ never changes your wallet network for you.
+        A wrong network or wrong account fails closed: the deployment stages below keep their own
+        independent expected-deployer, live chain-id {expectedChainId}, attempt and authorization
+        checks, which this panel never replaces.
       </p>
     </Section>
   );
