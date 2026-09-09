@@ -145,8 +145,8 @@ function CanaryConsole() {
     setLaunchId(id);
     if (typeof window === "undefined") return;
     try {
-      if (id) window.sessionStorage.setItem(LAUNCH_SELECTION_STORAGE_KEY, id);
-      else window.sessionStorage.removeItem(LAUNCH_SELECTION_STORAGE_KEY);
+      if (id) window.localStorage.setItem(LAUNCH_SELECTION_STORAGE_KEY, id);
+      else window.localStorage.removeItem(LAUNCH_SELECTION_STORAGE_KEY);
     } catch {
       // Storage being unavailable is never fatal: selection stays in memory.
     }
