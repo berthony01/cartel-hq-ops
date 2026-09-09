@@ -1019,21 +1019,21 @@ check(
 );
 
 check(
-  "V5",
+  "X5",
   (panelCode.match(/requestRobinhoodChainSwitch\(\)/g) ?? []).length === 1 &&
     /status === "CONNECTED_WRONG_CHAIN"/.test(panelCode) &&
     !/wallet_addEthereumChain/.test(panelCode),
   "E — exactly one explicit switch call site, only from the wrong-chain branch, never adding a network",
 );
 check(
-  "V6",
+  "X6",
   /status === "CONNECTED_CHAIN_UNAVAILABLE"/.test(panelCode) &&
     /Robinhood Chain is unavailable in this wallet/.test(panelCode) &&
     /isChainUnavailableSwitchNotice/.test(panelCode),
   "F — a proven unavailable chain shows the connected-but-unavailable branch instead of disconnecting",
 );
 check(
-  "V7",
+  "X7",
   /NETWORK_SWITCH_REJECTED[\s\S]{0,200}stays connected/.test(panelCode) &&
     /independent expected-deployer, live chain-id/.test(panelCode),
   "G — a declined switch keeps the wallet connected, and downstream guards are stated as authoritative",
