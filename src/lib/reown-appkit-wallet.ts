@@ -266,13 +266,46 @@ export async function openAppKitConnect(timeoutMs: number): Promise<AppKitConnec
   return await new Promise<AppKitConnectOutcome>((resolve) => {
     let settled = false;
     let sawOpen = false;
+    let modalClosed = false;
+    let handoffObserved = false;
     const unsubscribers: Array<() => void> = [];
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+    let rejectionTimer: ReturnType<typeof setTimeout> | undefined;
+    let visibleBudgetMs = timeoutMs;
+    let visibleStartedAt: number | null = null;
+
+    const clearRejectionTimer = () => {
+      if (rejectionTimer !== undefined) clearTimeout(rejectionTimer);
+      rejectionTimer = undefined;
+    };
+
+    const pauseVisibleBudget = () => {
+      if (timeoutTimer !== undefined) clearTimeout(timeoutTimer);
+      timeoutTimer = undefined;
+      if (visibleStartedAt !== null) {
+        visibleBudgetMs = Math.max(0, visibleBudgetMs - (Date.now() - visibleStartedAt));
+        visibleStartedAt = null;
+      }
+    };
+
+    const startVisibleBudget = () => {
+      if (settled || document.hidden || !document.hasFocus() || timeoutTimer !== undefined) return;
+      if (visibleBudgetMs <= 0) {
+        finish({ status: "timeout" });
+        return;
+      }
+      visibleStartedAt = Date.now();
+      timeoutTimer = setTimeout(() => finish({ status: "timeout" }), visibleBudgetMs);
+    };
 
     const finish = (outcome: AppKitConnectOutcome) => {
       if (settled) return;
       settled = true;
-      if (timer !== undefined) clearTimeout(timer);
+      pauseVisibleBudget();
+      clearRejectionTimer();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("focus", handleFocus);
       for (const off of unsubscribers) {
         try {
           off();
@@ -290,6 +323,44 @@ export async function openAppKitConnect(timeoutMs: number): Promise<AppKitConnec
       }
     };
 
+    const scheduleVisibleRejection = () => {
+      clearRejectionTimer();
+      if (settled || !modalClosed || document.hidden || !document.hasFocus()) return;
+      // A plain in-page dismissal rejects quickly. A wallet-app handoff gets a
+      // longer return grace so AppKit can publish the approved provider/account.
+      const graceMs = handoffObserved ? 5_000 : 1_000;
+      rejectionTimer = setTimeout(() => {
+        tryResolveConnected();
+        if (!settled && !document.hidden && document.hasFocus()) {
+          finish({ status: "rejected" });
+        }
+      }, graceMs);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        handoffObserved = true;
+        clearRejectionTimer();
+        pauseVisibleBudget();
+        return;
+      }
+      tryResolveConnected();
+      startVisibleBudget();
+      scheduleVisibleRejection();
+    };
+
+    const handleBlur = () => {
+      handoffObserved = true;
+      clearRejectionTimer();
+      pauseVisibleBudget();
+    };
+
+    const handleFocus = () => {
+      tryResolveConnected();
+      startVisibleBudget();
+      scheduleVisibleRejection();
+    };
+
     try {
       unsubscribers.push(appKit.subscribeProviders(() => tryResolveConnected()));
       unsubscribers.push(appKit.subscribeAccount(() => tryResolveConnected()));
@@ -300,24 +371,20 @@ export async function openAppKitConnect(timeoutMs: number): Promise<AppKitConnec
             return;
           }
           if (!sawOpen) return;
-          // Modal closed. Give AppKit a microtask to publish the provider
-          // before treating the close as an operator dismissal.
-          setTimeout(() => {
-            const provider = getAppKitWalletProvider();
-            if (provider && appKit.getIsConnectedState()) {
-              finish({ status: "connected", provider });
-            } else {
-              finish({ status: "rejected" });
-            }
-          }, 250);
+          modalClosed = true;
+          tryResolveConnected();
+          scheduleVisibleRejection();
         }),
       );
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+      window.addEventListener("blur", handleBlur);
+      window.addEventListener("focus", handleFocus);
     } catch {
       finish({ status: "failed", notice: "REOWN_CONNECT_FAILED" });
       return;
     }
 
-    timer = setTimeout(() => finish({ status: "timeout" }), timeoutMs);
+    startVisibleBudget();
 
     void appKit
       .open({ view: "Connect", namespace: "eip155" })
