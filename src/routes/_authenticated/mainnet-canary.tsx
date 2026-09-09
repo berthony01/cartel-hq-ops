@@ -483,8 +483,9 @@ function CanaryConsole() {
         {existingAttempt ? (
           <p className="mt-2 text-xs text-danger">
             Blocked: production attempt #{existingAttempt.attemptNumber} for this launch is still
-            nonterminal ({existingAttempt.status}). Creating another attempt is refused here. Use
-            Resume existing attempt above to continue with its immutable identity.
+            nonterminal ({existingAttempt.status}). Creating another attempt is refused here. That
+            attempt is already loaded above as the active deployment context, with its immutable
+            identity.
           </p>
         ) : existingUnverified ? (
           <p className="mt-2 text-xs text-danger">
