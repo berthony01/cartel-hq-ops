@@ -575,16 +575,16 @@ function CanaryConsole() {
             disabled={
               busy !== null ||
               !armReady ||
-              !deploymentId ||
+              !activeDeploymentId ||
               !authorizationId ||
               typeof control?.revision !== "number"
             }
             onClick={() =>
               run("arm", async () => {
-                if (!deploymentId || !authorizationId || typeof control?.revision !== "number") return;
+                if (!activeDeploymentId || !authorizationId || typeof control?.revision !== "number") return;
                 const result = await arm({
                   data: {
-                    deploymentId,
+                    deploymentId: activeDeploymentId,
                     authorizationId,
                     expectedControlRevision: control.revision,
                     reason: "Owner-authorized first production canary.",
@@ -604,14 +604,14 @@ function CanaryConsole() {
             disabled={
               busy !== null ||
               !armReady ||
-              !deploymentId ||
+              !activeDeploymentId ||
               !authorizationId ||
               !armSuccess
             }
             onClick={() =>
               run("claim", async () => {
-                if (!deploymentId || !authorizationId) return;
-                const result = await claim({ data: { deploymentId, authorizationId } });
+                if (!activeDeploymentId || !authorizationId) return;
+                const result = await claim({ data: { deploymentId: activeDeploymentId, authorizationId } });
                 setClaimed(result);
                 setClaimSuccess(result.ok === true);
                 note(`Claim: ${result.notice ?? "claimed"}.`);
@@ -634,11 +634,11 @@ function CanaryConsole() {
           <Button
             size="sm"
             variant="outline"
-            disabled={busy !== null || !deploymentId || !authorizationId || !claimSuccess}
+            disabled={busy !== null || !activeDeploymentId || !authorizationId || !claimSuccess}
             onClick={() =>
               run("window", async () => {
-                if (!deploymentId || !authorizationId) return;
-                const result = await sendWindow({ data: { deploymentId, authorizationId } });
+                if (!activeDeploymentId || !authorizationId) return;
+                const result = await sendWindow({ data: { deploymentId: activeDeploymentId, authorizationId } });
                 setWindowResult({
                   ok: result.ok,
                   notice: result.notice,
@@ -697,11 +697,11 @@ function CanaryConsole() {
         <div className="flex flex-wrap gap-2">
           <Button
             size="sm"
-            disabled={busy !== null || !deploymentId || !authorizationId || !txHash}
+            disabled={busy !== null || !activeDeploymentId || !authorizationId || !txHash}
             onClick={() =>
               run("persist", async () => {
-                if (!deploymentId || !authorizationId || !txHash) return;
-                const result = await persist({ data: { deploymentId, authorizationId, txHash } });
+                if (!activeDeploymentId || !authorizationId || !txHash) return;
+                const result = await persist({ data: { deploymentId: activeDeploymentId, authorizationId, txHash } });
                 setTail(result);
                 note(`Persist: ${result.notice ?? "recorded"}.`);
               })
@@ -713,11 +713,11 @@ function CanaryConsole() {
           <Button
             size="sm"
             variant="outline"
-            disabled={busy !== null || !deploymentId}
+            disabled={busy !== null || !activeDeploymentId}
             onClick={() =>
               run("reconcile", async () => {
-                if (!deploymentId) return;
-                setTail(await reconcile({ data: { deploymentId } }));
+                if (!activeDeploymentId) return;
+                setTail(await reconcile({ data: { deploymentId: activeDeploymentId } }));
                 note("Reconciliation snapshot read.");
               })
             }
@@ -727,11 +727,11 @@ function CanaryConsole() {
           <Button
             size="sm"
             variant="outline"
-            disabled={busy !== null || !deploymentId}
+            disabled={busy !== null || !activeDeploymentId}
             onClick={() =>
               run("verify", async () => {
-                if (!deploymentId) return;
-                setTail(await verify({ data: { deploymentId } }));
+                if (!activeDeploymentId) return;
+                setTail(await verify({ data: { deploymentId: activeDeploymentId } }));
                 note("Verifier run.");
               })
             }
