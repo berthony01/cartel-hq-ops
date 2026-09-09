@@ -361,7 +361,7 @@ check(
 check(
   "L4",
   /Presign NOT issued: runtime state could not be verified/.test(routeSrc) &&
-    /read-only runtime execution state/i.test(routeSrc),
+    /re-reads the authoritative runtime execution state read-only/i.test(routeSrc),
   "operator sees why presign did not proceed and that the click includes the runtime refresh",
 );
 check(
