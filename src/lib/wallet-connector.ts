@@ -518,21 +518,24 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
 
   const provider = outcome.provider as Eip1193Provider;
 
-  // CHAIN EVIDENCE GATE — real session / live provider only.
+  /*
+   * GATE 1 ONLY — CONNECTION. A wallet that connects on another EVM network
+   * STAYS CONNECTED: chain eligibility is Gate 2 and is classified separately
+   * (`classifyWalletConnection`) from the live provider chain. Nothing here
+   * tears down a session for being on the wrong network, and nothing here
+   * requests a network change.
+   *
+   * The chain EVIDENCE recorded for the pre-send guard is unchanged and
+   * unweakened: it is set only when Robinhood Chain 4663 is actually proven,
+   * by CAIP-10 session accounts or by AppKit + a live `eth_chainId` agreeing.
+   * Absent proof it stays null, so the canary send path still fails closed.
+   */
   let evidence: string[] | null = null;
   if (hasWalletConnectSession(provider)) {
     const sessionEvidence = readSessionChainEvidence(provider);
-    if (!sessionEvidence.includes(ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL)) {
-      clearLocalConnectionState();
-      await disconnectAppKit();
-      emit();
-      return {
-        ok: false,
-        notice: "WRONG_CHAIN_APPROVED",
-        state: emptyState("WRONG_CHAIN_APPROVED"),
-      };
-    }
-    evidence = sessionEvidence;
+    evidence = sessionEvidence.includes(ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL)
+      ? sessionEvidence
+      : null;
   } else {
     const appKitChain = normalizeChainId(getAppKitChainId());
     const liveRaw = await provider.request({ method: "eth_chainId" }).catch(() => null);
@@ -554,6 +557,7 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
   emit();
   return { ok: state.connected, notice: state.notice, state };
 }
+
 
 /**
  * Only trust wallet metadata the peer actually supplied. If the session does
