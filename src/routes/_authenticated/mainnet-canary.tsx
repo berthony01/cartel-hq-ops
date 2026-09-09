@@ -17,11 +17,14 @@ import {
 } from "@/lib/chain-mainnet-canary-intent";
 import {
   ARM_PHRASE,
+  ChecklistRow,
   Readout,
   ReadoutLine,
   SEND_PHRASE,
+  useArmWindow,
   useBusy,
 } from "@/components/cartel/CanaryReadout";
+
 import { usePlatformAccess } from "@/hooks/usePlatformAccess";
 import { useWorkspace } from "@/lib/workspace-context";
 import { listLaunches } from "@/lib/launch-control";
