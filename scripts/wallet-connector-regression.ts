@@ -336,8 +336,11 @@ check(
   "K4",
   /export const WALLETCONNECT_CONNECT_TIMEOUT_MS = 45_000;/.test(connectorCode) &&
     /openAppKitConnect\(WALLETCONNECT_CONNECT_TIMEOUT_MS\)/.test(connectorCode) &&
-    /timer = setTimeout\(\(\) => finish\(\{ status: "timeout" \}\), timeoutMs\);/.test(appkitCode),
-  "the AppKit connect handshake is bounded by the same fixed client timeout",
+    /let visibleBudgetMs = timeoutMs;/.test(appkitCode) &&
+    /timeoutTimer = setTimeout\(\(\) => finish\(\{ status: "timeout" \}\), visibleBudgetMs\);/.test(
+      appkitCode,
+    ),
+  "the AppKit connect handshake is bounded by the same fixed visible-time budget",
 );
 check(
   "K5",
@@ -782,6 +785,66 @@ check(
     /subscribeState\(/.test(appkitCode) &&
     /for \(const off of unsubscribers\)/.test(appkitCode),
   "AppKit subscriptions drive the bounded wait and are all unsubscribed on settle",
+);
+
+/* V — mobile deep-link handoff remains one explicit pending attempt. */
+const openConnectBody = /export async function openAppKitConnect\([\s\S]*?\n\}/.exec(appkitCode)?.[0] ?? "";
+check(
+  "V1",
+  /modalClosed = true;[\s\S]{0,120}tryResolveConnected\(\);[\s\S]{0,120}scheduleVisibleRejection\(\);/.test(
+    openConnectBody,
+  ) && !/250/.test(openConnectBody),
+  "modal close re-checks connection and no longer rejects after the brittle 250ms delay",
+);
+check(
+  "V2",
+  /if \(settled \|\| !modalClosed \|\| document\.hidden \|\| !document\.hasFocus\(\)\) return;/.test(
+    openConnectBody,
+  ) && /if \(!settled && !document\.hidden && document\.hasFocus\(\)\)/.test(openConnectBody),
+  "a hidden or backgrounded modal close cannot resolve as rejection",
+);
+check(
+  "V3",
+  /const graceMs = handoffObserved \? 5_000 : 1_000;/.test(openConnectBody) &&
+    /rejectionTimer = setTimeout/.test(openConnectBody) &&
+    /finish\(\{ status: "rejected" \}\)/.test(openConnectBody),
+  "a visible manual dismissal still rejects after a bounded one-second grace",
+);
+check(
+  "V4",
+  /const handleVisibilityChange = \(\) => \{[\s\S]{0,240}pauseVisibleBudget\(\)/.test(
+    openConnectBody,
+  ) &&
+    /const handleBlur = \(\) => \{[\s\S]{0,160}pauseVisibleBudget\(\)/.test(openConnectBody) &&
+    /visibleBudgetMs = Math\.max\(0, visibleBudgetMs - \(Date\.now\(\) - visibleStartedAt\)\)/.test(
+      openConnectBody,
+    ),
+  "the 45-second timeout budget pauses while hidden or handed off to the wallet app",
+);
+check(
+  "V5",
+  /visibilitychange/.test(openConnectBody) &&
+    /window\.addEventListener\("focus", handleFocus\)/.test(openConnectBody) &&
+    /const handleFocus = \(\) => \{\s*tryResolveConnected\(\);/.test(openConnectBody) &&
+    /subscribeProviders\(\(\) => tryResolveConnected\(\)\)/.test(openConnectBody) &&
+    /subscribeAccount\(\(\) => tryResolveConnected\(\)\)/.test(openConnectBody),
+  "visibility, focus, provider and account evidence can settle the original pending attempt",
+);
+check(
+  "V6",
+  !/setInterval|requestAnimationFrame|while\s*\(/.test(openConnectBody) &&
+    /enableReconnect: false/.test(appkitCode) &&
+    !/\bsubscribeProvider\(/.test(appkitCode),
+  "handoff awareness adds no polling or auto-reconnect and uses only installed AppKit subscriptions",
+);
+check(
+  "V7",
+  /document\.removeEventListener\("visibilitychange", handleVisibilityChange\)/.test(
+    openConnectBody,
+  ) &&
+    /window\.removeEventListener\("blur", handleBlur\)/.test(openConnectBody) &&
+    /window\.removeEventListener\("focus", handleFocus\)/.test(openConnectBody),
+  "all document lifecycle listeners are removed when the attempt settles",
 );
 const createBody = /async function runCreateAppKit\([\s\S]*?\n\}/.exec(appkitCode)?.[0] ?? "";
 check(
