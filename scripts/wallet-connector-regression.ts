@@ -1023,7 +1023,7 @@ check(
   "E — exactly one explicit switch call site, only from the wrong-chain branch, never adding a network",
 );
 check(
-  "F1_UNAVAILABLE" as unknown as string,
+  "V6",
   /status === "CONNECTED_CHAIN_UNAVAILABLE"/.test(panelCode) &&
     /Robinhood Chain is unavailable in this wallet/.test(panelCode) &&
     /isChainUnavailableSwitchNotice/.test(panelCode),
