@@ -86,7 +86,6 @@ export type WalletConnectorNotice =
   | "REOWN_CONNECT_FAILED"
   | "WALLETCONNECT_TIMEOUT"
   | "CONNECTION_REJECTED_OR_FAILED"
-  | "CONNECTION_REJECTED_OR_FAILED"
   | "NO_ACCOUNT";
 
 export type WalletConnectorState = {
