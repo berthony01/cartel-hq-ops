@@ -159,7 +159,7 @@ function CanaryConsole() {
     if (!rows) return;
     let stored: string | null = null;
     try {
-      stored = window.sessionStorage.getItem(LAUNCH_SELECTION_STORAGE_KEY);
+      stored = window.localStorage.getItem(LAUNCH_SELECTION_STORAGE_KEY);
     } catch {
       stored = null;
     }
