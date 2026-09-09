@@ -133,7 +133,7 @@ function CanaryConsole() {
   /**
    * LOCAL UI CONTEXT ONLY. A mobile wallet hand-off can remount this route, and
    * losing the selected launch also silently loses the existing-attempt lookup.
-   * Only the launch id is remembered, only in this browser tab's sessionStorage,
+   * Only the launch id is remembered, only in this browser's localStorage,
    * and only if it still exists in the operator's current launch list.
    *
    * Restoring is NOT resuming: it never builds intent, never creates, presigns,
