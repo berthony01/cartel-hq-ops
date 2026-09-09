@@ -224,7 +224,7 @@ check(
   "K1",
   routeEffects.length === 1 &&
     /if \(launchId\) return;/.test(routeEffects[0]!) &&
-    /sessionStorage\.getItem\(LAUNCH_SELECTION_STORAGE_KEY\)/.test(routeEffects[0]!) &&
+    /localStorage\.getItem\(LAUNCH_SELECTION_STORAGE_KEY\)/.test(routeEffects[0]!) &&
     !/mutate|mutateAsync|useServerFn|\.rpc\(|connect|switch|presign|arm|claim|send|persist|verify/i.test(
       routeEffects[0]!,
     ),
@@ -311,6 +311,26 @@ check(
     lookupSrc.slice(lookupSrc.indexOf("readCanaryExistingAttempt")),
   ) === false,
   "existing-attempt lookup performs no insert and no RPC mutation",
+);
+
+/* K12 — continuation context is DERIVED only, never an auto-advancing effect. */
+check(
+  "K12",
+  /const activeDeploymentId =\s*\n?\s*deploymentId \?\? existingAttempt\?\.deploymentId \?\? null;/.test(
+    routeSrc,
+  ),
+  "active deployment context is a pure derivation of local state and the read-only lookup",
+);
+check(
+  "K13",
+  !/Resume existing attempt/.test(routeSrc) &&
+    /automatically loaded for continuation/.test(routeSrc),
+  "redundant manual resume removed; the card states continuation is automatic and inert",
+);
+check(
+  "K14",
+  /Managed pre-sign is unavailable because there is no active deployment context/.test(routeSrc),
+  "section B explains why managed pre-sign is unavailable instead of a bare disabled button",
 );
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
