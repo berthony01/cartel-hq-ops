@@ -43,6 +43,9 @@ export function NetworkShell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
         <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
           <Wordmark />
+          <span className="hidden shrink-0 rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:inline">
+            Public page
+          </span>
           <nav className="ml-auto hidden items-center gap-1 md:flex">
             {NAV.map((item) => (
               <Link
