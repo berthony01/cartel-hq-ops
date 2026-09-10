@@ -232,11 +232,16 @@ function CanaryConsole() {
   /** PRESENTATION ONLY: local clock derived from the presign expiry. */
   const armWindow = useArmWindow(authorizationExpiresAt);
 
-  const sendReady =
-    sendPhrase === SEND_PHRASE &&
-    windowResult?.ok === true &&
-    !!windowResult.envelope &&
-    typeof windowResult.sendWindowExpiresAt === "string";
+  /**
+   * The immutable deployer for the live wallet preflight. An existing attempt's
+   * bound deployer always wins; editable form state is only ever a fallback
+   * while no attempt exists.
+   */
+  const expectedSendDeployer =
+    existingAttempt?.deployerAddress ?? intent?.deployer ?? (deployer.trim() || null);
+
+  /** Gate for the single explicit final-send click. */
+  const finalSendReady = !!activeDeploymentId && !!authorizationId && claimSuccess;
 
   const buildIntent = () => {
     setIntentError(null);
