@@ -221,6 +221,8 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
     launch: { id: "l1", status: "LIVE", scheduleSet: true, officialContractRegistered: true },
     activeWatchers: 12,
     verifiedProductionDeployments: 1,
+    ...completeCreative,
+
   });
   check("J7", j.allComplete === true, `completed ${j.completedCount}/${j.totalCount}`);
   check("J7b", j.nextAction.stage === null, "no next stage when everything is complete");
