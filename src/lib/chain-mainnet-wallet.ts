@@ -1,5 +1,6 @@
 import { MAINNET_DEPLOYMENT_TX_ENABLED, ROBINHOOD_MAINNET_CHAIN_ID } from "./chain-mainnet-registry";
 import {
+  getActiveAccount,
   getActiveProvider,
   getActiveSessionChainEvidence,
   normalizeChainId,
