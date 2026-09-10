@@ -1327,5 +1327,86 @@ check(
   "no account-identity path introduces a sign, send or add-chain call",
 );
 
+
+/* ------------------------------------------------------------------ */
+/* B1–B8 — FAIL-CLOSED RE-PROOF HARDENING                              */
+/* ------------------------------------------------------------------ */
+
+check(
+  "B1",
+  /if \(approved\.length === 0\) return "ACTIVE_ACCOUNT_CHANGED";/.test(connectorCode) &&
+    /if \(!approved\.includes\(canonical\)\) return "ACTIVE_ACCOUNT_CHANGED";/.test(
+      connectorCode,
+    ) &&
+    // NEGATIVE TRIPWIRE: the old "only check when non-empty" loophole is gone.
+    !/approved\.length > 0 && !approved\.includes/.test(connectorCode + walletCode),
+  "an empty or unreadable approved-account list invalidates the connection instead of passing",
+);
+check(
+  "B2",
+  // `readApprovedAccounts` returns [] for a throw, a non-array and an empty
+  // list alike, and [] is now an invalidation — so a read failure fails closed.
+  /async function readApprovedAccounts[\s\S]{0,400}\} catch \{\s*\n\s*return \[\];/.test(
+    connectorCode,
+  ) && /if \(approved\.length === 0\) return "ACTIVE_ACCOUNT_CHANGED";/.test(connectorCode),
+  "an approved-account read failure is indistinguishable from empty and fails closed",
+);
+check(
+  "B3",
+  /const proofNotice = await proveCanonicalAccount\(provider, canonical\);/.test(connectorCode) &&
+    /if \(proofNotice !== null\) \{\s*\n\s*invalidateAccountIdentity\(proofNotice\);/.test(
+      connectorCode,
+    ),
+  "every state re-check runs the full canonical proof and invalidates on failure",
+);
+check(
+  "B4",
+  /if \(current !== null && current !== canonical\) return "ACTIVE_ACCOUNT_CHANGED";/.test(
+    connectorCode,
+  ) &&
+    /if \(currentCaip !== null && currentCaip !== canonical\) return "ACTIVE_ACCOUNT_CHANGED";/.test(
+      connectorCode,
+    ),
+  "a changed AppKit CURRENT account invalidates even while the old account remains approved",
+);
+check(
+  "B5",
+  /return approved\.length === 1 \? null : "WALLET_ACCOUNT_AMBIGUOUS";/.test(connectorCode),
+  "no AppKit current-account signal with multiple approved accounts fails closed as ambiguous",
+);
+check(
+  "B6",
+  /appKitAccountUnsubscribe = subscribeAppKitAccount\(\(\) => \{\s*\n\s*void revalidateActiveAccount\(\)/.test(
+    connectorCode,
+  ) &&
+    /async function attachAppKitAccountWatch\(\): Promise<void> \{\s*\n\s*detachAppKitAccountWatch\(\);/.test(
+      connectorCode,
+    ) &&
+    (connectorCode.match(/await attachAppKitAccountWatch\(\);/g) ?? []).length === 1 &&
+    /function clearLocalConnectionState\(\): void \{\s*\n\s*detachEvents\(\);\s*\n\s*detachAppKitAccountWatch\(\);/.test(
+      connectorCode,
+    ),
+  "exactly one AppKit account watch is installed for WalletConnect and removed on every clear/disconnect",
+);
+check(
+  "B7",
+  /if \(account === null \|\| approved\.length === 0 \|\| !approved\.includes\(account\)\) account = null;/.test(
+    walletCode,
+  ),
+  "the pre-send handoff refuses an account unless a non-empty approved list contains the canonical one",
+);
+check(
+  "B8",
+  // NEGATIVE TRIPWIRE: invalidation never substitutes another account, and this
+  // hardening adds no execution surface.
+  !/activeAccount = approved\[|activeAccount = accounts\[|activeAccount = current;/.test(
+    connectorCode,
+  ) &&
+    !/eth_sendTransaction|eth_sendRawTransaction|wallet_addEthereumChain|personal_sign/.test(
+      connectorCode.slice(connectorCode.indexOf("async function proveCanonicalAccount")),
+    ),
+  "re-proof never selects a replacement account and introduces no sign, send or add-chain path",
+);
+
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
