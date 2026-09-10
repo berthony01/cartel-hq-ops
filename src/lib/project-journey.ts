@@ -352,6 +352,35 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
 
   const watchOpen = stepDone("launch_watch_open");
 
+  // --- Brand & Creative ---------------------------------------------------
+  const brandKitConfigured =
+    !input.brandKitUnavailable && !!input.brandKit?.brandName?.trim();
+
+  const assets = input.creativeAssets;
+  const usefulAssetCount = assets ? assets.brandAssetCount + assets.otherAssetCount : 0;
+
+  const packs = input.stickerPacks;
+
+  // --- Communications -----------------------------------------------------
+  const inbox = input.inbox;
+  const inboxConfigured =
+    !input.inboxUnavailable && !!inbox && inbox.repliesEnabled && inbox.newConversationsEnabled;
+  const waiting = inbox?.waitingOnTeamCount ?? null;
+  const inboxDetail = input.inboxUnavailable
+    ? null
+    : inboxConfigured
+      ? waiting && waiting > 0
+        ? `Inbox ready · ${waiting} need${waiting === 1 ? "s" : ""} reply`
+        : "Inbox ready"
+      : inbox
+        ? !inbox.repliesEnabled && !inbox.newConversationsEnabled
+          ? "Replies and new conversations are off"
+          : !inbox.repliesEnabled
+            ? "Replies are off"
+            : "New conversations are off"
+        : null;
+
+
   const raw: Array<{
     key: JourneyStageKey;
     status: JourneyStageStatus;
