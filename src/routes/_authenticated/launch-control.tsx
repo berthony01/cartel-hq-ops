@@ -2275,6 +2275,7 @@ function LaunchControlPage() {
                       : null
                   }
                 />
+                </div>
 
                 <Section
                   variant="surface"
