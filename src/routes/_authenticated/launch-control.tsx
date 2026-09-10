@@ -1418,6 +1418,8 @@ function LaunchControlPage() {
                 </div>
               </div>
             </Section>
+            </div>
+            </>
           ) : null}
 
           {selected ? (
