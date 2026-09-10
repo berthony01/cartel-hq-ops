@@ -809,6 +809,9 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
   activeKind = "walletconnect";
   sessionChainEvidence = evidence;
   walletName = readPeerWalletName(provider);
+  // Canonical identity is written only after every identity check above passed.
+  activeAccount = selectedAccount;
+  activeAccountVerified = true;
   attachEvents(provider);
   const state = await readWalletConnectorState();
   emit();
