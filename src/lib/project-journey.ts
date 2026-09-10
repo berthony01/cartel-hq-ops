@@ -1,0 +1,512 @@
+import {
+  fetchLaunchReadiness,
+  type LaunchReadiness,
+} from "@/lib/launch-readiness";
+import {
+  listLaunches,
+  getLaunchWatchSummary,
+  hasSchedule,
+  toLaunchStatus,
+  launchStatusIndex,
+  type LaunchRow,
+} from "@/lib/launch-control";
+import { listChainDeployments } from "@/lib/chain-launcher";
+import { evaluateLaunchDeploymentEvidence } from "@/lib/launch-verified-eligibility";
+
+/**
+ * P1-A — one unified, read-only project journey model.
+ *
+ * This creates NO state of its own and persists nothing. Every stage is
+ * derived from authoritative rows the operator can already read through
+ * existing RLS surfaces, reusing the existing readiness derivation, the
+ * existing launch reads, the existing Launch Watch summary RPC and the
+ * existing deployment-evidence evaluator.
+ *
+ * Rules that must not be weakened:
+ *  - Never treat testnet or historical rows as current mainnet readiness.
+ *  - Never guess: an unreadable input becomes `unavailable`, never `complete`.
+ *  - Never expose watcher identities — aggregate counts only.
+ */
+
+export type JourneyRoute =
+  | "/project-profile"
+  | "/launch-control"
+  | "/telegram"
+  | "/distribution"
+  | "/sticker-lab"
+  | "/brand-kit"
+  | "/assets";
+
+export const JOURNEY_STAGE_KEYS = [
+  "project_profile",
+  "profile_published",
+  "launch_created",
+  "launch_announced",
+  "launch_schedule",
+  "launch_watch_open",
+  "telegram_community",
+  "launch_welcome",
+  "audience",
+  "deployment",
+  "official_contract",
+  "launch_live",
+] as const;
+
+export type JourneyStageKey = (typeof JOURNEY_STAGE_KEYS)[number];
+
+export type JourneyStageStatus = "complete" | "action" | "waiting" | "unavailable";
+
+export type JourneyPhase = "Identity" | "Launch" | "Audience" | "Contract";
+
+export type JourneyStage = {
+  key: JourneyStageKey;
+  order: number;
+  phase: JourneyPhase;
+  title: string;
+  description: string;
+  status: JourneyStageStatus;
+  /** Only actionable stages can become the next action. */
+  actionable: boolean;
+  to: JourneyRoute;
+  actionLabel: string;
+  /** Short live detail, when one can be stated honestly. */
+  detail: string | null;
+};
+
+export type JourneyNextAction = {
+  stage: JourneyStage | null;
+  label: string;
+  to: JourneyRoute;
+  headline: string;
+  explanation: string;
+};
+
+export type ProjectJourney = {
+  stages: JourneyStage[];
+  completedCount: number;
+  totalCount: number;
+  allComplete: boolean;
+  nextAction: JourneyNextAction;
+  projectName: string | null;
+  primaryLaunchId: string | null;
+  primaryLaunchName: string | null;
+  readiness: LaunchReadiness;
+};
+
+// ---------------------------------------------------------------------------
+// Input
+// ---------------------------------------------------------------------------
+
+export type JourneyLaunchFacts = {
+  id: string;
+  status: string;
+  scheduleSet: boolean;
+  officialContractRegistered: boolean;
+};
+
+export type JourneyInput = {
+  readiness: LaunchReadiness;
+  launch: JourneyLaunchFacts | null;
+  /** Aggregate Launch Watch counts, or null when not readable / not opened. */
+  activeWatchers: number | null;
+  watchUnavailable: boolean;
+  /** Verified PRODUCTION deployments for the primary launch only. */
+  verifiedProductionDeployments: number | null;
+  deploymentUnavailable: boolean;
+};
+
+// ---------------------------------------------------------------------------
+// Pure derivation
+// ---------------------------------------------------------------------------
+
+const STAGE_COPY: Record<
+  JourneyStageKey,
+  {
+    phase: JourneyPhase;
+    title: string;
+    description: string;
+    to: JourneyRoute;
+    actionLabel: string;
+    explanation: string;
+  }
+> = {
+  project_profile: {
+    phase: "Identity",
+    title: "Project Profile",
+    description: "Create the project identity for this workspace.",
+    to: "/project-profile",
+    actionLabel: "Create Project Profile",
+    explanation:
+      "Start here. Your Project Profile is the identity every other Cartel HQ feature builds on.",
+  },
+  profile_published: {
+    phase: "Identity",
+    title: "Profile published",
+    description: "Publish the profile so Cartel HQ launch features can use it.",
+    to: "/project-profile",
+    actionLabel: "Publish Project Profile",
+    explanation:
+      "Publishing makes the profile discoverable on the Cartel Network and ready for launch features.",
+  },
+  launch_created: {
+    phase: "Launch",
+    title: "Launch created",
+    description: "Add the launch you want people to follow.",
+    to: "/launch-control",
+    actionLabel: "Create Your Launch",
+    explanation: "Create your launch record so you can announce it and open Launch Watch.",
+  },
+  launch_announced: {
+    phase: "Launch",
+    title: "Launch announced",
+    description: "Move the launch out of Draft so it becomes a locked launch record.",
+    to: "/launch-control",
+    actionLabel: "Announce Your Launch",
+    explanation: "Announcing locks the launch identity and starts the lifecycle.",
+  },
+  launch_schedule: {
+    phase: "Launch",
+    title: "Launch schedule set",
+    description: "Set the launch time or launch window so countdowns and reminders work.",
+    to: "/launch-control",
+    actionLabel: "Set Launch Schedule",
+    explanation:
+      "A launch time or window is required before the launch can advance to Launch Approaching.",
+  },
+  launch_watch_open: {
+    phase: "Audience",
+    title: "Launch Watch open",
+    description: "Open Launch Watch so people can opt in for private launch alerts.",
+    to: "/launch-control",
+    actionLabel: "Open Launch Watch",
+    explanation:
+      "Open Launch Watch so people can opt in for private launch alerts through the Telegram bot.",
+  },
+  telegram_community: {
+    phase: "Audience",
+    title: "Telegram community ready",
+    description: "Connect a Telegram community with the bot as admin.",
+    to: "/telegram",
+    actionLabel: "Connect Telegram Community",
+    explanation:
+      "Connect a Telegram community and make the bot an admin so it can welcome new members.",
+  },
+  launch_welcome: {
+    phase: "Audience",
+    title: "Launch Watch in welcome",
+    description: "Add the separate Launch Watch card to your community welcome.",
+    to: "/telegram",
+    actionLabel: "Add Launch Watch to Welcome",
+    explanation:
+      "Open Welcome & onboarding on a connected community and enable the Launch Watch card for this launch.",
+  },
+  audience: {
+    phase: "Audience",
+    title: "Watchers joined",
+    description: "At least one person is watching this launch.",
+    to: "/launch-control",
+    actionLabel: "Share Launch Watch link",
+    explanation:
+      "Share the Launch Watch deep link so people can opt in before the launch goes live.",
+  },
+  deployment: {
+    phase: "Contract",
+    title: "Mainnet deployment verified",
+    description: "A production deployment for this launch has passed on-chain verification.",
+    to: "/launch-control",
+    actionLabel: "Review deployment evidence",
+    explanation: "",
+  },
+  official_contract: {
+    phase: "Contract",
+    title: "Official contract registered",
+    description: "Register the official contract address from verified deployment evidence.",
+    to: "/launch-control",
+    actionLabel: "Register Official Contract",
+    explanation:
+      "Registering publishes the official contract address supplied by the authenticated project.",
+  },
+  launch_live: {
+    phase: "Contract",
+    title: "Launch live",
+    description: "The launch lifecycle has reached Live.",
+    to: "/launch-control",
+    actionLabel: "Advance the launch",
+    explanation: "Advance the lifecycle in Launch Control when the launch is actually live.",
+  },
+};
+
+function stageOf(
+  key: JourneyStageKey,
+  order: number,
+  status: JourneyStageStatus,
+  actionable: boolean,
+  detail: string | null,
+): JourneyStage {
+  const copy = STAGE_COPY[key];
+  return {
+    key,
+    order,
+    phase: copy.phase,
+    title: copy.title,
+    description: copy.description,
+    status,
+    actionable,
+    to: copy.to,
+    actionLabel: copy.actionLabel,
+    detail,
+  };
+}
+
+export function computeProjectJourney(input: JourneyInput): ProjectJourney {
+  const r = input.readiness;
+  const stepDone = (key: string) => r.steps.find((s) => s.key === key)?.complete === true;
+
+  const launch = input.launch;
+  const statusIndex = launch ? launchStatusIndex(toLaunchStatus(launch.status)) : -1;
+  const liveIndex = launchStatusIndex("LIVE");
+
+  const watchOpen = stepDone("launch_watch_open");
+
+  const raw: Array<{
+    key: JourneyStageKey;
+    status: JourneyStageStatus;
+    actionable: boolean;
+    detail: string | null;
+  }> = [
+    {
+      key: "project_profile",
+      status: stepDone("project_profile") ? "complete" : "action",
+      actionable: true,
+      detail: r.projectName,
+    },
+    {
+      key: "profile_published",
+      status: stepDone("profile_published") ? "complete" : "action",
+      actionable: true,
+      detail: r.profilePublished ? "Published" : "Draft",
+    },
+    {
+      key: "launch_created",
+      status: stepDone("launch_created") ? "complete" : "action",
+      actionable: true,
+      detail: r.primaryLaunchName,
+    },
+    {
+      key: "launch_announced",
+      status: stepDone("launch_announced") ? "complete" : launch ? "action" : "waiting",
+      actionable: !!launch,
+      detail: null,
+    },
+    {
+      key: "launch_schedule",
+      status: !launch ? "waiting" : launch.scheduleSet ? "complete" : "action",
+      actionable: !!launch,
+      detail: launch && !launch.scheduleSet ? "No launch time or window set" : null,
+    },
+    {
+      key: "launch_watch_open",
+      status: watchOpen ? "complete" : launch ? "action" : "waiting",
+      actionable: !!launch,
+      detail: null,
+    },
+    {
+      key: "telegram_community",
+      status: stepDone("telegram_community") ? "complete" : "action",
+      actionable: true,
+      detail:
+        r.operationalGroupCount > 0
+          ? `${r.operationalGroupCount} community${r.operationalGroupCount === 1 ? "" : "s"} ready`
+          : null,
+    },
+    {
+      key: "launch_welcome",
+      status: stepDone("launch_welcome")
+        ? "complete"
+        : stepDone("telegram_community") && watchOpen
+          ? "action"
+          : "waiting",
+      actionable: stepDone("telegram_community") && watchOpen,
+      detail: null,
+    },
+    {
+      key: "audience",
+      status: !watchOpen
+        ? "waiting"
+        : input.watchUnavailable
+          ? "unavailable"
+          : (input.activeWatchers ?? 0) > 0
+            ? "complete"
+            : "action",
+      actionable: watchOpen && !input.watchUnavailable,
+      detail:
+        input.watchUnavailable || input.activeWatchers === null
+          ? null
+          : `${input.activeWatchers} active watcher${input.activeWatchers === 1 ? "" : "s"}`,
+    },
+    {
+      key: "deployment",
+      status: !launch
+        ? "waiting"
+        : input.deploymentUnavailable
+          ? "unavailable"
+          : (input.verifiedProductionDeployments ?? 0) > 0
+            ? "complete"
+            : "waiting",
+      // Production deployment is an owner-controlled, manually gated operation.
+      // It is reported here, never proposed as a next action.
+      actionable: false,
+      detail:
+        input.deploymentUnavailable || input.verifiedProductionDeployments === null
+          ? null
+          : input.verifiedProductionDeployments > 0
+            ? "Verified production deployment on record"
+            : "No verified production deployment yet",
+    },
+    {
+      key: "official_contract",
+      status: !launch
+        ? "waiting"
+        : launch.officialContractRegistered
+          ? "complete"
+          : (input.verifiedProductionDeployments ?? 0) > 0
+            ? "action"
+            : "waiting",
+      actionable: !!launch && (input.verifiedProductionDeployments ?? 0) > 0,
+      detail: launch?.officialContractRegistered ? "Registered" : null,
+    },
+    {
+      key: "launch_live",
+      status: !launch
+        ? "waiting"
+        : statusIndex >= liveIndex
+          ? "complete"
+          : launch.officialContractRegistered
+            ? "action"
+            : "waiting",
+      actionable: !!launch && launch.officialContractRegistered,
+      detail: null,
+    },
+  ];
+
+  const stages = raw.map((entry, index) =>
+    stageOf(entry.key, index + 1, entry.status, entry.actionable, entry.detail),
+  );
+
+  const completedCount = stages.filter((s) => s.status === "complete").length;
+  const nextStage =
+    stages.find((s) => s.status === "action" && s.actionable) ?? null;
+
+  const nextAction: JourneyNextAction = nextStage
+    ? {
+        stage: nextStage,
+        label: nextStage.actionLabel,
+        to: nextStage.to,
+        headline: `Next: ${nextStage.actionLabel}.`,
+        explanation: STAGE_COPY[nextStage.key].explanation,
+      }
+    : {
+        stage: null,
+        label: "Review Launch Control",
+        to: "/launch-control",
+        headline:
+          completedCount === stages.length
+            ? "Launch journey complete"
+            : "Nothing to action right now",
+        explanation:
+          completedCount === stages.length
+            ? "Every stage of this project's launch journey is on record."
+            : "The remaining stages depend on work that is not available yet. Launch Control holds the authoritative state.",
+      };
+
+  return {
+    stages,
+    completedCount,
+    totalCount: stages.length,
+    allComplete: completedCount === stages.length,
+    nextAction,
+    projectName: r.projectName,
+    primaryLaunchId: r.primaryLaunchId,
+    primaryLaunchName: r.primaryLaunchName,
+    readiness: r,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Query
+// ---------------------------------------------------------------------------
+
+/**
+ * Prefixed with the readiness key so every existing
+ * `invalidateQueries(["launch-readiness", workspaceId])` call keeps working.
+ */
+export function projectJourneyQueryKey(workspaceId: string | null | undefined) {
+  return ["launch-readiness", workspaceId ?? null, "project-journey"] as const;
+}
+
+export function launchFactsOf(row: LaunchRow): JourneyLaunchFacts {
+  return {
+    id: row.id,
+    status: row.status,
+    scheduleSet: hasSchedule(row),
+    officialContractRegistered: Boolean(row.official_contract_address),
+  };
+}
+
+export async function fetchProjectJourney(workspaceId: string): Promise<ProjectJourney> {
+  const [readiness, launches] = await Promise.all([
+    fetchLaunchReadiness(workspaceId),
+    listLaunches(workspaceId).catch(() => [] as LaunchRow[]),
+  ]);
+
+  const primaryRow =
+    readiness.primaryLaunchId
+      ? (launches.find((l) => l.id === readiness.primaryLaunchId) ?? null)
+      : null;
+  const launch = primaryRow ? launchFactsOf(primaryRow) : null;
+
+  let activeWatchers: number | null = null;
+  let watchUnavailable = false;
+  if (primaryRow?.launch_watch_token) {
+    try {
+      const summary = await getLaunchWatchSummary(primaryRow.id);
+      activeWatchers = summary.active_count;
+    } catch {
+      watchUnavailable = true;
+    }
+  }
+
+  let verifiedProductionDeployments: number | null = null;
+  let deploymentUnavailable = false;
+  if (primaryRow) {
+    try {
+      const rows = await listChainDeployments(primaryRow.id);
+      const evaluation = evaluateLaunchDeploymentEvidence(
+        {
+          launchId: primaryRow.id,
+          workspaceId: primaryRow.workspace_id,
+          declaredChain: primaryRow.chain,
+          launchStatus: primaryRow.status,
+          officialContractAddress: primaryRow.official_contract_address,
+          officialContractDeploymentId: primaryRow.official_contract_deployment_id,
+          contractRegisteredAt: primaryRow.contract_registered_at,
+        },
+        rows,
+      );
+      verifiedProductionDeployments = evaluation.deployments.filter(
+        (d) => d.environment === "PRODUCTION" && d.evidenceVerified,
+      ).length;
+    } catch {
+      deploymentUnavailable = true;
+    }
+  }
+
+  return computeProjectJourney({
+    readiness,
+    launch,
+    activeWatchers,
+    watchUnavailable,
+    verifiedProductionDeployments,
+    deploymentUnavailable,
+  });
+}

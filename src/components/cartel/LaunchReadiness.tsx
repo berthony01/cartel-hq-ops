@@ -10,7 +10,9 @@ import {
   launchReadinessQueryKey,
   type LaunchReadiness,
 } from "@/lib/launch-readiness";
+import { ProjectJourneyCallout } from "@/components/cartel/ProjectJourney";
 import { cn } from "@/lib/utils";
+
 
 /**
  * Phase 5.5 — shared guided-setup UI.
@@ -282,48 +284,25 @@ export function LaunchReadinessPanel({ workspaceId, workspaceName }: SharedProps
   );
 }
 
-/** Compact callout for Project Profile, Launch Control and Community Command. */
+/**
+ * Compact callout for Project Profile, Launch Control and Community Command.
+ *
+ * P1-A: this now renders the unified project journey model so every surface
+ * shows the same next action as the HQ dashboard. The wrapper is kept so the
+ * existing call sites and their props stay untouched.
+ */
 export function LaunchReadinessCallout({
   workspaceId,
+  workspaceName,
   title = "Guided setup",
 }: SharedProps & { title?: string }) {
-  const query = useLaunchReadiness(workspaceId);
-
-  if (!workspaceId) return null;
-  if (query.isPending) return null;
-
-  if (query.isError) {
-    return (
-      <ErrorState
-        compact
-        message={(query.error as Error)?.message ?? "Unexpected error."}
-        onRetry={() => void query.refetch()}
-      />
-    );
-  }
-
-  const readiness = query.data!;
-
-  if (readiness.allComplete) {
-    return null;
-  }
-
   return (
-    <Section
-      variant="surface"
-      className="rise-in min-w-0"
+    <ProjectJourneyCallout
+      workspaceId={workspaceId}
+      workspaceName={workspaceName ?? null}
       title={title}
-      actions={
-        <StatusBadge tone="gold">
-          <span>
-            {readiness.completedCount} of {readiness.totalCount} complete
-          </span>
-        </StatusBadge>
-      }
-      contentClassName="space-y-3"
-    >
-      <ProgressBar value={readiness.completedCount} total={readiness.totalCount} />
-      <NextStepBlock readiness={readiness} compact />
-    </Section>
+    />
   );
+
 }
+

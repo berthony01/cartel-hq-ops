@@ -36,7 +36,7 @@ import { Section } from "@/components/cartel/Section";
 import { InlineRow } from "@/components/cartel/InlineRow";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { EmptyState } from "@/components/cartel/EmptyState";
-import { LaunchReadinessPanel, useLaunchReadiness } from "@/components/cartel/LaunchReadiness";
+import { ProjectJourneyPanel } from "@/components/cartel/ProjectJourney";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
@@ -136,8 +136,9 @@ function SnapshotCard({
 function HqDashboard() {
   const { workspace, workspaceId, loading: workspaceLoading } = useWorkspace();
 
-  const readinessQuery = useLaunchReadiness(workspaceId);
-  const readinessComplete = readinessQuery.data?.allComplete === true;
+
+
+
 
   const packsQuery = useQuery({
     queryKey: ["recent-packs", workspaceId],
@@ -326,9 +327,8 @@ function HqDashboard() {
         status="Private Beta"
       />
 
-      {readinessComplete ? null : (
-        <LaunchReadinessPanel workspaceId={workspaceId} workspaceName={workspace?.name ?? null} />
-      )}
+      <ProjectJourneyPanel workspaceId={workspaceId} workspaceName={workspace?.name ?? null} />
+
 
       {!workspaceId ? (
         <Section
