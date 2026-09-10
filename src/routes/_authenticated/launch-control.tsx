@@ -2157,6 +2157,10 @@ function LaunchControlPage() {
                   )}
                 </Section>
 
+                <div
+                  id="lc-contract"
+                  className="min-w-0 scroll-mt-28 space-y-4 sm:space-y-6"
+                >
                 <VerifiedContractRegistrationPanel
                   evaluation={deploymentEvidence}
                   launchId={selected.id}
