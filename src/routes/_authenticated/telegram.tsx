@@ -285,6 +285,18 @@ function TelegramPage() {
         status={groupCount > 0 ? "Connected · Live Beta" : "Live Beta"}
       />
 
+      <RelatedLinks label="Go to">
+        <Link to="/distribution" className={relatedLinkClass}>
+          Sticker Drops
+        </Link>
+        <Link to="/sticker-lab" className={relatedLinkClass}>
+          Sticker Lab
+        </Link>
+        <Link to="/launch-control" className={relatedLinkClass}>
+          Launch Control
+        </Link>
+      </RelatedLinks>
+
       <Tabs
         value={tab}
         onValueChange={(value) => setTab(value as TabKey)}
