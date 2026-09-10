@@ -189,9 +189,9 @@ export function CanaryIntentForm(props: CanaryIntentFormProps) {
           <p className="text-[11px] text-muted-foreground">
             {attemptRecipient
               ? "Source: existing attempt — immutable and never overwritten."
-              : boundWallet && props.recipient.trim().toLowerCase() === boundWallet
-                ? "Default only: the connected wallet. Editable — choose another recipient before creating the attempt."
-                : "Always editable. Defaults to the connected wallet only while empty."}
+              : boundWallet
+                ? "Canary safety mode: the connected deployer wallet receives 100% of the supply. Read-only while that wallet stays connected on Robinhood Chain."
+                : "Canary safety mode: the recipient must equal the deployer wallet. Connect a wallet on Robinhood Chain to bind both."}
           </p>
         </div>
 
