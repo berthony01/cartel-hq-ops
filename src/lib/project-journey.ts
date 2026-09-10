@@ -671,6 +671,74 @@ export async function fetchProjectJourney(workspaceId: string): Promise<ProjectJ
     }
   }
 
+  // --- Brand & Creative + Communications (read-only, existing surfaces) ----
+  const [brandKitResult, assetsResult, packsResult, inboxSettingsResult] =
+    await Promise.allSettled([
+      supabase
+        .from("brand_kits")
+        .select("id,brand_name")
+        .eq("workspace_id", workspaceId)
+        .maybeSingle(),
+      listWorkspaceAssets(workspaceId),
+      listWorkspacePacks(workspaceId),
+      getProjectInboxSettings(workspaceId),
+    ]);
+
+  let brandKit: JourneyBrandKitFacts | null = null;
+  let brandKitUnavailable = true;
+  if (brandKitResult.status === "fulfilled" && !brandKitResult.value.error) {
+    brandKitUnavailable = false;
+    const row = brandKitResult.value.data;
+    brandKit = row ? { brandName: row.brand_name ?? null } : null;
+  }
+
+  let creativeAssets: JourneyCreativeAssetFacts | null = null;
+  let creativeAssetsUnavailable = true;
+  if (assetsResult.status === "fulfilled") {
+    creativeAssetsUnavailable = false;
+    const rows = assetsResult.value;
+    creativeAssets = {
+      brandAssetCount: rows.filter((a) =>
+        ["logo", "mascot", "reference_image"].includes(a.asset_type),
+      ).length,
+      generatedStickerCount: rows.filter((a) => a.asset_type === "generated_sticker").length,
+      otherAssetCount: rows.filter(
+        (a) =>
+          !["logo", "mascot", "reference_image", "generated_sticker"].includes(a.asset_type),
+      ).length,
+    };
+  }
+
+  let stickerPacks: JourneyStickerPackFacts | null = null;
+  let stickerPacksUnavailable = true;
+  if (packsResult.status === "fulfilled") {
+    stickerPacksUnavailable = false;
+    const rows = packsResult.value;
+    stickerPacks = {
+      activeCount: rows.length,
+      publishedCount: rows.filter((p) => p.status === "published").length,
+    };
+  }
+
+  let inbox: JourneyInboxFacts | null = null;
+  let inboxUnavailable = true;
+  if (inboxSettingsResult.status === "fulfilled") {
+    inboxUnavailable = false;
+    const settings = inboxSettingsResult.value;
+    let waitingOnTeamCount: number | null = null;
+    try {
+      const summary = await getProjectInboxSummary(workspaceId);
+      waitingOnTeamCount = summary.waiting_on_team_count;
+    } catch {
+      waitingOnTeamCount = null;
+    }
+    inbox = {
+      repliesEnabled: settings.replies_enabled === true,
+      newConversationsEnabled: settings.new_conversations_enabled === true,
+      waitingOnTeamCount,
+    };
+  }
+
   return computeProjectJourney({
     readiness,
     launch,
@@ -678,5 +746,14 @@ export async function fetchProjectJourney(workspaceId: string): Promise<ProjectJ
     watchUnavailable,
     verifiedProductionDeployments,
     deploymentUnavailable,
+    brandKit,
+    brandKitUnavailable,
+    creativeAssets,
+    creativeAssetsUnavailable,
+    stickerPacks,
+    stickerPacksUnavailable,
+    inbox,
+    inboxUnavailable,
   });
 }
+
