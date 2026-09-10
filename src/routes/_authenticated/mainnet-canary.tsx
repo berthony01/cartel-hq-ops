@@ -235,7 +235,13 @@ function CanaryConsole() {
     enabled: !!launchId,
     retry: false,
   });
+  /** ACTIVE / RESUMABLE attempt only (DRAFT, SUBMITTED, PENDING). */
   const existingAttempt = existing.data?.attempt ?? null;
+  /**
+   * COMPLETED HISTORY (CONFIRMED). Display only: it never binds intent, never
+   * becomes a deployment context and never reaches presign/ARM/CLAIM/send.
+   */
+  const confirmedDeployment = existing.data?.confirmed ?? null;
   /**
    * FAIL CLOSED. Only an explicit successful lookup (ok === true) counts as a
    * verified answer. Loading, errors, refused reads and notices are all treated
@@ -250,15 +256,18 @@ function CanaryConsole() {
         ? "LOOKUP_ERROR"
         : null;
   const existingDetail = existing.data?.detail ?? null;
-  const attemptBlocksCreation = existingUnverified || existingAttempt !== null;
+  const attemptBlocksCreation =
+    existingUnverified || existingAttempt !== null || confirmedDeployment !== null;
 
   /**
-   * DERIVED UI CONTEXT ONLY. A verified nonterminal existing attempt supplies its
-   * immutable deployment id for continuation, so the operator never lands on a
-   * dead-end after a wallet hand-off. This is pure derivation: no server call, no
+   * DERIVED UI CONTEXT ONLY. Only a deployment created locally for the CURRENT
+   * launch, or a verified ACTIVE/RESUMABLE attempt for the CURRENT launch, can
+   * become the live deployment context. A CONFIRMED historical deployment is
+   * deliberately excluded. This is pure derivation: no server call, no
    * mutation, no stage advancement and no wallet action happens because of it.
    */
   const activeDeploymentId = deploymentId ?? existingAttempt?.deploymentId ?? null;
+
 
   const hasActiveState = !!activeDeploymentId || !!authorizationId;
 
