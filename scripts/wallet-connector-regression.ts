@@ -1049,5 +1049,142 @@ check(
 );
 
 
+/* W — WALLET-ID CORRECTION. Every explicit Connect is a FRESH handshake, and a
+   previously connected AppKit account/provider can never satisfy it. */
+const openBody =
+  /export async function openAppKitConnect\([\s\S]*?\n\}\n/.exec(appkitCode)?.[0] ?? "";
+const resetBody =
+  /export async function resetAppKitConnection\([\s\S]*?\n\}\n/.exec(appkitCode)?.[0] ?? "";
+
+check(
+  "W1",
+  resetBody.length > 0 &&
+    /await appKit\.disconnect\("eip155"\);/.test(resetBody) &&
+    /appKit\.getIsConnectedState\(\) === false &&\s*\n\s*getAppKitAddress\(\) === null &&\s*\n\s*getAppKitWalletProvider\(\) === null/.test(
+      resetBody,
+    ) &&
+    /catch \{\s*\n\s*return false;/.test(resetBody),
+  "teardown is PROVEN from AppKit state, and an unprovable teardown returns false",
+);
+check(
+  "W2",
+  openBody.length > 0 &&
+    /if \(hasAppKitConnectionEvidence\(\)\) return \{ status: "failed", notice: "REOWN_STALE_SESSION" \};/.test(
+      openBody,
+    ) &&
+    openBody.indexOf("hasAppKitConnectionEvidence()") < openBody.indexOf("new Promise"),
+  "a pre-existing AppKit connection fails the connect attempt closed before any chooser opens",
+);
+check(
+  "W3",
+  /let chooserStarted = false;/.test(openBody) &&
+    /const tryResolveConnected = \(\) => \{\s*\n(?:\s*\/\/.*\n)*\s*if \(!chooserStarted\) return;/.test(
+      openBody,
+    ) &&
+    (openBody.match(/chooserStarted = true;/g) ?? []).length === 2,
+  "only evidence arising after THIS attempt's chooser opened can settle the connection",
+);
+{
+  const freshBlock = wcBody.slice(0, wcBody.indexOf("openAppKitConnect("));
+  check(
+    "W4",
+    freshBlock.includes("clearLocalConnectionState();") &&
+      /const tornDown = await appKit\.resetAppKitConnection\(\);/.test(freshBlock) &&
+      /if \(!tornDown\) \{[\s\S]{0,320}notice: "STALE_SESSION_TEARDOWN_FAILED"/.test(freshBlock),
+    "the connector clears local handles and proves AppKit teardown BEFORE opening the chooser, else fails closed",
+  );
+}
+check(
+  "W5",
+  /const liveAccountRaw = await provider\s*\n?\s*\.request\(\{ method: "eth_accounts" \}\)/.test(
+    wcBody,
+  ) &&
+    /if \(liveAccount === null\) return await failClosed\("NO_ACCOUNT"\);/.test(wcBody) &&
+    /const appKitAddress = appKit\.getAppKitAddress\(\);/.test(wcBody) &&
+    /lower\(appKitAddress\) !== liveAccount\) \{\s*\n\s*return await failClosed\("WALLET_ACCOUNT_MISMATCH"\);/.test(
+      wcBody,
+    ),
+  "the live provider account is cross-checked against AppKit's address and disagreement fails closed",
+);
+check(
+  "W6",
+  /const forLiveChain = sessionAccounts\.filter\(\(entry\) => entry\.chainId === liveChain\);/.test(
+    wcBody,
+  ) &&
+    /forLiveChain\.length > 0 && !forLiveChain\.some\(\(entry\) => entry\.address === liveAccount\)/.test(
+      wcBody,
+    ) &&
+    /return await failClosed\("WALLET_ACCOUNT_MISMATCH"\);/.test(wcBody),
+  "CAIP-10 accounts for the LIVE active chain must contain the live account, else fail closed",
+);
+{
+  const failClosedBody =
+    /const failClosed = async \([\s\S]*?\n  \};/.exec(wcBody)?.[0] ?? "";
+  check(
+    "W7",
+    /clearLocalConnectionState\(\);/.test(failClosedBody) &&
+      /await appKit\.disconnectAppKit\(\);/.test(failClosedBody) &&
+      /state: emptyState\(notice\)/.test(failClosedBody) &&
+      !/account:/.test(failClosedBody),
+    "every identity failure disconnects, clears state and exposes an EMPTY state — never the stale address",
+  );
+}
+check(
+  "W8",
+  wcBody.indexOf("walletConnectProvider = provider;") > wcBody.indexOf('failClosed("NO_ACCOUNT")') &&
+    wcBody.indexOf("activeProvider = provider;") >
+      wcBody.indexOf('failClosed("WALLET_ACCOUNT_MISMATCH")'),
+  "the provider becomes active only AFTER the current-session identity proofs pass",
+);
+check(
+  "W9",
+  /const runChooseAnotherWallet = useCallback\(async \(\) => \{[\s\S]*?await disconnect\(\);[\s\S]*?clearInspection\(\);[\s\S]*?await runConnect\(\);/.test(
+    panelCode,
+  ) && /void runChooseAnotherWallet\(\);[\s\S]{0,120}Choose another wallet/.test(panelCode),
+  "Choose another wallet tears the current wallet down and clears the readout before the chooser opens",
+);
+check(
+  "W10",
+  /setWalletLabel\(null\);\s*\n\s*clearInspection\(\);\s*\n\s*try \{\s*\n\s*let result = await connectWalletConnect\(\)/.test(
+    panelCode,
+  ),
+  "a new Connect click clears any previously displayed wallet address first",
+);
+check(
+  "W11",
+  /STALE_SESSION_TEARDOWN_FAILED:/.test(panelCode) &&
+    /STALE_SESSION_REUSE_REFUSED:/.test(panelCode) &&
+    /WALLET_ACCOUNT_MISMATCH:/.test(panelCode) &&
+    /case "REOWN_STALE_SESSION":\s*\n\s*return "STALE_SESSION_REUSE_REFUSED";/.test(connectorCode),
+  "the three new fail-closed outcomes are sanitized codes with operator copy",
+);
+check(
+  "W12",
+  // NEGATIVE TRIPWIRE: reconnecting the SAME wallet stays possible — nothing
+  // pins, remembers or bans a previously used address anywhere.
+  !/lastConnectedAddress|previousAccount|bannedAddress|!== previousAddress/.test(
+    connectorCode + appkitCode + panelCode,
+  ) && /enableReconnect: false/.test(appkitCode),
+  "no remembered/blocked address exists: the same wallet may reconnect after a clean teardown",
+);
+check(
+  "W13",
+  !/eth_sendTransaction|eth_sendRawTransaction|signTransaction|personal_sign|eth_sign|wallet_addEthereumChain/.test(
+    [openBody, resetBody, wcBody, panelCode].join("\n"),
+  ) &&
+    !/presign|armCanary|claim|sendWindow|createCanaryDeploymentAttempt/i.test(
+      [openBody, resetBody, wcBody].join("\n"),
+    ),
+  "this correction introduces no sign, send, add-chain, presign, ARM, CLAIM or send-window path",
+);
+check(
+  "W14",
+  // Gate separation preserved: no chain requirement gates the connection itself.
+  !/CONNECTED_WRONG_CHAIN|requestRobinhoodChainSwitch|wallet_switchEthereumChain/.test(
+    wcBody.slice(0, wcBody.indexOf("let evidence")),
+  ),
+  "a wrong-chain wallet still stays connected: identity proofs never switch or require 4663",
+);
+
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
