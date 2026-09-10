@@ -123,6 +123,7 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
   const [chainId, setChainId] = useState<string | null>(null);
   const [accountMatches, setAccountMatches] = useState(false);
   const [chainMatches, setChainMatches] = useState(false);
+  const [accountVerified, setAccountVerified] = useState(false);
   const [injectedAvailable, setInjectedAvailable] = useState(false);
   const [walletConnectReady, setWalletConnectReady] = useState(false);
   const [embedded, setEmbedded] = useState(false);
@@ -133,6 +134,7 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
     setChainId(null);
     setAccountMatches(false);
     setChainMatches(false);
+    setAccountVerified(false);
   }, []);
 
   /**
@@ -150,8 +152,10 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
   }, []);
 
   /**
-   * Read-only inspection. Runs ONLY when a connector is already explicitly
-   * active; otherwise it clears the readout and touches no provider.
+   * Read-only inspection of the CONNECTOR's canonical validated account. The
+   * displayed address is never re-derived from the wallet's account array here:
+   * it is the account proven for the current explicit connection, and it is
+   * blank whenever that proof does not exist.
    */
   const refresh = useCallback(async () => {
     const active = refreshAvailability();
@@ -159,12 +163,16 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
       clearInspection();
       return;
     }
-    const inspection = await inspectMainnetWalletForHandoff(expectedDeployer ?? "");
-    setAccount(inspection.account);
-    setChainId(inspection.chainId);
-    setAccountMatches(inspection.accountMatches);
-    setChainMatches(inspection.chainMatches);
-  }, [clearInspection, expectedDeployer, refreshAvailability]);
+    const state = await readWalletConnectorState();
+    const expected = expectedDeployer ? expectedDeployer.trim().toLowerCase() : null;
+    const expectedChainHex = normalizeChainId(expectedChainId);
+    setAccount(state.account);
+    setChainId(state.chainId);
+    setAccountVerified(state.accountVerified);
+    setAccountMatches(state.account !== null && expected !== null && state.account === expected);
+    setChainMatches(state.chainId !== null && state.chainId === expectedChainHex);
+    if (state.notice !== null) setNotice(state.notice);
+  }, [clearInspection, expectedChainId, expectedDeployer, refreshAvailability]);
 
   useEffect(() => {
     // Mount does availability detection only — never an inspection. The
