@@ -36,7 +36,7 @@ import { Section } from "@/components/cartel/Section";
 import { InlineRow } from "@/components/cartel/InlineRow";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { EmptyState } from "@/components/cartel/EmptyState";
-import { LaunchReadinessPanel, useLaunchReadiness } from "@/components/cartel/LaunchReadiness";
+import { ProjectJourneyPanel, useProjectJourney } from "@/components/cartel/ProjectJourney";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
