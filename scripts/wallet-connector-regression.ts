@@ -404,7 +404,11 @@ check(
 );
 check(
   "L5",
-  /const liveChain = normalizeChainId\(liveRaw\);/.test(wcBody) &&
+  // RE-PINNED: the live chain read is now hoisted once for the whole
+  // post-connect proof block; it is still a real `eth_chainId` provider read.
+  /const liveChain = normalizeChainId\(\s*\n?\s*await provider\.request\(\{ method: "eth_chainId" \}\)/.test(
+    wcBody,
+  ) &&
     /appKitChain === ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL &&/.test(wcBody) &&
     /liveChain === ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL/.test(wcBody),
   "an injected AppKit connection records chain evidence only when AppKit and a live eth_chainId both prove 4663",
@@ -587,9 +591,15 @@ check(
   /requestRobinhoodChainSwitch\(\)/.test(panelCode) &&
     /setBusy\("switch"\)/.test(panelCode) &&
     /Switch to Robinhood Chain/.test(panelCode) &&
-    !/(useEffect|attachEvents|refreshAvailability|subscribeWalletConnector)[\s\S]{0,300}requestRobinhoodChainSwitch/.test(
+    // RE-PINNED to an exact structural proof: the panel's ONLY switch call site
+    // is the explicit runSwitch handler, and the mount/subscription effect
+    // cannot reach it.
+    (panelCode.match(/requestRobinhoodChainSwitch\(\)/g) ?? []).length === 1 &&
+    /const runSwitch = useCallback\(async \(\) => \{[\s\S]*?requestRobinhoodChainSwitch\(\)/.test(
       panelCode,
     ) &&
+    panelMountEffect !== undefined &&
+    !/requestRobinhoodChainSwitch|runSwitch\(/.test(panelMountEffect) &&
     // Exactly two call sites in the connector: the definition, and the single
     // same-explicit-click alignment inside connectWalletConnectOnRobinhoodChain.
     sameClickBody !== undefined &&
