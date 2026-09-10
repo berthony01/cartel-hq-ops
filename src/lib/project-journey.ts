@@ -400,7 +400,53 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
       detail: r.profilePublished ? "Published" : "Draft",
     },
     {
+      key: "brand_kit",
+      status: input.brandKitUnavailable
+        ? "unavailable"
+        : brandKitConfigured
+          ? "complete"
+          : "action",
+      actionable: !input.brandKitUnavailable,
+      detail: brandKitConfigured ? input.brandKit!.brandName : null,
+    },
+    {
+      key: "creative_assets",
+      status: input.creativeAssetsUnavailable || !assets
+        ? "unavailable"
+        : usefulAssetCount > 0
+          ? "complete"
+          : "action",
+      actionable: !input.creativeAssetsUnavailable && !!assets,
+      detail:
+        input.creativeAssetsUnavailable || !assets
+          ? null
+          : usefulAssetCount > 0
+            ? `${usefulAssetCount} brand asset${usefulAssetCount === 1 ? "" : "s"}` +
+              (assets.generatedStickerCount > 0
+                ? ` · ${assets.generatedStickerCount} generated sticker${assets.generatedStickerCount === 1 ? "" : "s"}`
+                : "")
+            : "No logo, mascot or reference image yet",
+    },
+    {
+      key: "sticker_pack",
+      status: input.stickerPacksUnavailable || !packs
+        ? "unavailable"
+        : packs.publishedCount > 0
+          ? "complete"
+          : "action",
+      actionable: !input.stickerPacksUnavailable && !!packs,
+      detail:
+        input.stickerPacksUnavailable || !packs
+          ? null
+          : packs.publishedCount > 0
+            ? `${packs.publishedCount} published pack${packs.publishedCount === 1 ? "" : "s"}`
+            : packs.activeCount > 0
+              ? `${packs.activeCount} pack${packs.activeCount === 1 ? "" : "s"} in progress`
+              : "No sticker pack yet",
+    },
+    {
       key: "launch_created",
+
       status: stepDone("launch_created") ? "complete" : "action",
       actionable: true,
       detail: r.primaryLaunchName,
