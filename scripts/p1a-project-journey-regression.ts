@@ -5,7 +5,11 @@
  * Exercises only the pure journey derivation plus repository source text.
  */
 import { readFileSync } from "node:fs";
-import { computeLaunchReadiness, type ReadinessInput } from "../src/lib/launch-readiness";
+import {
+  computeLaunchReadiness,
+  selectPrimaryLaunch,
+  type ReadinessInput,
+} from "../src/lib/launch-readiness";
 import {
   computeProjectJourney,
   JOURNEY_STAGE_KEYS,
