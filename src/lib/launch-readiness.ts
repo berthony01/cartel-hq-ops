@@ -121,14 +121,25 @@ function timeOf(row: ReadinessLaunchRow): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
-/** Newest non-COMPLETED launch, otherwise newest launch. Deterministic. */
+/**
+ * Deterministic primary launch:
+ *   1. newest launch that is neither DRAFT nor COMPLETED (genuinely active),
+ *   2. otherwise the newest DRAFT,
+ *   3. otherwise the newest COMPLETED.
+ * Ties break on ascending id. Generic — no name/ticker/id special-casing.
+ */
 export function selectPrimaryLaunch(launches: ReadinessLaunchRow[]): ReadinessLaunchRow | null {
   if (launches.length === 0) return null;
   const byNewest = [...launches].sort((a, b) => {
     const diff = timeOf(b) - timeOf(a);
     return diff !== 0 ? diff : a.id.localeCompare(b.id);
   });
-  return byNewest.find((l) => toLaunchStatus(l.status) !== "COMPLETED") ?? byNewest[0]!;
+  const statusOf = (l: ReadinessLaunchRow) => toLaunchStatus(l.status);
+  return (
+    byNewest.find((l) => statusOf(l) !== "DRAFT" && statusOf(l) !== "COMPLETED") ??
+    byNewest.find((l) => statusOf(l) === "DRAFT") ??
+    byNewest[0]!
+  );
 }
 
 function statusIndex(status: LaunchStatus): number {
