@@ -74,9 +74,12 @@ export function CanaryIntentForm(props: CanaryIntentFormProps) {
     setBoundWallet(null);
     if (previous === null) return;
     const current = propsRef.current;
-    // Only ever clear the value this component provisionally set. A manually
+    // Only ever clear the values this component provisionally set. A manually
     // typed address, or an attempt-bound one, is never touched.
     if (current.deployer.trim().toLowerCase() === previous) current.onDeployer("");
+    if (!current.attemptBoundRecipient?.trim() && current.recipient.trim().toLowerCase() === previous) {
+      current.onRecipient("");
+    }
   }, []);
 
   /**
@@ -109,7 +112,8 @@ export function CanaryIntentForm(props: CanaryIntentFormProps) {
     setBoundWallet(matched);
     const latest = propsRef.current;
     if (latest.deployer.trim().toLowerCase() !== matched) latest.onDeployer(matched);
-    if (latest.recipient.trim() === "" && !latest.attemptBoundRecipient?.trim()) {
+    // CANARY SAFETY MODE: the deployer wallet is also the sole recipient.
+    if (!latest.attemptBoundRecipient?.trim() && latest.recipient.trim().toLowerCase() !== matched) {
       latest.onRecipient(matched);
     }
   }, [unbind]);
@@ -126,7 +130,7 @@ export function CanaryIntentForm(props: CanaryIntentFormProps) {
   const deployerValue = attemptDeployer ?? props.deployer;
   const deployerLocked = attemptDeployer !== null || boundWallet !== null;
   const recipientValue = attemptRecipient ?? props.recipient;
-  const recipientLocked = attemptRecipient !== null;
+  const recipientLocked = attemptRecipient !== null || boundWallet !== null;
 
 
   return (
@@ -185,9 +189,9 @@ export function CanaryIntentForm(props: CanaryIntentFormProps) {
           <p className="text-[11px] text-muted-foreground">
             {attemptRecipient
               ? "Source: existing attempt — immutable and never overwritten."
-              : boundWallet && props.recipient.trim().toLowerCase() === boundWallet
-                ? "Default only: the connected wallet. Editable — choose another recipient before creating the attempt."
-                : "Always editable. Defaults to the connected wallet only while empty."}
+              : boundWallet
+                ? "Canary safety mode: the connected deployer wallet receives 100% of the supply. Read-only while that wallet stays connected on Robinhood Chain."
+                : "Canary safety mode: the recipient must equal the deployer wallet. Connect a wallet on Robinhood Chain to bind both."}
           </p>
         </div>
 

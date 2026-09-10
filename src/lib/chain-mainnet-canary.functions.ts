@@ -37,6 +37,7 @@ const SYMBOL = /^[A-Z0-9]{2,11}$/;
 export type CanaryNotice =
   | "NOT_AUTHORIZED"
   | "INVALID_INPUT"
+  | "RECIPIENT_MUST_MATCH_DEPLOYER"
   | "SUPPLY_OUT_OF_RANGE"
   | "LAUNCH_CHAIN_MISMATCH"
   | "RPC_REFUSED"
@@ -230,6 +231,14 @@ export const createCanaryDeploymentAttempt = createServerFn({ method: "POST" })
     ) {
       return attemptFail("INVALID_INPUT");
     }
+
+    // CANARY HARNESS SAFETY. For this owner-only production canary the entire
+    // supply must be minted to the deployer itself. Both values are already
+    // lowercase-normalized above. Rejected BEFORE the production attempt RPC.
+    if (data.tokenRecipient !== data.deployerAddress) {
+      return attemptFail("RECIPIENT_MUST_MATCH_DEPLOYER");
+    }
+
 
     // Supply is validated EXACTLY, in base units, with BigInt only. The RPC
     // requires an integer >= 10^18, <= 10^30 and divisible by 10^18; a lossy
