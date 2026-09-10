@@ -370,6 +370,8 @@ export async function openAppKitConnect(timeoutMs: number): Promise<AppKitConnec
     };
 
     const tryResolveConnected = () => {
+      // Nothing that predates this attempt's chooser may satisfy it.
+      if (!chooserStarted) return;
       const provider = getAppKitWalletProvider();
       if (provider && appKit.getIsConnectedState()) {
         finish({ status: "connected", provider });
@@ -421,6 +423,7 @@ export async function openAppKitConnect(timeoutMs: number): Promise<AppKitConnec
         appKit.subscribeState((state) => {
           if (state.open) {
             sawOpen = true;
+            chooserStarted = true;
             return;
           }
           if (!sawOpen) return;
