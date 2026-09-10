@@ -1241,7 +1241,9 @@ function LaunchControlPage() {
           ) : null}
 
           {selected ? (
-            <Section variant="hero" className="min-w-0">
+            <>
+            <SectionNav label="Launch Control sections" items={LAUNCH_SECTIONS} />
+            <Section variant="hero" className="min-w-0" id="lc-overview">
               <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
                 <div className="min-w-0 space-y-3">
                   <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 sm:flex sm:items-center sm:justify-between">
