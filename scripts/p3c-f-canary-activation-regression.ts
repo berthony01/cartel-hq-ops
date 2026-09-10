@@ -254,9 +254,10 @@ for (const fn of guarded) {
 }
 check(
   "K4",
-  /const sendReady =\s*\n?\s*sendPhrase === SEND_PHRASE/.test(routeSrc) &&
-    /windowResult\?\.ok === true/.test(routeSrc),
-  "send requires the exact typed phrase AND a valid server send window",
+  /const finalSendReady = !!activeDeploymentId && !!authorizationId && claimSuccess;/.test(
+    routeSrc,
+  ) && /disabled=\{busy !== null \|\| !finalSendReady\}/.test(routeSrc),
+  "the final send is gated on an active deployment, a bound authorization and a successful CLAIM",
 );
 check(
   "K5",
