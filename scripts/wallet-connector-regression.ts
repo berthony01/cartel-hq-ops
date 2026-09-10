@@ -970,10 +970,18 @@ check(
   "U4",
   !/connectWalletConnectOnRobinhoodChain/.test(panelCode) &&
     /connectWalletConnect\(\)/.test(panelCode) &&
-    !/(useEffect|subscribeWalletConnector|refreshAvailability)[\s\S]{0,300}runConnect\(\)/.test(
+    // RE-PINNED structurally: connecting is reachable only from explicit
+    // operator handlers (the Connect button and the teardown-first
+    // "Choose another wallet"), never from the mount/subscription effect.
+    panelMountEffect !== undefined &&
+    !/runConnect|runChooseAnotherWallet|connectWalletConnect|connectInjected/.test(
+      panelMountEffect,
+    ) &&
+    (panelCode.match(/void runConnect\(\);/g) ?? []).length === 1 &&
+    /await runConnect\(\);\s*\n\s*\}, \[clearInspection, refreshAvailability, runConnect\]\);/.test(
       panelCode,
     ),
-  "the panel connects through Gate 1 only, from the explicit button, never on mount, subscription or re-check",
+  "the panel connects through Gate 1 only, from the explicit button or the teardown-first chooser, never on mount, subscription or re-check",
 );
 const restoreEffect = /useEffect\(\(\) => \{\s*if \(launchId\) return;[\s\S]*?\}, \[launches\.data, launchId\]\);/.exec(
   routeCode,
@@ -1037,8 +1045,16 @@ check(
   "X4",
   postConnectBody !== undefined &&
     postConnectBody.length > 0 &&
-    !/disconnectAppKit|clearLocalConnectionState|WRONG_CHAIN_APPROVED/.test(postConnectBody),
-  "D — Gate 1 connect never tears down a connected session for being on another EVM network",
+    // RE-PINNED: teardown after connect now exists for IDENTITY failures only
+    // (no account, or conflicting account evidence). The chain-evidence block
+    // itself still never disconnects and never approves a wrong chain.
+    !/WRONG_CHAIN_APPROVED/.test(postConnectBody) &&
+    !/disconnectAppKit|clearLocalConnectionState/.test(
+      postConnectBody.slice(postConnectBody.indexOf("let evidence")),
+    ) &&
+    (postConnectBody.match(/failClosed\("(NO_ACCOUNT|WALLET_ACCOUNT_MISMATCH)"\)/g) ?? []).length ===
+      3,
+  "D — Gate 1 connect tears down only for a failed current-session identity proof, never for being on another EVM network",
 );
 
 check(
