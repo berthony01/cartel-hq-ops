@@ -12,10 +12,17 @@ import {
 } from "../src/lib/launch-readiness";
 import {
   computeProjectJourney,
+  deriveJourneyDeploymentEvidenceFacts,
   JOURNEY_STAGE_KEYS,
   type JourneyInput,
+  type JourneyLaunchFacts,
   type JourneyStageKey,
 } from "../src/lib/project-journey";
+import {
+  evaluateLaunchDeploymentEvidence,
+  type DeploymentEvidenceInput,
+  type LaunchEvidenceContext,
+} from "../src/lib/launch-verified-eligibility";
 
 const read = (p: string) => readFileSync(p, "utf8");
 
@@ -65,7 +72,7 @@ function journey(input: Partial<JourneyInput> & { readiness: JourneyInput["readi
     launch: null,
     activeWatchers: null,
     watchUnavailable: false,
-    verifiedProductionDeployments: null,
+    deploymentEvidence: null,
     deploymentUnavailable: false,
     brandKit: null,
     brandKitUnavailable: false,
@@ -78,6 +85,39 @@ function journey(input: Partial<JourneyInput> & { readiness: JourneyInput["readi
     ...input,
   });
 }
+
+const launchFacts = (
+  status: string,
+  registration: "none" | "partial" | "complete" = "none",
+): JourneyLaunchFacts => ({
+  id: "l1",
+  status,
+  scheduleSet: true,
+  officialContractAddress:
+    registration === "none" ? null : `0x${"b".repeat(40)}`,
+  officialContractDeploymentId:
+    registration === "complete" ? "deployment-1" : null,
+  contractRegisteredAt:
+    registration === "complete" ? "2026-09-07T00:03:00.000Z" : null,
+});
+
+const noDeploymentEvidence = {
+  productionDeploymentCount: 0,
+  verifiedProductionCount: 0,
+  managedFinalizedVerifiedCount: 0,
+  deploymentAmbiguous: false,
+  registrationEligibleCount: 0,
+  registrationAmbiguous: false,
+};
+
+const finalizedDeploymentEvidence = {
+  productionDeploymentCount: 1,
+  verifiedProductionCount: 1,
+  managedFinalizedVerifiedCount: 1,
+  deploymentAmbiguous: false,
+  registrationEligibleCount: 1,
+  registrationAmbiguous: false,
+};
 
 /** P1-B — every Brand & Creative + Communications stage satisfied. */
 const completeCreative = {
@@ -136,7 +176,7 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
   });
   const j = journey({
     readiness: r,
-    launch: { id: "l1", status: "ANNOUNCED", scheduleSet: false, officialContractRegistered: false },
+    launch: { ...launchFacts("ANNOUNCED"), scheduleSet: false },
     activeWatchers: 3,
     ...completeCreative,
 
@@ -144,20 +184,20 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
   check("J3", j.nextAction.stage?.key === "launch_schedule", `next=${j.nextAction.stage?.key}`);
 }
 
-// J4 — verified PRODUCTION deployments gate contract registration.
+// J4 — managed-finalized production evidence gates deployment and registration.
 {
   const r = computeLaunchReadiness(fullReadiness);
   const without = journey({
     readiness: r,
-    launch: { id: "l1", status: "LIVE", scheduleSet: true, officialContractRegistered: false },
+    launch: launchFacts("CONTRACT_PENDING"),
     activeWatchers: 5,
-    verifiedProductionDeployments: 0,
+    deploymentEvidence: noDeploymentEvidence,
   });
   const withProd = journey({
     readiness: r,
-    launch: { id: "l1", status: "LIVE", scheduleSet: true, officialContractRegistered: false },
+    launch: launchFacts("CONTRACT_PENDING"),
     activeWatchers: 5,
-    verifiedProductionDeployments: 1,
+    deploymentEvidence: finalizedDeploymentEvidence,
     ...completeCreative,
 
   });
@@ -170,13 +210,13 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
     "J4b",
     statusOf(withProd, "official_contract") === "action" &&
       withProd.nextAction.stage?.key === "official_contract",
-    "verified production deployment makes registration the next action",
+    "one eligible finalized production deployment makes registration the next action",
   );
   check(
     "J4c",
     statusOf(without, "deployment") === "waiting" &&
       statusOf(withProd, "deployment") === "complete",
-    "deployment stage reflects verified production count only",
+    "deployment stage requires one verified managed-finalized production deployment",
   );
 }
 
@@ -184,9 +224,9 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
 {
   const j = journey({
     readiness: computeLaunchReadiness(fullReadiness),
-    launch: { id: "l1", status: "LIVE", scheduleSet: true, officialContractRegistered: false },
+    launch: launchFacts("CONTRACT_PENDING"),
     activeWatchers: 5,
-    verifiedProductionDeployments: 0,
+    deploymentEvidence: noDeploymentEvidence,
   });
   check(
     "J5",
@@ -200,10 +240,10 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
 {
   const j = journey({
     readiness: computeLaunchReadiness(fullReadiness),
-    launch: { id: "l1", status: "LIVE", scheduleSet: true, officialContractRegistered: true },
+    launch: launchFacts("LIVE", "complete"),
     activeWatchers: null,
     watchUnavailable: true,
-    verifiedProductionDeployments: null,
+    deploymentEvidence: null,
     deploymentUnavailable: true,
   });
   check(
@@ -222,9 +262,9 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
 {
   const j = journey({
     readiness: computeLaunchReadiness(fullReadiness),
-    launch: { id: "l1", status: "LIVE", scheduleSet: true, officialContractRegistered: true },
+    launch: launchFacts("LIVE", "complete"),
     activeWatchers: 12,
-    verifiedProductionDeployments: 1,
+    deploymentEvidence: finalizedDeploymentEvidence,
     ...completeCreative,
 
   });
@@ -236,10 +276,10 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
 {
   const input: JourneyInput = {
     readiness: computeLaunchReadiness(fullReadiness),
-    launch: { id: "l1", status: "ANNOUNCED", scheduleSet: true, officialContractRegistered: false },
+    launch: launchFacts("ANNOUNCED"),
     activeWatchers: 0,
     watchUnavailable: false,
-    verifiedProductionDeployments: 0,
+    deploymentEvidence: noDeploymentEvidence,
     deploymentUnavailable: false,
   };
   const a = JSON.stringify(computeProjectJourney(input));
