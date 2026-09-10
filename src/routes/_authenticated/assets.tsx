@@ -21,6 +21,7 @@ import { EmptyState } from "@/components/cartel/EmptyState";
 import { AssetUploader } from "@/components/cartel/AssetUploader";
 import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
+import { RelatedLinks, relatedLinkClass } from "@/components/cartel/RelatedLinks";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
