@@ -146,6 +146,15 @@ function AssetsPage() {
         status={workspace ? workspace.name : "No project"}
       />
 
+      <RelatedLinks label="Go to">
+        <Link to="/brand-kit" className={relatedLinkClass}>
+          Brand Kit
+        </Link>
+        <Link to="/sticker-lab" className={relatedLinkClass}>
+          Sticker Lab
+        </Link>
+      </RelatedLinks>
+
       {!workspaceLoading && !workspaceId ? (
         <EmptyState
           icon={FolderLock}
