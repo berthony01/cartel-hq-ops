@@ -538,12 +538,13 @@ export async function readWalletConnectorState(): Promise<WalletConnectorState> 
 
   /*
    * The displayed / bound address is ALWAYS the canonical account captured for
-   * this explicit connection. The live read below is a membership proof of that
-   * exact account, never a re-derivation of identity from array order.
+   * this explicit connection, and it survives a re-check only while the FULL
+   * live proof still holds (non-empty approved list containing it, AppKit's
+   * current account still naming it, no ambiguity). Anything else invalidates.
    */
-  const approved = await readApprovedAccounts(provider);
-  if (approved.length > 0 && !approved.includes(canonical)) {
-    invalidateAccountIdentity("ACTIVE_ACCOUNT_CHANGED");
+  const proofNotice = await proveCanonicalAccount(provider, canonical);
+  if (proofNotice !== null) {
+    invalidateAccountIdentity(proofNotice);
     const pending = accountInvalidationNotice;
     accountInvalidationNotice = null;
     return emptyState(pending);
