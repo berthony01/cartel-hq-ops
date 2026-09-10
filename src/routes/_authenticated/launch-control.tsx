@@ -1701,6 +1701,7 @@ function LaunchControlPage() {
               </div>
 
               <div className="min-w-0 space-y-4 sm:space-y-6">
+                <div id="lc-watch" className="min-w-0 scroll-mt-28">
                 <Section
                   variant="surface"
                   title="Launch Watch"
