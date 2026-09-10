@@ -431,16 +431,60 @@ export type CanaryExistingAttemptResult = {
   notice: CanaryNotice | null;
   /** Sanitized, truncated diagnostic for the owner-only console. Never secrets. */
   detail: string | null;
+  /**
+   * ACTIVE / RESUMABLE attempt only (DRAFT, SUBMITTED, PENDING). This is the
+   * ONLY value that may ever become a live deployment context.
+   */
   attempt: CanaryExistingAttempt | null;
+  /**
+   * COMPLETED HISTORY (CONFIRMED). Display only. It permanently blocks creating
+   * another production attempt for the same launch, and it is NEVER a resume,
+   * presign, ARM, CLAIM or send context.
+   */
+  confirmed: CanaryExistingAttempt | null;
 };
 
-/** Terminal statuses are NOT blocking: a new attempt is legitimate after them. */
+/** Statuses that may still be continued by the manual stages. */
+const ACTIVE_ATTEMPT_STATUSES = ["DRAFT", "SUBMITTED", "PENDING"] as const;
+/** Completed production history. Blocking, never resumable. */
+const CONFIRMED_ATTEMPT_STATUS = "CONFIRMED" as const;
+/** Restartable terminal statuses: they bind nothing and block nothing. */
 const TERMINAL_ATTEMPT_STATUSES = ["FAILED", "ABANDONED"] as const;
 
 function sanitizeDetail(value: unknown): string | null {
   const text = typeof value === "string" ? value : value instanceof Error ? value.message : "";
   const trimmed = text.replace(/\s+/g, " ").trim();
   return trimmed ? trimmed.slice(0, 200) : null;
+}
+
+type DeploymentRow = {
+  id: string;
+  attempt_number: number;
+  status: string;
+  deployer_address: string;
+  token_recipient: string | null;
+  token_name: string | null;
+  token_symbol: string | null;
+  token_total_supply_text: string | null;
+  tx_hash: string | null;
+  contract_address: string | null;
+  created_at: string;
+};
+
+function toAttempt(row: DeploymentRow): CanaryExistingAttempt {
+  return {
+    deploymentId: row.id,
+    attemptNumber: row.attempt_number,
+    status: row.status,
+    deployerAddress: row.deployer_address,
+    tokenRecipient: row.token_recipient,
+    tokenName: row.token_name,
+    tokenSymbol: row.token_symbol,
+    tokenTotalSupplyBaseUnits: row.token_total_supply_text,
+    txHash: row.tx_hash,
+    contractAddress: row.contract_address,
+    createdAt: row.created_at,
+  };
 }
 
 export const readCanaryExistingAttempt = createServerFn({ method: "POST" })
@@ -452,14 +496,14 @@ export const readCanaryExistingAttempt = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }): Promise<CanaryExistingAttemptResult> => {
     if (!(await isPlatformOwner(context.supabase as unknown as SupabaseLike, context.userId))) {
-      return { ok: false, notice: "NOT_AUTHORIZED", detail: null, attempt: null };
+      return { ok: false, notice: "NOT_AUTHORIZED", detail: null, attempt: null, confirmed: null };
     }
 
     try {
-      // READ ONLY. Exact chain, exact environment, exact deployment kind.
-      // Terminal statuses are excluded with explicit per-status negations rather
-      // than a serialized IN list, so no list encoding can silently mis-filter.
-      let query = context.supabase
+      // READ ONLY. Exact chain, exact environment, exact deployment kind. Rows
+      // are classified in code so a completed CONFIRMED deployment can never be
+      // mistaken for a resumable attempt, and terminal rows bind nothing.
+      const { data: rows, error } = await context.supabase
         .from("launch_chain_deployments")
         .select(
           "id, attempt_number, status, deployer_address, token_recipient, token_name, token_symbol, token_total_supply_text, tx_hash, contract_address, created_at",
@@ -467,15 +511,9 @@ export const readCanaryExistingAttempt = createServerFn({ method: "POST" })
         .eq("launch_id", data.launchId)
         .eq("chain_id", ROBINHOOD_MAINNET_CHAIN_ID)
         .eq("network_environment", "PRODUCTION")
-        .eq("deployment_kind", "FIXED_SUPPLY_ERC20");
-
-      for (const terminal of TERMINAL_ATTEMPT_STATUSES) {
-        query = query.not("status", "eq", terminal);
-      }
-
-      const { data: rows, error } = await query
+        .eq("deployment_kind", "FIXED_SUPPLY_ERC20")
         .order("attempt_number", { ascending: false })
-        .limit(1);
+        .limit(50);
 
       if (error) {
         console.error("[canary] existing-attempt lookup failed", error.message);
@@ -484,29 +522,26 @@ export const readCanaryExistingAttempt = createServerFn({ method: "POST" })
           notice: "RPC_REFUSED",
           detail: sanitizeDetail(error.message),
           attempt: null,
+          confirmed: null,
         };
       }
 
-      const row = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
-      if (!row) return { ok: true, notice: null, detail: null, attempt: null };
+      const all = (Array.isArray(rows) ? rows : []) as DeploymentRow[];
+      const active =
+        all.find((row) =>
+          (ACTIVE_ATTEMPT_STATUSES as readonly string[]).includes(row.status),
+        ) ?? null;
+      const confirmed = all.find((row) => row.status === CONFIRMED_ATTEMPT_STATUS) ?? null;
+      // TERMINAL_ATTEMPT_STATUSES rows are intentionally ignored here: they are
+      // neither resumable nor blocking, and they never bind a new intent.
+      void TERMINAL_ATTEMPT_STATUSES;
 
       return {
         ok: true,
         notice: null,
         detail: null,
-        attempt: {
-          deploymentId: row.id,
-          attemptNumber: row.attempt_number,
-          status: row.status,
-          deployerAddress: row.deployer_address,
-          tokenRecipient: row.token_recipient,
-          tokenName: row.token_name,
-          tokenSymbol: row.token_symbol,
-          tokenTotalSupplyBaseUnits: row.token_total_supply_text,
-          txHash: row.tx_hash,
-          contractAddress: row.contract_address,
-          createdAt: row.created_at,
-        },
+        attempt: active ? toAttempt(active) : null,
+        confirmed: confirmed ? toAttempt(confirmed) : null,
       };
     } catch (caught) {
       // FAIL CLOSED: an unverified lookup is never reported as "no attempt".
@@ -516,7 +551,9 @@ export const readCanaryExistingAttempt = createServerFn({ method: "POST" })
         notice: "CONTROL_STATE_UNAVAILABLE",
         detail: sanitizeDetail(caught),
         attempt: null,
+        confirmed: null,
       };
     }
   });
+
 

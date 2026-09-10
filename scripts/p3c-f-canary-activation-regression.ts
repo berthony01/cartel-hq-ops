@@ -291,7 +291,9 @@ check(
 );
 check(
   "K8",
-  /const attemptBlocksCreation = existingUnverified \|\| existingAttempt !== null;/.test(routeSrc),
+  /const attemptBlocksCreation =\s*\n?\s*existingUnverified \|\| existingAttempt !== null \|\| confirmedDeployment !== null;/.test(
+    routeSrc,
+  ),
   "loading/error/refused lookups block Create production attempt (fail closed)",
 );
 check(

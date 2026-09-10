@@ -152,7 +152,37 @@ function CanaryConsole() {
    * account and never changes a network. It only re-enables the READ-ONLY
    * existing-attempt lookup, whose immutable deployer/recipient still win.
    */
+  /**
+   * CROSS-LAUNCH LEAK GUARD. Every launch-scoped value is dropped before the
+   * newly selected launch is applied, so no deployment id, authorization,
+   * intent, wallet identity, envelope or result from launch X can ever survive
+   * into launch Y. This clears local UI state only: it mutates nothing, calls
+   * nothing and never touches a persisted row.
+   */
+  const resetLaunchScopedState = () => {
+    setDeployer("");
+    setRecipient("");
+    setSupply("");
+    setIntent(null);
+    setIntentError(null);
+    setDeploymentId(null);
+    setAuthorizationId(null);
+    setAuthorizationExpiresAt(null);
+    setArmPhrase("");
+    setArmSuccess(false);
+    setClaimSuccess(false);
+    setQuote(null);
+    setClaimed(null);
+    setArmed(null);
+    setWindowResult(null);
+    setPreflight(null);
+    setSendResult(null);
+    setTxHash(null);
+    setTail(null);
+  };
+
   const selectLaunch = (id: string) => {
+    resetLaunchScopedState();
     setLaunchId(id);
     if (typeof window === "undefined") return;
     try {
@@ -184,10 +214,14 @@ function CanaryConsole() {
       }
       return;
     }
+    // A restored selection is a launch change too: start from clean state.
+    resetLaunchScopedState();
     setLaunchId(row.id);
     setName(row.token_name ?? "");
     setSymbol(deriveCanaryOnchainSymbol(row.ticker));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [launches.data, launchId]);
+
 
   /**
    * READ-ONLY awareness of an existing nonterminal production attempt for the
@@ -201,7 +235,13 @@ function CanaryConsole() {
     enabled: !!launchId,
     retry: false,
   });
+  /** ACTIVE / RESUMABLE attempt only (DRAFT, SUBMITTED, PENDING). */
   const existingAttempt = existing.data?.attempt ?? null;
+  /**
+   * COMPLETED HISTORY (CONFIRMED). Display only: it never binds intent, never
+   * becomes a deployment context and never reaches presign/ARM/CLAIM/send.
+   */
+  const confirmedDeployment = existing.data?.confirmed ?? null;
   /**
    * FAIL CLOSED. Only an explicit successful lookup (ok === true) counts as a
    * verified answer. Loading, errors, refused reads and notices are all treated
@@ -216,15 +256,18 @@ function CanaryConsole() {
         ? "LOOKUP_ERROR"
         : null;
   const existingDetail = existing.data?.detail ?? null;
-  const attemptBlocksCreation = existingUnverified || existingAttempt !== null;
+  const attemptBlocksCreation =
+    existingUnverified || existingAttempt !== null || confirmedDeployment !== null;
 
   /**
-   * DERIVED UI CONTEXT ONLY. A verified nonterminal existing attempt supplies its
-   * immutable deployment id for continuation, so the operator never lands on a
-   * dead-end after a wallet hand-off. This is pure derivation: no server call, no
+   * DERIVED UI CONTEXT ONLY. Only a deployment created locally for the CURRENT
+   * launch, or a verified ACTIVE/RESUMABLE attempt for the CURRENT launch, can
+   * become the live deployment context. A CONFIRMED historical deployment is
+   * deliberately excluded. This is pure derivation: no server call, no
    * mutation, no stage advancement and no wallet action happens because of it.
    */
   const activeDeploymentId = deploymentId ?? existingAttempt?.deploymentId ?? null;
+
 
   const hasActiveState = !!activeDeploymentId || !!authorizationId;
 
@@ -346,7 +389,7 @@ function CanaryConsole() {
         </Section>
       ) : null}
 
-      {launchId && !existingAttempt ? (
+      {launchId && !existingAttempt && !confirmedDeployment ? (
         <Section
           variant="surface"
           leading={
@@ -408,6 +451,43 @@ function CanaryConsole() {
           </p>
         </Section>
       ) : null}
+
+      {confirmedDeployment ? (
+        <Section
+          variant="surface"
+          leading={<ShieldCheck className="h-4 w-4 text-success" />}
+          title={`Completed historical deployment #${confirmedDeployment.attemptNumber}`}
+          description="This launch already has a CONFIRMED Robinhood Chain production deployment. It is permanent history: it is displayed read-only, it never binds new intent, and it is never loaded as a presign, ARM, CLAIM or send context."
+        >
+          <div className="grid gap-1 sm:grid-cols-2">
+            <ReadoutLine label={"Status"} value={confirmedDeployment.status} />
+            <ReadoutLine label={"Deployment id"} value={confirmedDeployment.deploymentId} />
+            <ReadoutLine
+              label={"Historical deployer"}
+              value={confirmedDeployment.deployerAddress}
+            />
+            <ReadoutLine
+              label={"Historical recipient"}
+              value={confirmedDeployment.tokenRecipient}
+            />
+            <ReadoutLine label={"Token"} value={confirmedDeployment.tokenName} />
+            <ReadoutLine label={"Onchain symbol"} value={confirmedDeployment.tokenSymbol} />
+            <ReadoutLine
+              label={"Base units"}
+              value={confirmedDeployment.tokenTotalSupplyBaseUnits}
+            />
+            <ReadoutLine label={"Tx hash"} value={confirmedDeployment.txHash} />
+            <ReadoutLine label={"Contract"} value={confirmedDeployment.contractAddress} />
+            <ReadoutLine label={"Created"} value={confirmedDeployment.createdAt} />
+          </div>
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            Historical identity is never rewritten and never copied into a new attempt. Creating
+            another production attempt for this launch is refused here to prevent an accidental
+            duplicate mainnet deployment.
+          </p>
+        </Section>
+      ) : null}
+
 
       <DeploymentWalletConnect
         expectedDeployer={
@@ -508,6 +588,12 @@ function CanaryConsole() {
             nonterminal ({existingAttempt.status}). Creating another attempt is refused here. That
             attempt is already loaded above as the active deployment context, with its immutable
             identity.
+          </p>
+        ) : confirmedDeployment ? (
+          <p className="mt-2 text-xs text-danger">
+            Blocked: this launch already has a confirmed production deployment (attempt #
+            {confirmedDeployment.attemptNumber}). Creating another production attempt is refused
+            here to prevent a duplicate mainnet deployment.
           </p>
         ) : existingUnverified ? (
           <p className="mt-2 text-xs text-danger">

@@ -218,15 +218,13 @@ check(
       /\.eq\("chain_id", ROBINHOOD_MAINNET_CHAIN_ID\)/.test(body) &&
       /\.eq\("network_environment", "PRODUCTION"\)/.test(body) &&
       /\.eq\("deployment_kind", "FIXED_SUPPLY_ERC20"\)/.test(body) &&
-      /for \(const terminal of TERMINAL_ATTEMPT_STATUSES\) \{\s*\n\s*query = query\.not\("status", "eq", terminal\);/.test(
-        body,
-      ) &&
-      !/\.not\("status", "in"/.test(body) &&
-
+      /ACTIVE_ATTEMPT_STATUSES = \["DRAFT", "SUBMITTED", "PENDING"\] as const/.test(wrapperCode) &&
+      /CONFIRMED_ATTEMPT_STATUS = "CONFIRMED" as const/.test(wrapperCode) &&
       /TERMINAL_ATTEMPT_STATUSES = \["FAILED", "ABANDONED"\] as const/.test(wrapperCode),
-    "the lookup is scoped to chain 4663 PRODUCTION fixed-supply nonterminal rows",
+    "the lookup is scoped to chain 4663 PRODUCTION fixed-supply rows with explicit status classes",
   );
 }
+
 check(
   "F5",
   /attemptBlocksCreation/.test(routeCode) &&
@@ -342,6 +340,102 @@ check(
     "the comparison uses the existing lowercase normalization",
   );
 }
+
+/* H — CROSS-LAUNCH LEAK GUARD: no identity or context survives a launch switch. */
+{
+  const start = routeCode.indexOf("const resetLaunchScopedState = () => {");
+  const reset = start >= 0 ? routeCode.slice(start, routeCode.indexOf("\n  };", start)) : "";
+  const required = [
+    "setDeployer(\"\")",
+    "setRecipient(\"\")",
+    "setSupply(\"\")",
+    "setIntent(null)",
+    "setIntentError(null)",
+    "setDeploymentId(null)",
+    "setAuthorizationId(null)",
+    "setAuthorizationExpiresAt(null)",
+    "setArmPhrase(\"\")",
+    "setArmSuccess(false)",
+    "setClaimSuccess(false)",
+    "setQuote(null)",
+    "setClaimed(null)",
+    "setArmed(null)",
+    "setWindowResult(null)",
+    "setPreflight(null)",
+    "setSendResult(null)",
+    "setTxHash(null)",
+    "setTail(null)",
+  ];
+  const missing = required.filter((entry) => !reset.includes(entry));
+  check(
+    "H1a",
+    reset.length > 0 && missing.length === 0,
+    `launch switch clears every launch-scoped field${missing.length ? ` (missing: ${missing.join(", ")})` : ""}`,
+  );
+  check(
+    "H1b",
+    /const selectLaunch = \(id: string\) => \{\s*\n\s*resetLaunchScopedState\(\);\s*\n\s*setLaunchId\(id\);/.test(
+      routeCode,
+    ),
+    "the selector resets launch-scoped state BEFORE applying the new launch id",
+  );
+  check(
+    "H1c",
+    /resetLaunchScopedState\(\);\s*\n\s*setLaunchId\(row\.id\);/.test(routeCode),
+    "a restored stored selection resets launch-scoped state too",
+  );
+}
+check(
+  "H2",
+  /const activeDeploymentId = deploymentId \?\? existingAttempt\?\.deploymentId \?\? null;/.test(
+    routeCode,
+  ) &&
+    !/activeDeploymentId = [^;]*confirmed/i.test(routeCode) &&
+    /setDeploymentId\(null\)/.test(routeCode),
+  "a deployment id from launch X cannot become the active deployment id for launch Y",
+);
+check(
+  "H3",
+  /const confirmedDeployment = existing\.data\?\.confirmed \?\? null;/.test(routeCode) &&
+    /Completed historical deployment/.test(routeSrc) &&
+    /attemptBlocksCreation =\s*\n?\s*existingUnverified \|\| existingAttempt !== null \|\| confirmedDeployment !== null;/.test(
+      routeCode,
+    ) &&
+    !/attemptBoundDeployer=\{confirmedDeployment|attemptBoundRecipient=\{confirmedDeployment|expectedDeployer=\{confirmedDeployment/.test(
+      routeCode,
+    ),
+  "a CONFIRMED deployment is history only: it blocks creation and never binds or resumes",
+);
+check(
+  "H4",
+  /attempt: active \? toAttempt\(active\) : null/.test(wrapperCode) &&
+    /const active =\s*\n?\s*all\.find\(\(row\) =>\s*\n?\s*\(ACTIVE_ATTEMPT_STATUSES as readonly string\[\]\)\.includes\(row\.status\)/.test(
+      wrapperCode,
+    ),
+  "DRAFT/SUBMITTED/PENDING remain the only resumable, immutable active attempt",
+);
+check(
+  "H5",
+  /TERMINAL_ATTEMPT_STATUSES rows are intentionally ignored/.test(wrapperSrc) &&
+    !/attempt: .*(FAILED|ABANDONED)/.test(wrapperCode),
+  "FAILED/ABANDONED bind no intent and block nothing",
+);
+check(
+  "H6",
+  /\}, \[syncBinding, props\.launchId, props\.attemptBoundDeployer, props\.attemptBoundRecipient\]\);/.test(
+    formSrc,
+  ),
+  "the form re-binds the verified connected wallet when the launch or attempt binding changes",
+);
+check(
+  "H7",
+  !/0x[0-9a-fA-F]{40}/.test(
+    [routeSrc, formSrc, wrapperSrc].join("\n").replace(/0x0{40}/g, ""),
+  ),
+  "no hardcoded EOA address exists in the route, form or wrapper",
+);
+
+
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

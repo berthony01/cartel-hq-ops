@@ -118,12 +118,20 @@ export function CanaryIntentForm(props: CanaryIntentFormProps) {
     }
   }, [unbind]);
 
+  /**
+   * The binding is re-synced on connector events AND whenever the launch or its
+   * attempt binding changes. Switching from an attempt-bound launch to a clean
+   * one therefore re-binds the verified connected wallet instead of leaving the
+   * previous launch's identity on screen; attempt-bound identity is never
+   * carried across launches. This still only READS the active connector.
+   */
   useEffect(() => {
     void syncBinding();
     return subscribeWalletConnector(() => {
       void syncBinding();
     });
-  }, [syncBinding]);
+  }, [syncBinding, props.launchId, props.attemptBoundDeployer, props.attemptBoundRecipient]);
+
 
   const attemptDeployer = props.attemptBoundDeployer?.trim() || null;
   const attemptRecipient = props.attemptBoundRecipient?.trim() || null;
