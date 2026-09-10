@@ -1047,6 +1047,21 @@ function LaunchControlPage() {
 
       {profile ? <LaunchReadinessCallout workspaceId={workspaceId} /> : null}
 
+      <RelatedLinks label="Go to">
+        <Link to="/telegram" className={relatedLinkClass}>
+          Community Command
+        </Link>
+        <Link to="/sticker-lab" className={relatedLinkClass}>
+          Sticker Lab
+        </Link>
+        <Link to="/assets" className={relatedLinkClass}>
+          Asset Vault
+        </Link>
+        <Link to="/project-profile" className={relatedLinkClass}>
+          Project Profile
+        </Link>
+      </RelatedLinks>
+
 
 
       {workspaceLoading ? (
