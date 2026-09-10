@@ -1288,7 +1288,8 @@ check(
 check(
   "A8",
   /accountsChanged: \(\) => \{\s*\n\s*void revalidateActiveAccount\(\)/.test(connectorCode) &&
-    /invalidateAccountIdentity\("ACTIVE_ACCOUNT_CHANGED"\)/.test(connectorCode) &&
+    /if \(notice !== null\) invalidateAccountIdentity\(notice\);/.test(connectorCode) &&
+    /return "ACTIVE_ACCOUNT_CHANGED";/.test(connectorCode) &&
     /function invalidateAccountIdentity[\s\S]{0,200}clearLocalConnectionState\(\);/.test(
       connectorCode,
     ),
@@ -1403,7 +1404,10 @@ check(
     connectorCode,
   ) &&
     !/eth_sendTransaction|eth_sendRawTransaction|wallet_addEthereumChain|personal_sign/.test(
-      connectorCode.slice(connectorCode.indexOf("async function proveCanonicalAccount")),
+      connectorCode.slice(
+        connectorCode.indexOf("async function proveCanonicalAccount"),
+        connectorCode.indexOf("function attachEvents("),
+      ),
     ),
   "re-proof never selects a replacement account and introduces no sign, send or add-chain path",
 );
