@@ -88,7 +88,17 @@ export type WalletConnectorNotice =
 export type WalletConnectorState = {
   kind: WalletConnectorKind | null;
   connected: boolean;
+  /**
+   * The CANONICAL VALIDATED ACTIVE ACCOUNT of the current explicit connection.
+   * It is never re-derived from `eth_accounts` array order.
+   */
   account: string | null;
+  /**
+   * True only when the canonical account was proven, for THIS session, against
+   * the wallet's approved account list and every other identity source that
+   * exists. Never true for an unproven or invalidated connection.
+   */
+  accountVerified: boolean;
   chainId: string | null;
   /** Wallet-reported metadata, only when the peer actually supplies it. */
   walletName: string | null;
@@ -111,6 +121,16 @@ let walletConnectProvider: Eip1193Provider | null = null;
 let walletName: string | null = null;
 /** Canonical hex chain ids proven by the active WalletConnect session. */
 let sessionChainEvidence: string[] | null = null;
+/**
+ * CANONICAL ACTIVE ACCOUNT. Written exactly once per successful explicit
+ * connection, from the account the operator actually selected for that attempt,
+ * and cleared on teardown or on any account-identity invalidation. Nothing in
+ * this module may substitute another account for it.
+ */
+let activeAccount: string | null = null;
+let activeAccountVerified = false;
+/** Sticky invalidation reason, surfaced once and then cleared with the state. */
+let accountInvalidationNotice: WalletConnectorNotice | null = null;
 
 /**
  * RECONNECT INFRASTRUCTURE.
