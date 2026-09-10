@@ -1486,6 +1486,7 @@ function LaunchControlPage() {
                       saveMutation.mutate();
                     }}
                   >
+                    <div id="lc-details" className="min-w-0 scroll-mt-28">
                     <Section
                       variant="primary"
                       title="Launch identity"
