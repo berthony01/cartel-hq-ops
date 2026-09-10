@@ -655,18 +655,24 @@ check(
 );
 check(
   "N11",
-  /latest\.recipient\.trim\(\) === ""/.test(formCode) &&
-    // Editability before attempt creation is still protected: the ONLY thing
-    // that can lock the recipient is an immutable attempt-bound value.
-    /const recipientLocked = attemptRecipient !== null;/.test(formCode) &&
+  // CANARY SAFETY CONTRACT (superseding the old "editable recipient" rule):
+  // a matched connected wallet on Robinhood Chain 4663 forces the recipient to
+  // the SAME address as the deployer and locks it.
+  /if \(!latest\.attemptBoundRecipient\?\.trim\(\) && latest\.recipient\.trim\(\)\.toLowerCase\(\) !== matched\) \{\s*\n\s*latest\.onRecipient\(matched\);/.test(
+    formCode,
+  ) &&
+    /const recipientLocked = attemptRecipient !== null \|\| boundWallet !== null;/.test(formCode) &&
     /const attemptRecipient = props\.attemptBoundRecipient\?\.trim\(\) \|\| null;/.test(formCode) &&
+    /const recipientValue = attemptRecipient \?\? props\.recipient;/.test(formCode) &&
     /id="canary-recipient"[\s\S]{0,240}readOnly=\{recipientLocked\}/.test(formCode) &&
     /id="canary-recipient"[\s\S]{0,320}if \(recipientLocked\) return;\s*props\.onRecipient\(event\.target\.value\);/.test(
       formCode,
     ) &&
-    // No unconditional lock may ever be reintroduced.
-    !/id="canary-recipient"[\s\S]{0,240}readOnly(?!=\{recipientLocked\})/.test(formCode),
-  "the recipient defaults only when empty and stays editable unless attempt-bound",
+    // The lock must stay derived from state; no unconditional lock may appear.
+    !/id="canary-recipient"[\s\S]{0,240}readOnly(?!=\{recipientLocked\})/.test(formCode) &&
+    // NEGATIVE TRIPWIRE: the superseded "empty-only default" rule must not return.
+    !/latest\.recipient\.trim\(\) === ""/.test(formCode),
+  "a matched 4663 wallet forces recipient == deployer and locks it; attempt-bound recipient still wins",
 );
 check(
   "N12",
