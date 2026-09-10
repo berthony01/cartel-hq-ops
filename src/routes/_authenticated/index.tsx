@@ -136,8 +136,8 @@ function SnapshotCard({
 function HqDashboard() {
   const { workspace, workspaceId, loading: workspaceLoading } = useWorkspace();
 
-  const journeyQuery = useProjectJourney(workspaceId);
-  const journeyComplete = journeyQuery.data?.allComplete === true;
+
+
 
 
   const packsQuery = useQuery({
