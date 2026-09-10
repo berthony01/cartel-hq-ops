@@ -389,7 +389,7 @@ function CanaryConsole() {
         </Section>
       ) : null}
 
-      {launchId && !existingAttempt ? (
+      {launchId && !existingAttempt && !confirmedDeployment ? (
         <Section
           variant="surface"
           leading={
