@@ -815,69 +815,6 @@ function CanaryConsole() {
       </Section>
 
 
-      <Section
-        variant="surface"
-        title="F — Final send window and one-shot send"
-        description="The server issues a short-lived envelope. The wallet is only ever prompted by the explicit send click below."
-      >
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={busy !== null || !activeDeploymentId || !authorizationId || !claimSuccess}
-            onClick={() =>
-              run("window", async () => {
-                if (!activeDeploymentId || !authorizationId) return;
-                const result = await sendWindow({ data: { deploymentId: activeDeploymentId, authorizationId } });
-                setWindowResult({
-                  ok: result.ok,
-                  notice: result.notice,
-                  envelope: result.envelope,
-                  sendWindowExpiresAt: result.sendWindowExpiresAt,
-                });
-                note(`Send window: ${result.notice ?? "issued"}.`);
-              })
-            }
-          >
-            {busy === "window" ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-            Issue final send window
-          </Button>
-        </div>
-
-        <Input
-          value={sendPhrase}
-          onChange={(event) => setSendPhrase(event.target.value)}
-          placeholder={SEND_PHRASE}
-          className="mt-3 max-w-md font-mono"
-        />
-        <p className="mt-2 text-xs text-muted-foreground">
-          Issue the final send window only after CLAIM succeeds. The envelope expires on a short
-          server clock (approximately 10 seconds from CLAIM). One wallet request. No retry and no
-          rebroadcast: if the outcome is ambiguous the attempt freezes for reconciliation.
-        </p>
-        <Button
-          variant="destructive"
-          className="mt-2"
-          disabled={busy !== null || !sendReady}
-          onClick={() =>
-            run("send", async () => {
-              if (!windowResult?.envelope || !windowResult.sendWindowExpiresAt) return;
-              const result = await sendClaimedMainnetDeployment({
-                envelope: windowResult.envelope as never,
-                sendWindowExpiresAt: windowResult.sendWindowExpiresAt,
-              });
-              setSendResult(result);
-              setWindowResult(null);
-              setSendPhrase("");
-              if (result.txHash) setTxHash(result.txHash);
-              note(`Send: phase ${result.phase}, ${result.notice ?? "hash known"}.`);
-            })
-          }
-        >
-          Send one mainnet deployment
-        </Button>
-        <Readout value={sendResult} />
-      </Section>
 
       <Section
         variant="surface"
