@@ -869,6 +869,9 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
   activeAccount = selectedAccount;
   activeAccountVerified = true;
   attachEvents(provider);
+  // One AppKit current-account watch for this WalletConnect connection; it can
+  // only re-prove and invalidate, never rebind to a newly selected account.
+  await attachAppKitAccountWatch();
   const state = await readWalletConnectorState();
   emit();
   return { ok: state.connected, notice: state.notice, state };
