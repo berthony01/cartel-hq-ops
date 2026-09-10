@@ -327,9 +327,8 @@ function HqDashboard() {
         status="Private Beta"
       />
 
-      {readinessComplete ? null : (
-        <LaunchReadinessPanel workspaceId={workspaceId} workspaceName={workspace?.name ?? null} />
-      )}
+      <ProjectJourneyPanel workspaceId={workspaceId} workspaceName={workspace?.name ?? null} />
+
 
       {!workspaceId ? (
         <Section
