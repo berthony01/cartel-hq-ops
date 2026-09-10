@@ -67,9 +67,30 @@ function journey(input: Partial<JourneyInput> & { readiness: JourneyInput["readi
     watchUnavailable: false,
     verifiedProductionDeployments: null,
     deploymentUnavailable: false,
+    brandKit: null,
+    brandKitUnavailable: false,
+    creativeAssets: null,
+    creativeAssetsUnavailable: false,
+    stickerPacks: null,
+    stickerPacksUnavailable: false,
+    inbox: null,
+    inboxUnavailable: false,
     ...input,
   });
 }
+
+/** P1-B — every Brand & Creative + Communications stage satisfied. */
+const completeCreative = {
+  brandKit: { brandName: "PROJECT" },
+  brandKitUnavailable: false,
+  creativeAssets: { brandAssetCount: 1, generatedStickerCount: 0, otherAssetCount: 0 },
+  creativeAssetsUnavailable: false,
+  stickerPacks: { activeCount: 1, publishedCount: 1 },
+  stickerPacksUnavailable: false,
+  inbox: { repliesEnabled: true, newConversationsEnabled: true, waitingOnTeamCount: 0 },
+  inboxUnavailable: false,
+} satisfies Partial<JourneyInput>;
+
 
 const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
   j.stages.find((s) => s.key === key)!.status;
@@ -117,6 +138,8 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
     readiness: r,
     launch: { id: "l1", status: "ANNOUNCED", scheduleSet: false, officialContractRegistered: false },
     activeWatchers: 3,
+    ...completeCreative,
+
   });
   check("J3", j.nextAction.stage?.key === "launch_schedule", `next=${j.nextAction.stage?.key}`);
 }
@@ -135,6 +158,8 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
     launch: { id: "l1", status: "LIVE", scheduleSet: true, officialContractRegistered: false },
     activeWatchers: 5,
     verifiedProductionDeployments: 1,
+    ...completeCreative,
+
   });
   check(
     "J4",
@@ -200,6 +225,8 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
     launch: { id: "l1", status: "LIVE", scheduleSet: true, officialContractRegistered: true },
     activeWatchers: 12,
     verifiedProductionDeployments: 1,
+    ...completeCreative,
+
   });
   check("J7", j.allComplete === true, `completed ${j.completedCount}/${j.totalCount}`);
   check("J7b", j.nextAction.stage === null, "no next stage when everything is complete");
@@ -310,7 +337,213 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
   check("J12f", selectPrimaryLaunch([]) === null, "empty launch list yields no primary launch");
 }
 
+// ---------------------------------------------------------------------------
+// P1-B — Brand & Creative + Communications readiness
+// ---------------------------------------------------------------------------
+
+const publishedProfile: ReadinessInput = {
+  profile: { id: "p1", project_name: "PROJECT", discovery_status: "published" },
+  launches: [],
+  groups: [],
+  settings: [],
+};
+
+// J13 — a published profile with no Brand Kit points at the Brand Kit next.
+{
+  const j = journey({ readiness: computeLaunchReadiness(publishedProfile) });
+  check(
+    "J13",
+    j.nextAction.stage?.key === "brand_kit" && j.nextAction.to === "/brand-kit",
+    `next after publication is ${j.nextAction.stage?.key}`,
+  );
+  check(
+    "J13b",
+    statusOf(j, "brand_kit") === "action",
+    "missing Brand Kit is actionable, never complete",
+  );
+}
+
+// J14 — a saved Brand Kit advances the path to creative assets.
+{
+  const j = journey({
+    readiness: computeLaunchReadiness(publishedProfile),
+    brandKit: { brandName: "PROJECT" },
+    creativeAssets: { brandAssetCount: 0, generatedStickerCount: 0, otherAssetCount: 0 },
+  });
+  check("J14", statusOf(j, "brand_kit") === "complete", "named Brand Kit is complete");
+  check(
+    "J14b",
+    j.nextAction.stage?.key === "creative_assets" && j.nextAction.to === "/assets",
+    `next after Brand Kit is ${j.nextAction.stage?.key}`,
+  );
+  const blank = journey({
+    readiness: computeLaunchReadiness(publishedProfile),
+    brandKit: { brandName: "   " },
+  });
+  check(
+    "J14c",
+    statusOf(blank, "brand_kit") === "action",
+    "a Brand Kit row without a brand name is not complete",
+  );
+  const unreadable = journey({
+    readiness: computeLaunchReadiness(publishedProfile),
+    brandKitUnavailable: true,
+    brandKit: null,
+  });
+  check(
+    "J14d",
+    statusOf(unreadable, "brand_kit") === "unavailable",
+    "unreadable Brand Kit is unknown, never complete",
+  );
+}
+
+// J15 — creative assets: generated stickers alone never prove brand setup.
+{
+  const none = journey({
+    readiness: computeLaunchReadiness(publishedProfile),
+    brandKit: { brandName: "PROJECT" },
+    creativeAssets: { brandAssetCount: 0, generatedStickerCount: 12, otherAssetCount: 0 },
+  });
+  check(
+    "J15",
+    statusOf(none, "creative_assets") === "action",
+    "generated stickers alone leave creative assets actionable",
+  );
+  const some = journey({
+    readiness: computeLaunchReadiness(publishedProfile),
+    brandKit: { brandName: "PROJECT" },
+    creativeAssets: { brandAssetCount: 2, generatedStickerCount: 12, otherAssetCount: 0 },
+  });
+  check(
+    "J15b",
+    statusOf(some, "creative_assets") === "complete",
+    "logo/mascot/reference assets complete the stage",
+  );
+  check(
+    "J15c",
+    (some.stages.find((s) => s.key === "creative_assets")!.detail ?? "").includes("2 brand assets"),
+    "asset detail is an honest count",
+  );
+  const unreadable = journey({
+    readiness: computeLaunchReadiness(publishedProfile),
+    brandKit: { brandName: "PROJECT" },
+    creativeAssetsUnavailable: true,
+    creativeAssets: null,
+  });
+  check(
+    "J15d",
+    statusOf(unreadable, "creative_assets") === "unavailable",
+    "unreadable assets are unknown, never complete",
+  );
+}
+
+// J16 — sticker pack lifecycle uses real pack status vocabulary.
+{
+  const base = {
+    readiness: computeLaunchReadiness(publishedProfile),
+    brandKit: { brandName: "PROJECT" },
+    creativeAssets: { brandAssetCount: 1, generatedStickerCount: 0, otherAssetCount: 0 },
+  };
+  const zero = journey({ ...base, stickerPacks: { activeCount: 0, publishedCount: 0 } });
+  check(
+    "J16",
+    statusOf(zero, "sticker_pack") === "action" &&
+      zero.nextAction.stage?.key === "sticker_pack" &&
+      zero.nextAction.to === "/sticker-lab",
+    "no packs routes to Sticker Lab",
+  );
+  const draft = journey({ ...base, stickerPacks: { activeCount: 2, publishedCount: 0 } });
+  check(
+    "J16b",
+    statusOf(draft, "sticker_pack") === "action",
+    "in-progress packs are not complete",
+  );
+  check(
+    "J16c",
+    (draft.stages.find((s) => s.key === "sticker_pack")!.detail ?? "").includes("in progress"),
+    "in-progress packs are described honestly",
+  );
+  const published = journey({ ...base, stickerPacks: { activeCount: 2, publishedCount: 1 } });
+  check(
+    "J16d",
+    statusOf(published, "sticker_pack") === "complete",
+    "a published active pack completes the stage",
+  );
+  const unreadable = journey({ ...base, stickerPacksUnavailable: true, stickerPacks: null });
+  check(
+    "J16e",
+    statusOf(unreadable, "sticker_pack") === "unavailable",
+    "unreadable packs are unknown, never complete",
+  );
+}
+
+// J17 — communications readiness comes only from inbox settings.
+{
+  const base = { readiness: computeLaunchReadiness(fullReadiness) };
+  const on = journey({
+    ...base,
+    inbox: { repliesEnabled: true, newConversationsEnabled: true, waitingOnTeamCount: 0 },
+  });
+  check("J17", statusOf(on, "communications") === "complete", "both directions enabled is complete");
+
+  const partial = journey({
+    ...base,
+    inbox: { repliesEnabled: true, newConversationsEnabled: false, waitingOnTeamCount: null },
+  });
+  check(
+    "J17b",
+    statusOf(partial, "communications") === "action" &&
+      partial.stages.find((s) => s.key === "communications")!.to === "/telegram",
+    "a disabled direction is actionable on the existing inbox surface",
+  );
+
+  const unreadable = journey({ ...base, inboxUnavailable: true, inbox: null });
+  check(
+    "J17c",
+    statusOf(unreadable, "communications") === "unavailable",
+    "unreadable inbox settings are unknown, never complete",
+  );
+
+  const busy = journey({
+    ...base,
+    inbox: { repliesEnabled: true, newConversationsEnabled: true, waitingOnTeamCount: 2 },
+  });
+  const detail = busy.stages.find((s) => s.key === "communications")!.detail ?? "";
+  check(
+    "J17d",
+    statusOf(busy, "communications") === "complete" && detail === "Inbox ready · 2 need reply",
+    `waiting workload stays operational detail: "${detail}"`,
+  );
+}
+
+// J18 — the journey model still performs no writes of any kind.
+{
+  const src = read("src/lib/project-journey.ts");
+  const forbidden = [
+    ".insert(",
+    ".update(",
+    ".upsert(",
+    ".delete(",
+    "localStorage",
+    "sessionStorage",
+    "setProjectInbox",
+    "sendProjectInboxTeamReply",
+    "updateProjectConversationStatus",
+  ];
+  check(
+    "J18",
+    forbidden.every((token) => !src.includes(token)),
+    "journey model contains no persistence or mutation call",
+  );
+  check(
+    "J18b",
+    !src.includes("project_conversations") && !src.includes("project_inbox_"),
+    "private inbox tables are never queried directly",
+  );
+}
+
 if (failures > 0) {
+
   console.error(`\n${failures} check(s) failed.`);
   process.exit(1);
 }

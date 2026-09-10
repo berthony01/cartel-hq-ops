@@ -12,6 +12,10 @@ import {
 } from "@/lib/launch-control";
 import { listChainDeployments } from "@/lib/chain-launcher";
 import { evaluateLaunchDeploymentEvidence } from "@/lib/launch-verified-eligibility";
+import { supabase } from "@/integrations/supabase/client";
+import { listWorkspaceAssets } from "@/lib/media";
+import { listWorkspacePacks } from "@/lib/sticker-packs";
+import { getProjectInboxSettings, getProjectInboxSummary } from "@/lib/project-inbox";
 
 /**
  * P1-A — one unified, read-only project journey model.
@@ -40,6 +44,9 @@ export type JourneyRoute =
 export const JOURNEY_STAGE_KEYS = [
   "project_profile",
   "profile_published",
+  "brand_kit",
+  "creative_assets",
+  "sticker_pack",
   "launch_created",
   "launch_announced",
   "launch_schedule",
@@ -47,6 +54,7 @@ export const JOURNEY_STAGE_KEYS = [
   "telegram_community",
   "launch_welcome",
   "audience",
+  "communications",
   "deployment",
   "official_contract",
   "launch_live",
@@ -56,7 +64,13 @@ export type JourneyStageKey = (typeof JOURNEY_STAGE_KEYS)[number];
 
 export type JourneyStageStatus = "complete" | "action" | "waiting" | "unavailable";
 
-export type JourneyPhase = "Identity" | "Launch" | "Audience" | "Contract";
+export type JourneyPhase =
+  | "Identity"
+  | "Brand & Creative"
+  | "Launch"
+  | "Audience"
+  | "Contract";
+
 
 export type JourneyStage = {
   key: JourneyStageKey;
@@ -104,6 +118,33 @@ export type JourneyLaunchFacts = {
   officialContractRegistered: boolean;
 };
 
+/** Brand Kit facts. `null` means "no row"; unavailable is tracked separately. */
+export type JourneyBrandKitFacts = {
+  /** The Brand Kit UI treats brand name as the one required core field. */
+  brandName: string | null;
+};
+
+export type JourneyCreativeAssetFacts = {
+  /** logo / mascot / reference_image — real brand identity assets. */
+  brandAssetCount: number;
+  /** Generated stickers are detail only; they never prove brand setup. */
+  generatedStickerCount: number;
+  otherAssetCount: number;
+};
+
+export type JourneyStickerPackFacts = {
+  /** Active (non-archived) packs only. */
+  activeCount: number;
+  publishedCount: number;
+};
+
+export type JourneyInboxFacts = {
+  repliesEnabled: boolean;
+  newConversationsEnabled: boolean;
+  /** Aggregate only — never member identities. */
+  waitingOnTeamCount: number | null;
+};
+
 export type JourneyInput = {
   readiness: LaunchReadiness;
   launch: JourneyLaunchFacts | null;
@@ -113,7 +154,16 @@ export type JourneyInput = {
   /** Verified PRODUCTION deployments for the primary launch only. */
   verifiedProductionDeployments: number | null;
   deploymentUnavailable: boolean;
+  brandKit: JourneyBrandKitFacts | null;
+  brandKitUnavailable: boolean;
+  creativeAssets: JourneyCreativeAssetFacts | null;
+  creativeAssetsUnavailable: boolean;
+  stickerPacks: JourneyStickerPackFacts | null;
+  stickerPacksUnavailable: boolean;
+  inbox: JourneyInboxFacts | null;
+  inboxUnavailable: boolean;
 };
+
 
 // ---------------------------------------------------------------------------
 // Pure derivation
@@ -148,6 +198,34 @@ const STAGE_COPY: Record<
     explanation:
       "Publishing makes the profile discoverable on the Cartel Network and ready for launch features.",
   },
+  brand_kit: {
+    phase: "Brand & Creative",
+    title: "Brand Kit set up",
+    description: "Save the Brand Kit so every creative surface uses one identity.",
+    to: "/brand-kit",
+    actionLabel: "Set up Brand Kit",
+    explanation:
+      "Your Brand Kit holds the brand name, look and language reused across creative and community surfaces.",
+  },
+  creative_assets: {
+    phase: "Brand & Creative",
+    title: "Creative assets uploaded",
+    description: "Add a logo, mascot or reference image for this project.",
+    to: "/assets",
+    actionLabel: "Upload Creative Assets",
+    explanation:
+      "Upload a logo, mascot or reference image so creative work has real source material to build from.",
+  },
+  sticker_pack: {
+    phase: "Brand & Creative",
+    title: "Sticker pack published",
+    description: "Build and publish a sticker pack for your community.",
+    to: "/sticker-lab",
+    actionLabel: "Create a Sticker Pack",
+    explanation:
+      "Sticker Lab turns your brand assets into a pack you can publish and distribute to the community.",
+  },
+
   launch_created: {
     phase: "Launch",
     title: "Launch created",
@@ -209,6 +287,16 @@ const STAGE_COPY: Record<
     explanation:
       "Share the Launch Watch deep link so people can opt in before the launch goes live.",
   },
+  communications: {
+    phase: "Audience",
+    title: "Project inbox open",
+    description: "Let community members reach the team through the project inbox.",
+    to: "/telegram",
+    actionLabel: "Open Project Inbox",
+    explanation:
+      "Turn on replies and new conversations so members can contact the team privately through the project inbox.",
+  },
+
   deployment: {
     phase: "Contract",
     title: "Mainnet deployment verified",
@@ -268,6 +356,35 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
 
   const watchOpen = stepDone("launch_watch_open");
 
+  // --- Brand & Creative ---------------------------------------------------
+  const brandKitConfigured =
+    !input.brandKitUnavailable && !!input.brandKit?.brandName?.trim();
+
+  const assets = input.creativeAssets;
+  const usefulAssetCount = assets ? assets.brandAssetCount + assets.otherAssetCount : 0;
+
+  const packs = input.stickerPacks;
+
+  // --- Communications -----------------------------------------------------
+  const inbox = input.inbox;
+  const inboxConfigured =
+    !input.inboxUnavailable && !!inbox && inbox.repliesEnabled && inbox.newConversationsEnabled;
+  const waiting = inbox?.waitingOnTeamCount ?? null;
+  const inboxDetail = input.inboxUnavailable
+    ? null
+    : inboxConfigured
+      ? waiting && waiting > 0
+        ? `Inbox ready · ${waiting} need${waiting === 1 ? "s" : ""} reply`
+        : "Inbox ready"
+      : inbox
+        ? !inbox.repliesEnabled && !inbox.newConversationsEnabled
+          ? "Replies and new conversations are off"
+          : !inbox.repliesEnabled
+            ? "Replies are off"
+            : "New conversations are off"
+        : null;
+
+
   const raw: Array<{
     key: JourneyStageKey;
     status: JourneyStageStatus;
@@ -287,7 +404,53 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
       detail: r.profilePublished ? "Published" : "Draft",
     },
     {
+      key: "brand_kit",
+      status: input.brandKitUnavailable
+        ? "unavailable"
+        : brandKitConfigured
+          ? "complete"
+          : "action",
+      actionable: !input.brandKitUnavailable,
+      detail: brandKitConfigured ? input.brandKit!.brandName : null,
+    },
+    {
+      key: "creative_assets",
+      status: input.creativeAssetsUnavailable || !assets
+        ? "unavailable"
+        : usefulAssetCount > 0
+          ? "complete"
+          : "action",
+      actionable: !input.creativeAssetsUnavailable && !!assets,
+      detail:
+        input.creativeAssetsUnavailable || !assets
+          ? null
+          : usefulAssetCount > 0
+            ? `${usefulAssetCount} brand asset${usefulAssetCount === 1 ? "" : "s"}` +
+              (assets.generatedStickerCount > 0
+                ? ` · ${assets.generatedStickerCount} generated sticker${assets.generatedStickerCount === 1 ? "" : "s"}`
+                : "")
+            : "No logo, mascot or reference image yet",
+    },
+    {
+      key: "sticker_pack",
+      status: input.stickerPacksUnavailable || !packs
+        ? "unavailable"
+        : packs.publishedCount > 0
+          ? "complete"
+          : "action",
+      actionable: !input.stickerPacksUnavailable && !!packs,
+      detail:
+        input.stickerPacksUnavailable || !packs
+          ? null
+          : packs.publishedCount > 0
+            ? `${packs.publishedCount} published pack${packs.publishedCount === 1 ? "" : "s"}`
+            : packs.activeCount > 0
+              ? `${packs.activeCount} pack${packs.activeCount === 1 ? "" : "s"} in progress`
+              : "No sticker pack yet",
+    },
+    {
       key: "launch_created",
+
       status: stepDone("launch_created") ? "complete" : "action",
       actionable: true,
       detail: r.primaryLaunchName,
@@ -344,6 +507,17 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
           ? null
           : `${input.activeWatchers} active watcher${input.activeWatchers === 1 ? "" : "s"}`,
     },
+    {
+      key: "communications",
+      status: input.inboxUnavailable || !inbox
+        ? "unavailable"
+        : inboxConfigured
+          ? "complete"
+          : "action",
+      actionable: !input.inboxUnavailable && !!inbox,
+      detail: inboxDetail,
+    },
+
     {
       key: "deployment",
       status: !launch
@@ -501,6 +675,74 @@ export async function fetchProjectJourney(workspaceId: string): Promise<ProjectJ
     }
   }
 
+  // --- Brand & Creative + Communications (read-only, existing surfaces) ----
+  const [brandKitResult, assetsResult, packsResult, inboxSettingsResult] =
+    await Promise.allSettled([
+      supabase
+        .from("brand_kits")
+        .select("id,brand_name")
+        .eq("workspace_id", workspaceId)
+        .maybeSingle(),
+      listWorkspaceAssets(workspaceId),
+      listWorkspacePacks(workspaceId),
+      getProjectInboxSettings(workspaceId),
+    ]);
+
+  let brandKit: JourneyBrandKitFacts | null = null;
+  let brandKitUnavailable = true;
+  if (brandKitResult.status === "fulfilled" && !brandKitResult.value.error) {
+    brandKitUnavailable = false;
+    const row = brandKitResult.value.data;
+    brandKit = row ? { brandName: row.brand_name ?? null } : null;
+  }
+
+  let creativeAssets: JourneyCreativeAssetFacts | null = null;
+  let creativeAssetsUnavailable = true;
+  if (assetsResult.status === "fulfilled") {
+    creativeAssetsUnavailable = false;
+    const rows = assetsResult.value;
+    creativeAssets = {
+      brandAssetCount: rows.filter((a) =>
+        ["logo", "mascot", "reference_image"].includes(a.asset_type),
+      ).length,
+      generatedStickerCount: rows.filter((a) => a.asset_type === "generated_sticker").length,
+      otherAssetCount: rows.filter(
+        (a) =>
+          !["logo", "mascot", "reference_image", "generated_sticker"].includes(a.asset_type),
+      ).length,
+    };
+  }
+
+  let stickerPacks: JourneyStickerPackFacts | null = null;
+  let stickerPacksUnavailable = true;
+  if (packsResult.status === "fulfilled") {
+    stickerPacksUnavailable = false;
+    const rows = packsResult.value;
+    stickerPacks = {
+      activeCount: rows.length,
+      publishedCount: rows.filter((p) => p.status === "published").length,
+    };
+  }
+
+  let inbox: JourneyInboxFacts | null = null;
+  let inboxUnavailable = true;
+  if (inboxSettingsResult.status === "fulfilled") {
+    inboxUnavailable = false;
+    const settings = inboxSettingsResult.value;
+    let waitingOnTeamCount: number | null = null;
+    try {
+      const summary = await getProjectInboxSummary(workspaceId);
+      waitingOnTeamCount = summary.waiting_on_team_count;
+    } catch {
+      waitingOnTeamCount = null;
+    }
+    inbox = {
+      repliesEnabled: settings.replies_enabled === true,
+      newConversationsEnabled: settings.new_conversations_enabled === true,
+      waitingOnTeamCount,
+    };
+  }
+
   return computeProjectJourney({
     readiness,
     launch,
@@ -508,5 +750,14 @@ export async function fetchProjectJourney(workspaceId: string): Promise<ProjectJ
     watchUnavailable,
     verifiedProductionDeployments,
     deploymentUnavailable,
+    brandKit,
+    brandKitUnavailable,
+    creativeAssets,
+    creativeAssetsUnavailable,
+    stickerPacks,
+    stickerPacksUnavailable,
+    inbox,
+    inboxUnavailable,
   });
 }
+
