@@ -253,6 +253,59 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
   );
 }
 
+// J12 — primary launch selection prefers a genuinely active lifecycle launch.
+{
+  const row = (
+    id: string,
+    status: string,
+    updated_at: string,
+  ): ReadinessInput["launches"][number] => ({
+    id,
+    token_name: id,
+    status,
+    announced_at: null,
+    watchlist_opened_at: null,
+    launch_watch_token: null,
+    created_at: updated_at,
+    updated_at,
+  });
+
+  const active = row("active", "WATCHLIST_OPEN", "2026-09-07T13:57:38Z");
+  const newDraft = row("newdraft", "DRAFT", "2026-09-10T06:03:31Z");
+  const olderDraft = row("olddraft", "DRAFT", "2026-09-08T04:05:17Z");
+  const completedOld = row("done1", "COMPLETED", "2026-09-01T00:00:00Z");
+  const completedNew = row("done2", "COMPLETED", "2026-09-05T00:00:00Z");
+
+  check(
+    "J12",
+    selectPrimaryLaunch([newDraft, olderDraft, active])?.id === "active",
+    "older active-lifecycle launch beats newer DRAFT launches",
+  );
+  check(
+    "J12b",
+    selectPrimaryLaunch([olderDraft, newDraft])?.id === "newdraft",
+    "newest DRAFT is chosen when no active lifecycle launch exists",
+  );
+  check(
+    "J12c",
+    selectPrimaryLaunch([completedOld, completedNew])?.id === "done2",
+    "newest COMPLETED is the final fallback",
+  );
+  check(
+    "J12d",
+    selectPrimaryLaunch([completedNew, newDraft])?.id === "newdraft",
+    "DRAFT is preferred over a newer COMPLETED launch",
+  );
+  const tieA = row("aaa", "LIVE", "2026-09-09T00:00:00Z");
+  const tieB = row("bbb", "LIVE", "2026-09-09T00:00:00Z");
+  check(
+    "J12e",
+    selectPrimaryLaunch([tieB, tieA])?.id === "aaa",
+    "equal timestamps break deterministically on ascending id",
+  );
+  check("J12f", selectPrimaryLaunch([]) === null, "empty launch list yields no primary launch");
+}
+
 if (failures > 0) {
   console.error(`\n${failures} check(s) failed.`);
   process.exit(1);
