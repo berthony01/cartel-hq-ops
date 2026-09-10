@@ -15,13 +15,16 @@ import {
   isEmbeddedBrowserContext,
   isInjectedWalletAvailable,
   isWalletConnectConfigured,
+  normalizeChainId,
+  readWalletConnectorState,
   requestRobinhoodChainSwitch,
+  ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL,
   subscribeWalletConnector,
   WALLETCONNECT_CONNECT_TIMEOUT_MS,
   type WalletConnectorNotice,
   type WalletSwitchNotice,
 } from "@/lib/wallet-connector";
-import { inspectMainnetWalletForHandoff } from "@/lib/chain-mainnet-wallet";
+
 
 /**
  * P3C-G — MAINNET deployment wallet panel.
