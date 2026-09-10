@@ -1542,7 +1542,9 @@ function LaunchControlPage() {
                         <p className="mt-3 text-xs text-destructive">{identityError}</p>
                       ) : null}
                     </Section>
+                    </div>
 
+                    <div id="lc-schedule" className="min-w-0 scroll-mt-28">
                     <Section
                       variant="surface"
                       title="Schedule"
