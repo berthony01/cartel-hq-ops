@@ -43,6 +43,9 @@ export function NetworkShell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
         <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
           <Wordmark />
+          <span className="hidden shrink-0 rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:inline">
+            Public page
+          </span>
           <nav className="ml-auto hidden items-center gap-1 md:flex">
             {NAV.map((item) => (
               <Link
@@ -56,7 +59,7 @@ export function NetworkShell({ children }: { children: ReactNode }) {
               </Link>
             ))}
             <Button asChild size="sm" className="ml-2">
-              <a href="/">Open CARTEL HQ</a>
+              <Link to="/">Back to CARTEL HQ</Link>
             </Button>
           </nav>
           <Button
@@ -86,7 +89,9 @@ export function NetworkShell({ children }: { children: ReactNode }) {
                 </Link>
               ))}
               <Button asChild size="sm" className="mt-2 w-full">
-                <a href="/">Open CARTEL HQ</a>
+                <Link to="/" onClick={() => setOpen(false)}>
+                  Back to CARTEL HQ
+                </Link>
               </Button>
             </nav>
           </div>
@@ -107,12 +112,12 @@ export function NetworkShell({ children }: { children: ReactNode }) {
             Listing a project or launch is not a safety audit, token-safety verification,
             rug-proof guarantee or investment endorsement. Always do your own research.
           </p>
-          <a
-            href="/"
+          <Link
+            to="/"
             className="text-xs font-semibold uppercase tracking-[0.14em] text-gold hover:underline"
           >
-            Open CARTEL HQ →
-          </a>
+            Back to CARTEL HQ →
+          </Link>
         </div>
       </footer>
     </div>

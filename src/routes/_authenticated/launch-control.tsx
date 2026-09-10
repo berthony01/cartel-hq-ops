@@ -89,6 +89,18 @@ import { VerifiedContractRegistrationPanel } from "@/components/cartel/VerifiedC
 import { OfficialContractNotifyPanel } from "@/components/cartel/OfficialContractNotifyPanel";
 import { OfficialContractGroupBroadcastPanel } from "@/components/cartel/OfficialContractGroupBroadcastPanel";
 import { OfficialContractCorrectionPanel } from "@/components/cartel/OfficialContractCorrectionPanel";
+import { SectionNav, type SectionNavItem } from "@/components/cartel/SectionNav";
+import { RelatedLinks, relatedLinkClass } from "@/components/cartel/RelatedLinks";
+
+/** Presentation-only in-page navigation targets for a selected launch. */
+const LAUNCH_SECTIONS: SectionNavItem[] = [
+  { id: "lc-overview", label: "Overview" },
+  { id: "lc-details", label: "Details" },
+  { id: "lc-schedule", label: "Schedule" },
+  { id: "lc-watch", label: "Launch Watch" },
+  { id: "lc-comms", label: "Communications" },
+  { id: "lc-contract", label: "Contract" },
+];
 
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -1035,6 +1047,21 @@ function LaunchControlPage() {
 
       {profile ? <LaunchReadinessCallout workspaceId={workspaceId} /> : null}
 
+      <RelatedLinks label="Go to">
+        <Link to="/telegram" className={relatedLinkClass}>
+          Community Command
+        </Link>
+        <Link to="/sticker-lab" className={relatedLinkClass}>
+          Sticker Lab
+        </Link>
+        <Link to="/assets" className={relatedLinkClass}>
+          Asset Vault
+        </Link>
+        <Link to="/project-profile" className={relatedLinkClass}>
+          Project Profile
+        </Link>
+      </RelatedLinks>
+
 
 
       {workspaceLoading ? (
@@ -1241,6 +1268,9 @@ function LaunchControlPage() {
           ) : null}
 
           {selected ? (
+            <>
+            <SectionNav label="Launch Control sections" items={LAUNCH_SECTIONS} />
+            <div id="lc-overview" className="min-w-0 scroll-mt-28">
             <Section variant="hero" className="min-w-0">
               <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
                 <div className="min-w-0 space-y-3">
@@ -1415,6 +1445,8 @@ function LaunchControlPage() {
                 </div>
               </div>
             </Section>
+            </div>
+            </>
           ) : null}
 
           {selected ? (
@@ -1486,6 +1518,7 @@ function LaunchControlPage() {
                       saveMutation.mutate();
                     }}
                   >
+                    <div id="lc-details" className="min-w-0 scroll-mt-28">
                     <Section
                       variant="primary"
                       title="Launch identity"
@@ -1542,7 +1575,9 @@ function LaunchControlPage() {
                         <p className="mt-3 text-xs text-destructive">{identityError}</p>
                       ) : null}
                     </Section>
+                    </div>
 
+                    <div id="lc-schedule" className="min-w-0 scroll-mt-28">
                     <Section
                       variant="surface"
                       title="Schedule"
@@ -1656,6 +1691,7 @@ function LaunchControlPage() {
                         <p className="mt-2 text-xs text-destructive">{scheduleError}</p>
                       ) : null}
                     </Section>
+                    </div>
 
                     <Section
                       variant="quiet"
@@ -1701,6 +1737,7 @@ function LaunchControlPage() {
               </div>
 
               <div className="min-w-0 space-y-4 sm:space-y-6">
+                <div id="lc-watch" className="min-w-0 scroll-mt-28">
                 <Section
                   variant="surface"
                   title="Launch Watch"
@@ -1984,7 +2021,9 @@ function LaunchControlPage() {
                     </div>
                   )}
                 </Section>
+                </div>
 
+                <div id="lc-comms" className="min-w-0 scroll-mt-28">
                 <Section
                   variant="surface"
                   title="Watcher Updates"
@@ -2156,7 +2195,12 @@ function LaunchControlPage() {
                     </p>
                   )}
                 </Section>
+                </div>
 
+                <div
+                  id="lc-contract"
+                  className="min-w-0 scroll-mt-28 space-y-4 sm:space-y-6"
+                >
                 <VerifiedContractRegistrationPanel
                   evaluation={deploymentEvidence}
                   launchId={selected.id}
@@ -2271,6 +2315,7 @@ function LaunchControlPage() {
                       : null
                   }
                 />
+                </div>
 
                 <Section
                   variant="surface"

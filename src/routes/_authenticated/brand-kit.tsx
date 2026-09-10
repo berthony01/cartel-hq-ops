@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { RelatedLinks, relatedLinkClass } from "@/components/cartel/RelatedLinks";
 import {
   MAX_CANONICAL_REFERENCES,
   formatLockList,
@@ -309,6 +310,15 @@ function BrandKitPage() {
         description="Brand Kit holds this project's creative rules — identity, colour, type, links and AI style guidance. Actual files live in Asset Vault. Sticker Lab uses this Brand Kit when one is saved and can reuse Asset Vault references."
         status={workspace ? workspace.name : "No project"}
       />
+
+      <RelatedLinks label="Go to">
+        <Link to="/assets" className={relatedLinkClass}>
+          Asset Vault
+        </Link>
+        <Link to="/sticker-lab" className={relatedLinkClass}>
+          Sticker Lab
+        </Link>
+      </RelatedLinks>
 
       {!workspaceLoading && !workspaceId ? (
         <EmptyState

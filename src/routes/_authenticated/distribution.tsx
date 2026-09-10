@@ -17,6 +17,7 @@ import { InlineRow } from "@/components/cartel/InlineRow";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { StickerDropScheduleDialog } from "@/components/cartel/StickerDropScheduleDialog";
+import { RelatedLinks, relatedLinkClass } from "@/components/cartel/RelatedLinks";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/lib/workspace-context";
 import {
@@ -180,6 +181,15 @@ function DistributionPage() {
         description="Schedule and monitor recurring sticker posts across your connected Telegram communities. Pack publishing and one-time sends stay in Sticker Lab."
         status="Live Beta"
       />
+
+      <RelatedLinks label="Go to">
+        <Link to="/telegram" className={relatedLinkClass}>
+          Community Command
+        </Link>
+        <Link to="/sticker-lab" className={relatedLinkClass}>
+          Sticker Lab · packs & one-time sends
+        </Link>
+      </RelatedLinks>
 
       {filteredPackTitle ? (
         <p className="min-w-0 rounded-lg border border-gold/30 bg-gold/5 px-3 py-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">

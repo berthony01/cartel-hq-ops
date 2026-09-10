@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/cartel/EmptyState";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { Section } from "@/components/cartel/Section";
 import { InlineRow } from "@/components/cartel/InlineRow";
+import { RelatedLinks, relatedLinkClass } from "@/components/cartel/RelatedLinks";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -343,6 +344,18 @@ function StickerLabHome() {
       />
 
       <div className="sm:hidden">{newPackLink}</div>
+
+      <RelatedLinks label="Go to">
+        <Link to="/brand-kit" className={relatedLinkClass}>
+          Brand Kit
+        </Link>
+        <Link to="/assets" className={relatedLinkClass}>
+          Asset Vault
+        </Link>
+        <Link to="/distribution" className={relatedLinkClass}>
+          Sticker Drops · recurring
+        </Link>
+      </RelatedLinks>
 
       <div className="rounded-lg border border-border/70 bg-surface-raised/40 px-4 py-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">

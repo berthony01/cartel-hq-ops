@@ -21,6 +21,7 @@ import { EmptyState } from "@/components/cartel/EmptyState";
 import { AssetUploader } from "@/components/cartel/AssetUploader";
 import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
+import { RelatedLinks, relatedLinkClass } from "@/components/cartel/RelatedLinks";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -144,6 +145,15 @@ function AssetsPage() {
         description="Asset Vault is this project’s source of truth for actual image files. Brand Kit stores creative rules, not separate copies, and Sticker Lab reuses applicable files from here. Files stay private; previews and downloads use short-lived signed links."
         status={workspace ? workspace.name : "No project"}
       />
+
+      <RelatedLinks label="Go to">
+        <Link to="/brand-kit" className={relatedLinkClass}>
+          Brand Kit
+        </Link>
+        <Link to="/sticker-lab" className={relatedLinkClass}>
+          Sticker Lab
+        </Link>
+      </RelatedLinks>
 
       {!workspaceLoading && !workspaceId ? (
         <EmptyState

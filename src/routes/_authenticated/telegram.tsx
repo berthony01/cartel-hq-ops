@@ -17,6 +17,7 @@ import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
 import { BroadcastsPanel } from "@/components/cartel/BroadcastsPanel";
 import { AudiencePanel } from "@/components/cartel/AudiencePanel";
 import { ProjectInboxPanel } from "@/components/cartel/ProjectInboxPanel";
+import { RelatedLinks, relatedLinkClass } from "@/components/cartel/RelatedLinks";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWorkspace } from "@/lib/workspace-context";
@@ -283,6 +284,18 @@ function TelegramPage() {
         description="Connection health, onboarding, the member Inbox and per-community controls for every Telegram community you have connected."
         status={groupCount > 0 ? "Connected · Live Beta" : "Live Beta"}
       />
+
+      <RelatedLinks label="Go to">
+        <Link to="/distribution" className={relatedLinkClass}>
+          Sticker Drops
+        </Link>
+        <Link to="/sticker-lab" className={relatedLinkClass}>
+          Sticker Lab
+        </Link>
+        <Link to="/launch-control" className={relatedLinkClass}>
+          Launch Control
+        </Link>
+      </RelatedLinks>
 
       <Tabs
         value={tab}
