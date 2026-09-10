@@ -283,6 +283,16 @@ const STAGE_COPY: Record<
     explanation:
       "Share the Launch Watch deep link so people can opt in before the launch goes live.",
   },
+  communications: {
+    phase: "Audience",
+    title: "Project inbox open",
+    description: "Let community members reach the team through the project inbox.",
+    to: "/telegram",
+    actionLabel: "Open Project Inbox",
+    explanation:
+      "Turn on replies and new conversations so members can contact the team privately through the project inbox.",
+  },
+
   deployment: {
     phase: "Contract",
     title: "Mainnet deployment verified",
