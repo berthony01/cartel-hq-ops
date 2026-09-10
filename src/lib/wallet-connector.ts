@@ -450,6 +450,35 @@ function readSessionChainEvidence(provider: Eip1193Provider): string[] {
   return found;
 }
 
+/**
+ * CAIP-10 session accounts as `{ chainId, address }` pairs, using exactly the
+ * same strict parsing as the chain evidence above. Read-only; no provider call.
+ */
+function readSessionAccounts(
+  provider: Eip1193Provider,
+): Array<{ chainId: string; address: string }> {
+  const session = (
+    provider as unknown as {
+      session?: { namespaces?: Record<string, { accounts?: unknown }> };
+    }
+  ).session;
+  const accounts = session?.namespaces?.["eip155"]?.accounts;
+  if (!Array.isArray(accounts)) return [];
+  const found: Array<{ chainId: string; address: string }> = [];
+  for (const entry of accounts) {
+    if (typeof entry !== "string") continue;
+    const parts = entry.split(":");
+    if (parts.length !== 3) continue;
+    if (parts[0] !== "eip155") continue;
+    if (!/^(0|[1-9][0-9]*)$/.test(parts[1] ?? "")) continue;
+    if (!/^0x[0-9a-fA-F]{40}$/.test(parts[2] ?? "")) continue;
+    const hex = normalizeChainId(Number(parts[1]));
+    if (hex === null) continue;
+    found.push({ chainId: hex, address: lower(parts[2] as string) });
+  }
+  return found;
+}
+
 /** True only when the resolved provider really carries a WalletConnect session. */
 function hasWalletConnectSession(provider: Eip1193Provider): boolean {
   return Boolean((provider as unknown as { session?: unknown }).session);
@@ -516,6 +545,27 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
   }
 
   const appKit = await import("./reown-appkit-wallet");
+
+  /*
+   * FRESH HANDSHAKE, ALWAYS. Every explicit Connect click first drops this
+   * module's handles and then PROVES that any earlier AppKit eip155 connection
+   * is gone. A teardown that cannot be proven fails closed with no address
+   * shown, so a previously used wallet can never stand in for the operator's
+   * new choice. Nothing here signs, sends or advances anything.
+   */
+  clearLocalConnectionState();
+  emit();
+  const tornDown = await appKit.resetAppKitConnection();
+  if (!tornDown) {
+    await appKit.closeAppKit();
+    emit();
+    return {
+      ok: false,
+      notice: "STALE_SESSION_TEARDOWN_FAILED",
+      state: emptyState("STALE_SESSION_TEARDOWN_FAILED"),
+    };
+  }
+
   const outcome = await appKit.openAppKitConnect(WALLETCONNECT_CONNECT_TIMEOUT_MS);
   if (outcome.status !== "connected") {
     clearLocalConnectionState();
@@ -532,6 +582,50 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
   }
 
   const provider = outcome.provider as Eip1193Provider;
+
+  /*
+   * CURRENT-SESSION IDENTITY PROOF. The address that may ever be displayed or
+   * bound must come from the LIVE provider of the session just established, and
+   * must agree with every other identity source that exists:
+   *   - AppKit's current eip155 address, when AppKit supplies one;
+   *   - the CAIP-10 accounts of the live active chain, when the session carries
+   *     accounts for that chain.
+   * Any disagreement, or no account at all, fails closed: the session is torn
+   * down, all local state is cleared and NO address is exposed.
+   */
+  const liveAccountRaw = await provider
+    .request({ method: "eth_accounts" })
+    .catch(() => null as unknown);
+  const liveAccount =
+    Array.isArray(liveAccountRaw) && typeof liveAccountRaw[0] === "string"
+      ? lower(liveAccountRaw[0])
+      : null;
+  const liveChain = normalizeChainId(
+    await provider.request({ method: "eth_chainId" }).catch(() => null),
+  );
+
+  const failClosed = async (notice: WalletConnectorNotice): Promise<WalletConnectorResult> => {
+    clearLocalConnectionState();
+    await appKit.disconnectAppKit();
+    await appKit.closeAppKit();
+    emit();
+    return { ok: false, notice, state: emptyState(notice) };
+  };
+
+  if (liveAccount === null) return await failClosed("NO_ACCOUNT");
+
+  const appKitAddress = appKit.getAppKitAddress();
+  if (typeof appKitAddress === "string" && lower(appKitAddress) !== liveAccount) {
+    return await failClosed("WALLET_ACCOUNT_MISMATCH");
+  }
+
+  const sessionAccounts = hasWalletConnectSession(provider) ? readSessionAccounts(provider) : [];
+  if (liveChain !== null) {
+    const forLiveChain = sessionAccounts.filter((entry) => entry.chainId === liveChain);
+    if (forLiveChain.length > 0 && !forLiveChain.some((entry) => entry.address === liveAccount)) {
+      return await failClosed("WALLET_ACCOUNT_MISMATCH");
+    }
+  }
 
   /*
    * GATE 1 ONLY — CONNECTION. A wallet that connects on another EVM network
@@ -553,8 +647,6 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
       : null;
   } else {
     const appKitChain = normalizeChainId(appKit.getAppKitChainId());
-    const liveRaw = await provider.request({ method: "eth_chainId" }).catch(() => null);
-    const liveChain = normalizeChainId(liveRaw);
     evidence =
       appKitChain === ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL &&
       liveChain === ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL
