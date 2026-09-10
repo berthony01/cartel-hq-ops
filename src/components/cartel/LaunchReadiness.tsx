@@ -10,7 +10,9 @@ import {
   launchReadinessQueryKey,
   type LaunchReadiness,
 } from "@/lib/launch-readiness";
+import { ProjectJourneyCallout } from "@/components/cartel/ProjectJourney";
 import { cn } from "@/lib/utils";
+
 
 /**
  * Phase 5.5 — shared guided-setup UI.
