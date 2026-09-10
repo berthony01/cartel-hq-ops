@@ -109,12 +109,12 @@ export function NetworkShell({ children }: { children: ReactNode }) {
             Listing a project or launch is not a safety audit, token-safety verification,
             rug-proof guarantee or investment endorsement. Always do your own research.
           </p>
-          <a
-            href="/"
+          <Link
+            to="/"
             className="text-xs font-semibold uppercase tracking-[0.14em] text-gold hover:underline"
           >
-            Open CARTEL HQ →
-          </a>
+            Back to CARTEL HQ →
+          </Link>
         </div>
       </footer>
     </div>
