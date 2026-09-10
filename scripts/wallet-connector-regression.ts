@@ -46,6 +46,10 @@ const verifyApplySrc = read(VERIFY_APPLY);
 const appkitSrc = read(APPKIT);
 const appkitCode = stripComments(appkitSrc);
 const pkgSrc = read(PKG);
+/** The panel's ONLY mount/subscription effect, extracted once and reused. */
+const panelMountEffect = /useEffect\(\(\) => \{[\s\S]*?\}, \[refresh, refreshAvailability\]\);/.exec(
+  panelCode,
+)?.[0];
 
 let failures = 0;
 function check(id: string, ok: boolean, detail: string) {
@@ -404,7 +408,11 @@ check(
 );
 check(
   "L5",
-  /const liveChain = normalizeChainId\(liveRaw\);/.test(wcBody) &&
+  // RE-PINNED: the live chain read is now hoisted once for the whole
+  // post-connect proof block; it is still a real `eth_chainId` provider read.
+  /const liveChain = normalizeChainId\(\s*\n?\s*await provider\.request\(\{ method: "eth_chainId" \}\)/.test(
+    wcBody,
+  ) &&
     /appKitChain === ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL &&/.test(wcBody) &&
     /liveChain === ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL/.test(wcBody),
   "an injected AppKit connection records chain evidence only when AppKit and a live eth_chainId both prove 4663",
@@ -587,9 +595,15 @@ check(
   /requestRobinhoodChainSwitch\(\)/.test(panelCode) &&
     /setBusy\("switch"\)/.test(panelCode) &&
     /Switch to Robinhood Chain/.test(panelCode) &&
-    !/(useEffect|attachEvents|refreshAvailability|subscribeWalletConnector)[\s\S]{0,300}requestRobinhoodChainSwitch/.test(
+    // RE-PINNED to an exact structural proof: the panel's ONLY switch call site
+    // is the explicit runSwitch handler, and the mount/subscription effect
+    // cannot reach it.
+    (panelCode.match(/requestRobinhoodChainSwitch\(\)/g) ?? []).length === 1 &&
+    /const runSwitch = useCallback\(async \(\) => \{[\s\S]*?requestRobinhoodChainSwitch\(\)/.test(
       panelCode,
     ) &&
+    panelMountEffect !== undefined &&
+    !/requestRobinhoodChainSwitch|runSwitch\(/.test(panelMountEffect) &&
     // Exactly two call sites in the connector: the definition, and the single
     // same-explicit-click alignment inside connectWalletConnectOnRobinhoodChain.
     sameClickBody !== undefined &&
@@ -956,10 +970,18 @@ check(
   "U4",
   !/connectWalletConnectOnRobinhoodChain/.test(panelCode) &&
     /connectWalletConnect\(\)/.test(panelCode) &&
-    !/(useEffect|subscribeWalletConnector|refreshAvailability)[\s\S]{0,300}runConnect\(\)/.test(
+    // RE-PINNED structurally: connecting is reachable only from explicit
+    // operator handlers (the Connect button and the teardown-first
+    // "Choose another wallet"), never from the mount/subscription effect.
+    panelMountEffect !== undefined &&
+    !/runConnect|runChooseAnotherWallet|connectWalletConnect|connectInjected/.test(
+      panelMountEffect,
+    ) &&
+    (panelCode.match(/void runConnect\(\);/g) ?? []).length === 1 &&
+    /await runConnect\(\);\s*\n\s*\}, \[clearInspection, refreshAvailability, runConnect\]\);/.test(
       panelCode,
     ),
-  "the panel connects through Gate 1 only, from the explicit button, never on mount, subscription or re-check",
+  "the panel connects through Gate 1 only, from the explicit button or the teardown-first chooser, never on mount, subscription or re-check",
 );
 const restoreEffect = /useEffect\(\(\) => \{\s*if \(launchId\) return;[\s\S]*?\}, \[launches\.data, launchId\]\);/.exec(
   routeCode,
@@ -1023,8 +1045,16 @@ check(
   "X4",
   postConnectBody !== undefined &&
     postConnectBody.length > 0 &&
-    !/disconnectAppKit|clearLocalConnectionState|WRONG_CHAIN_APPROVED/.test(postConnectBody),
-  "D — Gate 1 connect never tears down a connected session for being on another EVM network",
+    // RE-PINNED: teardown after connect now exists for IDENTITY failures only
+    // (no account, or conflicting account evidence). The chain-evidence block
+    // itself still never disconnects and never approves a wrong chain.
+    !/WRONG_CHAIN_APPROVED/.test(postConnectBody) &&
+    !/disconnectAppKit|clearLocalConnectionState/.test(
+      postConnectBody.slice(postConnectBody.indexOf("let evidence")),
+    ) &&
+    (postConnectBody.match(/failClosed\("(NO_ACCOUNT|WALLET_ACCOUNT_MISMATCH)"\)/g) ?? []).length ===
+      3,
+  "D — Gate 1 connect tears down only for a failed current-session identity proof, never for being on another EVM network",
 );
 
 check(
@@ -1048,6 +1078,143 @@ check(
   "G — a declined switch keeps the wallet connected, and downstream guards are stated as authoritative",
 );
 
+
+/* W — WALLET-ID CORRECTION. Every explicit Connect is a FRESH handshake, and a
+   previously connected AppKit account/provider can never satisfy it. */
+const openBody =
+  /export async function openAppKitConnect\([\s\S]*?\n\}\n/.exec(appkitCode)?.[0] ?? "";
+const resetBody =
+  /export async function resetAppKitConnection\([\s\S]*?\n\}\n/.exec(appkitCode)?.[0] ?? "";
+
+check(
+  "W1",
+  resetBody.length > 0 &&
+    /await appKit\.disconnect\("eip155"\);/.test(resetBody) &&
+    /appKit\.getIsConnectedState\(\) === false &&\s*\n\s*getAppKitAddress\(\) === null &&\s*\n\s*getAppKitWalletProvider\(\) === null/.test(
+      resetBody,
+    ) &&
+    /catch \{\s*\n\s*return false;/.test(resetBody),
+  "teardown is PROVEN from AppKit state, and an unprovable teardown returns false",
+);
+check(
+  "W2",
+  openBody.length > 0 &&
+    /if \(hasAppKitConnectionEvidence\(\)\) return \{ status: "failed", notice: "REOWN_STALE_SESSION" \};/.test(
+      openBody,
+    ) &&
+    openBody.indexOf("hasAppKitConnectionEvidence()") < openBody.indexOf("new Promise"),
+  "a pre-existing AppKit connection fails the connect attempt closed before any chooser opens",
+);
+check(
+  "W3",
+  /let chooserStarted = false;/.test(openBody) &&
+    /const tryResolveConnected = \(\) => \{\s*\n(?:\s*\/\/.*\n)*\s*if \(!chooserStarted\) return;/.test(
+      openBody,
+    ) &&
+    (openBody.match(/chooserStarted = true;/g) ?? []).length === 2,
+  "only evidence arising after THIS attempt's chooser opened can settle the connection",
+);
+{
+  const freshBlock = wcBody.slice(0, wcBody.indexOf("openAppKitConnect("));
+  check(
+    "W4",
+    freshBlock.includes("clearLocalConnectionState();") &&
+      /const tornDown = await appKit\.resetAppKitConnection\(\);/.test(freshBlock) &&
+      /if \(!tornDown\) \{[\s\S]{0,320}notice: "STALE_SESSION_TEARDOWN_FAILED"/.test(freshBlock),
+    "the connector clears local handles and proves AppKit teardown BEFORE opening the chooser, else fails closed",
+  );
+}
+check(
+  "W5",
+  /const liveAccountRaw = await provider\s*\n?\s*\.request\(\{ method: "eth_accounts" \}\)/.test(
+    wcBody,
+  ) &&
+    /if \(liveAccount === null\) return await failClosed\("NO_ACCOUNT"\);/.test(wcBody) &&
+    /const appKitAddress = appKit\.getAppKitAddress\(\);/.test(wcBody) &&
+    /lower\(appKitAddress\) !== liveAccount\) \{\s*\n\s*return await failClosed\("WALLET_ACCOUNT_MISMATCH"\);/.test(
+      wcBody,
+    ),
+  "the live provider account is cross-checked against AppKit's address and disagreement fails closed",
+);
+check(
+  "W6",
+  /const forLiveChain = sessionAccounts\.filter\(\(entry\) => entry\.chainId === liveChain\);/.test(
+    wcBody,
+  ) &&
+    /forLiveChain\.length > 0 && !forLiveChain\.some\(\(entry\) => entry\.address === liveAccount\)/.test(
+      wcBody,
+    ) &&
+    /return await failClosed\("WALLET_ACCOUNT_MISMATCH"\);/.test(wcBody),
+  "CAIP-10 accounts for the LIVE active chain must contain the live account, else fail closed",
+);
+{
+  const failClosedBody =
+    /const failClosed = async \([\s\S]*?\n  \};/.exec(wcBody)?.[0] ?? "";
+  check(
+    "W7",
+    /clearLocalConnectionState\(\);/.test(failClosedBody) &&
+      /await appKit\.disconnectAppKit\(\);/.test(failClosedBody) &&
+      /state: emptyState\(notice\)/.test(failClosedBody) &&
+      !/account:/.test(failClosedBody),
+    "every identity failure disconnects, clears state and exposes an EMPTY state — never the stale address",
+  );
+}
+check(
+  "W8",
+  wcBody.indexOf("walletConnectProvider = provider;") > wcBody.indexOf('failClosed("NO_ACCOUNT")') &&
+    wcBody.indexOf("activeProvider = provider;") >
+      wcBody.indexOf('failClosed("WALLET_ACCOUNT_MISMATCH")'),
+  "the provider becomes active only AFTER the current-session identity proofs pass",
+);
+check(
+  "W9",
+  /const runChooseAnotherWallet = useCallback\(async \(\) => \{[\s\S]*?await disconnect\(\);[\s\S]*?clearInspection\(\);[\s\S]*?await runConnect\(\);/.test(
+    panelCode,
+  ) && /void runChooseAnotherWallet\(\);[\s\S]{0,120}Choose another wallet/.test(panelCode),
+  "Choose another wallet tears the current wallet down and clears the readout before the chooser opens",
+);
+check(
+  "W10",
+  /setWalletLabel\(null\);\s*\n\s*clearInspection\(\);\s*\n\s*try \{\s*\n\s*let result = await connectWalletConnect\(\)/.test(
+    panelCode,
+  ),
+  "a new Connect click clears any previously displayed wallet address first",
+);
+check(
+  "W11",
+  /STALE_SESSION_TEARDOWN_FAILED:/.test(panelCode) &&
+    /STALE_SESSION_REUSE_REFUSED:/.test(panelCode) &&
+    /WALLET_ACCOUNT_MISMATCH:/.test(panelCode) &&
+    /case "REOWN_STALE_SESSION":\s*\n\s*return "STALE_SESSION_REUSE_REFUSED";/.test(connectorCode),
+  "the three new fail-closed outcomes are sanitized codes with operator copy",
+);
+check(
+  "W12",
+  // NEGATIVE TRIPWIRE: reconnecting the SAME wallet stays possible — nothing
+  // pins, remembers or bans a previously used address anywhere.
+  !/lastConnectedAddress|previousAccount|bannedAddress|!== previousAddress/.test(
+    connectorCode + appkitCode + panelCode,
+  ) && /enableReconnect: false/.test(appkitCode),
+  "no remembered/blocked address exists: the same wallet may reconnect after a clean teardown",
+);
+check(
+  "W13",
+  !/eth_sendTransaction|eth_sendRawTransaction|signTransaction|personal_sign|eth_sign|wallet_addEthereumChain/.test(
+    [openBody, resetBody, wcBody, panelCode].join("\n"),
+  ) &&
+    !/presign|armCanary|claim|sendWindow|createCanaryDeploymentAttempt/i.test(
+      [openBody, resetBody, wcBody].join("\n"),
+    ),
+  "this correction introduces no sign, send, add-chain, presign, ARM, CLAIM or send-window path",
+);
+check(
+  "W14",
+  // Gate separation preserved: no chain requirement gates the connection itself.
+  !/CONNECTED_WRONG_CHAIN|requestRobinhoodChainSwitch|wallet_switchEthereumChain/.test(
+    wcBody.slice(0, wcBody.indexOf("let evidence")),
+  ),
+  "a wrong-chain wallet still stays connected: identity proofs never switch or require 4663",
+);
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
