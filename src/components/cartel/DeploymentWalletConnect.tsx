@@ -80,6 +80,10 @@ const NOTICE_COPY: Record<WalletConnectorNotice, string> = {
     "Diagnostic code STALE_SESSION_REUSE_REFUSED — an earlier wallet connection was still present, and it can never stand in for the wallet you just chose. Nothing was connected and no address is shown. Reload this page and connect again.",
   WALLET_ACCOUNT_MISMATCH:
     "Diagnostic code WALLET_ACCOUNT_MISMATCH — the wallet reported conflicting account information for this session, so it was disconnected and no address is shown. Nothing was connected and nothing advanced. Connect again and confirm a single account in the wallet.",
+  WALLET_ACCOUNT_AMBIGUOUS:
+    "Diagnostic code WALLET_ACCOUNT_AMBIGUOUS — the wallet exposed several accounts and did not identify which one you selected. CARTEL HQ never guesses an account, so nothing was connected and no address is shown. Leave a single account connected to this site in the wallet, then connect again.",
+  ACTIVE_ACCOUNT_CHANGED:
+    "Diagnostic code ACTIVE_ACCOUNT_CHANGED — the wallet changed its active account, so the connection was dropped rather than silently moving to a different address. Nothing advanced. Connect again and confirm the account you intend to deploy from.",
   WALLETCONNECT_TIMEOUT: `The wallet never completed the connection within ${Math.round(
     WALLETCONNECT_CONNECT_TIMEOUT_MS / 1000,
   )} seconds, so the attempt was cancelled and nothing was connected. This usually means the wallet hand-off could not return to this page. Open CARTEL HQ in a standalone browser tab, or inside the wallet's own browser, and choose the wallet again.`,
