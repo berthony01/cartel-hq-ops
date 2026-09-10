@@ -136,8 +136,9 @@ function SnapshotCard({
 function HqDashboard() {
   const { workspace, workspaceId, loading: workspaceLoading } = useWorkspace();
 
-  const readinessQuery = useLaunchReadiness(workspaceId);
-  const readinessComplete = readinessQuery.data?.allComplete === true;
+  const journeyQuery = useProjectJourney(workspaceId);
+  const journeyComplete = journeyQuery.data?.allComplete === true;
+
 
   const packsQuery = useQuery({
     queryKey: ["recent-packs", workspaceId],
