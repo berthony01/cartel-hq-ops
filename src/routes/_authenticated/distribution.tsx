@@ -17,6 +17,7 @@ import { InlineRow } from "@/components/cartel/InlineRow";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { StickerDropScheduleDialog } from "@/components/cartel/StickerDropScheduleDialog";
+import { RelatedLinks, relatedLinkClass } from "@/components/cartel/RelatedLinks";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/lib/workspace-context";
 import {
