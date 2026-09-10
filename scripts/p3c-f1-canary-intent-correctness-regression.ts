@@ -268,5 +268,67 @@ check(
   );
 }
 
+/* G — LIQUIDITY-CANARY RECIPIENT SAFETY: recipient must equal deployer. */
+check(
+  "G1",
+  /CANARY SAFETY MODE: the deployer wallet is also the sole recipient\./.test(formSrc) &&
+    /if \(!latest\.attemptBoundRecipient\?\.trim\(\) && latest\.recipient\.trim\(\)\.toLowerCase\(\) !== matched\) \{\s*\n\s*latest\.onRecipient\(matched\);/.test(
+      formSrc,
+    ),
+  "a matched connected wallet binds the recipient to the same address as the deployer",
+);
+check(
+  "G2",
+  /const deployerLocked = attemptDeployer !== null \|\| boundWallet !== null;/.test(formSrc) &&
+    /const recipientLocked = attemptRecipient !== null \|\| boundWallet !== null;/.test(formSrc),
+  "both fields are read-only while the wallet binding is active",
+);
+check(
+  "G3",
+  /Canary safety mode: the connected deployer wallet receives 100% of the supply\./.test(formSrc),
+  "the safety-mode copy is shown to the operator",
+);
+{
+  const start = formSrc.indexOf("const unbind = useCallback");
+  const body = start >= 0 ? formSrc.slice(start, formSrc.indexOf("}, []);", start)) : "";
+  check(
+    "G4",
+    /if \(current\.deployer\.trim\(\)\.toLowerCase\(\) === previous\) current\.onDeployer\(""\);/.test(
+      body,
+    ) &&
+      /if \(!current\.attemptBoundRecipient\?\.trim\(\) && current\.recipient\.trim\(\)\.toLowerCase\(\) === previous\)/.test(
+        body,
+      ) &&
+      /current\.onRecipient\(""\);/.test(body),
+    "unbind clears ONLY the values this component auto-bound, never attempt-bound state",
+  );
+}
+check(
+  "G5",
+  /\| "RECIPIENT_MUST_MATCH_DEPLOYER"/.test(wrapperCode),
+  "RECIPIENT_MUST_MATCH_DEPLOYER is part of the sanitized notice union",
+);
+{
+  const start = wrapperCode.indexOf("export const createCanaryDeploymentAttempt");
+  const body = wrapperCode.slice(start, wrapperCode.indexOf("export const armCanaryExecution"));
+  const guard = body.indexOf('data.tokenRecipient !== data.deployerAddress');
+  const rpc = body.indexOf("create_launch_chain_production_token_deployment_attempt");
+  check(
+    "G6",
+    guard > 0 &&
+      /if \(data\.tokenRecipient !== data\.deployerAddress\) \{\s*\n\s*return attemptFail\("RECIPIENT_MUST_MATCH_DEPLOYER"\);/.test(
+        body,
+      ),
+    "the server fails closed when the recipient does not match the deployer",
+  );
+  check("G7", guard > 0 && rpc > 0 && guard < rpc, "the check runs BEFORE the production attempt RPC");
+  check(
+    "G8",
+    /deployerAddress: text\(input\.deployerAddress\)\.toLowerCase\(\)/.test(body) &&
+      /tokenRecipient: text\(input\.tokenRecipient\)\.toLowerCase\(\)/.test(body),
+    "the comparison uses the existing lowercase normalization",
+  );
+}
+
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
