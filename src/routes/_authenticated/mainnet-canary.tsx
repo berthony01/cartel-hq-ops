@@ -101,7 +101,7 @@ function CanaryConsole() {
   const [symbol, setSymbol] = useState("");
   const [supply, setSupply] = useState("");
   const [armPhrase, setArmPhrase] = useState("");
-  const [sendPhrase, setSendPhrase] = useState("");
+  
   const [stopReason, setStopReason] = useState("");
 
   const [armSuccess, setArmSuccess] = useState(false);
