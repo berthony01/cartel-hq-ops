@@ -311,6 +311,15 @@ function BrandKitPage() {
         status={workspace ? workspace.name : "No project"}
       />
 
+      <RelatedLinks label="Go to">
+        <Link to="/assets" className={relatedLinkClass}>
+          Asset Vault
+        </Link>
+        <Link to="/sticker-lab" className={relatedLinkClass}>
+          Sticker Lab
+        </Link>
+      </RelatedLinks>
+
       {!workspaceLoading && !workspaceId ? (
         <EmptyState
           icon={Palette}
