@@ -430,6 +430,75 @@ check(
   "plain-English presign/claim copy exists with no automatic stage advancement",
 );
 
+/* ------------------------------------------------------------------ */
+/* N1–N10 — one explicit final-send click, same security order          */
+/* ------------------------------------------------------------------ */
+
+const finalSendHandler =
+  /run\("final-send", async \(\) => \{[\s\S]*?\n {14}\}\)/.exec(routeSrc)?.[0] ?? "";
+
+check("N1", finalSendHandler.length > 0, "the final send lives in one explicit click handler");
+check(
+  "N2",
+  /if \(!activeDeploymentId \|\| !authorizationId \|\| !claimSuccess\) return;/.test(
+    finalSendHandler,
+  ),
+  "the final-send handler refuses unless CLAIM already succeeded",
+);
+check(
+  "N3",
+  /await inspectMainnetWalletForHandoff\(expectedSendDeployer\)[\s\S]*await sendWindow\(/.test(
+    finalSendHandler,
+  ),
+  "the read-only wallet preflight happens before any send-window issuance",
+);
+check(
+  "N4",
+  /await sendWindow\([\s\S]*await sendClaimedMainnetDeployment\(/.test(finalSendHandler),
+  "the send window is issued before the wallet send",
+);
+check(
+  "N5",
+  /if \(!inspection\.ok\) \{[\s\S]*?return;\s*\}/.test(finalSendHandler) &&
+    finalSendHandler.indexOf("if (!inspection.ok)") < finalSendHandler.indexOf("await sendWindow("),
+  "a failed wallet preflight returns before a send window can be issued",
+);
+check(
+  "N6",
+  /issued\.ok !== true \|\|\s*\n?\s*!issued\.envelope \|\|\s*\n?\s*typeof issued\.sendWindowExpiresAt !== "string"/.test(
+    finalSendHandler,
+  ) &&
+    finalSendHandler.indexOf("issued.ok !== true") <
+      finalSendHandler.indexOf("await sendClaimedMainnetDeployment("),
+  "a failed or malformed send-window issuance returns before the wallet send",
+);
+check(
+  "N7",
+  (finalSendHandler.match(/await sendWindow\(/g) ?? []).length === 1 &&
+    (finalSendHandler.match(/await sendClaimedMainnetDeployment\(/g) ?? []).length === 1 &&
+    !/retry|rebroadcast|setInterval|setTimeout|while \(/i.test(finalSendHandler),
+  "exactly one send-window call and one wallet send, with no retry or rebroadcast",
+);
+check(
+  "N8",
+  !/Issue final send window/.test(routeSrc) &&
+    (routeSrc.match(/await sendClaimedMainnetDeployment\(/g) ?? []).length === 1,
+  "the separate two-click send-window operator action is gone; only one send path remains",
+);
+check(
+  "N9",
+  !/sendPhrase|SEND_PHRASE/.test(routeSrc) &&
+    /const armReady = armPhrase === ARM_PHRASE;/.test(routeSrc),
+  "no separate SEND phrase input remains; the exact ARM phrase is still required",
+);
+check(
+  "N10",
+  !/await persist\(|await verify\(/.test(finalSendHandler) &&
+    /CLAIM complete — ready for final wallet handoff/.test(routeSrc) &&
+    /const expectedSendDeployer =\s*\n?\s*existingAttempt\?\.deployerAddress \?\?/.test(routeSrc),
+  "no auto-persist/verify, mobile status copy is present, and the bound deployer wins",
+);
+
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 
 process.exit(failures === 0 ? 0 : 1);
