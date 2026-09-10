@@ -718,6 +718,99 @@ function CanaryConsole() {
           CLAIM locks this exact armed authorization as the one being used for the deployment
           handoff. It still does not send a blockchain transaction or spend ETH.
         </p>
+
+        {/*
+          FINAL HANDOFF — ONE EXPLICIT OPERATOR CLICK.
+          Placed here, immediately after CLAIM and before the raw readout, so the
+          short server-side send window is usable on a phone without scrolling.
+          Nothing below runs on render, on a timer, or automatically: the wallet
+          can only ever be invoked from this button's own click handler.
+        */}
+        <div className="mt-4 rounded-md border border-danger/40 bg-surface-raised/40 p-3">
+          <p className={`text-xs ${claimSuccess ? "text-success" : "text-muted-foreground"}`}>
+            {claimSuccess
+              ? "CLAIM complete — ready for final wallet handoff"
+              : "CLAIM is required before the final wallet handoff."}
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            This click performs a live wallet check, creates the one-time short send window, then
+            opens the wallet. No ETH is spent unless you approve the wallet transaction. One wallet
+            request only: no retry and no rebroadcast. If the outcome is ambiguous the attempt
+            freezes for reconciliation.
+          </p>
+          <Button
+            variant="destructive"
+            size="lg"
+            className="mt-3 w-full"
+            disabled={busy !== null || !finalSendReady}
+            onClick={() =>
+              run("final-send", async () => {
+                if (!activeDeploymentId || !authorizationId || !claimSuccess) return;
+                if (!expectedSendDeployer) {
+                  note("Final send blocked: no immutable deployer address is known.");
+                  return;
+                }
+                // 1 — READ-ONLY live wallet preflight. No issuance, no send.
+                const inspection = await inspectMainnetWalletForHandoff(expectedSendDeployer);
+                setPreflight(inspection);
+                if (!inspection.ok) {
+                  note(
+                    `Final send blocked at wallet check (${inspection.notice ?? "WALLET_NOT_READY"}). No send window was issued.`,
+                  );
+                  return;
+                }
+                // 2 — exactly one send-window issuance, immediately before the wallet.
+                const issued = await sendWindow({
+                  data: { deploymentId: activeDeploymentId, authorizationId },
+                });
+                setWindowResult({
+                  ok: issued.ok,
+                  notice: issued.notice,
+                  envelope: issued.envelope,
+                  sendWindowExpiresAt: issued.sendWindowExpiresAt,
+                });
+                if (
+                  issued.ok !== true ||
+                  !issued.envelope ||
+                  typeof issued.sendWindowExpiresAt !== "string"
+                ) {
+                  note(
+                    `Final send blocked: send window not issued (${issued.notice ?? "REFUSED"}).`,
+                  );
+                  return;
+                }
+                // 3 — exactly one wallet send, with the exact server envelope.
+                const result = await sendClaimedMainnetDeployment({
+                  envelope: issued.envelope as never,
+                  sendWindowExpiresAt: issued.sendWindowExpiresAt,
+                });
+                setSendResult(result);
+                setWindowResult(null);
+                // Persisting the hash stays a separate explicit click in section G.
+                if (result.txHash) setTxHash(result.txHash);
+                note(`Send: phase ${result.phase}, ${result.notice ?? "hash known"}.`);
+              })
+            }
+          >
+            {busy === "final-send" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            SEND ONE MAINNET DEPLOYMENT
+          </Button>
+
+          {preflight && !preflight.ok ? (
+            <p className="mt-2 text-xs text-danger">
+              Wallet check failed ({preflight.notice ?? "WALLET_NOT_READY"}). No send window was
+              created and the wallet was not asked to send anything. Expected deployer{" "}
+              {expectedSendDeployer ?? "—"} on chain {ROBINHOOD_MAINNET_CHAIN_ID}.
+            </p>
+          ) : null}
+          {windowResult && windowResult.ok !== true ? (
+            <p className="mt-2 text-xs text-danger">
+              Send window not issued ({windowResult.notice ?? "REFUSED"}). Nothing was sent.
+            </p>
+          ) : null}
+          <Readout value={sendResult} />
+        </div>
+
         <Readout value={{ armed, claimed }} />
       </Section>
 
