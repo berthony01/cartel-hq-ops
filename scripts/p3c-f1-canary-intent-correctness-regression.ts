@@ -254,17 +254,30 @@ check(
 );
 check(
   "F9",
-  /Resume existing attempt/.test(routeSrc) &&
-    !/Start new attempt anyway|abandonCanary|abandon_launch_chain/.test(routeSrc),
-  "resume exists and no abandon/overwrite action was added",
+  /const activeDeploymentId = deploymentId \?\? existingAttempt\?\.deploymentId \?\? null;/.test(
+    routeCode,
+  ) &&
+    // NEGATIVE TRIPWIRE: no manual resume, abandon or overwrite action returns.
+    !/Resume existing attempt|Start new attempt anyway|abandonCanary|abandon_launch_chain/.test(
+      routeSrc,
+    ),
+  "continuation is automatic local derivation; no resume/abandon/overwrite action exists",
 );
 {
-  const start = routeCode.indexOf("Resume existing attempt");
-  const before = start >= 0 ? routeCode.slice(Math.max(0, start - 1200), start) : "";
+  const line = routeCode.indexOf("const activeDeploymentId =");
+  const statement =
+    line >= 0 ? routeCode.slice(line, routeCode.indexOf(";", line) + 1) : "";
+  // Every useEffect body in the route, to prove the derivation drives no stage.
+  const effects = routeCode.match(/useEffect\(\(\) => \{[\s\S]*?\n  \}, \[[^\]]*\]\);/g) ?? [];
+  const stage = /\b(presign|arm|claim|sendWindow|persist|verify|reconcile|send)\(/;
   check(
     "F10",
-    before.length > 0 && !/presign\(|claim\(|arm\(|sendWindow\(|verify\(|persist\(/.test(before),
-    "resume only loads local console state and triggers no downstream stage",
+    statement.length > 0 &&
+      // The derivation itself is a pure nullish-coalescing read: no call at all.
+      !/\(/.test(statement.replace("const activeDeploymentId =", "")) &&
+      effects.length > 0 &&
+      effects.every((body) => !stage.test(body)),
+    "deriving activeDeploymentId triggers no presign/ARM/CLAIM/send/persist/verify",
   );
 }
 
