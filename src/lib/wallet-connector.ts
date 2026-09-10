@@ -76,6 +76,9 @@ export type WalletConnectorNotice =
   | "REOWN_RATE_LIMITED"
   | "REOWN_APPKIT_INIT_FAILED"
   | "REOWN_CONNECT_FAILED"
+  | "STALE_SESSION_TEARDOWN_FAILED"
+  | "STALE_SESSION_REUSE_REFUSED"
+  | "WALLET_ACCOUNT_MISMATCH"
   | "WALLETCONNECT_TIMEOUT"
   | "CONNECTION_REJECTED_OR_FAILED"
   | "NO_ACCOUNT";
@@ -469,6 +472,8 @@ function mapAppKitNotice(notice: AppKitNotice): WalletConnectorNotice {
       return "REOWN_RATE_LIMITED";
     case "REOWN_CONNECT_FAILED":
       return "REOWN_CONNECT_FAILED";
+    case "REOWN_STALE_SESSION":
+      return "STALE_SESSION_REUSE_REFUSED";
     default:
       return "REOWN_APPKIT_INIT_FAILED";
   }
