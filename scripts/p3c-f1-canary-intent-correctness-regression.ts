@@ -436,6 +436,35 @@ check(
 );
 
 
+/* I — MOBILE LOCKED ADDRESS DISPLAY: full readout, no clipping, derived suffix. */
+check(
+  "I1",
+  /break-all[\s\S]{0,240}\{deployerValue\}/.test(formSrc) &&
+    /font-mono[\s\S]{0,240}\{deployerValue\}/.test(formSrc) &&
+    /break-all[\s\S]{0,240}\{recipientValue\}/.test(formSrc) &&
+    /font-mono[\s\S]{0,240}\{recipientValue\}/.test(formSrc),
+  "locked deployer and recipient render as break-all monospace full-address readouts",
+);
+check(
+  "I2",
+  /Ends in \{deployerValue\.slice\(-4\)\}/.test(formSrc) &&
+    /Ends in \{recipientValue\.slice\(-4\)\}/.test(formSrc) &&
+    !/Ends in (?:[0-9a-fA-F]{4}|d617|6485)/.test(formSrc),
+  "the 'Ends in' suffix is dynamically derived from the last 4 characters",
+);
+check(
+  "I3",
+  /<Input[\s\S]{0,200}id="canary-deployer"/.test(formSrc) &&
+    /<Input[\s\S]{0,200}id="canary-recipient"/.test(formSrc) &&
+    /readOnly=\{deployerLocked\}/.test(formSrc) &&
+    /readOnly=\{recipientLocked\}/.test(formSrc),
+  "editable Input behavior remains when the field is not locked",
+);
+check(
+  "I4",
+  !/0x[0-9a-fA-F]{40}/.test(formSrc.replace(/0x0{40}/g, "")),
+  "no hardcoded EOA address exists in the intent form",
+);
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
