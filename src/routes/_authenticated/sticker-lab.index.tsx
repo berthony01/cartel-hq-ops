@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/cartel/EmptyState";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { Section } from "@/components/cartel/Section";
 import { InlineRow } from "@/components/cartel/InlineRow";
+import { RelatedLinks, relatedLinkClass } from "@/components/cartel/RelatedLinks";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
