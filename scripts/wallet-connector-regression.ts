@@ -1216,5 +1216,107 @@ check(
   "a wrong-chain wallet still stays connected: identity proofs never switch or require 4663",
 );
 
+
+/* ------------------------------------------------------------------ */
+/* A1–A10 — CURRENT-ACCOUNT IDENTITY (never array order)               */
+/* ------------------------------------------------------------------ */
+
+check(
+  "A1",
+  /getAppKitAccountSnapshot\(\)/.test(appkitCode) &&
+    /appKit\.getAccount\("eip155"\)/.test(appkitCode) &&
+    /appKit\.subscribeAccount\(\(\) => listener\(\), "eip155"\)/.test(appkitCode),
+  "the current account is read from AppKit's real namespace-scoped getAccount/subscribeAccount API",
+);
+check(
+  "A2",
+  // NEGATIVE TRIPWIRE: no index-zero identity anywhere in the wallet stack.
+  !/accounts\[0\]|liveAccountRaw\[0\]|eth_accounts"\s*\}\)\s*\)\[0\]/.test(
+    connectorCode + walletCode,
+  ),
+  "no connector or pre-send path derives the account identity from array index 0",
+);
+check(
+  "A3",
+  /let activeAccount: string \| null = null;/.test(connectorCode) &&
+    /export function getActiveAccount\(\): string \| null \{\s*return activeAccount;/.test(
+      connectorCode,
+    ),
+  "a single canonical validated active account exists in connector state",
+);
+check(
+  "A4",
+  /let selectedAccount: string \| null = appKitCurrent;/.test(connectorCode) &&
+    /if \(approvedAccounts\.length !== 1\) return await failClosed\("WALLET_ACCOUNT_AMBIGUOUS"\);/.test(
+      connectorCode,
+    ),
+  "the AppKit current account wins; with no current-account signal only a single approved account is accepted",
+);
+check(
+  "A5",
+  /if \(!approvedAccounts\.includes\(selectedAccount\)\) \{\s*return await failClosed\("WALLET_ACCOUNT_MISMATCH"\);/.test(
+    connectorCode,
+  ),
+  "a selected account absent from the wallet's approved accounts fails closed",
+);
+check(
+  "A6",
+  /if \(appKitCaip !== null && appKitCaip !== selectedAccount\) \{\s*return await failClosed\("WALLET_ACCOUNT_MISMATCH"\);/.test(
+    connectorCode,
+  ) &&
+    /forLiveChain\.length > 0 && !forLiveChain\.some\(\(e\) => e\.address === selectedAccount\)/.test(
+      connectorCode,
+    ),
+  "CAIP-10 current-account and live-chain session-account disagreement both fail closed",
+);
+check(
+  "A7",
+  connectorCode.indexOf("activeAccount = selectedAccount;") >
+    connectorCode.indexOf('failClosed("WALLET_ACCOUNT_MISMATCH")') &&
+    /activeAccount = selectedAccount;\s*\n\s*activeAccountVerified = true;/.test(connectorCode),
+  "the canonical account is written only after every identity proof passed",
+);
+check(
+  "A8",
+  /accountsChanged: \(\) => \{\s*\n\s*void revalidateActiveAccount\(\)/.test(connectorCode) &&
+    /invalidateAccountIdentity\("ACTIVE_ACCOUNT_CHANGED"\)/.test(connectorCode) &&
+    /function invalidateAccountIdentity[\s\S]{0,200}clearLocalConnectionState\(\);/.test(
+      connectorCode,
+    ),
+  "accountsChanged invalidates the connection instead of silently switching deployment identity",
+);
+check(
+  "A9",
+  /const state = await readWalletConnectorState\(\);[\s\S]{0,400}setAccountVerified\(state\.accountVerified\);/.test(
+    panelCode,
+  ) &&
+    /accountVerified \? "VERIFIED CURRENT SESSION" : "UNVERIFIED"/.test(panelCode) &&
+    !/inspectMainnetWalletForHandoff/.test(panelCode),
+  "the panel displays the connector's validated account plus a visible current-session proof marker",
+);
+check(
+  "A10",
+  /let account: string \| null = getActiveAccount\(\);/.test(walletCode) &&
+    /!approved\.includes\(account\)\) account = null;/.test(walletCode),
+  "the pre-send handoff inspection uses the canonical account and fails closed if it is no longer approved",
+);
+check(
+  "A11",
+  // Canary rule unchanged: deployer and recipient both come from the connector
+  // state account, which is now the validated canonical account.
+  /readWalletConnectorState\(\)/.test(stripComments(read(FORM))) &&
+    !/accounts\[0\]/.test(stripComments(read(FORM))),
+  "deployer = recipient is still bound only from the validated connector account",
+);
+check(
+  "A12",
+  !/eth_sendTransaction|eth_sendRawTransaction|wallet_addEthereumChain|personal_sign/.test(
+    [connectorCode.slice(connectorCode.indexOf("function revalidateActiveAccount")), panelCode].join(
+      "\n",
+    ),
+  ),
+  "no account-identity path introduces a sign, send or add-chain call",
+);
+
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
