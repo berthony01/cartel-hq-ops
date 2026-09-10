@@ -2158,6 +2158,7 @@ function LaunchControlPage() {
                     </p>
                   )}
                 </Section>
+                </div>
 
                 <div
                   id="lc-contract"
