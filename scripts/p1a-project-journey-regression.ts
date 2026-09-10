@@ -12,10 +12,17 @@ import {
 } from "../src/lib/launch-readiness";
 import {
   computeProjectJourney,
+  deriveJourneyDeploymentEvidenceFacts,
   JOURNEY_STAGE_KEYS,
   type JourneyInput,
+  type JourneyLaunchFacts,
   type JourneyStageKey,
 } from "../src/lib/project-journey";
+import {
+  evaluateLaunchDeploymentEvidence,
+  type DeploymentEvidenceInput,
+  type LaunchEvidenceContext,
+} from "../src/lib/launch-verified-eligibility";
 
 const read = (p: string) => readFileSync(p, "utf8");
 
@@ -65,7 +72,7 @@ function journey(input: Partial<JourneyInput> & { readiness: JourneyInput["readi
     launch: null,
     activeWatchers: null,
     watchUnavailable: false,
-    verifiedProductionDeployments: null,
+    deploymentEvidence: null,
     deploymentUnavailable: false,
     brandKit: null,
     brandKitUnavailable: false,
@@ -78,6 +85,39 @@ function journey(input: Partial<JourneyInput> & { readiness: JourneyInput["readi
     ...input,
   });
 }
+
+const launchFacts = (
+  status: string,
+  registration: "none" | "partial" | "complete" = "none",
+): JourneyLaunchFacts => ({
+  id: "l1",
+  status,
+  scheduleSet: true,
+  officialContractAddress:
+    registration === "none" ? null : `0x${"b".repeat(40)}`,
+  officialContractDeploymentId:
+    registration === "complete" ? "deployment-1" : null,
+  contractRegisteredAt:
+    registration === "complete" ? "2026-09-07T00:03:00.000Z" : null,
+});
+
+const noDeploymentEvidence = {
+  productionDeploymentCount: 0,
+  verifiedProductionCount: 0,
+  managedFinalizedVerifiedCount: 0,
+  deploymentAmbiguous: false,
+  registrationEligibleCount: 0,
+  registrationAmbiguous: false,
+};
+
+const finalizedDeploymentEvidence = {
+  productionDeploymentCount: 1,
+  verifiedProductionCount: 1,
+  managedFinalizedVerifiedCount: 1,
+  deploymentAmbiguous: false,
+  registrationEligibleCount: 1,
+  registrationAmbiguous: false,
+};
 
 /** P1-B — every Brand & Creative + Communications stage satisfied. */
 const completeCreative = {
@@ -136,7 +176,7 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
   });
   const j = journey({
     readiness: r,
-    launch: { id: "l1", status: "ANNOUNCED", scheduleSet: false, officialContractRegistered: false },
+    launch: { ...launchFacts("ANNOUNCED"), scheduleSet: false },
     activeWatchers: 3,
     ...completeCreative,
 
@@ -144,20 +184,20 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
   check("J3", j.nextAction.stage?.key === "launch_schedule", `next=${j.nextAction.stage?.key}`);
 }
 
-// J4 — verified PRODUCTION deployments gate contract registration.
+// J4 — managed-finalized production evidence gates deployment and registration.
 {
   const r = computeLaunchReadiness(fullReadiness);
   const without = journey({
     readiness: r,
-    launch: { id: "l1", status: "LIVE", scheduleSet: true, officialContractRegistered: false },
+    launch: launchFacts("CONTRACT_PENDING"),
     activeWatchers: 5,
-    verifiedProductionDeployments: 0,
+    deploymentEvidence: noDeploymentEvidence,
   });
   const withProd = journey({
     readiness: r,
-    launch: { id: "l1", status: "LIVE", scheduleSet: true, officialContractRegistered: false },
+    launch: launchFacts("CONTRACT_PENDING"),
     activeWatchers: 5,
-    verifiedProductionDeployments: 1,
+    deploymentEvidence: finalizedDeploymentEvidence,
     ...completeCreative,
 
   });
@@ -170,13 +210,13 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
     "J4b",
     statusOf(withProd, "official_contract") === "action" &&
       withProd.nextAction.stage?.key === "official_contract",
-    "verified production deployment makes registration the next action",
+    "one eligible finalized production deployment makes registration the next action",
   );
   check(
     "J4c",
     statusOf(without, "deployment") === "waiting" &&
       statusOf(withProd, "deployment") === "complete",
-    "deployment stage reflects verified production count only",
+    "deployment stage requires one verified managed-finalized production deployment",
   );
 }
 
@@ -184,9 +224,9 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
 {
   const j = journey({
     readiness: computeLaunchReadiness(fullReadiness),
-    launch: { id: "l1", status: "LIVE", scheduleSet: true, officialContractRegistered: false },
+    launch: launchFacts("CONTRACT_PENDING"),
     activeWatchers: 5,
-    verifiedProductionDeployments: 0,
+    deploymentEvidence: noDeploymentEvidence,
   });
   check(
     "J5",
@@ -200,10 +240,10 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
 {
   const j = journey({
     readiness: computeLaunchReadiness(fullReadiness),
-    launch: { id: "l1", status: "LIVE", scheduleSet: true, officialContractRegistered: true },
+    launch: launchFacts("LIVE", "complete"),
     activeWatchers: null,
     watchUnavailable: true,
-    verifiedProductionDeployments: null,
+    deploymentEvidence: null,
     deploymentUnavailable: true,
   });
   check(
@@ -222,9 +262,9 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
 {
   const j = journey({
     readiness: computeLaunchReadiness(fullReadiness),
-    launch: { id: "l1", status: "LIVE", scheduleSet: true, officialContractRegistered: true },
+    launch: launchFacts("LIVE", "complete"),
     activeWatchers: 12,
-    verifiedProductionDeployments: 1,
+    deploymentEvidence: finalizedDeploymentEvidence,
     ...completeCreative,
 
   });
@@ -236,10 +276,10 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
 {
   const input: JourneyInput = {
     readiness: computeLaunchReadiness(fullReadiness),
-    launch: { id: "l1", status: "ANNOUNCED", scheduleSet: true, officialContractRegistered: false },
+    launch: launchFacts("ANNOUNCED"),
     activeWatchers: 0,
     watchUnavailable: false,
-    verifiedProductionDeployments: 0,
+    deploymentEvidence: noDeploymentEvidence,
     deploymentUnavailable: false,
   };
   const a = JSON.stringify(computeProjectJourney(input));
@@ -539,6 +579,253 @@ const publishedProfile: ReadinessInput = {
     "J18b",
     !src.includes("project_conversations") && !src.includes("project_inbox_"),
     "private inbox tables are never queried directly",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// P1-C — Verification, finality, official contract and go-live visibility
+// ---------------------------------------------------------------------------
+
+const evidenceContext = (
+  launchId = "l1",
+  status = "CONTRACT_PENDING",
+): LaunchEvidenceContext => ({
+  launchId,
+  workspaceId: "workspace-1",
+  declaredChain: "Robinhood Chain",
+  launchStatus: status,
+  officialContractAddress: null,
+  officialContractDeploymentId: null,
+  contractRegisteredAt: null,
+});
+
+const evidenceRow = (
+  overrides: Partial<DeploymentEvidenceInput> = {},
+): DeploymentEvidenceInput => ({
+  id: "deployment-1",
+  attempt_number: 1,
+  launch_id: "l1",
+  workspace_id: "workspace-1",
+  deployment_kind: "FIXED_SUPPLY_ERC20",
+  network_environment: "PRODUCTION",
+  chain_id: 4663,
+  status: "CONFIRMED",
+  tx_hash: `0x${"a".repeat(64)}`,
+  contract_address: `0x${"b".repeat(40)}`,
+  confirmations: 0,
+  block_number: 900,
+  submitted_at: "2026-09-07T00:00:00.000Z",
+  verified_at: "2026-09-07T00:01:00.000Z",
+  created_at: "2026-09-07T00:00:00.000Z",
+  artifact_id: "cartel-fixed-erc20-v1",
+  failure_code: null,
+  failure_detail: null,
+  token_name: "PROJECT",
+  token_symbol: "PROJECT",
+  token_decimals: 18,
+  token_total_supply_text: "1000000000000000000000",
+  verified_token_name: "PROJECT",
+  verified_token_symbol: "PROJECT",
+  verified_token_decimals: 18,
+  verified_total_supply_text: "1000000000000000000000",
+  verified_recipient_balance_text: "1000000000000000000000",
+  finality_state: "FINALIZED",
+  finalized_block_hash_confirmed: true,
+  finality_provider_kind: "MANAGED",
+  finalized_at: "2026-09-07T00:02:00.000Z",
+  finalized_block_number: 900,
+  finalized_head_block_number: 901,
+  ...overrides,
+});
+
+const deriveEvidence = (
+  rows: DeploymentEvidenceInput[],
+  context = evidenceContext(),
+) => deriveJourneyDeploymentEvidenceFacts(
+  evaluateLaunchDeploymentEvidence(context, rows),
+  rows,
+);
+
+const contractJourney = (
+  deploymentEvidence: JourneyInput["deploymentEvidence"],
+  launch = launchFacts("CONTRACT_PENDING"),
+) => journey({
+  readiness: computeLaunchReadiness(fullReadiness),
+  launch,
+  activeWatchers: 1,
+  deploymentEvidence,
+  ...completeCreative,
+});
+
+// J19 — the stage contract remains exactly 16 ordered stages.
+{
+  const expected = [
+    "project_profile", "profile_published", "brand_kit", "creative_assets",
+    "sticker_pack", "launch_created", "launch_announced", "launch_schedule",
+    "launch_watch_open", "telegram_community", "launch_welcome", "audience",
+    "communications", "deployment", "official_contract", "launch_live",
+  ];
+  check(
+    "J19",
+    JOURNEY_STAGE_KEYS.length === 16 && JSON.stringify(JOURNEY_STAGE_KEYS) === JSON.stringify(expected),
+    "the exact 16-stage order is unchanged",
+  );
+}
+
+// J20 — testnet and incomplete production evidence never satisfy deployment.
+{
+  const testnet = evidenceRow({
+    network_environment: "TESTNET",
+    chain_id: 46630,
+    confirmations: 5,
+  });
+  const testnetFacts = deriveEvidence(
+    [testnet],
+    { ...evidenceContext(), declaredChain: "Robinhood Chain Testnet" },
+  );
+  check(
+    "J20",
+    statusOf(contractJourney(testnetFacts), "deployment") === "waiting" &&
+      testnetFacts.productionDeploymentCount === 0,
+    "verified testnet evidence never satisfies production deployment",
+  );
+
+  const unverifiedFacts = deriveEvidence([evidenceRow({ verified_at: null })]);
+  check(
+    "J20b",
+    statusOf(contractJourney(unverifiedFacts), "deployment") === "waiting" &&
+      unverifiedFacts.verifiedProductionCount === 0,
+    "unverified production evidence remains waiting",
+  );
+}
+
+// J21 — managed finality is authoritative; confirmations are not.
+{
+  const finalized = deriveEvidence([evidenceRow({ confirmations: 0 })]);
+  check(
+    "J21",
+    statusOf(contractJourney(finalized), "deployment") === "complete" &&
+      finalized.managedFinalizedVerifiedCount === 1,
+    "managed FINALIZED evidence completes deployment even with zero confirmations",
+  );
+
+  for (const [label, row] of [
+    ["pending", evidenceRow({ finality_state: "FINALITY_PENDING" })],
+    ["unmanaged", evidenceRow({ finality_provider_kind: "SELF" })],
+    ["mismatched", evidenceRow({ finalized_block_number: 899 })],
+    ["incomplete", evidenceRow({ finalized_at: null })],
+  ] as const) {
+    const facts = deriveEvidence([row]);
+    check(
+      `J21-${label}`,
+      statusOf(contractJourney(facts), "deployment") === "waiting" &&
+        facts.managedFinalizedVerifiedCount === 0,
+      `${label} finality does not complete deployment`,
+    );
+  }
+}
+
+// J22 — competing verified production records fail closed for deployment and registration.
+{
+  const facts = deriveEvidence([
+    evidenceRow(),
+    evidenceRow({ id: "deployment-2", attempt_number: 2 }),
+  ]);
+  const j = contractJourney(facts);
+  check(
+    "J22",
+    facts.deploymentAmbiguous && statusOf(j, "deployment") === "waiting",
+    "multiple verified production candidates require review",
+  );
+  check(
+    "J22b",
+    statusOf(j, "official_contract") === "waiting" &&
+      j.stages.find((stage) => stage.key === "official_contract")?.actionable === false,
+    "ambiguous registration candidates are never actionable",
+  );
+  check(
+    "J22c",
+    j.stages.find((stage) => stage.key === "deployment")?.actionable === false,
+    "deployment remains informational in every state",
+  );
+}
+
+// J23 — registration needs exactly one eligible candidate or all three recorded fields.
+{
+  const eligible = contractJourney(deriveEvidence([evidenceRow()]));
+  const zero = contractJourney(noDeploymentEvidence);
+  const partial = contractJourney(finalizedDeploymentEvidence, launchFacts("CONTRACT_PENDING", "partial"));
+  const registered = contractJourney(finalizedDeploymentEvidence, launchFacts("CONTRACT_PENDING", "complete"));
+  check(
+    "J23",
+    statusOf(eligible, "official_contract") === "action" &&
+      eligible.stages.find((stage) => stage.key === "official_contract")?.to === "/launch-control",
+    "exactly one eligible candidate routes registration review to Launch Control",
+  );
+  check("J23b", statusOf(zero, "official_contract") === "waiting", "zero eligible candidates wait");
+  check(
+    "J23c",
+    statusOf(partial, "official_contract") === "unavailable",
+    "partial registration fields fail closed",
+  );
+  check(
+    "J23d",
+    statusOf(registered, "official_contract") === "complete",
+    "all three registration binding fields complete registration",
+  );
+}
+
+// J24 — go-live visibility follows normalized lifecycle and strengthened registration.
+{
+  const earlier = contractJourney(finalizedDeploymentEvidence, launchFacts("OFFICIAL_CONTRACT_REGISTERED", "complete"));
+  const live = contractJourney(finalizedDeploymentEvidence, launchFacts("LIVE", "complete"));
+  const completed = contractJourney(finalizedDeploymentEvidence, launchFacts("COMPLETED", "complete"));
+  check(
+    "J24",
+    statusOf(earlier, "launch_live") === "action" &&
+      statusOf(live, "launch_live") === "complete" &&
+      statusOf(completed, "launch_live") === "complete",
+    "only LIVE and COMPLETED satisfy go-live",
+  );
+}
+
+// J25 — evidence remains scoped to the selected launch.
+{
+  const foreign = evidenceRow({ launch_id: "canary-launch" });
+  const facts = deriveEvidence([foreign], evidenceContext("l1"));
+  check(
+    "J25",
+    facts.productionDeploymentCount === 0 &&
+      statusOf(contractJourney(facts), "deployment") === "waiting",
+    "finalized production evidence from another launch cannot satisfy the primary launch",
+  );
+}
+
+// J26 — no liquidity, wallet, execution or mutation boundary enters the journey.
+{
+  const src = read("src/lib/project-journey.ts");
+  const forbidden = [
+    "liquidity-plan",
+    "MAINNET_LIQUIDITY_TX_ENABLED",
+    "wallet-connector",
+    'to: "/chain-launcher"',
+    'to: "/mainnet-canary"',
+    "registerVerifiedLaunchContract",
+    "transitionLaunchStatus",
+    "verifyMainnetChainDeployment",
+    "applyProductionDeploymentVerification",
+    "applyProductionFinality",
+    "presignMainnetTokenDeployment",
+    "armCanaryExecution",
+    "claimMainnetDeploymentHandoff",
+    "authorizeMainnetSendWindow",
+    "sendClaimedMainnetDeployment",
+    "persistMainnetDeploymentTxHash",
+  ];
+  check(
+    "J26",
+    forbidden.every((token) => !src.includes(token)),
+    "journey imports no liquidity, wallet, execution, verifier-write or mutation path",
   );
 }
 
