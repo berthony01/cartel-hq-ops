@@ -248,9 +248,9 @@ check(
 );
 check(
   "F8",
-  /const recipientLocked = attemptRecipient !== null;/.test(formSrc) &&
+  /const recipientLocked = attemptRecipient !== null \|\| boundWallet !== null;/.test(formSrc) &&
     /readOnly=\{recipientLocked\}/.test(formSrc),
-  "an attempt-bound recipient renders read-only exactly like the deployer",
+  "an attempt-bound or wallet-bound recipient renders read-only exactly like the deployer",
 );
 check(
   "F9",
