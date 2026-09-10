@@ -35,6 +35,7 @@ export type AppKitNotice =
   | "REOWN_CONFIG_SERVER_ERROR"
   | "REOWN_RATE_LIMITED"
   | "REOWN_APPKIT_INIT_FAILED"
+  | "REOWN_STALE_SESSION"
   | "REOWN_CONNECT_FAILED";
 
 export type MinimalEip1193 = {
@@ -254,18 +255,70 @@ export type AppKitConnectOutcome =
   | { status: "failed"; notice: AppKitNotice };
 
 /**
+ * Proven teardown of any existing AppKit `eip155` connection.
+ *
+ * Returns TRUE only when, after the official disconnect, AppKit reports no
+ * connected state, no address and no wallet provider. A teardown that cannot be
+ * PROVEN returns FALSE so the caller fails closed instead of letting an old
+ * session stand in for a new operator choice. It never connects, never opens a
+ * chooser, never signs and never sends.
+ */
+export async function resetAppKitConnection(): Promise<boolean> {
+  const appKit = appKitHandle;
+  // Never initialized in this browser lifecycle => there is nothing to inherit.
+  if (!appKit) return true;
+  try {
+    await appKit.disconnect("eip155");
+  } catch {
+    // Teardown is PROVEN below, never assumed from the absence of an error.
+  }
+  try {
+    return (
+      appKit.getIsConnectedState() === false &&
+      getAppKitAddress() === null &&
+      getAppKitWalletProvider() === null
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** True when AppKit currently holds ANY eip155 connection evidence. */
+export function hasAppKitConnectionEvidence(): boolean {
+  const appKit = appKitHandle;
+  if (!appKit) return false;
+  try {
+    return (
+      appKit.getIsConnectedState() === true ||
+      getAppKitAddress() !== null ||
+      getAppKitWalletProvider() !== null
+    );
+  } catch {
+    return true;
+  }
+}
+
+/**
  * EXPLICIT CLICK ONLY. Opens the official AppKit `Connect` view scoped to the
  * `eip155` namespace and waits — through AppKit's own subscriptions, with no
  * polling loop and no automatic retry — for a real provider, a modal close, or
  * the bounded timeout.
+ *
+ * FRESH-ATTEMPT GUARD. A previously connected provider/account can NEVER settle
+ * this attempt: any pre-existing connection evidence fails closed with
+ * `REOWN_STALE_SESSION`, and no connection evidence at all is accepted until
+ * this attempt's chooser interaction has actually begun.
  */
 export async function openAppKitConnect(timeoutMs: number): Promise<AppKitConnectOutcome> {
   const { appKit, notice } = await ensureAppKit();
   if (!appKit) return { status: "failed", notice: notice ?? "REOWN_APPKIT_INIT_FAILED" };
+  if (hasAppKitConnectionEvidence()) return { status: "failed", notice: "REOWN_STALE_SESSION" };
 
   return await new Promise<AppKitConnectOutcome>((resolve) => {
     let settled = false;
     let sawOpen = false;
+    /** Only evidence arising AFTER this attempt's chooser opened may settle it. */
+    let chooserStarted = false;
     let modalClosed = false;
     let handoffObserved = false;
     const unsubscribers: Array<() => void> = [];
