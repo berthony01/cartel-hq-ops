@@ -204,7 +204,29 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
     } finally {
       setBusy(null);
     }
-  }, [refresh]);
+  }, [clearInspection, refresh]);
+
+  /**
+   * "Choose another wallet" — EXPLICIT TEARDOWN FIRST. The current wallet /
+   * session is disconnected and the readout cleared BEFORE the chooser opens,
+   * so the previous wallet can never be re-accepted as the new choice. It
+   * signs nothing, sends nothing and advances nothing.
+   */
+  const runChooseAnotherWallet = useCallback(async () => {
+    setBusy("disconnect");
+    try {
+      await disconnect();
+      setNotice(null);
+      setSwitchNotice(null);
+      setChainUnavailable(false);
+      setWalletLabel(null);
+      clearInspection();
+      refreshAvailability();
+    } finally {
+      setBusy(null);
+    }
+    await runConnect();
+  }, [clearInspection, refreshAvailability, runConnect]);
 
   /**
    * GATE 2 ONLY, EXPLICIT CLICK. The single switch call site in this panel. On
