@@ -138,6 +138,8 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
     readiness: r,
     launch: { id: "l1", status: "ANNOUNCED", scheduleSet: false, officialContractRegistered: false },
     activeWatchers: 3,
+    ...completeCreative,
+
   });
   check("J3", j.nextAction.stage?.key === "launch_schedule", `next=${j.nextAction.stage?.key}`);
 }
