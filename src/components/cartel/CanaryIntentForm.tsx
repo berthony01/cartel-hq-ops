@@ -74,9 +74,12 @@ export function CanaryIntentForm(props: CanaryIntentFormProps) {
     setBoundWallet(null);
     if (previous === null) return;
     const current = propsRef.current;
-    // Only ever clear the value this component provisionally set. A manually
+    // Only ever clear the values this component provisionally set. A manually
     // typed address, or an attempt-bound one, is never touched.
     if (current.deployer.trim().toLowerCase() === previous) current.onDeployer("");
+    if (!current.attemptBoundRecipient?.trim() && current.recipient.trim().toLowerCase() === previous) {
+      current.onRecipient("");
+    }
   }, []);
 
   /**
@@ -109,7 +112,8 @@ export function CanaryIntentForm(props: CanaryIntentFormProps) {
     setBoundWallet(matched);
     const latest = propsRef.current;
     if (latest.deployer.trim().toLowerCase() !== matched) latest.onDeployer(matched);
-    if (latest.recipient.trim() === "" && !latest.attemptBoundRecipient?.trim()) {
+    // CANARY SAFETY MODE: the deployer wallet is also the sole recipient.
+    if (!latest.attemptBoundRecipient?.trim() && latest.recipient.trim().toLowerCase() !== matched) {
       latest.onRecipient(matched);
     }
   }, [unbind]);
@@ -126,7 +130,7 @@ export function CanaryIntentForm(props: CanaryIntentFormProps) {
   const deployerValue = attemptDeployer ?? props.deployer;
   const deployerLocked = attemptDeployer !== null || boundWallet !== null;
   const recipientValue = attemptRecipient ?? props.recipient;
-  const recipientLocked = attemptRecipient !== null;
+  const recipientLocked = attemptRecipient !== null || boundWallet !== null;
 
 
   return (
