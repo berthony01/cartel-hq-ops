@@ -299,9 +299,10 @@ export function LaunchReadinessCallout({
   return (
     <ProjectJourneyCallout
       workspaceId={workspaceId}
-      workspaceName={workspaceName}
+      workspaceName={workspaceName ?? null}
       title={title}
     />
   );
+
 }
 
