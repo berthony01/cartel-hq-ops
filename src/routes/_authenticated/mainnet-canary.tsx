@@ -124,6 +124,8 @@ function CanaryConsole() {
     ok: boolean;
     notice: string | null;
   } | null>(null);
+  /** READ-ONLY live wallet preflight result. Never authoritative for security. */
+  const [preflight, setPreflight] = useState<MainnetWalletInspection | null>(null);
   const [sendResult, setSendResult] = useState<unknown>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [tail, setTail] = useState<unknown>(null);
