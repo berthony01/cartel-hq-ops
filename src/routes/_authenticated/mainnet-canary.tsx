@@ -452,6 +452,43 @@ function CanaryConsole() {
         </Section>
       ) : null}
 
+      {confirmedDeployment ? (
+        <Section
+          variant="surface"
+          leading={<ShieldCheck className="h-4 w-4 text-success" />}
+          title={`Completed historical deployment #${confirmedDeployment.attemptNumber}`}
+          description="This launch already has a CONFIRMED Robinhood Chain production deployment. It is permanent history: it is displayed read-only, it never binds new intent, and it is never loaded as a presign, ARM, CLAIM or send context."
+        >
+          <div className="grid gap-1 sm:grid-cols-2">
+            <ReadoutLine label={"Status"} value={confirmedDeployment.status} />
+            <ReadoutLine label={"Deployment id"} value={confirmedDeployment.deploymentId} />
+            <ReadoutLine
+              label={"Historical deployer"}
+              value={confirmedDeployment.deployerAddress}
+            />
+            <ReadoutLine
+              label={"Historical recipient"}
+              value={confirmedDeployment.tokenRecipient}
+            />
+            <ReadoutLine label={"Token"} value={confirmedDeployment.tokenName} />
+            <ReadoutLine label={"Onchain symbol"} value={confirmedDeployment.tokenSymbol} />
+            <ReadoutLine
+              label={"Base units"}
+              value={confirmedDeployment.tokenTotalSupplyBaseUnits}
+            />
+            <ReadoutLine label={"Tx hash"} value={confirmedDeployment.txHash} />
+            <ReadoutLine label={"Contract"} value={confirmedDeployment.contractAddress} />
+            <ReadoutLine label={"Created"} value={confirmedDeployment.createdAt} />
+          </div>
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            Historical identity is never rewritten and never copied into a new attempt. Creating
+            another production attempt for this launch is refused here to prevent an accidental
+            duplicate mainnet deployment.
+          </p>
+        </Section>
+      ) : null}
+
+
       <DeploymentWalletConnect
         expectedDeployer={
           existingAttempt?.deployerAddress ?? (deployer.trim() === "" ? null : deployer.trim())
