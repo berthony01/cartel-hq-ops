@@ -312,24 +312,45 @@ function lower(value: string): string {
   return value.trim().toLowerCase();
 }
 
-async function readAccountAndChain(
-  provider: Eip1193Provider,
-): Promise<{ account: string | null; chainId: string | null }> {
-  let account: string | null = null;
-  let chainId: string | null = null;
+/**
+ * The wallet's APPROVED ACCOUNT LIST for the live session, lowercased. This is
+ * a membership set ONLY: array order carries no meaning here and index 0 is
+ * never treated as the operator's selection.
+ */
+async function readApprovedAccounts(provider: Eip1193Provider): Promise<string[]> {
+  let raw: unknown;
   try {
-    const accounts = (await provider.request({ method: "eth_accounts" })) as unknown;
-    if (Array.isArray(accounts) && typeof accounts[0] === "string") account = lower(accounts[0]);
+    raw = await provider.request({ method: "eth_accounts" });
   } catch {
-    account = null;
+    return [];
   }
+  if (!Array.isArray(raw)) return [];
+  const found: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "string") continue;
+    const address = lower(entry);
+    if (!/^0x[0-9a-f]{40}$/.test(address)) continue;
+    if (!found.includes(address)) found.push(address);
+  }
+  return found;
+}
+
+async function readLiveChainId(provider: Eip1193Provider): Promise<string | null> {
   try {
-    const raw = (await provider.request({ method: "eth_chainId" })) as unknown;
-    chainId = normalizeChainId(raw);
+    return normalizeChainId(await provider.request({ method: "eth_chainId" }));
   } catch {
-    chainId = null;
+    return null;
   }
-  return { account, chainId };
+}
+
+/** Address of a CAIP-10 account string, or null. */
+function caipAddress(value: string | null): string | null {
+  if (typeof value !== "string") return null;
+  const parts = value.split(":");
+  if (parts.length !== 3) return null;
+  if (parts[0] !== "eip155") return null;
+  if (!/^0x[0-9a-fA-F]{40}$/.test(parts[2] ?? "")) return null;
+  return lower(parts[2] as string);
 }
 
 /* ------------------------------------------------------------------ */
@@ -356,13 +377,47 @@ function detachEvents(): void {
   provider.removeListener("disconnect", attached.disconnected);
 }
 
+/**
+ * ACCOUNT-CHANGE INVALIDATION. An `accountsChanged` event can NEVER move the
+ * deployment identity to another address: the canonical account is either still
+ * approved and current, or the whole connection is invalidated and the operator
+ * must explicitly connect again. Nothing here selects a replacement account,
+ * signs, sends or advances anything.
+ */
+function invalidateAccountIdentity(notice: WalletConnectorNotice): void {
+  clearLocalConnectionState();
+  accountInvalidationNotice = notice;
+  emit();
+}
+
+async function revalidateActiveAccount(): Promise<void> {
+  const provider = activeProvider;
+  const canonical = activeAccount;
+  if (!provider || canonical === null) return;
+  const approved = await readApprovedAccounts(provider);
+  if (approved.length > 0 && !approved.includes(canonical)) {
+    invalidateAccountIdentity("ACTIVE_ACCOUNT_CHANGED");
+    return;
+  }
+  if (activeKind === "walletconnect") {
+    const { getAppKitAccountSnapshot } = await import("./reown-appkit-wallet");
+    const snapshot = getAppKitAccountSnapshot();
+    const current = snapshot?.address ? lower(snapshot.address) : null;
+    if (current !== null && current !== canonical) {
+      invalidateAccountIdentity("ACTIVE_ACCOUNT_CHANGED");
+    }
+  }
+}
+
 function attachEvents(provider: Eip1193Provider): void {
   // Always detach first: a fresh connect must never accumulate listeners.
   detachEvents();
   if (typeof provider.on !== "function") return;
   const handlers: AttachedHandlers = {
     provider,
-    accountsChanged: () => emit(),
+    accountsChanged: () => {
+      void revalidateActiveAccount().finally(() => emit());
+    },
     chainChanged: () => emit(),
     disconnected: () => {
       clearLocalConnectionState();
@@ -376,8 +431,9 @@ function attachEvents(provider: Eip1193Provider): void {
 }
 
 /**
- * Drops every local handle and every piece of session evidence. Safe to call
- * repeatedly and safe to call when module state is already partially stale.
+ * Drops every local handle, every piece of session evidence and the canonical
+ * account identity. Safe to call repeatedly and safe to call when module state
+ * is already partially stale.
  */
 function clearLocalConnectionState(): void {
   detachEvents();
@@ -386,6 +442,8 @@ function clearLocalConnectionState(): void {
   activeKind = null;
   walletName = null;
   sessionChainEvidence = null;
+  activeAccount = null;
+  activeAccountVerified = false;
 }
 
 /* ------------------------------------------------------------------ */
@@ -397,23 +455,53 @@ function emptyState(notice: WalletConnectorNotice | null): WalletConnectorState 
     kind: null,
     connected: false,
     account: null,
+    accountVerified: false,
     chainId: null,
     walletName: null,
     notice,
   };
 }
 
+/** The canonical validated active account, or null. Never array-derived. */
+export function getActiveAccount(): string | null {
+  return activeAccount;
+}
+
+export function isActiveAccountVerified(): boolean {
+  return activeAccount !== null && activeAccountVerified;
+}
+
 export async function readWalletConnectorState(): Promise<WalletConnectorState> {
   const provider = getActiveProvider();
-  if (!provider) return emptyState(null);
-  const { account, chainId } = await readAccountAndChain(provider);
+  if (!provider) {
+    const pending = accountInvalidationNotice;
+    accountInvalidationNotice = null;
+    return emptyState(pending);
+  }
+  const canonical = activeAccount;
+  if (canonical === null) return emptyState("NO_ACCOUNT");
+
+  /*
+   * The displayed / bound address is ALWAYS the canonical account captured for
+   * this explicit connection. The live read below is a membership proof of that
+   * exact account, never a re-derivation of identity from array order.
+   */
+  const approved = await readApprovedAccounts(provider);
+  if (approved.length > 0 && !approved.includes(canonical)) {
+    invalidateAccountIdentity("ACTIVE_ACCOUNT_CHANGED");
+    const pending = accountInvalidationNotice;
+    accountInvalidationNotice = null;
+    return emptyState(pending);
+  }
+  const chainId = await readLiveChainId(provider);
   return {
     kind: getActiveConnectorKind(),
-    connected: account !== null,
-    account,
+    connected: true,
+    account: canonical,
+    accountVerified: activeAccountVerified,
     chainId,
     walletName: activeKind === "walletconnect" ? walletName : null,
-    notice: account === null ? "NO_ACCOUNT" : null,
+    notice: null,
   };
 }
 
