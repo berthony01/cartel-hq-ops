@@ -194,6 +194,34 @@ const STAGE_COPY: Record<
     explanation:
       "Publishing makes the profile discoverable on the Cartel Network and ready for launch features.",
   },
+  brand_kit: {
+    phase: "Brand & Creative",
+    title: "Brand Kit set up",
+    description: "Save the Brand Kit so every creative surface uses one identity.",
+    to: "/brand-kit",
+    actionLabel: "Set up Brand Kit",
+    explanation:
+      "Your Brand Kit holds the brand name, look and language reused across creative and community surfaces.",
+  },
+  creative_assets: {
+    phase: "Brand & Creative",
+    title: "Creative assets uploaded",
+    description: "Add a logo, mascot or reference image for this project.",
+    to: "/assets",
+    actionLabel: "Upload Creative Assets",
+    explanation:
+      "Upload a logo, mascot or reference image so creative work has real source material to build from.",
+  },
+  sticker_pack: {
+    phase: "Brand & Creative",
+    title: "Sticker pack published",
+    description: "Build and publish a sticker pack for your community.",
+    to: "/sticker-lab",
+    actionLabel: "Create a Sticker Pack",
+    explanation:
+      "Sticker Lab turns your brand assets into a pack you can publish and distribute to the community.",
+  },
+
   launch_created: {
     phase: "Launch",
     title: "Launch created",
