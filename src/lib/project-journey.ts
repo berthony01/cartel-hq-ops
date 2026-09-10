@@ -114,6 +114,33 @@ export type JourneyLaunchFacts = {
   officialContractRegistered: boolean;
 };
 
+/** Brand Kit facts. `null` means "no row"; unavailable is tracked separately. */
+export type JourneyBrandKitFacts = {
+  /** The Brand Kit UI treats brand name as the one required core field. */
+  brandName: string | null;
+};
+
+export type JourneyCreativeAssetFacts = {
+  /** logo / mascot / reference_image — real brand identity assets. */
+  brandAssetCount: number;
+  /** Generated stickers are detail only; they never prove brand setup. */
+  generatedStickerCount: number;
+  otherAssetCount: number;
+};
+
+export type JourneyStickerPackFacts = {
+  /** Active (non-archived) packs only. */
+  activeCount: number;
+  publishedCount: number;
+};
+
+export type JourneyInboxFacts = {
+  repliesEnabled: boolean;
+  newConversationsEnabled: boolean;
+  /** Aggregate only — never member identities. */
+  waitingOnTeamCount: number | null;
+};
+
 export type JourneyInput = {
   readiness: LaunchReadiness;
   launch: JourneyLaunchFacts | null;
@@ -123,7 +150,16 @@ export type JourneyInput = {
   /** Verified PRODUCTION deployments for the primary launch only. */
   verifiedProductionDeployments: number | null;
   deploymentUnavailable: boolean;
+  brandKit: JourneyBrandKitFacts | null;
+  brandKitUnavailable: boolean;
+  creativeAssets: JourneyCreativeAssetFacts | null;
+  creativeAssetsUnavailable: boolean;
+  stickerPacks: JourneyStickerPackFacts | null;
+  stickerPacksUnavailable: boolean;
+  inbox: JourneyInboxFacts | null;
+  inboxUnavailable: boolean;
 };
+
 
 // ---------------------------------------------------------------------------
 // Pure derivation
