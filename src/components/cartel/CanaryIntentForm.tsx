@@ -164,16 +164,28 @@ export function CanaryIntentForm(props: CanaryIntentFormProps) {
 
         <div className="space-y-1.5">
           <Label htmlFor="canary-deployer">Deployer wallet</Label>
-          <Input
-            id="canary-deployer"
-            value={deployerValue}
-            readOnly={deployerLocked}
-            onChange={(event) => {
-              if (deployerLocked) return;
-              props.onDeployer(event.target.value);
-            }}
-            placeholder="0x…"
-          />
+          {deployerLocked ? (
+            <>
+              <div
+                id="canary-deployer"
+                className="break-all rounded-md border border-border bg-surface-raised px-3 py-2 font-mono text-sm leading-relaxed text-foreground"
+              >
+                {deployerValue}
+              </div>
+              <p className="text-[11px] text-muted-foreground">Ends in {deployerValue.slice(-4)}</p>
+            </>
+          ) : (
+            <Input
+              id="canary-deployer"
+              value={deployerValue}
+              readOnly={deployerLocked}
+              onChange={(event) => {
+                if (deployerLocked) return;
+                props.onDeployer(event.target.value);
+              }}
+              placeholder="0x…"
+            />
+          )}
           <p className="text-[11px] text-muted-foreground">
             {attemptDeployer
               ? "Source: existing attempt — immutable and never overwritten."
@@ -184,16 +196,28 @@ export function CanaryIntentForm(props: CanaryIntentFormProps) {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="canary-recipient">Initial recipient</Label>
-          <Input
-            id="canary-recipient"
-            value={recipientValue}
-            readOnly={recipientLocked}
-            onChange={(event) => {
-              if (recipientLocked) return;
-              props.onRecipient(event.target.value);
-            }}
-            placeholder="0x…"
-          />
+          {recipientLocked ? (
+            <>
+              <div
+                id="canary-recipient"
+                className="break-all rounded-md border border-border bg-surface-raised px-3 py-2 font-mono text-sm leading-relaxed text-foreground"
+              >
+                {recipientValue}
+              </div>
+              <p className="text-[11px] text-muted-foreground">Ends in {recipientValue.slice(-4)}</p>
+            </>
+          ) : (
+            <Input
+              id="canary-recipient"
+              value={recipientValue}
+              readOnly={recipientLocked}
+              onChange={(event) => {
+                if (recipientLocked) return;
+                props.onRecipient(event.target.value);
+              }}
+              placeholder="0x…"
+            />
+          )}
           <p className="text-[11px] text-muted-foreground">
             {attemptRecipient
               ? "Source: existing attempt — immutable and never overwritten."
