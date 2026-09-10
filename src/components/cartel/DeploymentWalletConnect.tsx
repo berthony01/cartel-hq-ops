@@ -483,6 +483,15 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
         <ReadoutLine label={"Session"} value={account ? "Connected" : "Disconnected"} />
         <ReadoutLine label={"Wallet state"} value={status} />
         <ReadoutLine label={"Wallet address"} value={account ?? "—"} />
+        {/*
+          Visible identity proof. "VERIFIED CURRENT SESSION" appears only when
+          the connector proved this exact account for the current explicit
+          connection; it is never shown for an inferred or unproven account.
+        */}
+        <ReadoutLine
+          label={"Selected account"}
+          value={!account ? "—" : accountVerified ? "VERIFIED CURRENT SESSION" : "UNVERIFIED"}
+        />
         <ReadoutLine label={"Expected deployer"} value={expectedDeployer ?? "—"} />
         <ReadoutLine
           label={"Account check"}
