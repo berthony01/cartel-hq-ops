@@ -158,6 +158,8 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
     launch: { id: "l1", status: "LIVE", scheduleSet: true, officialContractRegistered: false },
     activeWatchers: 5,
     verifiedProductionDeployments: 1,
+    ...completeCreative,
+
   });
   check(
     "J4",
