@@ -1,56 +1,64 @@
-# Verify and finalize — read-only diagnosis and minimal fix proposal
+# Wallet Identity Mismatch — Read-Only Audit (Mainnet Canary console)
 
-HEAD `c95bd02c63bc02fd7c4a99d628968154fd3c7f97`, tree clean. No file, DB, wallet, or transaction action taken. RPC endpoint never printed.
+HEAD `54866be3246495553a1dea07a83a33ae1c40552c` ("Harden wallet identity gating"), `git status` clean. No files edited, no migration, no secret, no transaction, no publish during this audit.
 
-## 1. On-chain evidence reproduced (read-only managed RPC)
+## A. Root cause
 
-Every check the verifier performs passes on chain for tx `0xa9979a94…d6ae`:
+Two distinct defects, both in the console, none in the wallet layer.
 
-- chain id `0x1237` = 4663 (production)
-- transaction: `from 0xe5b2…d617`, `to = null` (contract creation), `value 0x0`, init code present
-- receipt: `status 0x1`, contract `0xef60997969d865c9542f3ea8dd9794e842038873`, block `0x385ee61` (59108961), block hash `0xf00ade04…8bc0`
-- deployment-block re-read returns the identical block hash (no reorg)
-- runtime code keccak256 = `0xcac530c4300d48804d9707b87f0ab52e91ba7b2ced97bc84e5a377ae702c10c0`, which equals the frozen `CARTEL_FIXED_ERC20_RUNTIME_BYTECODE_HASH` exactly
-- token reads: `decimals = 18`, `totalSupply = 1000e18`, name/symbol return normally
-- finalized head `0x38628ad` (59122349) is far past the deployment block, so managed finality is FINALIZED, not pending
-
-Conclusion: the chain side is fully valid. Nothing on chain can explain a SUBMITTED row with no evidence — the verifier either never ran to completion or threw.
-
-## 2. Why the UI "did nothing" (confirmed defect)
-
-`useBusy.run()` in `src/components/cartel/CanaryReadout.tsx` wraps the action in `try { await fn() } finally { setBusy(null) }` — there is **no catch**. The Verify handler in `src/routes/_authenticated/mainnet-canary.tsx` is:
+**A1 — CONFIRMED attempts are treated as live "existing attempts".**
+`src/lib/chain-mainnet-canary.functions.ts` → `readCanaryExistingAttempt`:
 
 ```
-setTail(await verify({ data: { deploymentId: activeDeploymentId } }));
-note("Verifier run.");
+const TERMINAL_ATTEMPT_STATUSES = ["FAILED", "ABANDONED"]
 ```
 
-If the server function throws, `setTail` and `note` are both skipped, the spinner clears, and the failure becomes an unhandled promise rejection visible only in the browser console. The operator sees an exactly silent button. This applies to every stage handler, not just Verify.
+`CONFIRMED` is not in that list, so the query returns the newest non-FAILED/non-ABANDONED row. For launch `bade8faa` that is attempt 2 (`11381a8c`, status `CONFIRMED`). The route (`src/routes/_authenticated/mainnet-canary.tsx`) then feeds `existingAttempt.deployerAddress` / `existingAttempt.tokenRecipient` into `CanaryIntentForm` as `attemptBoundDeployer` / `attemptBoundRecipient`, and `CanaryIntentForm` renders those read-only with "existing attempt — immutable". So a finished historical deployment is presented as current editable-launch intent, showing recipient `0xf95f…6485` next to deployer `0xe5b2…d617`.
 
-## 3. Where the verifier throws rather than returning a notice
+Data path: table `launch_chain_deployments` columns `status`, `deployer_address`, `token_recipient`, filtered by `launch_id`, `chain_id=4663`, `network_environment='PRODUCTION'`, `deployment_kind='FIXED_SUPPLY_ERC20'`. No RPC involved in the read.
 
-`verifyMainnetChainDeployment` returns structured `notice` codes for every chain/provider uncertainty, but it **throws** in three places:
+**A2 — Launch switching does not reset per-launch state.**
+In `mainnet-canary.tsx`, `onSelectLaunch` only sets `name` and `symbol`. It does **not** clear `deployer`, `recipient`, `supply`, `intent`, `deploymentId`, `authorizationId`, `authorizationExpiresAt`, `armPhrase`, `armSuccess`, `claimSuccess`, `quote`, `preflight`, `txHash`. Consequences:
 
-1. `Invalid deployment id` — input validator (not applicable here; persist used the same id).
-2. `Not authorized` — the RLS read of `launch_chain_deployments` returned an error or no row.
-3. `Unsupported deployment artifact` — the row-pin block: chain id, `network_environment`, `deployment_kind`, `artifact_id`, `token_decimals`, `token_name`, `token_symbol`, `token_total_supply_text` (digits only), `token_recipient` and `deployer_address` must all be present and exact on the row.
+- `activeDeploymentId = deploymentId ?? existingAttempt?.deploymentId` can still hold the *previous* launch's deployment id after switching — presign/ARM/CLAIM would target the wrong launch.
+- `intent` built for launch X survives into launch Y and would be submitted by "Create production attempt".
+- `CanaryIntentForm.syncBinding` only re-runs on wallet events (`useEffect` deps `[syncBinding]`, which is stable), not when `attemptBound*` props change, so after leaving a launch that had an attempt, the previously bound/typed deployer and recipient remain in form state.
 
-Given the row exists (persist succeeded against it) and the chain evidence matches, the overwhelmingly likely throw point is **(3)**: one or more of the pinned token columns on deployment `11381a8c…` is null or not in the expected shape, so the verifier aborts before any RPC read and before any state write. A secondary, less likely possibility is that the verifier ran, reached the PENDING apply, and the RPC refused the `SUBMITTED → PENDING` transition — but that path returns `STATE_WRITE_FAILED_RETRYABLE` in the readout, which the operator did not see, which again points at a throw.
+## B. Fabricated addresses?
 
-This cannot be narrowed further without reading the deployment row; DB access was out of scope for this turn.
+None. `rg` over `src/` and `scripts/` finds no hardcoded EOA addresses — only the zero address, artifact bytecode/hashes, and `0x1111…`/`0x2222…` test fixtures in the regression script. Every unexpected address is persisted historical DB data:
 
-## 4. Root cause
+- attempt 1 `685300e1` ABANDONED — deployer `0xc23b…9245`, recipient `0xf95f…6485`
+- attempt 2 `11381a8c` CONFIRMED — deployer `0xe5b2…d617`, recipient `0xf95f…6485`, tx `0xa997…d6ae`, contract `0xef60…8873`
 
-Two independent defects, both real:
+## C. Was attempt 2's recipient actually committed on chain?
 
-- **A (visibility, certain):** thrown server errors in the canary console are silently swallowed by `useBusy`, so a failing Verify is indistinguishable from a no-op.
-- **B (behaviour, near-certain):** `verifyMainnetChainDeployment` throws on the row-pin check instead of returning a diagnostic notice, so an incomplete/mismatched deployment row produces a bare 500 with no indication of which pin failed.
+Yes. Prior read-only RPC evidence for contract `0xef60…8873` on chain 4663 showed total supply `1000e18` held entirely by `0xf95f…6485`. Attempt 2's recipient is immutable historical truth and must never be edited or "corrected" — it predates the later deployer==recipient canary rule.
 
-## 5. Minimal fix proposal (not applied)
+## D. Correct behavior for a NEW unsubmitted attempt
 
-1. `src/components/cartel/CanaryReadout.tsx` — add `catch` to `useBusy.run`, storing a sanitized message so the caller can surface it. Presentation only; no change to gating or ordering.
-2. `src/routes/_authenticated/mainnet-canary.tsx` — every `run(...)` handler reports the caught error via `note()` and `setTail({ error: message })`. No new server calls, no auto-advance, no retry.
-3. `src/lib/chain-mainnet-verify.functions.ts` — replace the `Unsupported deployment artifact` throw with a structured fail-closed return (`result.notice = "ROW_PIN_MISMATCH:<field>"`), naming only the failing field name, no values. Still refuses all chain reads and all writes — identical safety, diagnosable outcome.
-4. Before or alongside the fix: a read-only inspection of deployment row `11381a8c…` to confirm which pinned column is missing, and whether the recorded `status` must be advanced by the persist/verify RPC contract rather than by the verifier.
+With a verified connected wallet on chain 4663 and no *live* attempt: deployer and recipient are both bound to the validated connected account, read-only, and any historical CONFIRMED/FAILED/ABANDONED row is shown only as history — never as the source of the new intent. Historical identity may never prefill or silently override current wallet identity.
 
-Nothing in this proposal touches presign/arm/claim/send-window/send, liquidity, secrets, migrations, or publication.
+## E. Minimal surgical fix (proposed, not applied)
+
+1. `chain-mainnet-canary.functions.ts`: treat `CONFIRMED` (and any other terminal state) as terminal for the *blocking* lookup; return it separately as `historicalAttempt` (read-only display) rather than `attempt`. Keep creation blocked only by genuinely live attempts, and keep the fail-closed unverified path.
+2. `mainnet-canary.tsx`: on launch change, reset all per-launch state listed in A2 (deployer, recipient, supply, intent, deploymentId, authorizationId/expiry, arm/claim flags, quote, preflight, txHash, tail).
+3. `CanaryIntentForm.tsx`: re-run `syncBinding` when `attemptBoundDeployer` / `attemptBoundRecipient` change, so releasing an attempt binding immediately re-binds to the validated connected wallet or clears.
+
+No DB writes, no migration, no change to presign/ARM/CLAIM/send/verify semantics.
+
+## F. UI distinction
+
+Yes. The console should render two clearly separate blocks: **CURRENT CONNECTED WALLET** (validated session identity, used for any new attempt) and **HISTORICAL ATTEMPT IDENTITY** (read-only, per attempt, with status). When a *live* attempt's immutable deployer differs from the connected account, fail closed: block the send path and state the mismatch, exactly as the pre-send handoff already does — but never bind or display historical identity as current intent.
+
+## G. Verification tests to add
+
+1. Lookup: a `CONFIRMED`-only launch returns `attempt: null` (creation unblocked) and surfaces history separately; a `SUBMITTED`/live row still blocks.
+2. Switching launch X→Y clears deployer, recipient, supply, intent, deploymentId, authorizationId, arm/claim flags — asserted as an exact field list tripwire.
+3. `activeDeploymentId` can never be a deployment id belonging to a different launch id.
+4. Form re-binds to the validated connected account when `attemptBound*` transitions from set to null, and never copies a historical recipient into a new intent.
+5. Server rejects `tokenRecipient !== deployerAddress` before the create RPC (existing assertion, keep).
+6. No new attempt is created with a deployer that differs from the validated connected account while a wallet is connected.
+7. No path added that mutates or corrects any historical `launch_chain_deployments` row.
+
+STOP — audit only, nothing built.
