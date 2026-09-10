@@ -152,7 +152,37 @@ function CanaryConsole() {
    * account and never changes a network. It only re-enables the READ-ONLY
    * existing-attempt lookup, whose immutable deployer/recipient still win.
    */
+  /**
+   * CROSS-LAUNCH LEAK GUARD. Every launch-scoped value is dropped before the
+   * newly selected launch is applied, so no deployment id, authorization,
+   * intent, wallet identity, envelope or result from launch X can ever survive
+   * into launch Y. This clears local UI state only: it mutates nothing, calls
+   * nothing and never touches a persisted row.
+   */
+  const resetLaunchScopedState = () => {
+    setDeployer("");
+    setRecipient("");
+    setSupply("");
+    setIntent(null);
+    setIntentError(null);
+    setDeploymentId(null);
+    setAuthorizationId(null);
+    setAuthorizationExpiresAt(null);
+    setArmPhrase("");
+    setArmSuccess(false);
+    setClaimSuccess(false);
+    setQuote(null);
+    setClaimed(null);
+    setArmed(null);
+    setWindowResult(null);
+    setPreflight(null);
+    setSendResult(null);
+    setTxHash(null);
+    setTail(null);
+  };
+
   const selectLaunch = (id: string) => {
+    resetLaunchScopedState();
     setLaunchId(id);
     if (typeof window === "undefined") return;
     try {
@@ -184,10 +214,14 @@ function CanaryConsole() {
       }
       return;
     }
+    // A restored selection is a launch change too: start from clean state.
+    resetLaunchScopedState();
     setLaunchId(row.id);
     setName(row.token_name ?? "");
     setSymbol(deriveCanaryOnchainSymbol(row.ticker));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [launches.data, launchId]);
+
 
   /**
    * READ-ONLY awareness of an existing nonterminal production attempt for the
