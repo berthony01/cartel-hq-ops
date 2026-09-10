@@ -46,6 +46,10 @@ const verifyApplySrc = read(VERIFY_APPLY);
 const appkitSrc = read(APPKIT);
 const appkitCode = stripComments(appkitSrc);
 const pkgSrc = read(PKG);
+/** The panel's ONLY mount/subscription effect, extracted once and reused. */
+const panelMountEffect = /useEffect\(\(\) => \{[\s\S]*?\}, \[refresh, refreshAvailability\]\);/.exec(
+  panelCode,
+)?.[0];
 
 let failures = 0;
 function check(id: string, ok: boolean, detail: string) {
