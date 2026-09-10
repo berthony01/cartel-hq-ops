@@ -589,6 +589,12 @@ function CanaryConsole() {
             attempt is already loaded above as the active deployment context, with its immutable
             identity.
           </p>
+        ) : confirmedDeployment ? (
+          <p className="mt-2 text-xs text-danger">
+            Blocked: this launch already has a confirmed production deployment (attempt #
+            {confirmedDeployment.attemptNumber}). Creating another production attempt is refused
+            here to prevent a duplicate mainnet deployment.
+          </p>
         ) : existingUnverified ? (
           <p className="mt-2 text-xs text-danger">
             Blocked: the existing-attempt check has not returned a verified result
