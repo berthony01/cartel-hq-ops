@@ -390,23 +390,51 @@ function invalidateAccountIdentity(notice: WalletConnectorNotice): void {
   emit();
 }
 
+/**
+ * FAIL-CLOSED RE-PROOF of the canonical account against the LIVE session.
+ * Returns null when the canonical account is still proven, or the notice that
+ * must invalidate the connection otherwise. It never picks a replacement
+ * account, never connects, never signs and never sends.
+ *
+ * The proof requires ALL of:
+ *   - a NON-EMPTY, readable approved-account list containing the canonical
+ *     account (an empty or unreadable list is a DISAPPEARED proof, not a pass);
+ *   - for AppKit/WalletConnect connections, AppKit's CURRENT account (and its
+ *     CAIP-10 form when present) still naming the canonical account;
+ *   - when AppKit reports no current account, an UNAMBIGUOUS single approved
+ *     account. Several approved accounts with no current-account signal are
+ *     ambiguous and fail closed.
+ */
+async function proveCanonicalAccount(
+  provider: Eip1193Provider,
+  canonical: string,
+): Promise<WalletConnectorNotice | null> {
+  const approved = await readApprovedAccounts(provider);
+  // Empty or unreadable list: the identity proof no longer exists.
+  if (approved.length === 0) return "ACTIVE_ACCOUNT_CHANGED";
+  if (!approved.includes(canonical)) return "ACTIVE_ACCOUNT_CHANGED";
+
+  if (activeKind !== "walletconnect") return null;
+
+  const { getAppKitAccountSnapshot } = await import("./reown-appkit-wallet");
+  const snapshot = getAppKitAccountSnapshot();
+  const current = snapshot?.address ? lower(snapshot.address) : null;
+  const currentCaip = caipAddress(snapshot?.caipAddress ?? null);
+  if (current === null && currentCaip === null) {
+    // No current-account signal: only a single approved account is unambiguous.
+    return approved.length === 1 ? null : "WALLET_ACCOUNT_AMBIGUOUS";
+  }
+  if (current !== null && current !== canonical) return "ACTIVE_ACCOUNT_CHANGED";
+  if (currentCaip !== null && currentCaip !== canonical) return "ACTIVE_ACCOUNT_CHANGED";
+  return null;
+}
+
 async function revalidateActiveAccount(): Promise<void> {
   const provider = activeProvider;
   const canonical = activeAccount;
   if (!provider || canonical === null) return;
-  const approved = await readApprovedAccounts(provider);
-  if (approved.length > 0 && !approved.includes(canonical)) {
-    invalidateAccountIdentity("ACTIVE_ACCOUNT_CHANGED");
-    return;
-  }
-  if (activeKind === "walletconnect") {
-    const { getAppKitAccountSnapshot } = await import("./reown-appkit-wallet");
-    const snapshot = getAppKitAccountSnapshot();
-    const current = snapshot?.address ? lower(snapshot.address) : null;
-    if (current !== null && current !== canonical) {
-      invalidateAccountIdentity("ACTIVE_ACCOUNT_CHANGED");
-    }
-  }
+  const notice = await proveCanonicalAccount(provider, canonical);
+  if (notice !== null) invalidateAccountIdentity(notice);
 }
 
 function attachEvents(provider: Eip1193Provider): void {
@@ -431,12 +459,39 @@ function attachEvents(provider: Eip1193Provider): void {
 }
 
 /**
+ * ONE namespace-scoped AppKit current-account subscription for the active
+ * WalletConnect connection. It only ever RE-PROVES and invalidates; it can
+ * never rebind the deployment identity to a newly selected account.
+ */
+let appKitAccountUnsubscribe: (() => void) | null = null;
+
+async function attachAppKitAccountWatch(): Promise<void> {
+  detachAppKitAccountWatch();
+  const { subscribeAppKitAccount } = await import("./reown-appkit-wallet");
+  appKitAccountUnsubscribe = subscribeAppKitAccount(() => {
+    void revalidateActiveAccount().finally(() => emit());
+  });
+}
+
+function detachAppKitAccountWatch(): void {
+  const off = appKitAccountUnsubscribe;
+  appKitAccountUnsubscribe = null;
+  if (!off) return;
+  try {
+    off();
+  } catch {
+    // Unsubscribe failures are never fatal and never surfaced.
+  }
+}
+
+/**
  * Drops every local handle, every piece of session evidence and the canonical
  * account identity. Safe to call repeatedly and safe to call when module state
  * is already partially stale.
  */
 function clearLocalConnectionState(): void {
   detachEvents();
+  detachAppKitAccountWatch();
   walletConnectProvider = null;
   activeProvider = null;
   activeKind = null;
