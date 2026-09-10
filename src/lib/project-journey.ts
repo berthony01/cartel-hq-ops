@@ -11,7 +11,12 @@ import {
   type LaunchRow,
 } from "@/lib/launch-control";
 import { listChainDeployments } from "@/lib/chain-launcher";
-import { evaluateLaunchDeploymentEvidence } from "@/lib/launch-verified-eligibility";
+import {
+  evaluateLaunchDeploymentEvidence,
+  type LaunchEvidenceEvaluation,
+} from "@/lib/launch-verified-eligibility";
+import { evaluateProductionFinality } from "@/lib/launch-production-finality";
+import type { DeploymentEvidenceInput } from "@/lib/launch-evidence-checks";
 import { supabase } from "@/integrations/supabase/client";
 import { listWorkspaceAssets } from "@/lib/media";
 import { listWorkspacePacks } from "@/lib/sticker-packs";
@@ -115,7 +120,18 @@ export type JourneyLaunchFacts = {
   id: string;
   status: string;
   scheduleSet: boolean;
-  officialContractRegistered: boolean;
+  officialContractAddress: string | null;
+  officialContractDeploymentId: string | null;
+  contractRegisteredAt: string | null;
+};
+
+export type JourneyDeploymentEvidenceFacts = {
+  productionDeploymentCount: number;
+  verifiedProductionCount: number;
+  managedFinalizedVerifiedCount: number;
+  deploymentAmbiguous: boolean;
+  registrationEligibleCount: number;
+  registrationAmbiguous: boolean;
 };
 
 /** Brand Kit facts. `null` means "no row"; unavailable is tracked separately. */
@@ -151,8 +167,8 @@ export type JourneyInput = {
   /** Aggregate Launch Watch counts, or null when not readable / not opened. */
   activeWatchers: number | null;
   watchUnavailable: boolean;
-  /** Verified PRODUCTION deployments for the primary launch only. */
-  verifiedProductionDeployments: number | null;
+  /** Read-only evidence summary for the primary launch only. */
+  deploymentEvidence: JourneyDeploymentEvidenceFacts | null;
   deploymentUnavailable: boolean;
   brandKit: JourneyBrandKitFacts | null;
   brandKitUnavailable: boolean;
@@ -353,6 +369,34 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
   const launch = input.launch;
   const statusIndex = launch ? launchStatusIndex(toLaunchStatus(launch.status)) : -1;
   const liveIndex = launchStatusIndex("LIVE");
+  const normalizedLaunchStatus = launch ? toLaunchStatus(launch.status) : null;
+
+  const registrationFields = launch
+    ? [
+        launch.officialContractAddress,
+        launch.officialContractDeploymentId,
+        launch.contractRegisteredAt,
+      ]
+    : [];
+  const registrationFieldCount = registrationFields.filter(
+    (value) => typeof value === "string" && value.trim() !== "",
+  ).length;
+  const registrationComplete = registrationFieldCount === 3;
+  const registrationInconsistent = registrationFieldCount > 0 && registrationFieldCount < 3;
+
+  const deployment = input.deploymentEvidence;
+  const deploymentComplete =
+    !!deployment &&
+    deployment.verifiedProductionCount === 1 &&
+    deployment.managedFinalizedVerifiedCount === 1 &&
+    !deployment.deploymentAmbiguous;
+  const registrationActionable =
+    !!launch &&
+    !registrationComplete &&
+    !registrationInconsistent &&
+    !input.deploymentUnavailable &&
+    deployment?.registrationEligibleCount === 1 &&
+    !deployment.registrationAmbiguous;
 
   const watchOpen = stepDone("launch_watch_open");
 
@@ -524,30 +568,44 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
         ? "waiting"
         : input.deploymentUnavailable
           ? "unavailable"
-          : (input.verifiedProductionDeployments ?? 0) > 0
+          : deploymentComplete
             ? "complete"
             : "waiting",
       // Production deployment is an owner-controlled, manually gated operation.
       // It is reported here, never proposed as a next action.
       actionable: false,
       detail:
-        input.deploymentUnavailable || input.verifiedProductionDeployments === null
+        input.deploymentUnavailable || deployment === null
           ? null
-          : input.verifiedProductionDeployments > 0
-            ? "Verified production deployment on record"
-            : "No verified production deployment yet",
+          : deployment.deploymentAmbiguous
+            ? "Multiple verified production deployments require review"
+            : deployment.productionDeploymentCount === 0
+              ? "No production deployment evidence yet"
+              : deployment.verifiedProductionCount === 0
+                ? "Production deployment evidence is not verified"
+                : deployment.managedFinalizedVerifiedCount === 0
+                  ? "Production evidence verified · managed finality pending"
+                  : "Verified production deployment · managed finality confirmed",
     },
     {
       key: "official_contract",
       status: !launch
         ? "waiting"
-        : launch.officialContractRegistered
+        : registrationInconsistent
+          ? "unavailable"
+          : registrationComplete
           ? "complete"
-          : (input.verifiedProductionDeployments ?? 0) > 0
+          : registrationActionable
             ? "action"
             : "waiting",
-      actionable: !!launch && (input.verifiedProductionDeployments ?? 0) > 0,
-      detail: launch?.officialContractRegistered ? "Registered" : null,
+      actionable: registrationActionable,
+      detail: registrationComplete
+        ? "Registered"
+        : registrationInconsistent
+          ? "Recorded registration fields are incomplete"
+          : deployment?.registrationAmbiguous
+            ? "Multiple eligible contracts require review"
+            : null,
     },
     {
       key: "launch_live",
@@ -555,11 +613,13 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
         ? "waiting"
         : statusIndex >= liveIndex
           ? "complete"
-          : launch.officialContractRegistered
+          : registrationComplete
             ? "action"
             : "waiting",
-      actionable: !!launch && launch.officialContractRegistered,
-      detail: null,
+      actionable: !!launch && registrationComplete,
+      detail: normalizedLaunchStatus
+        ? `Lifecycle: ${normalizedLaunchStatus.toLowerCase().replaceAll("_", " ")}`
+        : null,
     },
   ];
 
@@ -623,7 +683,46 @@ export function launchFactsOf(row: LaunchRow): JourneyLaunchFacts {
     id: row.id,
     status: row.status,
     scheduleSet: hasSchedule(row),
-    officialContractRegistered: Boolean(row.official_contract_address),
+    officialContractAddress: row.official_contract_address,
+    officialContractDeploymentId: row.official_contract_deployment_id,
+    contractRegisteredAt: row.contract_registered_at,
+  };
+}
+
+/**
+ * Compresses existing pure evidence evaluations into journey-only facts.
+ * Rows are explicitly re-scoped to the selected launch before finality is read.
+ */
+export function deriveJourneyDeploymentEvidenceFacts(
+  evaluation: LaunchEvidenceEvaluation,
+  rows: readonly DeploymentEvidenceInput[],
+): JourneyDeploymentEvidenceFacts {
+  const scopedProductionRows = rows.filter(
+    (row) =>
+      row.launch_id === evaluation.launchId && row.network_environment === "PRODUCTION",
+  );
+  const scopedIds = new Set(scopedProductionRows.map((row) => row.id));
+  const verifiedProduction = evaluation.deployments.filter(
+    (deployment) =>
+      scopedIds.has(deployment.deploymentId) &&
+      deployment.environment === "PRODUCTION" &&
+      deployment.evidenceVerified,
+  );
+  const finalizedVerifiedIds = new Set(
+    scopedProductionRows
+      .filter((row) => evaluateProductionFinality(row).finalityOk)
+      .map((row) => row.id),
+  );
+
+  return {
+    productionDeploymentCount: scopedProductionRows.length,
+    verifiedProductionCount: verifiedProduction.length,
+    managedFinalizedVerifiedCount: verifiedProduction.filter((deployment) =>
+      finalizedVerifiedIds.has(deployment.deploymentId),
+    ).length,
+    deploymentAmbiguous: verifiedProduction.length > 1,
+    registrationEligibleCount: evaluation.eligibleForOfficialRegistration,
+    registrationAmbiguous: evaluation.ambiguous,
   };
 }
 
@@ -650,7 +749,7 @@ export async function fetchProjectJourney(workspaceId: string): Promise<ProjectJ
     }
   }
 
-  let verifiedProductionDeployments: number | null = null;
+  let deploymentEvidence: JourneyDeploymentEvidenceFacts | null = null;
   let deploymentUnavailable = false;
   if (primaryRow) {
     try {
@@ -667,9 +766,7 @@ export async function fetchProjectJourney(workspaceId: string): Promise<ProjectJ
         },
         rows,
       );
-      verifiedProductionDeployments = evaluation.deployments.filter(
-        (d) => d.environment === "PRODUCTION" && d.evidenceVerified,
-      ).length;
+      deploymentEvidence = deriveJourneyDeploymentEvidenceFacts(evaluation, rows);
     } catch {
       deploymentUnavailable = true;
     }
@@ -748,7 +845,7 @@ export async function fetchProjectJourney(workspaceId: string): Promise<ProjectJ
     launch,
     activeWatchers,
     watchUnavailable,
-    verifiedProductionDeployments,
+    deploymentEvidence,
     deploymentUnavailable,
     brandKit,
     brandKitUnavailable,
