@@ -71,6 +71,12 @@ const NOTICE_COPY: Record<WalletConnectorNotice, string> = {
     "Diagnostic code REOWN_APPKIT_INIT_FAILED — the wallet chooser loaded but could not start. Nothing was connected. Report this code.",
   REOWN_CONNECT_FAILED:
     "Diagnostic code REOWN_CONNECT_FAILED — the wallet chooser could not be opened. Nothing was connected. Report this code.",
+  STALE_SESSION_TEARDOWN_FAILED:
+    "Diagnostic code STALE_SESSION_TEARDOWN_FAILED — a previous wallet session could not be proven closed, so this connection attempt was refused and no wallet address is shown. Nothing was connected and nothing advanced. Reload this page and connect again.",
+  STALE_SESSION_REUSE_REFUSED:
+    "Diagnostic code STALE_SESSION_REUSE_REFUSED — an earlier wallet connection was still present, and it can never stand in for the wallet you just chose. Nothing was connected and no address is shown. Reload this page and connect again.",
+  WALLET_ACCOUNT_MISMATCH:
+    "Diagnostic code WALLET_ACCOUNT_MISMATCH — the wallet reported conflicting account information for this session, so it was disconnected and no address is shown. Nothing was connected and nothing advanced. Connect again and confirm a single account in the wallet.",
   WALLETCONNECT_TIMEOUT: `The wallet never completed the connection within ${Math.round(
     WALLETCONNECT_CONNECT_TIMEOUT_MS / 1000,
   )} seconds, so the attempt was cancelled and nothing was connected. This usually means the wallet hand-off could not return to this page. Open CARTEL HQ in a standalone browser tab, or inside the wallet's own browser, and choose the wallet again.`,
@@ -175,6 +181,9 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
     setNotice(null);
     setSwitchNotice(null);
     setChainUnavailable(false);
+    // No previously shown address may survive into a new connect attempt.
+    setWalletLabel(null);
+    clearInspection();
     try {
       let result = await connectWalletConnect();
       // Fallback ONLY when the chooser itself is unavailable, and only to the
