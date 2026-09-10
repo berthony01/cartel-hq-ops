@@ -1399,10 +1399,12 @@ check(
 check(
   "B8",
   // NEGATIVE TRIPWIRE: invalidation never substitutes another account, and this
-  // hardening adds no execution surface.
-  !/activeAccount = approved\[|activeAccount = accounts\[|activeAccount = current;/.test(
-    connectorCode,
-  ) &&
+  // hardening adds no execution surface. The ONLY two canonical assignments are
+  // the injected single-approved-account case (unambiguous by construction) and
+  // the WalletConnect account proven from AppKit's current-account signal.
+  (connectorCode.match(/activeAccount = [^n][^;]*;/g) ?? []).join("|") ===
+    "activeAccount = approved[0] as string;|activeAccount = selectedAccount;" &&
+    !/activeAccount = current|activeAccount = accounts\[/.test(connectorCode) &&
     !/eth_sendTransaction|eth_sendRawTransaction|wallet_addEthereumChain|personal_sign/.test(
       connectorCode.slice(
         connectorCode.indexOf("async function proveCanonicalAccount"),
