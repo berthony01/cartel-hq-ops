@@ -20,7 +20,6 @@ import {
   ChecklistRow,
   Readout,
   ReadoutLine,
-  SEND_PHRASE,
   useArmWindow,
   useBusy,
 } from "@/components/cartel/CanaryReadout";
