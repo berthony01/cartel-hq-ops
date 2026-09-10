@@ -509,6 +509,13 @@ export async function readWalletConnectorState(): Promise<WalletConnectorState> 
 /* Connect / disconnect                                                */
 /* ------------------------------------------------------------------ */
 
+/**
+ * INJECTED CONNECT. The canonical account is resolved by UNAMBIGUOUS PROOF:
+ * exactly one approved account may be treated as the operator's selection. When
+ * an injected wallet exposes several approved accounts there is no reliable
+ * "current account" signal from the page, so the attempt FAILS CLOSED with
+ * `WALLET_ACCOUNT_AMBIGUOUS` rather than silently taking the first entry.
+ */
 export async function connectInjected(): Promise<WalletConnectorResult> {
   const provider = readInjectedProvider();
   if (!provider) {
@@ -523,11 +530,29 @@ export async function connectInjected(): Promise<WalletConnectorResult> {
       state: emptyState("CONNECTION_REJECTED_OR_FAILED"),
     };
   }
+  const approved = await readApprovedAccounts(provider);
+  if (approved.length === 0) {
+    clearLocalConnectionState();
+    emit();
+    return { ok: false, notice: "NO_ACCOUNT", state: emptyState("NO_ACCOUNT") };
+  }
+  if (approved.length > 1) {
+    clearLocalConnectionState();
+    emit();
+    return {
+      ok: false,
+      notice: "WALLET_ACCOUNT_AMBIGUOUS",
+      state: emptyState("WALLET_ACCOUNT_AMBIGUOUS"),
+    };
+  }
   activeProvider = provider;
   activeKind = "injected";
   walletName = null;
   sessionChainEvidence = null;
+  activeAccount = approved[0] as string;
+  activeAccountVerified = true;
   attachEvents(provider);
+
   const state = await readWalletConnectorState();
   emit();
   return { ok: state.connected, notice: state.notice, state };
