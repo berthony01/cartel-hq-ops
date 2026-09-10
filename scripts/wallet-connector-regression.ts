@@ -410,9 +410,10 @@ check(
   "L5",
   // RE-PINNED: the live chain read is now hoisted once for the whole
   // post-connect proof block; it is still a real `eth_chainId` provider read.
-  /const liveChain = normalizeChainId\(\s*\n?\s*await provider\.request\(\{ method: "eth_chainId" \}\)/.test(
-    wcBody,
-  ) &&
+  // RE-PINNED: the live chain read is hoisted into `readLiveChainId`, which is
+  // still a real `eth_chainId` provider read and nothing weaker.
+  /const liveChain = await readLiveChainId\(provider\);/.test(wcBody) &&
+    /async function readLiveChainId[\s\S]{0,200}method: "eth_chainId"/.test(connectorCode) &&
     /appKitChain === ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL &&/.test(wcBody) &&
     /liveChain === ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL/.test(wcBody),
   "an injected AppKit connection records chain evidence only when AppKit and a live eth_chainId both prove 4663",
@@ -949,9 +950,13 @@ check(
 );
 check(
   "U2",
+  // RE-PINNED: the panel now compares the connector's canonical validated
+  // account with `expectedDeployer` itself, so the dependency is still real.
   /const refresh = useCallback\([\s\S]*?\}, \[[^\]]*expectedDeployer[^\]]*\]\);/.test(panelCode) &&
     /if \(active\) void refresh\(\);/.test(panelCode) &&
-    /inspectMainnetWalletForHandoff\(expectedDeployer \?\? ""\)/.test(panelCode),
+    /setAccountMatches\(state\.account !== null && expected !== null && state\.account === expected\);/.test(
+      panelCode,
+    ),
   "the read-only inspection depends on expectedDeployer, so a changed expectation cannot show a stale verdict",
 );
 check(
@@ -1052,8 +1057,11 @@ check(
     !/disconnectAppKit|clearLocalConnectionState/.test(
       postConnectBody.slice(postConnectBody.indexOf("let evidence")),
     ) &&
-    (postConnectBody.match(/failClosed\("(NO_ACCOUNT|WALLET_ACCOUNT_MISMATCH)"\)/g) ?? []).length ===
-      3,
+    (
+      postConnectBody.match(
+        /failClosed\("(NO_ACCOUNT|WALLET_ACCOUNT_MISMATCH|WALLET_ACCOUNT_AMBIGUOUS)"\)/g,
+      ) ?? []
+    ).length === 5,
   "D — Gate 1 connect tears down only for a failed current-session identity proof, never for being on another EVM network",
 );
 
@@ -1126,12 +1134,13 @@ check(
 }
 check(
   "W5",
-  /const liveAccountRaw = await provider\s*\n?\s*\.request\(\{ method: "eth_accounts" \}\)/.test(
-    wcBody,
-  ) &&
-    /if \(liveAccount === null\) return await failClosed\("NO_ACCOUNT"\);/.test(wcBody) &&
-    /const appKitAddress = appKit\.getAppKitAddress\(\);/.test(wcBody) &&
-    /lower\(appKitAddress\) !== liveAccount\) \{\s*\n\s*return await failClosed\("WALLET_ACCOUNT_MISMATCH"\);/.test(
+  // RE-PINNED to the STRONGER contract: the live approved-account list is read
+  // as a membership set, an empty list fails closed, and the AppKit current
+  // account (plus its CAIP-10 form) must agree with the selected account.
+  /const approvedAccounts = await readApprovedAccounts\(provider\);/.test(wcBody) &&
+    /if \(approvedAccounts\.length === 0\) return await failClosed\("NO_ACCOUNT"\);/.test(wcBody) &&
+    /const snapshot = appKit\.getAppKitAccountSnapshot\(\);/.test(wcBody) &&
+    /if \(!approvedAccounts\.includes\(selectedAccount\)\) \{\s*\n\s*return await failClosed\("WALLET_ACCOUNT_MISMATCH"\);/.test(
       wcBody,
     ),
   "the live provider account is cross-checked against AppKit's address and disagreement fails closed",
@@ -1141,7 +1150,7 @@ check(
   /const forLiveChain = sessionAccounts\.filter\(\(entry\) => entry\.chainId === liveChain\);/.test(
     wcBody,
   ) &&
-    /forLiveChain\.length > 0 && !forLiveChain\.some\(\(entry\) => entry\.address === liveAccount\)/.test(
+    /forLiveChain\.length > 0 && !forLiveChain\.some\(\(e\) => e\.address === selectedAccount\)/.test(
       wcBody,
     ) &&
     /return await failClosed\("WALLET_ACCOUNT_MISMATCH"\);/.test(wcBody),
