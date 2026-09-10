@@ -422,7 +422,7 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
               variant="outline"
               disabled={busy !== null || embedded}
               onClick={() => {
-                void runConnect();
+                void runChooseAnotherWallet();
               }}
             >
               Choose another wallet
