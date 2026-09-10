@@ -444,7 +444,12 @@ export async function openAppKitConnect(timeoutMs: number): Promise<AppKitConnec
 
     void appKit
       .open({ view: "Connect", namespace: "eip155" })
-      .then(() => tryResolveConnected())
+      .then(() => {
+        // The chooser for THIS attempt is now open: evidence from here on is
+        // the operator's current choice.
+        chooserStarted = true;
+        tryResolveConnected();
+      })
       .catch(() => finish({ status: "failed", notice: "REOWN_CONNECT_FAILED" }));
   });
 }
