@@ -12,6 +12,10 @@ import {
 } from "@/lib/launch-control";
 import { listChainDeployments } from "@/lib/chain-launcher";
 import { evaluateLaunchDeploymentEvidence } from "@/lib/launch-verified-eligibility";
+import { supabase } from "@/integrations/supabase/client";
+import { listWorkspaceAssets } from "@/lib/media";
+import { listWorkspacePacks } from "@/lib/sticker-packs";
+import { getProjectInboxSettings, getProjectInboxSummary } from "@/lib/project-inbox";
 
 /**
  * P1-A — one unified, read-only project journey model.
