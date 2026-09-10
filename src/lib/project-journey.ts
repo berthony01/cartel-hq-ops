@@ -40,6 +40,9 @@ export type JourneyRoute =
 export const JOURNEY_STAGE_KEYS = [
   "project_profile",
   "profile_published",
+  "brand_kit",
+  "creative_assets",
+  "sticker_pack",
   "launch_created",
   "launch_announced",
   "launch_schedule",
@@ -47,6 +50,7 @@ export const JOURNEY_STAGE_KEYS = [
   "telegram_community",
   "launch_welcome",
   "audience",
+  "communications",
   "deployment",
   "official_contract",
   "launch_live",
@@ -56,7 +60,13 @@ export type JourneyStageKey = (typeof JOURNEY_STAGE_KEYS)[number];
 
 export type JourneyStageStatus = "complete" | "action" | "waiting" | "unavailable";
 
-export type JourneyPhase = "Identity" | "Launch" | "Audience" | "Contract";
+export type JourneyPhase =
+  | "Identity"
+  | "Brand & Creative"
+  | "Launch"
+  | "Audience"
+  | "Contract";
+
 
 export type JourneyStage = {
   key: JourneyStageKey;
