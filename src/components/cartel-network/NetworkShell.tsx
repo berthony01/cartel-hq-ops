@@ -56,7 +56,7 @@ export function NetworkShell({ children }: { children: ReactNode }) {
               </Link>
             ))}
             <Button asChild size="sm" className="ml-2">
-              <a href="/">Open CARTEL HQ</a>
+              <Link to="/">Back to CARTEL HQ</Link>
             </Button>
           </nav>
           <Button
