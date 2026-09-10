@@ -248,6 +248,65 @@ export function getAppKitAddress(): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+/**
+ * CURRENT-ACCOUNT SNAPSHOT, taken from the installed AppKit public API
+ * `getAccount("eip155")` (`@reown/appkit@1.8.23`). `address` / `caipAddress` are
+ * AppKit's CURRENT (operator-selected) account for the namespace — NOT an
+ * arbitrary first entry — and `allAccounts` is the namespace's full account
+ * list. Read-only: it connects nothing, opens nothing and touches no wallet.
+ */
+export type AppKitAccountSnapshot = {
+  address: string | null;
+  caipAddress: string | null;
+  allAccounts: string[];
+  isConnected: boolean;
+};
+
+export function getAppKitAccountSnapshot(): AppKitAccountSnapshot | null {
+  const appKit = appKitHandle;
+  if (!appKit) return null;
+  let account: ReturnType<AppKitHandle["getAccount"]>;
+  try {
+    account = appKit.getAccount("eip155");
+  } catch {
+    return null;
+  }
+  if (!account) return null;
+  const allAccounts: string[] = [];
+  for (const entry of account.allAccounts ?? []) {
+    if (entry && typeof entry.address === "string" && entry.address.length > 0) {
+      allAccounts.push(entry.address);
+    }
+  }
+  return {
+    address: typeof account.address === "string" && account.address.length > 0
+      ? account.address
+      : null,
+    caipAddress:
+      typeof account.caipAddress === "string" && account.caipAddress.length > 0
+        ? account.caipAddress
+        : null,
+    allAccounts,
+    isConnected: account.isConnected === true,
+  };
+}
+
+/**
+ * AppKit CURRENT-ACCOUNT SUBSCRIPTION (`subscribeAccount`, namespace-scoped).
+ * Used only to observe an operator account change; it never rebinds anything by
+ * itself — the connector invalidates instead.
+ */
+export function subscribeAppKitAccount(listener: () => void): () => void {
+  const appKit = appKitHandle;
+  if (!appKit) return () => {};
+  try {
+    return appKit.subscribeAccount(() => listener(), "eip155");
+  } catch {
+    return () => {};
+  }
+}
+
+
 export type AppKitConnectOutcome =
   | { status: "connected"; provider: MinimalEip1193 }
   | { status: "rejected" }
