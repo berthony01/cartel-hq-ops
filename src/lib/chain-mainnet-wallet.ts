@@ -1,5 +1,6 @@
 import { MAINNET_DEPLOYMENT_TX_ENABLED, ROBINHOOD_MAINNET_CHAIN_ID } from "./chain-mainnet-registry";
 import {
+  getActiveAccount,
   getActiveProvider,
   getActiveSessionChainEvidence,
   normalizeChainId,
@@ -247,13 +248,20 @@ function inspectionBase(): MainnetWalletInspection {
 async function readAccountAndChain(
   provider: Eip1193Provider,
 ): Promise<{ account: string | null; chainId: string | null }> {
-  let account: string | null = null;
+  /*
+   * CANONICAL ACCOUNT ONLY. The account is the connector's validated active
+   * account for the current explicit connection — never `eth_accounts[0]`.
+   * The live list is used solely as a MEMBERSHIP proof of that exact account;
+   * if it is no longer approved, this guard fails closed with no account.
+   */
+  let account: string | null = getActiveAccount();
   let chainId: string | null = null;
   try {
     const accounts = (await provider.request({ method: "eth_accounts" })) as unknown;
-    if (Array.isArray(accounts) && typeof accounts[0] === "string") {
-      account = lower(accounts[0]);
-    }
+    const approved = Array.isArray(accounts)
+      ? accounts.filter((e): e is string => typeof e === "string").map((e) => lower(e))
+      : [];
+    if (account !== null && approved.length > 0 && !approved.includes(account)) account = null;
   } catch {
     account = null;
   }

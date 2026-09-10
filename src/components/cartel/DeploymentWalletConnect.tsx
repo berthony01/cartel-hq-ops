@@ -15,13 +15,16 @@ import {
   isEmbeddedBrowserContext,
   isInjectedWalletAvailable,
   isWalletConnectConfigured,
+  normalizeChainId,
+  readWalletConnectorState,
   requestRobinhoodChainSwitch,
+  
   subscribeWalletConnector,
   WALLETCONNECT_CONNECT_TIMEOUT_MS,
   type WalletConnectorNotice,
   type WalletSwitchNotice,
 } from "@/lib/wallet-connector";
-import { inspectMainnetWalletForHandoff } from "@/lib/chain-mainnet-wallet";
+
 
 /**
  * P3C-G — MAINNET deployment wallet panel.
@@ -77,6 +80,10 @@ const NOTICE_COPY: Record<WalletConnectorNotice, string> = {
     "Diagnostic code STALE_SESSION_REUSE_REFUSED — an earlier wallet connection was still present, and it can never stand in for the wallet you just chose. Nothing was connected and no address is shown. Reload this page and connect again.",
   WALLET_ACCOUNT_MISMATCH:
     "Diagnostic code WALLET_ACCOUNT_MISMATCH — the wallet reported conflicting account information for this session, so it was disconnected and no address is shown. Nothing was connected and nothing advanced. Connect again and confirm a single account in the wallet.",
+  WALLET_ACCOUNT_AMBIGUOUS:
+    "Diagnostic code WALLET_ACCOUNT_AMBIGUOUS — the wallet exposed several accounts and did not identify which one you selected. CARTEL HQ never guesses an account, so nothing was connected and no address is shown. Leave a single account connected to this site in the wallet, then connect again.",
+  ACTIVE_ACCOUNT_CHANGED:
+    "Diagnostic code ACTIVE_ACCOUNT_CHANGED — the wallet changed its active account, so the connection was dropped rather than silently moving to a different address. Nothing advanced. Connect again and confirm the account you intend to deploy from.",
   WALLETCONNECT_TIMEOUT: `The wallet never completed the connection within ${Math.round(
     WALLETCONNECT_CONNECT_TIMEOUT_MS / 1000,
   )} seconds, so the attempt was cancelled and nothing was connected. This usually means the wallet hand-off could not return to this page. Open CARTEL HQ in a standalone browser tab, or inside the wallet's own browser, and choose the wallet again.`,
@@ -116,6 +123,7 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
   const [chainId, setChainId] = useState<string | null>(null);
   const [accountMatches, setAccountMatches] = useState(false);
   const [chainMatches, setChainMatches] = useState(false);
+  const [accountVerified, setAccountVerified] = useState(false);
   const [injectedAvailable, setInjectedAvailable] = useState(false);
   const [walletConnectReady, setWalletConnectReady] = useState(false);
   const [embedded, setEmbedded] = useState(false);
@@ -126,6 +134,7 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
     setChainId(null);
     setAccountMatches(false);
     setChainMatches(false);
+    setAccountVerified(false);
   }, []);
 
   /**
@@ -143,8 +152,10 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
   }, []);
 
   /**
-   * Read-only inspection. Runs ONLY when a connector is already explicitly
-   * active; otherwise it clears the readout and touches no provider.
+   * Read-only inspection of the CONNECTOR's canonical validated account. The
+   * displayed address is never re-derived from the wallet's account array here:
+   * it is the account proven for the current explicit connection, and it is
+   * blank whenever that proof does not exist.
    */
   const refresh = useCallback(async () => {
     const active = refreshAvailability();
@@ -152,12 +163,16 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
       clearInspection();
       return;
     }
-    const inspection = await inspectMainnetWalletForHandoff(expectedDeployer ?? "");
-    setAccount(inspection.account);
-    setChainId(inspection.chainId);
-    setAccountMatches(inspection.accountMatches);
-    setChainMatches(inspection.chainMatches);
-  }, [clearInspection, expectedDeployer, refreshAvailability]);
+    const state = await readWalletConnectorState();
+    const expected = expectedDeployer ? expectedDeployer.trim().toLowerCase() : null;
+    const expectedChainHex = normalizeChainId(expectedChainId);
+    setAccount(state.account);
+    setChainId(state.chainId);
+    setAccountVerified(state.accountVerified);
+    setAccountMatches(state.account !== null && expected !== null && state.account === expected);
+    setChainMatches(state.chainId !== null && state.chainId === expectedChainHex);
+    if (state.notice !== null) setNotice(state.notice);
+  }, [clearInspection, expectedChainId, expectedDeployer, refreshAvailability]);
 
   useEffect(() => {
     // Mount does availability detection only — never an inspection. The
@@ -468,6 +483,15 @@ export function DeploymentWalletConnect({ expectedDeployer, expectedChainId }: P
         <ReadoutLine label={"Session"} value={account ? "Connected" : "Disconnected"} />
         <ReadoutLine label={"Wallet state"} value={status} />
         <ReadoutLine label={"Wallet address"} value={account ?? "—"} />
+        {/*
+          Visible identity proof. "VERIFIED CURRENT SESSION" appears only when
+          the connector proved this exact account for the current explicit
+          connection; it is never shown for an inferred or unproven account.
+        */}
+        <ReadoutLine
+          label={"Selected account"}
+          value={!account ? "—" : accountVerified ? "VERIFIED CURRENT SESSION" : "UNVERIFIED"}
+        />
         <ReadoutLine label={"Expected deployer"} value={expectedDeployer ?? "—"} />
         <ReadoutLine
           label={"Account check"}
