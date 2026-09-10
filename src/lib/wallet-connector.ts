@@ -719,25 +719,29 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
   const provider = outcome.provider as Eip1193Provider;
 
   /*
-   * CURRENT-SESSION IDENTITY PROOF. The address that may ever be displayed or
-   * bound must come from the LIVE provider of the session just established, and
-   * must agree with every other identity source that exists:
-   *   - AppKit's current eip155 address, when AppKit supplies one;
-   *   - the CAIP-10 accounts of the live active chain, when the session carries
-   *     accounts for that chain.
-   * Any disagreement, or no account at all, fails closed: the session is torn
-   * down, all local state is cleared and NO address is exposed.
+   * CURRENT-ACCOUNT IDENTITY PROOF FOR THIS ATTEMPT.
+   *
+   * The canonical account is the account AppKit reports as CURRENT for the
+   * `eip155` namespace of the connection just established — read through the
+   * installed public API `getAccount("eip155")` (`address` / `caipAddress`),
+   * which is the operator's selected account, NOT an array position. When
+   * AppKit supplies no current address, the only accepted fallback is an
+   * UNAMBIGUOUS single approved account; several approved accounts with no
+   * current-account signal fail closed as ambiguous.
+   *
+   * The canonical account is then cross-checked against:
+   *   - the live provider's approved `eth_accounts` membership set;
+   *   - AppKit's own CAIP-10 current account, when present;
+   *   - the CAIP-10 session accounts of the live active chain, when the session
+   *     carries accounts for that chain.
+   * Any disagreement, ambiguity or missing proof fails closed: the session is
+   * torn down, all local state is cleared and NO address is exposed.
    */
-  const liveAccountRaw = await provider
-    .request({ method: "eth_accounts" })
-    .catch(() => null as unknown);
-  const liveAccount =
-    Array.isArray(liveAccountRaw) && typeof liveAccountRaw[0] === "string"
-      ? lower(liveAccountRaw[0])
-      : null;
-  const liveChain = normalizeChainId(
-    await provider.request({ method: "eth_chainId" }).catch(() => null),
-  );
+  const approvedAccounts = await readApprovedAccounts(provider);
+  const liveChain = await readLiveChainId(provider);
+  const snapshot = appKit.getAppKitAccountSnapshot();
+  const appKitCurrent = snapshot?.address ? lower(snapshot.address) : null;
+  const appKitCaip = caipAddress(snapshot?.caipAddress ?? null);
 
   const failClosed = async (notice: WalletConnectorNotice): Promise<WalletConnectorResult> => {
     clearLocalConnectionState();
@@ -747,20 +751,31 @@ export async function connectWalletConnect(): Promise<WalletConnectorResult> {
     return { ok: false, notice, state: emptyState(notice) };
   };
 
-  if (liveAccount === null) return await failClosed("NO_ACCOUNT");
+  if (approvedAccounts.length === 0) return await failClosed("NO_ACCOUNT");
 
-  const appKitAddress = appKit.getAppKitAddress();
-  if (typeof appKitAddress === "string" && lower(appKitAddress) !== liveAccount) {
-    return await failClosed("WALLET_ACCOUNT_MISMATCH");
+  let selectedAccount: string | null = appKitCurrent;
+  if (selectedAccount === null) {
+    if (approvedAccounts.length !== 1) return await failClosed("WALLET_ACCOUNT_AMBIGUOUS");
+    selectedAccount = approvedAccounts[0] as string;
   }
 
+  // The selected account must be one the wallet actually approved.
+  if (!approvedAccounts.includes(selectedAccount)) {
+    return await failClosed("WALLET_ACCOUNT_MISMATCH");
+  }
+  // Where AppKit exposes a CAIP-10 current account it must name the same one.
+  if (appKitCaip !== null && appKitCaip !== selectedAccount) {
+    return await failClosed("WALLET_ACCOUNT_MISMATCH");
+  }
+  // Where the session carries accounts for the live chain, it must include it.
   const sessionAccounts = hasWalletConnectSession(provider) ? readSessionAccounts(provider) : [];
   if (liveChain !== null) {
     const forLiveChain = sessionAccounts.filter((entry) => entry.chainId === liveChain);
-    if (forLiveChain.length > 0 && !forLiveChain.some((entry) => entry.address === liveAccount)) {
+    if (forLiveChain.length > 0 && !forLiveChain.some((e) => e.address === selectedAccount)) {
       return await failClosed("WALLET_ACCOUNT_MISMATCH");
     }
   }
+
 
   /*
    * GATE 1 ONLY — CONNECTION. A wallet that connects on another EVM network
