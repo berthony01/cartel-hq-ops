@@ -37,6 +37,7 @@ const SYMBOL = /^[A-Z0-9]{2,11}$/;
 export type CanaryNotice =
   | "NOT_AUTHORIZED"
   | "INVALID_INPUT"
+  | "RECIPIENT_MUST_MATCH_DEPLOYER"
   | "SUPPLY_OUT_OF_RANGE"
   | "LAUNCH_CHAIN_MISMATCH"
   | "RPC_REFUSED"
