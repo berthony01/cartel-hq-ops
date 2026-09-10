@@ -18,7 +18,7 @@ import {
   normalizeChainId,
   readWalletConnectorState,
   requestRobinhoodChainSwitch,
-  ROBINHOOD_MAINNET_CHAIN_ID_HEX_CANONICAL,
+  
   subscribeWalletConnector,
   WALLETCONNECT_CONNECT_TIMEOUT_MS,
   type WalletConnectorNotice,
