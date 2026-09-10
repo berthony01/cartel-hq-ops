@@ -1659,6 +1659,7 @@ function LaunchControlPage() {
                         <p className="mt-2 text-xs text-destructive">{scheduleError}</p>
                       ) : null}
                     </Section>
+                    </div>
 
                     <Section
                       variant="quiet"
