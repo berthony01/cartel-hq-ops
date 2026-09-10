@@ -53,7 +53,11 @@ import {
 } from "@/lib/chain-mainnet-handoff.functions";
 import { getMainnetDeploymentReconciliationSnapshot } from "@/lib/chain-mainnet-reconciliation.functions";
 import { verifyMainnetChainDeployment } from "@/lib/chain-mainnet-verify.functions";
-import { sendClaimedMainnetDeployment } from "@/lib/chain-mainnet-wallet";
+import {
+  inspectMainnetWalletForHandoff,
+  sendClaimedMainnetDeployment,
+  type MainnetWalletInspection,
+} from "@/lib/chain-mainnet-wallet";
 
 /**
  * P3C-F — OWNER-ONLY Robinhood Chain PRODUCTION canary orchestration.
