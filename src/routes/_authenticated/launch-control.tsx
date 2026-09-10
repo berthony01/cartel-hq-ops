@@ -89,6 +89,18 @@ import { VerifiedContractRegistrationPanel } from "@/components/cartel/VerifiedC
 import { OfficialContractNotifyPanel } from "@/components/cartel/OfficialContractNotifyPanel";
 import { OfficialContractGroupBroadcastPanel } from "@/components/cartel/OfficialContractGroupBroadcastPanel";
 import { OfficialContractCorrectionPanel } from "@/components/cartel/OfficialContractCorrectionPanel";
+import { SectionNav, type SectionNavItem } from "@/components/cartel/SectionNav";
+import { RelatedLinks, relatedLinkClass } from "@/components/cartel/RelatedLinks";
+
+/** Presentation-only in-page navigation targets for a selected launch. */
+const LAUNCH_SECTIONS: SectionNavItem[] = [
+  { id: "lc-overview", label: "Overview" },
+  { id: "lc-details", label: "Details" },
+  { id: "lc-schedule", label: "Schedule" },
+  { id: "lc-watch", label: "Launch Watch" },
+  { id: "lc-comms", label: "Communications" },
+  { id: "lc-contract", label: "Contract" },
+];
 
 import { supabase } from "@/integrations/supabase/client";
 import {
