@@ -26,7 +26,7 @@ function CartelShieldPage() {
       description="Future project and creator intelligence layer: review history, risk indicators, warnings, disputes, and status changes."
       status="Planned — not active"
       highlight="Shield will use evidence-based, non-defamatory wording and clearly distinguish reports and signals from verified facts."
-      availableNow={["Route and navigation entry", "Roadmap placement in INTELLIGENCE"]}
+      availableNow={["Reserved route and roadmap placement", "No signals, scores, or risk data are produced yet"]}
       plannedLater={[
         "Review history and risk indicators",
         "Suspicious behavior signals and warnings",

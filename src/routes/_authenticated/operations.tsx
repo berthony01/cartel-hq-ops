@@ -24,8 +24,8 @@ function OperationsPage() {
       eyebrow="Module"
       title="Operations"
       description="Plan and run campaigns, drops, and distribution pushes across PEPECARTEL channels."
-      status="Placeholder"
-      availableNow={["Route and navigation entry", "Positioning within the module roadmap"]}
+      status="Planned — not active"
+      availableNow={["Reserved route and roadmap placement", "No campaigns or operations run from here yet"]}
       plannedLater={[
         "Campaign records and scheduling",
         "Channel distribution runs",

@@ -24,8 +24,8 @@ function OperativesPage() {
       eyebrow="Module"
       title="Operatives"
       description="The roster of creators and collaborators working inside the PEPECARTEL ecosystem."
-      status="Placeholder"
-      availableNow={["Route and navigation entry", "Roadmap placement after Missions"]}
+      status="Planned — not active"
+      availableNow={["Reserved route and roadmap placement", "No team, roster, or AI Operator functionality is live"]}
       plannedLater={[
         "Operative profiles and roles",
         "Invites and workspace membership",
