@@ -71,7 +71,7 @@ const PLANNED_ENTRIES = [
     label: "Access & Permissions",
     icon: KeyRound,
     description:
-      "Workspace roles, invitations, and per-surface permissions. Not built yet — access is workspace-owner based today.",
+      "Invitations and per-surface permission controls are not built yet. Workspace membership and owner/admin roles already exist behind the scenes, but there is no screen to manage them here.",
   },
   {
     label: "Team & Cartel AI Operator",

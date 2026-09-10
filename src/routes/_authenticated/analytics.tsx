@@ -25,7 +25,11 @@ function AnalyticsPage() {
       title="Analytics"
       description="Reach, adoption, and creative performance across packs, campaigns, and channels."
       status="Planned — not active"
-      availableNow={["Reserved route and roadmap placement", "No analytics data is collected or shown yet"]}
+      availableNow={[
+        "Reserved route and roadmap placement",
+        "No project-facing analytics are shown here yet",
+        "Owner Console already reports launch and watcher counts for platform owners",
+      ]}
       plannedLater={[
         "Pack and campaign performance metrics",
         "Channel and distribution reporting",
