@@ -458,6 +458,17 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
           : `${input.activeWatchers} active watcher${input.activeWatchers === 1 ? "" : "s"}`,
     },
     {
+      key: "communications",
+      status: input.inboxUnavailable || !inbox
+        ? "unavailable"
+        : inboxConfigured
+          ? "complete"
+          : "action",
+      actionable: !input.inboxUnavailable && !!inbox,
+      detail: inboxDetail,
+    },
+
+    {
       key: "deployment",
       status: !launch
         ? "waiting"
