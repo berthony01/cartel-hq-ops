@@ -67,9 +67,30 @@ function journey(input: Partial<JourneyInput> & { readiness: JourneyInput["readi
     watchUnavailable: false,
     verifiedProductionDeployments: null,
     deploymentUnavailable: false,
+    brandKit: null,
+    brandKitUnavailable: false,
+    creativeAssets: null,
+    creativeAssetsUnavailable: false,
+    stickerPacks: null,
+    stickerPacksUnavailable: false,
+    inbox: null,
+    inboxUnavailable: false,
     ...input,
   });
 }
+
+/** P1-B — every Brand & Creative + Communications stage satisfied. */
+const completeCreative = {
+  brandKit: { brandName: "PROJECT" },
+  brandKitUnavailable: false,
+  creativeAssets: { brandAssetCount: 1, generatedStickerCount: 0, otherAssetCount: 0 },
+  creativeAssetsUnavailable: false,
+  stickerPacks: { activeCount: 1, publishedCount: 1 },
+  stickerPacksUnavailable: false,
+  inbox: { repliesEnabled: true, newConversationsEnabled: true, waitingOnTeamCount: 0 },
+  inboxUnavailable: false,
+} satisfies Partial<JourneyInput>;
+
 
 const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
   j.stages.find((s) => s.key === key)!.status;
