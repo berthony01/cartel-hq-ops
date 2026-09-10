@@ -24,8 +24,8 @@ function AnalyticsPage() {
       eyebrow="Module"
       title="Analytics"
       description="Reach, adoption, and creative performance across packs, campaigns, and channels."
-      status="Placeholder"
-      availableNow={["Route and navigation entry", "Roadmap placement after Operatives"]}
+      status="Planned — not active"
+      availableNow={["Reserved route and roadmap placement", "No analytics data is collected or shown yet"]}
       plannedLater={[
         "Pack and campaign performance metrics",
         "Channel and distribution reporting",

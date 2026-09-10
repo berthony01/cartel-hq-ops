@@ -28,11 +28,17 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
                   "border-gold/45 bg-gold/10 text-foreground shadow-[inset_2px_0_0_0_var(--gold)]",
               }}
               inactiveProps={{ className: "border-transparent text-muted-foreground" }}
-              className="group flex min-h-11 items-center gap-3 rounded-md border px-3 py-2 text-sm transition-colors duration-200 hover:border-border hover:bg-surface-raised hover:text-foreground"
+              className={`group flex min-h-11 items-center gap-3 rounded-md border px-3 py-2 text-sm transition-colors duration-200 hover:border-border hover:bg-surface-raised hover:text-foreground ${
+                item.subordinate ? "ml-3 border-l border-l-border/60 pl-4" : ""
+              }`}
             >
               <item.icon className="size-4 shrink-0" aria-hidden="true" />
               <span className="truncate">{item.label}</span>
-              {item.status === "next" ? (
+              {item.external ? (
+                <span className="ml-auto rounded-sm border border-border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Public
+                </span>
+              ) : item.status === "next" ? (
                 <span className="ml-auto rounded-sm border border-gold/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gold">
                   Next
                 </span>
@@ -43,6 +49,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
               ) : null}
             </Link>
           ))}
+
         </div>
         );
       })}

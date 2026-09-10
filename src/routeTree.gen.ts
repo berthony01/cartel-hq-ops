@@ -19,16 +19,12 @@ import { Route as AuthenticatedAssetsRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedBrandKitRouteImport } from './routes/_authenticated/brand-kit'
 import { Route as AuthenticatedCartelShieldRouteImport } from './routes/_authenticated/cartel-shield'
 import { Route as AuthenticatedChainLauncherRouteImport } from './routes/_authenticated/chain-launcher'
-import { Route as AuthenticatedClearanceRouteImport } from './routes/_authenticated/clearance'
-import { Route as AuthenticatedCommandTerminalRouteImport } from './routes/_authenticated/command-terminal'
 import { Route as AuthenticatedDistributionRouteImport } from './routes/_authenticated/distribution'
 import { Route as AuthenticatedLaunchControlRouteImport } from './routes/_authenticated/launch-control'
 import { Route as AuthenticatedMainnetCanaryRouteImport } from './routes/_authenticated/mainnet-canary'
-import { Route as AuthenticatedMissionsRouteImport } from './routes/_authenticated/missions'
 import { Route as AuthenticatedOperationsRouteImport } from './routes/_authenticated/operations'
 import { Route as AuthenticatedOperativesRouteImport } from './routes/_authenticated/operatives'
 import { Route as AuthenticatedProjectProfileRouteImport } from './routes/_authenticated/project-profile'
-import { Route as AuthenticatedReputationRouteImport } from './routes/_authenticated/reputation'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedStickerLabRouteImport } from './routes/_authenticated/sticker-lab'
 import { Route as AuthenticatedTelegramRouteImport } from './routes/_authenticated/telegram'
@@ -95,17 +91,6 @@ const AuthenticatedChainLauncherRoute =
     path: '/chain-launcher',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedClearanceRoute = AuthenticatedClearanceRouteImport.update({
-  id: '/clearance',
-  path: '/clearance',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedCommandTerminalRoute =
-  AuthenticatedCommandTerminalRouteImport.update({
-    id: '/command-terminal',
-    path: '/command-terminal',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedDistributionRoute =
   AuthenticatedDistributionRouteImport.update({
     id: '/distribution',
@@ -124,11 +109,6 @@ const AuthenticatedMainnetCanaryRoute =
     path: '/mainnet-canary',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedMissionsRoute = AuthenticatedMissionsRouteImport.update({
-  id: '/missions',
-  path: '/missions',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedOperationsRoute = AuthenticatedOperationsRouteImport.update({
   id: '/operations',
   path: '/operations',
@@ -145,11 +125,6 @@ const AuthenticatedProjectProfileRoute =
     path: '/project-profile',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedReputationRoute = AuthenticatedReputationRouteImport.update({
-  id: '/reputation',
-  path: '/reputation',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -235,16 +210,12 @@ export interface FileRoutesByFullPath {
   '/brand-kit': typeof AuthenticatedBrandKitRoute
   '/cartel-shield': typeof AuthenticatedCartelShieldRoute
   '/chain-launcher': typeof AuthenticatedChainLauncherRoute
-  '/clearance': typeof AuthenticatedClearanceRoute
-  '/command-terminal': typeof AuthenticatedCommandTerminalRoute
   '/distribution': typeof AuthenticatedDistributionRoute
   '/launch-control': typeof AuthenticatedLaunchControlRoute
   '/mainnet-canary': typeof AuthenticatedMainnetCanaryRoute
-  '/missions': typeof AuthenticatedMissionsRoute
   '/operations': typeof AuthenticatedOperationsRoute
   '/operatives': typeof AuthenticatedOperativesRoute
   '/project-profile': typeof AuthenticatedProjectProfileRoute
-  '/reputation': typeof AuthenticatedReputationRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/sticker-lab': typeof AuthenticatedStickerLabRouteWithChildren
   '/telegram': typeof AuthenticatedTelegramRoute
@@ -268,16 +239,12 @@ export interface FileRoutesByTo {
   '/brand-kit': typeof AuthenticatedBrandKitRoute
   '/cartel-shield': typeof AuthenticatedCartelShieldRoute
   '/chain-launcher': typeof AuthenticatedChainLauncherRoute
-  '/clearance': typeof AuthenticatedClearanceRoute
-  '/command-terminal': typeof AuthenticatedCommandTerminalRoute
   '/distribution': typeof AuthenticatedDistributionRoute
   '/launch-control': typeof AuthenticatedLaunchControlRoute
   '/mainnet-canary': typeof AuthenticatedMainnetCanaryRoute
-  '/missions': typeof AuthenticatedMissionsRoute
   '/operations': typeof AuthenticatedOperationsRoute
   '/operatives': typeof AuthenticatedOperativesRoute
   '/project-profile': typeof AuthenticatedProjectProfileRoute
-  '/reputation': typeof AuthenticatedReputationRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/telegram': typeof AuthenticatedTelegramRoute
   '/watchlist': typeof AuthenticatedWatchlistRoute
@@ -304,16 +271,12 @@ export interface FileRoutesById {
   '/_authenticated/brand-kit': typeof AuthenticatedBrandKitRoute
   '/_authenticated/cartel-shield': typeof AuthenticatedCartelShieldRoute
   '/_authenticated/chain-launcher': typeof AuthenticatedChainLauncherRoute
-  '/_authenticated/clearance': typeof AuthenticatedClearanceRoute
-  '/_authenticated/command-terminal': typeof AuthenticatedCommandTerminalRoute
   '/_authenticated/distribution': typeof AuthenticatedDistributionRoute
   '/_authenticated/launch-control': typeof AuthenticatedLaunchControlRoute
   '/_authenticated/mainnet-canary': typeof AuthenticatedMainnetCanaryRoute
-  '/_authenticated/missions': typeof AuthenticatedMissionsRoute
   '/_authenticated/operations': typeof AuthenticatedOperationsRoute
   '/_authenticated/operatives': typeof AuthenticatedOperativesRoute
   '/_authenticated/project-profile': typeof AuthenticatedProjectProfileRoute
-  '/_authenticated/reputation': typeof AuthenticatedReputationRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/sticker-lab': typeof AuthenticatedStickerLabRouteWithChildren
   '/_authenticated/telegram': typeof AuthenticatedTelegramRoute
@@ -342,16 +305,12 @@ export interface FileRouteTypes {
     | '/brand-kit'
     | '/cartel-shield'
     | '/chain-launcher'
-    | '/clearance'
-    | '/command-terminal'
     | '/distribution'
     | '/launch-control'
     | '/mainnet-canary'
-    | '/missions'
     | '/operations'
     | '/operatives'
     | '/project-profile'
-    | '/reputation'
     | '/settings'
     | '/sticker-lab'
     | '/telegram'
@@ -375,16 +334,12 @@ export interface FileRouteTypes {
     | '/brand-kit'
     | '/cartel-shield'
     | '/chain-launcher'
-    | '/clearance'
-    | '/command-terminal'
     | '/distribution'
     | '/launch-control'
     | '/mainnet-canary'
-    | '/missions'
     | '/operations'
     | '/operatives'
     | '/project-profile'
-    | '/reputation'
     | '/settings'
     | '/telegram'
     | '/watchlist'
@@ -410,16 +365,12 @@ export interface FileRouteTypes {
     | '/_authenticated/brand-kit'
     | '/_authenticated/cartel-shield'
     | '/_authenticated/chain-launcher'
-    | '/_authenticated/clearance'
-    | '/_authenticated/command-terminal'
     | '/_authenticated/distribution'
     | '/_authenticated/launch-control'
     | '/_authenticated/mainnet-canary'
-    | '/_authenticated/missions'
     | '/_authenticated/operations'
     | '/_authenticated/operatives'
     | '/_authenticated/project-profile'
-    | '/_authenticated/reputation'
     | '/_authenticated/settings'
     | '/_authenticated/sticker-lab'
     | '/_authenticated/telegram'
@@ -516,20 +467,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedChainLauncherRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/clearance': {
-      id: '/_authenticated/clearance'
-      path: '/clearance'
-      fullPath: '/clearance'
-      preLoaderRoute: typeof AuthenticatedClearanceRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/command-terminal': {
-      id: '/_authenticated/command-terminal'
-      path: '/command-terminal'
-      fullPath: '/command-terminal'
-      preLoaderRoute: typeof AuthenticatedCommandTerminalRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/distribution': {
       id: '/_authenticated/distribution'
       path: '/distribution'
@@ -551,13 +488,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedMainnetCanaryRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/missions': {
-      id: '/_authenticated/missions'
-      path: '/missions'
-      fullPath: '/missions'
-      preLoaderRoute: typeof AuthenticatedMissionsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/operations': {
       id: '/_authenticated/operations'
       path: '/operations'
@@ -577,13 +507,6 @@ declare module '@tanstack/react-router' {
       path: '/project-profile'
       fullPath: '/project-profile'
       preLoaderRoute: typeof AuthenticatedProjectProfileRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/reputation': {
-      id: '/_authenticated/reputation'
-      path: '/reputation'
-      fullPath: '/reputation'
-      preLoaderRoute: typeof AuthenticatedReputationRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/settings': {
@@ -712,16 +635,12 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedBrandKitRoute: typeof AuthenticatedBrandKitRoute
   AuthenticatedCartelShieldRoute: typeof AuthenticatedCartelShieldRoute
   AuthenticatedChainLauncherRoute: typeof AuthenticatedChainLauncherRoute
-  AuthenticatedClearanceRoute: typeof AuthenticatedClearanceRoute
-  AuthenticatedCommandTerminalRoute: typeof AuthenticatedCommandTerminalRoute
   AuthenticatedDistributionRoute: typeof AuthenticatedDistributionRoute
   AuthenticatedLaunchControlRoute: typeof AuthenticatedLaunchControlRoute
   AuthenticatedMainnetCanaryRoute: typeof AuthenticatedMainnetCanaryRoute
-  AuthenticatedMissionsRoute: typeof AuthenticatedMissionsRoute
   AuthenticatedOperationsRoute: typeof AuthenticatedOperationsRoute
   AuthenticatedOperativesRoute: typeof AuthenticatedOperativesRoute
   AuthenticatedProjectProfileRoute: typeof AuthenticatedProjectProfileRoute
-  AuthenticatedReputationRoute: typeof AuthenticatedReputationRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedStickerLabRoute: typeof AuthenticatedStickerLabRouteWithChildren
   AuthenticatedTelegramRoute: typeof AuthenticatedTelegramRoute
@@ -736,16 +655,12 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedBrandKitRoute: AuthenticatedBrandKitRoute,
   AuthenticatedCartelShieldRoute: AuthenticatedCartelShieldRoute,
   AuthenticatedChainLauncherRoute: AuthenticatedChainLauncherRoute,
-  AuthenticatedClearanceRoute: AuthenticatedClearanceRoute,
-  AuthenticatedCommandTerminalRoute: AuthenticatedCommandTerminalRoute,
   AuthenticatedDistributionRoute: AuthenticatedDistributionRoute,
   AuthenticatedLaunchControlRoute: AuthenticatedLaunchControlRoute,
   AuthenticatedMainnetCanaryRoute: AuthenticatedMainnetCanaryRoute,
-  AuthenticatedMissionsRoute: AuthenticatedMissionsRoute,
   AuthenticatedOperationsRoute: AuthenticatedOperationsRoute,
   AuthenticatedOperativesRoute: AuthenticatedOperativesRoute,
   AuthenticatedProjectProfileRoute: AuthenticatedProjectProfileRoute,
-  AuthenticatedReputationRoute: AuthenticatedReputationRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedStickerLabRoute: AuthenticatedStickerLabRouteWithChildren,
   AuthenticatedTelegramRoute: AuthenticatedTelegramRoute,

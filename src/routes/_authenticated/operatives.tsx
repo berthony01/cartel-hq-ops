@@ -8,10 +8,10 @@ export const Route = createFileRoute("/_authenticated/operatives")({
       { title: "Operatives — CARTEL HQ" },
       {
         name: "description",
-        content: "Operatives will manage PEPECARTEL creators, roles, and reputation.",
+        content: "Operatives will become the future Cartel AI Operator and team operations layer.",
       },
       { property: "og:title", content: "Operatives — CARTEL HQ" },
-      { property: "og:description", content: "Creator roster and reputation for PEPECARTEL." },
+      { property: "og:description", content: "Future Cartel AI Operator and team operations layer." },
     ],
   }),
   component: OperativesPage,
@@ -23,9 +23,9 @@ function OperativesPage() {
       icon={Users}
       eyebrow="Module"
       title="Operatives"
-      description="The roster of creators and collaborators working inside the PEPECARTEL ecosystem."
-      status="Placeholder"
-      availableNow={["Route and navigation entry", "Roadmap placement after Missions"]}
+      description="Future Cartel AI Operator and team operations layer: collaborators, assisted operations, and delegated work inside the workspace."
+      status="Planned — not active"
+      availableNow={["Reserved route and roadmap placement", "No team, roster, or AI Operator functionality is live"]}
       plannedLater={[
         "Operative profiles and roles",
         "Invites and workspace membership",
