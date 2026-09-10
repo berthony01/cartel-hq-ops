@@ -1984,7 +1984,9 @@ function LaunchControlPage() {
                     </div>
                   )}
                 </Section>
+                </div>
 
+                <div id="lc-comms" className="min-w-0 scroll-mt-28">
                 <Section
                   variant="surface"
                   title="Watcher Updates"
