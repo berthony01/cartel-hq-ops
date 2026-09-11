@@ -105,6 +105,7 @@ import { VerifiedContractRegistrationPanel } from "@/components/cartel/VerifiedC
 import { ProductionDeploymentRequestPanel } from "@/components/cartel/ProductionDeploymentRequestPanel";
 import {
   getLaunchProductionDeploymentRequest,
+  hasRegistrationRecord,
   productionDeploymentRequestQueryKey,
   submitLaunchProductionDeploymentRequest,
   withdrawLaunchProductionDeploymentRequest,
