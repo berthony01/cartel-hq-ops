@@ -21,6 +21,8 @@ import { EmptyState } from "@/components/cartel/EmptyState";
 import { Button } from "@/components/ui/button";
 import { usePlatformAccess } from "@/hooks/usePlatformAccess";
 import { useWorkspace } from "@/lib/workspace-context";
+import { getProjectProfile } from "@/lib/project-profile";
+
 import { listLaunches, type LaunchRow } from "@/lib/launch-control";
 import {
   ROBINHOOD_TESTNET_CHAIN_ID,
