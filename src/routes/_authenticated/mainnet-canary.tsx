@@ -75,11 +75,21 @@ const LAUNCH_SELECTION_STORAGE_KEY = "cartel-hq:mainnet-canary:selected-launch";
 function CanaryConsole() {
   const { workspaceId } = useWorkspace();
 
-  const launches = useQuery({
-    queryKey: ["canary-launches", workspaceId],
-    queryFn: () => listLaunches(workspaceId as string),
+  // Owner internal tooling: launches are scoped to the active project profile
+  // and may include INTERNAL_TEST chain-test records.
+  const canaryProfile = useQuery({
+    queryKey: ["project-profile", workspaceId],
+    queryFn: () => getProjectProfile(workspaceId as string),
     enabled: !!workspaceId,
   });
+  const canaryProfileId = canaryProfile.data?.id ?? null;
+
+  const launches = useQuery({
+    queryKey: ["canary-launches", workspaceId, canaryProfileId],
+    queryFn: () => listLaunches(workspaceId as string, canaryProfileId as string),
+    enabled: !!workspaceId && !!canaryProfileId,
+  });
+
 
   const readState = useServerFn(readCanaryExecutionState);
   const createAttempt = useServerFn(createCanaryDeploymentAttempt);
