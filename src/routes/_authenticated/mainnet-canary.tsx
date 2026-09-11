@@ -119,7 +119,34 @@ function CanaryConsole() {
   const verify = useServerFn(verifyMainnetChainDeployment);
   const stop = useServerFn(engageCanaryEmergencyStop);
 
+  /**
+   * Launcher-B3 — platform-side production request wrappers. Each one re-checks
+   * platform ownership server-side; none of them signs, arms, claims, sends,
+   * registers, advances lifecycle or notifies anything.
+   */
+  const listRequests = useServerFn(listPlatformProductionRequests);
+  const decideRequest = useServerFn(setPlatformProductionRequestStatus);
+  const beginRequest = useServerFn(beginPlatformProductionRequestExecution);
+
   const { busy, run } = useBusy();
+
+  const search = Route.useSearch();
+  const navigate = useNavigate({ from: "/mainnet-canary" });
+  const requestQueue = useQuery({
+    queryKey: ["b3-production-request-queue"],
+    queryFn: () => listRequests({ data: undefined }),
+    retry: false,
+  });
+  const requestRows = requestQueue.data?.requests ?? [];
+  const selectedRequestId = search.request ?? null;
+  const selectedRequest = useMemo(
+    () => requestRows.find((row) => row.id === selectedRequestId) ?? null,
+    [requestRows, selectedRequestId],
+  );
+  /** Request-bound mode: the exact request row is the only identity source. */
+  const requestMode = !!selectedRequest;
+  const [beginPhrase, setBeginPhrase] = useState("");
+
 
   const [launchId, setLaunchId] = useState("");
   const [deployer, setDeployer] = useState("");
