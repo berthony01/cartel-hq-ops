@@ -2742,13 +2742,49 @@ function LaunchControlPage() {
             </WorkingView>
 
             <WorkingView id="lc-contract" active={activeSection === "lc-contract"}>
-                <div className="min-w-0 rounded-lg border-l-2 border-gold/50 bg-gold/5 px-3.5 py-3">
-                  <p className="type-eyebrow text-gold">Official contract</p>
-                  <p className="mt-1 max-w-prose type-helper text-muted-foreground">
-                    Evidence-bound registration, corrections and the two separate communication
-                    actions. Registering never messages anyone on its own.
+                <Section
+                  variant="surface"
+                  className={
+                    contractGuidance.tone === "green"
+                      ? "min-w-0 border-pepe/35"
+                      : contractGuidance.tone === "gold"
+                        ? "min-w-0 border-gold/45"
+                        : "min-w-0"
+                  }
+                  contentClassName="space-y-3"
+                >
+                  <div className="flex min-w-0 items-start gap-3">
+                    <span
+                      className={`flex size-9 shrink-0 items-center justify-center rounded-md border ${
+                        contractGuidance.tone === "green"
+                          ? "border-pepe/45 bg-pepe/10 text-pepe"
+                          : contractGuidance.tone === "gold"
+                            ? "border-gold/45 bg-gold/10 text-gold"
+                            : "border-border-strong bg-background/50 text-muted-foreground"
+                      }`}
+                    >
+                      <ShieldCheck className="size-5" aria-hidden="true" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="min-w-0 text-base font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">
+                        {contractGuidance.headline}
+                      </p>
+                      <p className="mt-1 max-w-prose text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                        <span className="font-semibold text-foreground/85">Why: </span>
+                        {contractGuidance.why}
+                      </p>
+                      <p className="mt-1 max-w-prose text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                        <span className="font-semibold text-foreground/85">What happens next: </span>
+                        {contractGuidance.nextUp}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="min-w-0 border-t border-border-subtle pt-3 type-helper text-muted-foreground">
+                    Registration, corrections, watcher notification and community posting stay
+                    separate, explicit actions. Registering never messages anyone on its own.
                   </p>
-                </div>
+                </Section>
+
 
                 <dl className="grid min-w-0 gap-2.5 sm:grid-cols-3">
                   <div className="surface-quiet min-w-0 rounded-lg p-3">
