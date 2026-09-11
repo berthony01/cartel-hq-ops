@@ -234,6 +234,8 @@ function StageRow({
 }) {
   const complete = stage.status === "complete";
   const blocked = stage.status === "waiting" || stage.status === "unavailable";
+  /** The final milestone stays visually quieter than the locked-next milestone. */
+  const finalStage = stage.key === "launch_live";
   const Icon = complete ? Check : blocked ? Lock : isNext ? CircleDot : Circle;
   return (
     <li
@@ -244,7 +246,9 @@ function StageRow({
           : isNext
             ? "border-gold/55 bg-gold/10 px-3.5 py-4 shadow-[var(--glow-gold)] sm:col-span-2"
             : blocked
-              ? "border-border/60 bg-surface-raised/30 px-3 py-3"
+              ? finalStage
+                ? "border-border-subtle border-dashed bg-transparent px-3 py-3"
+                : "border-border/60 bg-surface-raised/30 px-3 py-3"
               : "border-border/50 bg-surface-raised/20 px-3 py-3",
       )}
     >
