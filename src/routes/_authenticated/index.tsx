@@ -378,12 +378,13 @@ function HqDashboard() {
                   Launch data could not be loaded right now. This does not change your launch —
                   open Launch Control to view the authoritative state.
                 </p>
-                <Link
-                  to="/launch-control"
-                  className="touch-target inline-flex w-fit items-center gap-1.5 rounded-md border border-gold/50 bg-gold/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-gold transition-colors hover:bg-gold/20"
-                >
-                  Open Launch Control <ChevronRight className="size-4" aria-hidden="true" />
-                </Link>
+                <Button asChild variant="outline" className="min-h-11 w-full sm:w-auto">
+                  <Link to="/launch-control">
+                    Open Launch Control
+                    <ChevronRight className="size-4" aria-hidden="true" />
+                  </Link>
+                </Button>
+
               </div>
             ) : !primaryLaunch ? (
               <div className="min-w-0 space-y-3">
