@@ -2,11 +2,16 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 /**
- * C7.3D D1 — Durable Project Inbox team-reply delivery worker.
+ * C7.3D — Durable Project Inbox team-reply delivery worker.
  *
- * SOURCE ONLY in D1: this function is deliberately NOT deployed and NOT
- * scheduled in this phase. It is committed so the delivery contract can be
- * reviewed before anything can ever talk to Telegram.
+ * DEPLOYED and ACTIVE. This Edge Function is scheduled every minute by the
+ * cron job `cartel-project-inbox-delivery-runner`. The cron invokes
+ * `public.invoke_project_inbox_delivery_scheduler()`, a database helper that
+ * reads the dedicated scheduler secret from Vault and POSTs to this function
+ * with the `x-cartel-inbox-scheduler-secret` header.
+ *
+ * `verify_jwt=false` is intentional: this worker authenticates using that
+ * custom scheduler secret, which is compared inside the database.
  *
  * Design rules:
  *  - Invoked by a scheduler with a dedicated custom secret header
