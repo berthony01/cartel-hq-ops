@@ -96,23 +96,45 @@ export function SectionNav({
       )}
     >
       <nav aria-label={label} className="no-scrollbar flex gap-1 overflow-x-auto">
-        {items.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => go(item.id)}
-            aria-current={active === item.id ? "true" : undefined}
-            className={cn(
-              "min-h-11 shrink-0 rounded-md px-3 text-xs font-semibold uppercase tracking-[0.12em] transition-colors sm:text-[13px]",
-              active === item.id
-                ? "bg-surface-raised text-gold"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {item.label}
-          </button>
-        ))}
+        {items.map((item) => {
+          const isActive = active === item.id;
+          const state = item.state ?? "neutral";
+          const StateIcon =
+            state === "complete" ? Check : state === "attention" ? CircleDot : state === "blocked" ? Lock : null;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => go(item.id)}
+              aria-current={isActive ? "true" : undefined}
+              className={cn(
+                "flex min-h-11 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-semibold uppercase tracking-[0.12em] transition-colors sm:text-[13px]",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/60",
+                isActive
+                  ? "bg-surface-raised text-gold shadow-[inset_0_-2px_0_0_var(--gold)]"
+                  : "text-muted-foreground hover:bg-surface-raised/50 hover:text-foreground",
+              )}
+            >
+              {StateIcon ? (
+                <StateIcon
+                  className={cn(
+                    "size-3.5 shrink-0",
+                    state === "complete"
+                      ? "text-pepe"
+                      : state === "attention"
+                        ? "text-gold"
+                        : "text-muted-foreground",
+                  )}
+                  aria-hidden="true"
+                />
+              ) : null}
+              <span>{item.label}</span>
+              {item.stateLabel ? <span className="sr-only">{item.stateLabel}</span> : null}
+            </button>
+          );
+        })}
       </nav>
+
     </div>
   );
 }
