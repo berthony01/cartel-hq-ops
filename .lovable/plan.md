@@ -1,64 +1,39 @@
-# Wallet Identity Mismatch — Read-Only Audit (Mainnet Canary console)
+# Recurring Preview Failure Repair
 
-HEAD `54866be3246495553a1dea07a83a33ae1c40552c` ("Harden wallet identity gating"), `git status` clean. No files edited, no migration, no secret, no transaction, no publish during this audit.
+## Confirmed cause
 
-## A. Root cause
+The app and production build are healthy. The failure is an authentication-initialization timing mismatch inside the Lovable preview:
 
-Two distinct defects, both in the console, none in the wallet layer.
+- Preview session storage can legitimately take about 4.25 seconds on its first brokered lookup.
+- The authenticated route currently abandons that lookup after 2 seconds.
+- The abandoned session lookup can leave that preview tab’s authentication client locked, so soft retries repeat the failure.
+- The root “This page didn’t load” screen only performs a soft router retry, which cannot reset that locked browser state.
+- This explains the observed split: one connected preview currently renders CARTEL HQ and real data, while the older preview tab remains stuck on the error screen.
 
-**A1 — CONFIRMED attempts are treated as live "existing attempts".**
-`src/lib/chain-mainnet-canary.functions.ts` → `readCanaryExistingAttempt`:
+## Smallest repair
 
-```
-const TERMINAL_ATTEMPT_STATUSES = ["FAILED", "ABANDONED"]
-```
+1. **Align authentication timing**
+   - Change only the authenticated route guard’s fail-safe timeout from 2 seconds to 5 seconds, exceeding the preview storage broker’s documented worst-case path.
+   - Preserve `getSession()`, fail-closed redirects, pending UI, RLS, and all authentication behavior.
+   - Clean up the timeout timer when session initialization finishes normally.
 
-`CONFIRMED` is not in that list, so the query returns the newest non-FAILED/non-ABANDONED row. For launch `bade8faa` that is attempt 2 (`11381a8c`, status `CONFIRMED`). The route (`src/routes/_authenticated/mainnet-canary.tsx`) then feeds `existingAttempt.deployerAddress` / `existingAttempt.tokenRecipient` into `CanaryIntentForm` as `attemptBoundDeployer` / `attemptBoundRecipient`, and `CanaryIntentForm` renders those read-only with "existing attempt — immutable". So a finished historical deployment is presented as current editable-launch intent, showing recipient `0xf95f…6485` next to deployer `0xe5b2…d617`.
+2. **Make recovery actually reset the failed browser state**
+   - Change the root error screen’s **Try again** action to reload the page instead of repeating a soft router invalidation.
+   - In editor development only, if a corrected hot update arrives while the error screen is mounted, reload once so a stale error boundary cannot remain after the code has recovered.
+   - Production behavior receives no automatic reload listener.
 
-Data path: table `launch_chain_deployments` columns `status`, `deployer_address`, `token_recipient`, filtered by `launch_id`, `chain_id=4663`, `network_environment='PRODUCTION'`, `deployment_kind='FIXED_SUPPLY_ERC20'`. No RPC involved in the read.
+## Allowed files
 
-**A2 — Launch switching does not reset per-launch state.**
-In `mainnet-canary.tsx`, `onSelectLaunch` only sets `name` and `symbol`. It does **not** clear `deployer`, `recipient`, `supply`, `intent`, `deploymentId`, `authorizationId`, `authorizationExpiresAt`, `armPhrase`, `armSuccess`, `claimSuccess`, `quote`, `preflight`, `txHash`. Consequences:
+- `src/routes/_authenticated/route.tsx`
+- `src/routes/__root.tsx`
 
-- `activeDeploymentId = deploymentId ?? existingAttempt?.deploymentId` can still hold the *previous* launch's deployment id after switching — presign/ARM/CLAIM would target the wrong launch.
-- `intent` built for launch X survives into launch Y and would be submitted by "Create production attempt".
-- `CanaryIntentForm.syncBinding` only re-runs on wallet events (`useEffect` deps `[syncBinding]`, which is stable), not when `attemptBound*` props change, so after leaving a launch that had an attempt, the previously bound/typed deployer and recipient remain in form state.
+No other files, backend state, authentication settings, data, Telegram, wallet, chain, runtime flags, migrations, or publishing.
 
-## B. Fabricated addresses?
+## Verification
 
-None. `rg` over `src/` and `scripts/` finds no hardcoded EOA addresses — only the zero address, artifact bytecode/hashes, and `0x1111…`/`0x2222…` test fixtures in the regression script. Every unexpected address is persisted historical DB data:
-
-- attempt 1 `685300e1` ABANDONED — deployer `0xc23b…9245`, recipient `0xf95f…6485`
-- attempt 2 `11381a8c` CONFIRMED — deployer `0xe5b2…d617`, recipient `0xf95f…6485`, tx `0xa997…d6ae`, contract `0xef60…8873`
-
-## C. Was attempt 2's recipient actually committed on chain?
-
-Yes. Prior read-only RPC evidence for contract `0xef60…8873` on chain 4663 showed total supply `1000e18` held entirely by `0xf95f…6485`. Attempt 2's recipient is immutable historical truth and must never be edited or "corrected" — it predates the later deployer==recipient canary rule.
-
-## D. Correct behavior for a NEW unsubmitted attempt
-
-With a verified connected wallet on chain 4663 and no *live* attempt: deployer and recipient are both bound to the validated connected account, read-only, and any historical CONFIRMED/FAILED/ABANDONED row is shown only as history — never as the source of the new intent. Historical identity may never prefill or silently override current wallet identity.
-
-## E. Minimal surgical fix (proposed, not applied)
-
-1. `chain-mainnet-canary.functions.ts`: treat `CONFIRMED` (and any other terminal state) as terminal for the *blocking* lookup; return it separately as `historicalAttempt` (read-only display) rather than `attempt`. Keep creation blocked only by genuinely live attempts, and keep the fail-closed unverified path.
-2. `mainnet-canary.tsx`: on launch change, reset all per-launch state listed in A2 (deployer, recipient, supply, intent, deploymentId, authorizationId/expiry, arm/claim flags, quote, preflight, txHash, tail).
-3. `CanaryIntentForm.tsx`: re-run `syncBinding` when `attemptBoundDeployer` / `attemptBoundRecipient` change, so releasing an attempt binding immediately re-binds to the validated connected wallet or clears.
-
-No DB writes, no migration, no change to presign/ARM/CLAIM/send/verify semantics.
-
-## F. UI distinction
-
-Yes. The console should render two clearly separate blocks: **CURRENT CONNECTED WALLET** (validated session identity, used for any new attempt) and **HISTORICAL ATTEMPT IDENTITY** (read-only, per attempt, with status). When a *live* attempt's immutable deployer differs from the connected account, fail closed: block the send path and state the mismatch, exactly as the pre-send handoff already does — but never bind or display historical identity as current intent.
-
-## G. Verification tests to add
-
-1. Lookup: a `CONFIRMED`-only launch returns `attempt: null` (creation unblocked) and surfaces history separately; a `SUBMITTED`/live row still blocks.
-2. Switching launch X→Y clears deployer, recipient, supply, intent, deploymentId, authorizationId, arm/claim flags — asserted as an exact field list tripwire.
-3. `activeDeploymentId` can never be a deployment id belonging to a different launch id.
-4. Form re-binds to the validated connected account when `attemptBound*` transitions from set to null, and never copies a historical recipient into a new intent.
-5. Server rejects `tokenRecipient !== deployerAddress` before the create RPC (existing assertion, keep).
-6. No new attempt is created with a deployer that differs from the validated connected account while a wallet is connected.
-7. No path added that mutates or corrects any historical `launch_chain_deployments` row.
-
-STOP — audit only, nothing built.
+- Confirm the build diagnostics remain clean.
+- Run the focused type check and production build.
+- Verify signed-out routing still reaches `/auth`.
+- Verify the authenticated preview reaches CARTEL HQ and Launch Control without the error boundary.
+- Verify the previously stuck preview can recover after the update instead of retaining “This page didn’t load.”
+- Confirm only the two allowed files changed and the project remains unpublished.
