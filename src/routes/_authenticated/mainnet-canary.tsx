@@ -276,7 +276,45 @@ function CanaryConsole() {
     setName(row.token_name ?? "");
     setSymbol(deriveCanaryOnchainSymbol(row.ticker));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [launches.data, launchId]);
+  }, [launches.data, launchId, search.request]);
+
+  /**
+   * REQUEST-BOUND HYDRATION. The customer's approved request row is the ONLY
+   * identity source in this mode: token name, onchain symbol, exact supply and
+   * the immutable recipient are copied read-only from it, and the bound
+   * deployment id (when execution has already begun) becomes the deployment
+   * context for the existing protected stages.
+   *
+   * This hydration is local UI state only. It creates nothing, signs nothing,
+   * arms nothing and advances no stage.
+   */
+  const requestHydrationKey = selectedRequest
+    ? `${selectedRequest.id}:${selectedRequest.executionDeploymentId ?? ""}`
+    : "";
+  useEffect(() => {
+    if (!selectedRequest) return;
+    resetLaunchScopedState();
+    setBeginPhrase("");
+    setLaunchId(selectedRequest.launchId);
+    setName(selectedRequest.tokenName);
+    setSymbol(selectedRequest.tokenSymbol);
+    setRecipient(selectedRequest.tokenRecipient);
+    setSupply(selectedRequest.tokenSupplyWhole);
+    setDeploymentId(selectedRequest.executionDeploymentId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestHydrationKey]);
+
+  const selectRequest = (requestId: string | null) => {
+    setBeginPhrase("");
+    resetLaunchScopedState();
+    setLaunchId("");
+    void navigate({
+      to: "/mainnet-canary",
+      search: requestId ? { request: requestId } : {},
+      replace: true,
+    });
+  };
+
 
 
   /**
