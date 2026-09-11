@@ -1120,8 +1120,8 @@ function LaunchControlPage() {
 
           <Section
             variant="quiet"
-            title="Launches"
-            description={`Select a launch to work on. One project profile can hold multiple launches.`}
+            title="Project launches"
+            description="Select a launch to work on. One project profile can hold multiple launches."
 
             actions={
               canManage ? (
@@ -1147,13 +1147,13 @@ function LaunchControlPage() {
                   Retry
                 </Button>
               </div>
-            ) : launches.length === 0 ? (
+            ) : projectLaunches.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No launches yet. Create a draft launch to begin the lifecycle.
               </p>
             ) : (
               <ul className="grid gap-2.5 sm:grid-cols-2 [&>*]:min-w-0">
-                {launches.map((launch) => {
+                {projectLaunches.map((launch) => {
                   const s = toLaunchStatus(launch.status);
                   const active = launch.id === selectedId;
                   return (
@@ -1196,12 +1196,76 @@ function LaunchControlPage() {
             )}
           </Section>
 
-          {creating && canManage ? (
-            <Section
-              variant="surface"
-              title="New launch"
-              description="Prefilled from the Project Profile. Nothing is saved until you press Create. The Project Profile is not modified."
-            >
+          {/* Owner-only. Internal chain-test records are never part of the
+              product surface: the database keeps them permanently DRAFT,
+              tokenless and unable to bind an official contract. */}
+          {isWorkspaceOwner && internalTestLaunches.length > 0 ? (
+            <details className="surface-quiet min-w-0 rounded-lg">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
+                Internal test launches ({internalTestLaunches.length})
+              </summary>
+              <div className="min-w-0 space-y-3 px-3.5 pb-3.5">
+                <p className="max-w-prose type-helper text-muted-foreground">
+                  Permanently private DRAFT chain-test records. They never appear on the Cartel
+                  Network, never open Launch Watch, never register an official contract and are
+                  never part of the project journey or launch readiness.
+                </p>
+                <ul className="grid gap-2.5 sm:grid-cols-2 [&>*]:min-w-0">
+                  {internalTestLaunches.map((launch) => {
+                    const active = launch.id === selectedId;
+                    return (
+                      <li key={launch.id}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedId(launch.id)}
+                          aria-current={active ? "true" : undefined}
+                          className={`hover-lift flex w-full min-w-0 items-start gap-3 rounded-lg border px-3.5 py-3 text-left ${
+                            active
+                              ? "border-gold/55 bg-gold/8"
+                              : "border-border-subtle bg-background/40"
+                          }`}
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className="block min-w-0 truncate font-display text-base uppercase leading-tight text-foreground">
+                              {launch.token_name}
+                            </span>
+                            <span className="mt-0.5 block min-w-0 truncate type-technical text-muted-foreground">
+                              {launch.ticker} · {launch.chain} · /{launch.public_slug}
+                            </span>
+                            <span className="mt-2 flex flex-wrap gap-1.5">
+                              <StatusBadge tone="gold">
+                                <span>Internal test</span>
+                              </StatusBadge>
+                              <StatusBadge tone="muted">
+                                <span>{LAUNCH_STATUS_LABELS[toLaunchStatus(launch.status)]}</span>
+                              </StatusBadge>
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            </details>
+          ) : null}
+
+          {/* New launch is a focused dialog so creation fields never mix with
+              the selected launch. Same state, inputs, validation and mutation. */}
+          <Dialog
+            open={creating && canManage}
+            onOpenChange={(open) => {
+              if (!open) setCreating(false);
+            }}
+          >
+            <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>New launch</DialogTitle>
+                <DialogDescription>
+                  Prefilled from the Project Profile. Nothing is saved until you press Create. The
+                  Project Profile is not modified.
+                </DialogDescription>
+              </DialogHeader>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="min-w-0">
                   <Label htmlFor="new-token-name">Token name</Label>
@@ -1250,10 +1314,17 @@ function LaunchControlPage() {
 
                 </div>
               </div>
-              <p className="mt-3 text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Timezone recorded from this device: {tz}. New launches always start in Draft.
               </p>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <DialogFooter className="gap-2 sm:gap-2">
+                <Button
+                  variant="outline"
+                  className="min-h-11"
+                  onClick={() => setCreating(false)}
+                >
+                  Cancel
+                </Button>
                 <Button
                   className="min-h-11"
                   disabled={!canCreate || !canManage || createMutation.isPending}
@@ -1266,16 +1337,10 @@ function LaunchControlPage() {
                   )}
                   Create draft launch
                 </Button>
-                <Button
-                  variant="outline"
-                  className="min-h-11"
-                  onClick={() => setCreating(false)}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </Section>
-          ) : null}
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
 
           {selected ? (
             <>
