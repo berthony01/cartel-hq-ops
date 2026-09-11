@@ -4,10 +4,10 @@ import { cn } from "@/lib/utils";
 export type SectionVariant = "hero" | "primary" | "surface" | "quiet" | "plain";
 
 const VARIANTS: Record<SectionVariant, string> = {
-  hero: "cartel-hero rounded-xl p-4 sm:p-6",
-  primary: "cartel-panel rounded-xl p-4 sm:p-6",
-  surface: "rounded-lg border border-border/70 bg-surface-raised/60 p-3 sm:p-5",
-  quiet: "rounded-md bg-surface-raised/25 p-2.5 sm:p-3.5",
+  hero: "cartel-hero rounded-lg p-4 sm:p-6",
+  primary: "cartel-panel rounded-lg p-4 sm:p-6",
+  surface: "surface-elevated rounded-lg p-3.5 sm:p-5",
+  quiet: "surface-quiet rounded-md p-3 sm:p-4",
   plain: "p-0",
 };
 
@@ -50,7 +50,7 @@ export function Section({
         <div
           className={cn(
             "grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 sm:flex sm:items-center sm:justify-between",
-            children ? "mb-3 sm:mb-4" : undefined,
+            children ? "mb-4 sm:mb-5" : undefined,
             headerClassName,
           )}
         >
@@ -58,7 +58,7 @@ export function Section({
             {leading ? <span className="mt-0.5 shrink-0 text-gold">{leading}</span> : null}
             <div className="min-w-0">
               {title ? (
-                <h2 className="min-w-0 text-sm font-semibold uppercase tracking-[0.14em] text-foreground [overflow-wrap:anywhere]">
+                <h2 className="min-w-0 text-sm font-semibold uppercase tracking-[0.12em] text-foreground [overflow-wrap:anywhere]">
                   {title}
                 </h2>
               ) : null}
