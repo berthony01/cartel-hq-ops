@@ -140,7 +140,9 @@ export function MotionStudioPanel({
   telegramPublished,
   releasingMotion,
   releaseError,
+  staticPreviewUrl,
   onGenerate,
+
   onSetCurrentMotion,
   onPrepareTelegram,
   onRetryNormalization,
