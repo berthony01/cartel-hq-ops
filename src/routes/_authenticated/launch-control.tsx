@@ -4,8 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Bell,
-
   Check,
+  ChevronDown,
   Copy,
   ExternalLink,
   IdCard,
@@ -14,8 +14,10 @@ import {
   Plus,
   Rocket,
   Save,
+  ShieldCheck,
   Trash2,
 } from "lucide-react";
+
 import { toast } from "sonner";
 import { useWorkspace } from "@/lib/workspace-context";
 import { getProjectProfile } from "@/lib/project-profile";
@@ -1136,6 +1138,86 @@ function LaunchControlPage() {
         ? "Complete evidence-bound contract registration first. This launch must be bound to a verified deployment record — address, deployment and registration time — before the official contract reference can be registered."
         : null;
 
+  /**
+   * UX-A: presentation-only section indicators. Every value below is already
+   * rendered inside the corresponding section — nothing new is asserted, no
+   * query is added and no handler, mutation or gate is involved.
+   */
+  const registrationCandidateReady = Boolean(
+    deploymentEvidence?.registrationCandidate && !deploymentEvidence.ambiguous,
+  );
+  const sectionItems: SectionNavItem[] = LAUNCH_SECTIONS.map((item) => {
+    switch (item.id) {
+      case "lc-overview":
+        return blockedReason
+          ? { ...item, state: "blocked" as const, stateLabel: "Blocked" }
+          : next
+            ? { ...item, state: "attention" as const, stateLabel: "Action available" }
+            : { ...item, state: "complete" as const, stateLabel: "Lifecycle complete" };
+      case "lc-schedule":
+        return scheduleReady
+          ? { ...item, state: "complete" as const, stateLabel: "Schedule set" }
+          : { ...item, state: "attention" as const, stateLabel: "Schedule not set" };
+      case "lc-watch":
+        return watchToken
+          ? { ...item, state: "complete" as const, stateLabel: "Launch Watch open" }
+          : profilePublished
+            ? { ...item, state: "attention" as const, stateLabel: "Launch Watch not open yet" }
+            : { ...item, state: "blocked" as const, stateLabel: "Publish the project profile first" };
+      case "lc-comms":
+        return pendingScheduleComm
+          ? { ...item, state: "attention" as const, stateLabel: "Schedule change not communicated" }
+          : { ...item, state: "neutral" as const };
+      case "lc-contract":
+        return contractRegistered
+          ? { ...item, state: "complete" as const, stateLabel: "Official contract registered" }
+          : registrationCandidateReady
+            ? { ...item, state: "attention" as const, stateLabel: "Registration available" }
+            : { ...item, state: "blocked" as const, stateLabel: "Deployment evidence required" };
+      default:
+        return { ...item, state: "neutral" as const };
+    }
+  });
+
+  /**
+   * Plain-English contract guidance derived from the same evaluation object the
+   * registration panel already uses. Eligibility, finality and registration
+   * rules are untouched — this only explains the state the user is already in.
+   */
+  const contractGuidance: { tone: "green" | "gold" | "muted"; headline: string; why: string; nextUp: string } =
+    contractRegistered
+      ? {
+          tone: "green",
+          headline: "Official contract: Registered",
+          why: "This launch is bound to a verified deployment record — address, deployment and registration time.",
+          nextUp:
+            "Notifying watchers and posting to your community remain separate, explicit actions below.",
+        }
+      : registrationCandidateReady
+        ? {
+            tone: "gold",
+            headline: "Official contract: Ready to register",
+            why: "Exactly one verified production deployment qualifies for official registration.",
+            nextUp: "Review the candidate below and register the official contract when you are ready.",
+          }
+        : deploymentEvidence && deploymentEvidence.ambiguous
+          ? {
+              tone: "muted",
+              headline: "Official contract: Not registered yet",
+              why: "More than one deployment qualifies, so no candidate is selected automatically.",
+              nextUp:
+                "Registration stays closed until exactly one qualifying production deployment remains.",
+            }
+          : {
+              tone: "muted",
+              headline: "Official contract: Not created or registered yet",
+              why: "This launch does not yet have verified production mainnet deployment evidence.",
+              nextUp:
+                "Production deployment evidence must exist before official contract registration unlocks.",
+            };
+
+
+
   const saveButton =
     selected && canManage ? (
       <Button
@@ -1318,8 +1400,9 @@ function LaunchControlPage() {
               tokenless and unable to bind an official contract. */}
           {isWorkspaceOwner && internalTestLaunches.length > 0 ? (
             <details className="surface-quiet min-w-0 rounded-lg">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
-                Internal test launches ({internalTestLaunches.length})
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
+                <span className="min-w-0 [overflow-wrap:anywhere]">Internal test launches ({internalTestLaunches.length})</span>
+                <ChevronDown className="size-4 shrink-0 transition-transform [[open]_&]:rotate-180" aria-hidden="true" />
               </summary>
               <div className="min-w-0 space-y-3 px-3.5 pb-3.5">
                 <p className="max-w-prose type-helper text-muted-foreground">
@@ -1517,9 +1600,10 @@ function LaunchControlPage() {
                 </dl>
 
                 <details className="surface-quiet mt-3 min-w-0 rounded-lg">
-                  <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
-                    Technical deployment evidence
-                  </summary>
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
+                <span className="min-w-0 [overflow-wrap:anywhere]">Technical deployment evidence</span>
+                <ChevronDown className="size-4 shrink-0 transition-transform [[open]_&]:rotate-180" aria-hidden="true" />
+              </summary>
                   <div className="min-w-0 px-3 pb-3">
                     <VerifiedDeploymentEvidencePanel
                       evaluation={deploymentEvidence}
@@ -1549,7 +1633,7 @@ function LaunchControlPage() {
             <>
             <SectionNav
               label="Launch Control sections"
-              items={LAUNCH_SECTIONS}
+              items={sectionItems}
               activeId={activeSection}
               onChange={selectSection}
             />
@@ -1746,8 +1830,9 @@ function LaunchControlPage() {
             </Section>
 
             <details className="surface-quiet min-w-0 rounded-lg">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
-                Lifecycle guide
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
+                <span className="min-w-0 [overflow-wrap:anywhere]">Lifecycle guide</span>
+                <ChevronDown className="size-4 shrink-0 transition-transform [[open]_&]:rotate-180" aria-hidden="true" />
               </summary>
               <div className="min-w-0 px-3.5 pb-3.5">
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -1801,8 +1886,9 @@ function LaunchControlPage() {
             </details>
 
             <details className="surface-quiet min-w-0 rounded-lg">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
-                Lifecycle timestamps
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
+                <span className="min-w-0 [overflow-wrap:anywhere]">Lifecycle timestamps</span>
+                <ChevronDown className="size-4 shrink-0 transition-transform [[open]_&]:rotate-180" aria-hidden="true" />
               </summary>
               <div className="min-w-0 px-3.5 pb-3.5">
                 <dl className="space-y-1.5 text-xs">
@@ -2346,9 +2432,10 @@ function LaunchControlPage() {
                       </div>
 
                       <details className="surface-quiet min-w-0 rounded-lg">
-                        <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
-                          How Launch Watch works
-                        </summary>
+                        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
+                <span className="min-w-0 [overflow-wrap:anywhere]">How Launch Watch works</span>
+                <ChevronDown className="size-4 shrink-0 transition-transform [[open]_&]:rotate-180" aria-hidden="true" />
+              </summary>
                         <div className="space-y-2 px-3 pb-3">
                           <ol className="list-decimal space-y-1 pl-4 text-xs leading-relaxed text-muted-foreground">
                             <li>A user taps “Watch this launch” from a community post or public link.</li>
@@ -2569,9 +2656,10 @@ function LaunchControlPage() {
                 </Section>
 
                 <details className="surface-quiet min-w-0 rounded-lg">
-                  <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
-                    Advanced communication diagnostics
-                  </summary>
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
+                <span className="min-w-0 [overflow-wrap:anywhere]">Advanced communication diagnostics</span>
+                <ChevronDown className="size-4 shrink-0 transition-transform [[open]_&]:rotate-180" aria-hidden="true" />
+              </summary>
                   <div className="min-w-0 px-3 pb-3">
                 <Section
                   variant="quiet"
@@ -2662,13 +2750,49 @@ function LaunchControlPage() {
             </WorkingView>
 
             <WorkingView id="lc-contract" active={activeSection === "lc-contract"}>
-                <div className="min-w-0 rounded-lg border-l-2 border-gold/50 bg-gold/5 px-3.5 py-3">
-                  <p className="type-eyebrow text-gold">Official contract</p>
-                  <p className="mt-1 max-w-prose type-helper text-muted-foreground">
-                    Evidence-bound registration, corrections and the two separate communication
-                    actions. Registering never messages anyone on its own.
+                <Section
+                  variant="surface"
+                  className={
+                    contractGuidance.tone === "green"
+                      ? "min-w-0 border-pepe/35"
+                      : contractGuidance.tone === "gold"
+                        ? "min-w-0 border-gold/45"
+                        : "min-w-0"
+                  }
+                  contentClassName="space-y-3"
+                >
+                  <div className="flex min-w-0 items-start gap-3">
+                    <span
+                      className={`flex size-9 shrink-0 items-center justify-center rounded-md border ${
+                        contractGuidance.tone === "green"
+                          ? "border-pepe/45 bg-pepe/10 text-pepe"
+                          : contractGuidance.tone === "gold"
+                            ? "border-gold/45 bg-gold/10 text-gold"
+                            : "border-border-strong bg-background/50 text-muted-foreground"
+                      }`}
+                    >
+                      <ShieldCheck className="size-5" aria-hidden="true" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="min-w-0 text-base font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">
+                        {contractGuidance.headline}
+                      </p>
+                      <p className="mt-1 max-w-prose text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                        <span className="font-semibold text-foreground/85">Why: </span>
+                        {contractGuidance.why}
+                      </p>
+                      <p className="mt-1 max-w-prose text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                        <span className="font-semibold text-foreground/85">What happens next: </span>
+                        {contractGuidance.nextUp}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="min-w-0 border-t border-border-subtle pt-3 type-helper text-muted-foreground">
+                    Registration, corrections, watcher notification and community posting stay
+                    separate, explicit actions. Registering never messages anyone on its own.
                   </p>
-                </div>
+                </Section>
+
 
                 <dl className="grid min-w-0 gap-2.5 sm:grid-cols-3">
                   <div className="surface-quiet min-w-0 rounded-lg p-3">
@@ -2807,9 +2931,10 @@ function LaunchControlPage() {
                 {/* Full technical evidence stays mounted and read-only, using
                     the same evaluation object as the panels above. */}
                 <details className="surface-quiet min-w-0 rounded-lg">
-                  <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
-                    Technical deployment evidence
-                  </summary>
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
+                <span className="min-w-0 [overflow-wrap:anywhere]">Technical deployment evidence</span>
+                <ChevronDown className="size-4 shrink-0 transition-transform [[open]_&]:rotate-180" aria-hidden="true" />
+              </summary>
                   <div className="min-w-0 px-3 pb-3">
                     <VerifiedDeploymentEvidencePanel
                       evaluation={deploymentEvidence}

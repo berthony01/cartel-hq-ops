@@ -5,11 +5,13 @@ import {
   Check,
   Circle,
   CircleDot,
-  HelpCircle,
   Loader2,
+  Lock,
   RefreshCw,
   ShieldCheck,
+  Target,
 } from "lucide-react";
+
 
 import { Button } from "@/components/ui/button";
 import { Section } from "@/components/cartel/Section";
@@ -145,58 +147,78 @@ function NextActionBlock({
   const blockedStage = journey.stages.find((stage) => stage.status !== "complete") ?? null;
   const activeStage = nextAction.stage ?? blockedStage;
   const blocked = !allComplete && nextAction.stage === null && blockedStage !== null;
+  const StateIcon = allComplete ? Check : blocked ? Lock : Target;
+  const explanation =
+    blocked && blockedStage ? blockedGuidance(blockedStage) : nextAction.explanation;
   return (
     <div
       className={cn(
-        "min-w-0 rounded-md border p-3.5 sm:p-4",
+        "min-w-0 rounded-lg border p-4 sm:p-5",
         allComplete
-          ? "border-pepe/40 bg-pepe/5"
+          ? "border-pepe/45 bg-pepe/5"
           : blocked
             ? "border-border-strong bg-surface-raised/60"
-            : "border-gold/40 bg-gold/5",
+            : "border-gold/55 bg-gold/10 shadow-[var(--glow-gold)]",
       )}
     >
-      <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-        <div className="min-w-0">
-          <p
+      <div className="grid min-w-0 gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+        <div className="flex min-w-0 items-start gap-3">
+          <span
             className={cn(
-              "type-eyebrow",
-              allComplete ? "text-pepe" : blocked ? "text-muted-foreground" : "text-gold",
+              "flex size-9 shrink-0 items-center justify-center rounded-md border",
+              allComplete
+                ? "border-pepe/45 bg-pepe/10 text-pepe"
+                : blocked
+                  ? "border-border-strong bg-background/50 text-muted-foreground"
+                  : "border-gold/45 bg-gold/10 text-gold",
             )}
           >
-            {allComplete ? "Status" : blocked ? "Blocked dependency" : "Continue setup"}
-          </p>
-          <p className="mt-1 text-sm font-semibold text-foreground [overflow-wrap:anywhere]">
-            {blocked && blockedStage ? blockedStage.title : nextAction.headline}
-          </p>
-          {compact ? null : (
-            <p className="mt-1 max-w-prose text-xs leading-relaxed text-muted-foreground sm:text-sm">
-              {blocked && blockedStage ? blockedGuidance(blockedStage) : nextAction.explanation}
+            <StateIcon className="size-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p
+              className={cn(
+                "text-[11px] font-bold uppercase tracking-[0.18em]",
+                allComplete ? "text-pepe" : blocked ? "text-muted-foreground" : "text-gold",
+              )}
+            >
+              {allComplete ? "Status" : blocked ? "Blocked dependency" : "Next action"}
             </p>
-          )}
+            <p className="mt-1 text-base font-semibold leading-snug text-foreground [overflow-wrap:anywhere] sm:text-lg">
+              {blocked && blockedStage ? blockedStage.title : nextAction.headline}
+            </p>
+            {compact ? null : (
+              <p className="mt-1.5 max-w-prose text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                {explanation}
+              </p>
+            )}
+          </div>
         </div>
         {activeStage ? (
           <Button
             asChild
-            size="sm"
             variant={blocked ? "outline" : "default"}
             className="min-h-11 w-full shrink-0 sm:w-auto"
           >
             <JourneyLink
               stage={activeStage}
               primaryLaunchId={journey.primaryLaunchId}
-              label={blocked ? `Review ${activeStage.title}` : activeStage.actionLabel}
+              label={blocked ? reviewLabel(activeStage) : activeStage.actionLabel}
             />
           </Button>
         ) : null}
       </div>
       {compact ? (
-        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-          {blocked && blockedStage ? blockedGuidance(blockedStage) : nextAction.explanation}
-        </p>
+        <p className="mt-2.5 text-xs leading-relaxed text-muted-foreground">{explanation}</p>
       ) : null}
     </div>
   );
+}
+
+/** Truthful review wording. A blocked stage is never described as doable now. */
+function reviewLabel(stage: JourneyStage): string {
+  if (stage.key === "deployment") return "Review deployment evidence";
+  return `Review ${stage.title}`;
 }
 
 function StageRow({
@@ -210,39 +232,48 @@ function StageRow({
 }) {
   const complete = stage.status === "complete";
   const blocked = stage.status === "waiting" || stage.status === "unavailable";
-  const later = stage.status === "action" && !isNext;
-  const Icon = complete ? Check : blocked ? HelpCircle : isNext ? CircleDot : Circle;
-  const secondaryLabel = stage.key === "deployment" ? "Review evidence" : "View";
+  const Icon = complete ? Check : blocked ? Lock : isNext ? CircleDot : Circle;
   return (
     <li
       className={cn(
-        "grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2.5 gap-y-2 rounded-md border px-3 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto]",
+        "grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2.5 rounded-lg border transition-colors sm:grid-cols-[auto_minmax(0,1fr)_auto]",
         complete
-          ? "border-pepe/30 bg-pepe/5"
+          ? "border-pepe/25 bg-pepe/[0.04] px-3 py-2.5"
           : isNext
-            ? "border-gold/55 bg-gold/10 shadow-[var(--glow-gold)]"
-            : "border-border/60 bg-surface-raised/40",
+            ? "border-gold/55 bg-gold/10 px-3.5 py-4 shadow-[var(--glow-gold)] sm:col-span-2"
+            : blocked
+              ? "border-border/60 bg-surface-raised/30 px-3 py-3"
+              : "border-border/50 bg-surface-raised/20 px-3 py-3",
       )}
     >
       <span
         className={cn(
-          "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border",
+          "mt-0.5 flex shrink-0 items-center justify-center rounded-full border",
+          isNext ? "size-7" : "size-5",
           complete
             ? "border-pepe/50 text-pepe"
             : isNext
-              ? "border-gold/50 text-gold"
+              ? "border-gold/60 bg-gold/10 text-gold"
               : "border-border text-muted-foreground",
         )}
       >
-        <Icon className="size-3" aria-hidden="true" />
+        <Icon className={isNext ? "size-4" : "size-3"} aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium text-foreground [overflow-wrap:anywhere]">
+        <span
+          className={cn(
+            "block font-medium text-foreground [overflow-wrap:anywhere]",
+            isNext ? "text-base font-semibold" : "text-sm",
+            complete ? "text-foreground/85" : undefined,
+          )}
+        >
           {stage.order}. {stage.title}
         </span>
-        <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-          {blocked ? blockedGuidance(stage) : stage.detail ?? stage.description}
-        </span>
+        {complete ? null : (
+          <span className="mt-1 block text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+            {blocked ? blockedGuidance(stage) : stage.detail ?? stage.description}
+          </span>
+        )}
       </span>
       <span className="col-start-2 flex min-w-0 flex-col items-start gap-2 sm:col-start-3 sm:row-start-1 sm:items-end">
         {complete ? (
@@ -262,24 +293,25 @@ function StageRow({
             <span>LATER</span>
           </StatusBadge>
         )}
-        {!complete ? (
+        {complete ? null : (
           <Button
             asChild
-            size="sm"
-            variant={isNext ? "default" : "outline"}
-            className={cn("min-h-11 w-full sm:w-auto", later || blocked ? "text-xs" : "")}
+            size={isNext ? "default" : "sm"}
+            variant={isNext ? "default" : blocked ? "outline" : "secondary"}
+            className="min-h-11 w-full sm:w-auto"
           >
             <JourneyLink
               stage={stage}
               primaryLaunchId={primaryLaunchId}
-              label={isNext ? stage.actionLabel : secondaryLabel}
+              label={isNext ? stage.actionLabel : blocked ? reviewLabel(stage) : "Open"}
             />
           </Button>
-        ) : null}
+        )}
       </span>
     </li>
   );
 }
+
 
 function ErrorState({
   message,

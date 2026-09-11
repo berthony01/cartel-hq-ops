@@ -1,11 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Activity,
   Sticker,
   PackageOpen,
   AlertTriangle,
   ChevronRight,
 } from "lucide-react";
+
 
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/lib/workspace-context";
@@ -40,6 +42,8 @@ import { InlineRow } from "@/components/cartel/InlineRow";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { ProjectJourneyPanel } from "@/components/cartel/ProjectJourney";
+import { Button } from "@/components/ui/button";
+
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
@@ -378,12 +382,13 @@ function HqDashboard() {
                   Launch data could not be loaded right now. This does not change your launch —
                   open Launch Control to view the authoritative state.
                 </p>
-                <Link
-                  to="/launch-control"
-                  className="touch-target inline-flex w-fit items-center gap-1.5 rounded-md border border-gold/50 bg-gold/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-gold transition-colors hover:bg-gold/20"
-                >
-                  Open Launch Control <ChevronRight className="size-4" aria-hidden="true" />
-                </Link>
+                <Button asChild variant="outline" className="min-h-11 w-full sm:w-auto">
+                  <Link to="/launch-control">
+                    Open Launch Control
+                    <ChevronRight className="size-4" aria-hidden="true" />
+                  </Link>
+                </Button>
+
               </div>
             ) : !primaryLaunch ? (
               <div className="min-w-0 space-y-3">
@@ -395,12 +400,13 @@ function HqDashboard() {
                   Launch Control is where you create the launch, open Launch Watch, register the
                   official contract and drive the lifecycle.
                 </p>
-                <Link
-                  to="/launch-control"
-                  className="touch-target inline-flex w-fit items-center gap-1.5 rounded-md border border-gold/50 bg-gold/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-gold transition-colors hover:bg-gold/20"
-                >
-                  Create launch <ChevronRight className="size-4" aria-hidden="true" />
-                </Link>
+                <Button asChild className="min-h-11 w-full sm:w-auto">
+                  <Link to="/launch-control">
+                    Create launch
+                    <ChevronRight className="size-4" aria-hidden="true" />
+                  </Link>
+                </Button>
+
               </div>
             ) : (
 
@@ -452,8 +458,13 @@ function HqDashboard() {
                   </dl>
                 </div>
 
-                <div className="surface-quiet min-w-0 space-y-4 rounded-md p-4">
-                  <p className="type-eyebrow text-muted-foreground">Operational focus</p>
+                <div className="min-w-0 space-y-4 rounded-lg border border-gold/25 bg-surface-raised/60 p-4">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Activity className="size-4 shrink-0 text-gold" aria-hidden="true" />
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gold">
+                      Operational focus
+                    </p>
+                  </div>
                   <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
                     <Fact
                       label="Communities"
@@ -480,16 +491,22 @@ function HqDashboard() {
                       }
                     />
                   </dl>
-                  <p className="min-w-0 border-l-2 border-gold bg-gold/5 px-3 py-2.5 text-xs font-semibold uppercase tracking-[0.1em] text-gold [overflow-wrap:anywhere]">
-                    {nextLine}
-                  </p>
-                  <Link
-                    to="/launch-control"
-                    className="touch-target inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-gold/40 bg-gold px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-primary-foreground transition-[background-color,transform] hover:-translate-y-px hover:bg-gold/90 sm:w-fit"
-                  >
-                    Open Launch Control <ChevronRight className="size-4" aria-hidden="true" />
-                  </Link>
+                  <div className="min-w-0 rounded-md border border-gold/35 bg-gold/10 px-3 py-2.5">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold">
+                      Next in Launch Control
+                    </p>
+                    <p className="mt-1 min-w-0 text-sm font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">
+                      {nextLine.replace(/^Next: /, "")}
+                    </p>
+                  </div>
+                  <Button asChild className="min-h-11 w-full">
+                    <Link to="/launch-control">
+                      Open Launch Control
+                      <ChevronRight className="size-4" aria-hidden="true" />
+                    </Link>
+                  </Button>
                 </div>
+
               </div>
             )}
           </Section>
@@ -511,13 +528,11 @@ function HqDashboard() {
                   leading={<AlertTriangle className="size-4" aria-hidden="true" />}
                   title={item.text}
                   trailing={
-                    <Link
-                      to={item.to}
-                      className="whitespace-nowrap text-xs uppercase tracking-[0.14em] text-gold hover:underline"
-                    >
-                      {item.action}
-                    </Link>
+                    <Button asChild size="sm" variant="outline" className="min-h-11 shrink-0">
+                      <Link to={item.to}>{item.action}</Link>
+                    </Button>
                   }
+
                 />
               ))}
             </Section>
@@ -644,12 +659,10 @@ function HqDashboard() {
             className="rise-in"
             title="Recent packs"
             actions={
-              <Link
-                to="/sticker-lab"
-                className="text-xs uppercase tracking-[0.14em] text-gold hover:underline"
-              >
-                Open Lab
-              </Link>
+              <Button asChild size="sm" variant="outline" className="min-h-11">
+                <Link to="/sticker-lab">Open Lab</Link>
+              </Button>
+
             }
             contentClassName="space-y-2"
           >
@@ -665,7 +678,13 @@ function HqDashboard() {
                 icon={PackageOpen}
                 title="No packs yet"
                 description="Sticker packs saved from Sticker Lab appear here for this project."
+                action={
+                  <Button asChild size="sm" className="min-h-11">
+                    <Link to="/sticker-lab">Open Sticker Lab</Link>
+                  </Button>
+                }
               />
+
             ) : (
               recentPacks.map((pack) => (
                 <InlineRow
