@@ -1064,6 +1064,73 @@ function LaunchControlPage() {
   /** Presentation-only count derived from the existing evidence query. */
   const deploymentRecordCount = deploymentEvidenceQuery.data?.length ?? 0;
 
+  // ---- Launcher-B2: production deployment handoff request ------------------
+  // PROJECT launches only. Reading, submitting and withdrawing all go through
+  // the existing owner-only RPCs; nothing here deploys, signs, broadcasts,
+  // registers a contract, changes lifecycle, notifies Telegram or adds
+  // liquidity. The database re-derives every eligibility rule.
+  const selectedIsProjectLaunch = !!selected && isProjectLaunch(selected);
+  const productionRequestQuery = useQuery({
+    queryKey: productionDeploymentRequestQueryKey(
+      selectedIsProjectLaunch ? selected!.id : null,
+    ),
+    enabled: selectedIsProjectLaunch,
+    queryFn: () => getLaunchProductionDeploymentRequest(selected!.id),
+  });
+
+  const productionRequestHints = useMemo(
+    () => ({
+      isProjectLaunch: selectedIsProjectLaunch,
+      profilePublished: profile?.discovery_status === "published",
+      scheduleSet: !!(selected?.launch_at || selected?.launch_window_start),
+      launchStatus: selected?.status ?? "",
+      registrationRecorded: !!(
+        selected?.official_contract_address || selected?.contract_registered_at
+      ),
+      hasProductionDeploymentEvidence: (deploymentEvidenceQuery.data ?? []).some(
+        (row) => row.network_environment === "PRODUCTION",
+      ),
+    }),
+    [selectedIsProjectLaunch, profile, selected, deploymentEvidenceQuery.data],
+  );
+
+  const invalidateProductionRequest = (launchId: string) => {
+    void queryClient.invalidateQueries({
+      queryKey: productionDeploymentRequestQueryKey(launchId),
+    });
+    void queryClient.invalidateQueries({ queryKey: ["launches", workspaceId] });
+    void queryClient.invalidateQueries({ queryKey: launchReadinessQueryKey(workspaceId) });
+    void queryClient.invalidateQueries({ queryKey: chainDeploymentsQueryKey(launchId) });
+  };
+
+  const submitProductionRequestMutation = useMutation({
+    mutationFn: async (input: { tokenSupplyWhole: string; tokenRecipient: string }) => {
+      if (!selected) throw new Error("No launch selected.");
+      return submitLaunchProductionDeploymentRequest({ launchId: selected.id, ...input });
+    },
+    onSuccess: () => {
+      toast.success("Deployment request recorded — nothing has been deployed");
+      if (selected) invalidateProductionRequest(selected.id);
+    },
+    onError: (err: unknown) => {
+      toast.error(
+        err instanceof Error ? err.message : "Could not record the deployment request.",
+      );
+    },
+  });
+
+  const withdrawProductionRequestMutation = useMutation({
+    mutationFn: (requestId: string) => withdrawLaunchProductionDeploymentRequest(requestId),
+    onSuccess: () => {
+      toast.success("Deployment request withdrawn");
+      if (selected) invalidateProductionRequest(selected.id);
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : "Could not withdraw the request.");
+    },
+  });
+
+
 
   
 
