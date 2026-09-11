@@ -1342,10 +1342,105 @@ function LaunchControlPage() {
           </Dialog>
 
 
-          {selected ? (
+          {/* INTERNAL_TEST: read-only internal record. No lifecycle controls,
+              no schedule, no Launch Watch, no communications and no official
+              contract registration are rendered on this path at all. */}
+          {selected && selectedIsInternalTest ? (
+            <div className="min-w-0 space-y-4 sm:space-y-6">
+              <Section variant="hero" className="min-w-0" contentClassName="min-w-0">
+                <p className="type-eyebrow text-gold">Internal test record</p>
+                <h2 className="mt-1.5 min-w-0 font-display text-2xl uppercase leading-[0.95] text-foreground [overflow-wrap:anywhere] sm:text-3xl">
+                  {selected.token_name}
+                </h2>
+                <div className="mt-2.5 flex min-w-0 flex-wrap items-center gap-1.5">
+                  <StatusBadge tone="gold">
+                    <span>Internal test</span>
+                  </StatusBadge>
+                  <StatusBadge tone="muted">
+                    <span>{LAUNCH_STATUS_LABELS[status]}</span>
+                  </StatusBadge>
+                  <StatusBadge tone="muted">
+                    <span>{selected.chain}</span>
+                  </StatusBadge>
+                  <span className="min-w-0 rounded-sm border border-border-subtle bg-background/40 px-2 py-1 type-technical text-muted-foreground [overflow-wrap:anywhere]">
+                    /{selected.public_slug}
+                  </span>
+                </div>
+                <p className="mt-3 max-w-prose type-helper text-muted-foreground">
+                  This is a permanently private chain-test record. It stays in Draft, never opens
+                  Launch Watch, never registers an official contract, never appears on the Cartel
+                  Network and is excluded from launch readiness and the project journey.
+                </p>
+              </Section>
+
+              <Section
+                variant="surface"
+                title="Chain deployment evidence"
+                description="Read-only summary of the deployment attempts recorded against this internal test record."
+              >
+                <dl className="grid min-w-0 gap-2.5 sm:grid-cols-3">
+                  <div className="surface-quiet min-w-0 rounded-lg p-3">
+                    <dt className="type-eyebrow text-muted-foreground">Deployment records</dt>
+                    <dd className="mt-1.5 font-mono text-lg font-semibold text-foreground">
+                      {deploymentEvidenceQuery.isLoading ? "—" : deploymentRecordCount}
+                    </dd>
+                  </div>
+                  <div className="surface-quiet min-w-0 rounded-lg p-3">
+                    <dt className="type-eyebrow text-muted-foreground">Declared chain</dt>
+                    <dd className="mt-1.5 min-w-0 text-sm font-semibold text-foreground [overflow-wrap:anywhere]">
+                      {selected.chain}
+                    </dd>
+                  </div>
+                  <div className="surface-quiet min-w-0 rounded-lg p-3">
+                    <dt className="type-eyebrow text-muted-foreground">Created</dt>
+                    <dd className="mt-1.5 min-w-0 text-sm font-semibold text-foreground [overflow-wrap:anywhere]">
+                      {formatTimestamp(selected.created_at)}
+                    </dd>
+                  </div>
+                </dl>
+
+                <details className="surface-quiet mt-3 min-w-0 rounded-lg">
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
+                    Technical deployment evidence
+                  </summary>
+                  <div className="min-w-0 px-3 pb-3">
+                    <VerifiedDeploymentEvidencePanel
+                      evaluation={deploymentEvidence}
+                      loading={deploymentEvidenceQuery.isLoading}
+                      error={
+                        deploymentEvidenceQuery.isError
+                          ? "Could not load deployment evidence for this launch."
+                          : null
+                      }
+                    />
+                  </div>
+                </details>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button asChild variant="outline" size="sm" className="min-h-11">
+                    <Link to="/chain-launcher">Testnet Lab</Link>
+                  </Button>
+                  <Button asChild variant="outline" size="sm" className="min-h-11">
+                    <Link to="/mainnet-canary">Mainnet Deployment</Link>
+                  </Button>
+                </div>
+              </Section>
+            </div>
+          ) : null}
+
+          {selected && !selectedIsInternalTest ? (
             <>
-            <SectionNav label="Launch Control sections" items={LAUNCH_SECTIONS} />
-            <div id="lc-overview" className="min-w-0 scroll-mt-28">
+            <SectionNav
+              label="Launch Control sections"
+              items={LAUNCH_SECTIONS}
+              activeId={activeSection}
+              onChange={setActiveSection}
+            />
+
+            {/* Every working view stays mounted. Only visibility changes, so
+                form state, queries, mutation state and idempotency outcomes
+                survive navigation. */}
+            <WorkingView active={activeSection === "lc-overview"}>
             <Section variant="hero" className="min-w-0" contentClassName="min-w-0">
               <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:gap-6">
                 <div className="min-w-0 space-y-4">
@@ -1533,299 +1628,371 @@ function LaunchControlPage() {
               </div>
             </Section>
 
-            </div>
-            </>
-          ) : null}
-
-          {selected ? (
-            <Section
-              variant="surface"
-              title="Launch lifecycle guide"
-              description="What each lifecycle stage means for operators."
-            >
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                {LAUNCH_STATUSES.map((s) => {
-                  const guide = LIFECYCLE_GUIDE[s];
-                  const current = s === status;
-                  const done = launchStatusIndex(s) < launchStatusIndex(status);
-                  return (
-                    <div
-                      key={s}
-                      className={`rounded-md border p-3 ${
-                        current
-                          ? "border-gold/50 bg-gold/5"
-                          : done
-                            ? "border-pepe/30 bg-pepe/5"
-                            : "border-border/60 bg-background/30"
-                      }`}
-                    >
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span
-                          className={`flex size-4 shrink-0 items-center justify-center rounded-full border text-[10px] ${
-                            done
-                              ? "border-pepe/50 text-pepe"
-                              : current
-                                ? "border-gold/60 text-gold"
-                                : "border-border text-muted-foreground"
-                          }`}
-                        >
-                          {done ? <Check className="size-2.5" aria-hidden="true" /> : null}
-                        </span>
-                        <p
-                          className={`min-w-0 truncate text-xs font-semibold uppercase tracking-[0.12em] ${
-                            current
-                              ? "text-gold"
-                              : done
-                                ? "text-foreground"
-                                : "text-muted-foreground"
-                          }`}
-                        >
-                          {guide.title}
+            <details className="surface-quiet min-w-0 rounded-lg">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
+                Lifecycle guide
+              </summary>
+              <div className="min-w-0 px-3.5 pb-3.5">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {LAUNCH_STATUSES.map((s) => {
+                    const guide = LIFECYCLE_GUIDE[s];
+                    const current = s === status;
+                    const done = launchStatusIndex(s) < launchStatusIndex(status);
+                    return (
+                      <div
+                        key={s}
+                        className={`min-w-0 rounded-md border p-3 ${
+                          current
+                            ? "border-gold/50 bg-gold/5"
+                            : done
+                              ? "border-pepe/30 bg-pepe/5"
+                              : "border-border/60 bg-background/30"
+                        }`}
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span
+                            className={`flex size-4 shrink-0 items-center justify-center rounded-full border text-[10px] ${
+                              done
+                                ? "border-pepe/50 text-pepe"
+                                : current
+                                  ? "border-gold/60 text-gold"
+                                  : "border-border text-muted-foreground"
+                            }`}
+                          >
+                            {done ? <Check className="size-2.5" aria-hidden="true" /> : null}
+                          </span>
+                          <p
+                            className={`min-w-0 truncate text-xs font-semibold uppercase tracking-[0.12em] ${
+                              current
+                                ? "text-gold"
+                                : done
+                                  ? "text-foreground"
+                                  : "text-muted-foreground"
+                            }`}
+                          >
+                            {guide.title}
+                          </p>
+                        </div>
+                        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                          {guide.body}
                         </p>
                       </div>
-                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                        {guide.body}
-                      </p>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </Section>
-          ) : null}
+            </details>
 
-          {selected ? (
-            <div className="grid min-w-0 gap-4 sm:gap-6 xl:grid-cols-2">
-              <div className="min-w-0 space-y-4 sm:space-y-6">
-                {form ? (
-                  <form
-                    id="launch-editor-form"
-                    className="min-w-0 space-y-4 sm:space-y-6"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      if (!canSave) return;
-                      saveMutation.mutate();
-                    }}
+            <details className="surface-quiet min-w-0 rounded-lg">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
+                Lifecycle timestamps
+              </summary>
+              <div className="min-w-0 px-3.5 pb-3.5">
+                <dl className="space-y-1.5 text-xs">
+                  {(
+                    [
+                      ["Created", selected.created_at],
+                      ["Status changed", selected.status_changed_at],
+                      ["Announced", selected.announced_at],
+                      ["Watchlist opened", selected.watchlist_opened_at],
+                      ["Launch approaching", selected.launch_approaching_at],
+                      ["Contract pending", selected.contract_pending_at],
+                      ["Contract registered", selected.contract_registered_at],
+                      ["Live", selected.live_at],
+                      ["Completed", selected.completed_at],
+                    ] as const
+                  )
+                    .filter(([, value]) => Boolean(value))
+                    .map(([label, value]) => (
+                      <div key={label} className="flex min-w-0 justify-between gap-3">
+                        <dt className="shrink-0 text-muted-foreground">{label}</dt>
+                        <dd className="min-w-0 truncate text-right text-foreground">
+                          {formatTimestamp(value)}
+                        </dd>
+                      </div>
+                    ))}
+                </dl>
+              </div>
+            </details>
+            </WorkingView>
+
+            {form ? (
+              <form
+                id="launch-editor-form"
+                className="min-w-0"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!canSave) return;
+                  saveMutation.mutate();
+                }}
+              >
+                <WorkingView active={activeSection === "lc-details"}>
+                  <Section
+                    variant="primary"
+                    title="Launch identity"
+                    description={
+                      idLocked
+                        ? "Identity fields are locked once the launch is announced."
+                        : "Identity fields can only be edited while the launch is a draft."
+                    }
                   >
-                    <div id="lc-details" className="min-w-0 scroll-mt-28">
-                    <Section
-                      variant="primary"
-                      title="Launch identity"
-                      description={
-                        idLocked
-                          ? "Identity fields are locked once the launch is announced."
-                          : "Identity fields can only be edited while the launch is a draft."
-                      }
-                    >
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="min-w-0">
-                          <Label htmlFor="token-name">Token name</Label>
-                          <Input
-                            id="token-name"
-                            maxLength={TOKEN_NAME_MAX}
-                            disabled={idLocked || readOnly}
-                            value={form.token_name}
-                            onChange={(e) => set({ token_name: e.target.value })}
-                          />
-                        </div>
-                        <div className="min-w-0">
-                          <Label htmlFor="ticker">Ticker</Label>
-                          <Input
-                            id="ticker"
-                            maxLength={TICKER_MAX}
-                            disabled={idLocked || readOnly}
-                            value={form.ticker}
-                            onChange={(e) => set({ ticker: e.target.value })}
-                          />
-                        </div>
-                        <div className="min-w-0">
-                          <Label htmlFor="chain">Chain</Label>
-                          <Input
-                            id="chain"
-                            maxLength={CHAIN_MAX}
-                            disabled={idLocked || readOnly}
-                            value={form.chain}
-                            onChange={(e) => set({ chain: e.target.value })}
-                          />
-                        </div>
-                        <div className="min-w-0">
-                          <Label htmlFor="slug">Public launch slug</Label>
-                          <Input
-                            id="slug"
-                            maxLength={SLUG_MAX}
-                            disabled={idLocked || readOnly}
-                            value={form.public_slug}
-                            onChange={(e) => set({ public_slug: e.target.value })}
-                          />
-                          <p className="mt-1 text-xs text-muted-foreground">{SLUG_RULE_HINT}</p>
-                        </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="min-w-0">
+                        <Label htmlFor="token-name">Token name</Label>
+                        <Input
+                          id="token-name"
+                          maxLength={TOKEN_NAME_MAX}
+                          disabled={idLocked || readOnly}
+                          value={form.token_name}
+                          onChange={(e) => set({ token_name: e.target.value })}
+                        />
                       </div>
-                      {identityError ? (
-                        <p className="mt-3 text-xs text-destructive">{identityError}</p>
-                      ) : null}
-                    </Section>
-                    </div>
-
-                    <div id="lc-schedule" className="min-w-0 scroll-mt-28">
-                    <Section
-                      variant="surface"
-                      title="Schedule"
-                      description={
-                        schedLocked
-                          ? "Schedule fields are locked once the launch is live."
-                          : `Times are entered and displayed in this device's timezone (${tz}) and stored as absolute timestamps. There is no arbitrary timezone conversion in this phase.`
-                      }
-                    >
-                      {scheduleCommQuery.isError ? (
-                        <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
-                          Could not check whether this launch has an unnotified schedule change.
-                          <button
-                            type="button"
-                            className="ml-2 underline underline-offset-2"
-                            onClick={() => void scheduleCommQuery.refetch()}
-                          >
-                            Retry
-                          </button>
-                        </div>
-                      ) : null}
-                      {pendingScheduleComm ? (
-                        <div className="mb-4 rounded-lg border border-primary/40 bg-primary/10 p-4">
-                          <div className="flex items-start gap-2">
-                            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-primary" />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-semibold text-foreground">
-                                Schedule changed · Watchers have not been notified.
-                              </p>
-                              <div className="mt-3">
-                                <ScheduleChangeSummary row={pendingScheduleComm} />
-                              </div>
-                              <Button asChild size="sm" className="mt-4 min-h-11">
-                                <Link
-                                  to="/telegram"
-                                  search={{ tab: "broadcasts", launch: selected.id }}
-                                >
-                                  Review &amp; notify in Community Command
-                                </Link>
-                              </Button>
-                              {readOnly ? (
-                                <p className="mt-2 text-xs text-muted-foreground">
-                                  You have read-only access. An owner or admin decides whether to
-                                  notify watchers.
-                                </p>
-                              ) : null}
-                            </div>
-                          </div>
-                        </div>
-                      ) : null}
-                      <div className="grid gap-3 sm:grid-cols-2">
-
-                        <div className="min-w-0">
-                          <Label htmlFor="schedule-mode">Schedule mode</Label>
-                          <Select
-                            value={form.schedule_mode}
-                            disabled={schedLocked || readOnly}
-                            onValueChange={(v) => set({ schedule_mode: v as ScheduleMode })}
-                          >
-                            <SelectTrigger id="schedule-mode" className="min-h-11">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">Not set</SelectItem>
-                              <SelectItem value="exact">Exact time</SelectItem>
-                              <SelectItem value="window">Launch window</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        {form.schedule_mode === "exact" ? (
-                          <div className="min-w-0">
-                            <Label htmlFor="launch-at">Launch time</Label>
-                            <Input
-                              id="launch-at"
-                              type="datetime-local"
-                              disabled={schedLocked || readOnly}
-                              value={form.launch_at}
-                              onChange={(e) => set({ launch_at: e.target.value })}
-                            />
-                          </div>
-                        ) : null}
-                        {form.schedule_mode === "window" ? (
-                          <>
-                            <div className="min-w-0">
-                              <Label htmlFor="window-start">Window start</Label>
-                              <Input
-                                id="window-start"
-                                type="datetime-local"
-                                disabled={schedLocked || readOnly}
-                                value={form.window_start}
-                                onChange={(e) => set({ window_start: e.target.value })}
-                              />
-                            </div>
-                            <div className="min-w-0">
-                              <Label htmlFor="window-end">Window end</Label>
-                              <Input
-                                id="window-end"
-                                type="datetime-local"
-                                disabled={schedLocked || readOnly}
-                                value={form.window_end}
-                                onChange={(e) => set({ window_end: e.target.value })}
-                              />
-                            </div>
-                          </>
-                        ) : null}
+                      <div className="min-w-0">
+                        <Label htmlFor="ticker">Ticker</Label>
+                        <Input
+                          id="ticker"
+                          maxLength={TICKER_MAX}
+                          disabled={idLocked || readOnly}
+                          value={form.ticker}
+                          onChange={(e) => set({ ticker: e.target.value })}
+                        />
                       </div>
-                      <p className="mt-3 text-xs text-muted-foreground">
-                        Recorded timezone on this launch: {selected.timezone}
-                      </p>
-                      {scheduleError ? (
-                        <p className="mt-2 text-xs text-destructive">{scheduleError}</p>
-                      ) : null}
-                    </Section>
+                      <div className="min-w-0">
+                        <Label htmlFor="chain">Chain</Label>
+                        <Input
+                          id="chain"
+                          maxLength={CHAIN_MAX}
+                          disabled={idLocked || readOnly}
+                          value={form.chain}
+                          onChange={(e) => set({ chain: e.target.value })}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <Label htmlFor="slug">Public launch slug</Label>
+                        <Input
+                          id="slug"
+                          maxLength={SLUG_MAX}
+                          disabled={idLocked || readOnly}
+                          value={form.public_slug}
+                          onChange={(e) => set({ public_slug: e.target.value })}
+                        />
+                        <p className="mt-1 text-xs text-muted-foreground">{SLUG_RULE_HINT}</p>
+                      </div>
                     </div>
+                    {identityError ? (
+                      <p className="mt-3 text-xs text-destructive">{identityError}</p>
+                    ) : null}
+                  </Section>
 
-                    <Section
-                      variant="quiet"
-                      title="Internal notes"
-                      description="Operator-only. Never shown outside this project."
-                    >
-                      <Textarea
-                        id="internal-notes"
-                        rows={4}
-                        maxLength={NOTES_MAX}
-                        disabled={readOnly}
-                        value={form.internal_notes}
-                        onChange={(e) => set({ internal_notes: e.target.value })}
-                      />
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {form.internal_notes.length} / {NOTES_MAX} characters.
-                      </p>
-                      {notesError ? (
-                        <p className="mt-1 text-xs text-destructive">{notesError}</p>
-                      ) : null}
-                    </Section>
-
-                    <div className="hidden lg:flex lg:justify-end">{saveButton}</div>
-                  </form>
-                ) : null}
-
-                {canManage && canDeleteLaunch(status) ? (
                   <Section
                     variant="quiet"
-                    title="Delete draft"
-                    description="Only draft launches can be deleted. Once announced, a launch record is permanent."
+                    title="Internal notes"
+                    description="Operator-only. Never shown outside this project."
                   >
-                    <Button
-                      variant="destructive"
-                      className="min-h-11"
-                      onClick={() => setConfirmDelete(true)}
-                    >
-                      <Trash2 className="size-4" aria-hidden="true" />
-                      Delete draft launch
-                    </Button>
+                    <Textarea
+                      id="internal-notes"
+                      rows={4}
+                      maxLength={NOTES_MAX}
+                      disabled={readOnly}
+                      value={form.internal_notes}
+                      onChange={(e) => set({ internal_notes: e.target.value })}
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {form.internal_notes.length} / {NOTES_MAX} characters.
+                    </p>
+                    {notesError ? (
+                      <p className="mt-1 text-xs text-destructive">{notesError}</p>
+                    ) : null}
                   </Section>
-                ) : null}
-              </div>
+                </WorkingView>
 
-              <div className="min-w-0 space-y-4 sm:space-y-6">
-                <div id="lc-watch" className="min-w-0 scroll-mt-28">
+                <WorkingView active={activeSection === "lc-schedule"}>
+                  <Section
+                    variant="surface"
+                    title="Schedule"
+                    description={
+                      schedLocked
+                        ? "Schedule fields are locked once the launch is live."
+                        : `Times are entered and displayed in this device's timezone (${tz}) and stored as absolute timestamps. There is no arbitrary timezone conversion in this phase.`
+                    }
+                  >
+                    {scheduleCommQuery.isError ? (
+                      <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+                        Could not check whether this launch has an unnotified schedule change.
+                        <button
+                          type="button"
+                          className="ml-2 underline underline-offset-2"
+                          onClick={() => void scheduleCommQuery.refetch()}
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    ) : null}
+                    {pendingScheduleComm ? (
+                      <div className="mb-4 rounded-lg border border-primary/40 bg-primary/10 p-4">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-primary" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-foreground">
+                              Schedule changed · Watchers have not been notified.
+                            </p>
+                            <div className="mt-3">
+                              <ScheduleChangeSummary row={pendingScheduleComm} />
+                            </div>
+                            <Button asChild size="sm" className="mt-4 min-h-11">
+                              <Link
+                                to="/telegram"
+                                search={{ tab: "broadcasts", launch: selected.id }}
+                              >
+                                Review &amp; notify in Community Command
+                              </Link>
+                            </Button>
+                            {readOnly ? (
+                              <p className="mt-2 text-xs text-muted-foreground">
+                                You have read-only access. An owner or admin decides whether to
+                                notify watchers.
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="grid gap-3 sm:grid-cols-2">
+
+                      <div className="min-w-0">
+                        <Label htmlFor="schedule-mode">Schedule mode</Label>
+                        <Select
+                          value={form.schedule_mode}
+                          disabled={schedLocked || readOnly}
+                          onValueChange={(v) => set({ schedule_mode: v as ScheduleMode })}
+                        >
+                          <SelectTrigger id="schedule-mode" className="min-h-11">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Not set</SelectItem>
+                            <SelectItem value="exact">Exact time</SelectItem>
+                            <SelectItem value="window">Launch window</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {form.schedule_mode === "exact" ? (
+                        <div className="min-w-0">
+                          <Label htmlFor="launch-at">Launch time</Label>
+                          <Input
+                            id="launch-at"
+                            type="datetime-local"
+                            disabled={schedLocked || readOnly}
+                            value={form.launch_at}
+                            onChange={(e) => set({ launch_at: e.target.value })}
+                          />
+                        </div>
+                      ) : null}
+                      {form.schedule_mode === "window" ? (
+                        <>
+                          <div className="min-w-0">
+                            <Label htmlFor="window-start">Window start</Label>
+                            <Input
+                              id="window-start"
+                              type="datetime-local"
+                              disabled={schedLocked || readOnly}
+                              value={form.window_start}
+                              onChange={(e) => set({ window_start: e.target.value })}
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <Label htmlFor="window-end">Window end</Label>
+                            <Input
+                              id="window-end"
+                              type="datetime-local"
+                              disabled={schedLocked || readOnly}
+                              value={form.window_end}
+                              onChange={(e) => set({ window_end: e.target.value })}
+                            />
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      Recorded timezone on this launch: {selected.timezone}
+                    </p>
+                    {scheduleError ? (
+                      <p className="mt-2 text-xs text-destructive">{scheduleError}</p>
+                    ) : null}
+                  </Section>
+                </WorkingView>
+              </form>
+            ) : null}
+
+            {/* Save / preview / delete live outside the form element so the
+                destructive action can never submit it. */}
+            <WorkingView active={activeSection === "lc-details"}>
+              <div className="hidden lg:flex lg:justify-end">{saveButton}</div>
+
+              <Section
+                variant="surface"
+                title="Launch preview"
+                description="How this launch appears to operators, plus its public Cartel Network page once it is out of Draft."
+              >
+                <dl className="space-y-1.5 text-xs">
+                  <PreviewRow label="Project" value={profile.project_name} />
+                  <PreviewRow label="Token" value={selected.token_name} />
+                  <PreviewRow label="Ticker" value={selected.ticker} />
+                  <PreviewRow label="Chain" value={selected.chain} />
+
+                  <PreviewRow
+                    label="Schedule"
+                    value={
+                      selected.launch_at
+                        ? formatTimestamp(selected.launch_at)
+                        : selected.launch_window_start && selected.launch_window_end
+                          ? `${formatTimestamp(selected.launch_window_start)} → ${formatTimestamp(selected.launch_window_end)}`
+                          : "Not set"
+                    }
+                  />
+                  <PreviewRow
+                    label="Network path"
+                    value={`/network/launch/${selected.public_slug}`}
+                  />
+                </dl>
+                {status !== "DRAFT" && profile.discovery_status === "published" ? (
+                  <Button asChild variant="outline" size="sm" className="mt-3 w-full sm:w-auto">
+                    <Link
+                      to="/network/launch/$launchSlug"
+                      params={{ launchSlug: selected.public_slug }}
+                    >
+                      View Network Launch
+                    </Link>
+                  </Button>
+                ) : (
+                  <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                    {status === "DRAFT"
+                      ? "Draft launches are never public. Announce this launch to publish its Cartel Network page."
+                      : "Publish your Project Profile to make this launch page live on the Cartel Network."}
+                  </p>
+                )}
+              </Section>
+
+              {canManage && canDeleteLaunch(status) ? (
+                <Section
+                  variant="quiet"
+                  title="Delete draft"
+                  description="Only draft launches can be deleted. Once announced, a launch record is permanent."
+                >
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="min-h-11"
+                    onClick={() => setConfirmDelete(true)}
+                  >
+                    <Trash2 className="size-4" aria-hidden="true" />
+                    Delete draft launch
+                  </Button>
+                </Section>
+              ) : null}
+            </WorkingView>
+
+            <WorkingView active={activeSection === "lc-watch"}>
                 <Section
                   variant="surface"
                   title="Launch Watch"
@@ -2091,8 +2258,8 @@ function LaunchControlPage() {
                       </p>
                       <p className="text-xs leading-relaxed text-muted-foreground">
                         Automated messages are the countdown reminders, the official-contract
-                        notice and the launch-live alert. Manual project updates are sent separately from
-                        Watcher Updates below.
+                        notice and the launch-live alert. Manual project updates are sent separately
+                        from Communications.
                       </p>
 
                     </div>
@@ -2109,9 +2276,9 @@ function LaunchControlPage() {
                     </div>
                   )}
                 </Section>
-                </div>
+            </WorkingView>
 
-                <div id="lc-comms" className="min-w-0 scroll-mt-28">
+            <WorkingView active={activeSection === "lc-comms"}>
                 <Section
                   variant="surface"
                   title="Watcher Updates"
@@ -2283,12 +2450,101 @@ function LaunchControlPage() {
                     </p>
                   )}
                 </Section>
-                </div>
 
-                <div
-                  id="lc-contract"
-                  className="min-w-0 scroll-mt-28 space-y-4 sm:space-y-6"
+                <details className="surface-quiet min-w-0 rounded-lg">
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
+                    Advanced communication diagnostics
+                  </summary>
+                  <div className="min-w-0 px-3 pb-3">
+                <Section
+                  variant="quiet"
+                  title="Telegram alerts for watchers"
+                  leading={<Bell className="size-4" aria-hidden="true" />}
                 >
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge tone="green">
+                        <span>Telegram alerts active</span>
+                      </StatusBadge>
+                      <span className="text-xs text-muted-foreground">
+                        Messages are only sent to active watchers of this launch.
+                      </span>
+                    </div>
+
+                    <ul className="space-y-1 text-xs leading-relaxed text-muted-foreground">
+                      <li>24h + 1h countdown reminders (watchers who allow them)</li>
+                      <li>Official-contract registration notice</li>
+                      <li>Launch-live alert</li>
+                      <li>Manual project updates (watchers who allow them)</li>
+                    </ul>
+
+                    {watchToken ? (
+                      <>
+                        <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
+                          {(
+                            [
+                              ["Alerts created", notificationSummary?.event_count],
+                              ["Waiting to send", notificationSummary?.pending_count],
+                              ["Delivered", notificationSummary?.sent_count],
+                              ["Failed", notificationSummary?.failed_count],
+                              ["Outcome unconfirmed", notificationSummary?.ambiguous_count],
+                              ["Not sent (muted or stopped)", notificationSummary?.skipped_count],
+                              ["Reminder opt-ins", notificationSummary?.reminder_enabled_watchers],
+                            ] as const
+                          ).map(([label, value]) => (
+                            <div key={label} className="min-w-0">
+                              <dt className="truncate type-eyebrow text-muted-foreground">
+                                {label}
+                              </dt>
+                              <dd className="mt-0.5 font-mono text-lg font-semibold text-foreground">
+                                {notificationSummaryQuery.isLoading ? "—" : (value ?? 0)}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          <span className="text-foreground">Outcome unconfirmed</span> means
+                          Telegram never confirmed whether the message arrived. Those are
+                          deliberately not resent automatically, so a watcher is never messaged
+                          twice.
+                        </p>
+
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          <span className="text-foreground">Alerts created</span> counts every
+                          watcher alert for this launch, including manual project updates. It can
+                          stay at 0 even with a saved schedule and active watchers: reminder events
+                          are created when the 24h or 1h reminder actually becomes due, not when the
+                          launch date is saved, and countdown delivery must be in an armed lifecycle
+                          state at that moment.
+                        </p>
+
+                      </>
+                    ) : (
+
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        Notification delivery becomes relevant once this launch reaches Watchlist
+                        open and the Launch Watch link starts collecting watchers.
+                      </p>
+                    )}
+
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Advancing to Official contract registered or Live queues one Telegram message
+                      per active watcher, and countdown reminders are scheduled from the launch
+                      time for watchers who allow them.
+                    </p>
+
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Only aggregate counts are shown. Individual deliveries, Telegram identifiers
+                      and watcher identities are never exposed in Cartel HQ.
+                    </p>
+                  </div>
+                </Section>
+                  </div>
+                </details>
+            </WorkingView>
+
+            <WorkingView active={activeSection === "lc-contract"}>
                 <div className="min-w-0 rounded-lg border-l-2 border-gold/50 bg-gold/5 px-3.5 py-3">
                   <p className="type-eyebrow text-gold">Official contract</p>
                   <p className="mt-1 max-w-prose type-helper text-muted-foreground">
@@ -2296,6 +2552,37 @@ function LaunchControlPage() {
                     actions. Registering never messages anyone on its own.
                   </p>
                 </div>
+
+                <dl className="grid min-w-0 gap-2.5 sm:grid-cols-3">
+                  <div className="surface-quiet min-w-0 rounded-lg p-3">
+                    <dt className="type-eyebrow text-muted-foreground">Registration</dt>
+                    <dd
+                      className={`mt-1.5 min-w-0 text-sm font-semibold leading-snug [overflow-wrap:anywhere] ${
+                        contractRegistered ? "text-pepe" : "text-foreground"
+                      }`}
+                    >
+                      {contractRegistered
+                        ? "Bound to verified deployment evidence"
+                        : status === "CONTRACT_PENDING"
+                          ? "Open — not registered yet"
+                          : "Not available at this lifecycle stage"}
+                    </dd>
+                  </div>
+                  <div className="surface-quiet min-w-0 rounded-lg p-3">
+                    <dt className="type-eyebrow text-muted-foreground">Deployment records</dt>
+                    <dd className="mt-1.5 font-mono text-lg font-semibold text-foreground">
+                      {deploymentEvidenceQuery.isLoading ? "—" : deploymentRecordCount}
+                    </dd>
+                  </div>
+                  <div className="surface-quiet min-w-0 rounded-lg p-3">
+                    <dt className="type-eyebrow text-muted-foreground">Registered at</dt>
+                    <dd className="mt-1.5 min-w-0 text-sm font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">
+                      {selected.contract_registered_at
+                        ? formatTimestamp(selected.contract_registered_at)
+                        : "—"}
+                    </dd>
+                  </div>
+                </dl>
 
                 <VerifiedContractRegistrationPanel
                   evaluation={deploymentEvidence}
@@ -2400,186 +2687,28 @@ function LaunchControlPage() {
                   }
                 />
 
-
-
-                <VerifiedDeploymentEvidencePanel
-                  evaluation={deploymentEvidence}
-                  loading={deploymentEvidenceQuery.isLoading}
-                  error={
-                    deploymentEvidenceQuery.isError
-                      ? "Could not load deployment evidence for this launch."
-                      : null
-                  }
-                />
-                </div>
-
-                <Section
-                  variant="surface"
-                  title="Launch preview"
-                  description="How this launch appears to operators, plus its public Cartel Network page once it is out of Draft."
-                >
-                  <dl className="space-y-1.5 text-xs">
-                    <PreviewRow label="Project" value={profile.project_name} />
-                    <PreviewRow label="Token" value={selected.token_name} />
-                    <PreviewRow label="Ticker" value={selected.ticker} />
-                    <PreviewRow label="Chain" value={selected.chain} />
-                    
-                    <PreviewRow
-                      label="Schedule"
-                      value={
-                        selected.launch_at
-                          ? formatTimestamp(selected.launch_at)
-                          : selected.launch_window_start && selected.launch_window_end
-                            ? `${formatTimestamp(selected.launch_window_start)} → ${formatTimestamp(selected.launch_window_end)}`
-                            : "Not set"
+                {/* Full technical evidence stays mounted and read-only, using
+                    the same evaluation object as the panels above. */}
+                <details className="surface-quiet min-w-0 rounded-lg">
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
+                    Technical deployment evidence
+                  </summary>
+                  <div className="min-w-0 px-3 pb-3">
+                    <VerifiedDeploymentEvidencePanel
+                      evaluation={deploymentEvidence}
+                      loading={deploymentEvidenceQuery.isLoading}
+                      error={
+                        deploymentEvidenceQuery.isError
+                          ? "Could not load deployment evidence for this launch."
+                          : null
                       }
                     />
-                    <PreviewRow
-                      label="Network path"
-                      value={`/network/launch/${selected.public_slug}`}
-                    />
-                  </dl>
-                  {status !== "DRAFT" && profile.discovery_status === "published" ? (
-                    <Button asChild variant="outline" size="sm" className="mt-3 w-full">
-                      <Link
-                        to="/network/launch/$launchSlug"
-                        params={{ launchSlug: selected.public_slug }}
-                      >
-                        View Network Launch
-                      </Link>
-                    </Button>
-                  ) : (
-                    <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                      {status === "DRAFT"
-                        ? "Draft launches are never public. Announce this launch to publish its Cartel Network page."
-                        : "Publish your Project Profile to make this launch page live on the Cartel Network."}
-                    </p>
-                  )}
-                </Section>
-              </div>
-            </div>
-          ) : null}
-
-          {selected ? (
-            <details className="surface-quiet min-w-0 rounded-lg">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
-                Advanced &amp; technical
-              </summary>
-              <div className="min-w-0 space-y-3 px-3 pb-3">
-                <Section
-                  variant="quiet"
-                  title="Telegram alerts for watchers"
-                  leading={<Bell className="size-4" aria-hidden="true" />}
-                >
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <StatusBadge tone="green">
-                        <span>Telegram alerts active</span>
-                      </StatusBadge>
-                      <span className="text-xs text-muted-foreground">
-                        Messages are only sent to active watchers of this launch.
-                      </span>
-                    </div>
-
-                    <ul className="space-y-1 text-xs leading-relaxed text-muted-foreground">
-                      <li>24h + 1h countdown reminders (watchers who allow them)</li>
-                      <li>Official-contract registration notice</li>
-                      <li>Launch-live alert</li>
-                      <li>Manual project updates (watchers who allow them)</li>
-                    </ul>
-
-                    {watchToken ? (
-                      <>
-                        <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
-                          {(
-                            [
-                              ["Alerts created", notificationSummary?.event_count],
-                              ["Waiting to send", notificationSummary?.pending_count],
-                              ["Delivered", notificationSummary?.sent_count],
-                              ["Failed", notificationSummary?.failed_count],
-                              ["Outcome unconfirmed", notificationSummary?.ambiguous_count],
-                              ["Not sent (muted or stopped)", notificationSummary?.skipped_count],
-                              ["Reminder opt-ins", notificationSummary?.reminder_enabled_watchers],
-                            ] as const
-                          ).map(([label, value]) => (
-                            <div key={label} className="min-w-0">
-                              <dt className="truncate type-eyebrow text-muted-foreground">
-                                {label}
-                              </dt>
-                              <dd className="mt-0.5 font-mono text-lg font-semibold text-foreground">
-                                {notificationSummaryQuery.isLoading ? "—" : (value ?? 0)}
-                              </dd>
-                            </div>
-                          ))}
-                        </dl>
-
-                        <p className="text-xs leading-relaxed text-muted-foreground">
-                          <span className="text-foreground">Outcome unconfirmed</span> means
-                          Telegram never confirmed whether the message arrived. Those are
-                          deliberately not resent automatically, so a watcher is never messaged
-                          twice.
-                        </p>
-
-                        <p className="text-xs leading-relaxed text-muted-foreground">
-                          <span className="text-foreground">Alerts created</span> counts every
-                          watcher alert for this launch, including manual project updates. It can
-                          stay at 0 even with a saved schedule and active watchers: reminder events
-                          are created when the 24h or 1h reminder actually becomes due, not when the
-                          launch date is saved, and countdown delivery must be in an armed lifecycle
-                          state at that moment.
-                        </p>
-
-                      </>
-                    ) : (
-
-                      <p className="text-xs leading-relaxed text-muted-foreground">
-                        Notification delivery becomes relevant once this launch reaches Watchlist
-                        open and the Launch Watch link starts collecting watchers.
-                      </p>
-                    )}
-
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      Advancing to Official contract registered or Live queues one Telegram message
-                      per active watcher, and countdown reminders are scheduled from the launch
-                      time for watchers who allow them.
-                    </p>
-
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      Only aggregate counts are shown. Individual deliveries, Telegram identifiers
-                      and watcher identities are never exposed in Cartel HQ.
-                    </p>
                   </div>
-                </Section>
-
-                <Section variant="quiet" title="Lifecycle timestamps">
-                  <dl className="space-y-1.5 text-xs">
-                    {(
-                      [
-                        ["Created", selected.created_at],
-                        ["Status changed", selected.status_changed_at],
-                        ["Announced", selected.announced_at],
-                        ["Watchlist opened", selected.watchlist_opened_at],
-                        ["Launch approaching", selected.launch_approaching_at],
-                        ["Contract pending", selected.contract_pending_at],
-                        ["Contract registered", selected.contract_registered_at],
-                        ["Live", selected.live_at],
-                        ["Completed", selected.completed_at],
-                      ] as const
-                    )
-                      .filter(([, value]) => Boolean(value))
-                      .map(([label, value]) => (
-                        <div key={label} className="flex min-w-0 justify-between gap-3">
-                          <dt className="shrink-0 text-muted-foreground">{label}</dt>
-                          <dd className="min-w-0 truncate text-right text-foreground">
-                            {formatTimestamp(value)}
-                          </dd>
-                        </div>
-                      ))}
-                  </dl>
-                </Section>
-              </div>
-            </details>
+                </details>
+            </WorkingView>
+            </>
           ) : null}
+
         </div>
       )}
 
