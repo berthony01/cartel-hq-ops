@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -129,10 +130,11 @@ function JourneyLink({
 }
 
 function blockedGuidance(stage: JourneyStage): string {
-  if (stage.detail) return stage.detail;
   if (stage.status === "unavailable") {
-    return "Current state could not be verified. Review the destination before continuing.";
+    return stage.detail ?? "Current state could not be verified. Review the destination before continuing.";
   }
+  if (stage.dependency) return stage.dependency;
+  if (stage.detail) return stage.detail;
   return "Complete the required earlier stage before this becomes available.";
 }
 
@@ -217,6 +219,7 @@ function NextActionBlock({
 
 /** Truthful review wording. A blocked stage is never described as doable now. */
 function reviewLabel(stage: JourneyStage): string {
+  if (stage.reviewLabel) return stage.reviewLabel;
   if (stage.key === "deployment") return "Review deployment evidence";
   return `Review ${stage.title}`;
 }
@@ -232,6 +235,8 @@ function StageRow({
 }) {
   const complete = stage.status === "complete";
   const blocked = stage.status === "waiting" || stage.status === "unavailable";
+  /** The final milestone stays visually quieter than the locked-next milestone. */
+  const finalStage = stage.key === "launch_live";
   const Icon = complete ? Check : blocked ? Lock : isNext ? CircleDot : Circle;
   return (
     <li
@@ -242,7 +247,9 @@ function StageRow({
           : isNext
             ? "border-gold/55 bg-gold/10 px-3.5 py-4 shadow-[var(--glow-gold)] sm:col-span-2"
             : blocked
-              ? "border-border/60 bg-surface-raised/30 px-3 py-3"
+              ? finalStage
+                ? "border-border-subtle border-dashed bg-transparent px-3 py-3"
+                : "border-border/60 bg-surface-raised/30 px-3 py-3"
               : "border-border/50 bg-surface-raised/20 px-3 py-3",
       )}
     >
@@ -282,7 +289,7 @@ function StageRow({
           </StatusBadge>
         ) : blocked ? (
           <StatusBadge tone="muted">
-            <span>BLOCKED</span>
+            <span>{stage.lockedLabel ?? "BLOCKED"}</span>
           </StatusBadge>
         ) : isNext ? (
           <StatusBadge tone="gold">
@@ -297,8 +304,13 @@ function StageRow({
           <Button
             asChild
             size={isNext ? "default" : "sm"}
-            variant={isNext ? "default" : blocked ? "outline" : "secondary"}
-            className="min-h-11 w-full sm:w-auto"
+            variant={
+              isNext ? "default" : blocked ? (finalStage ? "ghost" : "outline") : "secondary"
+            }
+            className={cn(
+              "min-h-11",
+              blocked ? "w-auto self-start sm:self-end" : "w-full sm:w-auto",
+            )}
           >
             <JourneyLink
               stage={stage}
@@ -312,6 +324,59 @@ function StageRow({
   );
 }
 
+
+/**
+ * Completed stages collapse into one summary row. Nothing about their status,
+ * counts or routes changes — only how much of the page they occupy.
+ */
+function CompletedStages({
+  stages,
+  primaryLaunchId,
+}: {
+  stages: JourneyStage[];
+  primaryLaunchId: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  if (stages.length === 0) return null;
+  return (
+    <div className="min-w-0 rounded-lg border border-pepe/25 bg-pepe/[0.04]">
+      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5">
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-pepe/50 text-pepe">
+          <Check className="size-3.5" aria-hidden="true" />
+        </span>
+        <p className="min-w-0 text-sm font-medium text-foreground/85 [overflow-wrap:anywhere]">
+          {stages.length} setup and community {stages.length === 1 ? "stage" : "stages"} completed
+        </p>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="min-h-11 shrink-0"
+          aria-expanded={open}
+          aria-controls="journey-completed-stages"
+          onClick={() => setOpen((prev) => !prev)}
+        >
+          {open ? "Hide completed steps" : "View completed steps"}
+        </Button>
+      </div>
+      {open ? (
+        <ul
+          id="journey-completed-stages"
+          className="grid gap-2 border-t border-pepe/20 p-3 sm:grid-cols-2 [&>*]:min-w-0"
+        >
+          {stages.map((stage) => (
+            <StageRow
+              key={stage.key}
+              stage={stage}
+              isNext={false}
+              primaryLaunchId={primaryLaunchId}
+            />
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
 
 function ErrorState({
   message,
@@ -370,6 +435,11 @@ export function ProjectJourneyPanel({ workspaceId, workspaceName }: SharedProps)
 
   const journey = query.data!;
   const nextKey = journey.nextAction.stage?.key ?? null;
+  const completedStages = journey.stages.filter((stage) => stage.status === "complete");
+  const remainingStages = journey.stages.filter((stage) => stage.status !== "complete");
+  const remainingPhases = remainingStages
+    .map((stage) => stage.phase)
+    .filter((phase, index, all) => all.indexOf(phase) === index);
   const heading = journey.projectName
     ? `${journey.projectName} launch journey`
     : workspaceName
@@ -394,16 +464,33 @@ export function ProjectJourneyPanel({ workspaceId, workspaceName }: SharedProps)
     >
       <ProgressBar value={journey.completedCount} total={journey.totalCount} />
       <NextActionBlock journey={journey} />
-      <ul className="grid gap-2 sm:grid-cols-2 [&>*]:min-w-0">
-        {journey.stages.map((stage) => (
-          <StageRow
-            key={stage.key}
-            stage={stage}
-            isNext={stage.key === nextKey}
-            primaryLaunchId={journey.primaryLaunchId}
-          />
-        ))}
-      </ul>
+      <CompletedStages
+        stages={completedStages}
+        primaryLaunchId={journey.primaryLaunchId}
+      />
+      {remainingStages.length > 0 ? (
+        <div className="space-y-3">
+          {remainingPhases.map((phase) => (
+            <div key={phase} className="space-y-2">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                {phase === "Contract" ? "Contract & launch" : phase} phase
+              </p>
+              <ul className="grid gap-2 [&>*]:min-w-0">
+                {remainingStages
+                  .filter((stage) => stage.phase === phase)
+                  .map((stage) => (
+                    <StageRow
+                      key={stage.key}
+                      stage={stage}
+                      isNext={stage.key === nextKey}
+                      primaryLaunchId={journey.primaryLaunchId}
+                    />
+                  ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </Section>
   );
 }

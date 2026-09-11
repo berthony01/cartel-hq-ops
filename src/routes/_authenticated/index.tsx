@@ -250,14 +250,13 @@ function HqDashboard() {
   const contractRegistered = Boolean(primaryLaunch?.official_contract_address);
   const scheduleSet = primaryLaunch ? hasSchedule(primaryLaunch) : false;
 
-  let nextLine = "Lifecycle complete";
-  if (next === "LAUNCH_APPROACHING" && !scheduleSet) {
-    nextLine = "Next: Set launch schedule";
-  } else if (next === "OFFICIAL_CONTRACT_REGISTERED" && !contractRegistered) {
-    nextLine = "Next: Register official contract";
-  } else if (next) {
-    nextLine = `Next: Advance to ${LAUNCH_STATUS_LABELS[next]}`;
-  }
+  /**
+   * Presentation-only lifecycle fact. The journey panel is the single source of
+   * next-action truth on this page, so this line never instructs an action.
+   */
+  const lifecycleLine = status
+    ? `Lifecycle: ${LAUNCH_STATUS_LABELS[status]}${contractRegistered ? " · official contract registered" : ""}`
+    : "Lifecycle: not started";
 
   const attention: { id: string; text: string; to: string; action: string }[] = [];
   if (killSwitch) {
@@ -491,14 +490,6 @@ function HqDashboard() {
                       }
                     />
                   </dl>
-                  <div className="min-w-0 rounded-md border border-gold/35 bg-gold/10 px-3 py-2.5">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold">
-                      Next in Launch Control
-                    </p>
-                    <p className="mt-1 min-w-0 text-sm font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">
-                      {nextLine.replace(/^Next: /, "")}
-                    </p>
-                  </div>
                   <Button asChild className="min-h-11 w-full">
                     <Link to="/launch-control">
                       Open Launch Control
@@ -573,7 +564,7 @@ function HqDashboard() {
                 launchesUnavailable
                   ? "Launch state could not be loaded. Open Launch Control for the authoritative state."
                   : primaryLaunch
-                    ? nextLine
+                    ? lifecycleLine
                     : "Create a launch to start the lifecycle."
               }
               to="/launch-control"
