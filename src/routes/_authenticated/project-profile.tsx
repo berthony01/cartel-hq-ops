@@ -380,44 +380,61 @@ function ProjectProfilePage() {
         </Section>
       ) : (
         <div className="min-w-0 space-y-4 sm:space-y-6">
-        <Section variant="primary" className="min-w-0">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-            <div className="min-w-0">
-              <p className="type-meta text-gold">Profile state</p>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <h2 className="min-w-0 font-display text-xl uppercase leading-tight text-foreground [overflow-wrap:anywhere] sm:text-2xl">
-                  {profileQuery.isLoading
-                    ? "Loading…"
-                    : profile
-                      ? profile.project_name
-                      : "Project profile not created yet"}
-                </h2>
-                {profile ? (
-                  <StatusBadge tone={STATUS_TONE[profile.discovery_status]}>
-                    <span>{DISCOVERY_STATUS_LABELS[profile.discovery_status]}</span>
-                  </StatusBadge>
+        <Section variant="hero" className="min-w-0" contentClassName="min-w-0">
+          <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+            <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+              <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gold/30 bg-background/50 sm:size-16">
+                {selectedLogo && urls[selectedLogo.storage_path] ? (
+                  <img
+                    src={urls[selectedLogo.storage_path]}
+                    alt=""
+                    className="max-h-full max-w-full object-contain"
+                    loading="lazy"
+                  />
+                ) : (
+                  <IdCard className="size-6 text-gold/70" aria-hidden="true" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="type-eyebrow text-gold">Profile state</p>
+                <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+                  <h2 className="min-w-0 font-display text-2xl uppercase leading-[0.95] text-foreground [overflow-wrap:anywhere] sm:text-3xl">
+                    {profileQuery.isLoading
+                      ? "Loading…"
+                      : profile
+                        ? profile.project_name
+                        : "Project profile not created yet"}
+                  </h2>
+                  {profile ? (
+                    <StatusBadge tone={STATUS_TONE[profile.discovery_status]}>
+                      <span>{DISCOVERY_STATUS_LABELS[profile.discovery_status]}</span>
+                    </StatusBadge>
+                  ) : (
+                    <StatusBadge tone="muted">
+                      <span>Not created</span>
+                    </StatusBadge>
+                  )}
+                </div>
+                <p className="mt-2.5 max-w-prose type-helper text-muted-foreground [overflow-wrap:anywhere]">
+                  {!profile
+                    ? "Fill in the identity below and create the profile. Nothing is public until you create it and set the status to Published."
+                    : profile.discovery_status === "published"
+                      ? "This profile is published, so it is discoverable on the public Cartel Network."
+                      : "This profile is saved but not discoverable on the public Cartel Network. Set the status to Published when you are ready."}
+                </p>
+                {profile?.public_slug || form.public_slug ? (
+                  <div className="mt-3 min-w-0 rounded-md border border-border-subtle bg-background/40 px-3 py-2">
+                    <p className="type-eyebrow text-muted-foreground">
+                      {profile?.public_slug ? "Network address" : "Planned network address"}
+                    </p>
+                    <p className="mt-1 min-w-0 type-technical text-foreground [overflow-wrap:anywhere]">
+                      /network/project/{profile?.public_slug ?? form.public_slug}
+                    </p>
+                  </div>
                 ) : null}
               </div>
-              <p className="mt-2 max-w-prose text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-                {!profile
-                  ? "Fill in the identity below and create the profile. Nothing is public until you create it and set the status to Published."
-                  : profile.discovery_status === "published"
-                    ? "This profile is published, so it is discoverable on the public Cartel Network."
-                    : "This profile is saved but not discoverable on the public Cartel Network. Set the status to Published when you are ready."}
-              </p>
-              {profile?.public_slug ? (
-                <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">
-                  Network address:{" "}
-                  <span className="text-foreground">/network/project/{profile.public_slug}</span>
-                </p>
-              ) : form.public_slug ? (
-                <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">
-                  Planned network address:{" "}
-                  <span className="text-foreground">/network/project/{form.public_slug}</span>
-                </p>
-              ) : null}
             </div>
-            <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
               {saveButton}
               {profile && profile.discovery_status === "published" && profile.public_slug ? (
                 <Button asChild variant="outline" className="min-h-11">
@@ -433,83 +450,89 @@ function ProjectProfilePage() {
           </div>
         </Section>
 
+
         {profile ? (
           <Section
             variant="surface"
             title="Verification"
             description="Layered trust signals for this project. Only CARTEL HQ can grant a review; the project can request one."
           >
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusBadge tone="gold">
-                  <span>Project Authenticated</span>
-                </StatusBadge>
-                <span className="text-xs text-muted-foreground">Active</span>
+            <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+              <div className="surface-quiet min-w-0 rounded-lg p-3.5">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <StatusBadge tone="gold">
+                    <span>Project Authenticated</span>
+                  </StatusBadge>
+                  <span className="type-helper text-muted-foreground">Active</span>
+                </div>
+                <p className="mt-2.5 max-w-prose type-helper text-muted-foreground">
+                  This profile is controlled and published through an authenticated CARTEL HQ
+                  project workspace. It does not verify external team identity or KYC.
+                </p>
               </div>
-              <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
-                This profile is controlled and published through an authenticated CARTEL HQ project
-                workspace. It does not verify external team identity or KYC.
-              </p>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusBadge tone={verificationStatus === "verified" ? "gold" : "muted"}>
-                  <span>Platform Reviewed</span>
-                </StatusBadge>
-                <span className="text-xs text-muted-foreground">
-                  {verificationQuery.isLoading
-                    ? "Checking review state…"
-                    : verificationQuery.isError
-                      ? "Review state could not be loaded right now."
-                      : verificationStatus === "verified"
-                        ? `Reviewed${
-                            formatDateTime(verification?.verified_at)
-                              ? ` ${formatDateTime(verification?.verified_at)}`
-                              : ""
-                          }`
-                        : verificationStatus === "pending"
-                          ? `Review requested${
-                              formatDateTime(verification?.requested_at)
-                                ? ` ${formatDateTime(verification?.requested_at)}`
+              <div className="surface-quiet min-w-0 rounded-lg p-3.5">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <StatusBadge tone={verificationStatus === "verified" ? "gold" : "muted"}>
+                    <span>Platform Reviewed</span>
+                  </StatusBadge>
+                  <span className="min-w-0 type-helper text-muted-foreground [overflow-wrap:anywhere]">
+                    {verificationQuery.isLoading
+                      ? "Checking review state…"
+                      : verificationQuery.isError
+                        ? "Review state could not be loaded right now."
+                        : verificationStatus === "verified"
+                          ? `Reviewed${
+                              formatDateTime(verification?.verified_at)
+                                ? ` ${formatDateTime(verification?.verified_at)}`
                                 : ""
                             }`
-                          : VERIFICATION_STATUS_LABEL[verificationStatus]}
-                </span>
-              </div>
-              <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
-                {VERIFICATION_STATUS_DESCRIPTION[verificationStatus]}
-              </p>
-              <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
-                Platform Reviewed does not verify token safety, smart-contract code, liquidity or
-                investment quality.
-              </p>
+                          : verificationStatus === "pending"
+                            ? `Review requested${
+                                formatDateTime(verification?.requested_at)
+                                  ? ` ${formatDateTime(verification?.requested_at)}`
+                                  : ""
+                              }`
+                            : VERIFICATION_STATUS_LABEL[verificationStatus]}
+                  </span>
+                </div>
+                <p className="mt-2.5 max-w-prose type-helper text-muted-foreground">
+                  {VERIFICATION_STATUS_DESCRIPTION[verificationStatus]}
+                </p>
+                <p className="mt-2 max-w-prose type-helper text-muted-foreground">
+                  Platform Reviewed does not verify token safety, smart-contract code, liquidity or
+                  investment quality.
+                </p>
 
-              {verificationQuery.isError ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="min-h-11"
-                  onClick={() => void verificationQuery.refetch()}
-                >
-                  Retry
-                </Button>
-              ) : verificationQuery.isSuccess && canRequestVerification(verificationStatus) ? (
-                <div className="space-y-2">
+                {verificationQuery.isError ? (
                   <Button
                     variant="outline"
                     size="sm"
-                    className="min-h-11"
-                    disabled={requestVerification.isPending}
-                    onClick={() => requestVerification.mutate()}
+                    className="mt-3 min-h-11"
+                    onClick={() => void verificationQuery.refetch()}
                   >
-                    {requestVerification.isPending ? "Requesting…" : "Request Platform Review"}
+                    Retry
                   </Button>
-                  <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
-                    Requires a published profile with a name, public link name, chain and at least
-                    one official link. Requesting a review never marks this project reviewed.
-                  </p>
-                </div>
-              ) : null}
+                ) : verificationQuery.isSuccess && canRequestVerification(verificationStatus) ? (
+                  <div className="mt-3 space-y-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-h-11"
+                      disabled={requestVerification.isPending}
+                      onClick={() => requestVerification.mutate()}
+                    >
+                      {requestVerification.isPending ? "Requesting…" : "Request Platform Review"}
+                    </Button>
+                    <p className="max-w-prose type-helper text-muted-foreground">
+                      Requires a published profile with a name, public link name, chain and at least
+                      one official link. Requesting a review never marks this project reviewed.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
             </div>
+
           </Section>
 
         ) : null}
@@ -782,71 +805,75 @@ function ProjectProfilePage() {
               className="xl:sticky xl:top-6"
               contentClassName="space-y-4"
             >
-
-              <div className="flex items-start gap-3">
-                <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-background/40">
-                  {selectedLogo && urls[selectedLogo.storage_path] ? (
-                    <img
-                      src={urls[selectedLogo.storage_path]}
-                      alt="Selected project logo"
-                      className="max-h-full max-w-full object-contain"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <IdCard className="size-5 text-muted-foreground" aria-hidden="true" />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-display text-lg uppercase text-foreground">
-                    {form.project_name.trim() || "Unnamed project"}
-                  </p>
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    {form.ticker.trim() ? (
-                      <StatusBadge tone="gold">
-                        <span>{form.ticker.trim()}</span>
-                      </StatusBadge>
-                    ) : null}
-                    {form.primary_chain.trim() ? (
-                      <StatusBadge tone="muted">
-                        <span>{form.primary_chain.trim()}</span>
-                      </StatusBadge>
-                    ) : null}
-                    <StatusBadge tone={STATUS_TONE[form.discovery_status]}>
-                      <span>{DISCOVERY_STATUS_LABELS[form.discovery_status]}</span>
-                    </StatusBadge>
+              <div className="min-w-0 overflow-hidden rounded-lg border border-border-subtle bg-background/40">
+                <div className="h-1 w-full bg-gradient-to-r from-gold/70 via-gold/25 to-transparent" />
+                <div className="space-y-4 p-3.5 sm:p-4">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-background/60">
+                      {selectedLogo && urls[selectedLogo.storage_path] ? (
+                        <img
+                          src={urls[selectedLogo.storage_path]}
+                          alt="Selected project logo"
+                          className="max-h-full max-w-full object-contain"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <IdCard className="size-5 text-muted-foreground" aria-hidden="true" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="min-w-0 font-display text-lg uppercase leading-tight text-foreground [overflow-wrap:anywhere]">
+                        {form.project_name.trim() || "Unnamed project"}
+                      </p>
+                      <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
+                        {form.ticker.trim() ? (
+                          <StatusBadge tone="gold">
+                            <span>{form.ticker.trim()}</span>
+                          </StatusBadge>
+                        ) : null}
+                        {form.primary_chain.trim() ? (
+                          <StatusBadge tone="muted">
+                            <span>{form.primary_chain.trim()}</span>
+                          </StatusBadge>
+                        ) : null}
+                        <StatusBadge tone={STATUS_TONE[form.discovery_status]}>
+                          <span>{DISCOVERY_STATUS_LABELS[form.discovery_status]}</span>
+                        </StatusBadge>
+                      </div>
+                    </div>
                   </div>
+
+                  {form.description.trim() ? (
+                    <p className="type-helper text-muted-foreground [overflow-wrap:anywhere]">
+                      {form.description.trim()}
+                    </p>
+                  ) : null}
+
+                  {form.website_url.trim() || form.telegram_url.trim() || form.x_url.trim() ? (
+                    <div className="flex min-w-0 flex-wrap gap-1.5">
+                      {form.website_url.trim() ? (
+                        <span className="rounded-md border border-border-subtle bg-surface-raised px-2 py-1 type-eyebrow text-muted-foreground">
+                          Website
+                        </span>
+                      ) : null}
+                      {form.telegram_url.trim() ? (
+                        <span className="rounded-md border border-border-subtle bg-surface-raised px-2 py-1 type-eyebrow text-muted-foreground">
+                          Telegram
+                        </span>
+                      ) : null}
+                      {form.x_url.trim() ? (
+                        <span className="rounded-md border border-border-subtle bg-surface-raised px-2 py-1 type-eyebrow text-muted-foreground">
+                          X
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
-              {form.description.trim() ? (
-                <p className="text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-                  {form.description.trim()}
-                </p>
-              ) : null}
-
-              {form.website_url.trim() || form.telegram_url.trim() || form.x_url.trim() ? (
-                <div className="flex flex-wrap gap-2">
-                  {form.website_url.trim() ? (
-                    <span className="rounded-md border border-border bg-surface-raised px-2 py-1 text-[11px] uppercase tracking-wider text-muted-foreground">
-                      Website
-                    </span>
-                  ) : null}
-                  {form.telegram_url.trim() ? (
-                    <span className="rounded-md border border-border bg-surface-raised px-2 py-1 text-[11px] uppercase tracking-wider text-muted-foreground">
-                      Telegram
-                    </span>
-                  ) : null}
-                  {form.x_url.trim() ? (
-                    <span className="rounded-md border border-border bg-surface-raised px-2 py-1 text-[11px] uppercase tracking-wider text-muted-foreground">
-                      X
-                    </span>
-                  ) : null}
-                </div>
-              ) : null}
-
               {profile && profile.discovery_status === "published" && profile.public_slug ? (
-                <div className="border-t border-border pt-3">
-                  <Button asChild variant="outline" size="sm" className="w-full">
+                <div>
+                  <Button asChild variant="outline" size="sm" className="min-h-11 w-full">
                     <Link
                       to="/network/project/$projectSlug"
                       params={{ projectSlug: profile.public_slug }}
@@ -854,16 +881,17 @@ function ProjectProfilePage() {
                       View Network Profile
                     </Link>
                   </Button>
-                  <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                  <p className="mt-2 type-helper text-muted-foreground">
                     Published profiles are discoverable on the Cartel Network.
                   </p>
                 </div>
               ) : (
-                <p className="border-t border-border pt-3 text-[11px] leading-relaxed text-muted-foreground">
+                <p className="type-helper text-muted-foreground">
                   Private preview. Publish this profile to make it discoverable on the Cartel
                   Network.
                 </p>
               )}
+
             </Section>
           </aside>
         </div>
