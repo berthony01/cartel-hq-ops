@@ -644,12 +644,10 @@ function HqDashboard() {
             className="rise-in"
             title="Recent packs"
             actions={
-              <Link
-                to="/sticker-lab"
-                className="text-xs uppercase tracking-[0.14em] text-gold hover:underline"
-              >
-                Open Lab
-              </Link>
+              <Button asChild size="sm" variant="outline" className="min-h-11">
+                <Link to="/sticker-lab">Open Lab</Link>
+              </Button>
+
             }
             contentClassName="space-y-2"
           >
