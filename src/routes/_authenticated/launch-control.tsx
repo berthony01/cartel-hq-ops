@@ -102,6 +102,13 @@ import { ScheduleChangeSummary } from "@/components/cartel/ScheduleChangeSummary
 import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
 import { VerifiedDeploymentEvidencePanel } from "@/components/cartel/VerifiedDeploymentEvidencePanel";
 import { VerifiedContractRegistrationPanel } from "@/components/cartel/VerifiedContractRegistrationPanel";
+import { ProductionDeploymentRequestPanel } from "@/components/cartel/ProductionDeploymentRequestPanel";
+import {
+  getLaunchProductionDeploymentRequest,
+  productionDeploymentRequestQueryKey,
+  submitLaunchProductionDeploymentRequest,
+  withdrawLaunchProductionDeploymentRequest,
+} from "@/lib/launch-production-request";
 import { OfficialContractNotifyPanel } from "@/components/cartel/OfficialContractNotifyPanel";
 import { OfficialContractGroupBroadcastPanel } from "@/components/cartel/OfficialContractGroupBroadcastPanel";
 import { OfficialContractCorrectionPanel } from "@/components/cartel/OfficialContractCorrectionPanel";
@@ -1063,6 +1070,73 @@ function LaunchControlPage() {
   }, [selected, deploymentEvidenceQuery.data]);
   /** Presentation-only count derived from the existing evidence query. */
   const deploymentRecordCount = deploymentEvidenceQuery.data?.length ?? 0;
+
+  // ---- Launcher-B2: production deployment handoff request ------------------
+  // PROJECT launches only. Reading, submitting and withdrawing all go through
+  // the existing owner-only RPCs; nothing here deploys, signs, broadcasts,
+  // registers a contract, changes lifecycle, notifies Telegram or adds
+  // liquidity. The database re-derives every eligibility rule.
+  const selectedIsProjectLaunch = !!selected && isProjectLaunch(selected);
+  const productionRequestQuery = useQuery({
+    queryKey: productionDeploymentRequestQueryKey(
+      selectedIsProjectLaunch ? selected!.id : null,
+    ),
+    enabled: selectedIsProjectLaunch,
+    queryFn: () => getLaunchProductionDeploymentRequest(selected!.id),
+  });
+
+  const productionRequestHints = useMemo(
+    () => ({
+      isProjectLaunch: selectedIsProjectLaunch,
+      profilePublished: profile?.discovery_status === "published",
+      scheduleSet: !!(selected?.launch_at || selected?.launch_window_start),
+      launchStatus: selected?.status ?? "",
+      registrationRecorded: !!(
+        selected?.official_contract_address || selected?.contract_registered_at
+      ),
+      hasProductionDeploymentEvidence: (deploymentEvidenceQuery.data ?? []).some(
+        (row) => row.network_environment === "PRODUCTION",
+      ),
+    }),
+    [selectedIsProjectLaunch, profile, selected, deploymentEvidenceQuery.data],
+  );
+
+  const invalidateProductionRequest = (launchId: string) => {
+    void queryClient.invalidateQueries({
+      queryKey: productionDeploymentRequestQueryKey(launchId),
+    });
+    void queryClient.invalidateQueries({ queryKey: ["launches", workspaceId] });
+    void queryClient.invalidateQueries({ queryKey: launchReadinessQueryKey(workspaceId) });
+    void queryClient.invalidateQueries({ queryKey: chainDeploymentsQueryKey(launchId) });
+  };
+
+  const submitProductionRequestMutation = useMutation({
+    mutationFn: async (input: { tokenSupplyWhole: string; tokenRecipient: string }) => {
+      if (!selected) throw new Error("No launch selected.");
+      return submitLaunchProductionDeploymentRequest({ launchId: selected.id, ...input });
+    },
+    onSuccess: () => {
+      toast.success("Deployment request recorded — nothing has been deployed");
+      if (selected) invalidateProductionRequest(selected.id);
+    },
+    onError: (err: unknown) => {
+      toast.error(
+        err instanceof Error ? err.message : "Could not record the deployment request.",
+      );
+    },
+  });
+
+  const withdrawProductionRequestMutation = useMutation({
+    mutationFn: (requestId: string) => withdrawLaunchProductionDeploymentRequest(requestId),
+    onSuccess: () => {
+      toast.success("Deployment request withdrawn");
+      if (selected) invalidateProductionRequest(selected.id);
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : "Could not withdraw the request.");
+    },
+  });
+
 
 
   
@@ -2792,6 +2866,42 @@ function LaunchControlPage() {
                     separate, explicit actions. Registering never messages anyone on its own.
                   </p>
                 </Section>
+
+                {/* Launcher-B2 — guided handoff request, before the technical
+                    deployment evidence details. PROJECT launches only. */}
+                {selected && selectedIsProjectLaunch ? (
+                  <ProductionDeploymentRequestPanel
+                    launchId={selected.id}
+                    launchTokenName={selected.token_name}
+                    launchTicker={selected.ticker}
+                    request={productionRequestQuery.data ?? null}
+                    requestLoading={productionRequestQuery.isLoading}
+                    requestError={
+                      productionRequestQuery.error instanceof Error
+                        ? productionRequestQuery.error.message
+                        : null
+                    }
+                    hints={productionRequestHints}
+                    isWorkspaceOwner={isWorkspaceOwner}
+                    disabled={readOnly}
+                    submitting={submitProductionRequestMutation.isPending}
+                    withdrawing={withdrawProductionRequestMutation.isPending}
+                    submitError={
+                      submitProductionRequestMutation.error instanceof Error
+                        ? submitProductionRequestMutation.error.message
+                        : null
+                    }
+                    withdrawError={
+                      withdrawProductionRequestMutation.error instanceof Error
+                        ? withdrawProductionRequestMutation.error.message
+                        : null
+                    }
+                    onSubmit={(input) => submitProductionRequestMutation.mutate(input)}
+                    onWithdraw={(id) => withdrawProductionRequestMutation.mutate(id)}
+                  />
+                ) : null}
+
+
 
 
                 <dl className="grid min-w-0 gap-2.5 sm:grid-cols-3">

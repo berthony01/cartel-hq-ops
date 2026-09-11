@@ -18,6 +18,7 @@ import {
   type LaunchEvidenceEvaluation,
 } from "@/lib/launch-verified-eligibility";
 import { evaluateProductionFinality } from "@/lib/launch-production-finality";
+import { getLaunchProductionDeploymentRequest } from "@/lib/launch-production-request";
 import type { DeploymentEvidenceInput } from "@/lib/launch-evidence-checks";
 import { supabase } from "@/integrations/supabase/client";
 import { listWorkspaceAssets } from "@/lib/media";
@@ -142,6 +143,16 @@ export type JourneyBrandKitFacts = {
   brandName: string | null;
 };
 
+/**
+ * Launcher-B2 — the latest production deployment handoff request for the
+ * primary PROJECT launch. Read-only fact; the database stays authoritative and
+ * `effectiveStatus === "COMPLETED"` is derived server-side from evidence.
+ */
+export type JourneyProductionRequestFacts = {
+  status: string;
+  effectiveStatus: string;
+};
+
 export type JourneyCreativeAssetFacts = {
   /** logo / mascot / reference_image — real brand identity assets. */
   brandAssetCount: number;
@@ -172,6 +183,9 @@ export type JourneyInput = {
   /** Read-only evidence summary for the primary launch only. */
   deploymentEvidence: JourneyDeploymentEvidenceFacts | null;
   deploymentUnavailable: boolean;
+  /** Latest handoff request for the primary PROJECT launch, when readable. */
+  productionRequest: JourneyProductionRequestFacts | null;
+  productionRequestUnavailable: boolean;
   brandKit: JourneyBrandKitFacts | null;
   brandKitUnavailable: boolean;
   creativeAssets: JourneyCreativeAssetFacts | null;
@@ -348,6 +362,8 @@ function stageOf(
   status: JourneyStageStatus,
   actionable: boolean,
   detail: string | null,
+  /** Optional label override for stages whose action depends on live state. */
+  actionLabel?: string,
 ): JourneyStage {
   const copy = STAGE_COPY[key];
   return {
@@ -359,7 +375,7 @@ function stageOf(
     status,
     actionable,
     to: copy.to,
-    actionLabel: copy.actionLabel,
+    actionLabel: actionLabel ?? copy.actionLabel,
     detail,
   };
 }
@@ -400,6 +416,48 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
     deployment?.registrationEligibleCount === 1 &&
     !deployment.registrationAmbiguous;
 
+  // --- Production deployment handoff request (Launcher-B) -----------------
+  // The request is a record of intent. The database re-derives every rule and
+  // may still refuse; these are client-known hints for guidance only.
+  const productionRequest = input.productionRequest;
+  const requestCompleted = productionRequest?.effectiveStatus === "COMPLETED";
+  const requestOpen =
+    !!productionRequest &&
+    !requestCompleted &&
+    ["REQUESTED", "IN_REVIEW", "APPROVED", "EXECUTING"].includes(productionRequest.status);
+  const requestClosed =
+    !!productionRequest &&
+    !requestCompleted &&
+    (productionRequest.status === "DECLINED" || productionRequest.status === "WITHDRAWN");
+  const requestEligibilityHint =
+    !!launch &&
+    stepDone("profile_published") &&
+    launch.scheduleSet &&
+    ["WATCHLIST_OPEN", "LAUNCH_APPROACHING", "CONTRACT_PENDING"].includes(
+      normalizedLaunchStatus ?? "",
+    ) &&
+    !registrationComplete &&
+    !registrationInconsistent &&
+    !input.deploymentUnavailable &&
+    !input.productionRequestUnavailable &&
+    (deployment?.productionDeploymentCount ?? 0) === 0;
+  const requestActionable =
+    requestEligibilityHint && (productionRequest === null || requestClosed);
+  const requestDetail = requestOpen
+    ? productionRequest.status === "EXECUTING"
+      ? "Deployment request approved · platform execution in progress"
+      : productionRequest.status === "APPROVED"
+        ? "Deployment request approved · no transaction sent yet"
+        : productionRequest.status === "IN_REVIEW"
+          ? "Deployment request under review"
+          : "Deployment request submitted · waiting for review"
+    : requestClosed
+      ? productionRequest.status === "DECLINED"
+        ? "Previous deployment request was declined"
+        : "Previous deployment request was withdrawn"
+      : null;
+
+
   const watchOpen = stepDone("launch_watch_open");
 
   // --- Brand & Creative ---------------------------------------------------
@@ -436,6 +494,8 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
     status: JourneyStageStatus;
     actionable: boolean;
     detail: string | null;
+    /** Only set where the label depends on live state. */
+    actionLabel?: string;
   }> = [
     {
       key: "project_profile",
@@ -566,18 +626,24 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
 
     {
       key: "deployment",
+      // Complete when verified evidence is on record, or when the database
+      // itself derives the handoff request as COMPLETED from that evidence.
       status: !launch
         ? "waiting"
-        : input.deploymentUnavailable
-          ? "unavailable"
-          : deploymentComplete
-            ? "complete"
-            : "waiting",
-      // Production deployment is an owner-controlled, manually gated operation.
-      // It is reported here, never proposed as a next action.
-      actionable: false,
+        : deploymentComplete || requestCompleted
+          ? "complete"
+          : input.deploymentUnavailable
+            ? "unavailable"
+            : requestActionable
+              ? "action"
+              : "waiting",
+      // Execution stays platform-controlled. The only owner action here is
+      // recording a request; it never deploys, signs or broadcasts anything.
+      actionable: !!launch && !deploymentComplete && !requestCompleted && requestActionable,
+      actionLabel: "Request production deployment",
       detail:
-        input.deploymentUnavailable || deployment === null
+        requestDetail ??
+        (input.deploymentUnavailable || deployment === null
           ? null
           : deployment.deploymentAmbiguous
             ? "Multiple verified production deployments require review"
@@ -587,7 +653,7 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
                 ? "Production deployment evidence is not verified"
                 : deployment.managedFinalizedVerifiedCount === 0
                   ? "Production evidence verified · managed finality pending"
-                  : "Verified production deployment · managed finality confirmed",
+                  : "Verified production deployment · managed finality confirmed"),
     },
     {
       key: "official_contract",
@@ -626,7 +692,14 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
   ];
 
   const stages = raw.map((entry, index) =>
-    stageOf(entry.key, index + 1, entry.status, entry.actionable, entry.detail),
+    stageOf(
+      entry.key,
+      index + 1,
+      entry.status,
+      entry.actionable,
+      entry.detail,
+      entry.actionLabel,
+    ),
   );
 
   const completedCount = stages.filter((s) => s.status === "complete").length;
@@ -639,7 +712,11 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
         label: nextStage.actionLabel,
         to: nextStage.to,
         headline: `Next: ${nextStage.actionLabel}.`,
-        explanation: STAGE_COPY[nextStage.key].explanation,
+        explanation:
+          STAGE_COPY[nextStage.key].explanation ||
+          (nextStage.key === "deployment"
+            ? "Ask the CARTEL platform to deploy your token contract. Submitting records a request only — nothing is deployed or signed by it."
+            : ""),
       }
     : {
         stage: null,
@@ -780,6 +857,22 @@ export async function fetchProjectJourney(workspaceId: string): Promise<ProjectJ
     }
   }
 
+  // Launcher-B — latest handoff request for the primary PROJECT launch only.
+  // Read-only; INTERNAL_TEST launches are already excluded above.
+  let productionRequest: JourneyProductionRequestFacts | null = null;
+  let productionRequestUnavailable = false;
+  if (primaryRow) {
+    try {
+      const row = await getLaunchProductionDeploymentRequest(primaryRow.id);
+      productionRequest = row
+        ? { status: row.status, effectiveStatus: row.effectiveStatus }
+        : null;
+    } catch {
+      productionRequestUnavailable = true;
+    }
+  }
+
+
   // --- Brand & Creative + Communications (read-only, existing surfaces) ----
   const [brandKitResult, assetsResult, packsResult, inboxSettingsResult] =
     await Promise.allSettled([
@@ -855,6 +948,8 @@ export async function fetchProjectJourney(workspaceId: string): Promise<ProjectJ
     watchUnavailable,
     deploymentEvidence,
     deploymentUnavailable,
+    productionRequest,
+    productionRequestUnavailable,
     brandKit,
     brandKitUnavailable,
     creativeAssets,
