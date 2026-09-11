@@ -625,18 +625,24 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
 
     {
       key: "deployment",
+      // Complete when verified evidence is on record, or when the database
+      // itself derives the handoff request as COMPLETED from that evidence.
       status: !launch
         ? "waiting"
-        : input.deploymentUnavailable
-          ? "unavailable"
-          : deploymentComplete
-            ? "complete"
-            : "waiting",
-      // Production deployment is an owner-controlled, manually gated operation.
-      // It is reported here, never proposed as a next action.
-      actionable: false,
+        : deploymentComplete || requestCompleted
+          ? "complete"
+          : input.deploymentUnavailable
+            ? "unavailable"
+            : requestActionable
+              ? "action"
+              : "waiting",
+      // Execution stays platform-controlled. The only owner action here is
+      // recording a request; it never deploys, signs or broadcasts anything.
+      actionable: !!launch && !deploymentComplete && !requestCompleted && requestActionable,
+      actionLabel: "Request production deployment",
       detail:
-        input.deploymentUnavailable || deployment === null
+        requestDetail ??
+        (input.deploymentUnavailable || deployment === null
           ? null
           : deployment.deploymentAmbiguous
             ? "Multiple verified production deployments require review"
@@ -646,7 +652,7 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
                 ? "Production deployment evidence is not verified"
                 : deployment.managedFinalizedVerifiedCount === 0
                   ? "Production evidence verified · managed finality pending"
-                  : "Verified production deployment · managed finality confirmed",
+                  : "Verified production deployment · managed finality confirmed"),
     },
     {
       key: "official_contract",
