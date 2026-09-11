@@ -230,7 +230,7 @@ export function ProjectCard({ project }: { project: NetworkProjectCard }) {
   const ticker = formatTicker(project.ticker);
   const summary = excerpt(project.description);
   return (
-    <article className="group flex h-full flex-col gap-3 rounded-lg border border-border/80 bg-surface-elevated p-4 shadow-inset transition-[border-color,transform,box-shadow] hover:-translate-y-0.5 hover:border-gold/40 hover:shadow-elevated">
+    <article className="group flex min-w-0 h-full flex-col gap-3 rounded-lg border border-border/80 bg-surface-elevated p-4 shadow-inset transition-[border-color,transform,box-shadow] hover:-translate-y-0.5 hover:border-gold/40 hover:shadow-elevated">
       <div className="flex min-w-0 items-start gap-3">
         <ProjectLogo
           slug={project.public_slug}
@@ -294,7 +294,7 @@ export function ProjectCard({ project }: { project: NetworkProjectCard }) {
 export function LaunchCard({ launch }: { launch: NetworkUpcomingLaunch }) {
   const ticker = formatTicker(launch.ticker);
   return (
-    <article className="group flex h-full flex-col gap-3 rounded-lg border border-border/80 bg-surface-elevated p-4 shadow-inset transition-[border-color,transform,box-shadow] hover:-translate-y-0.5 hover:border-gold/40 hover:shadow-elevated">
+    <article className="group flex min-w-0 h-full flex-col gap-3 rounded-lg border border-border/80 bg-surface-elevated p-4 shadow-inset transition-[border-color,transform,box-shadow] hover:-translate-y-0.5 hover:border-gold/40 hover:shadow-elevated">
       <div className="flex min-w-0 items-start gap-3">
         <ProjectLogo
           slug={launch.project_public_slug}

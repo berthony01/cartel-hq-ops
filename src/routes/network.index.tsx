@@ -120,7 +120,7 @@ function NetworkOverview() {
             description="Something went wrong loading published projects. Try again shortly."
           />
         ) : projects.data && projects.data.rows.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {projects.data.rows.map((p) => (
               <ProjectCard key={p.public_slug} project={p} />
             ))}
@@ -150,7 +150,7 @@ function NetworkOverview() {
             description="Something went wrong loading upcoming launches. Try again shortly."
           />
         ) : launches.data && launches.data.rows.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {launches.data.rows.map((l) => (
               <LaunchCard key={l.public_slug} launch={l} />
             ))}
