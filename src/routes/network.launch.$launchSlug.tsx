@@ -141,7 +141,7 @@ function PublicLaunchPage() {
         / <span className="text-foreground">{launch.token_name}</span>
       </nav>
 
-      <header className="flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-start">
+      <header className="flex flex-col gap-4 rounded-lg border border-gold/20 bg-surface-elevated p-5 shadow-elevated sm:flex-row sm:items-start sm:p-6">
         <ProjectLogo
           slug={launch.project_public_slug}
           hasLogo={launch.has_logo}
@@ -172,7 +172,7 @@ function PublicLaunchPage() {
       </header>
 
       {launch.official_contract_address ? (
-        <section className="rounded-lg border border-pepe/40 bg-pepe/5 px-4 py-4">
+        <section className="rounded-lg border border-pepe/40 bg-pepe/5 px-4 py-4 shadow-glow">
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-pepe">
             Official contract
           </h2>
@@ -206,7 +206,7 @@ function PublicLaunchPage() {
       ) : null}
 
       <section className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-lg border border-border bg-surface px-4 py-4">
+        <div className="rounded-lg border border-border/80 bg-surface-elevated px-4 py-4 shadow-inset">
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">
             Launch timeline
           </h2>
@@ -233,7 +233,7 @@ function PublicLaunchPage() {
           </dl>
         </div>
 
-        <div className="rounded-lg border border-border bg-surface px-4 py-4">
+        <div className="rounded-lg border border-border/80 bg-surface-elevated px-4 py-4 shadow-inset">
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">
             Official project links
           </h2>

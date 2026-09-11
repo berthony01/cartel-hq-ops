@@ -36,7 +36,7 @@ export function StatusPill({
   return (
     <span
       className={cn(
-        "inline-flex max-w-full items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase leading-tight tracking-[0.12em]",
+        "inline-flex max-w-full items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase leading-tight tracking-[0.12em] shadow-inset",
         TONES[tone],
         className,
       )}
@@ -66,7 +66,7 @@ export function ProjectLogo({
         aria-hidden="true"
         className={cn(
           box,
-          "flex shrink-0 items-center justify-center rounded-md border border-border bg-surface-raised font-display text-sm text-muted-foreground",
+          "flex shrink-0 items-center justify-center rounded-md border border-border bg-surface-raised font-display text-sm text-muted-foreground shadow-inset",
         )}
       >
         {initials}
@@ -78,7 +78,7 @@ export function ProjectLogo({
       src={publicProjectLogoUrl(slug)}
       alt={`${name} logo`}
       loading="lazy"
-      className={cn(box, "shrink-0 rounded-md border border-border bg-surface object-contain")}
+      className={cn(box, "shrink-0 rounded-md border border-border bg-surface object-contain shadow-elevated")}
     />
   );
 }
@@ -106,7 +106,7 @@ export function ExternalLinks({
           href={item.href!}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 rounded-md border border-border bg-surface-raised px-2.5 py-1 text-[11px] uppercase tracking-wider text-muted-foreground transition-colors hover:border-gold/40 hover:text-foreground"
+          className="inline-flex min-h-9 items-center gap-1 rounded-md border border-border bg-surface-raised px-2.5 py-1 text-[11px] uppercase tracking-wider text-muted-foreground transition-colors hover:border-gold/40 hover:bg-gold/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50"
         >
           {item.label}
           <ExternalLink className="size-3" aria-hidden="true" />
@@ -150,7 +150,7 @@ export function VerificationSignals({
   const platformReviewed = verificationStatus === "verified";
   const reviewedOn = platformReviewed ? formatDateTime(verifiedAt) : null;
   return (
-    <section className={cn("rounded-lg border border-border bg-surface px-4 py-4", className)}>
+    <section className={cn("rounded-lg border border-gold/20 bg-surface-elevated px-4 py-4 shadow-inset", className)}>
       <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">
         Verification &amp; trust signals
       </h2>
@@ -192,7 +192,7 @@ export function VerificationSignals({
 
 export function NetworkEmpty({ title, description }: { title: string; description: string }) {
   return (
-    <div className="rounded-lg border border-dashed border-border bg-surface/40 px-6 py-10 text-center">
+    <div className="rounded-lg border border-dashed border-border bg-surface-raised/30 px-6 py-10 text-center shadow-inset">
       <p className="text-sm font-semibold text-foreground">{title}</p>
       <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-muted-foreground">
         {description}
@@ -230,7 +230,7 @@ export function ProjectCard({ project }: { project: NetworkProjectCard }) {
   const ticker = formatTicker(project.ticker);
   const summary = excerpt(project.description);
   return (
-    <article className="flex h-full flex-col gap-3 rounded-lg border border-border bg-surface p-4">
+    <article className="group flex h-full flex-col gap-3 rounded-lg border border-border/80 bg-surface-elevated p-4 shadow-inset transition-[border-color,transform,box-shadow] hover:-translate-y-0.5 hover:border-gold/40 hover:shadow-elevated">
       <div className="flex min-w-0 items-start gap-3">
         <ProjectLogo
           slug={project.public_slug}
@@ -281,7 +281,7 @@ export function ProjectCard({ project }: { project: NetworkProjectCard }) {
       />
 
       <div className="mt-auto pt-1">
-        <Button asChild variant="outline" size="sm">
+        <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
           <Link to="/network/project/$projectSlug" params={{ projectSlug: project.public_slug }}>
             View Project
           </Link>
@@ -294,7 +294,7 @@ export function ProjectCard({ project }: { project: NetworkProjectCard }) {
 export function LaunchCard({ launch }: { launch: NetworkUpcomingLaunch }) {
   const ticker = formatTicker(launch.ticker);
   return (
-    <article className="flex h-full flex-col gap-3 rounded-lg border border-border bg-surface p-4">
+    <article className="group flex h-full flex-col gap-3 rounded-lg border border-border/80 bg-surface-elevated p-4 shadow-inset transition-[border-color,transform,box-shadow] hover:-translate-y-0.5 hover:border-gold/40 hover:shadow-elevated">
       <div className="flex min-w-0 items-start gap-3">
         <ProjectLogo
           slug={launch.project_public_slug}

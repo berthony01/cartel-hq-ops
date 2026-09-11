@@ -37,7 +37,7 @@ export const Route = createFileRoute("/network/")({
 
 function SummaryCard({ label, value }: { label: string; value: number | null }) {
   return (
-    <div className="rounded-lg border border-border bg-surface px-4 py-4">
+    <div className="rounded-lg border border-border/80 bg-surface-elevated px-4 py-4 shadow-inset">
       <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
       <p className="mt-1 font-display text-3xl leading-none text-gold">
         {value == null ? "—" : value}
@@ -64,7 +64,8 @@ function NetworkOverview() {
 
   return (
     <div className="space-y-10">
-      <section className="rounded-lg border border-border bg-surface/70 px-5 py-8 sm:px-8 sm:py-12">
+      <section className="relative overflow-hidden rounded-lg border border-gold/30 bg-surface-elevated px-5 py-8 shadow-elevated sm:px-8 sm:py-12">
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-gold" aria-hidden="true" />
         <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-gold">
           Cartel Network
         </p>
@@ -76,11 +77,11 @@ function NetworkOverview() {
           HQ. Follow launches, read the official details the project supplied, and opt in for
           launch alerts when a project opens Launch Watch.
         </p>
-        <div className="mt-6 flex flex-wrap gap-2">
-          <Button asChild>
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <Button asChild className="w-full sm:w-auto">
             <Link to="/network/projects">View Projects</Link>
           </Button>
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" className="w-full sm:w-auto">
             <Link to="/network/launches">View Upcoming Launches</Link>
           </Button>
         </div>
@@ -103,7 +104,7 @@ function NetworkOverview() {
       </section>
 
       <section className="space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-3">
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-gold/20 pb-3">
           <h2 className="font-display text-xl uppercase text-foreground sm:text-2xl">
             Latest projects
           </h2>
@@ -133,7 +134,7 @@ function NetworkOverview() {
       </section>
 
       <section className="space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-3">
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-gold/20 pb-3">
           <h2 className="font-display text-xl uppercase text-foreground sm:text-2xl">
             Upcoming launches
           </h2>

@@ -70,7 +70,7 @@ function NetworkProjectsPage() {
 
   return (
     <div className="space-y-6">
-      <header className="border-b border-border pb-4">
+      <header className="rounded-lg border border-gold/20 bg-surface-elevated px-4 py-5 shadow-inset sm:px-6">
         <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-gold">
           Cartel Network
         </p>
@@ -83,7 +83,7 @@ function NetworkProjectsPage() {
         </p>
       </header>
 
-      <form onSubmit={applyFilters} className="grid gap-3 sm:grid-cols-[1fr_200px_auto]">
+      <form onSubmit={applyFilters} className="grid gap-3 rounded-lg border border-border/80 bg-surface-raised/40 p-4 shadow-inset sm:grid-cols-[1fr_200px_auto]">
         <div>
           <Label htmlFor="project-search" className="text-xs">
             Search

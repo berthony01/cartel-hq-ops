@@ -116,7 +116,7 @@ function PublicProjectPage() {
         / <span className="text-foreground">{project.project_name}</span>
       </nav>
 
-      <header className="flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-start">
+      <header className="flex flex-col gap-4 rounded-lg border border-gold/20 bg-surface-elevated p-5 shadow-elevated sm:flex-row sm:items-start sm:p-6">
         <ProjectLogo
           slug={project.public_slug}
           hasLogo={project.has_logo}
@@ -144,7 +144,7 @@ function PublicProjectPage() {
       </header>
 
       {project.description ? (
-        <section className="max-w-3xl whitespace-pre-line text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+        <section className="max-w-3xl border-l-2 border-gold/30 pl-4 whitespace-pre-line text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
           {project.description}
         </section>
       ) : null}
@@ -180,7 +180,7 @@ function PublicProjectPage() {
             {launches.map((l) => (
               <article
                 key={l.public_slug}
-                className="flex h-full flex-col gap-3 rounded-lg border border-border bg-surface p-4"
+                className="flex h-full flex-col gap-3 rounded-lg border border-border/80 bg-surface-elevated p-4 shadow-inset transition-colors hover:border-gold/35"
               >
                 <div className="min-w-0">
                   <h3 className="truncate font-display text-lg uppercase text-foreground">
