@@ -1769,7 +1769,7 @@ function LaunchControlPage() {
                   {watchToken ? (
                     <div className="space-y-3">
                       <div className="min-w-0">
-                        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                        <p className="type-eyebrow text-muted-foreground">
                           Telegram deep link
                         </p>
                         <p className="mt-1 break-all rounded-md border border-border bg-background/40 px-3 py-2 font-mono text-xs text-foreground">
@@ -1833,8 +1833,8 @@ function LaunchControlPage() {
                         </p>
                       ) : null}
 
-                      <div className="rounded-md border border-border/60 bg-background/30 p-3">
-                        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                      <div className="surface-quiet min-w-0 rounded-lg p-3.5">
+                        <p className="type-eyebrow text-muted-foreground">
                           Watcher activity
                         </p>
                         {watchSummaryQuery.isError ? (
@@ -1855,19 +1855,19 @@ function LaunchControlPage() {
                           <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                             <div className="min-w-0">
                               <dt className="text-muted-foreground">Active watchers</dt>
-                              <dd className="font-mono text-sm text-foreground">
+                              <dd className="mt-0.5 font-mono text-lg font-semibold text-foreground">
                                 {watchStatsReady ? watchSummary!.active_count : "—"}
                               </dd>
                             </div>
                             <div className="min-w-0">
                               <dt className="text-muted-foreground">Total opt-ins</dt>
-                              <dd className="font-mono text-sm text-foreground">
+                              <dd className="mt-0.5 font-mono text-lg font-semibold text-foreground">
                                 {watchStatsReady ? watchSummary!.total_count : "—"}
                               </dd>
                             </div>
                             <div className="min-w-0">
                               <dt className="text-muted-foreground">Countdown reminders on</dt>
-                              <dd className="font-mono text-sm text-foreground">
+                              <dd className="mt-0.5 font-mono text-lg font-semibold text-foreground">
                                 {notificationStatsReady
                                   ? notificationSummary!.reminder_enabled_watchers
                                   : "—"}
@@ -1875,7 +1875,7 @@ function LaunchControlPage() {
                             </div>
                             <div className="min-w-0">
                               <dt className="text-muted-foreground">Countdown reminders muted</dt>
-                              <dd className="font-mono text-sm text-foreground">
+                              <dd className="mt-0.5 font-mono text-lg font-semibold text-foreground">
                                 {mutedCount ?? "—"}
                               </dd>
                             </div>
@@ -1891,8 +1891,8 @@ function LaunchControlPage() {
                         ) : null}
                       </div>
 
-                      <div className="rounded-md border border-border/60 bg-background/30 p-3">
-                        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                      <div className="surface-quiet min-w-0 rounded-lg p-3.5">
+                        <p className="type-eyebrow text-muted-foreground">
                           Private confirmation health
                         </p>
                         {confirmationSummaryQuery.isError ? (
@@ -1914,25 +1914,25 @@ function LaunchControlPage() {
                             <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                               <div className="min-w-0">
                                 <dt className="text-muted-foreground">Confirmations delivered</dt>
-                                <dd className="font-mono text-sm text-foreground">
+                                <dd className="mt-0.5 font-mono text-lg font-semibold text-foreground">
                                   {confirmationStatsReady ? confirmationSummary!.delivered_count : "—"}
                                 </dd>
                               </div>
                               <div className="min-w-0">
                                 <dt className="text-muted-foreground">Confirmation failed</dt>
-                                <dd className="font-mono text-sm text-foreground">
+                                <dd className="mt-0.5 font-mono text-lg font-semibold text-foreground">
                                   {confirmationStatsReady ? confirmationSummary!.failed_count : "—"}
                                 </dd>
                               </div>
                               <div className="min-w-0">
                                 <dt className="text-muted-foreground">Outcome unconfirmed</dt>
-                                <dd className="font-mono text-sm text-foreground">
+                                <dd className="mt-0.5 font-mono text-lg font-semibold text-foreground">
                                   {confirmationStatsReady ? confirmationSummary!.ambiguous_count : "—"}
                                 </dd>
                               </div>
                               <div className="min-w-0">
                                 <dt className="text-muted-foreground">Pre-tracking opt-ins</dt>
-                                <dd className="font-mono text-sm text-foreground">
+                                <dd className="mt-0.5 font-mono text-lg font-semibold text-foreground">
                                   {confirmationStatsReady ? confirmationSummary!.untracked_count : "—"}
                                 </dd>
                               </div>
@@ -1948,12 +1948,12 @@ function LaunchControlPage() {
 
 
 
-                      <div className="rounded-md border border-border/60 bg-background/30 p-3">
+                      <div className="surface-quiet min-w-0 rounded-lg p-3.5">
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
                           <StatusBadge tone={armingState.tone}>
                             <span>{armingState.badge}</span>
                           </StatusBadge>
-                          <span className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                          <span className="type-eyebrow text-muted-foreground">
                             Countdown delivery
                           </span>
                         </div>
@@ -2065,8 +2065,8 @@ function LaunchControlPage() {
                         <li>No watcher identities are exposed in CARTEL HQ.</li>
                       </ul>
 
-                      <div className="rounded-md border border-border/60 bg-background/30 p-3">
-                        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                      <div className="surface-quiet min-w-0 rounded-lg p-3.5">
+                        <p className="type-eyebrow text-muted-foreground">
                           Update audience
                         </p>
                         {watcherUpdateStatsQuery.isError ? (
@@ -2087,13 +2087,13 @@ function LaunchControlPage() {
                           <dl className="mt-2 grid grid-cols-3 gap-x-4 gap-y-2 text-xs">
                             <div className="min-w-0">
                               <dt className="text-muted-foreground">Active watchers</dt>
-                              <dd className="font-mono text-sm text-foreground">
+                              <dd className="mt-0.5 font-mono text-lg font-semibold text-foreground">
                                 {watcherUpdateStats ? watcherUpdateStats.active_watchers : "—"}
                               </dd>
                             </div>
                             <div className="min-w-0">
                               <dt className="text-muted-foreground">Project updates on</dt>
-                              <dd className="font-mono text-sm text-foreground">
+                              <dd className="mt-0.5 font-mono text-lg font-semibold text-foreground">
                                 {watcherUpdateStats
                                   ? watcherUpdateStats.updates_enabled_watchers
                                   : "—"}
@@ -2101,7 +2101,7 @@ function LaunchControlPage() {
                             </div>
                             <div className="min-w-0">
                               <dt className="text-muted-foreground">Project updates muted</dt>
-                              <dd className="font-mono text-sm text-foreground">
+                              <dd className="mt-0.5 font-mono text-lg font-semibold text-foreground">
                                 {watcherUpdateStats ? watcherUpdateStats.updates_muted_watchers : "—"}
                               </dd>
                             </div>
@@ -2143,8 +2143,8 @@ function LaunchControlPage() {
                       )}
 
 
-                      <div className="rounded-md border border-border/60 bg-background/30 p-3">
-                        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                      <div className="surface-quiet min-w-0 rounded-lg p-3.5">
+                        <p className="type-eyebrow text-muted-foreground">
                           Recent updates
                         </p>
                         {watcherUpdateHistoryQuery.isError ? (
@@ -2194,10 +2194,10 @@ function LaunchControlPage() {
                                     ] as const
                                   ).map(([label, value]) => (
                                     <div key={label} className="min-w-0">
-                                      <dt className="truncate uppercase tracking-[0.1em] text-muted-foreground">
+                                      <dt className="truncate type-eyebrow text-muted-foreground">
                                         {label}
                                       </dt>
-                                      <dd className="font-mono text-sm text-foreground">{value}</dd>
+                                      <dd className="mt-0.5 font-mono text-lg font-semibold text-foreground">{value}</dd>
                                     </div>
                                   ))}
                                 </dl>
@@ -2430,10 +2430,10 @@ function LaunchControlPage() {
                             ] as const
                           ).map(([label, value]) => (
                             <div key={label} className="min-w-0">
-                              <dt className="truncate uppercase tracking-[0.12em] text-muted-foreground">
+                              <dt className="truncate type-eyebrow text-muted-foreground">
                                 {label}
                               </dt>
-                              <dd className="font-mono text-sm text-foreground">
+                              <dd className="mt-0.5 font-mono text-lg font-semibold text-foreground">
                                 {notificationSummaryQuery.isLoading ? "—" : (value ?? 0)}
                               </dd>
                             </div>
