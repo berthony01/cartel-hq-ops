@@ -102,6 +102,13 @@ import { ScheduleChangeSummary } from "@/components/cartel/ScheduleChangeSummary
 import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
 import { VerifiedDeploymentEvidencePanel } from "@/components/cartel/VerifiedDeploymentEvidencePanel";
 import { VerifiedContractRegistrationPanel } from "@/components/cartel/VerifiedContractRegistrationPanel";
+import { ProductionDeploymentRequestPanel } from "@/components/cartel/ProductionDeploymentRequestPanel";
+import {
+  getLaunchProductionDeploymentRequest,
+  productionDeploymentRequestQueryKey,
+  submitLaunchProductionDeploymentRequest,
+  withdrawLaunchProductionDeploymentRequest,
+} from "@/lib/launch-production-request";
 import { OfficialContractNotifyPanel } from "@/components/cartel/OfficialContractNotifyPanel";
 import { OfficialContractGroupBroadcastPanel } from "@/components/cartel/OfficialContractGroupBroadcastPanel";
 import { OfficialContractCorrectionPanel } from "@/components/cartel/OfficialContractCorrectionPanel";
