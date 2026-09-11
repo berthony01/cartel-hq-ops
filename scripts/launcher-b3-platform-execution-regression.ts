@@ -10,6 +10,7 @@
  *
  * Run: bunx tsx scripts/launcher-b3-platform-execution-regression.ts
  */
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 let passed = 0;
@@ -182,6 +183,99 @@ check(
   "request-bound execution does not go through the legacy attempt creator",
   !/createCanaryDeploymentAttempt/.test(platform),
 );
+
+/* -------------------------------------------------------------- */
+/* 7 — B3.1 authority parity (repository parity migration)         */
+/* -------------------------------------------------------------- */
+
+const B31_PATH = "../supabase/migrations/20260911224113_launcher_b3_1_preserve_legacy_canary_authority.sql";
+const b31Raw = readFileSync(new URL(B31_PATH, import.meta.url));
+const b31 = b31Raw.toString("utf8");
+
+check("B3.1 parity migration is byte-exact (3795 bytes)", b31Raw.byteLength === 3795);
+check(
+  "B3.1 parity migration checksum matches the applied statement",
+  createHash("md5").update(b31Raw).digest("hex") === "d1a097db83f30fee716424b02bb96120",
+);
+
+const B31_TARGETS = [
+  "arm_launch_chain_production_canary_execution",
+  "authorize_launch_chain_production_send_window_issuance",
+  "cancel_claimed_launch_chain_production_presign_authorization",
+  "get_launch_chain_production_reconciliation_snapshot",
+  "submit_launch_chain_production_deployment_tx",
+  "enforce_launch_chain_production_presign",
+] as const;
+
+for (const fn of B31_TARGETS) {
+  check(`B3.1 targets ${fn}`, b31.includes(fn));
+}
+
+/**
+ * Every rewritten predicate must keep BOTH authorities: the legacy
+ * workspace-operator path and the exact request-scoped path. A replacement
+ * that drops either one is the defect B3.1 exists to correct.
+ */
+const replacements = [
+  ...b31.matchAll(/'\(public\.is_workspace_operator\([^']*\)'/g),
+];
+check(
+  "B3.1 rewrites exactly six authority predicates",
+  replacements.length === B31_TARGETS.length,
+);
+for (const [replacement] of replacements) {
+  check(
+    `replacement preserves legacy authority: ${replacement.slice(0, 48)}`,
+    replacement.includes("public.is_workspace_operator("),
+  );
+  check(
+    `replacement preserves request-scoped authority: ${replacement.slice(0, 48)}`,
+    replacement.includes("private.can_operate_launch_production_request("),
+  );
+  check(
+    `replacement keeps the two authorities as an OR: ${replacement.slice(0, 48)}`,
+    / or /.test(replacement),
+  );
+}
+
+/** The post-condition block re-asserts both predicates on all six functions. */
+check(
+  "B3.1 asserts both predicates survive in every targeted function",
+  b31.includes("position('public.is_workspace_operator' in rec.definition) = 0") &&
+    b31.includes(
+      "position('private.can_operate_launch_production_request' in rec.definition) = 0",
+    ) &&
+    b31.includes("Authority parity missing in %"),
+);
+
+/** The correction must not widen authorization anywhere else. */
+for (const forbidden of [
+  "grant ",
+  "revoke ",
+  "create policy",
+  "alter policy",
+  "drop policy",
+  "alter table",
+  "create role",
+  "alter role",
+  "security definer",
+  "is_platform_owner",
+]) {
+  check(
+    `B3.1 does not change authorization via "${forbidden.trim()}"`,
+    !b31.toLowerCase().includes(forbidden),
+  );
+}
+check(
+  "B3.1 only touches the six intended production functions",
+  (b31.match(/public\.[a-z_]+\(/g) ?? [])
+    .map((m) => m.slice("public.".length, -1))
+    .every(
+      (name) =>
+        (B31_TARGETS as readonly string[]).includes(name) || name === "is_workspace_operator",
+    ),
+);
+
 
 if (failures.length > 0) {
   console.error(`FAILED ${failures.length} check(s):`);
