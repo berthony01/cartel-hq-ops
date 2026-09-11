@@ -457,77 +457,82 @@ function ProjectProfilePage() {
             title="Verification"
             description="Layered trust signals for this project. Only CARTEL HQ can grant a review; the project can request one."
           >
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusBadge tone="gold">
-                  <span>Project Authenticated</span>
-                </StatusBadge>
-                <span className="text-xs text-muted-foreground">Active</span>
+            <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+              <div className="surface-quiet min-w-0 rounded-lg p-3.5">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <StatusBadge tone="gold">
+                    <span>Project Authenticated</span>
+                  </StatusBadge>
+                  <span className="type-helper text-muted-foreground">Active</span>
+                </div>
+                <p className="mt-2.5 max-w-prose type-helper text-muted-foreground">
+                  This profile is controlled and published through an authenticated CARTEL HQ
+                  project workspace. It does not verify external team identity or KYC.
+                </p>
               </div>
-              <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
-                This profile is controlled and published through an authenticated CARTEL HQ project
-                workspace. It does not verify external team identity or KYC.
-              </p>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusBadge tone={verificationStatus === "verified" ? "gold" : "muted"}>
-                  <span>Platform Reviewed</span>
-                </StatusBadge>
-                <span className="text-xs text-muted-foreground">
-                  {verificationQuery.isLoading
-                    ? "Checking review state…"
-                    : verificationQuery.isError
-                      ? "Review state could not be loaded right now."
-                      : verificationStatus === "verified"
-                        ? `Reviewed${
-                            formatDateTime(verification?.verified_at)
-                              ? ` ${formatDateTime(verification?.verified_at)}`
-                              : ""
-                          }`
-                        : verificationStatus === "pending"
-                          ? `Review requested${
-                              formatDateTime(verification?.requested_at)
-                                ? ` ${formatDateTime(verification?.requested_at)}`
+              <div className="surface-quiet min-w-0 rounded-lg p-3.5">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <StatusBadge tone={verificationStatus === "verified" ? "gold" : "muted"}>
+                    <span>Platform Reviewed</span>
+                  </StatusBadge>
+                  <span className="min-w-0 type-helper text-muted-foreground [overflow-wrap:anywhere]">
+                    {verificationQuery.isLoading
+                      ? "Checking review state…"
+                      : verificationQuery.isError
+                        ? "Review state could not be loaded right now."
+                        : verificationStatus === "verified"
+                          ? `Reviewed${
+                              formatDateTime(verification?.verified_at)
+                                ? ` ${formatDateTime(verification?.verified_at)}`
                                 : ""
                             }`
-                          : VERIFICATION_STATUS_LABEL[verificationStatus]}
-                </span>
-              </div>
-              <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
-                {VERIFICATION_STATUS_DESCRIPTION[verificationStatus]}
-              </p>
-              <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
-                Platform Reviewed does not verify token safety, smart-contract code, liquidity or
-                investment quality.
-              </p>
+                          : verificationStatus === "pending"
+                            ? `Review requested${
+                                formatDateTime(verification?.requested_at)
+                                  ? ` ${formatDateTime(verification?.requested_at)}`
+                                  : ""
+                              }`
+                            : VERIFICATION_STATUS_LABEL[verificationStatus]}
+                  </span>
+                </div>
+                <p className="mt-2.5 max-w-prose type-helper text-muted-foreground">
+                  {VERIFICATION_STATUS_DESCRIPTION[verificationStatus]}
+                </p>
+                <p className="mt-2 max-w-prose type-helper text-muted-foreground">
+                  Platform Reviewed does not verify token safety, smart-contract code, liquidity or
+                  investment quality.
+                </p>
 
-              {verificationQuery.isError ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="min-h-11"
-                  onClick={() => void verificationQuery.refetch()}
-                >
-                  Retry
-                </Button>
-              ) : verificationQuery.isSuccess && canRequestVerification(verificationStatus) ? (
-                <div className="space-y-2">
+                {verificationQuery.isError ? (
                   <Button
                     variant="outline"
                     size="sm"
-                    className="min-h-11"
-                    disabled={requestVerification.isPending}
-                    onClick={() => requestVerification.mutate()}
+                    className="mt-3 min-h-11"
+                    onClick={() => void verificationQuery.refetch()}
                   >
-                    {requestVerification.isPending ? "Requesting…" : "Request Platform Review"}
+                    Retry
                   </Button>
-                  <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
-                    Requires a published profile with a name, public link name, chain and at least
-                    one official link. Requesting a review never marks this project reviewed.
-                  </p>
-                </div>
-              ) : null}
+                ) : verificationQuery.isSuccess && canRequestVerification(verificationStatus) ? (
+                  <div className="mt-3 space-y-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-h-11"
+                      disabled={requestVerification.isPending}
+                      onClick={() => requestVerification.mutate()}
+                    >
+                      {requestVerification.isPending ? "Requesting…" : "Request Platform Review"}
+                    </Button>
+                    <p className="max-w-prose type-helper text-muted-foreground">
+                      Requires a published profile with a name, public link name, chain and at least
+                      one official link. Requesting a review never marks this project reviewed.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
             </div>
+
           </Section>
 
         ) : null}
