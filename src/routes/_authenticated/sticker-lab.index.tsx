@@ -357,22 +357,34 @@ function StickerLabHome() {
         </Link>
       </RelatedLinks>
 
-      <div className="rounded-lg border border-border/70 bg-surface-raised/40 px-4 py-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">
-          Project scope
-        </p>
-        <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-          Packs you create here belong to <strong className="text-foreground">{projectName}</strong>
-          . The project Brand Kit guides AI generation when one is saved, and a finished pack can be
-          sent to one or several Telegram communities connected to this same project. Connecting
-          communities is managed in Community Command.
-        </p>
-      </div>
+      <section className="surface-command overflow-hidden rounded-lg p-4 sm:p-6" aria-labelledby="studio-context-title">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+          <div className="min-w-0">
+            <p className="type-eyebrow text-gold">Creative operations</p>
+            <h2 id="studio-context-title" className="mt-2 font-display text-2xl uppercase leading-none text-foreground sm:text-3xl">
+              {projectName} Sticker Studio
+            </h2>
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              Brand Kit defines the identity. Asset Vault holds the source material. Sticker Lab turns both into reviewed packs for Telegram and community distribution.
+            </p>
+          </div>
+          <dl className="grid grid-cols-2 gap-2 lg:min-w-72">
+            <div className="surface-quiet min-w-0 rounded-md p-3">
+              <dt className="type-eyebrow text-muted-foreground">Active packs</dt>
+              <dd className="mt-1.5 font-display text-xl leading-none text-gold">{packsQuery.isLoading ? "—" : packs.length}</dd>
+            </div>
+            <div className="surface-quiet min-w-0 rounded-md p-3">
+              <dt className="type-eyebrow text-muted-foreground">Archived</dt>
+              <dd className="mt-1.5 font-display text-xl leading-none text-foreground">{archivedQuery.isLoading ? "—" : archived.length}</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
 
       <Section
         variant="plain"
         title="How Sticker Lab works"
-        description="Four stages, powered by the same five-step builder. Blueprint covers builder steps 1 and 2."
+        description="A connected path from project identity to community-ready creative. Blueprint covers builder steps 1 and 2."
       >
         <JourneyOverview />
         <JourneyAfterRelease />
@@ -463,7 +475,7 @@ function StickerLabHome() {
           />
 
         ) : (
-          <ul className="space-y-2">
+          <ul className="grid gap-3 lg:grid-cols-2">
             {packs.map((pack) => {
               // A pack is only "generating" while stickers are actually active.
               const label =

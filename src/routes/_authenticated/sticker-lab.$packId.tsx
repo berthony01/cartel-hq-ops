@@ -373,6 +373,32 @@ function PackManagerPage() {
         }
       />
 
+      <section className="surface-command overflow-hidden rounded-lg p-4 sm:p-6" aria-labelledby="pack-command-title">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+          <div className="min-w-0">
+            <p className="type-eyebrow text-gold">Pack identity</p>
+            <h2 id="pack-command-title" className="mt-2 font-display text-2xl uppercase leading-none text-foreground sm:text-3xl [overflow-wrap:anywhere]">
+              {pack.title}
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{pack.theme}</p>
+          </div>
+          <dl className="grid grid-cols-3 gap-2 lg:min-w-[23rem]">
+            <div className="surface-quiet min-w-0 rounded-md p-3">
+              <dt className="type-eyebrow text-muted-foreground">Ready</dt>
+              <dd className="mt-1.5 font-display text-xl leading-none text-pepe">{readyCount}/{stickers.length}</dd>
+            </div>
+            <div className="surface-quiet min-w-0 rounded-md p-3">
+              <dt className="type-eyebrow text-muted-foreground">Telegram</dt>
+              <dd className="mt-1.5 truncate font-display text-lg leading-none text-foreground">{published ? "Live" : "Pending"}</dd>
+            </div>
+            <div className="surface-quiet min-w-0 rounded-md p-3">
+              <dt className="type-eyebrow text-muted-foreground">Drops</dt>
+              <dd className="mt-1.5 truncate font-display text-lg leading-none text-gold">{dropLabel}</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
       {isArchived ? (
         <Section
           variant="quiet"
@@ -396,17 +422,17 @@ function PackManagerPage() {
           {summaryItems.map((item) => (
             <li
               key={item.label}
-              className="min-w-0 rounded-lg border border-border/70 bg-surface-raised/50 p-3"
+              className="surface-quiet min-w-0 rounded-lg p-3"
             >
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+               <p className="type-eyebrow text-muted-foreground">
                 {item.label}
               </p>
-              <p className="mt-1 break-words text-sm font-semibold text-foreground">{item.value}</p>
+               <p className="mt-1.5 break-words font-display text-lg leading-none text-foreground">{item.value}</p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{item.hint}</p>
             </li>
           ))}
         </ul>
-        <div className="mt-4 rounded-lg border border-primary/40 bg-primary/5 p-3">
+        <div className="mt-4 rounded-lg border border-gold/40 bg-gold/5 p-4">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Recommended next step
           </p>
@@ -513,9 +539,9 @@ function PackManagerPage() {
               return (
                 <li
                   key={sticker.id}
-                  className="min-w-0 rounded-lg border border-border/70 bg-surface-raised/50 p-2"
+                  className="surface-elevated hover-lift min-w-0 rounded-lg p-2.5"
                 >
-                  <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md border border-border/60 bg-background/60">
+                  <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md border border-border-subtle bg-background/60 p-1">
                     {url ? (
                       <img
                         src={url}
