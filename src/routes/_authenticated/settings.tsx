@@ -28,6 +28,8 @@ export const Route = createFileRoute("/_authenticated/settings")({
         property: "og:description",
         content: "Project, community, and brand configuration hub for CARTEL HQ.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: SettingsPage,
