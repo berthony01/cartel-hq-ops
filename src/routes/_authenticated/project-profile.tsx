@@ -805,71 +805,75 @@ function ProjectProfilePage() {
               className="xl:sticky xl:top-6"
               contentClassName="space-y-4"
             >
-
-              <div className="flex items-start gap-3">
-                <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-background/40">
-                  {selectedLogo && urls[selectedLogo.storage_path] ? (
-                    <img
-                      src={urls[selectedLogo.storage_path]}
-                      alt="Selected project logo"
-                      className="max-h-full max-w-full object-contain"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <IdCard className="size-5 text-muted-foreground" aria-hidden="true" />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-display text-lg uppercase text-foreground">
-                    {form.project_name.trim() || "Unnamed project"}
-                  </p>
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    {form.ticker.trim() ? (
-                      <StatusBadge tone="gold">
-                        <span>{form.ticker.trim()}</span>
-                      </StatusBadge>
-                    ) : null}
-                    {form.primary_chain.trim() ? (
-                      <StatusBadge tone="muted">
-                        <span>{form.primary_chain.trim()}</span>
-                      </StatusBadge>
-                    ) : null}
-                    <StatusBadge tone={STATUS_TONE[form.discovery_status]}>
-                      <span>{DISCOVERY_STATUS_LABELS[form.discovery_status]}</span>
-                    </StatusBadge>
+              <div className="min-w-0 overflow-hidden rounded-lg border border-border-subtle bg-background/40">
+                <div className="h-1 w-full bg-gradient-to-r from-gold/70 via-gold/25 to-transparent" />
+                <div className="space-y-4 p-3.5 sm:p-4">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-background/60">
+                      {selectedLogo && urls[selectedLogo.storage_path] ? (
+                        <img
+                          src={urls[selectedLogo.storage_path]}
+                          alt="Selected project logo"
+                          className="max-h-full max-w-full object-contain"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <IdCard className="size-5 text-muted-foreground" aria-hidden="true" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="min-w-0 font-display text-lg uppercase leading-tight text-foreground [overflow-wrap:anywhere]">
+                        {form.project_name.trim() || "Unnamed project"}
+                      </p>
+                      <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
+                        {form.ticker.trim() ? (
+                          <StatusBadge tone="gold">
+                            <span>{form.ticker.trim()}</span>
+                          </StatusBadge>
+                        ) : null}
+                        {form.primary_chain.trim() ? (
+                          <StatusBadge tone="muted">
+                            <span>{form.primary_chain.trim()}</span>
+                          </StatusBadge>
+                        ) : null}
+                        <StatusBadge tone={STATUS_TONE[form.discovery_status]}>
+                          <span>{DISCOVERY_STATUS_LABELS[form.discovery_status]}</span>
+                        </StatusBadge>
+                      </div>
+                    </div>
                   </div>
+
+                  {form.description.trim() ? (
+                    <p className="type-helper text-muted-foreground [overflow-wrap:anywhere]">
+                      {form.description.trim()}
+                    </p>
+                  ) : null}
+
+                  {form.website_url.trim() || form.telegram_url.trim() || form.x_url.trim() ? (
+                    <div className="flex min-w-0 flex-wrap gap-1.5">
+                      {form.website_url.trim() ? (
+                        <span className="rounded-md border border-border-subtle bg-surface-raised px-2 py-1 type-eyebrow text-muted-foreground">
+                          Website
+                        </span>
+                      ) : null}
+                      {form.telegram_url.trim() ? (
+                        <span className="rounded-md border border-border-subtle bg-surface-raised px-2 py-1 type-eyebrow text-muted-foreground">
+                          Telegram
+                        </span>
+                      ) : null}
+                      {form.x_url.trim() ? (
+                        <span className="rounded-md border border-border-subtle bg-surface-raised px-2 py-1 type-eyebrow text-muted-foreground">
+                          X
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
-              {form.description.trim() ? (
-                <p className="text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-                  {form.description.trim()}
-                </p>
-              ) : null}
-
-              {form.website_url.trim() || form.telegram_url.trim() || form.x_url.trim() ? (
-                <div className="flex flex-wrap gap-2">
-                  {form.website_url.trim() ? (
-                    <span className="rounded-md border border-border bg-surface-raised px-2 py-1 text-[11px] uppercase tracking-wider text-muted-foreground">
-                      Website
-                    </span>
-                  ) : null}
-                  {form.telegram_url.trim() ? (
-                    <span className="rounded-md border border-border bg-surface-raised px-2 py-1 text-[11px] uppercase tracking-wider text-muted-foreground">
-                      Telegram
-                    </span>
-                  ) : null}
-                  {form.x_url.trim() ? (
-                    <span className="rounded-md border border-border bg-surface-raised px-2 py-1 text-[11px] uppercase tracking-wider text-muted-foreground">
-                      X
-                    </span>
-                  ) : null}
-                </div>
-              ) : null}
-
               {profile && profile.discovery_status === "published" && profile.public_slug ? (
-                <div className="border-t border-border pt-3">
-                  <Button asChild variant="outline" size="sm" className="w-full">
+                <div>
+                  <Button asChild variant="outline" size="sm" className="min-h-11 w-full">
                     <Link
                       to="/network/project/$projectSlug"
                       params={{ projectSlug: profile.public_slug }}
@@ -877,16 +881,17 @@ function ProjectProfilePage() {
                       View Network Profile
                     </Link>
                   </Button>
-                  <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                  <p className="mt-2 type-helper text-muted-foreground">
                     Published profiles are discoverable on the Cartel Network.
                   </p>
                 </div>
               ) : (
-                <p className="border-t border-border pt-3 text-[11px] leading-relaxed text-muted-foreground">
+                <p className="type-helper text-muted-foreground">
                   Private preview. Publish this profile to make it discoverable on the Cartel
                   Network.
                 </p>
               )}
+
             </Section>
           </aside>
         </div>
