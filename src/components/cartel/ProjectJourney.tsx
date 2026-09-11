@@ -303,8 +303,13 @@ function StageRow({
           <Button
             asChild
             size={isNext ? "default" : "sm"}
-            variant={isNext ? "default" : blocked ? "outline" : "secondary"}
-            className="min-h-11 w-full sm:w-auto"
+            variant={
+              isNext ? "default" : blocked ? (finalStage ? "ghost" : "outline") : "secondary"
+            }
+            className={cn(
+              "min-h-11",
+              blocked ? "w-auto self-start sm:self-end" : "w-full sm:w-auto",
+            )}
           >
             <JourneyLink
               stage={stage}
