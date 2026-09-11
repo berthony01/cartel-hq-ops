@@ -26,6 +26,8 @@ import {
 
 import { usePlatformAccess } from "@/hooks/usePlatformAccess";
 import { useWorkspace } from "@/lib/workspace-context";
+import { getProjectProfile } from "@/lib/project-profile";
+
 import { listLaunches } from "@/lib/launch-control";
 import {
   MAINNET_DEPLOYMENT_TX_ENABLED,
