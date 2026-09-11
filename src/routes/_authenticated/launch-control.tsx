@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -107,6 +107,16 @@ import { SectionNav, type SectionNavItem } from "@/components/cartel/SectionNav"
 import { RelatedLinks, relatedLinkClass } from "@/components/cartel/RelatedLinks";
 
 /** Presentation-only in-page navigation targets for a selected launch. */
+const LAUNCH_SECTION_IDS = [
+  "lc-overview",
+  "lc-details",
+  "lc-schedule",
+  "lc-watch",
+  "lc-comms",
+  "lc-contract",
+] as const;
+type LaunchSectionId = (typeof LAUNCH_SECTION_IDS)[number];
+
 const LAUNCH_SECTIONS: SectionNavItem[] = [
   { id: "lc-overview", label: "Overview" },
   { id: "lc-details", label: "Details" },
@@ -115,6 +125,24 @@ const LAUNCH_SECTIONS: SectionNavItem[] = [
   { id: "lc-comms", label: "Communications" },
   { id: "lc-contract", label: "Contract" },
 ];
+
+type LaunchControlSearch = { launch?: string; section?: LaunchSectionId };
+
+function validateLaunchControlSearch(search: Record<string, unknown>): LaunchControlSearch {
+  const rawLaunch = search["launch"];
+  const launch =
+    typeof rawLaunch === "string" && rawLaunch.trim().length > 0 && rawLaunch.length <= 100
+      ? rawLaunch.trim()
+      : undefined;
+  const rawSection = search["section"];
+  const section = (LAUNCH_SECTION_IDS as readonly string[]).includes(String(rawSection))
+    ? (String(rawSection) as LaunchSectionId)
+    : undefined;
+  const next: LaunchControlSearch = {};
+  if (launch) next.launch = launch;
+  if (section && section !== "lc-overview") next.section = section;
+  return next;
+}
 
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -152,6 +180,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/_authenticated/launch-control")({
+  validateSearch: validateLaunchControlSearch,
   head: () => ({
     meta: [
       { title: "Launch Control — CARTEL HQ" },
@@ -373,6 +402,8 @@ const REMINDER_ARMED_STATUSES: readonly LaunchStatus[] = [
 function LaunchControlPage() {
   const { workspaceId, workspace, loading: workspaceLoading } = useWorkspace();
   const queryClient = useQueryClient();
+  const search = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
   const tz = useMemo(() => deviceTimezone(), []);
 
   const profileQuery = useQuery({
@@ -418,20 +449,66 @@ function LaunchControlPage() {
       setSelectedId(null);
       return;
     }
+    // A URL may select only a PROJECT launch from this already workspace- and
+    // profile-scoped list. Stale, inaccessible and INTERNAL_TEST ids fail back
+    // to the deterministic primary PROJECT launch without triggering work.
+    if (search.launch) {
+      const requested = projectLaunches.find((launch) => launch.id === search.launch);
+      const fallback = selectPrimaryProjectLaunch(projectLaunches);
+      const resolved = requested ?? fallback;
+      if (resolved?.id !== selectedId) setSelectedId(resolved?.id ?? null);
+      return;
+    }
     // Preserve an explicit selection across ordinary query refresh.
     if (launches.some((l) => l.id === selectedId)) return;
     // Otherwise fall back to the deterministic PROJECT primary launch. Only a
     // workspace with no PROJECT launch at all may land on an internal record.
     const primary = selectPrimaryProjectLaunch(projectLaunches);
     setSelectedId(primary?.id ?? internalTestLaunches[0]?.id ?? null);
-  }, [launches, projectLaunches, internalTestLaunches, selectedId]);
+  }, [launches, projectLaunches, internalTestLaunches, search.launch, selectedId]);
 
   /** Controlled working view for the selected PROJECT launch. */
-  const [activeSection, setActiveSection] = useState<string>("lc-overview");
+  const [activeSection, setActiveSection] = useState<LaunchSectionId>(
+    search.section ?? "lc-overview",
+  );
   useEffect(() => {
-    // Reset only when the selected launch genuinely changes.
+    // The validated URL owns explicit deep links. This only changes which
+    // already-mounted section is visible; ordinary launch changes still reset
+    // to Overview, and no action handler is invoked.
+    setActiveSection(search.section ?? "lc-overview");
+  }, [search.section, selectedId]);
+
+  const selectProjectLaunch = (launchId: string) => {
+    if (!projectLaunches.some((launch) => launch.id === launchId)) return;
+    setSelectedId(launchId);
     setActiveSection("lc-overview");
-  }, [selectedId]);
+    void navigate({ search: { launch: launchId }, replace: true });
+  };
+
+  const selectInternalLaunch = (launchId: string) => {
+    if (!internalTestLaunches.some((launch) => launch.id === launchId)) return;
+    setSelectedId(launchId);
+    setActiveSection("lc-overview");
+    void navigate({ search: {}, replace: true });
+  };
+
+  const selectSection = (sectionId: string) => {
+    if (!(LAUNCH_SECTION_IDS as readonly string[]).includes(sectionId)) return;
+    const section = sectionId as LaunchSectionId;
+    setActiveSection(section);
+    const launch = selected && isProjectLaunch(selected) ? selected.id : null;
+    void navigate({
+      search:
+        section === "lc-overview"
+          ? launch
+            ? { launch }
+            : {}
+          : launch
+            ? { launch, section }
+            : { section },
+      replace: true,
+    });
+  };
 
 
   const [form, setForm] = useState<EditorForm | null>(null);
@@ -1200,7 +1277,7 @@ function LaunchControlPage() {
                     <li key={launch.id}>
                       <button
                         type="button"
-                        onClick={() => setSelectedId(launch.id)}
+                        onClick={() => selectProjectLaunch(launch.id)}
                         aria-current={active ? "true" : undefined}
                         className={`hover-lift flex w-full min-w-0 items-start gap-3 rounded-lg border px-3.5 py-3 text-left ${
                           active
@@ -1257,7 +1334,7 @@ function LaunchControlPage() {
                       <li key={launch.id}>
                         <button
                           type="button"
-                          onClick={() => setSelectedId(launch.id)}
+                          onClick={() => selectInternalLaunch(launch.id)}
                           aria-current={active ? "true" : undefined}
                           className={`hover-lift flex w-full min-w-0 items-start gap-3 rounded-lg border px-3.5 py-3 text-left ${
                             active
@@ -1474,7 +1551,7 @@ function LaunchControlPage() {
               label="Launch Control sections"
               items={LAUNCH_SECTIONS}
               activeId={activeSection}
-              onChange={setActiveSection}
+              onChange={selectSection}
             />
 
             {/* Every working view stays mounted. Only visibility changes, so

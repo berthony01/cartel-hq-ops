@@ -57,6 +57,83 @@ function ProgressBar({ value, total }: { value: number; total: number }) {
   );
 }
 
+type LaunchControlSection =
+  | "lc-overview"
+  | "lc-details"
+  | "lc-schedule"
+  | "lc-watch"
+  | "lc-comms"
+  | "lc-contract";
+
+const LAUNCH_SECTION_BY_STAGE: Partial<Record<JourneyStage["key"], LaunchControlSection>> = {
+  launch_created: "lc-overview",
+  launch_announced: "lc-overview",
+  launch_schedule: "lc-schedule",
+  launch_watch_open: "lc-watch",
+  audience: "lc-watch",
+  deployment: "lc-contract",
+  official_contract: "lc-contract",
+  launch_live: "lc-overview",
+};
+
+const TELEGRAM_TAB_BY_STAGE: Partial<
+  Record<JourneyStage["key"], "communities" | "inbox">
+> = {
+  telegram_community: "communities",
+  launch_welcome: "communities",
+  communications: "inbox",
+};
+
+function JourneyLink({
+  stage,
+  primaryLaunchId,
+  label,
+}: {
+  stage: JourneyStage;
+  primaryLaunchId: string | null;
+  label: string;
+}) {
+  const section = LAUNCH_SECTION_BY_STAGE[stage.key];
+  if (stage.to === "/launch-control" && section) {
+    const search = primaryLaunchId ? { launch: primaryLaunchId, section } : { section };
+    return (
+      <Link
+        to="/launch-control"
+        search={search}
+        aria-label={`${label}: ${stage.title}`}
+      >
+        {label}
+        <ArrowRight className="size-4" aria-hidden="true" />
+      </Link>
+    );
+  }
+
+  const tab = TELEGRAM_TAB_BY_STAGE[stage.key];
+  if (stage.to === "/telegram" && tab) {
+    return (
+      <Link to="/telegram" search={{ tab }} aria-label={`${label}: ${stage.title}`}>
+        {label}
+        <ArrowRight className="size-4" aria-hidden="true" />
+      </Link>
+    );
+  }
+
+  return (
+    <Link to={stage.to} aria-label={`${label}: ${stage.title}`}>
+      {label}
+      <ArrowRight className="size-4" aria-hidden="true" />
+    </Link>
+  );
+}
+
+function blockedGuidance(stage: JourneyStage): string {
+  if (stage.detail) return stage.detail;
+  if (stage.status === "unavailable") {
+    return "Current state could not be verified. Review the destination before continuing.";
+  }
+  return "Complete the required earlier stage before this becomes available.";
+}
+
 function NextActionBlock({
   journey,
   compact,
@@ -65,53 +142,77 @@ function NextActionBlock({
   compact?: boolean;
 }) {
   const { nextAction, allComplete } = journey;
-  const done = allComplete || nextAction.stage === null;
+  const blockedStage = journey.stages.find((stage) => stage.status !== "complete") ?? null;
+  const activeStage = nextAction.stage ?? blockedStage;
+  const blocked = !allComplete && nextAction.stage === null && blockedStage !== null;
   return (
     <div
       className={cn(
         "min-w-0 rounded-md border p-3.5 sm:p-4",
-        done ? "border-pepe/40 bg-pepe/5" : "border-gold/40 bg-gold/5",
+        allComplete
+          ? "border-pepe/40 bg-pepe/5"
+          : blocked
+            ? "border-border-strong bg-surface-raised/60"
+            : "border-gold/40 bg-gold/5",
       )}
     >
       <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
         <div className="min-w-0">
           <p
             className={cn(
-            "type-eyebrow",
-              done ? "text-pepe" : "text-gold",
+              "type-eyebrow",
+              allComplete ? "text-pepe" : blocked ? "text-muted-foreground" : "text-gold",
             )}
           >
-            {done ? "Status" : "Next step"}
+            {allComplete ? "Status" : blocked ? "Blocked dependency" : "Continue setup"}
           </p>
           <p className="mt-1 text-sm font-semibold text-foreground [overflow-wrap:anywhere]">
-            {nextAction.headline}
+            {blocked && blockedStage ? blockedStage.title : nextAction.headline}
           </p>
           {compact ? null : (
             <p className="mt-1 max-w-prose text-xs leading-relaxed text-muted-foreground sm:text-sm">
-              {nextAction.explanation}
+              {blocked && blockedStage ? blockedGuidance(blockedStage) : nextAction.explanation}
             </p>
           )}
         </div>
-        <Button asChild size="sm" className="min-h-11 w-full shrink-0 sm:w-auto">
-          <Link to={nextAction.to}>
-            {nextAction.label}
-            <ArrowRight className="size-4" aria-hidden="true" />
-          </Link>
-        </Button>
+        {activeStage ? (
+          <Button
+            asChild
+            size="sm"
+            variant={blocked ? "outline" : "default"}
+            className="min-h-11 w-full shrink-0 sm:w-auto"
+          >
+            <JourneyLink
+              stage={activeStage}
+              primaryLaunchId={journey.primaryLaunchId}
+              label={blocked ? `Review ${activeStage.title}` : activeStage.actionLabel}
+            />
+          </Button>
+        ) : null}
       </div>
       {compact ? (
         <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-          {nextAction.explanation}
+          {blocked && blockedStage ? blockedGuidance(blockedStage) : nextAction.explanation}
         </p>
       ) : null}
     </div>
   );
 }
 
-function StageRow({ stage, isNext }: { stage: JourneyStage; isNext: boolean }) {
+function StageRow({
+  stage,
+  isNext,
+  primaryLaunchId,
+}: {
+  stage: JourneyStage;
+  isNext: boolean;
+  primaryLaunchId: string | null;
+}) {
   const complete = stage.status === "complete";
-  const unavailable = stage.status === "unavailable";
-  const Icon = complete ? Check : unavailable ? HelpCircle : isNext ? CircleDot : Circle;
+  const blocked = stage.status === "waiting" || stage.status === "unavailable";
+  const later = stage.status === "action" && !isNext;
+  const Icon = complete ? Check : blocked ? HelpCircle : isNext ? CircleDot : Circle;
+  const secondaryLabel = stage.key === "deployment" ? "Review evidence" : "View";
   return (
     <li
       className={cn(
@@ -119,7 +220,7 @@ function StageRow({ stage, isNext }: { stage: JourneyStage; isNext: boolean }) {
         complete
           ? "border-pepe/30 bg-pepe/5"
           : isNext
-            ? "border-gold/40 bg-gold/5"
+            ? "border-gold/55 bg-gold/10 shadow-[var(--glow-gold)]"
             : "border-border/60 bg-surface-raised/40",
       )}
     >
@@ -140,27 +241,41 @@ function StageRow({ stage, isNext }: { stage: JourneyStage; isNext: boolean }) {
           {stage.order}. {stage.title}
         </span>
         <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-          {stage.detail ?? stage.description}
+          {blocked ? blockedGuidance(stage) : stage.detail ?? stage.description}
         </span>
       </span>
-      <span className="col-start-2 shrink-0 sm:col-start-3 sm:row-start-1">
+      <span className="col-start-2 flex min-w-0 flex-col items-start gap-2 sm:col-start-3 sm:row-start-1 sm:items-end">
         {complete ? (
           <StatusBadge tone="green">
-            <span>Done</span>
+            <span>DONE</span>
           </StatusBadge>
-        ) : unavailable ? (
+        ) : blocked ? (
           <StatusBadge tone="muted">
-            <span>Unknown</span>
+            <span>BLOCKED</span>
           </StatusBadge>
         ) : isNext ? (
           <StatusBadge tone="gold">
-            <span>Now</span>
+            <span>NEXT</span>
           </StatusBadge>
         ) : (
           <StatusBadge tone="muted">
-            <span>Later</span>
+            <span>LATER</span>
           </StatusBadge>
         )}
+        {!complete ? (
+          <Button
+            asChild
+            size="sm"
+            variant={isNext ? "default" : "outline"}
+            className={cn("min-h-11 w-full sm:w-auto", later || blocked ? "text-xs" : "")}
+          >
+            <JourneyLink
+              stage={stage}
+              primaryLaunchId={primaryLaunchId}
+              label={isNext ? stage.actionLabel : secondaryLabel}
+            />
+          </Button>
+        ) : null}
       </span>
     </li>
   );
@@ -249,7 +364,12 @@ export function ProjectJourneyPanel({ workspaceId, workspaceName }: SharedProps)
       <NextActionBlock journey={journey} />
       <ul className="grid gap-2 sm:grid-cols-2 [&>*]:min-w-0">
         {journey.stages.map((stage) => (
-          <StageRow key={stage.key} stage={stage} isNext={stage.key === nextKey} />
+          <StageRow
+            key={stage.key}
+            stage={stage}
+            isNext={stage.key === nextKey}
+            primaryLaunchId={journey.primaryLaunchId}
+          />
         ))}
       </ul>
     </Section>
