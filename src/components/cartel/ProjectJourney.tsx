@@ -5,11 +5,13 @@ import {
   Check,
   Circle,
   CircleDot,
-  HelpCircle,
   Loader2,
+  Lock,
   RefreshCw,
   ShieldCheck,
+  Target,
 } from "lucide-react";
+
 
 import { Button } from "@/components/ui/button";
 import { Section } from "@/components/cartel/Section";
