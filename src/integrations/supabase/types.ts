@@ -848,6 +848,107 @@ export type Database = {
           },
         ]
       }
+      launch_production_deployment_requests: {
+        Row: {
+          assigned_operator_id: string | null
+          chain_id: number
+          decision_note: string | null
+          declared_chain: string
+          execution_deployment_id: string | null
+          id: string
+          launch_id: string
+          network_environment: string
+          project_profile_id: string
+          requested_at: string
+          requested_by: string
+          status: string
+          status_changed_at: string
+          token_decimals: number
+          token_name: string
+          token_recipient: string
+          token_supply_whole: number
+          token_symbol: string
+          token_total_supply_base_units: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          assigned_operator_id?: string | null
+          chain_id?: number
+          decision_note?: string | null
+          declared_chain: string
+          execution_deployment_id?: string | null
+          id?: string
+          launch_id: string
+          network_environment?: string
+          project_profile_id: string
+          requested_at?: string
+          requested_by: string
+          status?: string
+          status_changed_at?: string
+          token_decimals?: number
+          token_name: string
+          token_recipient: string
+          token_supply_whole: number
+          token_symbol: string
+          token_total_supply_base_units: number
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          assigned_operator_id?: string | null
+          chain_id?: number
+          decision_note?: string | null
+          declared_chain?: string
+          execution_deployment_id?: string | null
+          id?: string
+          launch_id?: string
+          network_environment?: string
+          project_profile_id?: string
+          requested_at?: string
+          requested_by?: string
+          status?: string
+          status_changed_at?: string
+          token_decimals?: number
+          token_name?: string
+          token_recipient?: string
+          token_supply_whole?: number
+          token_symbol?: string
+          token_total_supply_base_units?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launch_production_deployment_reque_execution_deployment_id_fkey"
+            columns: ["execution_deployment_id"]
+            isOneToOne: false
+            referencedRelation: "launch_chain_deployments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_production_deployment_requests_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_production_deployment_requests_project_profile_id_fkey"
+            columns: ["project_profile_id"]
+            isOneToOne: false
+            referencedRelation: "project_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_production_deployment_requests_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       launch_schedule_communications: {
         Row: {
           baseline_launch_at: string | null
@@ -4455,6 +4556,33 @@ export type Database = {
           skipped_count: number
         }[]
       }
+      get_launch_production_deployment_request: {
+        Args: { _launch_id: string }
+        Returns: {
+          assigned_operator_id: string
+          chain_id: number
+          decision_note: string
+          declared_chain: string
+          effective_status: string
+          execution_deployment_id: string
+          id: string
+          launch_id: string
+          network_environment: string
+          project_profile_id: string
+          requested_at: string
+          requested_by: string
+          status: string
+          status_changed_at: string
+          token_decimals: number
+          token_name: string
+          token_recipient: string
+          token_supply_whole: string
+          token_symbol: string
+          token_total_supply_base_units: string
+          updated_at: string
+          workspace_id: string
+        }[]
+      }
       get_launch_watch_confirmation_summary: {
         Args: { _launch_id: string }
         Returns: {
@@ -4777,6 +4905,10 @@ export type Database = {
         Args: { p_secret: string }
         Returns: boolean
       }
+      launch_production_request_is_completed: {
+        Args: { _request_id: string }
+        Returns: boolean
+      }
       list_launch_chain_deployments: {
         Args: { _launch_id: string }
         Returns: {
@@ -4834,6 +4966,34 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      list_launch_production_deployment_requests: {
+        Args: never
+        Returns: {
+          assigned_operator_id: string
+          decision_note: string
+          effective_status: string
+          execution_deployment_id: string
+          id: string
+          launch_id: string
+          launch_kind: string
+          launch_name: string
+          launch_status: string
+          launch_ticker: string
+          project_name: string
+          project_profile_id: string
+          requested_at: string
+          requested_by: string
+          status: string
+          status_changed_at: string
+          token_name: string
+          token_recipient: string
+          token_supply_whole: string
+          token_symbol: string
+          token_total_supply_base_units: string
+          workspace_id: string
+          workspace_name: string
+        }[]
       }
       list_launch_watcher_updates: {
         Args: { _launch_id: string; _limit?: number }
@@ -5024,6 +5184,38 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "launches"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      set_launch_production_deployment_request_status: {
+        Args: { _note?: string; _request_id: string; _target_status: string }
+        Returns: {
+          assigned_operator_id: string | null
+          chain_id: number
+          decision_note: string | null
+          declared_chain: string
+          execution_deployment_id: string | null
+          id: string
+          launch_id: string
+          network_environment: string
+          project_profile_id: string
+          requested_at: string
+          requested_by: string
+          status: string
+          status_changed_at: string
+          token_decimals: number
+          token_name: string
+          token_recipient: string
+          token_supply_whole: number
+          token_symbol: string
+          token_total_supply_base_units: number
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_production_deployment_requests"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -5248,6 +5440,42 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      submit_launch_production_deployment_request: {
+        Args: {
+          _launch_id: string
+          _token_recipient: string
+          _token_supply_whole: string
+        }
+        Returns: {
+          assigned_operator_id: string | null
+          chain_id: number
+          decision_note: string | null
+          declared_chain: string
+          execution_deployment_id: string | null
+          id: string
+          launch_id: string
+          network_environment: string
+          project_profile_id: string
+          requested_at: string
+          requested_by: string
+          status: string
+          status_changed_at: string
+          token_decimals: number
+          token_name: string
+          token_recipient: string
+          token_supply_whole: number
+          token_symbol: string
+          token_total_supply_base_units: number
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_production_deployment_requests"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       telegram_message_cleanup_scheduler_secret_matches: {
         Args: { p_secret: string }
         Returns: boolean
@@ -5302,6 +5530,38 @@ export type Database = {
           status: string
           updated_at: string
         }[]
+      }
+      withdraw_launch_production_deployment_request: {
+        Args: { _request_id: string }
+        Returns: {
+          assigned_operator_id: string | null
+          chain_id: number
+          decision_note: string | null
+          declared_chain: string
+          execution_deployment_id: string | null
+          id: string
+          launch_id: string
+          network_environment: string
+          project_profile_id: string
+          requested_at: string
+          requested_by: string
+          status: string
+          status_changed_at: string
+          token_decimals: number
+          token_name: string
+          token_recipient: string
+          token_supply_whole: number
+          token_symbol: string
+          token_total_supply_base_units: number
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_production_deployment_requests"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
     }
     Enums: {
