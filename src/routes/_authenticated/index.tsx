@@ -452,8 +452,13 @@ function HqDashboard() {
                   </dl>
                 </div>
 
-                <div className="surface-quiet min-w-0 space-y-4 rounded-md p-4">
-                  <p className="type-eyebrow text-muted-foreground">Operational focus</p>
+                <div className="min-w-0 space-y-4 rounded-lg border border-gold/25 bg-surface-raised/60 p-4">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Activity className="size-4 shrink-0 text-gold" aria-hidden="true" />
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gold">
+                      Operational focus
+                    </p>
+                  </div>
                   <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
                     <Fact
                       label="Communities"
@@ -480,16 +485,22 @@ function HqDashboard() {
                       }
                     />
                   </dl>
-                  <p className="min-w-0 border-l-2 border-gold bg-gold/5 px-3 py-2.5 text-xs font-semibold uppercase tracking-[0.1em] text-gold [overflow-wrap:anywhere]">
-                    {nextLine}
-                  </p>
-                  <Link
-                    to="/launch-control"
-                    className="touch-target inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-gold/40 bg-gold px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-primary-foreground transition-[background-color,transform] hover:-translate-y-px hover:bg-gold/90 sm:w-fit"
-                  >
-                    Open Launch Control <ChevronRight className="size-4" aria-hidden="true" />
-                  </Link>
+                  <div className="min-w-0 rounded-md border border-gold/35 bg-gold/10 px-3 py-2.5">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold">
+                      Next in Launch Control
+                    </p>
+                    <p className="mt-1 min-w-0 text-sm font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">
+                      {nextLine.replace(/^Next: /, "")}
+                    </p>
+                  </div>
+                  <Button asChild className="min-h-11 w-full">
+                    <Link to="/launch-control">
+                      Open Launch Control
+                      <ChevronRight className="size-4" aria-hidden="true" />
+                    </Link>
+                  </Button>
                 </div>
+
               </div>
             )}
           </Section>
