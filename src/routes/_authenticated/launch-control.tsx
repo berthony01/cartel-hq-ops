@@ -1271,28 +1271,36 @@ function LaunchControlPage() {
             <>
             <SectionNav label="Launch Control sections" items={LAUNCH_SECTIONS} />
             <div id="lc-overview" className="min-w-0 scroll-mt-28">
-            <Section variant="hero" className="min-w-0">
-              <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-                <div className="min-w-0 space-y-3">
-                  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 sm:flex sm:items-center sm:justify-between">
+            <Section variant="hero" className="min-w-0" contentClassName="min-w-0">
+              <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:gap-6">
+                <div className="min-w-0 space-y-4">
+                  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
                     <div className="min-w-0">
-                      <p className="type-meta text-gold">Selected launch</p>
-                      <h2 className="mt-1 min-w-0 font-display text-2xl uppercase leading-tight text-foreground [overflow-wrap:anywhere] sm:text-3xl">
+                      <p className="type-eyebrow text-gold">Selected launch</p>
+                      <h2 className="mt-1.5 min-w-0 font-display text-2xl uppercase leading-[0.95] text-foreground [overflow-wrap:anywhere] sm:text-3xl lg:text-4xl">
                         {selected.token_name}
                       </h2>
-                      <p className="mt-1 text-xs text-muted-foreground [overflow-wrap:anywhere]">
-                        {selected.ticker} · {selected.chain} · /{selected.public_slug}
-                      </p>
+                      <div className="mt-2.5 flex min-w-0 flex-wrap items-center gap-1.5">
+                        <StatusBadge tone="gold">
+                          <span>{selected.ticker}</span>
+                        </StatusBadge>
+                        <StatusBadge tone="muted">
+                          <span>{selected.chain}</span>
+                        </StatusBadge>
+                        <span className="min-w-0 rounded-sm border border-border-subtle bg-background/40 px-2 py-1 type-technical text-muted-foreground [overflow-wrap:anywhere]">
+                          /{selected.public_slug}
+                        </span>
+                      </div>
                     </div>
                     <StatusBadge tone={STATUS_TONE[status]}>
                       <span>{LAUNCH_STATUS_LABELS[status]}</span>
                     </StatusBadge>
                   </div>
 
-                  <dl className="grid gap-3 sm:grid-cols-3">
-                    <div className="min-w-0">
-                      <dt className="type-meta text-muted-foreground">Schedule</dt>
-                      <dd className="mt-1 text-xs leading-relaxed text-foreground [overflow-wrap:anywhere]">
+                  <dl className="grid min-w-0 gap-2.5 sm:grid-cols-3">
+                    <div className="surface-quiet min-w-0 rounded-lg p-3">
+                      <dt className="type-eyebrow text-muted-foreground">Schedule</dt>
+                      <dd className="mt-1.5 min-w-0 text-sm font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">
                         {selected.launch_at
                           ? formatTimestamp(selected.launch_at)
                           : selected.launch_window_start && selected.launch_window_end
@@ -1300,25 +1308,33 @@ function LaunchControlPage() {
                             : "Not set"}
                       </dd>
                       {countdownText ? (
-                        <dd className="mt-1 text-xs leading-relaxed text-gold [overflow-wrap:anywhere]">
+                        <dd className="mt-1.5 min-w-0 type-helper font-semibold text-gold [overflow-wrap:anywhere]">
                           {anchorPassed ? countdownText : `${countdownLabel} ${countdownText}`}
                         </dd>
                       ) : null}
-
                     </div>
-                    <div className="min-w-0">
-                      <dt className="type-meta text-muted-foreground">Launch Watch</dt>
-                      <dd className="mt-1 text-xs leading-relaxed text-foreground">
+                    <div className="surface-quiet min-w-0 rounded-lg p-3">
+                      <dt className="type-eyebrow text-muted-foreground">Launch Watch</dt>
+                      <dd className="mt-1.5 min-w-0 text-sm font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">
                         {!watchToken
                           ? "Not opened yet"
                           : watchSummaryQuery.isLoading
                             ? "Loading watcher count…"
-                            : `${watchSummary?.active_count ?? 0} active · ${watchSummary?.total_count ?? 0} total opt-ins`}
+                            : `${watchSummary?.active_count ?? 0} active`}
                       </dd>
+                      {watchToken && !watchSummaryQuery.isLoading ? (
+                        <dd className="mt-1 type-helper text-muted-foreground">
+                          {watchSummary?.total_count ?? 0} total opt-ins
+                        </dd>
+                      ) : null}
                     </div>
-                    <div className="min-w-0">
-                      <dt className="type-meta text-muted-foreground">Official contract</dt>
-                      <dd className="mt-1 text-xs leading-relaxed text-foreground">
+                    <div className="surface-quiet min-w-0 rounded-lg p-3">
+                      <dt className="type-eyebrow text-muted-foreground">Official contract</dt>
+                      <dd
+                        className={`mt-1.5 min-w-0 text-sm font-semibold leading-snug [overflow-wrap:anywhere] ${
+                          contractRegistered ? "text-pepe" : "text-foreground"
+                        }`}
+                      >
                         {contractRegistered
                           ? "Registered"
                           : status === "CONTRACT_PENDING"
@@ -1327,124 +1343,121 @@ function LaunchControlPage() {
                       </dd>
                     </div>
                   </dl>
-                </div>
 
-                <div className="min-w-0 space-y-3">
-                  <p className="type-meta text-muted-foreground">Lifecycle progress</p>
-                  <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 lg:grid-cols-2">
+                  <div className="min-w-0 rounded-lg border border-gold/25 bg-gold/5 p-3.5 sm:p-4">
+                    <p className="type-eyebrow text-gold">
+                      {next ? "Next action" : "Current step"}
+                    </p>
+                    <p className="mt-1.5 min-w-0 text-base font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">
+                      {next
+                        ? NEXT_ACTION_GUIDE[status].nextAction
+                        : NEXT_ACTION_GUIDE[status].current}
+                    </p>
+                    <p className="mt-1.5 max-w-prose type-helper text-muted-foreground">
+                      {NEXT_ACTION_GUIDE[status].means}
+                    </p>
 
-                    {LAUNCH_STATUSES.map((s) => {
-                      const current = s === status;
-                      const done = launchStatusIndex(s) < launchStatusIndex(status);
-                      return (
-                        <span
-                          key={s}
-                          className={`flex min-w-0 items-center gap-1.5 rounded-md border px-2 py-1.5 ${
-                            current
-                              ? "border-gold/50 bg-gold/5"
-                              : done
-                                ? "border-pepe/30 bg-pepe/5"
-                                : "border-border/60 bg-background/30"
-                          }`}
-                        >
-                          <span
-                            className={`flex size-3.5 shrink-0 items-center justify-center rounded-full border ${
-                              done
-                                ? "border-pepe/50 text-pepe"
-                                : current
-                                  ? "border-gold/60 text-gold"
-                                  : "border-border text-muted-foreground"
-                            }`}
-                          >
-                            {done ? <Check className="size-2.5" aria-hidden="true" /> : null}
-                          </span>
-                          <span
-                            className={`min-w-0 truncate text-[10px] font-semibold uppercase tracking-[0.12em] ${
-                              current
-                                ? "text-gold"
-                                : done
-                                  ? "text-foreground"
-                                  : "text-muted-foreground"
-                            }`}
-                          >
-                            {LAUNCH_STATUS_LABELS[s]}
-                          </span>
-                        </span>
-                      );
-                    })}
-                  </div>
-
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    {LAUNCH_STATUS_HELP[status]}
-                  </p>
-
-                  {next ? (
-                    <div className="space-y-3">
-                      <div className="rounded-md border border-gold/20 bg-gold/5 p-3">
-                        <p className="type-meta text-gold">Current step</p>
-                        <p className="mt-1 text-sm font-semibold text-foreground">
-                          {NEXT_ACTION_GUIDE[status].current}
-                        </p>
-                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                          {NEXT_ACTION_GUIDE[status].means}
-                        </p>
-                        <div className="mt-2 border-t border-gold/10 pt-2">
-                          <p className="type-meta text-gold">Next action</p>
-                          <p className="mt-0.5 text-xs text-foreground">
-                            {NEXT_ACTION_GUIDE[status].nextAction}
+                    {next ? (
+                      <>
+                        {blockedReason ? (
+                          <p className="mt-3 rounded-md border border-border-subtle bg-background/40 p-2.5 type-helper text-muted-foreground">
+                            {blockedReason}
                           </p>
-                        </div>
-                        <div className="mt-2 border-t border-gold/10 pt-2">
-                          <p className="type-meta text-gold">What happens next</p>
-                          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                        ) : null}
+                        {canManage ? (
+                          <Button
+                            className="mt-3.5 min-h-11 w-full sm:w-auto"
+                            disabled={transitionMutation.isPending || !!blockedReason}
+                            onClick={() => transitionMutation.mutate(next)}
+                          >
+                            {transitionMutation.isPending ? (
+                              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                            ) : null}
+                            {TRANSITION_BUTTON_LABEL[status]}
+                          </Button>
+                        ) : (
+                          <p className="mt-3 type-helper text-muted-foreground">
+                            Advancing the lifecycle requires the project owner or admin role.
+                          </p>
+                        )}
+                        <div className="mt-3 border-t border-gold/15 pt-2.5">
+                          <p className="type-eyebrow text-muted-foreground">What happens next</p>
+                          <p className="mt-1 max-w-prose type-helper text-muted-foreground">
                             {NEXT_ACTION_GUIDE[status].after}
                           </p>
                         </div>
-                      </div>
-
-                      {blockedReason ? (
-                        <p className="text-xs text-muted-foreground">{blockedReason}</p>
-                      ) : null}
-                      {canManage ? (
-                        <Button
-                          className="min-h-11 w-full"
-                          disabled={transitionMutation.isPending || !!blockedReason}
-                          onClick={() => transitionMutation.mutate(next)}
-                        >
-                          {transitionMutation.isPending ? (
-                            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                          ) : null}
-                          {TRANSITION_BUTTON_LABEL[status]}
-                        </Button>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">
-                          Advancing the lifecycle requires the project owner or admin role.
+                        <p className="mt-2 type-helper text-muted-foreground">
+                          Only the single next step is available. The database enforces every
+                          transition rule.
                         </p>
-                      )}
-                      <p className="text-xs text-muted-foreground">
-                        Only the single next step is available. The database enforces every
-                        transition rule.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="rounded-md border border-border/60 bg-background/30 p-3">
-                        <p className="type-meta text-muted-foreground">Current step</p>
-                        <p className="mt-1 text-sm font-semibold text-foreground">
-                          {NEXT_ACTION_GUIDE[status].current}
-                        </p>
-                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                          {NEXT_ACTION_GUIDE[status].means}
-                        </p>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
+                      </>
+                    ) : (
+                      <p className="mt-3 type-helper text-muted-foreground">
                         This launch has reached the final lifecycle state.
                       </p>
-                    </div>
-                  )}
+                    )}
+                  </div>
+                </div>
+
+                <div className="min-w-0 space-y-3">
+                  <p className="type-eyebrow text-muted-foreground">Lifecycle progress</p>
+                  <ol className="min-w-0 space-y-0">
+                    {LAUNCH_STATUSES.map((s, index) => {
+                      const current = s === status;
+                      const done = launchStatusIndex(s) < launchStatusIndex(status);
+                      const last = index === LAUNCH_STATUSES.length - 1;
+                      return (
+                        <li key={s} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-3">
+                          <div className="flex flex-col items-center">
+                            <span
+                              className={`flex size-5 shrink-0 items-center justify-center rounded-full border text-[9px] font-bold ${
+                                done
+                                  ? "border-pepe/60 bg-pepe/10 text-pepe"
+                                  : current
+                                    ? "border-gold/70 bg-gold/15 text-gold"
+                                    : "border-border text-muted-foreground"
+                              }`}
+                            >
+                              {done ? (
+                                <Check className="size-3" aria-hidden="true" />
+                              ) : (
+                                index + 1
+                              )}
+                            </span>
+                            {last ? null : (
+                              <span
+                                className={`w-px flex-1 ${
+                                  done ? "bg-pepe/35" : "bg-border-subtle"
+                                }`}
+                              />
+                            )}
+                          </div>
+                          <div className={last ? "min-w-0 pb-0" : "min-w-0 pb-3"}>
+                            <p
+                              className={`min-w-0 text-xs font-semibold uppercase tracking-[0.12em] [overflow-wrap:anywhere] ${
+                                current
+                                  ? "text-gold"
+                                  : done
+                                    ? "text-foreground"
+                                    : "text-muted-foreground"
+                              }`}
+                            >
+                              {LAUNCH_STATUS_LABELS[s]}
+                            </p>
+                            {current ? (
+                              <p className="mt-1 max-w-prose type-helper text-muted-foreground">
+                                {LAUNCH_STATUS_HELP[status]}
+                              </p>
+                            ) : null}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
                 </div>
               </div>
             </Section>
+
             </div>
             </>
           ) : null}
