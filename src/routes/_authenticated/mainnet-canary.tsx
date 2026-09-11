@@ -398,6 +398,39 @@ function CanaryConsole() {
     }
   };
 
+  /**
+   * Exact-supply agreement between the locally reviewed intent and the
+   * immutable request row. A mismatch FAILS CLOSED: begin stays disabled. Exact
+   * decimal strings only — never `Number`.
+   */
+  const requestSupplyMatches =
+    !!selectedRequest &&
+    !!intent &&
+    intent.totalSupplyBaseUnits === selectedRequest.tokenTotalSupplyBaseUnits &&
+    intent.recipient === selectedRequest.tokenRecipient.trim().toLowerCase() &&
+    intent.name === selectedRequest.tokenName &&
+    intent.symbol === selectedRequest.tokenSymbol;
+
+  const beginReady =
+    canBeginExecution(selectedRequest) &&
+    !!intent &&
+    requestSupplyMatches &&
+    beginPhrase.trim() === BEGIN_EXECUTION_PHRASE;
+
+  const runDecision = (
+    requestId: string,
+    target: PlatformRequestStatusTarget,
+    decisionNote: string,
+  ) =>
+    run(`request-${target}`, async () => {
+      const result = await decideRequest({
+        data: { requestId, targetStatus: target, note: decisionNote },
+      });
+      note(`Request ${target}: ${result.ok ? "recorded" : (result.notice ?? "refused")}.`);
+      await requestQueue.refetch();
+    });
+
+
   return (
     <div className="space-y-5">
       <PageHeader
