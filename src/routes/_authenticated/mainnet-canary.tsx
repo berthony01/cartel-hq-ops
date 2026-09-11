@@ -60,6 +60,15 @@ import {
   sendClaimedMainnetDeployment,
   type MainnetWalletInspection,
 } from "@/lib/chain-mainnet-wallet";
+import { ProductionRequestQueuePanel } from "@/components/cartel/ProductionRequestQueuePanel";
+import {
+  beginPlatformProductionRequestExecution,
+  canBeginExecution,
+  isBoundExecutingRequest,
+  listPlatformProductionRequests,
+  setPlatformProductionRequestStatus,
+  type PlatformRequestStatusTarget,
+} from "@/lib/launch-production-request-platform.functions";
 
 /**
  * P3C-F — OWNER-ONLY Robinhood Chain PRODUCTION canary orchestration.
