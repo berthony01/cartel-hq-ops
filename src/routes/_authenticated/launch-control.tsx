@@ -1772,7 +1772,7 @@ function LaunchControlPage() {
                         <p className="type-eyebrow text-muted-foreground">
                           Telegram deep link
                         </p>
-                        <p className="mt-1 break-all rounded-md border border-border bg-background/40 px-3 py-2 font-mono text-xs text-foreground">
+                        <p className="mt-1.5 min-w-0 break-all rounded-md border border-gold/25 bg-background/60 px-3 py-2.5 type-technical text-foreground">
                           {watchLink}
                         </p>
                       </div>
@@ -1996,8 +1996,8 @@ function LaunchControlPage() {
                         ) : null}
                       </div>
 
-                      <details className="rounded-md border border-border/60 bg-background/30">
-                        <summary className="cursor-pointer list-none px-3 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      <details className="surface-quiet min-w-0 rounded-lg">
+                        <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
                           How Launch Watch works
                         </summary>
                         <div className="space-y-2 px-3 pb-3">
@@ -2388,8 +2388,8 @@ function LaunchControlPage() {
           ) : null}
 
           {selected ? (
-            <details className="min-w-0 rounded-lg border border-border/60 bg-background/20">
-              <summary className="cursor-pointer list-none px-3 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            <details className="surface-quiet min-w-0 rounded-lg">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
                 Advanced &amp; technical
               </summary>
               <div className="min-w-0 space-y-3 px-3 pb-3">
