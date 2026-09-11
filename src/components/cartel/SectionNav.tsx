@@ -29,7 +29,12 @@ export type SectionNavItem = {
   /** DOM id of the anchor wrapper (uncontrolled) or of the view (controlled). */
   id: string;
   label: string;
+  /** Presentation-only attention hint supplied by the parent. */
+  state?: SectionNavState;
+  /** Accessible sentence describing the hint, e.g. "Needs attention". */
+  stateLabel?: string;
 };
+
 
 export function SectionNav({
   items,
