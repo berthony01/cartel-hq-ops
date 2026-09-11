@@ -415,6 +415,48 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
     deployment?.registrationEligibleCount === 1 &&
     !deployment.registrationAmbiguous;
 
+  // --- Production deployment handoff request (Launcher-B) -----------------
+  // The request is a record of intent. The database re-derives every rule and
+  // may still refuse; these are client-known hints for guidance only.
+  const productionRequest = input.productionRequest;
+  const requestCompleted = productionRequest?.effectiveStatus === "COMPLETED";
+  const requestOpen =
+    !!productionRequest &&
+    !requestCompleted &&
+    ["REQUESTED", "IN_REVIEW", "APPROVED", "EXECUTING"].includes(productionRequest.status);
+  const requestClosed =
+    !!productionRequest &&
+    !requestCompleted &&
+    (productionRequest.status === "DECLINED" || productionRequest.status === "WITHDRAWN");
+  const requestEligibilityHint =
+    !!launch &&
+    stepDone("profile_published") &&
+    launch.scheduleSet &&
+    ["WATCHLIST_OPEN", "LAUNCH_APPROACHING", "CONTRACT_PENDING"].includes(
+      normalizedLaunchStatus ?? "",
+    ) &&
+    !registrationComplete &&
+    !registrationInconsistent &&
+    !input.deploymentUnavailable &&
+    !input.productionRequestUnavailable &&
+    (deployment?.productionDeploymentCount ?? 0) === 0;
+  const requestActionable =
+    requestEligibilityHint && (productionRequest === null || requestClosed);
+  const requestDetail = requestOpen
+    ? productionRequest.status === "EXECUTING"
+      ? "Deployment request approved · platform execution in progress"
+      : productionRequest.status === "APPROVED"
+        ? "Deployment request approved · no transaction sent yet"
+        : productionRequest.status === "IN_REVIEW"
+          ? "Deployment request under review"
+          : "Deployment request submitted · waiting for review"
+    : requestClosed
+      ? productionRequest.status === "DECLINED"
+        ? "Previous deployment request was declined"
+        : "Previous deployment request was withdrawn"
+      : null;
+
+
   const watchOpen = stepDone("launch_watch_open");
 
   // --- Brand & Creative ---------------------------------------------------
