@@ -349,7 +349,6 @@ const STAGE_COPY: Record<
     actionLabel: "Review deployment evidence",
     explanation: "",
     reviewLabel: "Review deployment evidence",
-    lockedLabel: "NEXT",
     dependency:
       "Submitting a production deployment request records intent only. It does not deploy, sign or broadcast anything.",
   },
