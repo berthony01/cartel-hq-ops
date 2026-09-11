@@ -1089,11 +1089,15 @@ function LaunchControlPage() {
     () => ({
       isProjectLaunch: selectedIsProjectLaunch,
       profilePublished: profile?.discovery_status === "published",
-      scheduleSet: !!(selected?.launch_at || selected?.launch_window_start),
+      // B2.1 — mirror the server rules exactly: launch_at OR a complete window.
+      scheduleSet: selected ? hasSchedule(selected) : false,
       launchStatus: selected?.status ?? "",
-      registrationRecorded: !!(
-        selected?.official_contract_address || selected?.contract_registered_at
-      ),
+      // B2.1 — any one of the three registration fields counts as recorded.
+      registrationRecorded: hasRegistrationRecord({
+        officialContractAddress: selected?.official_contract_address ?? null,
+        officialContractDeploymentId: selected?.official_contract_deployment_id ?? null,
+        contractRegisteredAt: selected?.contract_registered_at ?? null,
+      }),
       hasProductionDeploymentEvidence: (deploymentEvidenceQuery.data ?? []).some(
         (row) => row.network_environment === "PRODUCTION",
       ),
