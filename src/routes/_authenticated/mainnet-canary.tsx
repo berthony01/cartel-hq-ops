@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AlertTriangle, Loader2, Lock, ShieldAlert, ShieldCheck } from "lucide-react";
@@ -60,6 +60,15 @@ import {
   sendClaimedMainnetDeployment,
   type MainnetWalletInspection,
 } from "@/lib/chain-mainnet-wallet";
+import { ProductionRequestQueuePanel } from "@/components/cartel/ProductionRequestQueuePanel";
+import {
+  beginPlatformProductionRequestExecution,
+  canBeginExecution,
+  isBoundExecutingRequest,
+  listPlatformProductionRequests,
+  setPlatformProductionRequestStatus,
+  type PlatformRequestStatusTarget,
+} from "@/lib/launch-production-request-platform.functions";
 
 /**
  * P3C-F — OWNER-ONLY Robinhood Chain PRODUCTION canary orchestration.
@@ -73,6 +82,12 @@ import {
 
 /** Browser-local, non-authoritative memory of the selected launch id only. */
 const LAUNCH_SELECTION_STORAGE_KEY = "cartel-hq:mainnet-canary:selected-launch";
+
+/** Launcher-B3 — literal confirmation for beginning a request-bound execution. */
+export const BEGIN_EXECUTION_PHRASE = "BEGIN PROTECTED EXECUTION";
+
+const REQUEST_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function CanaryConsole() {
   const { workspaceId } = useWorkspace();
@@ -104,7 +119,34 @@ function CanaryConsole() {
   const verify = useServerFn(verifyMainnetChainDeployment);
   const stop = useServerFn(engageCanaryEmergencyStop);
 
+  /**
+   * Launcher-B3 — platform-side production request wrappers. Each one re-checks
+   * platform ownership server-side; none of them signs, arms, claims, sends,
+   * registers, advances lifecycle or notifies anything.
+   */
+  const listRequests = useServerFn(listPlatformProductionRequests);
+  const decideRequest = useServerFn(setPlatformProductionRequestStatus);
+  const beginRequest = useServerFn(beginPlatformProductionRequestExecution);
+
   const { busy, run } = useBusy();
+
+  const search = Route.useSearch();
+  const navigate = useNavigate({ from: "/mainnet-canary" });
+  const requestQueue = useQuery({
+    queryKey: ["b3-production-request-queue"],
+    queryFn: () => listRequests({ data: undefined }),
+    retry: false,
+  });
+  const requestRows = requestQueue.data?.requests ?? [];
+  const selectedRequestId = search.request ?? null;
+  const selectedRequest = useMemo(
+    () => requestRows.find((row) => row.id === selectedRequestId) ?? null,
+    [requestRows, selectedRequestId],
+  );
+  /** Request-bound mode: the exact request row is the only identity source. */
+  const requestMode = !!selectedRequest;
+  const [beginPhrase, setBeginPhrase] = useState("");
+
 
   const [launchId, setLaunchId] = useState("");
   const [deployer, setDeployer] = useState("");
@@ -207,6 +249,8 @@ function CanaryConsole() {
 
   useEffect(() => {
     if (launchId) return;
+    // Request-bound mode owns the launch context; local memory never overrides it.
+    if (search.request) return;
     if (typeof window === "undefined") return;
     const rows = launches.data;
     if (!rows) return;
@@ -233,6 +277,46 @@ function CanaryConsole() {
     setSymbol(deriveCanaryOnchainSymbol(row.ticker));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [launches.data, launchId]);
+
+  /**
+   * REQUEST-BOUND HYDRATION. The customer's approved request row is the ONLY
+   * identity source in this mode: token name, onchain symbol, exact supply and
+   * the immutable recipient are copied read-only from it, and the bound
+   * deployment id (when execution has already begun) becomes the deployment
+   * context for the existing protected stages.
+   *
+   * Deliberately derived DURING RENDER rather than in an effect: the route's
+   * single effect stays the local-only launch-id restore, and this synchronises
+   * local UI state only. It creates nothing, signs nothing, arms nothing,
+   * touches no wallet and advances no stage.
+   */
+  const requestHydrationKey = selectedRequest
+    ? `${selectedRequest.id}:${selectedRequest.executionDeploymentId ?? ""}`
+    : "";
+  const [hydratedRequestKey, setHydratedRequestKey] = useState("");
+  if (selectedRequest && requestHydrationKey !== hydratedRequestKey) {
+    setHydratedRequestKey(requestHydrationKey);
+    resetLaunchScopedState();
+    setBeginPhrase("");
+    setLaunchId(selectedRequest.launchId);
+    setName(selectedRequest.tokenName);
+    setSymbol(selectedRequest.tokenSymbol);
+    setRecipient(selectedRequest.tokenRecipient);
+    setSupply(selectedRequest.tokenSupplyWhole);
+    setDeploymentId(selectedRequest.executionDeploymentId);
+  }
+
+  const selectRequest = (requestId: string | null) => {
+    setBeginPhrase("");
+    resetLaunchScopedState();
+    setLaunchId("");
+    void navigate({
+      to: "/mainnet-canary",
+      search: requestId ? { request: requestId } : {},
+      replace: true,
+    });
+  };
+
 
 
   /**
@@ -316,6 +400,39 @@ function CanaryConsole() {
     }
   };
 
+  /**
+   * Exact-supply agreement between the locally reviewed intent and the
+   * immutable request row. A mismatch FAILS CLOSED: begin stays disabled. Exact
+   * decimal strings only — never `Number`.
+   */
+  const requestSupplyMatches =
+    !!selectedRequest &&
+    !!intent &&
+    intent.totalSupplyBaseUnits === selectedRequest.tokenTotalSupplyBaseUnits &&
+    intent.recipient === selectedRequest.tokenRecipient.trim().toLowerCase() &&
+    intent.name === selectedRequest.tokenName &&
+    intent.symbol === selectedRequest.tokenSymbol;
+
+  const beginReady =
+    canBeginExecution(selectedRequest) &&
+    !!intent &&
+    requestSupplyMatches &&
+    beginPhrase.trim() === BEGIN_EXECUTION_PHRASE;
+
+  const runDecision = (
+    requestId: string,
+    target: PlatformRequestStatusTarget,
+    decisionNote: string,
+  ) =>
+    run(`request-${target}`, async () => {
+      const result = await decideRequest({
+        data: { requestId, targetStatus: target, note: decisionNote },
+      });
+      note(`Request ${target}: ${result.ok ? "recorded" : (result.notice ?? "refused")}.`);
+      await requestQueue.refetch();
+    });
+
+
   return (
     <div className="space-y-5">
       <PageHeader
@@ -361,6 +478,140 @@ function CanaryConsole() {
           </Button>
         </div>
       </Section>
+
+      <ProductionRequestQueuePanel
+        requests={requestRows}
+        loading={requestQueue.isPending}
+        notice={requestQueue.data && !requestQueue.data.ok ? requestQueue.data.notice : null}
+        selectedRequestId={selectedRequestId}
+        busy={busy !== null}
+        onSelect={selectRequest}
+        onDecision={(requestId, target, decisionNote) =>
+          runDecision(requestId, target, decisionNote)
+        }
+      />
+
+      {selectedRequest ? (
+        <Section
+          variant="surface"
+          leading={<ShieldAlert className="h-4 w-4 text-danger" />}
+          title="REQUEST-BOUND EXECUTION — customer production deployment"
+          description="Identity comes from the approved request row and cannot be edited here. Beginning execution creates and binds a DRAFT attempt only: nothing is signed, armed, claimed, sent, registered or announced."
+        >
+          <div className="grid gap-1 sm:grid-cols-2">
+            <ReadoutLine label={"Request id"} value={selectedRequest.id} />
+            <ReadoutLine label={"Request status"} value={selectedRequest.status} />
+            <ReadoutLine label={"Effective status"} value={selectedRequest.effectiveStatus} />
+            <ReadoutLine label={"Launch kind"} value={selectedRequest.launchKind} />
+            <ReadoutLine label={"Token name"} value={selectedRequest.tokenName} />
+            <ReadoutLine label={"Onchain symbol"} value={selectedRequest.tokenSymbol} />
+            <ReadoutLine label={"Supply (whole)"} value={selectedRequest.tokenSupplyWhole} />
+            <ReadoutLine
+              label={"Base units"}
+              value={selectedRequest.tokenTotalSupplyBaseUnits}
+            />
+            <ReadoutLine label={"Immutable recipient"} value={selectedRequest.tokenRecipient} />
+            <ReadoutLine
+              label={"Bound deployment id"}
+              value={selectedRequest.executionDeploymentId}
+            />
+          </div>
+
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            The recipient is the customer&apos;s address and is expected to differ from the platform
+            deployer wallet. Confirm both below before beginning.
+          </p>
+
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <Input
+              value={deployer}
+              onChange={(event) => setDeployer(event.target.value)}
+              placeholder="Platform deployer wallet (0x…)"
+              disabled={!canBeginExecution(selectedRequest)}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-h-11"
+              onClick={buildIntent}
+              disabled={busy !== null}
+            >
+              Build request intent
+            </Button>
+          </div>
+
+          {intentError ? <p className="mt-2 text-xs text-danger">{intentError}</p> : null}
+
+          {intent ? (
+            <div className="mt-3 grid gap-1 sm:grid-cols-2">
+              <ReadoutLine label={"Deployer"} value={intent.deployer} />
+              <ReadoutLine label={"Recipient"} value={intent.recipient} />
+              <ReadoutLine label={"Base units"} value={intent.totalSupplyBaseUnits} />
+              <ReadoutLine label={"Init code hash"} value={intent.initCodeHash} />
+              <ReadoutLine label={"Review fingerprint"} value={intent.fingerprint} />
+              <ReadoutLine
+                label={"Matches request"}
+                value={requestSupplyMatches ? "yes" : "NO — begin blocked"}
+              />
+            </div>
+          ) : null}
+
+          {canBeginExecution(selectedRequest) ? (
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <Input
+                value={beginPhrase}
+                onChange={(event) => setBeginPhrase(event.target.value)}
+                placeholder={`Type ${BEGIN_EXECUTION_PHRASE} to confirm`}
+              />
+              <Button
+                size="sm"
+                className="min-h-11"
+                disabled={busy !== null || !beginReady}
+                onClick={() =>
+                  run("begin", async () => {
+                    if (!intent || !beginReady) return;
+                    const result = await beginRequest({
+                      data: {
+                        requestId: selectedRequest.id,
+                        deployerAddress: intent.deployer,
+                        reviewFingerprint: intent.fingerprint,
+                        initCodeHash: intent.initCodeHash,
+                      },
+                    });
+                    if (result.ok && result.request?.executionDeploymentId) {
+                      setDeploymentId(result.request.executionDeploymentId);
+                      setBeginPhrase("");
+                    }
+                    note(
+                      `Begin execution: ${
+                        result.ok ? "DRAFT attempt bound" : (result.notice ?? "refused")
+                      }${result.detail ? ` — ${result.detail}` : ""}.`,
+                    );
+                    await requestQueue.refetch();
+                  })
+                }
+              >
+                {busy === "begin" ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                Begin protected execution
+              </Button>
+            </div>
+          ) : isBoundExecutingRequest(selectedRequest) ? (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Execution has begun and the DRAFT attempt is bound. Continue through the existing
+              manual stages below; each one remains a separate explicit click.
+            </p>
+          ) : selectedRequest.effectiveStatus === "COMPLETED" ? (
+            <p className="mt-3 text-xs text-success">
+              Deployment is verified and final. The project owner can now register the official
+              contract from Launch Control.
+            </p>
+          ) : (
+            <p className="mt-3 text-xs text-danger">
+              This request is not in an approved, unbound state, so execution cannot begin.
+            </p>
+          )}
+        </Section>
+      ) : null}
 
       {hasActiveState ? (
         <Section
@@ -509,6 +760,7 @@ function CanaryConsole() {
       />
 
 
+      {requestMode ? null : (
       <Section
 
         variant="surface"
@@ -631,6 +883,7 @@ function CanaryConsole() {
           </div>
         ) : null}
       </Section>
+      )}
 
 
       <Section
@@ -1005,6 +1258,15 @@ function MainnetCanaryPage() {
 }
 
 export const Route = createFileRoute("/_authenticated/mainnet-canary")({
+  /**
+   * Only an exact request id is accepted; anything else is dropped. A request
+   * id in the URL selects a request for review/execution — it never authorizes
+   * anything, since every action is re-checked server-side.
+   */
+  validateSearch: (search: Record<string, unknown>): { request?: string } => {
+    const raw = typeof search["request"] === "string" ? search["request"] : "";
+    return REQUEST_ID_PATTERN.test(raw) ? { request: raw.toLowerCase() } : {};
+  },
   head: () => ({
     meta: [
       { title: "Mainnet Canary — CARTEL HQ" },
