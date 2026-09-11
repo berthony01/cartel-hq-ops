@@ -493,6 +493,8 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
     status: JourneyStageStatus;
     actionable: boolean;
     detail: string | null;
+    /** Only set where the label depends on live state. */
+    actionLabel?: string;
   }> = [
     {
       key: "project_profile",
