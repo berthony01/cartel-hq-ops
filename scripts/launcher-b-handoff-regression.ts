@@ -8,9 +8,13 @@
  *
  * Run: bunx tsx scripts/launcher-b-handoff-regression.ts  (or `bun run`)
  */
+import { readFileSync } from "node:fs";
+
 import {
   canWithdrawProductionRequest,
   evaluateProductionRequestEligibility,
+  exactManualRecipientMatch,
+  hasRegistrationRecord,
   groupDigits,
   isClosedProductionRequest,
   isCompletedProductionRequest,
@@ -24,6 +28,7 @@ import {
   type ProductionDeploymentRequest,
   type ProductionRequestEligibilityHints,
 } from "../src/lib/launch-production-request";
+import { hasSchedule } from "../src/lib/launch-control";
 import {
   computeProjectJourney,
   type JourneyInput,
@@ -585,7 +590,9 @@ check(
 );
 check(
   "journey link: destination carries the primary launch id and section",
-  /launch=\$\{[^}]*\}&section=\$\{[^}]*\}|search: \{[\s\S]{0,200}section/.test(journeySource),
+  /const search = primaryLaunchId \? \{ launch: primaryLaunchId, section \} : \{ section \}/.test(
+    journeySource,
+  ),
 );
 
 // ---------------------------------------------------------------------------
