@@ -69,11 +69,14 @@ const STATUS_TONE: Record<LaunchStatus, "gold" | "green" | "muted"> = {
   COMPLETED: "muted",
 };
 
-/** Newest non-COMPLETED launch, otherwise newest. `listLaunches` is newest-first. */
+/**
+ * Deterministic PROJECT primary launch. INTERNAL_TEST chain-test records are
+ * never eligible, whatever their timestamps.
+ */
 function selectPrimary(launches: LaunchRow[]): LaunchRow | null {
-  if (launches.length === 0) return null;
-  return launches.find((l) => toLaunchStatus(l.status) !== "COMPLETED") ?? launches[0]!;
+  return selectPrimaryProjectLaunch(launches);
 }
+
 
 function scheduleSummary(row: LaunchRow): string {
   if (row.launch_at) return formatTimestamp(row.launch_at);
