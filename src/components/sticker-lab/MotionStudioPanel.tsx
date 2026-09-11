@@ -227,6 +227,47 @@ export function MotionStudioPanel({
   const durationSeconds = config?.durationSeconds ?? 5;
 
   const versions = state?.versions ?? [];
+  const newestEligibleVersion = versions.reduce<StickerMotionVersion | null>((newest, version) => {
+    if (
+      !version.motionAssetId ||
+      !sourceIsCurrentStatic(version, state?.currentStaticAssetId) ||
+      version.id === state?.currentMotionVersionId
+    ) {
+      return newest;
+    }
+    return !newest || version.versionNumber > newest.versionNumber ? version : newest;
+  }, null);
+  const createComplete = !!current && currentFromCurrentStatic;
+  const prepareComplete = createComplete && currentIsTelegramReady;
+  const releaseComplete = currentMotionIsLive;
+  const activeStep = releaseComplete ? null : !createComplete ? 1 : !prepareComplete ? 2 : 3;
+  const approvingPrimary =
+    !!newestEligibleVersion && approvingVersionId === newestEligibleVersion.id;
+  const approvePrimaryDisabled = busy || telegramBusy || approvingVersionId !== null;
+
+  const workflowSteps = [
+    {
+      number: 1,
+      title: "Create Motion",
+      complete: createComplete,
+      locked: false,
+      lockedReason: "",
+    },
+    {
+      number: 2,
+      title: "Prepare for Telegram",
+      complete: prepareComplete,
+      locked: !createComplete,
+      lockedReason: "Available after you set a Current Motion",
+    },
+    {
+      number: 3,
+      title: "Release to Pack",
+      complete: releaseComplete,
+      locked: !prepareComplete,
+      lockedReason: "Available after Telegram preparation",
+    },
+  ];
 
   return (
     <div className="mt-3 rounded-md border border-border bg-background/40 p-2.5">
@@ -243,7 +284,7 @@ export function MotionStudioPanel({
         ) : null}
       </div>
 
-      <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
         Animate the approved static without replacing or damaging it. Motion keeps its own version
         history.{" "}
         {currentMotionIsLive
@@ -255,7 +296,7 @@ export function MotionStudioPanel({
       </p>
 
 
-      <dl className="mt-2 space-y-0.5 text-[10px] text-muted-foreground">
+      <dl className="mt-2 space-y-0.5 text-xs text-muted-foreground">
         {error ? (
           <div className="text-signal">Motion status unavailable</div>
         ) : !known ? (
@@ -282,7 +323,50 @@ export function MotionStudioPanel({
         )}
       </dl>
 
-      {/* ------------------------------------------------------- controls */}
+      {/* ------------------------------------------ progressive workflow */}
+      <ol className="mt-3 grid gap-2 sm:grid-cols-3" aria-label="Motion workflow">
+        {workflowSteps.map((step) => {
+          const isCurrent = activeStep === step.number;
+          const status = step.complete ? "Completed" : step.locked ? "Locked" : "Current";
+          return (
+            <li
+              key={step.number}
+              aria-current={isCurrent ? "step" : undefined}
+              className={`rounded border px-3 py-2.5 ${
+                step.complete
+                  ? "border-positive/40 bg-positive/5"
+                  : isCurrent
+                    ? "border-gold/80 bg-gold/10"
+                    : "border-border/60 bg-surface-raised/20 opacity-70"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-foreground">
+                  Step {step.number}: {step.title}
+                </span>
+                <StatusBadge tone={step.complete ? "green" : isCurrent ? "gold" : "muted"}>
+                  {status}
+                </StatusBadge>
+              </div>
+              {step.locked ? (
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  {step.lockedReason}
+                </p>
+              ) : null}
+            </li>
+          );
+        })}
+      </ol>
+
+      {/* ------------------------------------------------ Step 1 controls */}
+      <div className="mt-3 border-t border-border/70 pt-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Create Motion
+          </p>
+          {createComplete ? <StatusBadge tone="green">Current Motion set</StatusBadge> : null}
+        </div>
+
       <ul className="mt-2 grid gap-1.5 sm:grid-cols-3">
         {MODE_COPY.map((choice) => {
           const active = mode === choice.mode;
@@ -293,16 +377,16 @@ export function MotionStudioPanel({
                 disabled={busy}
                 aria-pressed={active}
                 onClick={() => setMode(choice.mode)}
-                className={`w-full rounded border p-2 text-left transition ${
+                className={`min-h-11 w-full rounded border p-2.5 text-left transition ${
                   active
-                    ? "border-gold/70 bg-gold/10"
+                    ? "border-gold bg-gold/15 ring-1 ring-gold/50"
                     : "border-border/70 bg-surface-raised/20 hover:border-border"
                 } ${busy ? "cursor-not-allowed opacity-60" : ""}`}
               >
-                <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground">
+                <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
                   {choice.title}
                 </span>
-                <span className="mt-0.5 block text-[10px] leading-relaxed text-muted-foreground">
+                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
                   {choice.description}
                 </span>
               </button>
@@ -320,9 +404,9 @@ export function MotionStudioPanel({
               disabled={busy}
               aria-pressed={preset === key}
               onClick={() => setPreset(key)}
-              className={`min-h-8 rounded-full border px-2.5 text-[10px] transition ${
+              className={`min-h-11 rounded-full border px-3 text-xs font-medium transition ${
                 preset === key
-                  ? "border-gold/70 bg-gold/15 text-foreground"
+                  ? "border-gold bg-gold/15 text-foreground ring-1 ring-gold/50"
                   : "border-border/70 text-muted-foreground hover:text-foreground"
               } ${busy ? "cursor-not-allowed opacity-60" : ""}`}
             >
@@ -341,50 +425,89 @@ export function MotionStudioPanel({
             rows={3}
             placeholder="Describe the movement, e.g. slow confident nod while the smoke drifts upward."
             onChange={(e) => setInstruction(e.target.value.slice(0, MAX_MOTION_INSTRUCTION_LENGTH))}
-            className="text-[11px]"
+            className="text-sm"
           />
-          <p className="mt-1 text-right text-[10px] text-muted-foreground">
+          <p className="mt-1 text-right text-xs text-muted-foreground">
             {instruction.length}/{MAX_MOTION_INSTRUCTION_LENGTH}
           </p>
         </div>
       ) : null}
 
       {providerUnknown ? (
-        <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
           Motion provider status is unknown right now. Use “Refresh status” to re-check — nothing
           was lost.
         </p>
       ) : config?.configured !== true ? (
-        <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
           Motion provider unavailable. Motion generation stays disabled until it is configured.
         </p>
       ) : null}
 
-      <div className="mt-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="min-h-10 w-full text-[11px]"
-          disabled={generateDisabled}
-          onClick={() => setConfirmGenerate(true)}
-        >
-          {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
-          {busy ? MOTION_STAGE_LABEL[run.stage] : "Generate motion"}
-        </Button>
-      </div>
+      {activeStep === 1 && newestEligibleVersion && !busy ? (
+        <div className="mt-3">
+          <p className="mb-2 text-sm font-medium text-foreground">
+            Step 1 of 3 · Next: Set Current Motion
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            className="min-h-11 w-full text-sm font-semibold"
+            disabled={approvePrimaryDisabled}
+            onClick={() => setApproveTarget(newestEligibleVersion)}
+          >
+            {approvingPrimary ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+            {approvingPrimary ? "Setting Current Motion…" : "Set Current Motion"}
+          </Button>
+          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+            Approve Version {newestEligibleVersion.versionNumber} from the current static image. This
+            does not change Telegram or start provider work.
+          </p>
+        </div>
+      ) : activeStep === 1 ? (
+        <div className="mt-3">
+          <p className="mb-2 text-sm font-medium text-foreground">
+            Step 1 of 3 · Next: Generate motion
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            className="min-h-11 w-full text-sm font-semibold"
+            disabled={generateDisabled}
+            onClick={() => setConfirmGenerate(true)}
+          >
+            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+            {busy ? MOTION_STAGE_LABEL[run.stage] : "Generate motion"}
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-3">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="min-h-11 w-full text-sm"
+            disabled={generateDisabled}
+            onClick={() => setConfirmGenerate(true)}
+          >
+            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+            {busy ? MOTION_STAGE_LABEL[run.stage] : "Generate new version"}
+          </Button>
+        </div>
+      )}
 
       {run.failure && !busy ? (
         <p className="mt-2 text-[11px] text-signal">
           {run.failure.title}. {run.failure.body}
         </p>
       ) : null}
+      </div>
 
       {/* --------------------------------- Phase C2 Telegram preparation */}
-      <div className="mt-3 border-t border-border/70 pt-2">
+      <div className="mt-3 border-t border-border/70 pt-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Telegram preparation
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Prepare for Telegram
           </p>
           {currentMotionIsLive ? (
             <StatusBadge tone="green">Live in sticker pack</StatusBadge>
@@ -394,24 +517,23 @@ export function MotionStudioPanel({
         </div>
 
         {!current ? (
-          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-            Approve a Current Motion first. Telegram preparation only runs on the approved Current
-            Motion.
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Available after you set a Current Motion.
           </p>
         ) : currentIsTelegramReady ? (
           currentMotionIsLive ? (
-            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               Version {current.versionNumber} is live in the Telegram sticker pack for this
               sticker. Its Telegram-formatted derivative replaced this sticker inside the existing
               sticker pack. It is not automatically posted as a message to any community.
             </p>
           ) : anyMotionIsLive ? (
-            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               A different Motion version is currently live on Telegram for this sticker. Version{" "}
               {current.versionNumber} is prepared and can replace it when you release it explicitly.
             </p>
           ) : (
-            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               A Telegram-formatted derivative of Version {current.versionNumber} is prepared and
               stored. The Telegram release for this sticker is still static until you release motion
               explicitly.
@@ -420,24 +542,24 @@ export function MotionStudioPanel({
 
         ) : !currentFromCurrentStatic ? (
 
-          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
             This Current Motion came from an earlier static image. Generate and approve motion from
             the current static image before preparing it for Telegram.
           </p>
         ) : (
           <>
-            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               Prepares a Telegram-formatted derivative of Version {current.versionNumber}. This is
               media preparation only — nothing is published to Telegram and the release stays
               static.
             </p>
             {telegramProviderUnknown ? (
-              <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                 Telegram preparation provider status is unknown right now. Use “Refresh status” to
                 re-check — nothing was lost.
               </p>
             ) : telegramConfig?.configured !== true ? (
-              <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                 {(() => {
                   const missing = [];
                   if (telegramConfig?.falConfigured !== true) missing.push("fal.ai");
@@ -448,21 +570,27 @@ export function MotionStudioPanel({
                 })()}
               </p>
             ) : null}
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="mt-2 min-h-10 w-full text-[11px]"
-              disabled={prepareDisabled || !canPrepareTelegram}
-              onClick={() => setConfirmTelegramPrep(true)}
-            >
-              {telegramBusy ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-              ) : null}
-              {telegramBusy
-                ? TELEGRAM_PREP_STAGE_LABEL[telegramRun.stage]
-                : "Prepare for Telegram"}
-            </Button>
+            {activeStep === 2 ? (
+              <>
+                <p className="mb-2 mt-3 text-sm font-medium text-foreground">
+                  Step 2 of 3 · Next: Prepare for Telegram
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="min-h-11 w-full text-sm font-semibold"
+                  disabled={prepareDisabled || !canPrepareTelegram}
+                  onClick={() => setConfirmTelegramPrep(true)}
+                >
+                  {telegramBusy ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  ) : null}
+                  {telegramBusy
+                    ? TELEGRAM_PREP_STAGE_LABEL[telegramRun.stage]
+                    : "Prepare for Telegram"}
+                </Button>
+              </>
+            ) : null}
           </>
         )}
 
@@ -479,7 +607,7 @@ export function MotionStudioPanel({
               type="button"
               size="sm"
               variant="outline"
-              className="mt-2 min-h-10 w-full text-[11px]"
+              className="mt-2 min-h-11 w-full text-sm"
               disabled={retryNormalizationDisabled}
               onClick={() => setConfirmNormalizationRetry(true)}
             >
@@ -488,7 +616,7 @@ export function MotionStudioPanel({
               ) : null}
               Retry normalization only
             </Button>
-            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               This reuses the successful fal.ai background-removal result and re-runs CloudConvert
               formatting only.
             </p>
@@ -499,11 +627,13 @@ export function MotionStudioPanel({
         {/* -------------------- Phase C3 explicit motion release to Telegram */}
         {canShowRelease ? (
           <>
+            <p className="mb-2 mt-3 text-sm font-medium text-foreground">
+              Step 3 of 3 · Next: Release to Pack
+            </p>
             <Button
               type="button"
               size="sm"
-              variant="outline"
-              className="mt-2 min-h-10 w-full text-[11px]"
+              className="min-h-11 w-full text-sm font-semibold"
               disabled={releaseDisabled}
               onClick={() => setConfirmMotionRelease(true)}
             >
@@ -512,13 +642,13 @@ export function MotionStudioPanel({
               ) : null}
               {releasingMotion ? "Releasing motion…" : "Release motion to sticker pack"}
             </Button>
-            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
               This replaces this one sticker in place in the existing Telegram set using the
               already-prepared file. No new provider work starts.
             </p>
           </>
         ) : current && currentIsTelegramReady && !currentMotionIsLive && !telegramPublished ? (
-          <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
             Publish the static sticker pack in Step 5 first. Releasing motion replaces an existing
             live Telegram sticker, so there must already be one to replace.
           </p>
@@ -530,14 +660,12 @@ export function MotionStudioPanel({
         ) : null}
       </div>
 
-
-
       {/* -------------------------------------------------- motion history */}
       {versions.length > 0 ? (
-        <div className="mt-3 border-t border-border/70 pt-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Motion history
-          </p>
+        <details className="mt-3 border-t border-border/70 pt-3">
+          <summary className="min-h-11 cursor-pointer py-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground">
+            Motion history · {versions.length} version{versions.length === 1 ? "" : "s"}
+          </summary>
           <ul className="mt-2 space-y-2">
             {versions.map((version) => {
               const isCurrent = state?.currentMotionVersionId === version.id;
@@ -617,7 +745,7 @@ export function MotionStudioPanel({
                       type="button"
                       size="sm"
                       variant="outline"
-                      className="mt-1.5 h-8 w-full text-[10px]"
+                       className="mt-1.5 min-h-11 w-full text-xs"
                       disabled={!fromCurrentStatic || busy || approvingVersionId !== null}
                       onClick={() => setApproveTarget(version)}
                     >
@@ -632,10 +760,10 @@ export function MotionStudioPanel({
             })}
           </ul>
           {approveError ? <p className="mt-2 text-[11px] text-signal">{approveError}</p> : null}
-        </div>
+        </details>
       ) : null}
 
-      <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
         {MOTION_SAFETY_NOTE}
       </p>
 
