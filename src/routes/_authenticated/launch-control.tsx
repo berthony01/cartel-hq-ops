@@ -2753,7 +2753,7 @@ function LaunchControlPage() {
       )}
 
 
-      {selected && saveButton ? (
+      {selected && !selectedIsInternalTest && saveButton ? (
         <StickyActionBar desktop="hidden" end={saveButton} />
       ) : null}
 
