@@ -173,7 +173,7 @@ function NextActionBlock({
                   : "border-gold/45 bg-gold/10 text-gold",
             )}
           >
-            <StateIcon className="size-4.5" aria-hidden="true" />
+            <StateIcon className="size-5" aria-hidden="true" />
           </span>
           <div className="min-w-0">
             <p
