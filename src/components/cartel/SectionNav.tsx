@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Check, CircleDot, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -14,7 +15,15 @@ import { cn } from "@/lib/utils";
  * chosen id. The parent keeps every section mounted and toggles visibility with
  * CSS, so form state, queries, mutations, permissions and idempotency state are
  * untouched by navigation.
+ *
+ * UX-A: an item may carry a presentation-only `state` derived by the parent
+ * from state it already reads. The indicator never asserts a new fact and never
+ * triggers work — it only mirrors what the parent already renders inside the
+ * section.
  */
+
+export type SectionNavState = "complete" | "attention" | "blocked" | "neutral";
+
 
 export type SectionNavItem = {
   /** DOM id of the anchor wrapper (uncontrolled) or of the view (controlled). */
