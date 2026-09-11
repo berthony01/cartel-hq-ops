@@ -1,10 +1,13 @@
 import { supabase } from "@/integrations/supabase/client";
 import {
   LAUNCH_STATUSES,
+  isProjectLaunch,
+  selectPrimaryProjectLaunch,
   toLaunchStatus,
   type LaunchStatus,
 } from "@/lib/launch-control";
 import type { TelegramGroupConnectionMetadata } from "@/lib/telegram-group";
+
 
 /**
  * Phase 5.5 — Guided setup / launch readiness.
@@ -60,7 +63,10 @@ export type LaunchReadiness = {
   totalCount: number;
   allComplete: boolean;
   nextAction: ReadinessNextAction;
-  /** Deterministically chosen launch the guidance talks about. */
+  /** Project profile these launches belong to, when one exists. */
+  projectProfileId: string | null;
+  /** Deterministically chosen PROJECT launch the guidance talks about. */
+
   primaryLaunchId: string | null;
   primaryLaunchName: string | null;
   primaryLaunchStatus: LaunchStatus | null;
@@ -84,6 +90,9 @@ export type ReadinessLaunchRow = {
   id: string;
   token_name: string;
   status: string;
+  /** `PROJECT` (default) or `INTERNAL_TEST`. Missing is treated as PROJECT. */
+  launch_kind?: string | null;
+
   announced_at: string | null;
   watchlist_opened_at: string | null;
   launch_watch_token: string | null;
@@ -115,32 +124,16 @@ export type ReadinessInput = {
 // Pure derivation
 // ---------------------------------------------------------------------------
 
-function timeOf(row: ReadinessLaunchRow): number {
-  const value = row.updated_at ?? row.created_at;
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? 0 : parsed;
-}
-
 /**
- * Deterministic primary launch:
- *   1. newest launch that is neither DRAFT nor COMPLETED (genuinely active),
- *   2. otherwise the newest DRAFT,
- *   3. otherwise the newest COMPLETED.
- * Ties break on ascending id. Generic — no name/ticker/id special-casing.
+ * Deterministic primary launch, delegating to the single shared rule in
+ * `launch-control`: newest active PROJECT launch, else newest PROJECT draft,
+ * else newest PROJECT completed. INTERNAL_TEST rows are never eligible and no
+ * name/ticker/id is special-cased.
  */
 export function selectPrimaryLaunch(launches: ReadinessLaunchRow[]): ReadinessLaunchRow | null {
-  if (launches.length === 0) return null;
-  const byNewest = [...launches].sort((a, b) => {
-    const diff = timeOf(b) - timeOf(a);
-    return diff !== 0 ? diff : a.id.localeCompare(b.id);
-  });
-  const statusOf = (l: ReadinessLaunchRow) => toLaunchStatus(l.status);
-  return (
-    byNewest.find((l) => statusOf(l) !== "DRAFT" && statusOf(l) !== "COMPLETED") ??
-    byNewest.find((l) => statusOf(l) === "DRAFT") ??
-    byNewest[0]!
-  );
+  return selectPrimaryProjectLaunch(launches);
 }
+
 
 function statusIndex(status: LaunchStatus): number {
   return LAUNCH_STATUSES.indexOf(status);
@@ -246,10 +239,14 @@ export function computeLaunchReadiness(input: ReadinessInput): LaunchReadiness {
   const profileExists = !!profile;
   const profilePublished = profile?.discovery_status === "published";
 
+  // Only PROJECT launches exist for readiness/journey purposes. INTERNAL_TEST
+  // chain-test records are permanently private and never part of the guided
+  // project path, even though the database already keeps them isolated.
   const launches = profile
-    ? input.launches
+    ? input.launches.filter(isProjectLaunch)
     : []; // launches always belong to a profile; without one nothing counts
   const primary = selectPrimaryLaunch(launches);
+
 
   const operationalGroups = input.groups.filter(groupIsOperational);
   const operationalIds = new Set(operationalGroups.map((g) => g.id));
@@ -307,7 +304,9 @@ export function computeLaunchReadiness(input: ReadinessInput): LaunchReadiness {
     totalCount: steps.length,
     allComplete: completedCount === steps.length,
     nextAction,
+    projectProfileId: profile?.id ?? null,
     primaryLaunchId: primary?.id ?? null,
+
     primaryLaunchName: primary?.token_name ?? null,
     primaryLaunchStatus: primary ? toLaunchStatus(primary.status) : null,
     projectName: profile?.project_name ?? null,
@@ -339,7 +338,7 @@ export async function fetchLaunchReadiness(workspaceId: string): Promise<LaunchR
       ? supabase
           .from("launches")
           .select(
-            "id,token_name,status,announced_at,watchlist_opened_at,launch_watch_token,created_at,updated_at",
+            "id,token_name,status,launch_kind,announced_at,watchlist_opened_at,launch_watch_token,created_at,updated_at",
           )
           .eq("workspace_id", workspaceId)
           .eq("project_profile_id", profile.id)

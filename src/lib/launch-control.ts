@@ -71,6 +71,76 @@ export function launchStatusIndex(status: LaunchStatus): number {
   return LAUNCH_STATUSES.indexOf(status);
 }
 
+// ---------------------------------------------------------------------------
+// P2-C2 — launch classification (`launches.launch_kind`).
+//
+// `PROJECT` is the ordinary customer launch. `INTERNAL_TEST` is a permanently
+// private chain-test record: the database keeps it DRAFT, tokenless and
+// unbindable to an official contract. Classification is immutable after
+// creation and is never chosen in the ordinary new-launch form — the column
+// default supplies `PROJECT`.
+//
+// Every normal product surface must ignore INTERNAL_TEST explicitly, even
+// though the DB constraints already keep those rows private.
+// ---------------------------------------------------------------------------
+
+export const LAUNCH_KINDS = ["PROJECT", "INTERNAL_TEST"] as const;
+export type LaunchKind = (typeof LAUNCH_KINDS)[number];
+
+/** Unknown/missing classification is treated as PROJECT (the column default). */
+export function toLaunchKind(value: string | null | undefined): LaunchKind {
+  return value === "INTERNAL_TEST" ? "INTERNAL_TEST" : "PROJECT";
+}
+
+export type LaunchKindSource = { launch_kind?: string | null };
+
+export function isProjectLaunch(row: LaunchKindSource): boolean {
+  return toLaunchKind(row.launch_kind) === "PROJECT";
+}
+
+export function isInternalTestLaunch(row: LaunchKindSource): boolean {
+  return toLaunchKind(row.launch_kind) === "INTERNAL_TEST";
+}
+
+export type LaunchPrioritySource = LaunchKindSource & {
+  id: string;
+  status: string;
+  created_at: string;
+  updated_at?: string | null;
+};
+
+function launchRecencyOf(row: LaunchPrioritySource): number {
+  const parsed = Date.parse(row.updated_at ?? row.created_at);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+/**
+ * The single deterministic primary-launch rule shared by Launch Control,
+ * Launch Readiness and the Project Journey:
+ *   1. newest PROJECT launch that is neither DRAFT nor COMPLETED,
+ *   2. otherwise the newest PROJECT DRAFT,
+ *   3. otherwise the newest PROJECT COMPLETED.
+ * Ties break on ascending id. INTERNAL_TEST rows can never be chosen, and no
+ * project name, ticker or id is ever special-cased.
+ */
+export function selectPrimaryProjectLaunch<T extends LaunchPrioritySource>(
+  rows: readonly T[],
+): T | null {
+  const projectRows = rows.filter(isProjectLaunch);
+  if (projectRows.length === 0) return null;
+  const byNewest = [...projectRows].sort((a, b) => {
+    const diff = launchRecencyOf(b) - launchRecencyOf(a);
+    return diff !== 0 ? diff : a.id.localeCompare(b.id);
+  });
+  const statusOf = (row: T) => toLaunchStatus(row.status);
+  return (
+    byNewest.find((row) => statusOf(row) !== "DRAFT" && statusOf(row) !== "COMPLETED") ??
+    byNewest.find((row) => statusOf(row) === "DRAFT") ??
+    byNewest[0]!
+  );
+}
+
+
 /** Identity fields are editable only while DRAFT. */
 export function identityLocked(status: LaunchStatus): boolean {
   return status !== "DRAFT";
@@ -184,15 +254,25 @@ function rethrow(error: unknown): never {
   throw new Error(message);
 }
 
-export async function listLaunches(workspaceId: string): Promise<LaunchRow[]> {
+/**
+ * Launches for ONE project profile inside ONE workspace. Both filters are
+ * required: a workspace-only query could list launches belonging to another
+ * project profile in the same workspace.
+ */
+export async function listLaunches(
+  workspaceId: string,
+  projectProfileId: string,
+): Promise<LaunchRow[]> {
   const { data, error } = await supabase
     .from("launches")
     .select("*")
     .eq("workspace_id", workspaceId)
+    .eq("project_profile_id", projectProfileId)
     .order("created_at", { ascending: false });
   if (error) rethrow(error);
   return data ?? [];
 }
+
 
 export type CreateLaunchInput = {
   workspaceId: string;

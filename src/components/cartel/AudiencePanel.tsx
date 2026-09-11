@@ -19,9 +19,12 @@ import {
   LAUNCH_STATUS_LABELS,
   getLaunchAudienceSummary,
   getLaunchWatchConfirmationSummary,
+  isProjectLaunch,
   listLaunches,
   toLaunchStatus,
 } from "@/lib/launch-control";
+import { getProjectProfile } from "@/lib/project-profile";
+
 
 /**
  * Community Command → Audience (C3).
@@ -113,17 +116,30 @@ export function AudiencePanel({
 }) {
   const { workspaceId } = useWorkspace();
 
+  // Launches belong to the workspace's project profile, so the list is scoped
+  // to both (never workspace-only).
+  const profileQuery = useQuery({
+    queryKey: ["project-profile", workspaceId],
+    enabled: !!workspaceId,
+    queryFn: () => getProjectProfile(workspaceId!),
+  });
+  const projectProfileId = profileQuery.data?.id ?? null;
+
   // Same query key/wrapper as Broadcasts and Launch Control: shared cache.
   const launchesQuery = useQuery({
-    queryKey: ["launches", workspaceId],
-    enabled: !!workspaceId,
-    queryFn: () => listLaunches(workspaceId!),
+    queryKey: ["launches", workspaceId, projectProfileId],
+    enabled: !!workspaceId && !!projectProfileId,
+    queryFn: () => listLaunches(workspaceId!, projectProfileId!),
   });
-  const launches = useMemo(() => launchesQuery.data ?? [], [launchesQuery.data]);
+  const launches = useMemo(
+    // INTERNAL_TEST chain-test records never appear on customer surfaces.
+    () => (launchesQuery.data ?? []).filter(isProjectLaunch),
+    [launchesQuery.data],
+  );
 
-  // URL param wins when it names a launch in THIS workspace (the list is
-  // RLS-scoped). Otherwise the primary-launch convention: newest non-COMPLETED,
-  // else newest.
+  // URL param wins when it names a launch in THIS project (the list is
+  // RLS- and profile-scoped). Otherwise the primary-launch convention: newest
+  // non-COMPLETED, else newest.
   const resolvedId = useMemo(() => {
     if (launches.length === 0) return null;
     if (selectedLaunchId && launches.some((l) => l.id === selectedLaunchId)) {
@@ -132,6 +148,7 @@ export function AudiencePanel({
     const primary = launches.find((l) => toLaunchStatus(l.status) !== "COMPLETED");
     return (primary ?? launches[0]!).id;
   }, [launches, selectedLaunchId]);
+
 
   // Normalize the URL once, guarded so it cannot loop.
   useEffect(() => {
