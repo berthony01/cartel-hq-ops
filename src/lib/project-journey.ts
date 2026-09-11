@@ -857,6 +857,22 @@ export async function fetchProjectJourney(workspaceId: string): Promise<ProjectJ
     }
   }
 
+  // Launcher-B — latest handoff request for the primary PROJECT launch only.
+  // Read-only; INTERNAL_TEST launches are already excluded above.
+  let productionRequest: JourneyProductionRequestFacts | null = null;
+  let productionRequestUnavailable = false;
+  if (primaryRow) {
+    try {
+      const row = await getLaunchProductionDeploymentRequest(primaryRow.id);
+      productionRequest = row
+        ? { status: row.status, effectiveStatus: row.effectiveStatus }
+        : null;
+    } catch {
+      productionRequestUnavailable = true;
+    }
+  }
+
+
   // --- Brand & Creative + Communications (read-only, existing surfaces) ----
   const [brandKitResult, assetsResult, packsResult, inboxSettingsResult] =
     await Promise.allSettled([
