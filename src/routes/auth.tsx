@@ -118,7 +118,6 @@ function AuthPage() {
             Private Beta. Access is limited to approved CARTEL HQ operators.
           </div>
 
-
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div>
               <Label htmlFor="email">Email</Label>
