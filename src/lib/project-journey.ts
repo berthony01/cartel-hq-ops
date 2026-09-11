@@ -182,6 +182,9 @@ export type JourneyInput = {
   /** Read-only evidence summary for the primary launch only. */
   deploymentEvidence: JourneyDeploymentEvidenceFacts | null;
   deploymentUnavailable: boolean;
+  /** Latest handoff request for the primary PROJECT launch, when readable. */
+  productionRequest: JourneyProductionRequestFacts | null;
+  productionRequestUnavailable: boolean;
   brandKit: JourneyBrandKitFacts | null;
   brandKitUnavailable: boolean;
   creativeAssets: JourneyCreativeAssetFacts | null;
