@@ -218,6 +218,7 @@ function NextActionBlock({
 
 /** Truthful review wording. A blocked stage is never described as doable now. */
 function reviewLabel(stage: JourneyStage): string {
+  if (stage.reviewLabel) return stage.reviewLabel;
   if (stage.key === "deployment") return "Review deployment evidence";
   return `Review ${stage.title}`;
 }
