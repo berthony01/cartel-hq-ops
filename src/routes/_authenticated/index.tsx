@@ -665,7 +665,13 @@ function HqDashboard() {
                 icon={PackageOpen}
                 title="No packs yet"
                 description="Sticker packs saved from Sticker Lab appear here for this project."
+                action={
+                  <Button asChild size="sm" className="min-h-11">
+                    <Link to="/sticker-lab">Open Sticker Lab</Link>
+                  </Button>
+                }
               />
+
             ) : (
               recentPacks.map((pack) => (
                 <InlineRow
