@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { Menu, X } from "lucide-react";
+import { ArrowLeft, Globe2, Menu, ShieldCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -19,8 +19,8 @@ const NAV = [
 
 function Wordmark() {
   return (
-    <Link to="/network" className="flex min-w-0 items-center gap-2">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-gold/40 bg-gold/10 font-display text-sm text-gold">
+    <Link to="/network" className="group flex min-w-0 items-center gap-2.5">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-gold/40 bg-gold/10 font-display text-sm text-gold shadow-glow transition-colors group-hover:bg-gold/15">
         PC
       </span>
       <span className="min-w-0 leading-tight">
@@ -40,11 +40,12 @@ export function NetworkShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
+      <header className="sticky top-0 z-30 border-b border-border/80 bg-background/90 shadow-inset backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-7xl items-center gap-3 px-4 py-3 sm:px-6">
           <Wordmark />
-          <span className="hidden shrink-0 rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:inline">
-            Public page
+          <span className="hidden shrink-0 items-center gap-1.5 rounded-full border border-pepe/30 bg-pepe/5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-pepe sm:inline-flex">
+            <Globe2 className="size-3" aria-hidden="true" />
+            Public Network
           </span>
           <nav className="ml-auto hidden items-center gap-1 md:flex">
             {NAV.map((item) => (
@@ -53,13 +54,13 @@ export function NetworkShell({ children }: { children: ReactNode }) {
                 to={item.to}
                 activeOptions={{ exact: item.to === "/network" }}
                 activeProps={{ className: "text-gold" }}
-                className="rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                className="min-h-11 rounded-md border border-transparent px-3 py-3 text-sm text-muted-foreground transition-colors hover:border-border/70 hover:bg-surface-raised/50 hover:text-foreground"
               >
                 {item.label}
               </Link>
             ))}
-            <Button asChild size="sm" className="ml-2">
-              <Link to="/">Back to CARTEL HQ</Link>
+            <Button asChild size="sm" variant="outline" className="ml-2 min-h-11 border-gold/40">
+              <Link to="/"><ArrowLeft className="size-4" aria-hidden="true" />Back to CARTEL HQ</Link>
             </Button>
           </nav>
           <Button
@@ -74,8 +75,8 @@ export function NetworkShell({ children }: { children: ReactNode }) {
           </Button>
         </div>
         {open ? (
-          <div className="border-t border-border bg-surface md:hidden">
-            <nav className="mx-auto flex w-full max-w-6xl flex-col gap-1 px-4 py-3 sm:px-6">
+          <div className="border-t border-border bg-surface-elevated shadow-elevated md:hidden">
+            <nav className="mx-auto flex w-full max-w-7xl flex-col gap-1 px-4 py-3 sm:px-6">
               {NAV.map((item) => (
                 <Link
                   key={item.to}
@@ -83,14 +84,14 @@ export function NetworkShell({ children }: { children: ReactNode }) {
                   activeOptions={{ exact: item.to === "/network" }}
                   activeProps={{ className: "text-gold" }}
                   onClick={() => setOpen(false)}
-                  className="rounded-md px-2 py-2 text-sm text-muted-foreground"
+                  className="min-h-11 rounded-md border border-transparent px-3 py-3 text-sm text-muted-foreground transition-colors hover:border-border/70 hover:bg-surface-raised"
                 >
                   {item.label}
                 </Link>
               ))}
               <Button asChild size="sm" className="mt-2 w-full">
                 <Link to="/" onClick={() => setOpen(false)}>
-                  Back to CARTEL HQ
+                  <ArrowLeft className="size-4" aria-hidden="true" />Back to CARTEL HQ
                 </Link>
               </Button>
             </nav>
@@ -98,26 +99,25 @@ export function NetworkShell({ children }: { children: ReactNode }) {
         ) : null}
       </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 lg:py-12">
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:py-12">
         {children}
       </main>
 
-      <footer className="border-t border-border bg-surface/60">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-8 sm:px-6">
-          <p className="font-display text-sm uppercase tracking-wide text-foreground">
-            Cartel Network
-          </p>
-          <p className="max-w-3xl text-xs leading-relaxed text-muted-foreground">
-            Information shown here is supplied by authenticated project accounts in CARTEL HQ.
-            Listing a project or launch is not a safety audit, token-safety verification,
-            rug-proof guarantee or investment endorsement. Always do your own research.
-          </p>
-          <Link
-            to="/"
-            className="text-xs font-semibold uppercase tracking-[0.14em] text-gold hover:underline"
-          >
-            Back to CARTEL HQ →
-          </Link>
+      <footer className="border-t border-border/80 bg-surface/60">
+        <div className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-8 sm:px-6 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 font-display text-sm uppercase tracking-wide text-foreground">
+              <ShieldCheck className="size-4 text-gold" aria-hidden="true" />Cartel Network
+            </p>
+            <p className="mt-2 max-w-3xl text-xs leading-relaxed text-muted-foreground">
+              Information shown here is supplied by authenticated project accounts in CARTEL HQ.
+              Listing a project or launch is not a safety audit, token-safety verification,
+              rug-proof guarantee or investment endorsement. Always do your own research.
+            </p>
+          </div>
+          <Button asChild variant="outline" size="sm" className="w-full border-gold/30 sm:w-auto">
+            <Link to="/"><ArrowLeft className="size-4" aria-hidden="true" />Back to CARTEL HQ</Link>
+          </Button>
         </div>
       </footer>
     </div>

@@ -49,7 +49,7 @@ function SignalRow({ signal }: { signal: NetworkSignal }) {
   const ticker = formatTicker(signal.ticker);
   const occurred = formatDateTime(signal.occurred_at);
   return (
-    <li className="rounded-lg border border-border bg-surface p-4">
+    <li className="rounded-lg border border-border/80 bg-surface-elevated p-4 shadow-inset transition-colors hover:border-gold/30">
       <div className="flex min-w-0 items-start gap-3">
         <ProjectLogo
           slug={signal.project_public_slug}
@@ -138,7 +138,7 @@ function SignalsFeed() {
 
   return (
     <div className="space-y-6">
-      <header className="border-b border-border pb-4">
+      <header className="rounded-lg border border-gold/20 bg-surface-elevated px-4 py-5 shadow-inset sm:px-6">
         <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-gold">
           Cartel Network
         </p>
@@ -155,7 +155,7 @@ function SignalsFeed() {
         </p>
       </header>
 
-      <form onSubmit={applyFilters} className="grid gap-3 sm:grid-cols-[200px_auto]">
+      <form onSubmit={applyFilters} className="grid gap-3 rounded-lg border border-border/80 bg-surface-raised/40 p-4 shadow-inset sm:grid-cols-[200px_auto]">
         <div>
           <Label htmlFor="signal-chain" className="text-xs">
             Chain
