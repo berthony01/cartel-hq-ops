@@ -691,7 +691,14 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
   ];
 
   const stages = raw.map((entry, index) =>
-    stageOf(entry.key, index + 1, entry.status, entry.actionable, entry.detail),
+    stageOf(
+      entry.key,
+      index + 1,
+      entry.status,
+      entry.actionable,
+      entry.detail,
+      entry.actionLabel,
+    ),
   );
 
   const completedCount = stages.filter((s) => s.status === "complete").length;
