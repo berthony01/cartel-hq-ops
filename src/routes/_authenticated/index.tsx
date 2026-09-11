@@ -395,12 +395,13 @@ function HqDashboard() {
                   Launch Control is where you create the launch, open Launch Watch, register the
                   official contract and drive the lifecycle.
                 </p>
-                <Link
-                  to="/launch-control"
-                  className="touch-target inline-flex w-fit items-center gap-1.5 rounded-md border border-gold/50 bg-gold/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-gold transition-colors hover:bg-gold/20"
-                >
-                  Create launch <ChevronRight className="size-4" aria-hidden="true" />
-                </Link>
+                <Button asChild className="min-h-11 w-full sm:w-auto">
+                  <Link to="/launch-control">
+                    Create launch
+                    <ChevronRight className="size-4" aria-hidden="true" />
+                  </Link>
+                </Button>
+
               </div>
             ) : (
 
