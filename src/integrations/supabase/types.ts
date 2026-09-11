@@ -1041,6 +1041,7 @@ export type Database = {
           internal_notes: string | null
           launch_approaching_at: string | null
           launch_at: string | null
+          launch_kind: string
           launch_watch_token: string | null
           launch_watch_token_created_at: string | null
           launch_window_end: string | null
@@ -1073,6 +1074,7 @@ export type Database = {
           internal_notes?: string | null
           launch_approaching_at?: string | null
           launch_at?: string | null
+          launch_kind?: string
           launch_watch_token?: string | null
           launch_watch_token_created_at?: string | null
           launch_window_end?: string | null
@@ -1105,6 +1107,7 @@ export type Database = {
           internal_notes?: string | null
           launch_approaching_at?: string | null
           launch_at?: string | null
+          launch_kind?: string
           launch_watch_token?: string | null
           launch_watch_token_created_at?: string | null
           launch_window_end?: string | null
@@ -4923,6 +4926,7 @@ export type Database = {
           internal_notes: string | null
           launch_approaching_at: string | null
           launch_at: string | null
+          launch_kind: string
           launch_watch_token: string | null
           launch_watch_token_created_at: string | null
           launch_window_end: string | null
@@ -4997,6 +5001,7 @@ export type Database = {
           internal_notes: string | null
           launch_approaching_at: string | null
           launch_at: string | null
+          launch_kind: string
           launch_watch_token: string | null
           launch_watch_token_created_at: string | null
           launch_window_end: string | null
@@ -5262,6 +5267,7 @@ export type Database = {
           internal_notes: string | null
           launch_approaching_at: string | null
           launch_at: string | null
+          launch_kind: string
           launch_watch_token: string | null
           launch_watch_token_created_at: string | null
           launch_window_end: string | null

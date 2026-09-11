@@ -27,6 +27,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useWorkspace } from "@/lib/workspace-context";
+import { getProjectProfile } from "@/lib/project-profile";
+
 import { ScheduleChangeSummary } from "@/components/cartel/ScheduleChangeSummary";
 import { GroupAnnouncementComposer } from "@/components/cartel/GroupAnnouncementComposer";
 import type { TelegramGroupSetup } from "@/components/cartel/TelegramGroupCard";
@@ -43,7 +45,9 @@ import {
   getLaunchAccess,
   getLaunchWatcherUpdateStats,
   getPendingScheduleCommunication,
+  isProjectLaunch,
   listLaunches,
+
   scheduleCommunicationQueryKey,
   scheduleSnapshotPair,
   sendLaunchScheduleCommunication,
@@ -81,13 +85,27 @@ export function BroadcastsPanel({
   const [channel, setChannel] = useState<"watcher" | "community">("watcher");
 
 
+  // Launches belong to the workspace's project profile, so the list is scoped
+  // to both (never workspace-only).
+  const profileQuery = useQuery({
+    queryKey: ["project-profile", workspaceId],
+    enabled: !!workspaceId,
+    queryFn: () => getProjectProfile(workspaceId!),
+  });
+  const projectProfileId = profileQuery.data?.id ?? null;
+
   // Same query keys/wrappers as Launch Control so cache stays shared.
   const launchesQuery = useQuery({
-    queryKey: ["launches", workspaceId],
-    enabled: !!workspaceId,
-    queryFn: () => listLaunches(workspaceId!),
+    queryKey: ["launches", workspaceId, projectProfileId],
+    enabled: !!workspaceId && !!projectProfileId,
+    queryFn: () => listLaunches(workspaceId!, projectProfileId!),
   });
-  const launches = useMemo(() => launchesQuery.data ?? [], [launchesQuery.data]);
+  const launches = useMemo(
+    // INTERNAL_TEST chain-test records never appear on customer surfaces.
+    () => (launchesQuery.data ?? []).filter(isProjectLaunch),
+    [launchesQuery.data],
+  );
+
 
   const accessQuery = useQuery({
     queryKey: ["launch-access", workspaceId, workspace?.owner_id ?? null],

@@ -6,10 +6,12 @@ import {
   listLaunches,
   getLaunchWatchSummary,
   hasSchedule,
+  isProjectLaunch,
   toLaunchStatus,
   launchStatusIndex,
   type LaunchRow,
 } from "@/lib/launch-control";
+
 import { listChainDeployments } from "@/lib/chain-launcher";
 import {
   evaluateLaunchDeploymentEvidence,
@@ -727,16 +729,22 @@ export function deriveJourneyDeploymentEvidenceFacts(
 }
 
 export async function fetchProjectJourney(workspaceId: string): Promise<ProjectJourney> {
-  const [readiness, launches] = await Promise.all([
-    fetchLaunchReadiness(workspaceId),
-    listLaunches(workspaceId).catch(() => [] as LaunchRow[]),
-  ]);
+  // Readiness resolves the project profile, so the launch list can be scoped to
+  // that exact profile (never workspace-wide) and to PROJECT launches only:
+  // INTERNAL_TEST chain-test records are never part of the project journey.
+  const readiness = await fetchLaunchReadiness(workspaceId);
+  const launches = readiness.projectProfileId
+    ? await listLaunches(workspaceId, readiness.projectProfileId)
+        .then((rows) => rows.filter(isProjectLaunch))
+        .catch(() => [] as LaunchRow[])
+    : [];
 
   const primaryRow =
     readiness.primaryLaunchId
       ? (launches.find((l) => l.id === readiness.primaryLaunchId) ?? null)
       : null;
   const launch = primaryRow ? launchFactsOf(primaryRow) : null;
+
 
   let activeWatchers: number | null = null;
   let watchUnavailable = false;
