@@ -405,16 +405,33 @@ export function ProjectJourneyPanel({ workspaceId, workspaceName }: SharedProps)
     >
       <ProgressBar value={journey.completedCount} total={journey.totalCount} />
       <NextActionBlock journey={journey} />
-      <ul className="grid gap-2 sm:grid-cols-2 [&>*]:min-w-0">
-        {journey.stages.map((stage) => (
-          <StageRow
-            key={stage.key}
-            stage={stage}
-            isNext={stage.key === nextKey}
-            primaryLaunchId={journey.primaryLaunchId}
-          />
-        ))}
-      </ul>
+      <CompletedStages
+        stages={completedStages}
+        primaryLaunchId={journey.primaryLaunchId}
+      />
+      {remainingStages.length > 0 ? (
+        <div className="space-y-3">
+          {remainingPhases.map((phase) => (
+            <div key={phase} className="space-y-2">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                {phase === "Contract" ? "Contract & launch" : phase} phase
+              </p>
+              <ul className="grid gap-2 [&>*]:min-w-0">
+                {remainingStages
+                  .filter((stage) => stage.phase === phase)
+                  .map((stage) => (
+                    <StageRow
+                      key={stage.key}
+                      stage={stage}
+                      isNext={stage.key === nextKey}
+                      primaryLaunchId={journey.primaryLaunchId}
+                    />
+                  ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </Section>
   );
 }
