@@ -7,24 +7,28 @@ import { WorkspaceProvider } from "@/lib/workspace-context";
 /** Fail-safe against Supabase auth storage lock hangs. getSession() is local,
  *  so this should resolve almost instantly; the timeout guards pathological
  *  lock contention, not normal network latency. */
-const AUTH_INIT_TIMEOUT_MS = 2000;
+const AUTH_INIT_TIMEOUT_MS = 5000;
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async ({ location }) => {
-    const { data, error } = await Promise.race([
-      supabase.auth.getSession(),
-      new Promise<{ data: { session: null }; error: Error }>((resolve) => {
-        setTimeout(() => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<{ data: { session: null }; error: Error }>((resolve) => {
+      timeoutId = setTimeout(() => {
           resolve({
             data: { session: null },
             error: new Error(
               "Auth storage is taking too long to initialize. Please refresh the page.",
             ),
           });
-        }, AUTH_INIT_TIMEOUT_MS);
-      }),
-    ]);
+      }, AUTH_INIT_TIMEOUT_MS);
+    });
+
+    const { data, error } = await Promise.race([supabase.auth.getSession(), timeout]).finally(
+      () => {
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
+      },
+    );
 
     const session = data?.session;
     if (error || !session?.user) {
