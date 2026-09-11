@@ -1256,6 +1256,15 @@ function MainnetCanaryPage() {
 }
 
 export const Route = createFileRoute("/_authenticated/mainnet-canary")({
+  /**
+   * Only an exact request id is accepted; anything else is dropped. A request
+   * id in the URL selects a request for review/execution — it never authorizes
+   * anything, since every action is re-checked server-side.
+   */
+  validateSearch: (search: Record<string, unknown>): { request?: string } => {
+    const raw = typeof search["request"] === "string" ? search["request"] : "";
+    return REQUEST_ID_PATTERN.test(raw) ? { request: raw.toLowerCase() } : {};
+  },
   head: () => ({
     meta: [
       { title: "Mainnet Canary — CARTEL HQ" },
