@@ -98,9 +98,9 @@ export type JourneyStage = {
    * derivation, prerequisites, actionability or routing — they only give the
    * renderer truthful wording for locked/dependent stages.
    */
-  reviewLabel?: string;
-  lockedLabel?: string;
-  dependency?: string;
+  reviewLabel?: string | undefined;
+  lockedLabel?: string | undefined;
+  dependency?: string | undefined;
 };
 
 export type JourneyNextAction = {
