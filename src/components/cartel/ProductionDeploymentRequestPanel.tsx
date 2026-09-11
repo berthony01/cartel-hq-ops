@@ -166,8 +166,11 @@ export function ProductionDeploymentRequestPanel({
   }, []);
 
   const recipientValid = isValidRecipientAddress(recipient);
+  // A wallet-captured address is proven by the connector for this session, so
+  // it is exempt from retyping. Manually typed input must match EXACTLY,
+  // including letter case.
   const manualConfirmed =
-    recipientSource === "wallet" || sameAddress(recipient, recipientConfirm);
+    recipientSource === "wallet" || exactManualRecipientMatch(recipient, recipientConfirm);
   const canSubmit =
     !disabled &&
     !submitting &&
