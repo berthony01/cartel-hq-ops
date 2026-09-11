@@ -147,6 +147,18 @@ function ComingSoonPanel({
   );
 }
 
+/** Presentation-only metric tile for the community-state summaries. */
+function StateMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="surface-quiet min-w-0 rounded-lg p-3">
+      <dt className="type-eyebrow text-muted-foreground">{label}</dt>
+      <dd className="mt-1.5 min-w-0 truncate font-display text-xl leading-none text-foreground">
+        {value}
+      </dd>
+    </div>
+  );
+}
+
 function TelegramPage() {
   const setup = useTelegramSetup();
   const groupSetup = useTelegramGroupSetup();
@@ -379,37 +391,11 @@ function TelegramPage() {
             description={primaryLine}
             actions={<StatusBadge tone={overallTone}>{overallLabel}</StatusBadge>}
           >
-            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="min-w-0">
-                <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                  Telegram service
-                </dt>
-                <dd className="mt-1 text-sm font-semibold text-foreground">{serviceLabel}</dd>
-              </div>
-              <div className="min-w-0">
-                <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                  Connected
-                </dt>
-                <dd className="mt-1 text-sm font-semibold text-foreground">
-                  {metricValue(groupCount)}
-                </dd>
-              </div>
-              <div className="min-w-0">
-                <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                  Ready
-                </dt>
-                <dd className="mt-1 text-sm font-semibold text-foreground">
-                  {metricValue(readyCount)}
-                </dd>
-              </div>
-              <div className="min-w-0">
-                <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                  Needs attention
-                </dt>
-                <dd className="mt-1 text-sm font-semibold text-foreground">
-                  {metricValue(attentionCount)}
-                </dd>
-              </div>
+            <dl className="grid min-w-0 grid-cols-2 gap-2.5 sm:grid-cols-4">
+              <StateMetric label="Telegram service" value={serviceLabel} />
+              <StateMetric label="Connected" value={metricValue(groupCount)} />
+              <StateMetric label="Ready" value={metricValue(readyCount)} />
+              <StateMetric label="Needs attention" value={metricValue(attentionCount)} />
             </dl>
           </Section>
 
@@ -501,37 +487,11 @@ function TelegramPage() {
             description={primaryLine}
             actions={<StatusBadge tone={overallTone}>{overallLabel}</StatusBadge>}
           >
-            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="min-w-0">
-                <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                  Telegram service
-                </dt>
-                <dd className="mt-1 text-sm font-semibold text-foreground">{serviceLabel}</dd>
-              </div>
-              <div className="min-w-0">
-                <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                  Connected
-                </dt>
-                <dd className="mt-1 text-sm font-semibold text-foreground">
-                  {metricValue(groupCount)}
-                </dd>
-              </div>
-              <div className="min-w-0">
-                <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                  Ready
-                </dt>
-                <dd className="mt-1 text-sm font-semibold text-foreground">
-                  {metricValue(readyCount)}
-                </dd>
-              </div>
-              <div className="min-w-0">
-                <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                  Needs attention
-                </dt>
-                <dd className="mt-1 text-sm font-semibold text-foreground">
-                  {metricValue(attentionCount)}
-                </dd>
-              </div>
+            <dl className="grid min-w-0 grid-cols-2 gap-2.5 sm:grid-cols-4">
+              <StateMetric label="Telegram service" value={serviceLabel} />
+              <StateMetric label="Connected" value={metricValue(groupCount)} />
+              <StateMetric label="Ready" value={metricValue(readyCount)} />
+              <StateMetric label="Needs attention" value={metricValue(attentionCount)} />
             </dl>
           </Section>
 
