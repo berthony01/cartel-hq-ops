@@ -477,6 +477,140 @@ function CanaryConsole() {
         </div>
       </Section>
 
+      <ProductionRequestQueuePanel
+        requests={requestRows}
+        loading={requestQueue.isPending}
+        notice={requestQueue.data && !requestQueue.data.ok ? requestQueue.data.notice : null}
+        selectedRequestId={selectedRequestId}
+        busy={busy !== null}
+        onSelect={selectRequest}
+        onDecision={(requestId, target, decisionNote) =>
+          runDecision(requestId, target, decisionNote)
+        }
+      />
+
+      {selectedRequest ? (
+        <Section
+          variant="surface"
+          leading={<ShieldAlert className="h-4 w-4 text-danger" />}
+          title="REQUEST-BOUND EXECUTION — customer production deployment"
+          description="Identity comes from the approved request row and cannot be edited here. Beginning execution creates and binds a DRAFT attempt only: nothing is signed, armed, claimed, sent, registered or announced."
+        >
+          <div className="grid gap-1 sm:grid-cols-2">
+            <ReadoutLine label={"Request id"} value={selectedRequest.id} />
+            <ReadoutLine label={"Request status"} value={selectedRequest.status} />
+            <ReadoutLine label={"Effective status"} value={selectedRequest.effectiveStatus} />
+            <ReadoutLine label={"Launch kind"} value={selectedRequest.launchKind} />
+            <ReadoutLine label={"Token name"} value={selectedRequest.tokenName} />
+            <ReadoutLine label={"Onchain symbol"} value={selectedRequest.tokenSymbol} />
+            <ReadoutLine label={"Supply (whole)"} value={selectedRequest.tokenSupplyWhole} />
+            <ReadoutLine
+              label={"Base units"}
+              value={selectedRequest.tokenTotalSupplyBaseUnits}
+            />
+            <ReadoutLine label={"Immutable recipient"} value={selectedRequest.tokenRecipient} />
+            <ReadoutLine
+              label={"Bound deployment id"}
+              value={selectedRequest.executionDeploymentId}
+            />
+          </div>
+
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            The recipient is the customer&apos;s address and is expected to differ from the platform
+            deployer wallet. Confirm both below before beginning.
+          </p>
+
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <Input
+              value={deployer}
+              onChange={(event) => setDeployer(event.target.value)}
+              placeholder="Platform deployer wallet (0x…)"
+              disabled={!canBeginExecution(selectedRequest)}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-h-11"
+              onClick={buildIntent}
+              disabled={busy !== null}
+            >
+              Build request intent
+            </Button>
+          </div>
+
+          {intentError ? <p className="mt-2 text-xs text-danger">{intentError}</p> : null}
+
+          {intent ? (
+            <div className="mt-3 grid gap-1 sm:grid-cols-2">
+              <ReadoutLine label={"Deployer"} value={intent.deployer} />
+              <ReadoutLine label={"Recipient"} value={intent.recipient} />
+              <ReadoutLine label={"Base units"} value={intent.totalSupplyBaseUnits} />
+              <ReadoutLine label={"Init code hash"} value={intent.initCodeHash} />
+              <ReadoutLine label={"Review fingerprint"} value={intent.fingerprint} />
+              <ReadoutLine
+                label={"Matches request"}
+                value={requestSupplyMatches ? "yes" : "NO — begin blocked"}
+              />
+            </div>
+          ) : null}
+
+          {canBeginExecution(selectedRequest) ? (
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <Input
+                value={beginPhrase}
+                onChange={(event) => setBeginPhrase(event.target.value)}
+                placeholder={`Type ${BEGIN_EXECUTION_PHRASE} to confirm`}
+              />
+              <Button
+                size="sm"
+                className="min-h-11"
+                disabled={busy !== null || !beginReady}
+                onClick={() =>
+                  run("begin", async () => {
+                    if (!intent || !beginReady) return;
+                    const result = await beginRequest({
+                      data: {
+                        requestId: selectedRequest.id,
+                        deployerAddress: intent.deployer,
+                        reviewFingerprint: intent.fingerprint,
+                        initCodeHash: intent.initCodeHash,
+                      },
+                    });
+                    if (result.ok && result.request?.executionDeploymentId) {
+                      setDeploymentId(result.request.executionDeploymentId);
+                      setBeginPhrase("");
+                    }
+                    note(
+                      `Begin execution: ${
+                        result.ok ? "DRAFT attempt bound" : (result.notice ?? "refused")
+                      }${result.detail ? ` — ${result.detail}` : ""}.`,
+                    );
+                    await requestQueue.refetch();
+                  })
+                }
+              >
+                {busy === "begin" ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                Begin protected execution
+              </Button>
+            </div>
+          ) : isBoundExecutingRequest(selectedRequest) ? (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Execution has begun and the DRAFT attempt is bound. Continue through the existing
+              manual stages below; each one remains a separate explicit click.
+            </p>
+          ) : selectedRequest.effectiveStatus === "COMPLETED" ? (
+            <p className="mt-3 text-xs text-success">
+              Deployment is verified and final. The project owner can now register the official
+              contract from Launch Control.
+            </p>
+          ) : (
+            <p className="mt-3 text-xs text-danger">
+              This request is not in an approved, unbound state, so execution cannot begin.
+            </p>
+          )}
+        </Section>
+      ) : null}
+
       {hasActiveState ? (
         <Section
           variant="surface"
