@@ -27,6 +27,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useWorkspace } from "@/lib/workspace-context";
+import { getProjectProfile } from "@/lib/project-profile";
+
 import { ScheduleChangeSummary } from "@/components/cartel/ScheduleChangeSummary";
 import { GroupAnnouncementComposer } from "@/components/cartel/GroupAnnouncementComposer";
 import type { TelegramGroupSetup } from "@/components/cartel/TelegramGroupCard";
