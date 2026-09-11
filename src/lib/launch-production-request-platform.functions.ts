@@ -236,11 +236,13 @@ export const setPlatformProductionRequestStatus = createServerFn({ method: "POST
 
     const { data: raw, error } = await context.supabase.rpc(
       "set_launch_production_deployment_request_status",
-      {
-        _request_id: data.requestId,
-        _target_status: data.targetStatus,
-        _note: data.note === "" ? null : data.note,
-      },
+      data.note === ""
+        ? { _request_id: data.requestId, _target_status: data.targetStatus }
+        : {
+            _request_id: data.requestId,
+            _target_status: data.targetStatus,
+            _note: data.note,
+          },
     );
     if (error) {
       return { ...base, notice: "RPC_REFUSED", detail: sanitizeDetail(error.message) };
