@@ -95,10 +95,11 @@ function JourneyLink({
 }) {
   const section = LAUNCH_SECTION_BY_STAGE[stage.key];
   if (stage.to === "/launch-control" && section) {
+    const search = primaryLaunchId ? { launch: primaryLaunchId, section } : { section };
     return (
       <Link
         to="/launch-control"
-        search={{ launch: primaryLaunchId ?? undefined, section }}
+        search={search}
         aria-label={`${label}: ${stage.title}`}
       >
         {label}

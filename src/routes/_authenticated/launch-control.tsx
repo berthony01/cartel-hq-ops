@@ -496,11 +496,16 @@ function LaunchControlPage() {
     if (!(LAUNCH_SECTION_IDS as readonly string[]).includes(sectionId)) return;
     const section = sectionId as LaunchSectionId;
     setActiveSection(section);
+    const launch = selected && isProjectLaunch(selected) ? selected.id : null;
     void navigate({
-      search: {
-        launch: selected && isProjectLaunch(selected) ? selected.id : undefined,
-        section: section === "lc-overview" ? undefined : section,
-      },
+      search:
+        section === "lc-overview"
+          ? launch
+            ? { launch }
+            : {}
+          : launch
+            ? { launch, section }
+            : { section },
       replace: true,
     });
   };
