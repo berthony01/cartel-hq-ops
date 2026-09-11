@@ -3767,6 +3767,43 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      begin_launch_production_request_execution: {
+        Args: {
+          _deployer_address: string
+          _init_code_hash: string
+          _request_id: string
+          _review_fingerprint: string
+        }
+        Returns: {
+          assigned_operator_id: string | null
+          chain_id: number
+          decision_note: string | null
+          declared_chain: string
+          execution_deployment_id: string | null
+          id: string
+          launch_id: string
+          network_environment: string
+          project_profile_id: string
+          requested_at: string
+          requested_by: string
+          status: string
+          status_changed_at: string
+          token_decimals: number
+          token_name: string
+          token_recipient: string
+          token_supply_whole: number
+          token_symbol: string
+          token_total_supply_base_units: number
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_production_deployment_requests"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       bot_inbox_active_reply_session: {
         Args: { _telegram_user_id: number }
         Returns: {
