@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, FolderLock, Palette, Trash2 } from "lucide-react";
+import { Download, FolderLock, ImageIcon, Palette, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "@/hooks/useSession";
 import { useWorkspace } from "@/lib/workspace-context";
@@ -97,6 +97,10 @@ function AssetsPage() {
     return filter === "all" ? list : list.filter((a) => a.asset_type === filter);
   }, [assetsQuery.data, filter]);
 
+  const allAssets = assetsQuery.data ?? [];
+  const sourceCount = allAssets.filter((asset) => !isManagedAsset(asset.asset_type)).length;
+  const studioCount = allAssets.filter((asset) => isManagedAsset(asset.asset_type)).length;
+
   useEffect(() => {
     let active = true;
     if (assets.length === 0) {
@@ -155,6 +159,36 @@ function AssetsPage() {
         </Link>
       </RelatedLinks>
 
+      {workspaceId ? (
+        <section className="surface-command overflow-hidden rounded-lg p-4 sm:p-6" aria-labelledby="vault-status-title">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+            <div className="min-w-0">
+              <p className="type-eyebrow text-gold">Private creative library</p>
+              <h2 id="vault-status-title" className="mt-2 font-display text-2xl uppercase leading-none text-foreground sm:text-3xl">
+                {workspace?.name ?? "Project"} Asset Vault
+              </h2>
+              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                Source artwork and Sticker Lab outputs stay together here, protected by project access and opened through short-lived links.
+              </p>
+            </div>
+            <dl className="grid grid-cols-3 gap-2 lg:min-w-[22rem]">
+              <div className="surface-quiet min-w-0 rounded-md p-3">
+                <dt className="type-eyebrow text-muted-foreground">All files</dt>
+                <dd className="mt-1.5 font-display text-xl leading-none text-foreground">{assetsQuery.isLoading ? "—" : allAssets.length}</dd>
+              </div>
+              <div className="surface-quiet min-w-0 rounded-md p-3">
+                <dt className="type-eyebrow text-muted-foreground">Source</dt>
+                <dd className="mt-1.5 font-display text-xl leading-none text-gold">{assetsQuery.isLoading ? "—" : sourceCount}</dd>
+              </div>
+              <div className="surface-quiet min-w-0 rounded-md p-3">
+                <dt className="type-eyebrow text-muted-foreground">Studio</dt>
+                <dd className="mt-1.5 font-display text-xl leading-none text-pepe">{assetsQuery.isLoading ? "—" : studioCount}</dd>
+              </div>
+            </dl>
+          </div>
+        </section>
+      ) : null}
+
       {!workspaceLoading && !workspaceId ? (
         <EmptyState
           icon={FolderLock}
@@ -164,8 +198,10 @@ function AssetsPage() {
       ) : (
         <>
           <Section
-            variant="surface"
-            title="Upload"
+            variant="primary"
+            leading={<ImageIcon className="size-4" aria-hidden="true" />}
+            title="Add source material"
+            description="Choose what this file represents, then place it in the project vault."
             actions={
               <Button asChild variant="outline" size="sm" className="min-h-10">
                 <Link to="/brand-kit">
@@ -205,7 +241,7 @@ function AssetsPage() {
                 onUploaded={refresh}
               />
             </div>
-            <details className="rounded-md bg-surface-raised/25 p-3">
+            <details className="surface-quiet rounded-md p-3">
               <summary className="cursor-pointer text-xs font-medium text-foreground">
                 What each asset type means
               </summary>
@@ -235,7 +271,7 @@ function AssetsPage() {
 
           <Section
             variant="plain"
-            title="Library"
+            title="Creative library"
             description="These are the project's files. Project Profile and Sticker Lab can reuse applicable project files. Brand Kit stores creative rules and only shows related references for context — there are no separate Brand Kit file copies."
             actions={
               <div className="flex items-center gap-2">
@@ -301,8 +337,8 @@ function AssetsPage() {
                   const managed = isManagedAsset(asset.asset_type);
                   const isVideo = (asset.mime_type ?? "").startsWith("video/");
                   return (
-                    <li key={asset.id} className="cartel-panel rise-in rounded-lg p-2.5 sm:p-3">
-                      <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md border border-border bg-background/40">
+                    <li key={asset.id} className="surface-elevated hover-lift rise-in group rounded-lg p-2.5 sm:p-3">
+                      <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-md border border-border-subtle bg-background/40">
                         {urls[asset.storage_path] ? (
                           isVideo ? (
                             <video
@@ -328,15 +364,20 @@ function AssetsPage() {
                           </span>
                         )}
                       </div>
-                      <p className="mt-2 truncate text-[11px] uppercase tracking-wider text-gold">
-                        {label}
-                      </p>
+                      <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
+                        <p className="type-eyebrow min-w-0 truncate text-gold">{label}</p>
+                        {managed ? (
+                          <span title="Managed by Sticker Lab"><Sparkles className="size-3.5 shrink-0 text-pepe" aria-hidden="true" /></span>
+                        ) : (
+                          <span title="Project source"><ShieldCheck className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /></span>
+                        )}
+                      </div>
                       <p className="truncate text-[11px] text-muted-foreground">
                         {asset.width && asset.height ? `${asset.width}×${asset.height} · ` : ""}
                         {formatBytes(asset.file_size_bytes)}
                       </p>
                       {managed ? (
-                        <p className="mt-1 truncate text-[10px] text-muted-foreground">
+                        <p className="mt-1 text-[10px] text-muted-foreground">
                           Managed by Sticker Lab
                         </p>
                       ) : null}

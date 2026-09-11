@@ -71,8 +71,10 @@ export function AssetUploader({
           setDragging(false);
           void handleFile(e.dataTransfer.files?.[0]);
         }}
-        className={`flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed p-6 text-center transition-colors ${
-          dragging ? "border-gold bg-gold/5" : "border-border bg-background/40"
+        className={`flex min-h-52 flex-col items-center justify-center gap-3 rounded-lg border border-dashed p-6 text-center transition-[border-color,background-color,box-shadow] ${
+          dragging
+            ? "border-gold bg-gold/8 shadow-[var(--glow-gold)]"
+            : "border-border-subtle bg-surface-overlay/20"
         }`}
       >
         <span className="flex size-10 items-center justify-center rounded-md border border-border bg-surface-raised text-gold">
@@ -82,10 +84,10 @@ export function AssetUploader({
             <ImagePlus className="size-5" aria-hidden="true" />
           )}
         </span>
-        <p className="text-sm font-medium text-foreground">
+        <p className="font-display text-base uppercase text-foreground">
           {label ?? `Upload ${ASSET_TYPE_LABELS[assetType].toLowerCase()}`}
         </p>
-        <p className="text-xs text-muted-foreground">Images only · up to 25MB · private storage</p>
+        <p className="type-helper text-muted-foreground">Images only · up to 25MB · private storage</p>
         <Button
           type="button"
           variant="outline"

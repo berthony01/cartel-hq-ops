@@ -13,12 +13,13 @@ export function JourneyOverview() {
       {JOURNEY_STAGES.map((stage, i) => (
         <li
           key={stage.key}
-          className="min-w-0 rounded-lg border border-border/70 bg-surface-raised/60 p-4"
+          className="surface-elevated hover-lift relative min-w-0 overflow-hidden rounded-lg p-4"
         >
-          <p className="text-[11px] font-semibold tracking-[0.16em] text-gold">
+          <span className="absolute inset-y-0 left-0 w-px bg-gold/70" aria-hidden="true" />
+          <p className="font-display text-2xl leading-none text-gold/70">
             {String(i + 1).padStart(2, "0")}
           </p>
-          <h3 className="mt-1 text-sm font-semibold leading-snug text-foreground">{stage.name}</h3>
+          <h3 className="mt-2 font-display text-base uppercase leading-snug text-foreground">{stage.name}</h3>
           {stage.substeps ? (
             <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
               {stage.substeps.join(" · ")}
@@ -35,7 +36,7 @@ export function JourneyOverview() {
 /** Post-release continuation cue. */
 export function JourneyAfterRelease() {
   return (
-    <p className="mt-3 flex items-start gap-2 rounded-md border border-border/70 bg-background/40 p-3 text-xs leading-relaxed text-muted-foreground">
+    <p className="surface-quiet mt-3 flex items-start gap-2 rounded-md p-3 text-xs leading-relaxed text-muted-foreground">
       <ArrowRight className="mt-0.5 size-3.5 shrink-0 text-gold" aria-hidden="true" />
       <span>
         <strong className="text-foreground">After release — Sticker Drops.</strong> Post approved
@@ -53,7 +54,7 @@ export function CapabilityStrip() {
         {V2_CAPABILITIES.map((cap) => (
           <li
             key={cap.name}
-            className="min-w-0 rounded-md border border-border/70 bg-background/40 px-3 py-2"
+            className="surface-quiet min-w-0 rounded-md px-3 py-2.5"
           >
             <p className="text-xs font-semibold text-foreground">{cap.name}</p>
             <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{cap.blurb}</p>
@@ -77,25 +78,25 @@ export function StepGuide({ step }: { step: number }) {
   return (
     <section
       aria-label={`Guidance for ${guide.stage}`}
-      className="min-w-0 rounded-lg border border-border/70 bg-surface-raised/40 px-4 py-3"
+      className="surface-command min-w-0 rounded-lg px-4 py-3.5"
     >
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">
         {guide.stage}
       </p>
       <dl className="mt-2 grid gap-2 md:grid-cols-3 [&>*]:min-w-0">
-        <div>
+          <div className="surface-quiet rounded-md p-2.5">
           <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             What you&apos;re doing
           </dt>
           <dd className="mt-0.5 text-xs leading-relaxed text-foreground">{guide.doing}</dd>
         </div>
-        <div>
+          <div className="surface-quiet rounded-md p-2.5">
           <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Why it matters
           </dt>
           <dd className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{guide.why}</dd>
         </div>
-        <div>
+          <div className="surface-quiet rounded-md p-2.5">
           <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Next
           </dt>
