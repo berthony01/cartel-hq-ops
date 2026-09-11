@@ -2224,6 +2224,14 @@ function LaunchControlPage() {
                   id="lc-contract"
                   className="min-w-0 scroll-mt-28 space-y-4 sm:space-y-6"
                 >
+                <div className="min-w-0 rounded-lg border-l-2 border-gold/50 bg-gold/5 px-3.5 py-3">
+                  <p className="type-eyebrow text-gold">Official contract</p>
+                  <p className="mt-1 max-w-prose type-helper text-muted-foreground">
+                    Evidence-bound registration, corrections and the two separate communication
+                    actions. Registering never messages anyone on its own.
+                  </p>
+                </div>
+
                 <VerifiedContractRegistrationPanel
                   evaluation={deploymentEvidence}
                   launchId={selected.id}
