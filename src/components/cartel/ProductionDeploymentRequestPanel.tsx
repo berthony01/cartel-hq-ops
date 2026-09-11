@@ -455,7 +455,9 @@ export function ProductionDeploymentRequestPanel({
         ) : null}
         {recipientSource === "manual" && recipientValid ? (
           <div className="min-w-0 space-y-2">
-            <Label htmlFor="production-recipient-confirm">Re-type the wallet address</Label>
+            <Label htmlFor="production-recipient-confirm">
+              Re-type the wallet address exactly, including letter case
+            </Label>
             <Input
               id="production-recipient-confirm"
               className="min-h-11 font-mono"
@@ -469,7 +471,8 @@ export function ProductionDeploymentRequestPanel({
             />
             {recipientConfirm.trim() !== "" && !manualConfirmed ? (
               <p className="text-xs leading-relaxed text-signal">
-                The two addresses do not match.
+                The two entries are not identical. They must match exactly, character for
+                character, including upper and lower case.
               </p>
             ) : null}
           </div>
