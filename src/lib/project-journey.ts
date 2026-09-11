@@ -711,7 +711,11 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
         label: nextStage.actionLabel,
         to: nextStage.to,
         headline: `Next: ${nextStage.actionLabel}.`,
-        explanation: STAGE_COPY[nextStage.key].explanation,
+        explanation:
+          STAGE_COPY[nextStage.key].explanation ||
+          (nextStage.key === "deployment"
+            ? "Ask the CARTEL platform to deploy your token contract. Submitting records a request only — nothing is deployed or signed by it."
+            : ""),
       }
     : {
         stage: null,
