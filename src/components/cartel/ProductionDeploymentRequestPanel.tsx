@@ -19,12 +19,12 @@ import { StatusBadge } from "@/components/cartel/StatusBadge";
 import {
   canWithdrawProductionRequest,
   evaluateProductionRequestEligibility,
+  exactManualRecipientMatch,
   groupDigits,
   isValidRecipientAddress,
   normalizeRecipientAddress,
   parseWholeSupply,
   productionRequestCopy,
-  sameAddress,
   type ProductionDeploymentRequest,
   type ProductionRequestEligibilityHints,
 } from "@/lib/launch-production-request";
