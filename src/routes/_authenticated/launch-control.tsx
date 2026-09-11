@@ -1136,6 +1136,86 @@ function LaunchControlPage() {
         ? "Complete evidence-bound contract registration first. This launch must be bound to a verified deployment record — address, deployment and registration time — before the official contract reference can be registered."
         : null;
 
+  /**
+   * UX-A: presentation-only section indicators. Every value below is already
+   * rendered inside the corresponding section — nothing new is asserted, no
+   * query is added and no handler, mutation or gate is involved.
+   */
+  const registrationCandidateReady = Boolean(
+    deploymentEvidence?.registrationCandidate && !deploymentEvidence.ambiguous,
+  );
+  const sectionItems: SectionNavItem[] = LAUNCH_SECTIONS.map((item) => {
+    switch (item.id) {
+      case "lc-overview":
+        return blockedReason
+          ? { ...item, state: "blocked" as const, stateLabel: "Blocked" }
+          : next
+            ? { ...item, state: "attention" as const, stateLabel: "Action available" }
+            : { ...item, state: "complete" as const, stateLabel: "Lifecycle complete" };
+      case "lc-schedule":
+        return scheduleReady
+          ? { ...item, state: "complete" as const, stateLabel: "Schedule set" }
+          : { ...item, state: "attention" as const, stateLabel: "Schedule not set" };
+      case "lc-watch":
+        return watchToken
+          ? { ...item, state: "complete" as const, stateLabel: "Launch Watch open" }
+          : profilePublished
+            ? { ...item, state: "attention" as const, stateLabel: "Launch Watch not open yet" }
+            : { ...item, state: "blocked" as const, stateLabel: "Publish the project profile first" };
+      case "lc-comms":
+        return pendingScheduleComm
+          ? { ...item, state: "attention" as const, stateLabel: "Schedule change not communicated" }
+          : { ...item, state: "neutral" as const };
+      case "lc-contract":
+        return contractRegistered
+          ? { ...item, state: "complete" as const, stateLabel: "Official contract registered" }
+          : registrationCandidateReady
+            ? { ...item, state: "attention" as const, stateLabel: "Registration available" }
+            : { ...item, state: "blocked" as const, stateLabel: "Deployment evidence required" };
+      default:
+        return { ...item, state: "neutral" as const };
+    }
+  });
+
+  /**
+   * Plain-English contract guidance derived from the same evaluation object the
+   * registration panel already uses. Eligibility, finality and registration
+   * rules are untouched — this only explains the state the user is already in.
+   */
+  const contractGuidance: { tone: "green" | "gold" | "muted"; headline: string; why: string; nextUp: string } =
+    contractRegistered
+      ? {
+          tone: "green",
+          headline: "Official contract: Registered",
+          why: "This launch is bound to a verified deployment record — address, deployment and registration time.",
+          nextUp:
+            "Notifying watchers and posting to your community remain separate, explicit actions below.",
+        }
+      : registrationCandidateReady
+        ? {
+            tone: "gold",
+            headline: "Official contract: Ready to register",
+            why: "Exactly one verified production deployment qualifies for official registration.",
+            nextUp: "Review the candidate below and register the official contract when you are ready.",
+          }
+        : deploymentEvidence && deploymentEvidence.ambiguous
+          ? {
+              tone: "muted",
+              headline: "Official contract: Not registered yet",
+              why: "More than one deployment qualifies, so no candidate is selected automatically.",
+              nextUp:
+                "Registration stays closed until exactly one qualifying production deployment remains.",
+            }
+          : {
+              tone: "muted",
+              headline: "Official contract: Not created or registered yet",
+              why: "This launch does not yet have verified production mainnet deployment evidence.",
+              nextUp:
+                "Production deployment evidence must exist before official contract registration unlocks.",
+            };
+
+
+
   const saveButton =
     selected && canManage ? (
       <Button
