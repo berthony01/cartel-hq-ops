@@ -93,6 +93,14 @@ export type JourneyStage = {
   actionLabel: string;
   /** Short live detail, when one can be stated honestly. */
   detail: string | null;
+  /**
+   * Pure display metadata. None of these fields participate in status
+   * derivation, prerequisites, actionability or routing — they only give the
+   * renderer truthful wording for locked/dependent stages.
+   */
+  reviewLabel?: string;
+  lockedLabel?: string;
+  dependency?: string;
 };
 
 export type JourneyNextAction = {
