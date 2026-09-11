@@ -17,7 +17,7 @@ export function MobileTabBar({ onOpenMore }: { onOpenMore: () => void }) {
       aria-label="Primary mobile"
       className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-sidebar-border bg-sidebar/96 shadow-[0_-16px_36px_-30px_var(--gold)] backdrop-blur-xl lg:hidden"
     >
-        className="mx-auto flex w-full max-w-lg items-stretch gap-1 px-2 py-1.5">
+      <ul className="mx-auto flex w-full max-w-lg items-stretch gap-1 px-2 py-1.5">
         {MOBILE_PRIMARY_ITEMS.map((item) => (
           <li key={item.to} className="flex min-w-0 flex-1">
             <Link
