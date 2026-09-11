@@ -94,24 +94,30 @@ function AuthPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
-      <div className="w-full max-w-md">
+      <div className="rise-in w-full max-w-md min-w-0">
         <div className="mb-6 flex flex-col items-center text-center">
-          <span className="flex size-11 items-center justify-center rounded-md border border-gold/40 bg-surface-raised text-gold">
+          <span className="flex size-11 items-center justify-center rounded-md border border-gold/40 bg-surface-raised text-gold shadow-elevated">
             <ShieldCheck className="size-5" aria-hidden="true" />
           </span>
-          <h1 className="mt-4 font-display text-3xl uppercase tracking-widest text-gold">
+          <p className="type-eyebrow mt-4 text-muted-foreground">Private operating layer</p>
+          <h1 className="mt-2 font-display text-3xl uppercase tracking-widest text-gold sm:text-4xl">
             CARTEL HQ
           </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
             The operating layer for PEPECARTEL creative tools, campaigns, creators, and
             distribution.
           </p>
         </div>
 
-        <div className="cartel-panel rounded-xl p-6">
-          <div className="rounded-md border border-gold/35 bg-gold/5 px-3 py-2 text-xs text-foreground">
+        <div className="cartel-panel relative overflow-hidden rounded-xl p-6 shadow-elevated">
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gold/50"
+            aria-hidden="true"
+          />
+          <div className="rounded-md border border-gold/35 bg-gold/5 px-3 py-2 text-xs leading-relaxed text-foreground">
             Private Beta. Access is limited to approved CARTEL HQ operators.
           </div>
+
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div>
