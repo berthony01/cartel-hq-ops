@@ -2793,3 +2793,29 @@ function PreviewRow({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+/**
+ * Controlled working view. Inactive views stay mounted — only visibility
+ * changes — so form state, queries, mutation state and idempotency outcomes
+ * survive navigation between sections.
+ */
+function WorkingView({
+  id,
+  active,
+  children,
+}: {
+  id?: string;
+  active: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      id={id}
+      hidden={!active}
+      aria-hidden={active ? undefined : true}
+      className="min-w-0 space-y-4 sm:space-y-6"
+    >
+      {children}
+    </div>
+  );
+}
