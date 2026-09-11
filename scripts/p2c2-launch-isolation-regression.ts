@@ -119,7 +119,7 @@ const readinessInput: ReadinessInput = {
 const readiness = computeLaunchReadiness(readinessInput);
 check(
   "C2-6",
-  readiness.primaryLaunch?.id === "project-1",
+  readiness.primaryLaunchId === "project-1",
   "launch readiness ignores INTERNAL_TEST and selects the PROJECT launch",
 );
 
