@@ -178,7 +178,7 @@ function MyWatchlist() {
           }
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid min-w-0 gap-4 sm:grid-cols-2 [&>*]:min-w-0">
           {rows.map((item) => (
             <WatchRow key={item.launch_public_slug} item={item} />
           ))}
