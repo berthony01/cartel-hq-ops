@@ -380,44 +380,61 @@ function ProjectProfilePage() {
         </Section>
       ) : (
         <div className="min-w-0 space-y-4 sm:space-y-6">
-        <Section variant="primary" className="min-w-0">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-            <div className="min-w-0">
-              <p className="type-meta text-gold">Profile state</p>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <h2 className="min-w-0 font-display text-xl uppercase leading-tight text-foreground [overflow-wrap:anywhere] sm:text-2xl">
-                  {profileQuery.isLoading
-                    ? "Loading…"
-                    : profile
-                      ? profile.project_name
-                      : "Project profile not created yet"}
-                </h2>
-                {profile ? (
-                  <StatusBadge tone={STATUS_TONE[profile.discovery_status]}>
-                    <span>{DISCOVERY_STATUS_LABELS[profile.discovery_status]}</span>
-                  </StatusBadge>
+        <Section variant="hero" className="min-w-0" contentClassName="min-w-0">
+          <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+            <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+              <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gold/30 bg-background/50 sm:size-16">
+                {selectedLogo && urls[selectedLogo.storage_path] ? (
+                  <img
+                    src={urls[selectedLogo.storage_path]}
+                    alt=""
+                    className="max-h-full max-w-full object-contain"
+                    loading="lazy"
+                  />
+                ) : (
+                  <IdCard className="size-6 text-gold/70" aria-hidden="true" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="type-eyebrow text-gold">Profile state</p>
+                <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+                  <h2 className="min-w-0 font-display text-2xl uppercase leading-[0.95] text-foreground [overflow-wrap:anywhere] sm:text-3xl">
+                    {profileQuery.isLoading
+                      ? "Loading…"
+                      : profile
+                        ? profile.project_name
+                        : "Project profile not created yet"}
+                  </h2>
+                  {profile ? (
+                    <StatusBadge tone={STATUS_TONE[profile.discovery_status]}>
+                      <span>{DISCOVERY_STATUS_LABELS[profile.discovery_status]}</span>
+                    </StatusBadge>
+                  ) : (
+                    <StatusBadge tone="muted">
+                      <span>Not created</span>
+                    </StatusBadge>
+                  )}
+                </div>
+                <p className="mt-2.5 max-w-prose type-helper text-muted-foreground [overflow-wrap:anywhere]">
+                  {!profile
+                    ? "Fill in the identity below and create the profile. Nothing is public until you create it and set the status to Published."
+                    : profile.discovery_status === "published"
+                      ? "This profile is published, so it is discoverable on the public Cartel Network."
+                      : "This profile is saved but not discoverable on the public Cartel Network. Set the status to Published when you are ready."}
+                </p>
+                {profile?.public_slug || form.public_slug ? (
+                  <div className="mt-3 min-w-0 rounded-md border border-border-subtle bg-background/40 px-3 py-2">
+                    <p className="type-eyebrow text-muted-foreground">
+                      {profile?.public_slug ? "Network address" : "Planned network address"}
+                    </p>
+                    <p className="mt-1 min-w-0 type-technical text-foreground [overflow-wrap:anywhere]">
+                      /network/project/{profile?.public_slug ?? form.public_slug}
+                    </p>
+                  </div>
                 ) : null}
               </div>
-              <p className="mt-2 max-w-prose text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-                {!profile
-                  ? "Fill in the identity below and create the profile. Nothing is public until you create it and set the status to Published."
-                  : profile.discovery_status === "published"
-                    ? "This profile is published, so it is discoverable on the public Cartel Network."
-                    : "This profile is saved but not discoverable on the public Cartel Network. Set the status to Published when you are ready."}
-              </p>
-              {profile?.public_slug ? (
-                <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">
-                  Network address:{" "}
-                  <span className="text-foreground">/network/project/{profile.public_slug}</span>
-                </p>
-              ) : form.public_slug ? (
-                <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">
-                  Planned network address:{" "}
-                  <span className="text-foreground">/network/project/{form.public_slug}</span>
-                </p>
-              ) : null}
             </div>
-            <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
               {saveButton}
               {profile && profile.discovery_status === "published" && profile.public_slug ? (
                 <Button asChild variant="outline" className="min-h-11">
@@ -432,6 +449,7 @@ function ProjectProfilePage() {
             </div>
           </div>
         </Section>
+
 
         {profile ? (
           <Section
