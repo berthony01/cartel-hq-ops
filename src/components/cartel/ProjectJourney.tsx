@@ -288,7 +288,7 @@ function StageRow({
           </StatusBadge>
         ) : blocked ? (
           <StatusBadge tone="muted">
-            <span>BLOCKED</span>
+            <span>{stage.lockedLabel ?? "BLOCKED"}</span>
           </StatusBadge>
         ) : isNext ? (
           <StatusBadge tone="gold">
