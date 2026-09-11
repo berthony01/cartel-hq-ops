@@ -1152,7 +1152,7 @@ function LaunchControlPage() {
                 No launches yet. Create a draft launch to begin the lifecycle.
               </p>
             ) : (
-              <ul className="grid gap-2 sm:grid-cols-2 [&>*]:min-w-0">
+              <ul className="grid gap-2.5 sm:grid-cols-2 [&>*]:min-w-0">
                 {launches.map((launch) => {
                   const s = toLaunchStatus(launch.status);
                   const active = launch.id === selectedId;
@@ -1161,28 +1161,38 @@ function LaunchControlPage() {
                       <button
                         type="button"
                         onClick={() => setSelectedId(launch.id)}
-                        className={`flex w-full min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-3 text-left transition-colors ${
+                        aria-current={active ? "true" : undefined}
+                        className={`hover-lift flex w-full min-w-0 items-start gap-3 rounded-lg border px-3.5 py-3 text-left ${
                           active
-                            ? "border-gold/50 bg-gold/5"
-                            : "border-border bg-background/40 hover:bg-surface-raised/60"
+                            ? "border-gold/55 bg-gold/8 shadow-[var(--glow-gold)]"
+                            : "border-border-subtle bg-background/40"
                         }`}
                       >
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-semibold text-foreground">
+                        <span
+                          className={`mt-1.5 size-2 shrink-0 rounded-full ${
+                            active ? "bg-gold" : "bg-border-strong"
+                          }`}
+                          aria-hidden="true"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block min-w-0 truncate font-display text-base uppercase leading-tight text-foreground">
                             {launch.token_name}
                           </span>
-                          <span className="block truncate text-xs text-muted-foreground">
+                          <span className="mt-0.5 block min-w-0 truncate type-technical text-muted-foreground">
                             {launch.ticker} · {launch.chain} · /{launch.public_slug}
                           </span>
+                          <span className="mt-2 block">
+                            <StatusBadge tone={STATUS_TONE[s]}>
+                              <span>{LAUNCH_STATUS_LABELS[s]}</span>
+                            </StatusBadge>
+                          </span>
                         </span>
-                        <StatusBadge tone={STATUS_TONE[s]}>
-                          <span>{LAUNCH_STATUS_LABELS[s]}</span>
-                        </StatusBadge>
                       </button>
                     </li>
                   );
                 })}
               </ul>
+
             )}
           </Section>
 
