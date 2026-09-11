@@ -42,6 +42,8 @@ import { InlineRow } from "@/components/cartel/InlineRow";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { ProjectJourneyPanel } from "@/components/cartel/ProjectJourney";
+import { Button } from "@/components/ui/button";
+
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
