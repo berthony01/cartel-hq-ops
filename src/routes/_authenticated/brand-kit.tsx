@@ -320,6 +320,43 @@ function BrandKitPage() {
         </Link>
       </RelatedLinks>
 
+      {workspaceId ? (
+        <section className="surface-command overflow-hidden rounded-lg p-4 sm:p-6" aria-labelledby="brand-command-title">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+            <div className="min-w-0">
+              <p className="type-eyebrow text-gold">Creative source of truth</p>
+              <h2 id="brand-command-title" className="mt-2 font-display text-2xl uppercase leading-none text-foreground sm:text-3xl [overflow-wrap:anywhere]">
+                {form.brand_name.trim() || workspace?.name || "Project identity"}
+                {form.ticker.trim() ? <span className="ml-2 text-gold">{form.ticker}</span> : null}
+              </h2>
+              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                The identity, voice and visual rules Sticker Lab uses when creating for this project. Files remain in Asset Vault; this page defines how they should be used.
+              </p>
+            </div>
+            <dl className="grid grid-cols-3 gap-2 lg:min-w-[22rem]">
+              <div className="surface-quiet min-w-0 rounded-md p-3">
+                <dt className="type-eyebrow text-muted-foreground">Kit state</dt>
+                <dd className="mt-1.5 truncate font-display text-lg leading-none text-gold">
+                  {brandKitQuery.isLoading ? "Loading" : loaded ? "Saved" : "New"}
+                </dd>
+              </div>
+              <div className="surface-quiet min-w-0 rounded-md p-3">
+                <dt className="type-eyebrow text-muted-foreground">Character</dt>
+                <dd className="mt-1.5 truncate font-display text-lg leading-none text-foreground">
+                  {lockForm.enabled ? "Locked" : "Open"}
+                </dd>
+              </div>
+              <div className="surface-quiet min-w-0 rounded-md p-3">
+                <dt className="type-eyebrow text-muted-foreground">References</dt>
+                <dd className="mt-1.5 font-display text-lg leading-none text-pepe">
+                  {assetsQuery.isLoading ? "—" : brandAssets.length}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </section>
+      ) : null}
+
       {!workspaceLoading && !workspaceId ? (
         <EmptyState
           icon={Palette}
@@ -336,7 +373,12 @@ function BrandKitPage() {
             }}
             className="space-y-4 sm:space-y-6"
           >
-            <Section variant="surface" title="Identity">
+            <Section
+              variant="primary"
+              leading={<Palette className="size-4" aria-hidden="true" />}
+              title="Core identity"
+              description="The name and positioning that anchor every creative output."
+            >
               <div className="grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
                 <div>
                   <Label htmlFor="brand_name">Brand name</Label>
@@ -371,7 +413,7 @@ function BrandKitPage() {
               </div>
             </Section>
 
-            <Section variant="surface" title="Links">
+            <Section variant="surface" title="Official links" description="Canonical destinations available to project creative.">
               <div className="grid gap-4 md:grid-cols-3 [&>*]:min-w-0">
                 <div>
                   <Label htmlFor="website_url">Website</Label>
@@ -406,7 +448,7 @@ function BrandKitPage() {
               </div>
             </Section>
 
-            <Section variant="surface" title="Visual system">
+            <Section variant="surface" title="Visual system" description="Approved colour and type direction for consistent artwork.">
               <div className="grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
                 <div>
                   <Label htmlFor="colors">Colours</Label>
@@ -439,7 +481,7 @@ function BrandKitPage() {
                     {toList(form.colors).map((c) => (
                       <span
                         key={c}
-                        className="flex items-center gap-2 rounded-md border border-border bg-surface px-2 py-1 text-xs text-foreground"
+                        className="surface-quiet flex min-h-10 items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-foreground"
                       >
                         <span
                           className="size-4 rounded-sm border border-border"
@@ -454,7 +496,7 @@ function BrandKitPage() {
               </div>
             </Section>
 
-            <Section variant="surface" title="AI style guidance">
+            <Section variant="surface" title="Voice & style guidance" description="Creative direction, approved language and firm boundaries for generation.">
               <div className="grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
                 <div className="md:col-span-2">
                   <Label htmlFor="ai_style_notes">Style notes</Label>
@@ -490,7 +532,7 @@ function BrandKitPage() {
             </Section>
 
             <Section
-              variant="surface"
+              variant={lockForm.enabled ? "primary" : "surface"}
               leading={<ShieldCheck className="size-4" aria-hidden="true" />}
               title="Character Lock"
               description="Defines the canonical character identity that Sticker Lab V2 reuses across packs — who the subject is, what must stay the same, and what must never appear. Saved here; current generation behaviour is unchanged."
@@ -603,13 +645,13 @@ function BrandKitPage() {
                             type="button"
                             aria-pressed={selected}
                             onClick={() => toggleCanonical(asset.id)}
-                            className={`w-full overflow-hidden rounded-md border p-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                            className={`hover-lift min-h-11 w-full overflow-hidden rounded-md border p-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                               selected
                                 ? "border-gold bg-gold/10"
                                 : "border-border/70 hover:border-gold/40"
                             }`}
                           >
-                            <span className="flex aspect-square items-center justify-center overflow-hidden rounded-sm bg-background/40">
+                             <span className="flex aspect-square items-center justify-center overflow-hidden rounded-sm border border-border-subtle bg-background/40">
                               {urls[asset.storage_path] ? (
                                 <img
                                   src={urls[asset.storage_path]}
@@ -697,8 +739,8 @@ function BrandKitPage() {
               <>
                 <ul className="grid grid-cols-3 gap-2 sm:grid-cols-6 [&>*]:min-w-0">
                   {brandAssets.slice(0, 6).map((asset: MediaAsset) => (
-                    <li key={asset.id} className="rounded-md border border-border/70 p-1.5">
-                      <div className="flex aspect-square items-center justify-center overflow-hidden rounded-sm bg-background/40">
+                    <li key={asset.id} className="surface-elevated hover-lift rounded-md p-1.5">
+                      <div className="flex aspect-square items-center justify-center overflow-hidden rounded-sm border border-border-subtle bg-background/40">
                         {urls[asset.storage_path] ? (
                           <img
                             src={urls[asset.storage_path]}
