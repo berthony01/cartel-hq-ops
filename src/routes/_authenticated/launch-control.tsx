@@ -1629,7 +1629,7 @@ function LaunchControlPage() {
             <>
             <SectionNav
               label="Launch Control sections"
-              items={LAUNCH_SECTIONS}
+              items={sectionItems}
               activeId={activeSection}
               onChange={selectSection}
             />
