@@ -19,12 +19,12 @@ import { StatusBadge } from "@/components/cartel/StatusBadge";
 import {
   canWithdrawProductionRequest,
   evaluateProductionRequestEligibility,
+  exactManualRecipientMatch,
   groupDigits,
   isValidRecipientAddress,
   normalizeRecipientAddress,
   parseWholeSupply,
   productionRequestCopy,
-  sameAddress,
   type ProductionDeploymentRequest,
   type ProductionRequestEligibilityHints,
 } from "@/lib/launch-production-request";
@@ -166,8 +166,11 @@ export function ProductionDeploymentRequestPanel({
   }, []);
 
   const recipientValid = isValidRecipientAddress(recipient);
+  // A wallet-captured address is proven by the connector for this session, so
+  // it is exempt from retyping. Manually typed input must match EXACTLY,
+  // including letter case.
   const manualConfirmed =
-    recipientSource === "wallet" || sameAddress(recipient, recipientConfirm);
+    recipientSource === "wallet" || exactManualRecipientMatch(recipient, recipientConfirm);
   const canSubmit =
     !disabled &&
     !submitting &&
@@ -452,7 +455,9 @@ export function ProductionDeploymentRequestPanel({
         ) : null}
         {recipientSource === "manual" && recipientValid ? (
           <div className="min-w-0 space-y-2">
-            <Label htmlFor="production-recipient-confirm">Re-type the wallet address</Label>
+            <Label htmlFor="production-recipient-confirm">
+              Re-type the wallet address exactly, including letter case
+            </Label>
             <Input
               id="production-recipient-confirm"
               className="min-h-11 font-mono"
@@ -466,7 +471,8 @@ export function ProductionDeploymentRequestPanel({
             />
             {recipientConfirm.trim() !== "" && !manualConfirmed ? (
               <p className="text-xs leading-relaxed text-signal">
-                The two addresses do not match.
+                The two entries are not identical. They must match exactly, character for
+                character, including upper and lower case.
               </p>
             ) : null}
           </div>

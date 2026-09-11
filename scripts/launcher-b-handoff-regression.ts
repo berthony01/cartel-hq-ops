@@ -8,9 +8,13 @@
  *
  * Run: bunx tsx scripts/launcher-b-handoff-regression.ts  (or `bun run`)
  */
+import { readFileSync } from "node:fs";
+
 import {
   canWithdrawProductionRequest,
   evaluateProductionRequestEligibility,
+  exactManualRecipientMatch,
+  hasRegistrationRecord,
   groupDigits,
   isClosedProductionRequest,
   isCompletedProductionRequest,
@@ -24,6 +28,7 @@ import {
   type ProductionDeploymentRequest,
   type ProductionRequestEligibilityHints,
 } from "../src/lib/launch-production-request";
+import { hasSchedule } from "../src/lib/launch-control";
 import {
   computeProjectJourney,
   type JourneyInput,
@@ -441,6 +446,153 @@ check(
 check(
   "journey: unreadable request state is not actionable",
   !deploymentStage(journeyInput({ productionRequestUnavailable: true })).actionable,
+);
+
+// ---------------------------------------------------------------------------
+// 7. B2.1 — exact manual recipient confirmation
+// ---------------------------------------------------------------------------
+
+const ADDR_LOWER = "0xabcdef0123456789abcdef0123456789abcdef01";
+const ADDR_MIXED = "0xAbCdEf0123456789abcdef0123456789ABCDEF01";
+
+check(
+  "manual confirm: identical entry accepted",
+  exactManualRecipientMatch(ADDR_LOWER, ADDR_LOWER),
+);
+check(
+  "manual confirm: mixed-case variant of the same address rejected",
+  !exactManualRecipientMatch(ADDR_LOWER, ADDR_MIXED),
+);
+check(
+  "manual confirm: checksum-cased original still accepts an identical retype",
+  exactManualRecipientMatch(ADDR_MIXED, ADDR_MIXED),
+);
+check(
+  "manual confirm: a different address rejected",
+  !exactManualRecipientMatch(ADDR_LOWER, `0x${"1".repeat(40)}`),
+);
+check(
+  "manual confirm: outer whitespace ignored",
+  exactManualRecipientMatch(`  ${ADDR_LOWER}`, `${ADDR_LOWER}  `),
+);
+check("manual confirm: empty confirmation rejected", !exactManualRecipientMatch(ADDR_LOWER, ""));
+check(
+  "manual confirm: whitespace-only confirmation rejected",
+  !exactManualRecipientMatch(ADDR_LOWER, "   "),
+);
+check("manual confirm: null inputs rejected", !exactManualRecipientMatch(null, null));
+check(
+  "manual confirm: case-insensitive sameAddress is unchanged for identity use",
+  sameAddress(ADDR_LOWER, ADDR_MIXED),
+);
+
+// The wallet exemption lives in a component branch, so it is pinned by static
+// assertion on the source rather than a fabricated runtime test.
+const panelSource = readFileSync(
+  new URL("../src/components/cartel/ProductionDeploymentRequestPanel.tsx", import.meta.url),
+  "utf8",
+);
+check(
+  "panel: wallet source is exempt, manual source uses the exact helper",
+  /recipientSource === "wallet" \|\| exactManualRecipientMatch\(recipient, recipientConfirm\)/.test(
+    panelSource,
+  ),
+);
+check(
+  "panel: manual confirmation no longer uses the case-insensitive comparison",
+  !/sameAddress\(recipient, recipientConfirm\)/.test(panelSource),
+);
+
+// ---------------------------------------------------------------------------
+// 8. B2.1 — schedule + registration parity with the server rules
+// ---------------------------------------------------------------------------
+
+type ScheduleRow = {
+  launch_at: string | null;
+  launch_window_start: string | null;
+  launch_window_end: string | null;
+};
+const T = "2026-10-01T00:00:00Z";
+const schedule = (row: ScheduleRow) => hasSchedule(row);
+
+check(
+  "schedule: launch_at only is set",
+  schedule({ launch_at: T, launch_window_start: null, launch_window_end: null }),
+);
+check(
+  "schedule: window_start only is NOT set",
+  !schedule({ launch_at: null, launch_window_start: T, launch_window_end: null }),
+);
+check(
+  "schedule: window_end only is NOT set",
+  !schedule({ launch_at: null, launch_window_start: null, launch_window_end: T }),
+);
+check(
+  "schedule: complete window is set",
+  schedule({ launch_at: null, launch_window_start: T, launch_window_end: T }),
+);
+check(
+  "schedule: nothing set is not set",
+  !schedule({ launch_at: null, launch_window_start: null, launch_window_end: null }),
+);
+
+check(
+  "registration: no fields → not recorded",
+  !hasRegistrationRecord({
+    officialContractAddress: null,
+    officialContractDeploymentId: null,
+    contractRegisteredAt: null,
+  }),
+);
+const registrationCases: Array<[string, Parameters<typeof hasRegistrationRecord>[0]]> = [
+  ["official_contract_address", { officialContractAddress: `0x${"2".repeat(40)}` }],
+  ["official_contract_deployment_id", { officialContractDeploymentId: "dep-1" }],
+  ["contract_registered_at", { contractRegisteredAt: T }],
+];
+for (const [field, fields] of registrationCases) {
+  check(`registration: ${field} alone counts as recorded`, hasRegistrationRecord(fields));
+  check(
+    `registration: ${field} alone blocks a new request`,
+    !evaluateProductionRequestEligibility({
+      ...eligibleHints,
+      registrationRecorded: hasRegistrationRecord(fields),
+    }).eligible,
+  );
+}
+
+// The Launch Control hint must use the shared rules, not a widened local one.
+const launchControlSource = readFileSync(
+  new URL("../src/routes/_authenticated/launch-control.tsx", import.meta.url),
+  "utf8",
+);
+check(
+  "launch control: schedule hint uses the canonical hasSchedule rule",
+  /scheduleSet: selected \? hasSchedule\(selected\) : false/.test(launchControlSource),
+);
+check(
+  "launch control: registration hint uses all three fields",
+  /registrationRecorded: hasRegistrationRecord\(\{[\s\S]{0,400}officialContractDeploymentId/.test(
+    launchControlSource,
+  ),
+);
+
+// ---------------------------------------------------------------------------
+// 9. B2.1 — Project Journey deployment deep link is unchanged
+// ---------------------------------------------------------------------------
+
+const journeySource = readFileSync(
+  new URL("../src/components/cartel/ProjectJourney.tsx", import.meta.url),
+  "utf8",
+);
+check(
+  "journey link: deployment stage targets the Contract section",
+  /deployment: "lc-contract"/.test(journeySource),
+);
+check(
+  "journey link: destination carries the primary launch id and section",
+  /const search = primaryLaunchId \? \{ launch: primaryLaunchId, section \} : \{ section \}/.test(
+    journeySource,
+  ),
 );
 
 // ---------------------------------------------------------------------------

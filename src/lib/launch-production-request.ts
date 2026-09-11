@@ -255,6 +255,41 @@ export function sameAddress(a: string | null, b: string | null): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
+/**
+ * B2.1 — manual re-type confirmation ONLY.
+ *
+ * Deliberately stricter than `sameAddress`: the second entry must match the
+ * first character-for-character, including letter case. Nothing is lowercased,
+ * uppercased or checksum-normalised before the comparison, so a mixed-case
+ * variant of the same hex address is rejected. Only outer whitespace is
+ * ignored, because the submit path trims it anyway.
+ *
+ * This is a typo guard for hand-typed input; it holds no authority.
+ */
+export function exactManualRecipientMatch(a: string | null, b: string | null): boolean {
+  const left = (a ?? "").trim();
+  const right = (b ?? "").trim();
+  if (left === "" || right === "") return false;
+  return left === right;
+}
+
+/**
+ * B2.1 — mirrors the server registration rule exactly: an official contract is
+ * considered recorded when ANY of the three registration fields is present.
+ * Presentation hint only; the database re-derives and remains authoritative.
+ */
+export function hasRegistrationRecord(fields: {
+  officialContractAddress?: string | null;
+  officialContractDeploymentId?: string | null;
+  contractRegisteredAt?: string | null;
+}): boolean {
+  return Boolean(
+    fields.officialContractAddress ||
+      fields.officialContractDeploymentId ||
+      fields.contractRegisteredAt,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Status presentation + client-known eligibility hints
 // ---------------------------------------------------------------------------
