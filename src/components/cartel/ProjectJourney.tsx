@@ -129,10 +129,11 @@ function JourneyLink({
 }
 
 function blockedGuidance(stage: JourneyStage): string {
-  if (stage.detail) return stage.detail;
   if (stage.status === "unavailable") {
-    return "Current state could not be verified. Review the destination before continuing.";
+    return stage.detail ?? "Current state could not be verified. Review the destination before continuing.";
   }
+  if (stage.dependency) return stage.dependency;
+  if (stage.detail) return stage.detail;
   return "Complete the required earlier stage before this becomes available.";
 }
 
