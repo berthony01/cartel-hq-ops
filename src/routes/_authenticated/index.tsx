@@ -16,11 +16,14 @@ import {
   nextLaunchStatus,
   getLaunchWatchSummary,
   formatTimestamp,
+  selectPrimaryProjectLaunch,
   LAUNCH_STATUS_LABELS,
   LAUNCH_STATUS_HELP,
   type LaunchStatus,
   type LaunchRow,
 } from "@/lib/launch-control";
+import { getProjectProfile } from "@/lib/project-profile";
+
 import {
   fetchDropStatus,
   sentToday,
