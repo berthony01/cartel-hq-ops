@@ -4,8 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Bell,
-
   Check,
+  ChevronDown,
   Copy,
   ExternalLink,
   IdCard,
@@ -14,8 +14,10 @@ import {
   Plus,
   Rocket,
   Save,
+  ShieldCheck,
   Trash2,
 } from "lucide-react";
+
 import { toast } from "sonner";
 import { useWorkspace } from "@/lib/workspace-context";
 import { getProjectProfile } from "@/lib/project-profile";
