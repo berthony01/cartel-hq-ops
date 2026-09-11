@@ -218,6 +218,10 @@ const STAGE_COPY: Record<
     to: JourneyRoute;
     actionLabel: string;
     explanation: string;
+    /** Display-only wording used when the stage is not yet available. */
+    reviewLabel?: string;
+    lockedLabel?: string;
+    dependency?: string;
   }
 > = {
   project_profile: {
