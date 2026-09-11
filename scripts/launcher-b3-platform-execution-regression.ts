@@ -10,6 +10,7 @@
  *
  * Run: bunx tsx scripts/launcher-b3-platform-execution-regression.ts
  */
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 let passed = 0;
