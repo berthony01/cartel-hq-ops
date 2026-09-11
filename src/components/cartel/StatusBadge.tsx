@@ -4,10 +4,10 @@ import { cn } from "@/lib/utils";
 type Tone = "gold" | "green" | "red" | "muted";
 
 const TONES: Record<Tone, string> = {
-  gold: "border-gold/40 bg-gold/10 text-gold",
-  green: "border-pepe/40 bg-pepe/10 text-pepe",
-  red: "border-signal/40 bg-signal/10 text-signal",
-  muted: "border-border bg-surface-raised text-muted-foreground",
+  gold: "border-gold/35 bg-gold/8 text-gold",
+  green: "border-pepe/35 bg-pepe/8 text-pepe",
+  red: "border-signal/40 bg-signal/8 text-signal",
+  muted: "border-border-subtle bg-surface-overlay/45 text-muted-foreground",
 };
 
 export function StatusBadge({
@@ -22,7 +22,7 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex min-w-0 max-w-full items-center gap-1 overflow-hidden rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase leading-tight tracking-[0.12em]",
+        "inline-flex min-w-0 max-w-full items-center gap-1 overflow-hidden rounded-sm border px-2 py-1 text-[10px] font-bold uppercase leading-tight tracking-[0.12em]",
         "whitespace-nowrap text-ellipsis",
         "sm:gap-1.5 sm:px-2.5 sm:py-1 sm:text-[11px] sm:tracking-[0.14em]",
         "[&>span]:min-w-0 [&>span]:truncate",

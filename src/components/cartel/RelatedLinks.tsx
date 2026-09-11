@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
  */
 
 export const relatedLinkClass =
-  "touch-target inline-flex min-h-11 items-center gap-1.5 rounded-full border border-border/70 bg-surface-raised/50 px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-gold/40 hover:text-foreground";
+  "touch-target inline-flex min-h-11 items-center gap-1.5 rounded-md border border-border-subtle bg-surface-overlay/35 px-3 py-2 text-xs font-medium text-muted-foreground transition-[border-color,background-color,color,transform] hover:-translate-y-px hover:border-gold/35 hover:bg-gold/5 hover:text-foreground";
 
 export function RelatedLinks({
   label = "Related",
@@ -24,11 +24,11 @@ export function RelatedLinks({
     <nav
       aria-label={label}
       className={cn(
-        "flex min-w-0 flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-background/20 px-3 py-2.5",
+        "surface-quiet flex min-w-0 flex-wrap items-center gap-2 rounded-lg px-3 py-2.5",
         className,
       )}
     >
-      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70">
+      <span className="type-eyebrow shrink-0 text-muted-foreground/70">
         {label}
       </span>
       {children}

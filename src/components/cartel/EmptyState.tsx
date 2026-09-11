@@ -18,11 +18,11 @@ export function EmptyState({
 }: EmptyStateProps) {
   return (
     <div
-      className={`flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-background/40 text-center ${
-        compact ? "gap-2 px-4 py-6" : "gap-3 px-6 py-10"
+      className={`surface-quiet flex flex-col items-center justify-center rounded-lg border-dashed text-center ${
+        compact ? "gap-2 px-4 py-6" : "gap-3 px-5 py-9 sm:px-6 sm:py-10"
       }`}
     >
-      <span className="flex size-10 items-center justify-center rounded-md border border-border bg-surface-raised text-gold">
+      <span className="flex size-10 items-center justify-center rounded-md border border-gold/25 bg-gold/5 text-gold shadow-[0_8px_24px_-18px_var(--gold)]">
         <Icon className="size-5" aria-hidden="true" />
       </span>
       <p className="text-sm font-semibold text-foreground">{title}</p>

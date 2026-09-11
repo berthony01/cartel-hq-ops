@@ -47,7 +47,7 @@ function ProgressBar({ value, total }: { value: number; total: number }) {
       aria-valuemax={total}
       aria-valuenow={value}
       aria-label={`Project journey: ${value} of ${total} stages complete`}
-      className="h-2 w-full overflow-hidden rounded-full border border-border/70 bg-surface-raised"
+      className="h-1.5 w-full overflow-hidden rounded-full border border-border-subtle bg-surface-quiet"
     >
       <div
         className={cn("h-full rounded-full transition-all", value === total ? "bg-pepe" : "bg-gold")}
@@ -69,15 +69,15 @@ function NextActionBlock({
   return (
     <div
       className={cn(
-        "min-w-0 rounded-lg border p-3 sm:p-4",
+        "min-w-0 rounded-md border p-3.5 sm:p-4",
         done ? "border-pepe/40 bg-pepe/5" : "border-gold/40 bg-gold/5",
       )}
     >
-      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
         <div className="min-w-0">
           <p
             className={cn(
-              "text-[10px] font-semibold uppercase tracking-[0.2em]",
+            "type-eyebrow",
               done ? "text-pepe" : "text-gold",
             )}
           >
@@ -92,7 +92,7 @@ function NextActionBlock({
             </p>
           )}
         </div>
-        <Button asChild size="sm" className="min-h-11 shrink-0">
+        <Button asChild size="sm" className="min-h-11 w-full shrink-0 sm:w-auto">
           <Link to={nextAction.to}>
             {nextAction.label}
             <ArrowRight className="size-4" aria-hidden="true" />
@@ -115,7 +115,7 @@ function StageRow({ stage, isNext }: { stage: JourneyStage; isNext: boolean }) {
   return (
     <li
       className={cn(
-        "flex min-w-0 items-start gap-2.5 rounded-md border px-3 py-2.5",
+        "grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2.5 gap-y-2 rounded-md border px-3 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto]",
         complete
           ? "border-pepe/30 bg-pepe/5"
           : isNext
@@ -143,7 +143,7 @@ function StageRow({ stage, isNext }: { stage: JourneyStage; isNext: boolean }) {
           {stage.detail ?? stage.description}
         </span>
       </span>
-      <span className="shrink-0">
+      <span className="col-start-2 shrink-0 sm:col-start-3 sm:row-start-1">
         {complete ? (
           <StatusBadge tone="green">
             <span>Done</span>
@@ -232,7 +232,7 @@ export function ProjectJourneyPanel({ workspaceId, workspaceName }: SharedProps)
   return (
     <Section
       variant="primary"
-      className="rise-in min-w-0"
+       className="rise-in min-w-0 border-gold/20"
       title={heading}
       description="Every stage is read from your real project state. It is a recommended path, not a locked wizard."
       leading={<ShieldCheck className="size-5" aria-hidden="true" />}
@@ -243,7 +243,7 @@ export function ProjectJourneyPanel({ workspaceId, workspaceName }: SharedProps)
           </span>
         </StatusBadge>
       }
-      contentClassName="space-y-4"
+      contentClassName="space-y-5"
     >
       <ProgressBar value={journey.completedCount} total={journey.totalCount} />
       <NextActionBlock journey={journey} />

@@ -112,12 +112,12 @@ function SnapshotCard({
   return (
     <Section
       variant="surface"
-      className="rise-in flex min-w-0 flex-col"
+      className="rise-in group flex min-w-0 flex-col transition-[border-color,transform] hover:-translate-y-0.5 hover:border-gold/25"
       title={title}
       actions={badge}
-      contentClassName="flex flex-1 flex-col gap-2"
+      contentClassName="flex flex-1 flex-col gap-2.5"
     >
-      <p className="min-w-0 text-sm font-medium text-foreground [overflow-wrap:anywhere]">
+      <p className="min-w-0 text-sm font-semibold text-foreground [overflow-wrap:anywhere]">
         {primary}
       </p>
       <p className="min-w-0 text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
@@ -125,9 +125,10 @@ function SnapshotCard({
       </p>
       <Link
         to={to}
-        className="mt-auto inline-flex w-fit text-xs uppercase tracking-[0.14em] text-gold hover:underline"
+        className="touch-target mt-auto inline-flex w-full items-center justify-between gap-2 border-t border-border-subtle pt-3 text-xs font-semibold uppercase tracking-[0.12em] text-gold sm:w-fit sm:border-0 sm:pt-1"
       >
         {linkLabel}
+        <ChevronRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
       </Link>
     </Section>
   );
@@ -319,17 +320,17 @@ function HqDashboard() {
           : "No active drop schedule for this project.";
 
   return (
-    <div className="space-y-5 sm:space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       <PageHeader
         eyebrow="Command Center"
         title="CARTEL HQ"
-        description="The operating layer for PEPECARTEL creative tools, campaigns, creators, and distribution."
+        description={
+          workspace?.name
+            ? `${workspace.name} command surface for launch readiness, community operations and creative deployment.`
+            : "The operating layer for project identity, launch readiness, community operations and creative deployment."
+        }
         status="Private Beta"
       />
-
-      <ProjectJourneyPanel workspaceId={workspaceId} workspaceName={workspace?.name ?? null} />
-
-
       {!workspaceId ? (
         <Section
           variant="surface"
@@ -346,7 +347,11 @@ function HqDashboard() {
       ) : (
         <>
           {/* One operational hero */}
-          <Section variant="hero" className="min-w-0">
+          <Section
+            variant="hero"
+            className="surface-command relative min-w-0 overflow-hidden"
+            headerClassName="relative z-10"
+          >
             {launchesQuery.isPending ? (
               <p className="text-sm text-muted-foreground">Loading launch state…</p>
             ) : launchesUnavailable ? (
@@ -385,14 +390,14 @@ function HqDashboard() {
               </div>
             ) : (
 
-              <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-                <div className="min-w-0 space-y-3">
+              <div className="relative z-10 grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(17rem,0.75fr)] lg:gap-8">
+                <div className="min-w-0 space-y-4">
                   <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
                     <div className="min-w-0">
-                      <p className="type-meta text-gold">
+                      <p className="type-eyebrow text-gold">
                         {status === "COMPLETED" ? "Latest launch" : "Active launch"}
                       </p>
-                      <h2 className="mt-1 min-w-0 font-display text-2xl uppercase leading-tight text-foreground [overflow-wrap:anywhere] sm:text-3xl">
+                      <h2 className="mt-2 min-w-0 font-display text-3xl uppercase leading-none text-foreground [overflow-wrap:anywhere] sm:text-4xl">
                         {primaryLaunch.token_name}
                       </h2>
                       <p className="mt-1 text-xs text-muted-foreground [overflow-wrap:anywhere]">
@@ -406,7 +411,7 @@ function HqDashboard() {
                   <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
                     {LAUNCH_STATUS_HELP[status!]}
                   </p>
-                  <dl className="grid gap-3 sm:grid-cols-3">
+                  <dl className="grid gap-3 border-t border-border-subtle pt-4 sm:grid-cols-3">
                     <Fact label="Schedule" value={scheduleSummary(primaryLaunch)} />
                     <Fact
                       label="Launch Watch"
@@ -433,7 +438,8 @@ function HqDashboard() {
                   </dl>
                 </div>
 
-                <div className="min-w-0 space-y-3">
+                <div className="surface-quiet min-w-0 space-y-4 rounded-md p-4">
+                  <p className="type-eyebrow text-muted-foreground">Operational focus</p>
                   <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
                     <Fact
                       label="Communities"
@@ -460,12 +466,12 @@ function HqDashboard() {
                       }
                     />
                   </dl>
-                  <p className="min-w-0 rounded-md border border-gold/30 bg-gold/5 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-gold [overflow-wrap:anywhere]">
+                  <p className="min-w-0 border-l-2 border-gold bg-gold/5 px-3 py-2.5 text-xs font-semibold uppercase tracking-[0.1em] text-gold [overflow-wrap:anywhere]">
                     {nextLine}
                   </p>
                   <Link
                     to="/launch-control"
-                    className="touch-target inline-flex w-fit items-center gap-1.5 rounded-md border border-gold/50 bg-gold/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-gold transition-colors hover:bg-gold/20"
+                    className="touch-target inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-gold/40 bg-gold px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-primary-foreground transition-[background-color,transform] hover:-translate-y-px hover:bg-gold/90 sm:w-fit"
                   >
                     Open Launch Control <ChevronRight className="size-4" aria-hidden="true" />
                   </Link>
@@ -473,6 +479,8 @@ function HqDashboard() {
               </div>
             )}
           </Section>
+
+          <ProjectJourneyPanel workspaceId={workspaceId} workspaceName={workspace?.name ?? null} />
 
           {/* Attention required — only when real issues exist */}
           {attention.length > 0 ? (
@@ -502,7 +510,16 @@ function HqDashboard() {
           ) : null}
 
           {/* Operational snapshot */}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 [&>*]:min-w-0">
+          <section aria-labelledby="operational-snapshot-heading" className="space-y-3">
+            <div className="flex min-w-0 items-end justify-between gap-3">
+              <div className="min-w-0">
+                <p className="type-eyebrow text-gold">Live workspace state</p>
+                <h2 id="operational-snapshot-heading" className="mt-1 text-base font-semibold text-foreground">
+                  Operational snapshot
+                </h2>
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 [&>*]:min-w-0">
             <SnapshotCard
               title="Launch"
               badge={
@@ -604,7 +621,8 @@ function HqDashboard() {
               to="/distribution"
               linkLabel="Sticker Drops"
             />
-          </div>
+            </div>
+          </section>
 
           {/* Recent content */}
           <Section

@@ -48,6 +48,10 @@
   --color-ivory: var(--ivory);
   --color-surface: var(--surface);
   --color-surface-raised: var(--surface-raised);
+  --color-surface-quiet: var(--surface-quiet);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -72,6 +76,8 @@
   --foreground: oklch(0.918 0.026 92);
   --surface: oklch(0.195 0.002 60); /* #121212 */
   --surface-raised: oklch(0.235 0.004 70);
+  --surface-quiet: oklch(0.175 0.002 60);
+  --surface-overlay: oklch(0.255 0.006 78);
   --card: oklch(0.195 0.002 60);
   --card-foreground: oklch(0.918 0.026 92);
   --popover: oklch(0.205 0.003 60);
@@ -96,6 +102,8 @@
   --destructive-foreground: oklch(0.965 0.01 90);
 
   --border: oklch(0.3 0.014 82 / 55%);
+  --border-subtle: oklch(0.33 0.012 82 / 32%);
+  --border-strong: oklch(0.45 0.035 82 / 68%);
   --input: oklch(0.32 0.016 82 / 60%);
   --ring: oklch(0.755 0.132 84.5);
 
@@ -115,14 +123,15 @@
   --sidebar-ring: oklch(0.755 0.132 84.5);
 
   --gradient-gold: linear-gradient(135deg, var(--gold), var(--gold-deep));
-  --gradient-hq: radial-gradient(
-    120% 120% at 0% 0%,
-    color-mix(in oklab, var(--gold) 16%, transparent),
-    transparent 55%
+  --gradient-hq: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--gold) 10%, transparent),
+    transparent 42%
   );
-  --shadow-cartel: 0 18px 40px -24px oklch(0 0 0 / 90%);
-  --glow-gold: 0 0 0 1px color-mix(in oklab, var(--gold) 35%, transparent),
-    0 10px 30px -18px color-mix(in oklab, var(--gold) 60%, transparent);
+  --shadow-cartel: 0 20px 55px -34px oklch(0 0 0 / 96%);
+  --shadow-cartel-soft: 0 12px 32px -28px oklch(0 0 0 / 88%);
+  --glow-gold: 0 0 0 1px color-mix(in oklab, var(--gold) 24%, transparent),
+    0 14px 36px -28px color-mix(in oklab, var(--gold) 48%, transparent);
   --transition-cartel: 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
 
   /* Mobile application metrics (Phase 1C-1) */
@@ -148,7 +157,11 @@
   }
 
   body {
-    background-color: var(--color-background);
+    background:
+      linear-gradient(color-mix(in oklab, var(--gold) 2%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in oklab, var(--gold) 2%, transparent) 1px, transparent 1px),
+      var(--color-background);
+    background-size: 64px 64px;
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
@@ -161,8 +174,13 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--gold);
-    outline-offset: 2px;
+    outline: 2px solid color-mix(in oklab, var(--gold) 90%, var(--ivory));
+    outline-offset: 3px;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--gold) 32%, transparent);
+    color: var(--ivory);
   }
 }
 
@@ -177,8 +195,8 @@
     color-mix(in oklab, var(--surface-raised) 80%, transparent),
     var(--surface)
   );
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-cartel);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-cartel-soft);
 }
 
 /* Dominant operational/status surface. One per page, later phases only. */
@@ -190,7 +208,7 @@
       color-mix(in oklab, var(--surface-raised) 88%, transparent),
       var(--surface)
     );
-  border: 1px solid color-mix(in oklab, var(--gold) 28%, var(--border));
+  border: 1px solid color-mix(in oklab, var(--gold) 32%, var(--border));
   box-shadow: var(--shadow-cartel), var(--glow-gold);
 }
 
@@ -205,6 +223,15 @@
   @media (min-width: 640px) {
     font-size: 2.25rem;
   }
+}
+
+@utility type-eyebrow {
+  font-family: var(--font-sans);
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
 }
 
 @utility type-section {
@@ -229,6 +256,37 @@
   line-height: 1.4;
   letter-spacing: 0.2em;
   text-transform: uppercase;
+}
+
+@utility type-helper {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+@utility type-technical {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+@utility surface-command {
+  background:
+    linear-gradient(135deg, color-mix(in oklab, var(--gold) 8%, transparent), transparent 44%),
+    var(--surface);
+  border: 1px solid color-mix(in oklab, var(--gold) 30%, var(--border));
+  box-shadow: var(--shadow-cartel), var(--glow-gold);
+}
+
+@utility surface-elevated {
+  background: color-mix(in oklab, var(--surface-raised) 80%, var(--surface));
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-cartel-soft);
+}
+
+@utility surface-quiet {
+  background: color-mix(in oklab, var(--surface-quiet) 88%, transparent);
+  border: 1px solid var(--border-subtle);
 }
 
 

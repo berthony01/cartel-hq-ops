@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { cn } from "@/lib/utils";
 
 type PageHeaderProps = {
@@ -22,36 +22,33 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        "rise-in flex flex-col gap-3 border-b border-border pb-4 sm:gap-4 sm:pb-6 lg:flex-row lg:items-end lg:justify-between",
+        "rise-in grid min-w-0 gap-4 border-b border-border-subtle pb-5 sm:pb-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end",
         className,
       )}
     >
       <div className="min-w-0">
         {eyebrow ? (
-          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gold sm:text-[11px]">
+          <p className="type-eyebrow text-gold">
             {eyebrow}
           </p>
         ) : null}
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-2 sm:mt-2">
-          <h1 className="min-w-0 font-display text-2xl uppercase leading-tight text-foreground sm:text-3xl lg:text-4xl lg:leading-none">
+        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+          <h1 className="min-w-0 font-display text-[2rem] uppercase leading-[0.95] text-foreground [overflow-wrap:anywhere] sm:text-[2.5rem] lg:text-5xl">
             {title}
           </h1>
           {status ? (
-            <Badge
-              variant="outline"
-              className="shrink-0 border-gold/40 text-[10px] uppercase tracking-[0.14em] text-gold sm:text-xs"
-            >
+            <StatusBadge tone="gold" className="shrink-0">
               {status}
-            </Badge>
+            </StatusBadge>
           ) : null}
         </div>
         {description ? (
-          <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-muted-foreground sm:mt-3 sm:text-sm">
+          <p className="mt-3 max-w-2xl text-[13px] leading-6 text-muted-foreground sm:text-sm">
             {description}
           </p>
         ) : null}
       </div>
-      {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+      {actions ? <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">{actions}</div> : null}
     </header>
   );
 }
