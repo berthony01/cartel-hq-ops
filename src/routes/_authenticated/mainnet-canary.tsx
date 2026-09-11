@@ -758,6 +758,7 @@ function CanaryConsole() {
       />
 
 
+      {requestMode ? null : (
       <Section
 
         variant="surface"
