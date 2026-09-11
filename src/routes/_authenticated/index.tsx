@@ -511,13 +511,11 @@ function HqDashboard() {
                   leading={<AlertTriangle className="size-4" aria-hidden="true" />}
                   title={item.text}
                   trailing={
-                    <Link
-                      to={item.to}
-                      className="whitespace-nowrap text-xs uppercase tracking-[0.14em] text-gold hover:underline"
-                    >
-                      {item.action}
-                    </Link>
+                    <Button asChild size="sm" variant="outline" className="min-h-11 shrink-0">
+                      <Link to={item.to}>{item.action}</Link>
+                    </Button>
                   }
+
                 />
               ))}
             </Section>
