@@ -169,7 +169,10 @@ export function MotionStudioPanel({
   telegramPublished: boolean;
   releasingMotion: boolean;
   releaseError: string | null;
+  /** Presentation-only signed URL for the current static source. */
+  staticPreviewUrl?: string | null;
   /** BILLABLE — only ever called from the confirmation dialog below. */
+
   onGenerate: (input: {
     stickerId: string;
     motionMode: MotionMode;
