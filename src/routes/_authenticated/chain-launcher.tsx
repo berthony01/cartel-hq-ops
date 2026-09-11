@@ -157,11 +157,21 @@ function ChainLauncherPage() {
   const hasProvider = typeof window !== "undefined" && getInjectedProvider() !== null;
   const onTestnet = chainId === ROBINHOOD_TESTNET_CHAIN_ID;
 
-  const launchesQuery = useQuery({
-    queryKey: ["chain-launcher-launches", workspaceId ?? "none"],
-    queryFn: () => listLaunches(workspaceId as string),
+  // Owner internal tooling: scoped to the active project profile and may
+  // include INTERNAL_TEST chain-test records.
+  const launcherProfileQuery = useQuery({
+    queryKey: ["project-profile", workspaceId],
+    queryFn: () => getProjectProfile(workspaceId as string),
     enabled: isPlatformOwner === true && !!workspaceId,
   });
+  const launcherProfileId = launcherProfileQuery.data?.id ?? null;
+
+  const launchesQuery = useQuery({
+    queryKey: ["chain-launcher-launches", workspaceId ?? "none", launcherProfileId],
+    queryFn: () => listLaunches(workspaceId as string, launcherProfileId as string),
+    enabled: isPlatformOwner === true && !!workspaceId && !!launcherProfileId,
+  });
+
 
   const launchesData = launchesQuery.data;
   const launches: LaunchRow[] = useMemo(() => launchesData ?? [], [launchesData]);
