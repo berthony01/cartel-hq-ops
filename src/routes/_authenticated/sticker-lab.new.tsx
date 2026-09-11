@@ -4220,7 +4220,9 @@ function StickerLabBuilder() {
                               ? motionReleaseError.message
                               : null
                           }
+                          staticPreviewUrl={mPreview?.url ?? null}
                           onReleaseMotion={(input) => void releaseCurrentMotion(input)}
+
                         />
                       </div>
                     </>
