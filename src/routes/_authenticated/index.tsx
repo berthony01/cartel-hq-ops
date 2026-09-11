@@ -16,11 +16,14 @@ import {
   nextLaunchStatus,
   getLaunchWatchSummary,
   formatTimestamp,
+  selectPrimaryProjectLaunch,
   LAUNCH_STATUS_LABELS,
   LAUNCH_STATUS_HELP,
   type LaunchStatus,
   type LaunchRow,
 } from "@/lib/launch-control";
+import { getProjectProfile } from "@/lib/project-profile";
+
 import {
   fetchDropStatus,
   sentToday,
@@ -69,11 +72,14 @@ const STATUS_TONE: Record<LaunchStatus, "gold" | "green" | "muted"> = {
   COMPLETED: "muted",
 };
 
-/** Newest non-COMPLETED launch, otherwise newest. `listLaunches` is newest-first. */
+/**
+ * Deterministic PROJECT primary launch. INTERNAL_TEST chain-test records are
+ * never eligible, whatever their timestamps.
+ */
 function selectPrimary(launches: LaunchRow[]): LaunchRow | null {
-  if (launches.length === 0) return null;
-  return launches.find((l) => toLaunchStatus(l.status) !== "COMPLETED") ?? launches[0]!;
+  return selectPrimaryProjectLaunch(launches);
 }
+
 
 function scheduleSummary(row: LaunchRow): string {
   if (row.launch_at) return formatTimestamp(row.launch_at);
@@ -183,11 +189,19 @@ function HqDashboard() {
     },
   });
 
-  const launchesQuery = useQuery({
-    queryKey: ["hq-launches", workspaceId],
+  const hqProfileQuery = useQuery({
+    queryKey: ["project-profile", workspaceId],
     enabled: !!workspaceId,
-    queryFn: () => listLaunches(workspaceId!),
+    queryFn: () => getProjectProfile(workspaceId!),
   });
+  const hqProfileId = hqProfileQuery.data?.id ?? null;
+
+  const launchesQuery = useQuery({
+    queryKey: ["hq-launches", workspaceId, hqProfileId],
+    enabled: !!workspaceId && !!hqProfileId,
+    queryFn: () => listLaunches(workspaceId!, hqProfileId!),
+  });
+
 
   const primaryLaunch = selectPrimary(launchesQuery.data ?? []);
   const watchToken = primaryLaunch?.launch_watch_token ?? null;

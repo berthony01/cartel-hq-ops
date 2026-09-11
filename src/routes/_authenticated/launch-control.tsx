@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -19,6 +19,20 @@ import {
 import { toast } from "sonner";
 import { useWorkspace } from "@/lib/workspace-context";
 import { getProjectProfile } from "@/lib/project-profile";
+import {
+  isProjectLaunch,
+  isInternalTestLaunch,
+  selectPrimaryProjectLaunch,
+} from "@/lib/launch-control";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
 import {
   CHAIN_MAX,
   LAUNCH_STATUSES,
@@ -369,11 +383,19 @@ function LaunchControlPage() {
   const profile = profileQuery.data ?? null;
 
   const launchesQuery = useQuery({
-    queryKey: ["launches", workspaceId],
+    queryKey: ["launches", workspaceId, profile?.id ?? null],
     enabled: !!workspaceId && !!profile,
-    queryFn: () => listLaunches(workspaceId!),
+    queryFn: () => listLaunches(workspaceId!, profile!.id),
   });
   const launches = useMemo(() => launchesQuery.data ?? [], [launchesQuery.data]);
+  /** Customer-facing launches. INTERNAL_TEST rows never appear here. */
+  const projectLaunches = useMemo(() => launches.filter(isProjectLaunch), [launches]);
+  /** Owner-only internal chain-test records. */
+  const internalTestLaunches = useMemo(
+    () => launches.filter(isInternalTestLaunch),
+    [launches],
+  );
+
 
   // Local permission hint only. RLS and the RPCs remain authoritative.
   const accessQuery = useQuery({
@@ -389,14 +411,28 @@ function LaunchControlPage() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = launches.find((l) => l.id === selectedId) ?? null;
+  const selectedIsInternalTest = selected ? isInternalTestLaunch(selected) : false;
 
   useEffect(() => {
     if (launches.length === 0) {
       setSelectedId(null);
       return;
     }
-    if (!launches.some((l) => l.id === selectedId)) setSelectedId(launches[0]!.id);
-  }, [launches, selectedId]);
+    // Preserve an explicit selection across ordinary query refresh.
+    if (launches.some((l) => l.id === selectedId)) return;
+    // Otherwise fall back to the deterministic PROJECT primary launch. Only a
+    // workspace with no PROJECT launch at all may land on an internal record.
+    const primary = selectPrimaryProjectLaunch(projectLaunches);
+    setSelectedId(primary?.id ?? internalTestLaunches[0]?.id ?? null);
+  }, [launches, projectLaunches, internalTestLaunches, selectedId]);
+
+  /** Controlled working view for the selected PROJECT launch. */
+  const [activeSection, setActiveSection] = useState<string>("lc-overview");
+  useEffect(() => {
+    // Reset only when the selected launch genuinely changes.
+    setActiveSection("lc-overview");
+  }, [selectedId]);
+
 
   const [form, setForm] = useState<EditorForm | null>(null);
   useEffect(() => {
@@ -946,6 +982,10 @@ function LaunchControlPage() {
       deploymentEvidenceQuery.data ?? [],
     );
   }, [selected, deploymentEvidenceQuery.data]);
+  /** Presentation-only count derived from the existing evidence query. */
+  const deploymentRecordCount = deploymentEvidenceQuery.data?.length ?? 0;
+
+
   
 
   // ---- countdown + reminder readiness (saved launch fields only) -----------
@@ -1440,7 +1480,7 @@ function LaunchControlPage() {
             {/* Every working view stays mounted. Only visibility changes, so
                 form state, queries, mutation state and idempotency outcomes
                 survive navigation. */}
-            <WorkingView active={activeSection === "lc-overview"}>
+            <WorkingView id="lc-overview" active={activeSection === "lc-overview"}>
             <Section variant="hero" className="min-w-0" contentClassName="min-w-0">
               <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:gap-6">
                 <div className="min-w-0 space-y-4">
@@ -1726,7 +1766,7 @@ function LaunchControlPage() {
                   saveMutation.mutate();
                 }}
               >
-                <WorkingView active={activeSection === "lc-details"}>
+                <WorkingView id="lc-details" active={activeSection === "lc-details"}>
                   <Section
                     variant="primary"
                     title="Launch identity"
@@ -1806,7 +1846,7 @@ function LaunchControlPage() {
                   </Section>
                 </WorkingView>
 
-                <WorkingView active={activeSection === "lc-schedule"}>
+                <WorkingView id="lc-schedule" active={activeSection === "lc-schedule"}>
                   <Section
                     variant="surface"
                     title="Schedule"
@@ -1926,7 +1966,7 @@ function LaunchControlPage() {
 
             {/* Save / preview / delete live outside the form element so the
                 destructive action can never submit it. */}
-            <WorkingView active={activeSection === "lc-details"}>
+            <WorkingView id="lc-details-actions" active={activeSection === "lc-details"}>
               <div className="hidden lg:flex lg:justify-end">{saveButton}</div>
 
               <Section
@@ -1992,7 +2032,7 @@ function LaunchControlPage() {
               ) : null}
             </WorkingView>
 
-            <WorkingView active={activeSection === "lc-watch"}>
+            <WorkingView id="lc-watch" active={activeSection === "lc-watch"}>
                 <Section
                   variant="surface"
                   title="Launch Watch"
@@ -2278,7 +2318,7 @@ function LaunchControlPage() {
                 </Section>
             </WorkingView>
 
-            <WorkingView active={activeSection === "lc-comms"}>
+            <WorkingView id="lc-comms" active={activeSection === "lc-comms"}>
                 <Section
                   variant="surface"
                   title="Watcher Updates"
@@ -2544,7 +2584,7 @@ function LaunchControlPage() {
                 </details>
             </WorkingView>
 
-            <WorkingView active={activeSection === "lc-contract"}>
+            <WorkingView id="lc-contract" active={activeSection === "lc-contract"}>
                 <div className="min-w-0 rounded-lg border-l-2 border-gold/50 bg-gold/5 px-3.5 py-3">
                   <p className="type-eyebrow text-gold">Official contract</p>
                   <p className="mt-1 max-w-prose type-helper text-muted-foreground">
@@ -2713,7 +2753,7 @@ function LaunchControlPage() {
       )}
 
 
-      {selected && saveButton ? (
+      {selected && !selectedIsInternalTest && saveButton ? (
         <StickyActionBar desktop="hidden" end={saveButton} />
       ) : null}
 
@@ -2750,6 +2790,32 @@ function PreviewRow({ label, value }: { label: string; value: string }) {
     <div className="flex min-w-0 justify-between gap-3">
       <dt className="shrink-0 text-muted-foreground">{label}</dt>
       <dd className="min-w-0 truncate text-right text-foreground">{value}</dd>
+    </div>
+  );
+}
+
+/**
+ * Controlled working view. Inactive views stay mounted — only visibility
+ * changes — so form state, queries, mutation state and idempotency outcomes
+ * survive navigation between sections.
+ */
+function WorkingView({
+  id,
+  active,
+  children,
+}: {
+  id?: string;
+  active: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      id={id}
+      hidden={!active}
+      aria-hidden={active ? undefined : true}
+      className="min-w-0 space-y-4 sm:space-y-6"
+    >
+      {children}
     </div>
   );
 }
