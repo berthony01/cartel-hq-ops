@@ -2,17 +2,22 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Sticky in-page section navigator.
+ * Sticky section navigator, presentation-only in both modes.
  *
- * Presentation-only: it scrolls to existing sections that are already rendered
- * on the page. It does not mount/unmount content, so no workflow, query,
- * mutation or gating behaviour changes. Chosen over real tabs because the
- * Launch Control sections live inside a shared form and a two-column grid;
- * tabbing them would require restructuring behavioural code.
+ * Uncontrolled (default, unchanged): scroll-spy over sections already rendered
+ * on the page — an IntersectionObserver tracks the visible section and a click
+ * calls `scrollIntoView`.
+ *
+ * Controlled (`activeId` + `onChange`, P2-C2): the parent owns which working
+ * view is visible. In this mode the component NEVER calls `scrollIntoView` and
+ * NEVER creates an IntersectionObserver; pressing a button only reports the
+ * chosen id. The parent keeps every section mounted and toggles visibility with
+ * CSS, so form state, queries, mutations, permissions and idempotency state are
+ * untouched by navigation.
  */
 
 export type SectionNavItem = {
-  /** DOM id of the anchor wrapper for this section. */
+  /** DOM id of the anchor wrapper (uncontrolled) or of the view (controlled). */
   id: string;
   label: string;
 };
@@ -21,14 +26,22 @@ export function SectionNav({
   items,
   label,
   className,
+  activeId,
+  onChange,
 }: {
   items: SectionNavItem[];
   label: string;
   className?: string;
+  /** Controlled mode: id of the visible section. Requires `onChange`. */
+  activeId?: string;
+  /** Controlled mode: called with the chosen section id. */
+  onChange?: (id: string) => void;
 }) {
-  const [active, setActive] = useState<string | null>(items[0]?.id ?? null);
+  const controlled = activeId !== undefined && !!onChange;
+  const [scrollActive, setScrollActive] = useState<string | null>(items[0]?.id ?? null);
 
   useEffect(() => {
+    if (controlled) return; // controlled mode does no scroll-spy at all
     if (typeof window === "undefined" || !("IntersectionObserver" in window)) return;
     const nodes = items
       .map((item) => document.getElementById(item.id))
@@ -40,18 +53,24 @@ export function SectionNav({
         const visible = entries
           .filter((entry) => entry.isIntersecting)
           .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-        if (visible?.target.id) setActive(visible.target.id);
+        if (visible?.target.id) setScrollActive(visible.target.id);
       },
       { rootMargin: "-96px 0px -60% 0px", threshold: 0 },
     );
     nodes.forEach((node) => observer.observe(node));
     return () => observer.disconnect();
-  }, [items]);
+  }, [items, controlled]);
+
+  const active = controlled ? activeId : scrollActive;
 
   const go = (id: string) => {
+    if (controlled) {
+      onChange!(id);
+      return;
+    }
     const node = document.getElementById(id);
     if (!node) return;
-    setActive(id);
+    setScrollActive(id);
     node.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
