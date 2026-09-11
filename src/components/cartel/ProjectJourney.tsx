@@ -381,6 +381,11 @@ export function ProjectJourneyPanel({ workspaceId, workspaceName }: SharedProps)
 
   const journey = query.data!;
   const nextKey = journey.nextAction.stage?.key ?? null;
+  const completedStages = journey.stages.filter((stage) => stage.status === "complete");
+  const remainingStages = journey.stages.filter((stage) => stage.status !== "complete");
+  const remainingPhases = remainingStages
+    .map((stage) => stage.phase)
+    .filter((phase, index, all) => all.indexOf(phase) === index);
   const heading = journey.projectName
     ? `${journey.projectName} launch journey`
     : workspaceName
