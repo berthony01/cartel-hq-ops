@@ -140,7 +140,9 @@ export function MotionStudioPanel({
   telegramPublished,
   releasingMotion,
   releaseError,
+  staticPreviewUrl,
   onGenerate,
+
   onSetCurrentMotion,
   onPrepareTelegram,
   onRetryNormalization,
@@ -167,7 +169,10 @@ export function MotionStudioPanel({
   telegramPublished: boolean;
   releasingMotion: boolean;
   releaseError: string | null;
+  /** Presentation-only signed URL for the current static source. */
+  staticPreviewUrl?: string | null;
   /** BILLABLE — only ever called from the confirmation dialog below. */
+
   onGenerate: (input: {
     stickerId: string;
     motionMode: MotionMode;
@@ -499,6 +504,8 @@ export function MotionStudioPanel({
               <StatusBadge tone={featuredUsesTelegram ? "green" : "gold"}>
                 {featuredUsesTelegram ? "Telegram preview · background removed" : "Creative source"}
               </StatusBadge>
+            ) : staticPreviewUrl ? (
+              <StatusBadge tone="muted">Current static source</StatusBadge>
             ) : null}
           </div>
 
@@ -517,6 +524,18 @@ export function MotionStudioPanel({
                 preload="metadata"
                 className="max-h-72 w-full rounded object-contain"
               />
+            ) : staticPreviewUrl ? (
+              <div className="px-4 py-6 text-center">
+                <img
+                  src={staticPreviewUrl}
+                  alt={`${stickerLabel} current static source`}
+                  className="mx-auto max-h-64 w-auto rounded object-contain shadow-sm"
+                />
+                <p className="mt-3 text-sm font-semibold text-foreground">Ready to animate</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Current static source. Generate motion to see the result here.
+                </p>
+              </div>
             ) : (
               <div className="px-4 py-8 text-center">
                 <Sparkles className="mx-auto size-6 text-gold/70" aria-hidden="true" />
