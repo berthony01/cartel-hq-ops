@@ -948,6 +948,8 @@ export async function fetchProjectJourney(workspaceId: string): Promise<ProjectJ
     watchUnavailable,
     deploymentEvidence,
     deploymentUnavailable,
+    productionRequest,
+    productionRequestUnavailable,
     brandKit,
     brandKitUnavailable,
     creativeAssets,
