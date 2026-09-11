@@ -73,10 +73,10 @@ const STATE_TONE: Record<ScheduleState, "gold" | "green" | "red" | "muted"> = {
 
 function HeroStat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="min-w-0">
-      <p className="type-meta text-muted-foreground">{label}</p>
-      <p className="mt-1 truncate font-display text-2xl leading-none text-gold">{value}</p>
-      {hint ? <p className="mt-1 truncate text-[11px] text-muted-foreground">{hint}</p> : null}
+    <div className="surface-quiet min-w-0 rounded-lg p-3">
+      <p className="type-eyebrow text-muted-foreground">{label}</p>
+      <p className="mt-1.5 truncate font-display text-2xl leading-none text-gold">{value}</p>
+      {hint ? <p className="mt-1.5 truncate type-helper text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
@@ -229,7 +229,7 @@ function DistributionPage() {
             }
             contentClassName="space-y-4"
           >
-            <div className="grid min-w-0 grid-cols-2 gap-4 lg:grid-cols-4">
+            <div className="grid min-w-0 grid-cols-2 gap-2.5 lg:grid-cols-4">
               <HeroStat label="Connected communities" value={String(groups.length)} />
               <HeroStat
                 label="Active schedules"

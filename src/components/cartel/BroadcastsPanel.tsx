@@ -699,27 +699,30 @@ export function BroadcastsPanel({
         leading={<Megaphone className="size-4" aria-hidden="true" />}
         actions={<StatusBadge tone="green">Live</StatusBadge>}
       >
-        <ul className="grid gap-2 sm:grid-cols-2" role="list">
+        <ul className="grid min-w-0 gap-2.5 sm:grid-cols-2" role="list">
           <li className="min-w-0">
             <button
               type="button"
               aria-pressed={channel === "watcher"}
               onClick={() => setChannel("watcher")}
-              className={`min-h-11 min-w-0 w-full rounded-md border p-3 text-left transition-colors ${
+              className={`hover-lift min-h-11 min-w-0 w-full rounded-lg border p-3.5 text-left ${
                 channel === "watcher"
-                  ? "border-primary/70 bg-primary/10"
-                  : "border-border/70 bg-background/40 hover:bg-background/60"
+                  ? "border-gold/55 bg-gold/8 shadow-[var(--glow-gold)]"
+                  : "border-border-subtle bg-background/40"
               }`}
             >
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
-                  Watcher DM
-                </p>
+              <div className="flex min-w-0 items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="type-eyebrow text-muted-foreground">Private channel</p>
+                  <p className="mt-1 min-w-0 font-display text-base uppercase leading-tight text-foreground">
+                    Watcher DM
+                  </p>
+                </div>
                 <StatusBadge tone={channel === "watcher" ? "green" : "muted"}>
                   {channel === "watcher" ? "Selected" : "Available"}
                 </StatusBadge>
               </div>
-              <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              <p className="mt-2 type-helper text-muted-foreground">
                 A private @PepeCartelHQBot message to active watchers of the selected launch who
                 currently allow project updates.
               </p>
@@ -730,21 +733,24 @@ export function BroadcastsPanel({
               type="button"
               aria-pressed={channel === "community"}
               onClick={() => setChannel("community")}
-              className={`min-h-11 min-w-0 w-full rounded-md border p-3 text-left transition-colors ${
+              className={`hover-lift min-h-11 min-w-0 w-full rounded-lg border p-3.5 text-left ${
                 channel === "community"
-                  ? "border-primary/70 bg-primary/10"
-                  : "border-border/70 bg-background/40 hover:bg-background/60"
+                  ? "border-gold/55 bg-gold/8 shadow-[var(--glow-gold)]"
+                  : "border-border-subtle bg-background/40"
               }`}
             >
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
-                  Official Community Broadcast
-                </p>
+              <div className="flex min-w-0 items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="type-eyebrow text-muted-foreground">Public group post</p>
+                  <p className="mt-1 min-w-0 font-display text-base uppercase leading-tight text-foreground [overflow-wrap:anywhere]">
+                    Official Community Broadcast
+                  </p>
+                </div>
                 <StatusBadge tone={channel === "community" ? "green" : "muted"}>
                   {channel === "community" ? "Selected" : "Available"}
                 </StatusBadge>
               </div>
-              <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              <p className="mt-2 type-helper text-muted-foreground">
                 One official project message posted into a connected community group. This is for
                 official project/team communications and does not replace normal everyday Telegram
                 conversation. No watcher DM is sent.
@@ -835,22 +841,22 @@ export function BroadcastsPanel({
           </div>
         ) : (
           <>
-            <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-xs min-[420px]:grid-cols-2 sm:grid-cols-3">
-              <div className="min-w-0">
-                <dt className="text-muted-foreground">Active watchers</dt>
-                <dd className="font-mono text-sm text-foreground">
+            <dl className="grid min-w-0 grid-cols-1 gap-2.5 min-[420px]:grid-cols-3">
+              <div className="surface-quiet min-w-0 rounded-lg p-3">
+                <dt className="type-eyebrow text-muted-foreground">Active watchers</dt>
+                <dd className="mt-1.5 font-display text-xl leading-none text-foreground">
                   {stats ? stats.active_watchers : "—"}
                 </dd>
               </div>
-              <div className="min-w-0">
-                <dt className="text-muted-foreground">Updates enabled</dt>
-                <dd className="font-mono text-sm text-foreground">
+              <div className="surface-quiet min-w-0 rounded-lg p-3">
+                <dt className="type-eyebrow text-muted-foreground">Updates enabled</dt>
+                <dd className="mt-1.5 font-display text-xl leading-none text-pepe">
                   {stats ? stats.updates_enabled_watchers : "—"}
                 </dd>
               </div>
-              <div className="min-w-0">
-                <dt className="text-muted-foreground">Updates muted</dt>
-                <dd className="font-mono text-sm text-foreground">
+              <div className="surface-quiet min-w-0 rounded-lg p-3">
+                <dt className="type-eyebrow text-muted-foreground">Updates muted</dt>
+                <dd className="mt-1.5 font-display text-xl leading-none text-muted-foreground">
                   {stats ? stats.updates_muted_watchers : "—"}
                 </dd>
               </div>

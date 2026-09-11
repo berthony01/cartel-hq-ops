@@ -50,14 +50,11 @@ function MetricList({
   return (
     <dl className={className ?? "grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:grid-cols-3"}>
       {items.map((item) => (
-        <div
-          key={item.label}
-          className="min-w-0 rounded-md border border-border/60 bg-background/40 p-3"
-        >
-          <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground [overflow-wrap:anywhere]">
+        <div key={item.label} className="surface-quiet min-w-0 rounded-lg p-3">
+          <dt className="type-eyebrow text-muted-foreground [overflow-wrap:anywhere]">
             {item.label}
           </dt>
-          <dd className="mt-1 text-lg font-semibold text-foreground">
+          <dd className="mt-1.5 font-display text-xl leading-none text-foreground">
             {loading ? (
               <span
                 className="inline-block h-5 w-10 animate-pulse rounded bg-surface-raised"
