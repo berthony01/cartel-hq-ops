@@ -536,13 +536,13 @@ export function ProjectInboxPanel({
             </Button>
           </div>
         ) : (
-          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <dl className="grid min-w-0 grid-cols-2 gap-2.5 sm:grid-cols-5">
             {summaryCards.map((card) => (
-              <div key={card.label} className="min-w-0">
-                <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+              <div key={card.label} className="surface-quiet min-w-0 rounded-lg p-3">
+                <dt className="type-eyebrow text-muted-foreground [overflow-wrap:anywhere]">
                   {card.label}
                 </dt>
-                <dd className="mt-1 text-sm font-semibold text-foreground">
+                <dd className="mt-1.5 font-display text-xl leading-none text-foreground">
                   {summaryQuery.isPending || card.value == null ? "—" : String(card.value)}
                 </dd>
               </div>
