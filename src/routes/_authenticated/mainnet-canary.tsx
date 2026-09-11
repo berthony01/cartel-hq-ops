@@ -881,6 +881,7 @@ function CanaryConsole() {
           </div>
         ) : null}
       </Section>
+      )}
 
 
       <Section
