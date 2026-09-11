@@ -324,6 +324,59 @@ function StageRow({
 }
 
 
+/**
+ * Completed stages collapse into one summary row. Nothing about their status,
+ * counts or routes changes — only how much of the page they occupy.
+ */
+function CompletedStages({
+  stages,
+  primaryLaunchId,
+}: {
+  stages: JourneyStage[];
+  primaryLaunchId: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  if (stages.length === 0) return null;
+  return (
+    <div className="min-w-0 rounded-lg border border-pepe/25 bg-pepe/[0.04]">
+      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5">
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-pepe/50 text-pepe">
+          <Check className="size-3.5" aria-hidden="true" />
+        </span>
+        <p className="min-w-0 text-sm font-medium text-foreground/85 [overflow-wrap:anywhere]">
+          {stages.length} setup and community {stages.length === 1 ? "stage" : "stages"} completed
+        </p>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="min-h-11 shrink-0"
+          aria-expanded={open}
+          aria-controls="journey-completed-stages"
+          onClick={() => setOpen((prev) => !prev)}
+        >
+          {open ? "Hide completed steps" : "View completed steps"}
+        </Button>
+      </div>
+      {open ? (
+        <ul
+          id="journey-completed-stages"
+          className="grid gap-2 border-t border-pepe/20 p-3 sm:grid-cols-2 [&>*]:min-w-0"
+        >
+          {stages.map((stage) => (
+            <StageRow
+              key={stage.key}
+              stage={stage}
+              isNext={false}
+              primaryLaunchId={primaryLaunchId}
+            />
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 function ErrorState({
   message,
   onRetry,
