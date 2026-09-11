@@ -18,6 +18,7 @@ import {
   type LaunchEvidenceEvaluation,
 } from "@/lib/launch-verified-eligibility";
 import { evaluateProductionFinality } from "@/lib/launch-production-finality";
+import { getLaunchProductionDeploymentRequest } from "@/lib/launch-production-request";
 import type { DeploymentEvidenceInput } from "@/lib/launch-evidence-checks";
 import { supabase } from "@/integrations/supabase/client";
 import { listWorkspaceAssets } from "@/lib/media";
