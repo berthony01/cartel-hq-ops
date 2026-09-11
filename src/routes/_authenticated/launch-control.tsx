@@ -383,11 +383,19 @@ function LaunchControlPage() {
   const profile = profileQuery.data ?? null;
 
   const launchesQuery = useQuery({
-    queryKey: ["launches", workspaceId],
+    queryKey: ["launches", workspaceId, profile?.id ?? null],
     enabled: !!workspaceId && !!profile,
-    queryFn: () => listLaunches(workspaceId!),
+    queryFn: () => listLaunches(workspaceId!, profile!.id),
   });
   const launches = useMemo(() => launchesQuery.data ?? [], [launchesQuery.data]);
+  /** Customer-facing launches. INTERNAL_TEST rows never appear here. */
+  const projectLaunches = useMemo(() => launches.filter(isProjectLaunch), [launches]);
+  /** Owner-only internal chain-test records. */
+  const internalTestLaunches = useMemo(
+    () => launches.filter(isInternalTestLaunch),
+    [launches],
+  );
+
 
   // Local permission hint only. RLS and the RPCs remain authoritative.
   const accessQuery = useQuery({
