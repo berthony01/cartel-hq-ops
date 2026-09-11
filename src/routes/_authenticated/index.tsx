@@ -189,11 +189,19 @@ function HqDashboard() {
     },
   });
 
-  const launchesQuery = useQuery({
-    queryKey: ["hq-launches", workspaceId],
+  const hqProfileQuery = useQuery({
+    queryKey: ["project-profile", workspaceId],
     enabled: !!workspaceId,
-    queryFn: () => listLaunches(workspaceId!),
+    queryFn: () => getProjectProfile(workspaceId!),
   });
+  const hqProfileId = hqProfileQuery.data?.id ?? null;
+
+  const launchesQuery = useQuery({
+    queryKey: ["hq-launches", workspaceId, hqProfileId],
+    enabled: !!workspaceId && !!hqProfileId,
+    queryFn: () => listLaunches(workspaceId!, hqProfileId!),
+  });
+
 
   const primaryLaunch = selectPrimary(launchesQuery.data ?? []);
   const watchToken = primaryLaunch?.launch_watch_token ?? null;
