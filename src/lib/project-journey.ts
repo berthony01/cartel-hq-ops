@@ -142,6 +142,16 @@ export type JourneyBrandKitFacts = {
   brandName: string | null;
 };
 
+/**
+ * Launcher-B2 — the latest production deployment handoff request for the
+ * primary PROJECT launch. Read-only fact; the database stays authoritative and
+ * `effectiveStatus === "COMPLETED"` is derived server-side from evidence.
+ */
+export type JourneyProductionRequestFacts = {
+  status: string;
+  effectiveStatus: string;
+};
+
 export type JourneyCreativeAssetFacts = {
   /** logo / mascot / reference_image — real brand identity assets. */
   brandAssetCount: number;
