@@ -46,7 +46,7 @@ function WatchRow({ item }: { item: MyWatchlistItem }) {
   const ticker = formatTicker(item.ticker);
   const subscribed = formatDateTime(item.subscribed_at);
   return (
-    <article className="rounded-lg border border-border bg-surface p-4">
+    <article className="group min-w-0 rounded-lg border border-border/80 bg-surface-elevated p-4 shadow-inset transition-[border-color,transform,box-shadow] hover:-translate-y-0.5 hover:border-gold/40 hover:shadow-elevated">
       <div className="flex min-w-0 items-start gap-3">
         <ProjectLogo
           slug={item.project_public_slug}
