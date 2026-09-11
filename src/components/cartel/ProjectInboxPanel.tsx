@@ -632,21 +632,26 @@ export function ProjectInboxPanel({
                         onClick={() => onConversationChange(c.conversation_id)}
                         aria-current={selected ? "true" : undefined}
                         className={cn(
-                          "w-full min-h-11 rounded-md border p-3 text-left transition-colors",
+                          "hover-lift w-full min-h-11 min-w-0 rounded-lg border p-3.5 text-left",
                           selected
-                            ? "border-gold/60 bg-gold/5"
-                            : "border-border/60 bg-background/40 hover:border-gold/40",
+                            ? "border-gold/55 bg-gold/8 shadow-[var(--glow-gold)]"
+                            : "border-border-subtle bg-background/40",
                         )}
                       >
-                        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-                          <span className="min-w-0 truncate text-sm font-semibold text-foreground">
+                        <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+                          <span className="min-w-0 truncate font-display text-base uppercase leading-tight text-foreground">
                             Member {c.member_ref}
                           </span>
-                          <span className="shrink-0 text-[11px] text-muted-foreground">
+                          <span className="shrink-0 type-helper text-muted-foreground">
                             {formatWhen(c.last_message_at)}
                           </span>
                         </div>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        {c.latest_message_preview ? (
+                          <p className="mt-1.5 truncate text-sm leading-snug text-foreground">
+                            {c.latest_message_preview}
+                          </p>
+                        ) : null}
+                        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
                           <StatusBadge tone={statusTone(c.status)}>
                             {conversationStatusLabel(c.status)}
                           </StatusBadge>
@@ -660,14 +665,9 @@ export function ProjectInboxPanel({
                             <StatusBadge tone="red">Blocked</StatusBadge>
                           ) : null}
                         </div>
-                        <p className="mt-1.5 truncate text-xs text-muted-foreground">
+                        <p className="mt-2 truncate type-helper text-muted-foreground">
                           {c.origin_title_snapshot || conversationOriginLabel(c.origin_type)}
                         </p>
-                        {c.latest_message_preview ? (
-                          <p className="mt-1 truncate text-xs text-foreground/80">
-                            {c.latest_message_preview}
-                          </p>
-                        ) : null}
                       </button>
                     </li>
                   );
@@ -860,23 +860,39 @@ export function ProjectInboxPanel({
                           <li
                             key={m.message_id}
                             className={cn(
-                              "min-w-0 rounded-md border p-3",
+                              "min-w-0 rounded-lg border p-3.5",
                               isMember
-                                ? "border-gold/30 bg-gold/5"
+                                ? "border-gold/35 bg-gold/8"
                                 : isSystem
-                                  ? "border-border/50 bg-surface-raised/30"
-                                  : "border-pepe/30 bg-pepe/5",
+                                  ? "border-border-subtle bg-surface-overlay/35"
+                                  : "border-pepe/35 bg-pepe/8",
                             )}
                           >
-                            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-                              <span className="text-xs font-semibold text-foreground">
+                            <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+                              <span
+                                className={cn(
+                                  "type-eyebrow",
+                                  isMember
+                                    ? "text-gold"
+                                    : isSystem
+                                      ? "text-muted-foreground"
+                                      : "text-pepe",
+                                )}
+                              >
                                 {authorLabel}
                               </span>
-                              <span className="text-[11px] text-muted-foreground">
+                              <span className="type-helper text-muted-foreground">
                                 {channelLabel} · {formatWhen(m.created_at)}
                               </span>
                             </div>
-                            <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-foreground [overflow-wrap:anywhere]">
+                            <p
+                              className={cn(
+                                "mt-2 min-w-0 whitespace-pre-wrap leading-relaxed [overflow-wrap:anywhere]",
+                                isSystem
+                                  ? "text-xs text-muted-foreground"
+                                  : "text-sm text-foreground",
+                              )}
+                            >
                               {m.body}
                             </p>
                             {m.delivery_status ? (
