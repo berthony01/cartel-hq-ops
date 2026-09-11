@@ -276,7 +276,7 @@ function CanaryConsole() {
     setName(row.token_name ?? "");
     setSymbol(deriveCanaryOnchainSymbol(row.ticker));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [launches.data, launchId, search.request]);
+  }, [launches.data, launchId]);
 
   /**
    * REQUEST-BOUND HYDRATION. The customer's approved request row is the ONLY
@@ -285,14 +285,17 @@ function CanaryConsole() {
    * deployment id (when execution has already begun) becomes the deployment
    * context for the existing protected stages.
    *
-   * This hydration is local UI state only. It creates nothing, signs nothing,
-   * arms nothing and advances no stage.
+   * Deliberately derived DURING RENDER rather than in an effect: the route's
+   * single effect stays the local-only launch-id restore, and this synchronises
+   * local UI state only. It creates nothing, signs nothing, arms nothing,
+   * touches no wallet and advances no stage.
    */
   const requestHydrationKey = selectedRequest
     ? `${selectedRequest.id}:${selectedRequest.executionDeploymentId ?? ""}`
     : "";
-  useEffect(() => {
-    if (!selectedRequest) return;
+  const [hydratedRequestKey, setHydratedRequestKey] = useState("");
+  if (selectedRequest && requestHydrationKey !== hydratedRequestKey) {
+    setHydratedRequestKey(requestHydrationKey);
     resetLaunchScopedState();
     setBeginPhrase("");
     setLaunchId(selectedRequest.launchId);
@@ -301,8 +304,7 @@ function CanaryConsole() {
     setRecipient(selectedRequest.tokenRecipient);
     setSupply(selectedRequest.tokenSupplyWhole);
     setDeploymentId(selectedRequest.executionDeploymentId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestHydrationKey]);
+  }
 
   const selectRequest = (requestId: string | null) => {
     setBeginPhrase("");
