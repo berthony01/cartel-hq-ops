@@ -57,7 +57,15 @@ function ProgressBar({ value, total }: { value: number; total: number }) {
   );
 }
 
-const LAUNCH_SECTION_BY_STAGE: Partial<Record<JourneyStage["key"], string>> = {
+type LaunchControlSection =
+  | "lc-overview"
+  | "lc-details"
+  | "lc-schedule"
+  | "lc-watch"
+  | "lc-comms"
+  | "lc-contract";
+
+const LAUNCH_SECTION_BY_STAGE: Partial<Record<JourneyStage["key"], LaunchControlSection>> = {
   launch_created: "lc-overview",
   launch_announced: "lc-overview",
   launch_schedule: "lc-schedule",

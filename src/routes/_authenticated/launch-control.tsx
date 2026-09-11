@@ -473,9 +473,10 @@ function LaunchControlPage() {
   );
   useEffect(() => {
     // The validated URL owns explicit deep links. This only changes which
-    // already-mounted section is visible; it never invokes an action handler.
+    // already-mounted section is visible; ordinary launch changes still reset
+    // to Overview, and no action handler is invoked.
     setActiveSection(search.section ?? "lc-overview");
-  }, [search.section]);
+  }, [search.section, selectedId]);
 
   const selectProjectLaunch = (launchId: string) => {
     if (!projectLaunches.some((launch) => launch.id === launchId)) return;
