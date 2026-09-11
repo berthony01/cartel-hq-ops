@@ -22,7 +22,13 @@ function check(name: string, condition: boolean) {
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
-const platform = read("../src/lib/launch-production-request-platform.functions.ts");
+/** Comment text is documentation, not behaviour: strip it before scanning. */
+const stripComments = (source: string) =>
+  source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+const platform = stripComments(
+  read("../src/lib/launch-production-request-platform.functions.ts"),
+);
 const queue = read("../src/components/cartel/ProductionRequestQueuePanel.tsx");
 const route = read("../src/routes/_authenticated/mainnet-canary.tsx");
 const canary = read("../src/lib/chain-mainnet-canary.functions.ts");
@@ -72,7 +78,7 @@ check(
 );
 check(
   "begin never accepts token name, symbol, supply or recipient",
-  !/BeginInput = \{[\s\S]*?token/i.test(platform),
+  !/type BeginInput = \{[^}]*token/i.test(platform),
 );
 check(
   "begin validates address and 32-byte hashes and rejects the zero address",
