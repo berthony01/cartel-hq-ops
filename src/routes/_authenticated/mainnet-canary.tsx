@@ -248,9 +248,9 @@ function CanaryConsole() {
   };
 
   useEffect(() => {
+    if (launchId) return;
     // Request-bound mode owns the launch context; local memory never overrides it.
     if (search.request) return;
-    if (launchId) return;
     if (typeof window === "undefined") return;
     const rows = launches.data;
     if (!rows) return;
