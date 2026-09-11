@@ -411,14 +411,28 @@ function LaunchControlPage() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = launches.find((l) => l.id === selectedId) ?? null;
+  const selectedIsInternalTest = selected ? isInternalTestLaunch(selected) : false;
 
   useEffect(() => {
     if (launches.length === 0) {
       setSelectedId(null);
       return;
     }
-    if (!launches.some((l) => l.id === selectedId)) setSelectedId(launches[0]!.id);
-  }, [launches, selectedId]);
+    // Preserve an explicit selection across ordinary query refresh.
+    if (launches.some((l) => l.id === selectedId)) return;
+    // Otherwise fall back to the deterministic PROJECT primary launch. Only a
+    // workspace with no PROJECT launch at all may land on an internal record.
+    const primary = selectPrimaryProjectLaunch(projectLaunches);
+    setSelectedId(primary?.id ?? internalTestLaunches[0]?.id ?? null);
+  }, [launches, projectLaunches, internalTestLaunches, selectedId]);
+
+  /** Controlled working view for the selected PROJECT launch. */
+  const [activeSection, setActiveSection] = useState<string>("lc-overview");
+  useEffect(() => {
+    // Reset only when the selected launch genuinely changes.
+    setActiveSection("lc-overview");
+  }, [selectedId]);
+
 
   const [form, setForm] = useState<EditorForm | null>(null);
   useEffect(() => {
