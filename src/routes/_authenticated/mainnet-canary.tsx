@@ -83,6 +83,12 @@ import {
 /** Browser-local, non-authoritative memory of the selected launch id only. */
 const LAUNCH_SELECTION_STORAGE_KEY = "cartel-hq:mainnet-canary:selected-launch";
 
+/** Launcher-B3 — literal confirmation for beginning a request-bound execution. */
+export const BEGIN_EXECUTION_PHRASE = "BEGIN PROTECTED EXECUTION";
+
+const REQUEST_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function CanaryConsole() {
   const { workspaceId } = useWorkspace();
 
