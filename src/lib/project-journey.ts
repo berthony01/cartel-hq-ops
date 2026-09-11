@@ -361,6 +361,8 @@ function stageOf(
   status: JourneyStageStatus,
   actionable: boolean,
   detail: string | null,
+  /** Optional label override for stages whose action depends on live state. */
+  actionLabel?: string,
 ): JourneyStage {
   const copy = STAGE_COPY[key];
   return {
@@ -372,7 +374,7 @@ function stageOf(
     status,
     actionable,
     to: copy.to,
-    actionLabel: copy.actionLabel,
+    actionLabel: actionLabel ?? copy.actionLabel,
     detail,
   };
 }
