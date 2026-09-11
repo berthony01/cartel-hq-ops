@@ -348,15 +348,23 @@ const STAGE_COPY: Record<
     to: "/launch-control",
     actionLabel: "Review deployment evidence",
     explanation: "",
+    reviewLabel: "Review deployment evidence",
+    lockedLabel: "NEXT",
+    dependency:
+      "Submitting a production deployment request records intent only. It does not deploy, sign or broadcast anything.",
   },
   official_contract: {
     phase: "Contract",
-    title: "Official contract registered",
+    title: "Register official contract",
     description: "Register the official contract address from verified deployment evidence.",
     to: "/launch-control",
     actionLabel: "Register Official Contract",
     explanation:
       "Registering publishes the official contract address supplied by the authenticated project.",
+    reviewLabel: "View registration requirements",
+    lockedLabel: "NEXT AFTER DEPLOYMENT",
+    dependency:
+      "Unlocks after CARTEL HQ verifies the production mainnet deployment and its finality evidence.",
   },
   launch_live: {
     phase: "Contract",
@@ -365,6 +373,10 @@ const STAGE_COPY: Record<
     to: "/launch-control",
     actionLabel: "Advance the launch",
     explanation: "Advance the lifecycle in Launch Control when the launch is actually live.",
+    reviewLabel: "Review launch lifecycle",
+    lockedLabel: "FINAL STAGE",
+    dependency:
+      "Unlocks after the official contract is registered for this launch.",
   },
 };
 
@@ -389,6 +401,9 @@ function stageOf(
     to: copy.to,
     actionLabel: actionLabel ?? copy.actionLabel,
     detail,
+    reviewLabel: copy.reviewLabel,
+    lockedLabel: copy.lockedLabel,
+    dependency: copy.dependency,
   };
 }
 
