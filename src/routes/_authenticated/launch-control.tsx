@@ -982,6 +982,10 @@ function LaunchControlPage() {
       deploymentEvidenceQuery.data ?? [],
     );
   }, [selected, deploymentEvidenceQuery.data]);
+  /** Presentation-only count derived from the existing evidence query. */
+  const deploymentRecordCount = deploymentEvidenceQuery.data?.length ?? 0;
+
+
   
 
   // ---- countdown + reminder readiness (saved launch fields only) -----------
