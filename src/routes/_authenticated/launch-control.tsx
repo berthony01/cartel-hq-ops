@@ -1400,8 +1400,9 @@ function LaunchControlPage() {
               tokenless and unable to bind an official contract. */}
           {isWorkspaceOwner && internalTestLaunches.length > 0 ? (
             <details className="surface-quiet min-w-0 rounded-lg">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
-                Internal test launches ({internalTestLaunches.length})
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
+                <span className="min-w-0 [overflow-wrap:anywhere]">Internal test launches ({internalTestLaunches.length})</span>
+                <ChevronDown className="size-4 shrink-0 transition-transform [[open]_&]:rotate-180" aria-hidden="true" />
               </summary>
               <div className="min-w-0 space-y-3 px-3.5 pb-3.5">
                 <p className="max-w-prose type-helper text-muted-foreground">
@@ -1599,9 +1600,10 @@ function LaunchControlPage() {
                 </dl>
 
                 <details className="surface-quiet mt-3 min-w-0 rounded-lg">
-                  <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
-                    Technical deployment evidence
-                  </summary>
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
+                <span className="min-w-0 [overflow-wrap:anywhere]">Technical deployment evidence</span>
+                <ChevronDown className="size-4 shrink-0 transition-transform [[open]_&]:rotate-180" aria-hidden="true" />
+              </summary>
                   <div className="min-w-0 px-3 pb-3">
                     <VerifiedDeploymentEvidencePanel
                       evaluation={deploymentEvidence}
@@ -1828,8 +1830,9 @@ function LaunchControlPage() {
             </Section>
 
             <details className="surface-quiet min-w-0 rounded-lg">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
-                Lifecycle guide
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
+                <span className="min-w-0 [overflow-wrap:anywhere]">Lifecycle guide</span>
+                <ChevronDown className="size-4 shrink-0 transition-transform [[open]_&]:rotate-180" aria-hidden="true" />
               </summary>
               <div className="min-w-0 px-3.5 pb-3.5">
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -1883,8 +1886,9 @@ function LaunchControlPage() {
             </details>
 
             <details className="surface-quiet min-w-0 rounded-lg">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
-                Lifecycle timestamps
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
+                <span className="min-w-0 [overflow-wrap:anywhere]">Lifecycle timestamps</span>
+                <ChevronDown className="size-4 shrink-0 transition-transform [[open]_&]:rotate-180" aria-hidden="true" />
               </summary>
               <div className="min-w-0 px-3.5 pb-3.5">
                 <dl className="space-y-1.5 text-xs">
@@ -2428,9 +2432,10 @@ function LaunchControlPage() {
                       </div>
 
                       <details className="surface-quiet min-w-0 rounded-lg">
-                        <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
-                          How Launch Watch works
-                        </summary>
+                        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
+                <span className="min-w-0 [overflow-wrap:anywhere]">How Launch Watch works</span>
+                <ChevronDown className="size-4 shrink-0 transition-transform [[open]_&]:rotate-180" aria-hidden="true" />
+              </summary>
                         <div className="space-y-2 px-3 pb-3">
                           <ol className="list-decimal space-y-1 pl-4 text-xs leading-relaxed text-muted-foreground">
                             <li>A user taps “Watch this launch” from a community post or public link.</li>
@@ -2651,9 +2656,10 @@ function LaunchControlPage() {
                 </Section>
 
                 <details className="surface-quiet min-w-0 rounded-lg">
-                  <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
-                    Advanced communication diagnostics
-                  </summary>
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
+                <span className="min-w-0 [overflow-wrap:anywhere]">Advanced communication diagnostics</span>
+                <ChevronDown className="size-4 shrink-0 transition-transform [[open]_&]:rotate-180" aria-hidden="true" />
+              </summary>
                   <div className="min-w-0 px-3 pb-3">
                 <Section
                   variant="quiet"
@@ -2925,9 +2931,10 @@ function LaunchControlPage() {
                 {/* Full technical evidence stays mounted and read-only, using
                     the same evaluation object as the panels above. */}
                 <details className="surface-quiet min-w-0 rounded-lg">
-                  <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
-                    Technical deployment evidence
-                  </summary>
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
+                <span className="min-w-0 [overflow-wrap:anywhere]">Technical deployment evidence</span>
+                <ChevronDown className="size-4 shrink-0 transition-transform [[open]_&]:rotate-180" aria-hidden="true" />
+              </summary>
                   <div className="min-w-0 px-3 pb-3">
                     <VerifiedDeploymentEvidencePanel
                       evaluation={deploymentEvidence}
