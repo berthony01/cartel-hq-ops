@@ -2867,6 +2867,42 @@ function LaunchControlPage() {
                   </p>
                 </Section>
 
+                {/* Launcher-B2 — guided handoff request, before the technical
+                    deployment evidence details. PROJECT launches only. */}
+                {selected && selectedIsProjectLaunch ? (
+                  <ProductionDeploymentRequestPanel
+                    launchId={selected.id}
+                    launchTokenName={selected.token_name}
+                    launchTicker={selected.ticker}
+                    request={productionRequestQuery.data ?? null}
+                    requestLoading={productionRequestQuery.isLoading}
+                    requestError={
+                      productionRequestQuery.error instanceof Error
+                        ? productionRequestQuery.error.message
+                        : null
+                    }
+                    hints={productionRequestHints}
+                    isWorkspaceOwner={isWorkspaceOwner}
+                    disabled={readOnly}
+                    submitting={submitProductionRequestMutation.isPending}
+                    withdrawing={withdrawProductionRequestMutation.isPending}
+                    submitError={
+                      submitProductionRequestMutation.error instanceof Error
+                        ? submitProductionRequestMutation.error.message
+                        : null
+                    }
+                    withdrawError={
+                      withdrawProductionRequestMutation.error instanceof Error
+                        ? withdrawProductionRequestMutation.error.message
+                        : null
+                    }
+                    onSubmit={(input) => submitProductionRequestMutation.mutate(input)}
+                    onWithdraw={(id) => withdrawProductionRequestMutation.mutate(id)}
+                  />
+                ) : null}
+
+
+
 
                 <dl className="grid min-w-0 gap-2.5 sm:grid-cols-3">
                   <div className="surface-quiet min-w-0 rounded-lg p-3">
