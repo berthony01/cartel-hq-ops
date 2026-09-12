@@ -610,15 +610,23 @@ check(
   boundarySrc.includes(`rpc("is_workspace_operator"`),
   "server function requires workspace operator authorization",
 );
+// SE-2.1: the boundary now loads the direct-first router instead of the
+// Refetcher adapter. The safety property is unchanged and unweakened —
+// authorization still precedes any provider load.
 check(
   "fn-auth-before-provider",
-  boundarySrc.indexOf("is_workspace_operator") < boundarySrc.indexOf("social-read-refetcher.server"),
-  "authorization is checked before the provider adapter is even loaded",
+  boundarySrc.indexOf("is_workspace_operator") < boundarySrc.indexOf("social-read-router.server"),
+  "authorization is checked before the provider router is even loaded",
 );
 check(
   "fn-dynamic-server-import",
-  boundarySrc.includes('await import("./social-read-refetcher.server")'),
-  "the adapter is loaded dynamically inside the handler",
+  boundarySrc.includes('await import("./social-read-router.server")'),
+  "the provider router is loaded dynamically inside the handler",
+);
+check(
+  "fn-no-refetcher-runtime",
+  !boundarySrc.includes("social-read-refetcher.server"),
+  "the boundary no longer reaches Refetcher at runtime",
 );
 
 for (const [id, token] of [
