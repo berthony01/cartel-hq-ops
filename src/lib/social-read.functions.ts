@@ -83,18 +83,19 @@ export const socialRead = createServerFn({ method: "POST" })
       );
     }
 
-    // Server-only import: keeps the provider adapter out of every client bundle.
-    const { refetcherReadProvider } = await import("./social-read-refetcher.server");
+    // Server-only import: keeps every provider adapter out of client bundles.
+    // SE-2.1: the direct-first router is the only provider entry point.
+    const { socialReadRouter } = await import("./social-read-router.server");
 
     if (operation === "post") {
-      return { operation, ...(await refetcherReadProvider.fetchPostByUrl({ url: data.url })) };
+      return { operation, ...(await socialReadRouter.fetchPostByUrl({ url: data.url })) };
     }
     if (operation === "metrics") {
-      return { operation, ...(await refetcherReadProvider.fetchPostMetrics({ url: data.url })) };
+      return { operation, ...(await socialReadRouter.fetchPostMetrics({ url: data.url })) };
     }
     return {
       operation,
-      ...(await refetcherReadProvider.fetchSourceRecentPosts({
+      ...(await socialReadRouter.fetchSourceRecentPosts({
         url: data.url,
         ...(data.limit === undefined ? {} : { limit: data.limit }),
       })),
