@@ -87,6 +87,28 @@ check(
 );
 check("E-5c — explicit remove control exists", /Remove highlight \$\{index \+ 1\}/.test(STUDIO));
 
+// 5d — resource limit applies only to new docs/github, not legacy website/Telegram/X
+check(
+  "E-5d — website_url input has no PROFILE_RESOURCE_URL_MAX cap",
+  !/id="website_url"[\s\S]{0,120}maxLength=\{PROFILE_RESOURCE_URL_MAX\}/.test(STUDIO),
+);
+check(
+  "E-5e — telegram_url input has no PROFILE_RESOURCE_URL_MAX cap",
+  !/id="telegram_url"[\s\S]{0,120}maxLength=\{PROFILE_RESOURCE_URL_MAX\}/.test(STUDIO),
+);
+check(
+  "E-5f — x_url input has no PROFILE_RESOURCE_URL_MAX cap",
+  !/id="x_url"[\s\S]{0,120}maxLength=\{PROFILE_RESOURCE_URL_MAX\}/.test(STUDIO),
+);
+check(
+  "E-5g — docs_url input uses PROFILE_RESOURCE_URL_MAX",
+  /id="docs_url"[\s\S]{0,120}maxLength=\{PROFILE_RESOURCE_URL_MAX\}/.test(STUDIO),
+);
+check(
+  "E-5h — github_url input uses PROFILE_RESOURCE_URL_MAX",
+  /id="github_url"[\s\S]{0,120}maxLength=\{PROFILE_RESOURCE_URL_MAX\}/.test(STUDIO),
+);
+
 // 6 — no media work in this phase
 check(
   "E-6 — no video CRUD or project_profile_videos reference in the studio route",
