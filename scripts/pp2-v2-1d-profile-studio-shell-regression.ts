@@ -76,15 +76,18 @@ check(
     identity.includes(f),
   ),
 );
+// D-9/D-10 updated in PP2-V2-1E: rich About + Links fields are now editable.
 check(
-  "D-9 — About holds the existing description field only",
-  about.includes('id="description"') && !about.includes("tagline") && !about.includes("about_long"),
+  "D-9 — About holds description plus the activated rich content fields",
+  ['id="description"', 'id="tagline"', 'id="about_long"', 'id={`highlight-${index}`}'].every((f) =>
+    about.includes(f),
+  ),
 );
 check(
-  "D-10 — Links holds website, Telegram and X only",
-  ['id="website_url"', 'id="telegram_url"', 'id="x_url"'].every((f) => links.includes(f)) &&
-    !links.includes("docs_url") &&
-    !links.includes("github_url"),
+  "D-10 — Links holds website, Telegram, X, Docs and GitHub",
+  ['id="website_url"', 'id="telegram_url"', 'id="x_url"', 'id="docs_url"', 'id="github_url"'].every(
+    (f) => links.includes(f),
+  ),
 );
 check("D-11 — Visibility holds discovery status", visibility.includes('id="discovery_status"'));
 check(
@@ -107,10 +110,10 @@ check(
 // D-15 save flow invariants
 check("D-15 — exactly one editor form remains", count('id="project-profile-form"') === 1);
 check(
-  "D-16 — save payload still carries only the currently editable fields",
+  "D-16 — one save payload still carries every editable field (rich fields added in V2-1E)",
   /saveProjectProfile\(workspaceId, profile\?\.id \?\? null, \{[\s\S]*?discovery_status: form\.discovery_status,\s*\}\)/.test(
     SRC,
-  ) && !/tagline:|about_long:|highlights:|docs_url:|github_url:/.test(SRC),
+  ) && count("saveProjectProfile(") === 1,
 );
 check("D-17 — no video CRUD is called from the route", !/ProfileVideo|project_profile_videos/.test(SRC));
 check("D-18 — sticky mobile save bar preserved", SRC.includes("<StickyActionBar"));

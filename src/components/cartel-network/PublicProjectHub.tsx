@@ -66,6 +66,10 @@ function FactRow({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function OverviewPanel({ project }: { project: NetworkProject }) {
+  // `about_long` is the primary body; `description` is the fallback. Never both.
+  const aboutBody = project.about_long?.trim() || project.description?.trim() || null;
+  const highlights = (project.highlights ?? []).filter((item) => !!item && item.trim().length > 0);
+
   return (
     <div role="tabpanel" id="project-tabpanel-overview" aria-labelledby="project-tab-overview">
       <section className="rounded-lg border border-border/80 bg-surface-elevated p-5 shadow-inset sm:p-7">
@@ -73,9 +77,9 @@ function OverviewPanel({ project }: { project: NetworkProject }) {
         <h2 className="mt-2 font-display text-2xl uppercase leading-tight text-foreground sm:text-3xl">
           About {project.project_name}
         </h2>
-        {project.description ? (
+        {aboutBody ? (
           <p className="mt-5 max-w-3xl whitespace-pre-line text-sm leading-7 text-muted-foreground [overflow-wrap:anywhere] sm:text-base sm:leading-8">
-            {project.description}
+            {aboutBody}
           </p>
         ) : (
           <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
@@ -83,6 +87,24 @@ function OverviewPanel({ project }: { project: NetworkProject }) {
           </p>
         )}
       </section>
+
+      {highlights.length > 0 ? (
+        <section className="mt-6 rounded-lg border border-border/80 bg-surface-elevated p-5 shadow-inset sm:p-7">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gold">
+            Project highlights
+          </p>
+          <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+            {highlights.map((item, index) => (
+              <li
+                key={`${index}-${item}`}
+                className="min-w-0 rounded-md border border-border bg-surface-raised px-4 py-3 text-sm leading-relaxed text-foreground [overflow-wrap:anywhere]"
+              >
+                {item}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -199,7 +221,13 @@ function FactsRail({
   activeTab: PublicProjectHubTab;
 }) {
   const ticker = formatTicker(project.ticker);
-  const hasLinks = Boolean(project.website_url || project.telegram_url || project.x_url);
+  const hasLinks = Boolean(
+    project.website_url ||
+      project.telegram_url ||
+      project.x_url ||
+      project.docs_url ||
+      project.github_url,
+  );
   const platformReviewed = project.verification_status === "verified";
 
   return (
@@ -214,6 +242,8 @@ function FactsRail({
               website={project.website_url}
               telegram={project.telegram_url}
               x={project.x_url}
+              docs={project.docs_url}
+              github={project.github_url}
             />
           </div>
         </section>
@@ -295,6 +325,11 @@ export function PublicProjectHub({ project, launches, activeTab }: PublicProject
                 </StatusPill>
               ) : null}
             </div>
+            {project.tagline?.trim() ? (
+              <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere] sm:text-base">
+                {project.tagline.trim()}
+              </p>
+            ) : null}
           </div>
           {currentLaunch ? (
             <section className="min-w-0 rounded-lg border border-gold/20 bg-surface-raised/70 p-4 shadow-inset sm:p-5" aria-label="Current launch">
