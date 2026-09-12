@@ -861,7 +861,6 @@ function ProjectProfilePage() {
                   <Input
                     id="website_url"
                     type="url"
-                    maxLength={PROFILE_RESOURCE_URL_MAX}
                     className="mt-2 min-h-11"
                     value={form.website_url}
                     onChange={(e) => set({ website_url: e.target.value })}
