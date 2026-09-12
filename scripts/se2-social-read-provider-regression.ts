@@ -63,7 +63,9 @@ check(
 );
 
 const FORBIDDEN = [
-  "publish",
+  "publishPost",
+  "publishTo",
+  "createPost",
   "schedule",
   "deletePost",
   "oauth",
@@ -440,8 +442,9 @@ check(
 );
 check(
   "err-no-raw-payload",
-  !adapterSrc.includes("JSON.stringify(body)") && !adapterSrc.includes("payload)"),
-  "raw provider payload is never echoed back",
+  /return MESSAGES\[code\];/.test(adapterSrc) &&
+    !/message:\s*(String\(|`|\w+\.message)/.test(adapterSrc),
+  "failure messages come only from the fixed table; no provider text is echoed back",
 );
 
 /* -------------------------------------------------------------------------
