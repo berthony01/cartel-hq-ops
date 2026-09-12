@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Loader2, Rocket, ShieldCheck, Wallet } from "lucide-react";
 
 
