@@ -210,10 +210,17 @@ function platformOf(result: Rec, fallback: SocialPlatform): SocialPlatform {
   return isSocialPlatform(raw) ? raw : fallback;
 }
 
-/** Last non-empty path segment of a canonical link, used only as an id fallback. */
-function lastPathSegment(url: string): string | null {
+/**
+ * Identifier derived from a canonical link, used ONLY as a last-resort id for a
+ * links-only recent reference. A YouTube watch link carries its id in `?v=`;
+ * everything else uses the last path segment.
+ */
+function idFromUrl(url: string): string | null {
   try {
-    const segments = new URL(url).pathname.split("/").filter(Boolean);
+    const parsed = new URL(url);
+    const videoParam = parsed.searchParams.get("v");
+    if (videoParam) return videoParam.slice(0, 512);
+    const segments = parsed.pathname.split("/").filter(Boolean);
     const last = segments[segments.length - 1];
     return last ? last.slice(0, 512) : null;
   } catch {
