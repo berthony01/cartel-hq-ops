@@ -26,7 +26,13 @@ export const Route = createFileRoute("/network/project/$projectSlug")({
       queryKey: networkKeys.project(params.projectSlug),
       queryFn: () => fetchNetworkProject(params.projectSlug),
     });
-    return { project };
+    const launches = project
+      ? await context.queryClient.ensureQueryData({
+          queryKey: networkKeys.projectLaunches(params.projectSlug),
+          queryFn: () => fetchNetworkProjectLaunches(params.projectSlug),
+        })
+      : [];
+    return { project, launches };
   },
   head: ({ loaderData }) => {
     const project = loaderData?.project ?? null;
@@ -59,16 +65,19 @@ export const Route = createFileRoute("/network/project/$projectSlug")({
 function PublicProjectPage() {
   const { projectSlug } = Route.useParams();
   const { tab } = Route.useSearch();
+  const { project: initialProject, launches: initialLaunches } = Route.useLoaderData();
 
   const projectQuery = useQuery({
     queryKey: networkKeys.project(projectSlug),
     queryFn: () => fetchNetworkProject(projectSlug),
+    initialData: initialProject,
   });
 
   const launchesQuery = useQuery({
     queryKey: networkKeys.projectLaunches(projectSlug),
     queryFn: () => fetchNetworkProjectLaunches(projectSlug),
     enabled: !!projectQuery.data,
+    initialData: initialLaunches,
   });
 
   if (projectQuery.isLoading) {
@@ -107,7 +116,7 @@ function PublicProjectPage() {
   }
 
   const launches = launchesQuery.data ?? [];
-  const requestedTab = tab ?? "overview";
+  const requestedTab = tab === "launch" || tab === "trust" ? tab : "overview";
   const activeTab = requestedTab === "launch" && launches.length === 0 ? "overview" : requestedTab;
 
   return (
