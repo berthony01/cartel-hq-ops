@@ -266,11 +266,17 @@ function ProjectProfilePage() {
   /** Never submits an occupied position; the live table enforces UNIQUE(profile, position). */
   const nextFreeVideoPosition = (): number => {
     const used = new Set(videos.map((v) => v.position));
+    const maxPosition = videos.reduce((max, v) => (v.position > max ? v.position : max), -1);
+    const appendCandidate = maxPosition + 1;
+    if (appendCandidate < PROJECT_PROFILE_VIDEO_MAX_COUNT && !used.has(appendCandidate)) {
+      return appendCandidate;
+    }
     for (let position = 0; position < PROJECT_PROFILE_VIDEO_MAX_COUNT; position++) {
       if (!used.has(position)) return position;
     }
     throw new Error(`This profile already has ${PROJECT_PROFILE_VIDEO_MAX_COUNT} videos.`);
   };
+
 
   const addVideo = useMutation({
     mutationFn: async () => {
