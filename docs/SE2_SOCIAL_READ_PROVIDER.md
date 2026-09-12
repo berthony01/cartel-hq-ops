@@ -46,7 +46,22 @@ Canonical metrics `views / likes / comments / shares / saves` are `number | null
 
 For X, provider replies map to canonical `comments` and reposts to canonical `shares`. Bookmarks are not exposed separately; a bookmark count is adopted only if the provider returns it in the canonical `metrics.saves` field.
 
-Source reads force a single provider page (`pages: 1`), exactly one target per call, never a batch. Pagination `hasMore` is surfaced without fetching it.
+Exactly one target per call, expressed as a SINGULAR target field — never a batch.
+
+## Request contract (corrected 2026-09-12 after independent official-doc review)
+
+The initial SE-2 build sent an undocumented `{ targets: [...], pages: 1 }` envelope and read `post.url`. An independent review of Refetcher's current official documentation found this did not match the published contract. The adapter was corrected in the same phase, before any live call; nothing had been validated against the provider, so no live behaviour changed.
+
+| Operation | Request body |
+| --- | --- |
+| Post / video / metrics (all five platforms) | `{ url }` |
+| Source recent posts — Instagram, TikTok, Facebook | `{ profileUrl, includeRecentPosts: true, pages: 1, recentPostsLimit }` |
+| Source recent posts — X | as above plus `sort: "latest"` |
+| Source recent posts — YouTube channel | `{ type: "channel", platform: "youtube", channelUrl, includeRecentVideos: true, recentVideosLimit }` |
+
+Response mapping follows the documented shape: canonical link from `post.normalizedUrl` (falling back to `post.url`), content from `post.caption`, profile name from `profile.name`. Two source shapes normalize to one contract — `profile` + `recentPosts` for the four networks, `channel` + `recentVideos` for YouTube. `hasMore` reads `pageInfo.recentPosts.hasNextPage` or `pageInfo.recentVideos.hasNextPage`, with the earlier `pagination` shape kept as a fallback, and never triggers another call. Lightweight links-only references carry no metrics; those stay all-null with `unknown` availability rather than inventing values, and their id is derived from the canonical link only as a last resort.
+
+The result envelope rule is unchanged: inspect `results[0]`, require exactly one result entry, and honour `results[0].success`.
 
 ## Billing semantics
 
