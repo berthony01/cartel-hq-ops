@@ -5,6 +5,7 @@ export function renderErrorPage(): string {
     <meta charset="utf-8" />
     <title>This page didn't load</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="cartel-error-page" content="server" />
     <style>
       body { font: 15px/1.5 system-ui, -apple-system, sans-serif; background: #fafafa; color: #111; display: grid; place-items: center; min-height: 100vh; margin: 0; padding: 1.5rem; }
       .card { max-width: 28rem; width: 100%; text-align: center; padding: 2rem; }
@@ -39,7 +40,7 @@ export function renderErrorPage(): string {
           });
           if (!response.ok) return;
           const body = await response.text();
-          if (!body.includes("This page didn't load")) location.reload();
+          if (!body.includes('name="cartel-error-page" content="server"')) location.reload();
         } catch {
           // The server is still rebuilding or temporarily unreachable.
         }
