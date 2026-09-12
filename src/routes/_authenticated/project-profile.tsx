@@ -1129,13 +1129,23 @@ function ProjectProfilePage() {
                     </div>
                   </div>
 
+                  {form.tagline.trim() ? (
+                    <p className="type-helper text-foreground [overflow-wrap:anywhere]">
+                      {form.tagline.trim()}
+                    </p>
+                  ) : null}
+
                   {form.description.trim() ? (
                     <p className="type-helper text-muted-foreground [overflow-wrap:anywhere]">
                       {form.description.trim()}
                     </p>
                   ) : null}
 
-                  {form.website_url.trim() || form.telegram_url.trim() || form.x_url.trim() ? (
+                  {form.website_url.trim() ||
+                  form.telegram_url.trim() ||
+                  form.x_url.trim() ||
+                  form.docs_url.trim() ||
+                  form.github_url.trim() ? (
                     <div className="flex min-w-0 flex-wrap gap-1.5">
                       {form.website_url.trim() ? (
                         <span className="rounded-md border border-border-subtle bg-surface-raised px-2 py-1 type-eyebrow text-muted-foreground">
@@ -1150,6 +1160,16 @@ function ProjectProfilePage() {
                       {form.x_url.trim() ? (
                         <span className="rounded-md border border-border-subtle bg-surface-raised px-2 py-1 type-eyebrow text-muted-foreground">
                           X
+                        </span>
+                      ) : null}
+                      {form.docs_url.trim() ? (
+                        <span className="rounded-md border border-border-subtle bg-surface-raised px-2 py-1 type-eyebrow text-muted-foreground">
+                          Docs
+                        </span>
+                      ) : null}
+                      {form.github_url.trim() ? (
+                        <span className="rounded-md border border-border-subtle bg-surface-raised px-2 py-1 type-eyebrow text-muted-foreground">
+                          GitHub
                         </span>
                       ) : null}
                     </div>
