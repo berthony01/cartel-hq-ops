@@ -16,6 +16,8 @@ import {
   type ProviderErrorCode,
 } from "../src/lib/social-read-provider";
 import {
+  buildPostRequestBody,
+  buildSourceRequestBody,
   clampLimit,
   firstResult,
   mapHttpStatus,
@@ -155,7 +157,8 @@ const igResult = {
   scrapedAt: "2026-09-12T22:00:00.000Z",
   post: {
     id: "IG_ABC123",
-    url: "https://instagram.com/p/ABC123",
+    normalizedUrl: "https://instagram.com/p/ABC123",
+    url: "https://instagram.com/p/ABC123?igshid=tracking",
     caption: "gm cartel",
     mediaType: "image",
     publishedAt: "2026-09-11T10:00:00.000Z",
@@ -173,7 +176,12 @@ const igResult = {
 const igPost = mapPost(firstResult(successBody(igResult))!, "instagram", "https://instagram.com/p/ABC123");
 check("map-ig-identity", igPost?.externalPostId === "IG_ABC123", "instagram post id mapped");
 check("map-ig-author", igPost?.authorHandle === "pepecartel", "instagram author handle mapped");
-check("map-ig-text", igPost?.contentText === "gm cartel", "instagram caption mapped to contentText");
+check("map-ig-text", igPost?.contentText === "gm cartel", "documented caption maps to contentText");
+check(
+  "map-ig-normalized-url",
+  igPost?.canonicalUrl === "https://instagram.com/p/ABC123",
+  "normalizedUrl is preferred over the tracking url",
+);
 check("map-ig-metrics", igPost?.metrics.likes === 310 && igPost?.metrics.saves === 17, "instagram metrics mapped");
 check(
   "map-ig-unavailable-null",
@@ -228,11 +236,12 @@ check(
 
 const ytResult = {
   platform: "youtube",
-  post: { id: "YT_999", url: "https://youtube.com/watch?v=999", title: "launch recap" },
+  post: { id: "YT_999", normalizedUrl: "https://youtube.com/watch?v=999", caption: "launch recap" },
   // YouTube currently omits metricAvailability entirely.
   metrics: { views: 15000, likes: 400, comments: 12, shares: null, saves: null },
 };
 const ytPost = mapPost(firstResult(successBody(ytResult))!, "youtube", "https://youtube.com/watch?v=999");
+check("map-yt-caption", ytPost?.contentText === "launch recap", "YouTube video caption mapped");
 check(
   "map-yt-inferred-available",
   ytPost?.availability.views === "available" && ytPost?.availability.likes === "available",
@@ -315,7 +324,7 @@ const profileResult = {
     { id: "P2", url: "https://instagram.com/p/P2", metrics: { likes: 20 } },
     { id: "P3", url: "https://instagram.com/p/P3", metrics: { likes: 30 } },
   ],
-  pagination: { hasMore: true, nextCursor: "abc" },
+  pageInfo: { recentPosts: { hasNextPage: true } },
 };
 const source = mapSourceRecentPosts(
   firstResult(successBody(profileResult))!,
@@ -326,7 +335,72 @@ const source = mapSourceRecentPosts(
 check("map-source-identity", source?.source.handle === "pepecartel", "profile handle mapped");
 check("map-source-posts", source?.posts.length === 3, "recent posts mapped");
 check("map-source-post-metrics", source?.posts[0]?.metrics.likes === 10, "recent post metrics mapped");
-check("map-source-hasmore", source?.hasMore === true, "pagination hasMore preserved without fetching it");
+check(
+  "map-source-hasmore-pageinfo",
+  source?.hasMore === true,
+  "pageInfo.recentPosts.hasNextPage preserved without fetching another page",
+);
+check(
+  "map-source-hasmore-legacy",
+  mapSourceRecentPosts(
+    firstResult(successBody({ ...profileResult, pageInfo: undefined, pagination: { hasMore: true } }))!,
+    "instagram",
+    "https://instagram.com/pepecartel",
+    10,
+  )?.hasMore === true,
+  "legacy pagination.hasMore fallback still honoured",
+);
+
+const channelResult = {
+  platform: "youtube",
+  channel: {
+    channelId: "UC_PEPE",
+    normalizedUrl: "https://youtube.com/@pepecartel",
+    handle: "pepecartel",
+    name: "PEPECARTEL",
+  },
+  recentVideos: [
+    {
+      videoId: "V1",
+      normalizedUrl: "https://youtube.com/watch?v=V1",
+      caption: "recap",
+      metrics: { views: 500 },
+    },
+    // Links-only reference: no id, no metrics.
+    { normalizedUrl: "https://youtube.com/watch?v=V2" },
+  ],
+  pageInfo: { recentVideos: { hasNextPage: true } },
+};
+const channel = mapSourceRecentPosts(
+  firstResult(successBody(channelResult))!,
+  "youtube",
+  "https://youtube.com/@pepecartel",
+  10,
+);
+check(
+  "map-channel-identity",
+  channel?.source.externalAccountId === "UC_PEPE" && channel?.source.displayName === "PEPECARTEL",
+  "YouTube channel object maps to the canonical source",
+);
+check("map-channel-videos", channel?.posts.length === 2, "recentVideos map to canonical posts");
+check(
+  "map-channel-video-metrics",
+  channel?.posts[0]?.externalPostId === "V1" && channel?.posts[0]?.metrics.views === 500,
+  "YouTube video id and metrics mapped",
+);
+check(
+  "map-channel-linksonly-null",
+  channel?.posts[1]?.externalPostId === "V2" &&
+    SOCIAL_METRIC_KEYS.every(
+      (k) => channel?.posts[1]?.metrics[k] === null && channel?.posts[1]?.availability[k] === "unknown",
+    ),
+  "links-only recent video keeps all-null metrics with unknown availability",
+);
+check(
+  "map-channel-hasmore",
+  channel?.hasMore === true,
+  "pageInfo.recentVideos.hasNextPage preserved",
+);
 
 const clamped = mapSourceRecentPosts(
   firstResult(successBody(profileResult))!,
@@ -338,11 +412,58 @@ check("map-source-limit", clamped?.posts.length === 2, "caller limit clamps the 
 check("clamp-low", clampLimit(0) === 1, "limit clamps up to 1");
 check("clamp-high", clampLimit(9999) === 25, "limit clamps down to the single-page maximum");
 check("clamp-default", clampLimit(undefined) === 10, "default limit is 10");
-check("single-page", adapterSrc.includes("pages: 1"), "provider request forces a single page");
 check(
-  "single-target",
-  adapterSrc.includes("targets: [{ url: resolved.canonicalUrl, type: target }]"),
-  "exactly one target per call, never a batch",
+  "req-no-targets-array",
+  !adapterSrc.includes("targets:"),
+  "no undocumented targets array is sent",
+);
+check(
+  "req-post-body",
+  JSON.stringify(buildPostRequestBody("https://x.com/a/status/1")) ===
+    JSON.stringify({ url: "https://x.com/a/status/1" }),
+  "post/metrics request is exactly { url }",
+);
+for (const platform of ["instagram", "tiktok", "facebook"] as const) {
+  const body = buildSourceRequestBody(platform, "https://p.example/a", 7) as Record<string, unknown>;
+  check(
+    `req-profile-${platform}`,
+    body["profileUrl"] === "https://p.example/a" &&
+      body["includeRecentPosts"] === true &&
+      body["pages"] === 1 &&
+      body["recentPostsLimit"] === 7 &&
+      body["sort"] === undefined &&
+      body["url"] === undefined,
+    `${platform} profile request uses profileUrl + includeRecentPosts + pages:1 + recentPostsLimit`,
+  );
+}
+const xBody = buildSourceRequestBody("x", "https://x.com/a", 7) as Record<string, unknown>;
+check(
+  "req-profile-x-sort",
+  xBody["profileUrl"] === "https://x.com/a" &&
+    xBody["includeRecentPosts"] === true &&
+    xBody["pages"] === 1 &&
+    xBody["recentPostsLimit"] === 7 &&
+    xBody["sort"] === "latest",
+  "X profile request adds sort:latest",
+);
+const ytBody = buildSourceRequestBody("youtube", "https://youtube.com/@a", 7) as Record<string, unknown>;
+check(
+  "req-channel-youtube",
+  ytBody["type"] === "channel" &&
+    ytBody["platform"] === "youtube" &&
+    ytBody["channelUrl"] === "https://youtube.com/@a" &&
+    ytBody["includeRecentVideos"] === true &&
+    ytBody["recentVideosLimit"] === 7 &&
+    ytBody["includeRecentPosts"] === undefined &&
+    ytBody["profileUrl"] === undefined,
+  "YouTube channel request uses channelUrl + includeRecentVideos, never includeRecentPosts",
+);
+check(
+  "req-single-target-field",
+  ["url", "profileUrl", "channelUrl"].filter((k) => k in ytBody || k in xBody).length > 0 &&
+    !("profileUrl" in ytBody) &&
+    !("channelUrl" in xBody),
+  "exactly one singular target field per request, never a batch",
 );
 check(
   "first-result-strict",
