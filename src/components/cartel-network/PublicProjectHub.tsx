@@ -221,7 +221,13 @@ function FactsRail({
   activeTab: PublicProjectHubTab;
 }) {
   const ticker = formatTicker(project.ticker);
-  const hasLinks = Boolean(project.website_url || project.telegram_url || project.x_url);
+  const hasLinks = Boolean(
+    project.website_url ||
+      project.telegram_url ||
+      project.x_url ||
+      project.docs_url ||
+      project.github_url,
+  );
   const platformReviewed = project.verification_status === "verified";
 
   return (
@@ -236,6 +242,8 @@ function FactsRail({
               website={project.website_url}
               telegram={project.telegram_url}
               x={project.x_url}
+              docs={project.docs_url}
+              github={project.github_url}
             />
           </div>
         </section>
@@ -317,6 +325,11 @@ export function PublicProjectHub({ project, launches, activeTab }: PublicProject
                 </StatusPill>
               ) : null}
             </div>
+            {project.tagline?.trim() ? (
+              <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere] sm:text-base">
+                {project.tagline.trim()}
+              </p>
+            ) : null}
           </div>
           {currentLaunch ? (
             <section className="min-w-0 rounded-lg border border-gold/20 bg-surface-raised/70 p-4 shadow-inset sm:p-5" aria-label="Current launch">
