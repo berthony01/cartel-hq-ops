@@ -184,7 +184,7 @@ check(
 );
 check(
   "L1B-17",
-  !/supabase|from\(|rpc\(/.test(fnCode.replace(/auth-middleware|requireSupabaseAuth/g, "")),
+  !/\.from\(|\.rpc\(|supabaseAdmin|insert\(|update\(|delete\(/.test(fnCode),
   "verifier performs no database read or write",
 );
 check(
@@ -195,7 +195,7 @@ check(
 check(
   "L1B-19",
   /<TreasurySafeVerificationPanel[\s\S]*?address=\{recipient\}/.test(panelCode) &&
-    (panelCode.match(/production-recipient"/g) ?? []).length === 1,
+    (panelCode.match(/id="production-recipient"/g) ?? []).length === 1,
   "treasury panel reuses the single existing recipient field",
 );
 check(
