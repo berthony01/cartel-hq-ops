@@ -325,12 +325,21 @@ function FactsRail({
   );
 }
 
-export function PublicProjectHub({ project, launches, activeTab }: PublicProjectHubProps) {
+export function PublicProjectHub({
+  project,
+  launches,
+  videos = [],
+  activeTab,
+}: PublicProjectHubProps) {
   const ticker = formatTicker(project.ticker);
   const currentLaunch = launches.find((launch) => launch.status !== "COMPLETED") ?? null;
-  const tabs: PublicProjectHubTab[] = launches.length > 0
-    ? ["overview", "launch", "trust"]
-    : ["overview", "trust"];
+  // Media only appears when the project actually published videos.
+  const tabs: PublicProjectHubTab[] = [
+    "overview" as const,
+    ...(launches.length > 0 ? (["launch"] as const) : []),
+    ...(videos.length > 0 ? (["media"] as const) : []),
+    "trust" as const,
+  ];
 
   return (
     <div className="space-y-6 sm:space-y-8">
