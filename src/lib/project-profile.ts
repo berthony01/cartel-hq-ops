@@ -96,6 +96,243 @@ export function nullableText(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
+// ---------------------------------------------------------------------------
+// Rich profile content — pure normalization / validation helpers
+// ---------------------------------------------------------------------------
+
+/** Explicit, user-readable validation failure. Never silently truncates. */
+export class ProfileContentValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProfileContentValidationError";
+  }
+}
+
+export function normalizeTagline(value: string | null | undefined): string | null {
+  const text = nullableText(value);
+  if (text && text.length > TAGLINE_MAX) {
+    throw new ProfileContentValidationError(
+      `Tagline must be ${TAGLINE_MAX} characters or fewer.`,
+    );
+  }
+  return text;
+}
+
+export function normalizeAboutLong(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > ABOUT_LONG_MAX) {
+    throw new ProfileContentValidationError(
+      `About must be ${ABOUT_LONG_MAX} characters or fewer.`,
+    );
+  }
+  return trimmed;
+}
+
+/** Trims, drops empties, preserves author order, enforces count and length. */
+export function normalizeHighlights(
+  values: readonly string[] | null | undefined,
+): string[] | null {
+  if (values == null) return null;
+  const cleaned = values.map((v) => (v ?? "").trim()).filter((v) => v.length > 0);
+  if (cleaned.length === 0) return null;
+  if (cleaned.length > HIGHLIGHT_MAX_COUNT) {
+    throw new ProfileContentValidationError(
+      `You can add at most ${HIGHLIGHT_MAX_COUNT} highlights.`,
+    );
+  }
+  for (const item of cleaned) {
+    if (item.length > HIGHLIGHT_MAX) {
+      throw new ProfileContentValidationError(
+        `Each highlight must be ${HIGHLIGHT_MAX} characters or fewer.`,
+      );
+    }
+  }
+  return cleaned;
+}
+
+/** Optional absolute http(s) link. Rejects other schemes and over-long URLs. */
+export function normalizeResourceUrl(
+  value: string | null | undefined,
+  label: string,
+): string | null {
+  const text = nullableText(value);
+  if (!text) return null;
+  if (text.length > PROFILE_RESOURCE_URL_MAX) {
+    throw new ProfileContentValidationError(
+      `${label} must be ${PROFILE_RESOURCE_URL_MAX} characters or fewer.`,
+    );
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(text);
+  } catch {
+    throw new ProfileContentValidationError(
+      `${label} must be a full link starting with https://`,
+    );
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new ProfileContentValidationError(
+      `${label} must be a full link starting with https://`,
+    );
+  }
+  return text;
+}
+
+// ---------------------------------------------------------------------------
+// Project profile videos (authenticated, RLS-protected)
+// ---------------------------------------------------------------------------
+
+export type ProjectProfileVideoRow =
+  Database["public"]["Tables"]["project_profile_videos"]["Row"];
+
+export type ProjectProfileVideoInput = {
+  /** Raw user input: full YouTube URL or a bare 11-character video id. */
+  youtube: string;
+  title?: string | null;
+  position: number;
+};
+
+export type ProjectProfileVideoUpdate = {
+  title?: string | null;
+  position?: number;
+};
+
+const YOUTUBE_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
+
+const YOUTUBE_HOSTS = new Set([
+  "youtube.com",
+  "www.youtube.com",
+  "m.youtube.com",
+  "music.youtube.com",
+  "youtu.be",
+  "www.youtu.be",
+]);
+
+/**
+ * Pure canonical parser. Accepts a bare 11-char id, watch/shorts/embed URLs and
+ * youtu.be links on exact YouTube hosts only. No network access. Returns the
+ * canonical 11-character id, or null when the input is not acceptable.
+ */
+export function extractYouTubeVideoId(value: string | null | undefined): string | null {
+  const raw = (value ?? "").trim();
+  if (!raw) return null;
+  if (YOUTUBE_ID_PATTERN.test(raw)) return raw;
+  if (!/^https?:\/\//i.test(raw)) return null;
+
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  const host = url.hostname.toLowerCase();
+  if (!YOUTUBE_HOSTS.has(host)) return null;
+
+  let candidate: string | null = null;
+  const segments = url.pathname.split("/").filter(Boolean);
+
+  if (host === "youtu.be" || host === "www.youtu.be") {
+    candidate = segments[0] ?? null;
+  } else if (url.pathname === "/watch") {
+    candidate = url.searchParams.get("v");
+  } else if (segments[0] === "shorts" || segments[0] === "embed" || segments[0] === "v") {
+    candidate = segments[1] ?? null;
+  }
+
+  if (!candidate) return null;
+  return YOUTUBE_ID_PATTERN.test(candidate) ? candidate : null;
+}
+
+export function normalizeVideoTitle(value: string | null | undefined): string | null {
+  const text = nullableText(value);
+  if (text && text.length > PROJECT_PROFILE_VIDEO_TITLE_MAX) {
+    throw new ProfileContentValidationError(
+      `Video title must be ${PROJECT_PROFILE_VIDEO_TITLE_MAX} characters or fewer.`,
+    );
+  }
+  return text;
+}
+
+export function normalizeVideoPosition(value: number): number {
+  if (
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value > PROJECT_PROFILE_VIDEO_MAX_COUNT - 1
+  ) {
+    throw new ProfileContentValidationError(
+      `Video position must be between 0 and ${PROJECT_PROFILE_VIDEO_MAX_COUNT - 1}.`,
+    );
+  }
+  return value;
+}
+
+/** Videos for one profile, ordered the way the public hub will render them. */
+export async function listProjectProfileVideos(
+  projectProfileId: string,
+): Promise<ProjectProfileVideoRow[]> {
+  const { data, error } = await supabase
+    .from("project_profile_videos")
+    .select("*")
+    .eq("project_profile_id", projectProfileId)
+    .order("position", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function addProjectProfileVideo(
+  projectProfileId: string,
+  input: ProjectProfileVideoInput,
+): Promise<ProjectProfileVideoRow> {
+  const videoId = extractYouTubeVideoId(input.youtube);
+  if (!videoId) {
+    throw new ProfileContentValidationError(
+      "Enter a valid YouTube link or 11-character video ID.",
+    );
+  }
+  const { data, error } = await supabase
+    .from("project_profile_videos")
+    .insert({
+      project_profile_id: projectProfileId,
+      youtube_video_id: videoId,
+      title: normalizeVideoTitle(input.title),
+      position: normalizeVideoPosition(input.position),
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+/** Title and/or position only — never the profile link or the video id. */
+export async function updateProjectProfileVideo(
+  videoId: string,
+  patch: ProjectProfileVideoUpdate,
+): Promise<ProjectProfileVideoRow> {
+  const changes: { title?: string | null; position?: number } = {};
+  if ("title" in patch) changes.title = normalizeVideoTitle(patch.title);
+  if (patch.position !== undefined) changes.position = normalizeVideoPosition(patch.position);
+  const { data, error } = await supabase
+    .from("project_profile_videos")
+    .update(changes)
+    .eq("id", videoId)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteProjectProfileVideo(videoId: string): Promise<void> {
+  const { error } = await supabase
+    .from("project_profile_videos")
+    .delete()
+    .eq("id", videoId);
+  if (error) throw error;
+}
+
 function toDiscoveryStatus(value: string): DiscoveryStatus {
   return (DISCOVERY_STATUSES as string[]).includes(value)
     ? (value as DiscoveryStatus)
