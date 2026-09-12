@@ -137,8 +137,14 @@ function PublicProjectPage() {
   }
 
   const launches = launchesQuery.data ?? [];
-  const requestedTab = tab === "launch" || tab === "trust" ? tab : "overview";
-  const activeTab = requestedTab === "launch" && launches.length === 0 ? "overview" : requestedTab;
+  const videos = videosQuery.data ?? [];
+  const requestedTab =
+    tab === "launch" || tab === "media" || tab === "trust" ? tab : "overview";
+  const activeTab =
+    (requestedTab === "launch" && launches.length === 0) ||
+    (requestedTab === "media" && videos.length === 0)
+      ? "overview"
+      : requestedTab;
 
   return (
     <div className="space-y-6">
@@ -159,8 +165,26 @@ function PublicProjectPage() {
           </Button>
         </div>
       ) : (
-        <PublicProjectHub project={project} launches={launches} activeTab={activeTab} />
+        <>
+          {videosQuery.isError ? (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border/80 bg-surface-elevated px-4 py-3">
+              <p className="min-w-0 text-xs text-muted-foreground">
+                Project videos could not be loaded right now.
+              </p>
+              <Button variant="outline" size="sm" onClick={() => videosQuery.refetch()}>
+                Retry videos
+              </Button>
+            </div>
+          ) : null}
+          <PublicProjectHub
+            project={project}
+            launches={launches}
+            videos={videos}
+            activeTab={activeTab}
+          />
+        </>
       )}
+
     </div>
   );
 }
