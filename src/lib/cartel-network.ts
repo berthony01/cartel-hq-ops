@@ -210,6 +210,7 @@ export const networkKeys = {
 
   project: (slug: string) => ["cartel-network", "project", slug] as const,
   projectLaunches: (slug: string) => ["cartel-network", "project-launches", slug] as const,
+  projectVideos: (slug: string) => ["cartel-network", "project-videos", slug] as const,
   upcoming: (p: DirectoryParams) =>
     ["cartel-network", "upcoming", p.search ?? "", p.chain ?? "", p.limit ?? NETWORK_PAGE_SIZE, p.offset ?? 0] as const,
   launch: (slug: string) => ["cartel-network", "launch", slug] as const,
