@@ -210,6 +210,17 @@ function platformOf(result: Rec, fallback: SocialPlatform): SocialPlatform {
   return isSocialPlatform(raw) ? raw : fallback;
 }
 
+/** Last non-empty path segment of a canonical link, used only as an id fallback. */
+function lastPathSegment(url: string): string | null {
+  try {
+    const segments = new URL(url).pathname.split("/").filter(Boolean);
+    const last = segments[segments.length - 1];
+    return last ? last.slice(0, 512) : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Map one successful Refetcher post result into a canonical post.
  * Returns `null` when the payload lacks the identity fields we require.
