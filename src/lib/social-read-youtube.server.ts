@@ -520,10 +520,20 @@ export const youtubeReadProvider: SocialReadProvider = {
       : [];
 
     // 4. one videos.list enrichment for public statistics (quota 1). No search.
+    //
+    // Conservative metering: a quota-consuming enrichment request that is
+    // ATTEMPTED but does not succeed cleanly may still have consumed quota, and
+    // our transport cannot prove otherwise. In that case we keep the fallback
+    // success (playlist data) but report `units: null` (unknown) rather than
+    // understating usage as 2. Quota usage is never understated.
     const enriched = new Map<string, NormalizedPost>();
+    let enrichmentAttempted = false;
+    let enrichmentSucceeded = false;
     if (videoIds.length > 0) {
+      enrichmentAttempted = true;
       const videosResponse = await getJson(buildVideosListUrl(videoIds), apiKey);
       if (videosResponse.ok) {
+        enrichmentSucceeded = true;
         quotaUnits += 1;
         const items = asRecord(videosResponse.body)?.["items"];
         if (Array.isArray(items)) {
@@ -542,10 +552,14 @@ export const youtubeReadProvider: SocialReadProvider = {
 
     const nextPageToken = asText(asRecord(playlistResponse.body)?.["nextPageToken"], 512);
 
+    // Known total only when no enrichment was needed, or enrichment succeeded.
+    const reportedUnits = enrichmentAttempted && !enrichmentSucceeded ? null : quotaUnits;
+
     return providerSuccess<NormalizedSourceRecentPosts>(
       YOUTUBE_PROVIDER_ID,
       { source: channel.source, posts, hasMore: nextPageToken !== null },
-      { billable: false, units: quotaUnits },
+      { billable: false, units: reportedUnits },
     );
+
   },
 };

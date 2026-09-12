@@ -73,7 +73,7 @@ Count fields arrive as decimal strings and are converted only when they are a fi
 
 Source read: `channels.list` (`id` / `forHandle` / `forUsername` depending on URL form) → `contentDetails.relatedPlaylists.uploads` → one page of `playlistItems.list` → one `videos.list` enrichment for public statistics. **`search.list` is never used.** No pagination loop; `nextPageToken` only sets `hasMore`. Un-enriched items keep all-null metrics rather than inventing values.
 
-Billing: YouTube consumes API quota, not a direct monetary charge, so reads return `billable: false` with `units` expressing quota units — 1 for a video read, and the actual known total (2 or 3) for a source read.
+Billing: YouTube consumes API quota, not a direct monetary charge, so reads return `billable: false` with `units` expressing quota units — 1 for a video read, and for a source read the actual known total: 2 when no enrichment request is needed (zero video ids), and 3 when the `videos.list` enrichment succeeds cleanly. If the enrichment request was attempted but did not succeed, the call still succeeds on playlist fallback data but reports `units: null` (unknown): the failed attempt may still have consumed quota and the transport cannot prove otherwise, so usage is never understated as 2.
 
 ## Security boundary (unchanged from SE-2)
 
