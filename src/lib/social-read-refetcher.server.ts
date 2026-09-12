@@ -373,10 +373,51 @@ function fail<T>(code: ProviderErrorCode): ProviderResult<T> {
   return providerFailure<T>(REFETCHER_PROVIDER_ID, code, messageFor(code));
 }
 
+/* ---------------------------------------------------------------------------
+ * Request bodies (pure) — mirror the documented Refetcher request contract.
+ *
+ * Exactly ONE target per call. Single-target semantics are expressed by a
+ * SINGULAR target field (`url`, `profileUrl` or `channelUrl`); there is no
+ * `targets` array and SE-2 never batches.
+ * ------------------------------------------------------------------------- */
+
+/** Post / video / metrics read, all five platforms. */
+export function buildPostRequestBody(canonicalUrl: string): Rec {
+  return { url: canonicalUrl };
+}
+
+/**
+ * Profile read.
+ * - Instagram / TikTok / Facebook / X: `profileUrl` + `includeRecentPosts`.
+ *   X additionally takes `sort: "latest"`.
+ * - YouTube: a channel read with `channelUrl` + `includeRecentVideos`.
+ */
+export function buildSourceRequestBody(
+  platform: SocialPlatform,
+  canonicalUrl: string,
+  safeLimit: number,
+): Rec {
+  if (platform === "youtube") {
+    return {
+      type: "channel",
+      platform: "youtube",
+      channelUrl: canonicalUrl,
+      includeRecentVideos: true,
+      recentVideosLimit: safeLimit,
+    };
+  }
+  return {
+    profileUrl: canonicalUrl,
+    includeRecentPosts: true,
+    pages: 1,
+    recentPostsLimit: safeLimit,
+    ...(platform === "x" ? { sort: "latest" } : {}),
+  };
+}
+
 async function readOne<T>(
   url: unknown,
-  target: "post" | "profile",
-  extra: Rec,
+  buildBody: (platform: SocialPlatform, canonicalUrl: string) => Rec,
   map: (result: Rec, platform: SocialPlatform, canonicalUrl: string) => T | null,
   units: number | null,
 ): Promise<ProviderResult<T>> {
@@ -387,12 +428,7 @@ async function readOne<T>(
   const apiKey = readApiKey();
   if (!apiKey) return fail<T>("PROVIDER_NOT_CONFIGURED");
 
-  const transport = await callRefetcher(apiKey, {
-    // Exactly one target per call. SE-2 never batches.
-    targets: [{ url: resolved.canonicalUrl, type: target }],
-    pages: 1,
-    ...extra,
-  });
+  const transport = await callRefetcher(apiKey, buildBody(resolved.platform, resolved.canonicalUrl));
   if (!transport.ok) return fail<T>(transport.code);
 
   const result = firstResult(transport.body);
@@ -420,16 +456,18 @@ export const refetcherReadProvider: SocialReadProvider = {
   },
 
   fetchPostByUrl({ url }) {
-    return readOne<NormalizedPost>(url, "post", {}, (result, platform, canonicalUrl) =>
-      mapPost(result, platform, canonicalUrl),
-    1);
+    return readOne<NormalizedPost>(
+      url,
+      (_platform, canonicalUrl) => buildPostRequestBody(canonicalUrl),
+      (result, platform, canonicalUrl) => mapPost(result, platform, canonicalUrl),
+      1,
+    );
   },
 
   fetchPostMetrics({ url }) {
     return readOne<NormalizedMetricsObservation>(
       url,
-      "post",
-      {},
+      (_platform, canonicalUrl) => buildPostRequestBody(canonicalUrl),
       (result, platform, canonicalUrl) => mapMetricsObservation(result, platform, canonicalUrl),
       1,
     );
@@ -439,14 +477,14 @@ export const refetcherReadProvider: SocialReadProvider = {
     const safeLimit = clampLimit(limit);
     return readOne<NormalizedSourceRecentPosts>(
       url,
-      "profile",
-      { limit: safeLimit },
+      (platform, canonicalUrl) => buildSourceRequestBody(platform, canonicalUrl, safeLimit),
       (result, platform, canonicalUrl) =>
         mapSourceRecentPosts(result, platform, canonicalUrl, safeLimit),
       // Profile page billing can vary by platform, so units stay unasserted.
       null,
     );
   },
+};
 };
 
 /** Re-exported for fixture tests that assert the sanitized failure envelope. */
