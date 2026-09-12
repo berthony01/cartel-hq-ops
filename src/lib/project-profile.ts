@@ -389,6 +389,11 @@ export async function saveProjectProfile(
     telegram_url: nullableText(payload.telegram_url),
     x_url: nullableText(payload.x_url),
     discovery_status: payload.discovery_status,
+    tagline: normalizeTagline(payload.tagline),
+    about_long: normalizeAboutLong(payload.about_long),
+    highlights: normalizeHighlights(payload.highlights),
+    docs_url: normalizeResourceUrl(payload.docs_url, "Docs link"),
+    github_url: normalizeResourceUrl(payload.github_url, "GitHub link"),
   };
 
   if (!normalized.project_name) throw new Error("Project name is required.");
