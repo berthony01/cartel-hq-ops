@@ -22,6 +22,8 @@ export type NetworkUpcomingLaunch =
   Fns["get_cartel_network_upcoming_launches"]["Returns"][number];
 export type NetworkLaunch = Fns["get_cartel_network_launch"]["Returns"][number];
 export type NetworkSignal = Fns["get_cartel_network_signals"]["Returns"][number];
+export type NetworkProjectVideo =
+  Fns["get_cartel_network_project_videos"]["Returns"][number];
 
 const SIGNAL_LABELS: Record<string, string> = {
   LAUNCH_ANNOUNCED: "Launch announced",
@@ -208,6 +210,7 @@ export const networkKeys = {
 
   project: (slug: string) => ["cartel-network", "project", slug] as const,
   projectLaunches: (slug: string) => ["cartel-network", "project-launches", slug] as const,
+  projectVideos: (slug: string) => ["cartel-network", "project-videos", slug] as const,
   upcoming: (p: DirectoryParams) =>
     ["cartel-network", "upcoming", p.search ?? "", p.chain ?? "", p.limit ?? NETWORK_PAGE_SIZE, p.offset ?? 0] as const,
   launch: (slug: string) => ["cartel-network", "launch", slug] as const,
@@ -252,6 +255,21 @@ export async function fetchNetworkProjectLaunches(
 ): Promise<NetworkProjectLaunch[]> {
   if (!isValidNetworkSlug(slug)) return [];
   const { data, error } = await supabase.rpc("get_cartel_network_project_launches", {
+    _project_slug: slug.trim().toLowerCase(),
+  });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
+ * Public project videos. Read-only through the existing SECURITY DEFINER RPC,
+ * which only returns rows for published, non-hidden project profiles.
+ */
+export async function fetchNetworkProjectVideos(
+  slug: string,
+): Promise<NetworkProjectVideo[]> {
+  if (!isValidNetworkSlug(slug)) return [];
+  const { data, error } = await supabase.rpc("get_cartel_network_project_videos", {
     _project_slug: slug.trim().toLowerCase(),
   });
   if (error) throw error;
