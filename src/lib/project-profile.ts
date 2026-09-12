@@ -205,19 +205,12 @@ export type ProjectProfileVideoUpdate = {
 
 const YOUTUBE_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 
-const YOUTUBE_HOSTS = new Set([
-  "youtube.com",
-  "www.youtube.com",
-  "m.youtube.com",
-  "music.youtube.com",
-  "youtu.be",
-  "www.youtu.be",
-]);
+const YOUTUBE_WATCH_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com"]);
 
 /**
- * Pure canonical parser. Accepts a bare 11-char id, watch/shorts/embed URLs and
- * youtu.be links on exact YouTube hosts only. No network access. Returns the
- * canonical 11-character id, or null when the input is not acceptable.
+ * Pure canonical parser. Accepts a bare 11-char id, youtube.com watch/shorts/embed
+ * URLs and youtu.be short links on exact YouTube hosts only. No network access.
+ * Returns the canonical 11-character id, or null when the input is not acceptable.
  */
 export function extractYouTubeVideoId(value: string | null | undefined): string | null {
   const raw = (value ?? "").trim();
@@ -233,17 +226,20 @@ export function extractYouTubeVideoId(value: string | null | undefined): string 
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") return null;
   const host = url.hostname.toLowerCase();
-  if (!YOUTUBE_HOSTS.has(host)) return null;
 
   let candidate: string | null = null;
   const segments = url.pathname.split("/").filter(Boolean);
 
-  if (host === "youtu.be" || host === "www.youtu.be") {
-    candidate = segments[0] ?? null;
-  } else if (url.pathname === "/watch") {
-    candidate = url.searchParams.get("v");
-  } else if (segments[0] === "shorts" || segments[0] === "embed" || segments[0] === "v") {
-    candidate = segments[1] ?? null;
+  if (host === "youtu.be") {
+    candidate = segments.length === 1 ? segments[0] : null;
+  } else if (YOUTUBE_WATCH_HOSTS.has(host)) {
+    if (url.pathname === "/watch") {
+      candidate = url.searchParams.get("v");
+    } else if (segments.length === 2 && (segments[0] === "shorts" || segments[0] === "embed")) {
+      candidate = segments[1];
+    }
+  } else {
+    return null;
   }
 
   if (!candidate) return null;
