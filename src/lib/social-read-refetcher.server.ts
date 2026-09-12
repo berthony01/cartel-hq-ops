@@ -248,7 +248,8 @@ export function mapPost(
     canonicalUrl,
     authorHandle: asText(author?.["handle"] ?? author?.["username"], 255),
     authorDisplayName: asText(author?.["displayName"] ?? author?.["name"], 512),
-    contentText: asText(post["text"] ?? post["caption"] ?? post["title"], 20000),
+    // Documented post content field is `caption`.
+    contentText: asText(post["caption"] ?? post["text"] ?? post["title"], 20000),
     mediaType: asText(post["mediaType"] ?? post["type"], 64),
     publishedAt: asTimestamp(post["publishedAt"] ?? post["createdAt"] ?? post["timestamp"]),
     metrics,
@@ -270,17 +271,27 @@ export function mapMetricsObservation(
   return {
     platform: platformOf(result, fallbackPlatform),
     externalPostId:
-      asText(post["id"], 512) ?? asText(post["postId"], 512) ?? asText(result["id"], 512),
-    canonicalUrl: asText(post["url"], 2048) ?? fallbackUrl,
+      asText(post["id"], 512) ??
+      asText(post["postId"], 512) ??
+      asText(post["videoId"], 512) ??
+      asText(result["id"], 512),
+    canonicalUrl: asText(post["normalizedUrl"], 2048) ?? asText(post["url"], 2048) ?? fallbackUrl,
     metrics,
     availability,
   };
 }
 
 /**
- * Map one successful Refetcher profile result into a source plus a SINGLE page
- * of recent posts. Posts that cannot be identified are dropped rather than
- * guessed at.
+ * Map one successful Refetcher source result into a canonical source plus a
+ * SINGLE page of recent items.
+ *
+ * Two documented response shapes are accepted and normalized to one contract:
+ * - Instagram / TikTok / Facebook / X: `profile` + `recentPosts`, paging under
+ *   `pageInfo.recentPosts`.
+ * - YouTube: `channel` + `recentVideos`, paging under `pageInfo.recentVideos`.
+ *
+ * Lightweight recent references often carry no metrics. Those stay all-null
+ * with `unknown` availability; nothing is invented and no second call is made.
  */
 export function mapSourceRecentPosts(
   result: Rec,
@@ -288,35 +299,51 @@ export function mapSourceRecentPosts(
   fallbackUrl: string,
   limit: number,
 ): NormalizedSourceRecentPosts | null {
-  const profile = asRecord(result["profile"]);
+  const channel = asRecord(result["channel"]);
+  const profile = asRecord(result["profile"]) ?? channel;
   if (!profile) return null;
   const platform = platformOf(result, fallbackPlatform);
 
   const source: NormalizedSource = {
     platform,
-    canonicalUrl: asText(profile["url"], 2048) ?? fallbackUrl,
+    canonicalUrl:
+      asText(profile["normalizedUrl"], 2048) ?? asText(profile["url"], 2048) ?? fallbackUrl,
     handle: asText(profile["handle"] ?? profile["username"], 255),
-    externalAccountId: asText(profile["id"] ?? profile["accountId"], 512),
-    displayName: asText(profile["displayName"] ?? profile["name"], 512),
+    externalAccountId: asText(profile["id"] ?? profile["channelId"] ?? profile["accountId"], 512),
+    displayName: asText(profile["name"] ?? profile["displayName"], 512),
   };
 
-  const rawPosts = result["recentPosts"] ?? profile["recentPosts"];
+  const rawItems =
+    result["recentPosts"] ??
+    result["recentVideos"] ??
+    profile["recentPosts"] ??
+    profile["recentVideos"];
+
   const posts: NormalizedPost[] = [];
-  if (Array.isArray(rawPosts)) {
-    for (const entry of rawPosts) {
+  if (Array.isArray(rawItems)) {
+    for (const entry of rawItems) {
       const record = asRecord(entry);
       if (!record) continue;
-      const mapped = mapPost({ platform, post: record, metrics: record["metrics"] }, platform, source.canonicalUrl);
+      const mapped = mapPost(
+        { platform, post: record, metrics: record["metrics"] },
+        platform,
+        source.canonicalUrl,
+      );
       if (mapped) posts.push(mapped);
       if (posts.length >= limit) break;
     }
   }
 
+  const pageInfo = asRecord(result["pageInfo"]);
+  const postsPage = asRecord(pageInfo?.["recentPosts"]);
+  const videosPage = asRecord(pageInfo?.["recentVideos"]);
   const pagination = asRecord(result["pagination"]);
   const hasMore =
+    postsPage?.["hasNextPage"] === true ||
+    videosPage?.["hasNextPage"] === true ||
     pagination?.["hasMore"] === true ||
     typeof pagination?.["nextCursor"] === "string" ||
-    (Array.isArray(rawPosts) && rawPosts.length > posts.length);
+    (Array.isArray(rawItems) && rawItems.length > posts.length);
 
   return { source, posts, hasMore };
 }
