@@ -277,7 +277,6 @@ function ProjectProfilePage() {
     throw new Error(`This profile already has ${PROJECT_PROFILE_VIDEO_MAX_COUNT} videos.`);
   };
 
-
   const addVideo = useMutation({
     mutationFn: async () => {
       if (!profile?.id) throw new Error("Create the project profile first.");
