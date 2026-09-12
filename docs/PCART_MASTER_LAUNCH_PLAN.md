@@ -60,6 +60,78 @@ Important: creator-fee percentages are percentages of protocol/pool fee streams,
 
 **Treasury revenue policy target (non-contractual, adjustable):** 35% marketing/content/community growth; 35% CARTEL HQ development/infrastructure; 20% liquidity/security/reserve; 10% legal/audits/compliance/admin. This is an operating-policy target, not token-holder entitlement and not hard-coded in Solidity.
 
+## 4.1 PCART-L1A — CCA Auction Economics Simulation (RECOMMENDED CANDIDATE, NOT YET FROZEN)
+
+This section records a read-only economics recommendation for the already-frozen 500,000,000 PCART public launch + liquidity bucket. It does **not** freeze any parameter and does **not** authorize execution.
+
+### 4.1.1 Scenario comparison within the frozen 500M public-launch/liquidity bucket
+
+| Scenario | Max auction supply | Reserved token-side LP budget | Future liquidity/market reserve |
+|---|---|---|---|
+| Conservative | 100,000,000 PCART | 150,000,000 PCART | 250,000,000 PCART |
+| **Balanced (RECOMMENDED)** | **150,000,000 PCART** | **200,000,000 PCART** | **150,000,000 PCART** |
+| Aggressive | 200,000,000 PCART | 250,000,000 PCART | 50,000,000 PCART |
+
+**Why Balanced is recommended:** it exposes at most 15% of total supply to the initial auction, keeps a large 20% token-side LP budget available for migration, and retains another 15% of total supply as flexible future liquidity/market support. It avoids both a very small initial public distribution and committing almost the entire 500M bucket at launch.
+
+### 4.1.2 Current Uniswap LBP mechanical fit (must be reverified before execution)
+
+Current-source finding: `LBPStrategy` splits the amount deposited into auction supply (`distribution amount minus reservedTokenAmountForLP`) while `reservedTokenAmountForLP` stays in the strategy for migration. Under the recommended candidate, the planned LBP deposit would therefore be **350,000,000 PCART**, with **200,000,000 PCART reserved** and up to **150,000,000 PCART** sent to the CCA. The other **150,000,000 PCART** from the 500M bucket remains outside this launch transaction as designated future liquidity/market reserve.
+
+Unused migration currency and unused reserved LP tokens return to the configured recipient; failed-migration recovery also returns raised currency and reserved tokens to the recipient. These mechanics are **not frozen external facts** and must be reverified against current Robinhood Chain/Uniswap contracts and SDK immediately before build/execution.
+
+### 4.1.3 RECOMMENDED CANDIDATE auction parameters for simulation only
+
+- **Raise currency:** native ETH.
+- **Max auction supply:** 150,000,000 PCART.
+- **Reserved token-side LP budget:** 200,000,000 PCART.
+- **Future liquidity/market reserve outside launcher:** 150,000,000 PCART.
+- **Auction window:** 24 hours, subject to exact Robinhood Chain blocknumberish/live timing validation.
+- **Candidate floor FDV:** 50 ETH equivalent across the 1,000,000,000 PCART total supply. This is a low floor guardrail, not a target valuation.
+- **Candidate graduation minimum `requiredCurrencyRaised`:** 10 ETH. Treat this as a minimum viable launch-liquidity gate, not a fundraising target.
+- **Candidate tick spacing:** approximately 1% of floor price, subject to SDK derivation and validation.
+- **Auction emission/supply schedule:** use the current audited SDK convex schedule derivation and independently validate significant final issuance; do not hand-invent a schedule.
+- **Candidate post-auction static LP fee:** 0.25%, but leave **OPEN** until current Robinhood Chain v4 pool-key availability and creator-fee compatibility are confirmed.
+- **Validation hook:** none by default; legal/compliance review may change this.
+
+### 4.1.4 RECOMMENDED CANDIDATE tiered LP allocation of ETH raised
+
+Current SDK supports bracketed LP allocations, but exact inclusive on-chain thresholds must be encoded and tested later. The objective is that weak/modest demand prioritizes liquidity, while stronger demand creates a modest operational reserve. Protocol fees, gas, and exact accounting must be deducted and verified in simulation; these percentages are not net guaranteed proceeds.
+
+| Raise range | LP allocation | Operational remainder to configured treasury recipient |
+|---|---|---|
+| Below 15 ETH | 100% | 0% |
+| 15 ETH up to but below 30 ETH | 90% | 10% |
+| 30 ETH or more | 80% | 20% |
+
+### 4.1.5 Current-price illustrative economics only (NOT frozen or promised)
+
+The following price snapshot is **illustrative and stale immediately after writing**. Using ETH ≈ **$2,513.57** on 2026-09-12, and assuming for illustration only that all 150,000,000 auction tokens are sold at an average clearing price:
+
+| ETH raised | USD contributed (illustrative) | Simplified implied FDV (illustrative) | LP allocation | Treasury remainder |
+|---|---|---|---|---|
+| 5 ETH | ~$12,568 | ~$83,786 | 5 ETH | 0 ETH |
+| 10 ETH | ~$25,136 | ~$167,573 | 10 ETH | 0 ETH |
+| 15 ETH | ~$37,704 | ~$251,359 | 13.5 ETH | 1.5 ETH |
+| 30 ETH | ~$75,407 | ~$502,718 | 24 ETH | 6 ETH |
+| 50 ETH | ~$75,407 | ~$837,864 | 40 ETH | 10 ETH |
+
+Actual CCA clearing, unsold tokens, protocol fees, and position construction mean real outcomes can differ materially. These figures are a planning sensitivity table, not a guarantee, prediction, or offering document.
+
+### 4.1.6 LP custody / creator-fee recommendation
+
+Prefer permanent/non-ruggable LP custody using the current creator-fees-on `FeeSplitter` path **if and only if** the existing-token LBP path can correctly register and route PEPECARTEL's beneficiary. Current SDK history indicates that new auction/crowd-launch positions on Robinhood need the current creator-fees position recipient, but addresses and beneficiary compatibility have changed through redeploys. Therefore **do not pin a production address in this master plan**.
+
+This is a **hard PCART-L5 reverification gate**. If existing-token beneficiary routing cannot be proven before execution, stop and audit a timelocked or alternative LP custody + fee collection design rather than improvising.
+
+### 4.1.7 Recommendation disposition
+
+- **PCART-L1A READ-ONLY ECONOMICS PASS:** COMPLETE as a planning recommendation.
+- **Balanced 150M / 200M / 150M split:** **RECOMMENDED CANDIDATE**, awaiting explicit user approval before freezing.
+- **24h window / 50 ETH floor-FDV / 10 ETH graduation minimum / tiered 100-90-80 LP schedule / 0.25% fee:** **RECOMMENDED SIMULATION INPUTS, NOT production parameters**.
+- **Still OPEN before PCART-L1 can fully close:** user approval of the candidate economics, exact operational ETH reserve for gas, multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility confirmation, and fork/testnet simulation.
+- **No Solidity or value-moving action until those gates close.**
+
 ## 5. Utility model
 
 $PCART is the ecosystem utility token for PEPECARTEL and CARTEL HQ. Utility lives in CARTEL HQ services, not in the immutable ERC-20. Utility policy must be versioned outside the token contract.
