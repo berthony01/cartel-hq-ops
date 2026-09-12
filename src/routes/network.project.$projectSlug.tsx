@@ -75,7 +75,11 @@ export const Route = createFileRoute("/network/project/$projectSlug")({
 function PublicProjectPage() {
   const { projectSlug } = Route.useParams();
   const { tab } = Route.useSearch();
-  const { project: initialProject, launches: initialLaunches } = Route.useLoaderData();
+  const {
+    project: initialProject,
+    launches: initialLaunches,
+    videos: initialVideos,
+  } = Route.useLoaderData();
 
   const projectQuery = useQuery({
     queryKey: networkKeys.project(projectSlug),
@@ -88,6 +92,13 @@ function PublicProjectPage() {
     queryFn: () => fetchNetworkProjectLaunches(projectSlug),
     enabled: !!projectQuery.data,
     initialData: initialLaunches,
+  });
+
+  const videosQuery = useQuery({
+    queryKey: networkKeys.projectVideos(projectSlug),
+    queryFn: () => fetchNetworkProjectVideos(projectSlug),
+    enabled: !!projectQuery.data,
+    initialData: initialVideos,
   });
 
   if (projectQuery.isLoading) {
