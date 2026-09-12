@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Loader2, Rocket, ShieldCheck, Wallet } from "lucide-react";
 
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +36,8 @@ import {
   isWalletConnectConfigured,
   readWalletConnectorState,
 } from "@/lib/wallet-connector";
+import { TreasurySafeVerificationPanel } from "@/components/cartel/TreasurySafeVerificationPanel";
+
 
 /**
  * Launcher-B2 — customer-facing Production Deployment handoff.
@@ -478,6 +481,19 @@ export function ProductionDeploymentRequestPanel({
           </div>
         ) : null}
       </div>
+
+      {/*
+        PCART-L1B — read-only treasury check on the SAME recipient value above.
+        It never creates a Safe, never signs, never moves anything, and it does
+        not gate submission.
+      */}
+      <TreasurySafeVerificationPanel
+        address={recipient}
+        addressValid={recipientValid}
+        disabled={disabled || submitting}
+      />
+
+
 
       <div className="space-y-2 border-t border-border-subtle pt-3.5">
         <Button
