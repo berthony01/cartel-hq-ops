@@ -12,13 +12,11 @@ import {
   networkKeys,
 } from "@/lib/cartel-network";
 
-type ProjectHubSearch = { tab: PublicProjectHubTab };
+type ProjectHubSearch = { tab?: PublicProjectHubTab };
 
 function validateProjectHubSearch(search: Record<string, unknown>): ProjectHubSearch {
-  const tab = search.tab;
-  return {
-    tab: tab === "launch" || tab === "trust" ? tab : "overview",
-  };
+  const tab = search["tab"];
+  return tab === "launch" || tab === "trust" ? { tab } : {};
 }
 
 export const Route = createFileRoute("/network/project/$projectSlug")({
@@ -109,7 +107,8 @@ function PublicProjectPage() {
   }
 
   const launches = launchesQuery.data ?? [];
-  const activeTab = tab === "launch" && launches.length === 0 ? "overview" : tab;
+  const requestedTab = tab ?? "overview";
+  const activeTab = requestedTab === "launch" && launches.length === 0 ? "overview" : requestedTab;
 
   return (
     <div className="space-y-6">

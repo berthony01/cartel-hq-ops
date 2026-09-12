@@ -339,7 +339,6 @@ export function PublicProjectHub({ project, launches, activeTab }: PublicProject
                 role="tab"
                 aria-selected={selected}
                 aria-controls={`project-tabpanel-${tab}`}
-                tabIndex={selected ? 0 : -1}
                 className={cn(
                   "relative min-h-12 px-5 py-3 text-xs font-semibold uppercase tracking-[0.16em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold/60",
                   selected ? "text-gold" : "text-muted-foreground hover:text-foreground",
