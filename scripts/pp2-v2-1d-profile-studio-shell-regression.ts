@@ -76,15 +76,18 @@ check(
     identity.includes(f),
   ),
 );
+// D-9/D-10 updated in PP2-V2-1E: rich About + Links fields are now editable.
 check(
-  "D-9 — About holds the existing description field only",
-  about.includes('id="description"') && !about.includes("tagline") && !about.includes("about_long"),
+  "D-9 — About holds description plus the activated rich content fields",
+  ['id="description"', 'id="tagline"', 'id="about_long"', 'id={`highlight-${index}`}'].every((f) =>
+    about.includes(f),
+  ),
 );
 check(
-  "D-10 — Links holds website, Telegram and X only",
-  ['id="website_url"', 'id="telegram_url"', 'id="x_url"'].every((f) => links.includes(f)) &&
-    !links.includes("docs_url") &&
-    !links.includes("github_url"),
+  "D-10 — Links holds website, Telegram, X, Docs and GitHub",
+  ['id="website_url"', 'id="telegram_url"', 'id="x_url"', 'id="docs_url"', 'id="github_url"'].every(
+    (f) => links.includes(f),
+  ),
 );
 check("D-11 — Visibility holds discovery status", visibility.includes('id="discovery_status"'));
 check(
