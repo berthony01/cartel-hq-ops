@@ -224,6 +224,64 @@ function reviewLabel(stage: JourneyStage): string {
   return `Review ${stage.title}`;
 }
 
+function isLockedLaunchMilestone(stage: JourneyStage): boolean {
+  return (
+    (stage.status === "waiting" || stage.status === "unavailable") &&
+    (stage.key === "official_contract" || stage.key === "launch_live")
+  );
+}
+
+/** Dedicated presentation for the two locked final launch milestones. */
+function LockedLaunchMilestoneCard({
+  stage,
+  primaryLaunchId,
+}: {
+  stage: JourneyStage;
+  primaryLaunchId: string | null;
+}) {
+  return (
+    <li className="w-full min-w-0 overflow-hidden rounded-lg border border-border-strong bg-surface-raised/80 shadow-sm">
+      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-4 px-4 py-5 sm:gap-5 sm:px-5 sm:py-6">
+        <span className="flex size-12 shrink-0 items-center justify-center rounded-md border border-border-strong bg-surface-overlay text-foreground/80 shadow-sm">
+          <Lock className="size-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+            Launch milestone {stage.order}
+          </p>
+          <p className="mt-1 text-lg font-semibold leading-snug text-foreground [overflow-wrap:anywhere] sm:text-xl">
+            {stage.order}. {stage.title}
+          </p>
+          <div className="mt-4 border-l-2 border-border-strong pl-3 sm:pl-4">
+            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+              {blockedGuidance(stage)}
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="grid min-w-0 gap-3 border-t border-border bg-surface-overlay/45 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5">
+        <div className="min-w-0">
+          <StatusBadge tone="muted">
+            <span>{stage.lockedLabel ?? "BLOCKED"}</span>
+          </StatusBadge>
+        </div>
+        <Button
+          asChild
+          size="sm"
+          variant="outline"
+          className="min-h-11 w-full justify-center sm:w-auto"
+        >
+          <JourneyLink
+            stage={stage}
+            primaryLaunchId={primaryLaunchId}
+            label={reviewLabel(stage)}
+          />
+        </Button>
+      </div>
+    </li>
+  );
+}
+
 function StageRow({
   stage,
   isNext,
@@ -235,8 +293,6 @@ function StageRow({
 }) {
   const complete = stage.status === "complete";
   const blocked = stage.status === "waiting" || stage.status === "unavailable";
-  const lockedLaunchMilestone =
-    blocked && (stage.key === "official_contract" || stage.key === "launch_live");
   const Icon = complete ? Check : blocked ? Lock : isNext ? CircleDot : Circle;
   return (
     <li
@@ -247,28 +303,24 @@ function StageRow({
           : isNext
             ? "border-gold/55 bg-gold/10 px-3.5 py-4 shadow-[var(--glow-gold)] sm:col-span-2"
             : blocked
-              ? lockedLaunchMilestone
-                ? "min-h-36 border-border-strong bg-surface-raised/70 px-3.5 py-4 sm:px-4"
-                : "border-border/60 bg-surface-raised/30 px-3 py-3"
+              ? "border-border/60 bg-surface-raised/30 px-3 py-3"
               : "border-border/50 bg-surface-raised/20 px-3 py-3",
       )}
     >
       <span
         className={cn(
           "mt-0.5 flex shrink-0 items-center justify-center border",
-          isNext || lockedLaunchMilestone ? "size-7" : "size-5",
-          lockedLaunchMilestone ? "rounded-md" : "rounded-full",
+          isNext ? "size-7" : "size-5",
+          "rounded-full",
           complete
             ? "border-pepe/50 text-pepe"
             : isNext
               ? "border-gold/60 bg-gold/10 text-gold"
-              : lockedLaunchMilestone
-                ? "border-border-strong bg-surface-overlay/70 text-foreground/80"
               : "border-border text-muted-foreground",
         )}
       >
         <Icon
-          className={isNext || lockedLaunchMilestone ? "size-4" : "size-3"}
+          className={isNext ? "size-4" : "size-3"}
           aria-hidden="true"
         />
       </span>
@@ -276,7 +328,7 @@ function StageRow({
         <span
           className={cn(
             "block font-medium text-foreground [overflow-wrap:anywhere]",
-            isNext || lockedLaunchMilestone ? "text-base font-semibold" : "text-sm",
+            isNext ? "text-base font-semibold" : "text-sm",
             complete ? "text-foreground/85" : undefined,
           )}
         >
@@ -286,7 +338,6 @@ function StageRow({
           <span
             className={cn(
               "mt-1 block text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]",
-              lockedLaunchMilestone ? "max-w-prose sm:text-sm" : undefined,
             )}
           >
             {blocked ? blockedGuidance(stage) : stage.detail ?? stage.description}
@@ -296,7 +347,6 @@ function StageRow({
       <span
         className={cn(
           "col-start-2 flex min-w-0 flex-col items-start gap-2 sm:col-start-3 sm:row-start-1 sm:items-end",
-          lockedLaunchMilestone ? "self-stretch justify-between" : undefined,
         )}
       >
         {complete ? (
@@ -492,14 +542,22 @@ export function ProjectJourneyPanel({ workspaceId, workspaceName }: SharedProps)
               <ul className="grid gap-2 [&>*]:min-w-0">
                 {remainingStages
                   .filter((stage) => stage.phase === phase)
-                  .map((stage) => (
-                    <StageRow
-                      key={stage.key}
-                      stage={stage}
-                      isNext={stage.key === nextKey}
-                      primaryLaunchId={journey.primaryLaunchId}
-                    />
-                  ))}
+                  .map((stage) =>
+                    isLockedLaunchMilestone(stage) ? (
+                      <LockedLaunchMilestoneCard
+                        key={stage.key}
+                        stage={stage}
+                        primaryLaunchId={journey.primaryLaunchId}
+                      />
+                    ) : (
+                      <StageRow
+                        key={stage.key}
+                        stage={stage}
+                        isNext={stage.key === nextKey}
+                        primaryLaunchId={journey.primaryLaunchId}
+                      />
+                    ),
+                  )}
               </ul>
             </div>
           ))}
