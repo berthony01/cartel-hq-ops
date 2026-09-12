@@ -1,19 +1,24 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { IdCard, Loader2, Rocket, Save, Video, Wand2 } from "lucide-react";
+import { IdCard, Loader2, Plus, Rocket, Save, Trash2, Video, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/lib/workspace-context";
 import { listWorkspaceAssets, signedUrlMap, type MediaAsset } from "@/lib/media";
 import {
+  ABOUT_LONG_MAX,
   DESCRIPTION_MAX,
   DISCOVERY_STATUSES,
   DISCOVERY_STATUS_HELP,
   DISCOVERY_STATUS_LABELS,
+  HIGHLIGHT_MAX,
+  HIGHLIGHT_MAX_COUNT,
   PRIMARY_CHAIN_MAX,
+  PROFILE_RESOURCE_URL_MAX,
   PROJECT_NAME_MAX,
   SLUG_MAX,
+  TAGLINE_MAX,
   TICKER_MAX,
   getProjectProfile,
   isValidSlug,
