@@ -222,13 +222,6 @@ export function mapPost(
   const post = asRecord(result["post"]) ?? result;
   const author = asRecord(result["author"]) ?? asRecord(post["author"]);
 
-  const externalPostId =
-    asText(post["id"], 512) ??
-    asText(post["postId"], 512) ??
-    asText(post["externalId"], 512) ??
-    asText(result["id"], 512);
-  if (!externalPostId) return null;
-
   // Documented canonical link is `normalizedUrl`; `url` is only a fallback.
   const canonicalUrl =
     asText(post["normalizedUrl"], 2048) ??
@@ -236,6 +229,18 @@ export function mapPost(
     asText(result["normalizedUrl"], 2048) ??
     asText(result["url"], 2048) ??
     fallbackUrl;
+
+  const externalPostId =
+    asText(post["id"], 512) ??
+    asText(post["postId"], 512) ??
+    asText(post["videoId"], 512) ??
+    asText(post["shortcode"], 512) ??
+    asText(post["externalId"], 512) ??
+    asText(result["id"], 512) ??
+    // Links-only recent references carry no id field; derive it from the
+    // canonical link rather than dropping a real item or inventing a value.
+    lastPathSegment(canonicalUrl);
+  if (!externalPostId) return null;
 
   const { metrics, availability } = buildMetrics(
     result["metrics"] ?? post["metrics"],
