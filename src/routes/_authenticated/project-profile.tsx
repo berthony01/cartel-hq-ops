@@ -110,6 +110,42 @@ const STATUS_TONE: Record<DiscoveryStatus, "gold" | "green" | "muted"> = {
   hidden: "muted",
 };
 
+/** Profile Studio working sections. Presentation-only; no data ownership. */
+const STUDIO_SECTIONS: SectionNavItem[] = [
+  { id: "pp-identity", label: "Identity" },
+  { id: "pp-about", label: "About" },
+  { id: "pp-links", label: "Links" },
+  { id: "pp-media", label: "Media" },
+  { id: "pp-trust", label: "Trust" },
+  { id: "pp-launch", label: "Launch" },
+  { id: "pp-visibility", label: "Visibility" },
+];
+
+/**
+ * Every studio view stays mounted; only visibility changes, so unsaved form
+ * state, queries and mutation state survive navigation.
+ */
+function WorkingView({
+  id,
+  active,
+  children,
+}: {
+  id: string;
+  active: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      id={id}
+      hidden={!active}
+      aria-hidden={active ? undefined : true}
+      className="min-w-0 space-y-4 sm:space-y-6"
+    >
+      {children}
+    </div>
+  );
+}
+
 function ProjectProfilePage() {
   const { workspaceId, workspace, loading: workspaceLoading } = useWorkspace();
   const queryClient = useQueryClient();
@@ -118,6 +154,7 @@ function ProjectProfilePage() {
   const [form, setForm] = useState<Form>(EMPTY_FORM);
   const prefilledFor = useRef<string | null>(null);
   const [slugTouched, setSlugTouched] = useState(false);
+  const [activeSection, setActiveSection] = useState<string>("pp-identity");
 
   const profileQuery = useQuery({
     queryKey: ["project-profile", workspaceId],
