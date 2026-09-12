@@ -22,6 +22,8 @@ export type NetworkUpcomingLaunch =
   Fns["get_cartel_network_upcoming_launches"]["Returns"][number];
 export type NetworkLaunch = Fns["get_cartel_network_launch"]["Returns"][number];
 export type NetworkSignal = Fns["get_cartel_network_signals"]["Returns"][number];
+export type NetworkProjectVideo =
+  Fns["get_cartel_network_project_videos"]["Returns"][number];
 
 const SIGNAL_LABELS: Record<string, string> = {
   LAUNCH_ANNOUNCED: "Launch announced",
