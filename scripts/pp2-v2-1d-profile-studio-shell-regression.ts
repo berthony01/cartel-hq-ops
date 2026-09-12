@@ -110,10 +110,10 @@ check(
 // D-15 save flow invariants
 check("D-15 — exactly one editor form remains", count('id="project-profile-form"') === 1);
 check(
-  "D-16 — save payload still carries only the currently editable fields",
+  "D-16 — one save payload still carries every editable field (rich fields added in V2-1E)",
   /saveProjectProfile\(workspaceId, profile\?\.id \?\? null, \{[\s\S]*?discovery_status: form\.discovery_status,\s*\}\)/.test(
     SRC,
-  ) && !/tagline:|about_long:|highlights:|docs_url:|github_url:/.test(SRC),
+  ) && count("saveProjectProfile(") === 1,
 );
 check("D-17 — no video CRUD is called from the route", !/ProfileVideo|project_profile_videos/.test(SRC));
 check("D-18 — sticky mobile save bar preserved", SRC.includes("<StickyActionBar"));
