@@ -17,22 +17,65 @@ import {
   launchStatusTone,
   type NetworkProject,
   type NetworkProjectLaunch,
+  type NetworkProjectVideo,
 } from "@/lib/cartel-network";
 import { cn } from "@/lib/utils";
 
-export type PublicProjectHubTab = "overview" | "launch" | "trust";
+export type PublicProjectHubTab = "overview" | "launch" | "media" | "trust";
 
 type PublicProjectHubProps = {
   project: NetworkProject;
   launches: NetworkProjectLaunch[];
+  videos?: NetworkProjectVideo[];
   activeTab: PublicProjectHubTab;
 };
 
 const TAB_LABELS: Record<PublicProjectHubTab, string> = {
   overview: "Overview",
   launch: "Launch",
+  media: "Media",
   trust: "Trust",
 };
+
+function MediaPanel({
+  project,
+  videos,
+}: {
+  project: NetworkProject;
+  videos: NetworkProjectVideo[];
+}) {
+  return (
+    <div role="tabpanel" id="project-tabpanel-media" aria-labelledby="project-tab-media">
+      <section className="rounded-lg border border-border/80 bg-surface-elevated p-5 shadow-inset sm:p-7">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gold">Media</p>
+        <h2 className="mt-2 font-display text-2xl uppercase leading-tight text-foreground sm:text-3xl">
+          {project.project_name} videos
+        </h2>
+        <div className="mt-6 grid gap-5 lg:grid-cols-2">
+          {videos.map((video, index) => (
+            <article key={video.youtube_video_id} className="min-w-0">
+              <div className="relative w-full overflow-hidden rounded-lg border border-border bg-surface-raised pt-[56.25%]">
+                <iframe
+                  className="absolute inset-0 size-full"
+                  src={`https://www.youtube-nocookie.com/embed/${video.youtube_video_id}`}
+                  title={video.title ?? `${project.project_name} video ${index + 1}`}
+                  loading="lazy"
+                  allowFullScreen
+                />
+              </div>
+              {video.title ? (
+                <p className="mt-3 min-w-0 text-sm leading-relaxed text-foreground [overflow-wrap:anywhere]">
+                  {video.title}
+                </p>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 
 function LaunchActions({ launch }: { launch: NetworkProjectLaunch }) {
   return (
