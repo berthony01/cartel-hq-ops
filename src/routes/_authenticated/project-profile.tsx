@@ -17,13 +17,20 @@ import {
   PRIMARY_CHAIN_MAX,
   PROFILE_RESOURCE_URL_MAX,
   PROJECT_NAME_MAX,
+  PROJECT_PROFILE_VIDEO_MAX_COUNT,
+  PROJECT_PROFILE_VIDEO_TITLE_MAX,
   SLUG_MAX,
   TAGLINE_MAX,
   TICKER_MAX,
+  addProjectProfileVideo,
+  deleteProjectProfileVideo,
+  extractYouTubeVideoId,
   getProjectProfile,
   isValidSlug,
+  listProjectProfileVideos,
   saveProjectProfile,
   slugifyProjectName,
+  updateProjectProfileVideo,
   type DiscoveryStatus,
 } from "@/lib/project-profile";
 import { PageHeader } from "@/components/cartel/PageHeader";
@@ -237,6 +244,85 @@ function ProjectProfilePage() {
       toast.error(
         err instanceof Error ? err.message : "Could not request a platform review right now.",
       );
+    },
+  });
+
+  // Media (project profile videos) — RLS-protected CRUD, separate from Save.
+  const videosQuery = useQuery({
+    queryKey: ["project-profile-videos", profile?.id],
+    enabled: !!profile?.id,
+    queryFn: () => listProjectProfileVideos(profile!.id),
+  });
+  const videos = useMemo(() => videosQuery.data ?? [], [videosQuery.data]);
+  const videoLimitReached = videos.length >= PROJECT_PROFILE_VIDEO_MAX_COUNT;
+  const [videoInput, setVideoInput] = useState("");
+  const [videoTitle, setVideoTitle] = useState("");
+  const [titleDrafts, setTitleDrafts] = useState<Record<string, string>>({});
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+
+  const refreshVideos = () =>
+    queryClient.invalidateQueries({ queryKey: ["project-profile-videos", profile?.id] });
+
+  /** Never submits an occupied position; the live table enforces UNIQUE(profile, position). */
+  const nextFreeVideoPosition = (): number => {
+    const used = new Set(videos.map((v) => v.position));
+    for (let position = 0; position < PROJECT_PROFILE_VIDEO_MAX_COUNT; position++) {
+      if (!used.has(position)) return position;
+    }
+    throw new Error(`This profile already has ${PROJECT_PROFILE_VIDEO_MAX_COUNT} videos.`);
+  };
+
+  const addVideo = useMutation({
+    mutationFn: async () => {
+      if (!profile?.id) throw new Error("Create the project profile first.");
+      const parsed = extractYouTubeVideoId(videoInput);
+      if (!parsed) throw new Error("Enter a valid YouTube link or 11-character video ID.");
+      if (videos.some((v) => v.youtube_video_id === parsed)) {
+        throw new Error("That video is already on this profile.");
+      }
+      return addProjectProfileVideo(profile.id, {
+        youtube: videoInput,
+        title: videoTitle,
+        position: nextFreeVideoPosition(),
+      });
+    },
+    onSuccess: () => {
+      setVideoInput("");
+      setVideoTitle("");
+      toast.success("Video added");
+      void refreshVideos();
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : "Could not add that video.");
+    },
+  });
+
+  const updateVideoTitle = useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) =>
+      updateProjectProfileVideo(id, { title }),
+    onSuccess: (_data, vars) => {
+      setTitleDrafts((drafts) => {
+        const next = { ...drafts };
+        delete next[vars.id];
+        return next;
+      });
+      toast.success("Video title saved");
+      void refreshVideos();
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : "Could not save that video title.");
+    },
+  });
+
+  const removeVideo = useMutation({
+    mutationFn: (id: string) => deleteProjectProfileVideo(id),
+    onSuccess: () => {
+      setConfirmRemoveId(null);
+      toast.success("Video removed");
+      void refreshVideos();
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : "Could not remove that video.");
     },
   });
 
@@ -954,16 +1040,202 @@ function ProjectProfilePage() {
             <Section
               variant="surface"
               title="Media"
-              description="Where public project media will be managed."
+              description="Up to six YouTube videos shown on this project's public Cartel Network profile."
+              actions={
+                profile ? (
+                  <span className="type-helper text-muted-foreground">
+                    {videos.length} / {PROJECT_PROFILE_VIDEO_MAX_COUNT}
+                  </span>
+                ) : null
+              }
             >
-              <EmptyState
-                compact
-                icon={Video}
-                title="Media is not part of this profile yet"
-                description="This section is the future home for public project media. Nothing is published from here today, and the public profile shows no media."
-              />
+              {!profile ? (
+                <EmptyState
+                  compact
+                  icon={Video}
+                  title="Create the project profile first"
+                  description="Videos are attached to a saved project profile. Fill in Identity and create this profile, then add media here."
+                />
+              ) : videosQuery.isError ? (
+                <div>
+                  <p className="max-w-prose type-helper text-muted-foreground">
+                    Project videos could not be loaded right now.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 min-h-11"
+                    onClick={() => void videosQuery.refetch()}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  <div className="surface-quiet min-w-0 rounded-lg p-3.5">
+                    <div className="grid gap-3 md:grid-cols-2 [&>*]:min-w-0">
+                      <div>
+                        <Label htmlFor="video_youtube">YouTube link or video ID</Label>
+                        <Input
+                          id="video_youtube"
+                          className="mt-2 min-h-11"
+                          placeholder="https://www.youtube.com/watch?v=…"
+                          value={videoInput}
+                          onChange={(e) => setVideoInput(e.target.value)}
+                          disabled={videoLimitReached}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="video_title">Title (optional)</Label>
+                        <Input
+                          id="video_title"
+                          className="mt-2 min-h-11"
+                          maxLength={PROJECT_PROFILE_VIDEO_TITLE_MAX}
+                          value={videoTitle}
+                          onChange={(e) => setVideoTitle(e.target.value)}
+                          disabled={videoLimitReached}
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 min-h-11"
+                      disabled={
+                        videoLimitReached ||
+                        addVideo.isPending ||
+                        videosQuery.isLoading ||
+                        !videoInput.trim()
+                      }
+                      onClick={() => addVideo.mutate()}
+                    >
+                      {addVideo.isPending ? (
+                        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Plus className="size-4" aria-hidden="true" />
+                      )}
+                      Add video
+                    </Button>
+                    <p className="mt-2 max-w-prose type-helper text-muted-foreground">
+                      {videoLimitReached
+                        ? `You have reached the maximum of ${PROJECT_PROFILE_VIDEO_MAX_COUNT} videos. Remove one to add another.`
+                        : "Videos are saved immediately and are separate from the profile Save action. Titles are your own text; nothing is fetched from YouTube."}
+                    </p>
+                  </div>
+
+                  {videosQuery.isLoading ? (
+                    <p className="type-helper text-muted-foreground">Loading videos…</p>
+                  ) : videos.length === 0 ? (
+                    <EmptyState
+                      compact
+                      icon={Video}
+                      title="No videos yet"
+                      description="Add a YouTube link above. Videos appear on the public profile once this profile is published."
+                    />
+                  ) : (
+                    <div className="grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
+                      {videos.map((video, index) => (
+                        <article
+                          key={video.id}
+                          className="min-w-0 overflow-hidden rounded-lg border border-border-subtle bg-background/40"
+                        >
+                          <div className="relative w-full pt-[56.25%]">
+                            <iframe
+                              className="absolute inset-0 size-full"
+                              src={`https://www.youtube-nocookie.com/embed/${video.youtube_video_id}`}
+                              title={video.title ?? `Project video ${index + 1}`}
+                              loading="lazy"
+                              allowFullScreen
+                            />
+                          </div>
+                          <div className="space-y-3 p-3.5">
+                            <p className="min-w-0 type-technical text-muted-foreground [overflow-wrap:anywhere]">
+                              {video.youtube_video_id}
+                            </p>
+                            <div>
+                              <Label htmlFor={`video-title-${video.id}`}>Title</Label>
+                              <Input
+                                id={`video-title-${video.id}`}
+                                className="mt-2 min-h-11"
+                                maxLength={PROJECT_PROFILE_VIDEO_TITLE_MAX}
+                                value={titleDrafts[video.id] ?? video.title ?? ""}
+                                onChange={(e) =>
+                                  setTitleDrafts((drafts) => ({
+                                    ...drafts,
+                                    [video.id]: e.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="min-h-11"
+                                disabled={
+                                  updateVideoTitle.isPending ||
+                                  (titleDrafts[video.id] ?? video.title ?? "") ===
+                                    (video.title ?? "")
+                                }
+                                onClick={() =>
+                                  updateVideoTitle.mutate({
+                                    id: video.id,
+                                    title: titleDrafts[video.id] ?? "",
+                                  })
+                                }
+                              >
+                                <Save className="size-4" aria-hidden="true" />
+                                Save title
+                              </Button>
+                              {confirmRemoveId === video.id ? (
+                                <>
+                                  <Button
+                                    type="button"
+                                    variant="destructive"
+                                    size="sm"
+                                    className="min-h-11"
+                                    disabled={removeVideo.isPending}
+                                    onClick={() => removeVideo.mutate(video.id)}
+                                  >
+                                    Confirm remove
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="min-h-11"
+                                    onClick={() => setConfirmRemoveId(null)}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="min-h-11"
+                                  aria-label={`Remove video ${index + 1}`}
+                                  onClick={() => setConfirmRemoveId(video.id)}
+                                >
+                                  <Trash2 className="size-4" aria-hidden="true" />
+                                  Remove
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </Section>
           </WorkingView>
+
 
           <WorkingView id="pp-trust" active={activeSection === "pp-trust"}>
             {profile ? (

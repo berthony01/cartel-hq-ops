@@ -109,11 +109,12 @@ check(
   /id="github_url"[\s\S]{0,120}maxLength=\{PROFILE_RESOURCE_URL_MAX\}/.test(STUDIO),
 );
 
-// 6 — no media work in this phase
+// 6 — media activated in PP2-V2-1F through the shared helpers only
 check(
-  "E-6 — no video CRUD or project_profile_videos reference in the studio route",
-  !/ProfileVideo|project_profile_videos|fetchNetworkProjectVideos|youtube/i.test(STUDIO),
+  "E-6 — studio media uses the shared video helpers, never direct table access",
+  STUDIO.includes("listProjectProfileVideos") && !/project_profile_videos/.test(STUDIO),
 );
+
 
 // 7 — hero tagline is conditional with no fabricated fallback
 check(
@@ -161,7 +162,12 @@ check(
 );
 
 // 12/13 — scope boundaries
-check("E-12 — no public Media tab yet", !/"media"|Media/.test(HUB));
+// E-12 updated in PP2-V2-1F: the public Media tab is now live and conditional.
+check(
+  "E-12 — public Media tab exists and renders only when real videos exist",
+  HUB.includes('...(videos.length > 0 ? (["media"] as const) : [])') &&
+    HUB.includes('activeTab === "media" && videos.length > 0'),
+);
 check(
   "E-13 — no new Supabase RPC, direct table read or service role introduced",
   !/supabase|\.rpc\(|service_role|supabaseAdmin/.test(HUB) &&
@@ -170,10 +176,9 @@ check(
 );
 check(
   "E-13b — platform review reset stays explanatory, with no client-side mutation",
-  STUDIO.includes("clears") &&
-    count(STUDIO, "useMutation(") === 2 &&
-    !/verification_status:\s/.test(STUDIO),
+  STUDIO.includes("clears") && !/verification_status:\s/.test(STUDIO),
 );
+
 
 console.log(failed === 0 ? "\nALL CHECKS PASSED" : `\n${failed} CHECK(S) FAILED`);
 process.exit(failed === 0 ? 0 : 1);

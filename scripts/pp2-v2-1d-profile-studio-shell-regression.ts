@@ -96,11 +96,15 @@ check(
     trust.includes("Platform Reviewed") &&
     trust.includes("requestVerification.mutate()"),
 );
+// D-13 updated in PP2-V2-1F: Media is now a live, RLS-protected video editor.
 check(
-  "D-13 — Media has no CRUD, API or fake controls",
-  media.length > 0 &&
-    !/supabase|useMutation|useQuery|youtube|Upload|<Input|<Select/i.test(media),
+  "D-13 — Media is a real editor wired to the shared video query/mutations only",
+  media.includes("videosQuery") &&
+    media.includes("addVideo.mutate()") &&
+    !/supabase|project_profile_videos/.test(media),
 );
+
+
 check(
   "D-14 — Launch only navigates to Launch Control",
   launch.includes('<Link to="/launch-control">') &&
@@ -115,7 +119,14 @@ check(
     SRC,
   ) && count("saveProjectProfile(") === 1,
 );
-check("D-17 — no video CRUD is called from the route", !/ProfileVideo|project_profile_videos/.test(SRC));
+// D-17 updated in PP2-V2-1F: video CRUD is now live through the shared helpers.
+check(
+  "D-17 — video CRUD goes through the shared project-profile helpers, not raw tables",
+  SRC.includes("addProjectProfileVideo(") &&
+    SRC.includes("updateProjectProfileVideo(") &&
+    SRC.includes("deleteProjectProfileVideo(") &&
+    !/project_profile_videos/.test(SRC),
+);
 check("D-18 — sticky mobile save bar preserved", SRC.includes("<StickyActionBar"));
 check("D-19 — network profile preview preserved", SRC.includes("Network profile preview"));
 check("D-20 — setup guide preserved", SRC.includes("<LaunchReadinessCallout"));

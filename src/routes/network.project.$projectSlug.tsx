@@ -9,6 +9,7 @@ import {
 import {
   fetchNetworkProject,
   fetchNetworkProjectLaunches,
+  fetchNetworkProjectVideos,
   networkKeys,
 } from "@/lib/cartel-network";
 
@@ -16,7 +17,7 @@ type ProjectHubSearch = { tab?: PublicProjectHubTab };
 
 function validateProjectHubSearch(search: Record<string, unknown>): ProjectHubSearch {
   const tab = search["tab"];
-  return tab === "launch" || tab === "trust" ? { tab } : {};
+  return tab === "launch" || tab === "media" || tab === "trust" ? { tab } : {};
 }
 
 export const Route = createFileRoute("/network/project/$projectSlug")({
@@ -32,7 +33,16 @@ export const Route = createFileRoute("/network/project/$projectSlug")({
           queryFn: () => fetchNetworkProjectLaunches(params.projectSlug),
         })
       : [];
-    return { project, launches };
+    // Media must never take the whole project page down.
+    const videos = project
+      ? await context.queryClient
+          .ensureQueryData({
+            queryKey: networkKeys.projectVideos(params.projectSlug),
+            queryFn: () => fetchNetworkProjectVideos(params.projectSlug),
+          })
+          .catch(() => [])
+      : [];
+    return { project, launches, videos };
   },
   head: ({ loaderData }) => {
     const project = loaderData?.project ?? null;
@@ -65,7 +75,11 @@ export const Route = createFileRoute("/network/project/$projectSlug")({
 function PublicProjectPage() {
   const { projectSlug } = Route.useParams();
   const { tab } = Route.useSearch();
-  const { project: initialProject, launches: initialLaunches } = Route.useLoaderData();
+  const {
+    project: initialProject,
+    launches: initialLaunches,
+    videos: initialVideos,
+  } = Route.useLoaderData();
 
   const projectQuery = useQuery({
     queryKey: networkKeys.project(projectSlug),
@@ -78,6 +92,13 @@ function PublicProjectPage() {
     queryFn: () => fetchNetworkProjectLaunches(projectSlug),
     enabled: !!projectQuery.data,
     initialData: initialLaunches,
+  });
+
+  const videosQuery = useQuery({
+    queryKey: networkKeys.projectVideos(projectSlug),
+    queryFn: () => fetchNetworkProjectVideos(projectSlug),
+    enabled: !!projectQuery.data,
+    initialData: initialVideos,
   });
 
   if (projectQuery.isLoading) {
@@ -116,8 +137,14 @@ function PublicProjectPage() {
   }
 
   const launches = launchesQuery.data ?? [];
-  const requestedTab = tab === "launch" || tab === "trust" ? tab : "overview";
-  const activeTab = requestedTab === "launch" && launches.length === 0 ? "overview" : requestedTab;
+  const videos = videosQuery.data ?? [];
+  const requestedTab =
+    tab === "launch" || tab === "media" || tab === "trust" ? tab : "overview";
+  const activeTab =
+    (requestedTab === "launch" && launches.length === 0) ||
+    (requestedTab === "media" && videos.length === 0)
+      ? "overview"
+      : requestedTab;
 
   return (
     <div className="space-y-6">
@@ -138,8 +165,26 @@ function PublicProjectPage() {
           </Button>
         </div>
       ) : (
-        <PublicProjectHub project={project} launches={launches} activeTab={activeTab} />
+        <>
+          {videosQuery.isError ? (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border/80 bg-surface-elevated px-4 py-3">
+              <p className="min-w-0 text-xs text-muted-foreground">
+                Project videos could not be loaded right now.
+              </p>
+              <Button variant="outline" size="sm" onClick={() => videosQuery.refetch()}>
+                Retry videos
+              </Button>
+            </div>
+          ) : null}
+          <PublicProjectHub
+            project={project}
+            launches={launches}
+            videos={videos}
+            activeTab={activeTab}
+          />
+        </>
       )}
+
     </div>
   );
 }
