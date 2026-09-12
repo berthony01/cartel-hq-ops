@@ -482,6 +482,19 @@ export function ProductionDeploymentRequestPanel({
         ) : null}
       </div>
 
+      {/*
+        PCART-L1B — read-only treasury check on the SAME recipient value above.
+        It never creates a Safe, never signs, never moves anything, and it does
+        not gate submission.
+      */}
+      <TreasurySafeVerificationPanel
+        address={recipient}
+        addressValid={recipientValid}
+        disabled={disabled || submitting}
+      />
+
+
+
       <div className="space-y-2 border-t border-border-subtle pt-3.5">
         <Button
           className="min-h-11 w-full sm:w-auto"
