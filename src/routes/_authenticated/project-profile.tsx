@@ -17,13 +17,20 @@ import {
   PRIMARY_CHAIN_MAX,
   PROFILE_RESOURCE_URL_MAX,
   PROJECT_NAME_MAX,
+  PROJECT_PROFILE_VIDEO_MAX_COUNT,
+  PROJECT_PROFILE_VIDEO_TITLE_MAX,
   SLUG_MAX,
   TAGLINE_MAX,
   TICKER_MAX,
+  addProjectProfileVideo,
+  deleteProjectProfileVideo,
+  extractYouTubeVideoId,
   getProjectProfile,
   isValidSlug,
+  listProjectProfileVideos,
   saveProjectProfile,
   slugifyProjectName,
+  updateProjectProfileVideo,
   type DiscoveryStatus,
 } from "@/lib/project-profile";
 import { PageHeader } from "@/components/cartel/PageHeader";
@@ -237,6 +244,85 @@ function ProjectProfilePage() {
       toast.error(
         err instanceof Error ? err.message : "Could not request a platform review right now.",
       );
+    },
+  });
+
+  // Media (project profile videos) — RLS-protected CRUD, separate from Save.
+  const videosQuery = useQuery({
+    queryKey: ["project-profile-videos", profile?.id],
+    enabled: !!profile?.id,
+    queryFn: () => listProjectProfileVideos(profile!.id),
+  });
+  const videos = useMemo(() => videosQuery.data ?? [], [videosQuery.data]);
+  const videoLimitReached = videos.length >= PROJECT_PROFILE_VIDEO_MAX_COUNT;
+  const [videoInput, setVideoInput] = useState("");
+  const [videoTitle, setVideoTitle] = useState("");
+  const [titleDrafts, setTitleDrafts] = useState<Record<string, string>>({});
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+
+  const refreshVideos = () =>
+    queryClient.invalidateQueries({ queryKey: ["project-profile-videos", profile?.id] });
+
+  /** Never submits an occupied position; the live table enforces UNIQUE(profile, position). */
+  const nextFreeVideoPosition = (): number => {
+    const used = new Set(videos.map((v) => v.position));
+    for (let position = 0; position < PROJECT_PROFILE_VIDEO_MAX_COUNT; position++) {
+      if (!used.has(position)) return position;
+    }
+    throw new Error(`This profile already has ${PROJECT_PROFILE_VIDEO_MAX_COUNT} videos.`);
+  };
+
+  const addVideo = useMutation({
+    mutationFn: async () => {
+      if (!profile?.id) throw new Error("Create the project profile first.");
+      const parsed = extractYouTubeVideoId(videoInput);
+      if (!parsed) throw new Error("Enter a valid YouTube link or 11-character video ID.");
+      if (videos.some((v) => v.youtube_video_id === parsed)) {
+        throw new Error("That video is already on this profile.");
+      }
+      return addProjectProfileVideo(profile.id, {
+        youtube: videoInput,
+        title: videoTitle,
+        position: nextFreeVideoPosition(),
+      });
+    },
+    onSuccess: () => {
+      setVideoInput("");
+      setVideoTitle("");
+      toast.success("Video added");
+      void refreshVideos();
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : "Could not add that video.");
+    },
+  });
+
+  const updateVideoTitle = useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) =>
+      updateProjectProfileVideo(id, { title }),
+    onSuccess: (_data, vars) => {
+      setTitleDrafts((drafts) => {
+        const next = { ...drafts };
+        delete next[vars.id];
+        return next;
+      });
+      toast.success("Video title saved");
+      void refreshVideos();
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : "Could not save that video title.");
+    },
+  });
+
+  const removeVideo = useMutation({
+    mutationFn: (id: string) => deleteProjectProfileVideo(id),
+    onSuccess: () => {
+      setConfirmRemoveId(null);
+      toast.success("Video removed");
+      void refreshVideos();
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : "Could not remove that video.");
     },
   });
 
