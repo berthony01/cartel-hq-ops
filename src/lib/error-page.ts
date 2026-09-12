@@ -5,6 +5,7 @@ export function renderErrorPage(): string {
     <meta charset="utf-8" />
     <title>This page didn't load</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="cartel-error-page" content="server" />
     <style>
       body { font: 15px/1.5 system-ui, -apple-system, sans-serif; background: #fafafa; color: #111; display: grid; place-items: center; min-height: 100vh; margin: 0; padding: 1.5rem; }
       .card { max-width: 28rem; width: 100%; text-align: center; padding: 2rem; }
@@ -25,6 +26,28 @@ export function renderErrorPage(): string {
         <a class="secondary" href="/">Go home</a>
       </div>
     </div>
+    <script>
+      // This document is intentionally independent of the app bundle because it
+      // is served when that bundle cannot start. Check for server recovery here
+      // so a preview tab cannot remain stranded on a stale emergency response.
+      const recoveryProbe = async () => {
+        if (document.visibilityState === "hidden") return;
+        try {
+          const response = await fetch(location.href, {
+            cache: "no-store",
+            credentials: "same-origin",
+            headers: { "x-cartel-recovery-probe": "1" },
+          });
+          if (!response.ok) return;
+          const body = await response.text();
+          if (!body.includes('name="cartel-error-page" content="server"')) location.reload();
+        } catch {
+          // The server is still rebuilding or temporarily unreachable.
+        }
+      };
+      setInterval(recoveryProbe, 2000);
+      window.addEventListener("focus", recoveryProbe);
+    </script>
   </body>
 </html>`;
 }
