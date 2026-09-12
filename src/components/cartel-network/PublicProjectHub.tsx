@@ -447,6 +447,8 @@ export function PublicProjectHub({
         <main className="min-w-0">
           {activeTab === "launch" && launches.length > 0 ? (
             <LaunchPanel launches={launches} />
+          ) : activeTab === "media" && videos.length > 0 ? (
+            <MediaPanel project={project} videos={videos} />
           ) : activeTab === "trust" ? (
             <div role="tabpanel" id="project-tabpanel-trust" aria-labelledby="project-tab-trust">
               <VerificationSignals
