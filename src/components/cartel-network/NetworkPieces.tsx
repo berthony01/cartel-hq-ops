@@ -93,15 +93,21 @@ export function ExternalLinks({
   website,
   telegram,
   x,
+  docs,
+  github,
 }: {
   website?: string | null;
   telegram?: string | null;
   x?: string | null;
+  docs?: string | null;
+  github?: string | null;
 }) {
   const items = [
     { label: "Website", href: website },
     { label: "Telegram", href: telegram },
     { label: "X", href: x },
+    { label: "Docs", href: docs },
+    { label: "GitHub", href: github },
   ].filter((i) => !!i.href);
   if (items.length === 0) return null;
   return (
