@@ -36,6 +36,8 @@ import {
   isWalletConnectConfigured,
   readWalletConnectorState,
 } from "@/lib/wallet-connector";
+import { TreasurySafeVerificationPanel } from "@/components/cartel/TreasurySafeVerificationPanel";
+
 
 /**
  * Launcher-B2 — customer-facing Production Deployment handoff.
