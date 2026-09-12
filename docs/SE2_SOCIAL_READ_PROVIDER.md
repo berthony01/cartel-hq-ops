@@ -1,6 +1,6 @@
 # SE-2 — SocialReadProvider Foundation + Provisional Refetcher Adapter
 
-Status: BUILT, source-only/fixture verified. NOT validated against the live provider.
+Status: BUILT and CONTRACT-CORRECTED, source-only/fixture verified. NOT validated against the live provider — no live call has ever been performed.
 Phase: SE-2 (foundation only). Start gate: `915e24c781e8243a7cd8856c4b1505be276877fd` (audit artifact commit `2d15db0e...` removed in this turn).
 Authority: `docs/SE0_SOCIAL_ENGINE_ARCHITECTURE_LOCK.md` (frozen), `docs/SE1_SOCIAL_ENGINE_SCHEMA_FOUNDATION.md` (frozen).
 
@@ -13,7 +13,7 @@ Three files, plus a regression script and this document.
 | `src/lib/social-read-provider.ts` | Pure, provider-neutral contract. Zero I/O, no secret name, no provider host. Safe in any bundle. |
 | `src/lib/social-read-refetcher.server.ts` | Server-only Refetcher adapter. All vendor specifics live here and nowhere else. |
 | `src/lib/social-read.functions.ts` | Authenticated, operator-gated server-function boundary. The only path app code may use. |
-| `scripts/se2-social-read-provider-regression.ts` | 140 source-only, fixture-driven checks. No network, no database, no secret. |
+| `scripts/se2-social-read-provider-regression.ts` | 154 source-only, fixture-driven checks. No network, no database, no secret. |
 
 ## Provider selection
 
@@ -46,7 +46,22 @@ Canonical metrics `views / likes / comments / shares / saves` are `number | null
 
 For X, provider replies map to canonical `comments` and reposts to canonical `shares`. Bookmarks are not exposed separately; a bookmark count is adopted only if the provider returns it in the canonical `metrics.saves` field.
 
-Source reads force a single provider page (`pages: 1`), exactly one target per call, never a batch. Pagination `hasMore` is surfaced without fetching it.
+Exactly one target per call, expressed as a SINGULAR target field — never a batch.
+
+## Request contract (corrected 2026-09-12 after independent official-doc review)
+
+The initial SE-2 build sent an undocumented `{ targets: [...], pages: 1 }` envelope and read `post.url`. An independent review of Refetcher's current official documentation found this did not match the published contract. The adapter was corrected in the same phase, before any live call; nothing had been validated against the provider, so no live behaviour changed.
+
+| Operation | Request body |
+| --- | --- |
+| Post / video / metrics (all five platforms) | `{ url }` |
+| Source recent posts — Instagram, TikTok, Facebook | `{ profileUrl, includeRecentPosts: true, pages: 1, recentPostsLimit }` |
+| Source recent posts — X | as above plus `sort: "latest"` |
+| Source recent posts — YouTube channel | `{ type: "channel", platform: "youtube", channelUrl, includeRecentVideos: true, recentVideosLimit }` |
+
+Response mapping follows the documented shape: canonical link from `post.normalizedUrl` (falling back to `post.url`), content from `post.caption`, profile name from `profile.name`. Two source shapes normalize to one contract — `profile` + `recentPosts` for the four networks, `channel` + `recentVideos` for YouTube. `hasMore` reads `pageInfo.recentPosts.hasNextPage` or `pageInfo.recentVideos.hasNextPage`, with the earlier `pagination` shape kept as a fallback, and never triggers another call. Lightweight links-only references carry no metrics; those stay all-null with `unknown` availability rather than inventing values, and their id is derived from the canonical link only as a last resort.
+
+The result envelope rule is unchanged: inspect `results[0]`, require exactly one result entry, and honour `results[0].success`.
 
 ## Billing semantics
 
@@ -64,7 +79,7 @@ Refetcher is a public-scraping vendor. Scraping sits against several platforms' 
 
 ## Verification
 
-- `bun scripts/se2-social-read-provider-regression.ts` — 140 checks, all passing. Covers interface shape and absence of write capability; URL acceptance for all five platforms and rejection of foreign hosts, schemes, credentials and ports; success fixtures for Instagram, TikTok, X, YouTube and Facebook; null/availability preservation including the YouTube missing-availability case; profile mapping and single-page clamping; HTTP status and per-result category error mapping; retryable classification; `billable:false, units:0` on every failure; credential handling; authorization ordering; and scope locks (no cost fields, no pricing, no table writes, no cron, no Telegram).
+- `bun scripts/se2-social-read-provider-regression.ts` — 154 checks, all passing. Covers interface shape and absence of write capability; URL acceptance for all five platforms and rejection of foreign hosts, schemes, credentials and ports; success fixtures for Instagram, TikTok, X, YouTube and Facebook; null/availability preservation including the YouTube missing-availability case; exact request-body builders for post, the four-network profile read, X sort, and the YouTube channel read; `normalizedUrl`/`caption` preference; `pageInfo.*.hasNextPage`; the YouTube channel + recentVideos shape including a links-only reference; single-page clamping; HTTP status and per-result category error mapping; retryable classification; `billable:false, units:0` on every failure; credential handling; authorization ordering; and scope locks (no cost fields, no pricing, no table writes, no cron, no Telegram).
 - `bunx tsgo --noEmit` — clean.
 - `bun run build` — success.
 

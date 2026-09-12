@@ -211,6 +211,24 @@ function platformOf(result: Rec, fallback: SocialPlatform): SocialPlatform {
 }
 
 /**
+ * Identifier derived from a canonical link, used ONLY as a last-resort id for a
+ * links-only recent reference. A YouTube watch link carries its id in `?v=`;
+ * everything else uses the last path segment.
+ */
+function idFromUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const videoParam = parsed.searchParams.get("v");
+    if (videoParam) return videoParam.slice(0, 512);
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    const last = segments[segments.length - 1];
+    return last ? last.slice(0, 512) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Map one successful Refetcher post result into a canonical post.
  * Returns `null` when the payload lacks the identity fields we require.
  */
@@ -222,14 +240,25 @@ export function mapPost(
   const post = asRecord(result["post"]) ?? result;
   const author = asRecord(result["author"]) ?? asRecord(post["author"]);
 
+  // Documented canonical link is `normalizedUrl`; `url` is only a fallback.
+  const canonicalUrl =
+    asText(post["normalizedUrl"], 2048) ??
+    asText(post["url"], 2048) ??
+    asText(result["normalizedUrl"], 2048) ??
+    asText(result["url"], 2048) ??
+    fallbackUrl;
+
   const externalPostId =
     asText(post["id"], 512) ??
     asText(post["postId"], 512) ??
+    asText(post["videoId"], 512) ??
+    asText(post["shortcode"], 512) ??
     asText(post["externalId"], 512) ??
-    asText(result["id"], 512);
+    asText(result["id"], 512) ??
+    // Links-only recent references carry no id field; derive it from the
+    // canonical link rather than dropping a real item or inventing a value.
+    idFromUrl(canonicalUrl);
   if (!externalPostId) return null;
-
-  const canonicalUrl = asText(post["url"], 2048) ?? asText(result["url"], 2048) ?? fallbackUrl;
 
   const { metrics, availability } = buildMetrics(
     result["metrics"] ?? post["metrics"],
@@ -242,7 +271,8 @@ export function mapPost(
     canonicalUrl,
     authorHandle: asText(author?.["handle"] ?? author?.["username"], 255),
     authorDisplayName: asText(author?.["displayName"] ?? author?.["name"], 512),
-    contentText: asText(post["text"] ?? post["caption"] ?? post["title"], 20000),
+    // Documented post content field is `caption`.
+    contentText: asText(post["caption"] ?? post["text"] ?? post["title"], 20000),
     mediaType: asText(post["mediaType"] ?? post["type"], 64),
     publishedAt: asTimestamp(post["publishedAt"] ?? post["createdAt"] ?? post["timestamp"]),
     metrics,
@@ -264,17 +294,27 @@ export function mapMetricsObservation(
   return {
     platform: platformOf(result, fallbackPlatform),
     externalPostId:
-      asText(post["id"], 512) ?? asText(post["postId"], 512) ?? asText(result["id"], 512),
-    canonicalUrl: asText(post["url"], 2048) ?? fallbackUrl,
+      asText(post["id"], 512) ??
+      asText(post["postId"], 512) ??
+      asText(post["videoId"], 512) ??
+      asText(result["id"], 512),
+    canonicalUrl: asText(post["normalizedUrl"], 2048) ?? asText(post["url"], 2048) ?? fallbackUrl,
     metrics,
     availability,
   };
 }
 
 /**
- * Map one successful Refetcher profile result into a source plus a SINGLE page
- * of recent posts. Posts that cannot be identified are dropped rather than
- * guessed at.
+ * Map one successful Refetcher source result into a canonical source plus a
+ * SINGLE page of recent items.
+ *
+ * Two documented response shapes are accepted and normalized to one contract:
+ * - Instagram / TikTok / Facebook / X: `profile` + `recentPosts`, paging under
+ *   `pageInfo.recentPosts`.
+ * - YouTube: `channel` + `recentVideos`, paging under `pageInfo.recentVideos`.
+ *
+ * Lightweight recent references often carry no metrics. Those stay all-null
+ * with `unknown` availability; nothing is invented and no second call is made.
  */
 export function mapSourceRecentPosts(
   result: Rec,
@@ -282,35 +322,51 @@ export function mapSourceRecentPosts(
   fallbackUrl: string,
   limit: number,
 ): NormalizedSourceRecentPosts | null {
-  const profile = asRecord(result["profile"]);
+  const channel = asRecord(result["channel"]);
+  const profile = asRecord(result["profile"]) ?? channel;
   if (!profile) return null;
   const platform = platformOf(result, fallbackPlatform);
 
   const source: NormalizedSource = {
     platform,
-    canonicalUrl: asText(profile["url"], 2048) ?? fallbackUrl,
+    canonicalUrl:
+      asText(profile["normalizedUrl"], 2048) ?? asText(profile["url"], 2048) ?? fallbackUrl,
     handle: asText(profile["handle"] ?? profile["username"], 255),
-    externalAccountId: asText(profile["id"] ?? profile["accountId"], 512),
-    displayName: asText(profile["displayName"] ?? profile["name"], 512),
+    externalAccountId: asText(profile["id"] ?? profile["channelId"] ?? profile["accountId"], 512),
+    displayName: asText(profile["name"] ?? profile["displayName"], 512),
   };
 
-  const rawPosts = result["recentPosts"] ?? profile["recentPosts"];
+  const rawItems =
+    result["recentPosts"] ??
+    result["recentVideos"] ??
+    profile["recentPosts"] ??
+    profile["recentVideos"];
+
   const posts: NormalizedPost[] = [];
-  if (Array.isArray(rawPosts)) {
-    for (const entry of rawPosts) {
+  if (Array.isArray(rawItems)) {
+    for (const entry of rawItems) {
       const record = asRecord(entry);
       if (!record) continue;
-      const mapped = mapPost({ platform, post: record, metrics: record["metrics"] }, platform, source.canonicalUrl);
+      const mapped = mapPost(
+        { platform, post: record, metrics: record["metrics"] },
+        platform,
+        source.canonicalUrl,
+      );
       if (mapped) posts.push(mapped);
       if (posts.length >= limit) break;
     }
   }
 
+  const pageInfo = asRecord(result["pageInfo"]);
+  const postsPage = asRecord(pageInfo?.["recentPosts"]);
+  const videosPage = asRecord(pageInfo?.["recentVideos"]);
   const pagination = asRecord(result["pagination"]);
   const hasMore =
+    postsPage?.["hasNextPage"] === true ||
+    videosPage?.["hasNextPage"] === true ||
     pagination?.["hasMore"] === true ||
     typeof pagination?.["nextCursor"] === "string" ||
-    (Array.isArray(rawPosts) && rawPosts.length > posts.length);
+    (Array.isArray(rawItems) && rawItems.length > posts.length);
 
   return { source, posts, hasMore };
 }
@@ -373,10 +429,51 @@ function fail<T>(code: ProviderErrorCode): ProviderResult<T> {
   return providerFailure<T>(REFETCHER_PROVIDER_ID, code, messageFor(code));
 }
 
+/* ---------------------------------------------------------------------------
+ * Request bodies (pure) — mirror the documented Refetcher request contract.
+ *
+ * Exactly ONE target per call. Single-target semantics are expressed by a
+ * SINGULAR target field (`url`, `profileUrl` or `channelUrl`); there is no
+ * `targets` array and SE-2 never batches.
+ * ------------------------------------------------------------------------- */
+
+/** Post / video / metrics read, all five platforms. */
+export function buildPostRequestBody(canonicalUrl: string): Rec {
+  return { url: canonicalUrl };
+}
+
+/**
+ * Profile read.
+ * - Instagram / TikTok / Facebook / X: `profileUrl` + `includeRecentPosts`.
+ *   X additionally takes `sort: "latest"`.
+ * - YouTube: a channel read with `channelUrl` + `includeRecentVideos`.
+ */
+export function buildSourceRequestBody(
+  platform: SocialPlatform,
+  canonicalUrl: string,
+  safeLimit: number,
+): Rec {
+  if (platform === "youtube") {
+    return {
+      type: "channel",
+      platform: "youtube",
+      channelUrl: canonicalUrl,
+      includeRecentVideos: true,
+      recentVideosLimit: safeLimit,
+    };
+  }
+  return {
+    profileUrl: canonicalUrl,
+    includeRecentPosts: true,
+    pages: 1,
+    recentPostsLimit: safeLimit,
+    ...(platform === "x" ? { sort: "latest" } : {}),
+  };
+}
+
 async function readOne<T>(
   url: unknown,
-  target: "post" | "profile",
-  extra: Rec,
+  buildBody: (platform: SocialPlatform, canonicalUrl: string) => Rec,
   map: (result: Rec, platform: SocialPlatform, canonicalUrl: string) => T | null,
   units: number | null,
 ): Promise<ProviderResult<T>> {
@@ -387,12 +484,7 @@ async function readOne<T>(
   const apiKey = readApiKey();
   if (!apiKey) return fail<T>("PROVIDER_NOT_CONFIGURED");
 
-  const transport = await callRefetcher(apiKey, {
-    // Exactly one target per call. SE-2 never batches.
-    targets: [{ url: resolved.canonicalUrl, type: target }],
-    pages: 1,
-    ...extra,
-  });
+  const transport = await callRefetcher(apiKey, buildBody(resolved.platform, resolved.canonicalUrl));
   if (!transport.ok) return fail<T>(transport.code);
 
   const result = firstResult(transport.body);
@@ -420,16 +512,18 @@ export const refetcherReadProvider: SocialReadProvider = {
   },
 
   fetchPostByUrl({ url }) {
-    return readOne<NormalizedPost>(url, "post", {}, (result, platform, canonicalUrl) =>
-      mapPost(result, platform, canonicalUrl),
-    1);
+    return readOne<NormalizedPost>(
+      url,
+      (_platform, canonicalUrl) => buildPostRequestBody(canonicalUrl),
+      (result, platform, canonicalUrl) => mapPost(result, platform, canonicalUrl),
+      1,
+    );
   },
 
   fetchPostMetrics({ url }) {
     return readOne<NormalizedMetricsObservation>(
       url,
-      "post",
-      {},
+      (_platform, canonicalUrl) => buildPostRequestBody(canonicalUrl),
       (result, platform, canonicalUrl) => mapMetricsObservation(result, platform, canonicalUrl),
       1,
     );
@@ -439,8 +533,7 @@ export const refetcherReadProvider: SocialReadProvider = {
     const safeLimit = clampLimit(limit);
     return readOne<NormalizedSourceRecentPosts>(
       url,
-      "profile",
-      { limit: safeLimit },
+      (platform, canonicalUrl) => buildSourceRequestBody(platform, canonicalUrl, safeLimit),
       (result, platform, canonicalUrl) =>
         mapSourceRecentPosts(result, platform, canonicalUrl, safeLimit),
       // Profile page billing can vary by platform, so units stay unasserted.
