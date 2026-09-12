@@ -261,6 +261,21 @@ export async function fetchNetworkProjectLaunches(
   return data ?? [];
 }
 
+/**
+ * Public project videos. Read-only through the existing SECURITY DEFINER RPC,
+ * which only returns rows for published, non-hidden project profiles.
+ */
+export async function fetchNetworkProjectVideos(
+  slug: string,
+): Promise<NetworkProjectVideo[]> {
+  if (!isValidNetworkSlug(slug)) return [];
+  const { data, error } = await supabase.rpc("get_cartel_network_project_videos", {
+    _project_slug: slug.trim().toLowerCase(),
+  });
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function fetchNetworkUpcomingLaunches(
   params: DirectoryParams = {},
 ): Promise<Paged<NetworkUpcomingLaunch>> {
