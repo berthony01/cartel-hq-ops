@@ -48,15 +48,15 @@ User wants modest ongoing revenue from trading for marketing, production, and ec
 
 **Frozen direction:** keep PCART a standard 0%-transfer-tax ERC-20 and seek project revenue through audited liquidity-layer creator/LP fees. The Uniswap LiquidityLauncher technical reference states rebasing and fee-on-transfer tokens are not compatible with LiquidityLauncher. The Robinhood Chain Uniswap stack currently exposes creator-fee / fee-splitter infrastructure, which may offer ongoing trading-fee revenue while keeping PCART a standard ERC-20. This must be reverified from current Uniswap code/on-chain contracts immediately before implementation.
 
-Preferred order of evaluation:
-A. Standard 0%-transfer-tax PCART + creator/LP trading-fee revenue at the liquidity layer (RECOMMENDED candidate).
-B. If A cannot meet the project’s legitimate revenue requirement, perform a separate design/audit for a very small transfer-tax token and a compatible DEX/liquidity path. Do not add a transfer tax casually or by broad toggle.
+**Frozen launch-distribution and price-discovery decision:** PEPECARTEL chooses **Option A: public onchain CCA/LBP launch auction** as the preferred launch path because the project does not expect to supply all required launch liquidity ETH itself. A Continuous Clearing Auction (CCA) / Liquidity Bootstrapping Pool (LBP) is a public onchain token sale/auction economically; it is not a private fixed-price presale. Do not market it as “no sale” or imply legal distinctions that have not been reviewed.
+
+The current technical reason for choosing CCA/LBP is that Uniswap's LBP strategy can run a Continuous Clearing Auction, transfer raised currency to the LBP strategy, discover a market-clearing price, and migrate reserved token supply plus raised currency into Uniswap v4 liquidity according to configured migration parameters. Exact Robinhood Chain contracts, code hashes, parameters, auction amount, reserve/starting price, duration, LP allocation schedule, token/currency split, position recipient/lock, creator-fee compatibility, and failure-recovery behavior must be reverified in PCART-L5 before any execution.
+
+Choosing CCA/LBP can reduce the amount of ETH the project must contribute for initial liquidity, but does NOT mean the launch requires zero ETH. PEPECARTEL still needs ETH for deployment/gas and may need additional ETH depending on final auction/liquidity configuration and operational requirements.
+
+Do NOT freeze how much of the 500,000,000 PCART public-launch/liquidity allocation goes to auction versus post-auction liquidity/reserve. That exact split remains an audited simulation decision.
 
 Important: creator-fee percentages are percentages of protocol/pool fee streams, NOT percentages of gross trade volume. No revenue projection is frozen.
-
-**Preferred distribution/liquidity direction:** CCA/LBP / price-discovery launch path rather than current InstantLaunchStrategy, because current InstantLaunchStrategy requires/uses the full 1B supply while the approved tokenomics retain allocations outside liquidity. Existing-token CCA/LBP compatibility and precise parameters must be reverified in PCART-L5.
-
-A CCA is an onchain public token distribution / launch auction that can accept ETH bids and establish a market-clearing price before normal trading. It can economically resemble a public token sale, but it is not automatically the same thing as a private/fixed-price presale. Legal/comms treatment of any auction/token sale remains a PCART-L6 counsel-review gate.
 
 **Treasury revenue policy target (non-contractual, adjustable):** 35% marketing/content/community growth; 35% CARTEL HQ development/infrastructure; 20% liquidity/security/reserve; 10% legal/audits/compliance/admin. This is an operating-policy target, not token-holder entitlement and not hard-coded in Solidity.
 
