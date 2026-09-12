@@ -298,4 +298,4 @@ At the start of every future phase:
 
 ## 11. Immediate next phase
 
-PCART-L1 remains open until exact CCA/LBP parameters, ETH budget/minimum operational ETH, custody implementation, and legal/comms review inputs are resolved. The launch-distribution method is frozen as public onchain CCA/LBP launch auction (Option A). Do not write Solidity or initiate a production deployment until L1 fully closes.
+PCART-L1A read-only economics pass is complete. The Balanced 150M/200M/150M split and associated simulation inputs are a RECOMMENDED CANDIDATE, NOT YET FROZEN, awaiting explicit user approval. PCART-L1 remains open until that approval, exact operational ETH reserve for gas, multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility, and fork/testnet simulation are resolved. The launch-distribution method is frozen as public onchain CCA/LBP launch auction (Option A). Do not write Solidity or initiate a production deployment until L1 fully closes.
