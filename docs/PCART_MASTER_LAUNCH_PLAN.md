@@ -200,7 +200,7 @@ Freeze exact tokenomics allocation, custody/treasury architecture, utility launc
 
 ### PCART-L1 — Utility + tokenomics + treasury specification freeze
 
-Status: **Strategic tokenomics, utility, custody, trading-revenue and launch-distribution direction substantially approved; NOT fully closed until exact CCA/LBP parameters, ETH budget/minimum operational ETH, custody implementation, and legal/comms review inputs are resolved.**
+Status: **Strategic tokenomics, utility, custody, trading-revenue and launch-distribution direction substantially approved; PCART-L1A CCA auction economics recommendation complete as a planning recommendation with a RECOMMENDED CANDIDATE (Balanced 150M/200M/150M split) awaiting explicit user approval before freezing; NOT fully closed until that approval, exact operational ETH reserve for gas, multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility, and fork/testnet simulation inputs are resolved.**
 
 No deployment.
 Required outputs:
