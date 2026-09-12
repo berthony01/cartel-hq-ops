@@ -65,14 +65,7 @@ function FactRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function OverviewPanel({
-  project,
-  currentLaunch,
-}: {
-  project: NetworkProject;
-  currentLaunch: NetworkProjectLaunch | null;
-}) {
-  const ticker = formatTicker(project.ticker);
+function OverviewPanel({ project }: { project: NetworkProject }) {
   return (
     <div role="tabpanel" id="project-tabpanel-overview" aria-labelledby="project-tab-overview">
       <section className="rounded-lg border border-border/80 bg-surface-elevated p-5 shadow-inset sm:p-7">
@@ -89,20 +82,6 @@ function OverviewPanel({
             This project has not published a description yet.
           </p>
         )}
-      </section>
-
-      <section className="mt-5 rounded-lg border border-border/80 bg-surface-raised/45 p-5 shadow-inset">
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">
-          Key facts
-        </h2>
-        <dl className="mt-3 grid gap-x-6 sm:grid-cols-2">
-          {ticker ? <FactRow label="Ticker" value={ticker} /> : null}
-          {project.primary_chain ? <FactRow label="Primary chain" value={project.primary_chain} /> : null}
-          <FactRow label="Network status" value="Published" />
-          {currentLaunch ? (
-            <FactRow label="Current launch" value={launchStatusLabel(currentLaunch.status)} />
-          ) : null}
-        </dl>
       </section>
     </div>
   );
@@ -213,9 +192,11 @@ function LaunchPanel({ launches }: { launches: NetworkProjectLaunch[] }) {
 function FactsRail({
   project,
   currentLaunch,
+  activeTab,
 }: {
   project: NetworkProject;
   currentLaunch: NetworkProjectLaunch | null;
+  activeTab: PublicProjectHubTab;
 }) {
   const ticker = formatTicker(project.ticker);
   const hasLinks = Boolean(project.website_url || project.telegram_url || project.x_url);
@@ -246,25 +227,27 @@ function FactsRail({
           {ticker ? <FactRow label="Ticker" value={ticker} /> : null}
           {project.primary_chain ? <FactRow label="Primary chain" value={project.primary_chain} /> : null}
           <FactRow label="Cartel Network" value="Published" />
-          {currentLaunch ? (
+          {currentLaunch && activeTab !== "launch" ? (
             <FactRow label="Current launch" value={launchStatusLabel(currentLaunch.status)} />
           ) : null}
         </dl>
       </section>
 
-      <section className="rounded-lg border border-gold/20 bg-surface-elevated p-4 shadow-inset">
-        <div className="flex items-center gap-2 text-gold">
-          <ShieldCheck className="size-4 shrink-0" aria-hidden="true" />
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em]">Trust summary</h2>
-        </div>
-        <div className="mt-3 flex flex-col items-start gap-2">
-          <StatusPill tone="gold">Project Authenticated</StatusPill>
-          {platformReviewed ? <PlatformReviewedPill /> : null}
-        </div>
-        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-          Trust signals are distinct and do not verify token safety or investment quality.
-        </p>
-      </section>
+      {activeTab !== "trust" ? (
+        <section className="rounded-lg border border-gold/20 bg-surface-elevated p-4 shadow-inset">
+          <div className="flex items-center gap-2 text-gold">
+            <ShieldCheck className="size-4 shrink-0" aria-hidden="true" />
+            <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em]">Trust summary</h2>
+          </div>
+          <div className="mt-3 flex flex-col items-start gap-2">
+            <StatusPill tone="gold">Project Authenticated</StatusPill>
+            {platformReviewed ? <PlatformReviewedPill /> : null}
+          </div>
+          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+            Trust signals are distinct and do not verify token safety or investment quality.
+          </p>
+        </section>
+      ) : null}
     </aside>
   );
 }
@@ -280,7 +263,14 @@ export function PublicProjectHub({ project, launches, activeTab }: PublicProject
     <div className="space-y-6 sm:space-y-8">
       <header className="relative overflow-hidden rounded-lg border border-gold/25 bg-surface-elevated shadow-elevated">
         <div className="h-1 bg-gold/70" aria-hidden="true" />
-        <div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-center lg:gap-8 lg:p-9">
+        <div
+          className={cn(
+            "grid gap-6 p-5 sm:p-7 lg:items-center lg:gap-8 lg:p-9",
+            currentLaunch
+              ? "lg:grid-cols-[auto_minmax(0,1fr)_minmax(16rem,20rem)]"
+              : "lg:grid-cols-[auto_minmax(0,1fr)]",
+          )}
+        >
           <div className="flex items-center justify-center rounded-lg border border-border/80 bg-surface-raised/70 p-3 shadow-inset sm:w-fit">
             <ProjectLogo
               slug={project.public_slug}
@@ -305,20 +295,34 @@ export function PublicProjectHub({ project, launches, activeTab }: PublicProject
                 </StatusPill>
               ) : null}
             </div>
-            {currentLaunch ? (
-              <div className="mt-6 border-l-2 border-gold/50 pl-4">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Current launch · {currentLaunch.token_name}
-                </p>
-                <p className="mt-1 text-sm text-foreground [overflow-wrap:anywhere]">
-                  {formatSchedule(currentLaunch)}
-                </p>
-                <div className="mt-4">
-                  <LaunchActions launch={currentLaunch} />
-                </div>
-              </div>
-            ) : null}
           </div>
+          {currentLaunch ? (
+            <section className="min-w-0 rounded-lg border border-gold/20 bg-surface-raised/70 p-4 shadow-inset sm:p-5" aria-label="Current launch">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold">
+                Current launch
+              </p>
+              <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                <p className="min-w-0 truncate font-display text-xl uppercase text-foreground">
+                  {currentLaunch.token_name}
+                </p>
+                <StatusPill tone={launchStatusTone(currentLaunch.status)}>
+                  {launchStatusLabel(currentLaunch.status)}
+                </StatusPill>
+              </div>
+              <p className="mt-3 truncate text-xs text-muted-foreground" title={formatSchedule(currentLaunch)}>
+                {formatSchedule(currentLaunch)}
+              </p>
+              {currentLaunch.join_launch_watch_url ? (
+                <div className="mt-4">
+                  <WatchButton
+                    url={currentLaunch.join_launch_watch_url}
+                    status={currentLaunch.status}
+                    className="min-h-11 w-full px-4"
+                  />
+                </div>
+              ) : null}
+            </section>
+          ) : null}
         </div>
       </header>
 
@@ -361,14 +365,14 @@ export function PublicProjectHub({ project, launches, activeTab }: PublicProject
               <VerificationSignals
                 verificationStatus={project.verification_status}
                 verifiedAt={project.verified_at}
-                className="px-5 py-5 sm:px-7 sm:py-7"
+                className="px-5 py-6 sm:px-8 sm:py-8"
               />
             </div>
           ) : (
-            <OverviewPanel project={project} currentLaunch={currentLaunch} />
+            <OverviewPanel project={project} />
           )}
         </main>
-        <FactsRail project={project} currentLaunch={currentLaunch} />
+        <FactsRail project={project} currentLaunch={currentLaunch} activeTab={activeTab} />
       </div>
     </div>
   );
