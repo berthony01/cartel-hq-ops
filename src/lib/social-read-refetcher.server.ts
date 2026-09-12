@@ -16,7 +16,7 @@
  * - The upstream host is a fixed constant; caller input can never redirect it.
  * - `REFETCHER_API_KEY` is read inside the call path only, never returned,
  *   logged, or embedded in an error.
- * - No provider price is encoded anywhere. Pricing is commercial, not架 architecture.
+ * - No provider price is encoded anywhere. Pricing is commercial, not architecture.
  */
 
 import {
