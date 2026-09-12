@@ -1,6 +1,6 @@
 # SE-2 — SocialReadProvider Foundation + Provisional Refetcher Adapter
 
-Status: BUILT, source-only/fixture verified. NOT validated against the live provider.
+Status: BUILT and CONTRACT-CORRECTED, source-only/fixture verified. NOT validated against the live provider — no live call has ever been performed.
 Phase: SE-2 (foundation only). Start gate: `915e24c781e8243a7cd8856c4b1505be276877fd` (audit artifact commit `2d15db0e...` removed in this turn).
 Authority: `docs/SE0_SOCIAL_ENGINE_ARCHITECTURE_LOCK.md` (frozen), `docs/SE1_SOCIAL_ENGINE_SCHEMA_FOUNDATION.md` (frozen).
 
@@ -13,7 +13,7 @@ Three files, plus a regression script and this document.
 | `src/lib/social-read-provider.ts` | Pure, provider-neutral contract. Zero I/O, no secret name, no provider host. Safe in any bundle. |
 | `src/lib/social-read-refetcher.server.ts` | Server-only Refetcher adapter. All vendor specifics live here and nowhere else. |
 | `src/lib/social-read.functions.ts` | Authenticated, operator-gated server-function boundary. The only path app code may use. |
-| `scripts/se2-social-read-provider-regression.ts` | 140 source-only, fixture-driven checks. No network, no database, no secret. |
+| `scripts/se2-social-read-provider-regression.ts` | 154 source-only, fixture-driven checks. No network, no database, no secret. |
 
 ## Provider selection
 
@@ -79,7 +79,7 @@ Refetcher is a public-scraping vendor. Scraping sits against several platforms' 
 
 ## Verification
 
-- `bun scripts/se2-social-read-provider-regression.ts` — 140 checks, all passing. Covers interface shape and absence of write capability; URL acceptance for all five platforms and rejection of foreign hosts, schemes, credentials and ports; success fixtures for Instagram, TikTok, X, YouTube and Facebook; null/availability preservation including the YouTube missing-availability case; profile mapping and single-page clamping; HTTP status and per-result category error mapping; retryable classification; `billable:false, units:0` on every failure; credential handling; authorization ordering; and scope locks (no cost fields, no pricing, no table writes, no cron, no Telegram).
+- `bun scripts/se2-social-read-provider-regression.ts` — 154 checks, all passing. Covers interface shape and absence of write capability; URL acceptance for all five platforms and rejection of foreign hosts, schemes, credentials and ports; success fixtures for Instagram, TikTok, X, YouTube and Facebook; null/availability preservation including the YouTube missing-availability case; exact request-body builders for post, the four-network profile read, X sort, and the YouTube channel read; `normalizedUrl`/`caption` preference; `pageInfo.*.hasNextPage`; the YouTube channel + recentVideos shape including a links-only reference; single-page clamping; HTTP status and per-result category error mapping; retryable classification; `billable:false, units:0` on every failure; credential handling; authorization ordering; and scope locks (no cost fields, no pricing, no table writes, no cron, no Telegram).
 - `bunx tsgo --noEmit` — clean.
 - `bun run build` — success.
 
