@@ -229,7 +229,13 @@ export function mapPost(
     asText(result["id"], 512);
   if (!externalPostId) return null;
 
-  const canonicalUrl = asText(post["url"], 2048) ?? asText(result["url"], 2048) ?? fallbackUrl;
+  // Documented canonical link is `normalizedUrl`; `url` is only a fallback.
+  const canonicalUrl =
+    asText(post["normalizedUrl"], 2048) ??
+    asText(post["url"], 2048) ??
+    asText(result["normalizedUrl"], 2048) ??
+    asText(result["url"], 2048) ??
+    fallbackUrl;
 
   const { metrics, availability } = buildMetrics(
     result["metrics"] ?? post["metrics"],
