@@ -54,47 +54,48 @@ The current technical reason for choosing CCA/LBP is that Uniswap's LBP strategy
 
 Choosing CCA/LBP can reduce the amount of ETH the project must contribute for initial liquidity, but does NOT mean the launch requires zero ETH. PEPECARTEL still needs ETH for deployment/gas and may need additional ETH depending on final auction/liquidity configuration and operational requirements.
 
-Do NOT freeze how much of the 500,000,000 PCART public-launch/liquidity allocation goes to auction versus post-auction liquidity/reserve. That exact split remains an audited simulation decision.
+The 500,000,000 PCART public-launch/liquidity allocation is now frozen: 150,000,000 PCART maximum to the CCA public auction, 200,000,000 PCART reserved for token-side LBP migration/liquidity, and 150,000,000 PCART held as future liquidity/market reserve outside the initial launcher.
 
 Important: creator-fee percentages are percentages of protocol/pool fee streams, NOT percentages of gross trade volume. No revenue projection is frozen.
 
 **Treasury revenue policy target (non-contractual, adjustable):** 35% marketing/content/community growth; 35% CARTEL HQ development/infrastructure; 20% liquidity/security/reserve; 10% legal/audits/compliance/admin. This is an operating-policy target, not token-holder entitlement and not hard-coded in Solidity.
 
-## 4.1 PCART-L1A — CCA Auction Economics Simulation (RECOMMENDED CANDIDATE, NOT YET FROZEN)
+## 4.1 PCART-L1A — CCA Auction Economics Simulation (FROZEN / OWNER-APPROVED)
 
-This section records a read-only economics recommendation for the already-frozen 500,000,000 PCART public launch + liquidity bucket. It does **not** freeze any parameter and does **not** authorize execution.
+This section records the owner-approved and frozen CCA/LBP auction economics for the 500,000,000 PCART public launch + liquidity bucket. These parameters are frozen as planning inputs; they do not authorize execution.
 
 ### 4.1.1 Scenario comparison within the frozen 500M public-launch/liquidity bucket
 
 | Scenario | Max auction supply | Reserved token-side LP budget | Future liquidity/market reserve |
 |---|---|---|---|
 | Conservative | 100,000,000 PCART | 150,000,000 PCART | 250,000,000 PCART |
-| **Balanced (RECOMMENDED)** | **150,000,000 PCART** | **200,000,000 PCART** | **150,000,000 PCART** |
+| **Balanced (FROZEN / APPROVED)** | **150,000,000 PCART** | **200,000,000 PCART** | **150,000,000 PCART** |
 | Aggressive | 200,000,000 PCART | 250,000,000 PCART | 50,000,000 PCART |
 
-**Why Balanced is recommended:** it exposes at most 15% of total supply to the initial auction, keeps a large 20% token-side LP budget available for migration, and retains another 15% of total supply as flexible future liquidity/market support. It avoids both a very small initial public distribution and committing almost the entire 500M bucket at launch.
+**Why Balanced is approved:** it exposes at most 15% of total supply to the initial auction, keeps a large 20% token-side LP budget available for migration, and retains another 15% of total supply as flexible future liquidity/market support. It avoids both a very small initial public distribution and committing almost the entire 500M bucket at launch.
 
 ### 4.1.2 Current Uniswap LBP mechanical fit (must be reverified before execution)
 
-Current-source finding: `LBPStrategy` splits the amount deposited into auction supply (`distribution amount minus reservedTokenAmountForLP`) while `reservedTokenAmountForLP` stays in the strategy for migration. Under the recommended candidate, the planned LBP deposit would therefore be **350,000,000 PCART**, with **200,000,000 PCART reserved** and up to **150,000,000 PCART** sent to the CCA. The other **150,000,000 PCART** from the 500M bucket remains outside this launch transaction as designated future liquidity/market reserve.
+Current-source finding: `LBPStrategy` splits the amount deposited into auction supply (`distribution amount minus reservedTokenAmountForLP`) while `reservedTokenAmountForLP` stays in the strategy for migration. Under the frozen approved candidate, the planned LBP deposit would therefore be **350,000,000 PCART**, with **200,000,000 PCART reserved** and up to **150,000,000 PCART** sent to the CCA. The other **150,000,000 PCART** from the 500M bucket remains outside this launch transaction as designated future liquidity/market reserve.
 
 Unused migration currency and unused reserved LP tokens return to the configured recipient; failed-migration recovery also returns raised currency and reserved tokens to the recipient. These mechanics are **not frozen external facts** and must be reverified against current Robinhood Chain/Uniswap contracts and SDK immediately before build/execution.
 
-### 4.1.3 RECOMMENDED CANDIDATE auction parameters for simulation only
+### 4.1.3 FROZEN auction parameters (planning inputs, not execution authorization)
 
 - **Raise currency:** native ETH.
+- **Public onchain CCA/LBP launch path:** remains frozen.
 - **Max auction supply:** 150,000,000 PCART.
 - **Reserved token-side LP budget:** 200,000,000 PCART.
 - **Future liquidity/market reserve outside launcher:** 150,000,000 PCART.
-- **Auction window:** 24 hours, subject to exact Robinhood Chain blocknumberish/live timing validation.
-- **Candidate floor FDV:** 50 ETH equivalent across the 1,000,000,000 PCART total supply. This is a low floor guardrail, not a target valuation.
-- **Candidate graduation minimum `requiredCurrencyRaised`:** 10 ETH. Treat this as a minimum viable launch-liquidity gate, not a fundraising target.
-- **Candidate tick spacing:** approximately 1% of floor price, subject to SDK derivation and validation.
+- **Auction window:** 24 hours is the approved planning parameter, subject only to exact block/timing derivation during implementation.
+- **Frozen floor FDV planning guardrail:** 50 ETH equivalent across the 1,000,000,000 PCART total supply. This is an approved planning input, not a promised valuation or fundraising target.
+- **Frozen graduation minimum / `requiredCurrencyRaised` planning gate:** 10 ETH. This is an approved minimum launch-liquidity planning gate, not a fundraising target.
+- **Tick spacing:** approximately 1% of floor price, subject to SDK derivation and validation.
 - **Auction emission/supply schedule:** use the current audited SDK convex schedule derivation and independently validate significant final issuance; do not hand-invent a schedule.
-- **Candidate post-auction static LP fee:** 0.25%, but leave **OPEN** until current Robinhood Chain v4 pool-key availability and creator-fee compatibility are confirmed.
-- **Validation hook:** none by default; legal/compliance review may change this.
+- **Frozen post-auction static LP fee planning input:** 0.25%, technically conditional on live Robinhood Chain v4 pool-key availability / creator-fee compatibility. Do not mislabel this technical compatibility gate as owner indecision.
+- **Validation hook:** none by default unless legal/compliance or technical audit requires one.
 
-### 4.1.4 RECOMMENDED CANDIDATE tiered LP allocation of ETH raised
+### 4.1.4 FROZEN tiered LP allocation of ETH raised
 
 Current SDK supports bracketed LP allocations, but exact inclusive on-chain thresholds must be encoded and tested later. The objective is that weak/modest demand prioritizes liquidity, while stronger demand creates a modest operational reserve. Protocol fees, gas, and exact accounting must be deducted and verified in simulation; these percentages are not net guaranteed proceeds.
 
@@ -118,7 +119,7 @@ The following price snapshot is **illustrative and stale immediately after writi
 
 Actual CCA clearing, unsold tokens, protocol fees, and position construction mean real outcomes can differ materially. These figures are a planning sensitivity table, not a guarantee, prediction, or offering document.
 
-### 4.1.6 LP custody / creator-fee recommendation
+### 4.1.6 Frozen LP custody / creator-fee preference
 
 Prefer permanent/non-ruggable LP custody using the current creator-fees-on `FeeSplitter` path **if and only if** the existing-token LBP path can correctly register and route PEPECARTEL's beneficiary. Current SDK history indicates that new auction/crowd-launch positions on Robinhood need the current creator-fees position recipient, but addresses and beneficiary compatibility have changed through redeploys. Therefore **do not pin a production address in this master plan**.
 
@@ -126,10 +127,10 @@ This is a **hard PCART-L5 reverification gate**. If existing-token beneficiary r
 
 ### 4.1.7 Recommendation disposition
 
-- **PCART-L1A READ-ONLY ECONOMICS PASS:** COMPLETE as a planning recommendation.
-- **Balanced 150M / 200M / 150M split:** **RECOMMENDED CANDIDATE**, awaiting explicit user approval before freezing.
-- **24h window / 50 ETH floor-FDV / 10 ETH graduation minimum / tiered 100-90-80 LP schedule / 0.25% fee:** **RECOMMENDED SIMULATION INPUTS, NOT production parameters**.
-- **Still OPEN before PCART-L1 can fully close:** user approval of the candidate economics, exact operational ETH reserve for gas, multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility confirmation, and fork/testnet simulation.
+- **PCART-L1A ECONOMICS:** **OWNER-APPROVED AND FROZEN**.
+- **Balanced 150M / 200M / 150M split:** **FROZEN**.
+- **24h window / 50 ETH floor-FDV / 10 ETH graduation minimum / tiered 100-90-80 LP schedule / 0.25% fee:** **FROZEN PLANNING INPUTS**, not execution authorization.
+- **Still OPEN before PCART-L1 can fully close:** exact operational ETH reserve for gas, exact multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility confirmation, and fork/testnet simulation. Exact on-chain encoding is derived from these frozen policies in PCART-L5.
 - **No Solidity or value-moving action until those gates close.**
 
 ## 5. Utility model
@@ -200,7 +201,7 @@ Freeze exact tokenomics allocation, custody/treasury architecture, utility launc
 
 ### PCART-L1 — Utility + tokenomics + treasury specification freeze
 
-Status: **Strategic tokenomics, utility, custody, trading-revenue and launch-distribution direction substantially approved; PCART-L1A CCA auction economics recommendation complete as a planning recommendation with a RECOMMENDED CANDIDATE (Balanced 150M/200M/150M split) awaiting explicit user approval before freezing; NOT fully closed until that approval, exact operational ETH reserve for gas, multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility, and fork/testnet simulation inputs are resolved.**
+Status: **Strategic tokenomics, utility, custody, trading-revenue and launch-distribution direction substantially approved; PCART-L1A CCA auction economics are now OWNER-APPROVED AND FROZEN (Balanced 150M/200M/150M split, 24h window, 50 ETH floor-FDV planning guardrail, 10 ETH graduation-minimum planning gate, tiered 100-90-80 LP allocation, 0.25% static LP fee planning input). L1 is NOT fully closed until exact operational ETH reserve for gas, exact multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility, and fork/testnet simulation inputs are resolved.**
 
 No deployment.
 Required outputs:
@@ -210,7 +211,7 @@ Required outputs:
 - explicit non-security-style utility/comms guardrails; ✅ FROZEN: no passive revenue, no dividends, no guaranteed yield, treasury revenue for operations;
 - final decision: 0% transfer tax plus liquidity-layer fee revenue versus separate taxed-token architecture; ✅ FROZEN: 0% transfer tax, liquidity-layer creator/LP fee revenue preferred;
 - launch-distribution and price-discovery method: ✅ FROZEN: public onchain CCA/LBP launch auction (Option A), because the project does not expect to supply all required launch liquidity ETH itself. CCA/LBP is a public onchain token sale/auction economically, not a private fixed-price presale. Choosing CCA/LBP can reduce required project ETH for initial liquidity but does NOT mean zero ETH; ETH is still required for deployment/gas and may be required for additional auction/liquidity/operational configuration.
-- liquidity budget and intended launch pricing/strategy inputs, without sending value. ⏳ OPEN: user approval of the recommended candidate economics (Balanced 150M/200M/150M split, 24h window, 50 ETH floor-FDV, 10 ETH graduation minimum, tiered 100-90-80 LP schedule, 0.25% fee), exact operational ETH reserve for gas, multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility, and fork/testnet simulation. These remain for PCART-L5/L6.
+- liquidity budget and intended launch pricing/strategy inputs, without sending value. ✅ FROZEN: 500M public-launch/liquidity bucket split as 150M CCA auction / 200M reserved token-side LP budget / 150M future liquidity/market reserve; 24h window; 50 ETH floor-FDV planning guardrail; 10 ETH graduation-minimum planning gate; tiered 100-90-80 LP allocation; 0.25% static LP fee planning input. ⏳ STILL OPEN: exact operational ETH reserve for gas, multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility, and fork/testnet simulation. These remain for PCART-L5/L6.
 
 STOP for approval before proceeding to L2. L1 is not closed while the open items above remain unresolved.
 
@@ -298,4 +299,6 @@ At the start of every future phase:
 
 ## 11. Immediate next phase
 
-PCART-L1A read-only economics pass is complete. The Balanced 150M/200M/150M split and associated simulation inputs are a RECOMMENDED CANDIDATE, NOT YET FROZEN, awaiting explicit user approval. PCART-L1 remains open until that approval, exact operational ETH reserve for gas, multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility, and fork/testnet simulation are resolved. The launch-distribution method is frozen as public onchain CCA/LBP launch auction (Option A). Do not write Solidity or initiate a production deployment until L1 fully closes.
+PCART-L1A economics are now OWNER-APPROVED AND FROZEN. L1 remains open only for genuinely unresolved implementation gates: exact operational ETH reserve for gas, exact multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility confirmation, fork/testnet simulation, and exact on-chain encoding derived from frozen policy.
+
+**Immediate next phase:** read-only Treasury/Multisig Implementation + Live Robinhood/Uniswap CCA Compatibility Audit. Do not authorize Solidity or value movement merely by this documentation freeze. Do not write Solidity or initiate a production deployment until L1 fully closes.
