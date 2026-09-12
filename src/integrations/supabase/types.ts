@@ -1902,16 +1902,59 @@ export type Database = {
           },
         ]
       }
+      project_profile_videos: {
+        Row: {
+          created_at: string
+          id: string
+          position: number
+          project_profile_id: string
+          title: string | null
+          updated_at: string
+          youtube_video_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          position?: number
+          project_profile_id: string
+          title?: string | null
+          updated_at?: string
+          youtube_video_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          position?: number
+          project_profile_id?: string
+          title?: string | null
+          updated_at?: string
+          youtube_video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_profile_videos_project_profile_id_fkey"
+            columns: ["project_profile_id"]
+            isOneToOne: false
+            referencedRelation: "project_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_profiles: {
         Row: {
+          about_long: string | null
           created_at: string
           description: string | null
           discovery_status: string
+          docs_url: string | null
+          github_url: string | null
+          highlights: string[] | null
           id: string
           logo_asset_id: string | null
           primary_chain: string | null
           project_name: string
           public_slug: string
+          tagline: string | null
           telegram_url: string | null
           ticker: string | null
           updated_at: string
@@ -1920,14 +1963,19 @@ export type Database = {
           x_url: string | null
         }
         Insert: {
+          about_long?: string | null
           created_at?: string
           description?: string | null
           discovery_status?: string
+          docs_url?: string | null
+          github_url?: string | null
+          highlights?: string[] | null
           id?: string
           logo_asset_id?: string | null
           primary_chain?: string | null
           project_name: string
           public_slug: string
+          tagline?: string | null
           telegram_url?: string | null
           ticker?: string | null
           updated_at?: string
@@ -1936,14 +1984,19 @@ export type Database = {
           x_url?: string | null
         }
         Update: {
+          about_long?: string | null
           created_at?: string
           description?: string | null
           discovery_status?: string
+          docs_url?: string | null
+          github_url?: string | null
+          highlights?: string[] | null
           id?: string
           logo_asset_id?: string | null
           primary_chain?: string | null
           project_name?: string
           public_slug?: string
+          tagline?: string | null
           telegram_url?: string | null
           ticker?: string | null
           updated_at?: string
@@ -4383,11 +4436,16 @@ export type Database = {
       get_cartel_network_project: {
         Args: { _slug: string }
         Returns: {
+          about_long: string
           description: string
+          docs_url: string
+          github_url: string
           has_logo: boolean
+          highlights: string[]
           primary_chain: string
           project_name: string
           public_slug: string
+          tagline: string
           telegram_url: string
           ticker: string
           verification_status: string
@@ -4415,6 +4473,14 @@ export type Database = {
           timezone: string
           token_name: string
           watchlist_opened_at: string
+        }[]
+      }
+      get_cartel_network_project_videos: {
+        Args: { _project_slug: string }
+        Returns: {
+          position: number
+          title: string
+          youtube_video_id: string
         }[]
       }
       get_cartel_network_projects: {
