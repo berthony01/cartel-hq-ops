@@ -114,7 +114,7 @@ The following price snapshot is **illustrative and stale immediately after writi
 | 10 ETH | ~$25,136 | ~$167,573 | 10 ETH | 0 ETH |
 | 15 ETH | ~$37,704 | ~$251,359 | 13.5 ETH | 1.5 ETH |
 | 30 ETH | ~$75,407 | ~$502,718 | 24 ETH | 6 ETH |
-| 50 ETH | ~$75,407 | ~$837,864 | 40 ETH | 10 ETH |
+| 50 ETH | ~$125,679 | ~$837,864 | 40 ETH | 10 ETH |
 
 Actual CCA clearing, unsold tokens, protocol fees, and position construction mean real outcomes can differ materially. These figures are a planning sensitivity table, not a guarantee, prediction, or offering document.
 
