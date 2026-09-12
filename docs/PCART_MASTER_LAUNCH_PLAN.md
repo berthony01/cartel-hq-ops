@@ -128,7 +128,7 @@ Freeze exact tokenomics allocation, custody/treasury architecture, utility launc
 
 ### PCART-L1 — Utility + tokenomics + treasury specification freeze
 
-Status: **Strategic tokenomics, utility, custody and trading-revenue direction substantially approved; NOT fully closed until exact liquidity/auction inputs, ETH budget, custody implementation, and legal/comms review inputs are resolved.**
+Status: **Strategic tokenomics, utility, custody, trading-revenue and launch-distribution direction substantially approved; NOT fully closed until exact CCA/LBP parameters, ETH budget/minimum operational ETH, custody implementation, and legal/comms review inputs are resolved.**
 
 No deployment.
 Required outputs:
@@ -136,8 +136,9 @@ Required outputs:
 - initial recipient/treasury architecture, preferably hardened/multisig rather than an ordinary hot wallet; ✅ FROZEN PREFERRED: 2-of-3 multisig, separate from deployer/everyday wallet;
 - exact launch-day utility benefits and any holder thresholds/discount formulas; ✅ FROZEN: Verified Holder 1+, Cartel Member 10,000+ (5% discount), Cartel Capo 100,000+ (10% discount), Cartel Boss 1,000,000+ (20% discount);
 - explicit non-security-style utility/comms guardrails; ✅ FROZEN: no passive revenue, no dividends, no guaranteed yield, treasury revenue for operations;
-- final decision: 0% transfer tax plus liquidity-layer fee revenue versus separate taxed-token architecture; ✅ FROZEN: 0% transfer tax, liquidity-layer creator/LP fee revenue preferred, CCA/LBP price-discovery launch path;
-- liquidity budget and intended launch pricing/strategy inputs, without sending value. ⏳ OPEN: exact CCA/LBP parameters, ETH budget, compatibility reverification, and legal treatment of auction/token sale remain for PCART-L5/L6.
+- final decision: 0% transfer tax plus liquidity-layer fee revenue versus separate taxed-token architecture; ✅ FROZEN: 0% transfer tax, liquidity-layer creator/LP fee revenue preferred;
+- launch-distribution and price-discovery method: ✅ FROZEN: public onchain CCA/LBP launch auction (Option A), because the project does not expect to supply all required launch liquidity ETH itself. CCA/LBP is a public onchain token sale/auction economically, not a private fixed-price presale. Choosing CCA/LBP can reduce required project ETH for initial liquidity but does NOT mean zero ETH; ETH is still required for deployment/gas and may be required for additional auction/liquidity/operational configuration.
+- liquidity budget and intended launch pricing/strategy inputs, without sending value. ⏳ OPEN: exact CCA/LBP parameters, token amount from the 500M public-launch/liquidity allocation, ETH budget/minimum operational ETH, compatibility reverification, and legal treatment of auction/token sale remain for PCART-L5/L6.
 
 STOP for approval before proceeding to L2. L1 is not closed while the open items above remain unresolved.
 
