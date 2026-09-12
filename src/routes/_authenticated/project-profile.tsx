@@ -575,8 +575,16 @@ function ProjectProfilePage() {
 
         ) : null}
 
+        <SectionNav
+          label="Project Profile Studio"
+          items={STUDIO_SECTIONS}
+          activeId={activeSection}
+          onChange={setActiveSection}
+        />
+
         <div className="grid gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
 
+          <div className="min-w-0 space-y-4 sm:space-y-6">
           <form
             id="project-profile-form"
             onSubmit={(e) => {
@@ -585,10 +593,11 @@ function ProjectProfilePage() {
             }}
             className="min-w-0 space-y-4 sm:space-y-6"
           >
+            <WorkingView id="pp-identity" active={activeSection === "pp-identity"}>
             <Section
               variant="surface"
               title="Identity"
-              description="The public-facing name, ticker, chain, address and description of this project."
+              description="The public-facing name, ticker, chain and network address of this project."
               actions={
                 brandKitQuery.data ? (
                   <Button
@@ -681,59 +690,6 @@ function ProjectProfilePage() {
                     </p>
                   ) : null}
                 </div>
-                <div className="md:col-span-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    rows={4}
-                    maxLength={DESCRIPTION_MAX}
-                    className="mt-2"
-                    value={form.description}
-                    onChange={(e) => set({ description: e.target.value })}
-                  />
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {form.description.length} / {DESCRIPTION_MAX} characters
-                  </p>
-                </div>
-              </div>
-            </Section>
-
-            <Section
-              variant="surface"
-              title="Official links"
-              description="Only add links the project actually controls."
-            >
-              <div className="grid gap-4 md:grid-cols-3 [&>*]:min-w-0">
-                <div>
-                  <Label htmlFor="website_url">Official website</Label>
-                  <Input
-                    id="website_url"
-                    type="url"
-                    className="mt-2 min-h-11"
-                    value={form.website_url}
-                    onChange={(e) => set({ website_url: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="telegram_url">Official Telegram</Label>
-                  <Input
-                    id="telegram_url"
-                    type="url"
-                    className="mt-2 min-h-11"
-                    value={form.telegram_url}
-                    onChange={(e) => set({ telegram_url: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="x_url">Official X</Label>
-                  <Input
-                    id="x_url"
-                    type="url"
-                    className="mt-2 min-h-11"
-                    value={form.x_url}
-                    onChange={(e) => set({ x_url: e.target.value })}
-                  />
-                </div>
               </div>
             </Section>
 
@@ -805,14 +761,84 @@ function ProjectProfilePage() {
                 )}
               </div>
             </Section>
+            </WorkingView>
 
+            <WorkingView id="pp-about" active={activeSection === "pp-about"}>
             <Section
-              variant="quiet"
-              title="Discovery status"
+              variant="surface"
+              title="About"
+              description="The public description shown on this project's Cartel Network profile today."
+            >
+              <div className="max-w-2xl">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  rows={6}
+                  maxLength={DESCRIPTION_MAX}
+                  className="mt-2"
+                  value={form.description}
+                  onChange={(e) => set({ description: e.target.value })}
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {form.description.length} / {DESCRIPTION_MAX} characters
+                </p>
+                <p className="mt-2 max-w-prose text-xs leading-relaxed text-muted-foreground">
+                  This is the only description this profile publishes right now. Keep it accurate
+                  and specific to what the project actually does.
+                </p>
+              </div>
+            </Section>
+            </WorkingView>
+
+            <WorkingView id="pp-links" active={activeSection === "pp-links"}>
+            <Section
+              variant="surface"
+              title="Official links"
+              description="Only add links the project actually controls."
+            >
+              <div className="grid gap-4 md:grid-cols-3 [&>*]:min-w-0">
+                <div>
+                  <Label htmlFor="website_url">Official website</Label>
+                  <Input
+                    id="website_url"
+                    type="url"
+                    className="mt-2 min-h-11"
+                    value={form.website_url}
+                    onChange={(e) => set({ website_url: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="telegram_url">Official Telegram</Label>
+                  <Input
+                    id="telegram_url"
+                    type="url"
+                    className="mt-2 min-h-11"
+                    value={form.telegram_url}
+                    onChange={(e) => set({ telegram_url: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="x_url">Official X</Label>
+                  <Input
+                    id="x_url"
+                    type="url"
+                    className="mt-2 min-h-11"
+                    value={form.x_url}
+                    onChange={(e) => set({ x_url: e.target.value })}
+                  />
+                </div>
+              </div>
+            </Section>
+            </WorkingView>
+
+            <WorkingView id="pp-visibility" active={activeSection === "pp-visibility"}>
+            <Section
+              variant="surface"
+              title="Visibility"
               description="Draft and hidden profiles stay behind authenticated project access. Published profiles appear on the public Cartel Network."
             >
               <div className="max-w-sm">
-                <Label htmlFor="discovery_status">Status</Label>
+                <Label htmlFor="discovery_status">Discovery status</Label>
                 <Select
                   value={form.discovery_status}
                   onValueChange={(value) => set({ discovery_status: value as DiscoveryStatus })}
@@ -833,7 +859,140 @@ function ProjectProfilePage() {
                 </p>
               </div>
             </Section>
+            </WorkingView>
           </form>
+
+          <WorkingView id="pp-media" active={activeSection === "pp-media"}>
+            <Section
+              variant="surface"
+              title="Media"
+              description="Where public project media will be managed."
+            >
+              <EmptyState
+                compact
+                icon={Video}
+                title="Media is not part of this profile yet"
+                description="This section is the future home for public project media. Nothing is published from here today, and the public profile shows no media."
+              />
+            </Section>
+          </WorkingView>
+
+          <WorkingView id="pp-trust" active={activeSection === "pp-trust"}>
+            {profile ? (
+              <Section
+                variant="surface"
+                title="Verification"
+                description="Layered trust signals for this project. Only CARTEL HQ can grant a review; the project can request one."
+              >
+                <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+                  <div className="surface-quiet min-w-0 rounded-lg p-3.5">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <StatusBadge tone="gold">
+                        <span>Project Authenticated</span>
+                      </StatusBadge>
+                      <span className="type-helper text-muted-foreground">Active</span>
+                    </div>
+                    <p className="mt-2.5 max-w-prose type-helper text-muted-foreground">
+                      This profile is controlled and published through an authenticated CARTEL HQ
+                      project workspace. It does not verify external team identity or KYC.
+                    </p>
+                  </div>
+
+                  <div className="surface-quiet min-w-0 rounded-lg p-3.5">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <StatusBadge tone={verificationStatus === "verified" ? "gold" : "muted"}>
+                        <span>Platform Reviewed</span>
+                      </StatusBadge>
+                      <span className="min-w-0 type-helper text-muted-foreground [overflow-wrap:anywhere]">
+                        {verificationQuery.isLoading
+                          ? "Checking review state…"
+                          : verificationQuery.isError
+                            ? "Review state could not be loaded right now."
+                            : verificationStatus === "verified"
+                              ? `Reviewed${
+                                  formatDateTime(verification?.verified_at)
+                                    ? ` ${formatDateTime(verification?.verified_at)}`
+                                    : ""
+                                }`
+                              : verificationStatus === "pending"
+                                ? `Review requested${
+                                    formatDateTime(verification?.requested_at)
+                                      ? ` ${formatDateTime(verification?.requested_at)}`
+                                      : ""
+                                  }`
+                                : VERIFICATION_STATUS_LABEL[verificationStatus]}
+                      </span>
+                    </div>
+                    <p className="mt-2.5 max-w-prose type-helper text-muted-foreground">
+                      {VERIFICATION_STATUS_DESCRIPTION[verificationStatus]}
+                    </p>
+                    <p className="mt-2 max-w-prose type-helper text-muted-foreground">
+                      Platform Reviewed does not verify token safety, smart-contract code,
+                      liquidity or investment quality.
+                    </p>
+
+                    {verificationQuery.isError ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-3 min-h-11"
+                        onClick={() => void verificationQuery.refetch()}
+                      >
+                        Retry
+                      </Button>
+                    ) : verificationQuery.isSuccess && canRequestVerification(verificationStatus) ? (
+                      <div className="mt-3 space-y-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="min-h-11"
+                          disabled={requestVerification.isPending}
+                          onClick={() => requestVerification.mutate()}
+                        >
+                          {requestVerification.isPending ? "Requesting…" : "Request Platform Review"}
+                        </Button>
+                        <p className="max-w-prose type-helper text-muted-foreground">
+                          Requires a published profile with a name, public link name, chain and at
+                          least one official link. Requesting a review never marks this project
+                          reviewed.
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </Section>
+            ) : (
+              <Section variant="quiet" title="Verification">
+                <p className="max-w-prose type-helper text-muted-foreground">
+                  Trust signals appear here once this project profile has been created.
+                </p>
+              </Section>
+            )}
+          </WorkingView>
+
+          <WorkingView id="pp-launch" active={activeSection === "pp-launch"}>
+            <Section
+              variant="surface"
+              title="Launch integration"
+              description="Launch data is owned by Launch Control, not by this profile."
+            >
+              <p className="max-w-prose type-helper text-muted-foreground">
+                Launch schedule, lifecycle status, Launch Watch, official contract registration and
+                deployment all stay in Launch Control. This profile supplies the project identity
+                those launches are published under.
+              </p>
+              <Button asChild variant="outline" className="mt-4 min-h-11">
+                <Link to="/launch-control">
+                  <Rocket className="size-4" aria-hidden="true" />
+                  Open Launch Control
+                </Link>
+              </Button>
+            </Section>
+          </WorkingView>
+          </div>
+
 
           <aside className="min-w-0">
             <Section
