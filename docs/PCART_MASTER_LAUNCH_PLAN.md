@@ -12,15 +12,41 @@ Launch the official PEPECARTEL token, ticker PCART, on Robinhood Chain mainnet (
 
 - One official PEPECARTEL token only: $PCART.
 - No separate “launcher token” is planned. CARTEL HQ / the future launchpad is software and may use $PCART as ecosystem utility.
-- Proposed/favored total supply: 1,000,000,000 PCART, 18 decimals, permanently fixed supply.
+- **Frozen total supply: exactly 1,000,000,000 PCART, 18 decimals, permanently fixed supply.**
 - Dedicated production artifact for PEPECARTEL, separate from generic launchpad templates. Working artifact name: `pepecartel-token-v1`; working source name: `PepeCartelToken.sol`.
-- Preferred PCART production contract architecture: standard ERC-20; name/symbol/supply fixed; mint once at deployment to a deliberately chosen initial recipient/treasury; no post-deployment minting; no owner/admin; no blacklist/freeze; no pause; no max-wallet/max-tx; no proxy/upgradeability; no hidden transfer controls.
-- DO NOT finalize or deploy the Solidity until tokenomics, custody/treasury, utility, liquidity-revenue model, and legal/comms review gates below close.
+- **Frozen V1 token behavior: standard ERC-20; 0% fee-on-transfer / transfer tax; name/symbol/supply fixed; mint once at deployment to the deliberately chosen initial treasury; no post-deployment minting; no owner/admin; no blacklist/freeze; no pause; no max-wallet/max-tx; no proxy/upgradeability; no hidden transfer controls.**
+- DO NOT finalize or deploy the Solidity until all remaining L1 inputs close and L1 is explicitly approved.
 
-## 3. Transfer-tax / trading-revenue decision gate
+## 3. Tokenomics, allocation and custody freeze
+
+### 3.1 Allocation
+
+| Category | Share | Amount |
+|---|---|---|
+| Public launch + liquidity | 50% | 500,000,000 PCART |
+| Ecosystem + community | 20% | 200,000,000 PCART |
+| PEPECARTEL treasury | 15% | 150,000,000 PCART |
+| Founder/team | 10% | 100,000,000 PCART |
+| Strategic partnerships | 5% | 50,000,000 PCART |
+| **Total** | **100%** | **1,000,000,000 PCART** |
+
+### 3.2 Vesting and lock policy
+
+- **Team allocation:** 100,000,000 PCART vests linearly over 12 months from launch. **Zero team allocation is liquid or unlocked at launch.** Prefer continuous/time-based linear vesting so 100% is vested at 365 days; do not create a one-time 100M cliff unlock. Exact vesting contract implementation remains for a later audited step.
+- **Strategic partnerships:** 50,000,000 PCART preserved with the recommended guardrail of a 6-month initial lock followed by 24-month linear release, unless later L1 approval explicitly changes it. Grants must be disclosed from the allocation, not treated as hidden discretionary supply.
+- Public launch + liquidity, ecosystem + community, and treasury allocations are not subject to the above vesting locks unless separately decided.
+
+### 3.3 Treasury architecture
+
+- **Frozen preferred architecture: 2-of-3 multisig, separate from deployer/everyday wallet.**
+- Treasury is intended to receive the 150M treasury allocation plus project trading-fee revenue and operational assets.
+- Exact multisig implementation/addresses remain unresolved until chain compatibility and security audit are complete.
+
+## 4. Transfer-tax / trading-revenue decision gate
 
 User wants modest ongoing revenue from trading for marketing, production, and ecosystem operations.
-Current preferred direction is NOT to put a fee-on-transfer tax in PCART itself until compatibility is proven. The Uniswap LiquidityLauncher technical reference states rebasing and fee-on-transfer tokens are not compatible with LiquidityLauncher. The Robinhood Chain Uniswap stack currently exposes creator-fee / fee-splitter infrastructure, which may offer ongoing trading-fee revenue while keeping PCART a standard ERC-20. This must be reverified from current Uniswap code/on-chain contracts immediately before implementation.
+
+**Frozen direction:** keep PCART a standard 0%-transfer-tax ERC-20 and seek project revenue through audited liquidity-layer creator/LP fees. The Uniswap LiquidityLauncher technical reference states rebasing and fee-on-transfer tokens are not compatible with LiquidityLauncher. The Robinhood Chain Uniswap stack currently exposes creator-fee / fee-splitter infrastructure, which may offer ongoing trading-fee revenue while keeping PCART a standard ERC-20. This must be reverified from current Uniswap code/on-chain contracts immediately before implementation.
 
 Preferred order of evaluation:
 A. Standard 0%-transfer-tax PCART + creator/LP trading-fee revenue at the liquidity layer (RECOMMENDED candidate).
@@ -28,10 +54,28 @@ B. If A cannot meet the project’s legitimate revenue requirement, perform a se
 
 Important: creator-fee percentages are percentages of protocol/pool fee streams, NOT percentages of gross trade volume. No revenue projection is frozen.
 
-## 4. Utility model
+**Preferred distribution/liquidity direction:** CCA/LBP / price-discovery launch path rather than current InstantLaunchStrategy, because current InstantLaunchStrategy requires/uses the full 1B supply while the approved tokenomics retain allocations outside liquidity. Existing-token CCA/LBP compatibility and precise parameters must be reverified in PCART-L5.
 
-$PCART is intended to be the ecosystem utility token for PEPECARTEL and CARTEL HQ. Utility should generally live in CARTEL HQ / surrounding smart-contract services, not be hardcoded into the immutable ERC-20.
-Candidate practical utilities to design and activate:
+A CCA is an onchain public token distribution / launch auction that can accept ETH bids and establish a market-clearing price before normal trading. It can economically resemble a public token sale, but it is not automatically the same thing as a private/fixed-price presale. Legal/comms treatment of any auction/token sale remains a PCART-L6 counsel-review gate.
+
+**Treasury revenue policy target (non-contractual, adjustable):** 35% marketing/content/community growth; 35% CARTEL HQ development/infrastructure; 20% liquidity/security/reserve; 10% legal/audits/compliance/admin. This is an operating-policy target, not token-holder entitlement and not hard-coded in Solidity.
+
+## 5. Utility model
+
+$PCART is the ecosystem utility token for PEPECARTEL and CARTEL HQ. Utility lives in CARTEL HQ services, not in the immutable ERC-20. Utility policy must be versioned outside the token contract.
+
+**Frozen launch-day utility tiers (chain-verified wallet holdings):**
+
+| Tier | Holdings | Benefits |
+|---|---|---|
+| Verified Holder | 1+ PCART | Holder identity/badge/community role and eligible community participation. |
+| Cartel Member | 10,000+ PCART | 5% discount on eligible CARTEL HQ paid services plus member utility features. |
+| Cartel Capo | 100,000+ PCART | 10% discount plus premium features / priority beta access. |
+| Cartel Boss | 1,000,000+ PCART | 20% discount plus highest utility tier, premium features and future launchpad benefits. |
+
+Safety-critical functionality such as verified contract information, anti-scam protections, and critical launch communications must not be gated by token holdings.
+
+Additional candidate utilities to activate over time:
 - verified-holder identity/badges and community roles;
 - holder-only community areas/content/events where appropriate;
 - Sticker Lab benefits such as discounts, credits, enhanced generation limits/features;
@@ -42,11 +86,10 @@ Candidate practical utilities to design and activate:
 - optional advisory/community voting on non-financial product/cultural topics;
 - potential future optional PCART payment paths only after separate audit.
 
-Safety-critical functionality such as verified contract information, anti-scam protections, and critical launch communications should not be withheld solely because a user does not hold PCART.
-
-## 5. Securities / communications risk guardrails
+## 6. Securities / communications risk guardrails
 
 Design and market PCART as genuine utility/culture functionality, not equity or a claim on CARTEL HQ.
+
 Do not promise or encode:
 - dividends or ownership of CARTEL HQ;
 - revenue/profit share paid to holders merely for holding;
@@ -54,12 +97,17 @@ Do not promise or encode:
 - guaranteed returns or price appreciation;
 - entitlement to company/platform profits or assets;
 - marketing that buyers should expect the team’s future managerial work to increase token value.
+
+**There is no passive holder revenue, dividends, guaranteed APY/yield, or entitlement to CARTEL HQ revenue. Treasury revenue is for project/ecosystem operations, not pro-rata holder distributions.**
+
 A transfer tax or liquidity-layer fee paid to a project treasury is not assumed by this plan to determine securities status. Final token terms, distribution and public communications require qualified U.S. crypto/securities counsel review before public offering/launch. Do not claim legal certainty.
 
-## 6. Public launchpad architecture
+## 7. Public launchpad architecture
 
-The future CARTEL HQ launchpad does NOT need a second PEPECARTEL ecosystem token. $PCART can be the platform utility token.
+The future CARTEL HQ launchpad does NOT need a second PEPECARTEL ecosystem token. $PCART remains the ecosystem utility token.
+
 Tokens created for third-party projects are separate project tokens and should use separate, versioned, audited generic contract templates, not the PEPECARTEL-specific artifact.
+
 Initial generic template direction:
 - `cartel-standard-erc20-v1`
 - configurable name, symbol, fixed supply, recipient;
@@ -68,9 +116,10 @@ Initial generic template direction:
 - no owner/admin after deployment;
 - no future mint;
 - no tax, blacklist, freeze, pause, proxy, hidden transfer restrictions.
+
 Avoid an arbitrary “toggle anything” Solidity generator. Future optional capabilities should be separate audited artifact versions with explicit IDs, hashes, verifier support, and audits.
 
-## 7. Required launch phases
+## 8. Required launch phases
 
 ### PCART-L0 — Master decisions / no build
 
@@ -79,26 +128,29 @@ Freeze exact tokenomics allocation, custody/treasury architecture, utility launc
 
 ### PCART-L1 — Utility + tokenomics + treasury specification freeze
 
+Status: **Strategic tokenomics, utility, custody and trading-revenue direction substantially approved; NOT fully closed until exact liquidity/auction inputs, ETH budget, custody implementation, and legal/comms review inputs are resolved.**
+
 No deployment.
 Required outputs:
-- exact 1B allocation percentages and vesting/lock policy if applicable;
-- initial recipient/treasury architecture, preferably hardened/multisig rather than an ordinary hot wallet;
-- exact launch-day utility benefits and any holder thresholds/discount formulas;
-- explicit non-security-style utility/comms guardrails;
-- final decision: 0% transfer tax plus liquidity-layer fee revenue versus separate taxed-token architecture;
-- liquidity budget and intended launch pricing/strategy inputs, without sending value.
-STOP for approval.
+- exact 1B allocation percentages and vesting/lock policy if applicable; ✅ FROZEN: 50% public launch + liquidity, 20% ecosystem + community, 15% treasury, 10% team (12-month linear vesting, zero liquid at launch), 5% strategic partnerships (6-month lock + 24-month linear release);
+- initial recipient/treasury architecture, preferably hardened/multisig rather than an ordinary hot wallet; ✅ FROZEN PREFERRED: 2-of-3 multisig, separate from deployer/everyday wallet;
+- exact launch-day utility benefits and any holder thresholds/discount formulas; ✅ FROZEN: Verified Holder 1+, Cartel Member 10,000+ (5% discount), Cartel Capo 100,000+ (10% discount), Cartel Boss 1,000,000+ (20% discount);
+- explicit non-security-style utility/comms guardrails; ✅ FROZEN: no passive revenue, no dividends, no guaranteed yield, treasury revenue for operations;
+- final decision: 0% transfer tax plus liquidity-layer fee revenue versus separate taxed-token architecture; ✅ FROZEN: 0% transfer tax, liquidity-layer creator/LP fee revenue preferred, CCA/LBP price-discovery launch path;
+- liquidity budget and intended launch pricing/strategy inputs, without sending value. ⏳ OPEN: exact CCA/LBP parameters, ETH budget, compatibility reverification, and legal treatment of auction/token sale remain for PCART-L5/L6.
+
+STOP for approval before proceeding to L2. L1 is not closed while the open items above remain unresolved.
 
 ### PCART-L2 — Dedicated production contract artifact
 
-Only after L1 approval.
-Create `PepeCartelToken.sol` / `pepecartel-token-v1` with the frozen token behavior. Prefer hard-coded PEPECARTEL/PCART/1,000,000,000/18 and constructor-controlled initial recipient only unless L1 explicitly changes this. Compile reproducibly, pin creation/runtime hashes, document compiler/OpenZeppelin settings, and add exact verifier support without weakening generic/testnet paths.
+Only after L1 fully closes.
+Create `PepeCartelToken.sol` / `pepecartel-token-v1` with the frozen token behavior. Prefer hard-coded PEPECARTEL/PCART/1,000,000,000/18 and constructor-controlled initial treasury only unless L1 explicitly changes this. Compile reproducibly, pin creation/runtime hashes, document compiler/OpenZeppelin settings, and add exact verifier support without weakening generic/testnet paths.
 No mainnet transaction.
 STOP for audit.
 
 ### PCART-L3 — Exact-artifact testnet rehearsal
 
-Deploy the exact production artifact on Robinhood Chain Testnet 46630 using the protected flow. Verify name, symbol, 18 decimals, exactly 1B supply, recipient balance, creation/runtime bytecode hashes, recovery/idempotency, and mobile wallet behavior. Test every failure gate. No mainnet value.
+Deploy the exact production artifact on Robinhood Chain Testnet 46630 using the protected flow. Verify name, symbol, 18 decimals, exactly 1B supply, treasury balance, creation/runtime bytecode hashes, recovery/idempotency, and mobile wallet behavior. Test every failure gate. No mainnet value.
 STOP unless all tests pass.
 
 ### PCART-L4 — CARTEL HQ PCART Utility Engine
@@ -109,9 +161,9 @@ STOP for QA.
 ### PCART-L5 — Liquidity + trading-revenue production design
 
 Reverify current Robinhood Chain and Uniswap LiquidityLauncher contracts/code hashes/SDK revision on chain 4663. Determine exact supported strategy for the already-deployed PEPECARTEL token.
-Priority: evaluate standard ERC-20 + audited creator/LP fee revenue without fee-on-transfer behavior.
+Priority: evaluate standard ERC-20 + audited creator/LP fee revenue without fee-on-transfer behavior, and existing-token CCA/LBP compatibility for the approved allocation.
 Freeze: liquidity amounts, paired ETH, price/auction/instant-launch strategy, pool parameters, beneficiary/treasury destination, protocol fee/creator-fee treatment, LP ownership/lock/compounding rules, approvals/Permit2, slippage/deadline, recovery/finality, and revenue accounting.
-If current LiquidityLauncher cannot satisfy the revenue model, STOP and separately audit alternatives. Never silently add token transfer taxes.
+If current LiquidityLauncher / CCA/LBP path cannot satisfy the revenue model or the approved tokenomics, STOP and separately audit alternatives. Never silently add token transfer taxes.
 No liquidity send until separately authorized.
 
 ### PCART-L6 — Legal/comms + public-surface readiness
@@ -123,7 +175,7 @@ STOP for final launch authorization.
 
 ### PCART-L7 — Mainnet production deployment request
 
-In Launch Control, create the immutable PEPECARTEL production deployment request using the approved exact supply and recipient. Owner review only. No transaction occurs merely because the request exists.
+In Launch Control, create the immutable PEPECARTEL production deployment request using the approved exact supply and treasury. Owner review only. No transaction occurs merely because the request exists.
 STOP and verify immutable intent.
 
 ### PCART-L8 — Protected Robinhood Chain mainnet deployment
@@ -150,7 +202,7 @@ Update official website and CARTEL HQ public surfaces with the verified official
 
 After PCART is stable, expand CARTEL HQ for third-party production launches using a versioned audited artifact registry and generic contract templates. Integrate PCART as platform utility/discount/access where legally and product-wise appropriate. Do not create a second launcher token merely because the launcher expands.
 
-## 8. Current known baseline
+## 9. Current known baseline
 
 - CARTEL HQ has proven a real Robinhood Chain mainnet ERC-20 canary deployment on chain 4663 with managed finality.
 - Official PEPECARTEL mainnet contract is NOT deployed or registered.
@@ -159,7 +211,7 @@ After PCART is stable, expand CARTEL HQ for third-party production launches usin
 - Mainnet liquidity execution remains a separate unfinished/disabled area and must be completed before a full tradable launch through CARTEL HQ can be certified.
 - Current public PEPECARTEL website contains stale Solana/Pump.fun references that must be corrected before launch.
 
-## 9. Strict continuation protocol
+## 10. Strict continuation protocol
 
 At the start of every future phase:
 1. Read this file first.
@@ -171,7 +223,6 @@ At the start of every future phase:
 7. Stop at the named checkpoint. Never jump directly from planning to mainnet value movement.
 8. A user saying “proceed” means proceed only to the next incomplete phase/checkpoint, not permission to skip irreversible safety gates.
 
-## 10. Immediate next phase
+## 11. Immediate next phase
 
-PCART-L1 — Utility + Tokenomics + Treasury Specification Freeze.
-Do not write Solidity or initiate a production deployment until L1 closes.
+PCART-L1 remains open until liquidity/auction inputs, ETH budget, custody implementation, and legal/comms review inputs are resolved. Do not write Solidity or initiate a production deployment until L1 fully closes.
