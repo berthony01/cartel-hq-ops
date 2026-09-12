@@ -363,6 +363,61 @@ check(
   "the source path is channels → uploads playlist → playlistItems → videos enrichment",
 );
 
+/* -------------------------------------------------------------------------
+ * 7b. Conservative enrichment metering (SE-2.1 final QA hardening)
+ *
+ * If the optional third videos.list enrichment request is ATTEMPTED but does
+ * not succeed cleanly, quota may still have been consumed and the transport
+ * cannot prove otherwise. The call still succeeds on playlist fallback data,
+ * but must report units: null (unknown) instead of understating usage as 2.
+ * ---------------------------------------------------------------------- */
+
+check(
+  "yt-enrich-attempt-tracked",
+  ytSrc.includes("enrichmentAttempted") && ytSrc.includes("enrichmentSucceeded"),
+  "enrichment attempt and clean success are tracked separately",
+);
+check(
+  "yt-enrich-units-unknown-rule",
+  ytSrc.includes("enrichmentAttempted && !enrichmentSucceeded ? null : quotaUnits"),
+  "attempted-but-failed enrichment reports units: null, never a known 2",
+);
+check(
+  "yt-enrich-units-reported",
+  ytSrc.includes("units: reportedUnits") && !/units: quotaUnits,\s*\},\s*\);\s*\},\s*\};/.test(ytSrc),
+  "the source result reports the conservative unit value, not the raw counter",
+);
+check(
+  "yt-enrich-increment-guarded",
+  /if \(videosResponse\.ok\) \{\s*\n\s*enrichmentSucceeded = true;\s*\n\s*quotaUnits \+= 1;/.test(ytSrc),
+  "the third quota unit is only counted on a clean enrichment success",
+);
+check(
+  "yt-enrich-fallback-preserved",
+  ytSrc.includes("hit ?? mapPlaylistItemFallback(videoId, playlistItems[index])"),
+  "fallback-success behaviour on failed enrichment is preserved",
+);
+
+// Pure replication of the documented rule, exercised across all three cases.
+const reportedUnitsRule = (attempted: boolean, succeeded: boolean, quotaUnits: number) =>
+  attempted && !succeeded ? null : quotaUnits;
+check(
+  "yt-enrich-units-no-videos",
+  reportedUnitsRule(false, false, 2) === 2,
+  "zero video ids means no enrichment request and a known 2 units",
+);
+check(
+  "yt-enrich-units-success",
+  reportedUnitsRule(true, true, 3) === 3,
+  "a clean enrichment success keeps the known 3 units",
+);
+check(
+  "yt-enrich-units-failure",
+  reportedUnitsRule(true, false, 2) === null,
+  "an attempted-but-failed enrichment reports unknown units",
+);
+
+
 /* =========================================================================
  * 8. YouTube metric mapping (string counts)
  * ====================================================================== */
