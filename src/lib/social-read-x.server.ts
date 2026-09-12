@@ -153,7 +153,7 @@ export function buildUserByUsernameUrl(username: string): string {
 }
 
 /** One page only. `max_results` respects the provider minimum; extras are trimmed locally. */
-export function buildUserTweetsUrl(userId: string, limit: number): string {
+export function buildUserTweetsUrl(userId: string, limit: unknown): string {
   const params = new URLSearchParams({
     max_results: String(xMaxResults(limit)),
     "tweet.fields": X_TWEET_FIELDS,
