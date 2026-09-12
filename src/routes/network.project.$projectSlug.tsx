@@ -33,11 +33,14 @@ export const Route = createFileRoute("/network/project/$projectSlug")({
           queryFn: () => fetchNetworkProjectLaunches(params.projectSlug),
         })
       : [];
+    // Media must never take the whole project page down.
     const videos = project
-      ? await context.queryClient.ensureQueryData({
-          queryKey: networkKeys.projectVideos(params.projectSlug),
-          queryFn: () => fetchNetworkProjectVideos(params.projectSlug),
-        })
+      ? await context.queryClient
+          .ensureQueryData({
+            queryKey: networkKeys.projectVideos(params.projectSlug),
+            queryFn: () => fetchNetworkProjectVideos(params.projectSlug),
+          })
+          .catch(() => [])
       : [];
     return { project, launches, videos };
   },
