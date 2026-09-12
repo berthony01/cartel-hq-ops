@@ -534,7 +534,6 @@ export const refetcherReadProvider: SocialReadProvider = {
     );
   },
 };
-};
 
 /** Re-exported for fixture tests that assert the sanitized failure envelope. */
 export function sanitizedFailure(code: ProviderErrorCode): ProviderError {
