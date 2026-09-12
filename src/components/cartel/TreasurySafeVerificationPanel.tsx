@@ -21,7 +21,7 @@ export type TreasurySafeVerificationPanelProps = {
   /** The SAME recipient value shown in the production request form. */
   address: string;
   addressValid: boolean;
-  disabled?: boolean;
+  disabled?: boolean | undefined;
 };
 
 function shorten(address: string): string {
