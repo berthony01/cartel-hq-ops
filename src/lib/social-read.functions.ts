@@ -96,7 +96,7 @@ export const socialRead = createServerFn({ method: "POST" })
       operation,
       ...(await refetcherReadProvider.fetchSourceRecentPosts({
         url: data.url,
-        limit: data.limit,
+        ...(data.limit === undefined ? {} : { limit: data.limit }),
       })),
     };
   });
