@@ -44,6 +44,11 @@ export type ProjectProfilePayload = {
   telegram_url: string | null;
   x_url: string | null;
   discovery_status: DiscoveryStatus;
+  tagline: string | null;
+  about_long: string | null;
+  highlights: string[] | null;
+  docs_url: string | null;
+  github_url: string | null;
 };
 
 export const PROJECT_NAME_MAX = 120;
@@ -53,8 +58,18 @@ export const DESCRIPTION_MAX = 1500;
 export const SLUG_MIN = 2;
 export const SLUG_MAX = 64;
 
+/** Rich-profile limits — these mirror the live database contract exactly. */
+export const TAGLINE_MAX = 140;
+export const ABOUT_LONG_MAX = 6000;
+export const HIGHLIGHT_MAX = 120;
+export const HIGHLIGHT_MAX_COUNT = 6;
+export const PROFILE_RESOURCE_URL_MAX = 500;
+export const PROJECT_PROFILE_VIDEO_MAX_COUNT = 6;
+export const PROJECT_PROFILE_VIDEO_TITLE_MAX = 120;
+
 /** Mirrors the database check constraint on `public_slug`. */
 export const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
 
 export function isValidSlug(value: string): boolean {
   return (
