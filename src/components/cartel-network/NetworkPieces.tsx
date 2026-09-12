@@ -55,10 +55,16 @@ export function ProjectLogo({
   slug: string;
   hasLogo: boolean;
   name: string;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
 }) {
   const box =
-    size === "lg" ? "size-16" : size === "sm" ? "size-9" : "size-12";
+    size === "xl"
+      ? "size-24 sm:size-28"
+      : size === "lg"
+        ? "size-16"
+        : size === "sm"
+          ? "size-9"
+          : "size-12";
   const initials = name.trim().slice(0, 2).toUpperCase() || "PC";
   if (!hasLogo) {
     return (
