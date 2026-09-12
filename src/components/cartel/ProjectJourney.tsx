@@ -235,8 +235,8 @@ function StageRow({
 }) {
   const complete = stage.status === "complete";
   const blocked = stage.status === "waiting" || stage.status === "unavailable";
-  /** The final milestone stays visually quieter than the locked-next milestone. */
-  const finalStage = stage.key === "launch_live";
+  const lockedLaunchMilestone =
+    blocked && (stage.key === "official_contract" || stage.key === "launch_live");
   const Icon = complete ? Check : blocked ? Lock : isNext ? CircleDot : Circle;
   return (
     <li
@@ -247,42 +247,58 @@ function StageRow({
           : isNext
             ? "border-gold/55 bg-gold/10 px-3.5 py-4 shadow-[var(--glow-gold)] sm:col-span-2"
             : blocked
-              ? finalStage
-                ? "border-border-subtle border-dashed bg-transparent px-3 py-3"
+              ? lockedLaunchMilestone
+                ? "min-h-36 border-border-strong bg-surface-raised/70 px-3.5 py-4 sm:px-4"
                 : "border-border/60 bg-surface-raised/30 px-3 py-3"
               : "border-border/50 bg-surface-raised/20 px-3 py-3",
       )}
     >
       <span
         className={cn(
-          "mt-0.5 flex shrink-0 items-center justify-center rounded-full border",
-          isNext ? "size-7" : "size-5",
+          "mt-0.5 flex shrink-0 items-center justify-center border",
+          isNext || lockedLaunchMilestone ? "size-7" : "size-5",
+          lockedLaunchMilestone ? "rounded-md" : "rounded-full",
           complete
             ? "border-pepe/50 text-pepe"
             : isNext
               ? "border-gold/60 bg-gold/10 text-gold"
+              : lockedLaunchMilestone
+                ? "border-border-strong bg-surface-overlay/70 text-foreground/80"
               : "border-border text-muted-foreground",
         )}
       >
-        <Icon className={isNext ? "size-4" : "size-3"} aria-hidden="true" />
+        <Icon
+          className={isNext || lockedLaunchMilestone ? "size-4" : "size-3"}
+          aria-hidden="true"
+        />
       </span>
       <span className="min-w-0 flex-1">
         <span
           className={cn(
             "block font-medium text-foreground [overflow-wrap:anywhere]",
-            isNext ? "text-base font-semibold" : "text-sm",
+            isNext || lockedLaunchMilestone ? "text-base font-semibold" : "text-sm",
             complete ? "text-foreground/85" : undefined,
           )}
         >
           {stage.order}. {stage.title}
         </span>
         {complete ? null : (
-          <span className="mt-1 block text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+          <span
+            className={cn(
+              "mt-1 block text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]",
+              lockedLaunchMilestone ? "max-w-prose sm:text-sm" : undefined,
+            )}
+          >
             {blocked ? blockedGuidance(stage) : stage.detail ?? stage.description}
           </span>
         )}
       </span>
-      <span className="col-start-2 flex min-w-0 flex-col items-start gap-2 sm:col-start-3 sm:row-start-1 sm:items-end">
+      <span
+        className={cn(
+          "col-start-2 flex min-w-0 flex-col items-start gap-2 sm:col-start-3 sm:row-start-1 sm:items-end",
+          lockedLaunchMilestone ? "self-stretch justify-between" : undefined,
+        )}
+      >
         {complete ? (
           <StatusBadge tone="green">
             <span>DONE</span>
@@ -304,9 +320,7 @@ function StageRow({
           <Button
             asChild
             size={isNext ? "default" : "sm"}
-            variant={
-              isNext ? "default" : blocked ? (finalStage ? "ghost" : "outline") : "secondary"
-            }
+            variant={isNext ? "default" : blocked ? "outline" : "secondary"}
             className={cn(
               "min-h-11",
               blocked ? "w-auto self-start sm:self-end" : "w-full sm:w-auto",
