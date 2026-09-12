@@ -96,11 +96,14 @@ check(
     trust.includes("Platform Reviewed") &&
     trust.includes("requestVerification.mutate()"),
 );
+// D-13 updated in PP2-V2-1F: Media is now a live, RLS-protected video editor.
 check(
-  "D-13 — Media has no CRUD, API or fake controls",
-  media.length > 0 &&
-    !/supabase|useMutation|useQuery|youtube|Upload|<Input|<Select/i.test(media),
+  "D-13 — Media is a real editor built only on the shared project-profile helpers",
+  media.includes("listProjectProfileVideos") &&
+    media.length > 0 &&
+    !/supabase|project_profile_videos/.test(media),
 );
+
 check(
   "D-14 — Launch only navigates to Launch Control",
   launch.includes('<Link to="/launch-control">') &&

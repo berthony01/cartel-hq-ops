@@ -109,11 +109,12 @@ check(
   /id="github_url"[\s\S]{0,120}maxLength=\{PROFILE_RESOURCE_URL_MAX\}/.test(STUDIO),
 );
 
-// 6 — no media work in this phase
+// 6 — media activated in PP2-V2-1F through the shared helpers only
 check(
-  "E-6 — no video CRUD or project_profile_videos reference in the studio route",
-  !/ProfileVideo|project_profile_videos|fetchNetworkProjectVideos|youtube/i.test(STUDIO),
+  "E-6 — studio media uses the shared video helpers, never direct table access",
+  STUDIO.includes("listProjectProfileVideos") && !/project_profile_videos/.test(STUDIO),
 );
+
 
 // 7 — hero tagline is conditional with no fabricated fallback
 check(
