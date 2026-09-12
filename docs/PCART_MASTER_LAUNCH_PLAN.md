@@ -226,4 +226,4 @@ At the start of every future phase:
 
 ## 11. Immediate next phase
 
-PCART-L1 remains open until liquidity/auction inputs, ETH budget, custody implementation, and legal/comms review inputs are resolved. Do not write Solidity or initiate a production deployment until L1 fully closes.
+PCART-L1 remains open until exact CCA/LBP parameters, ETH budget/minimum operational ETH, custody implementation, and legal/comms review inputs are resolved. The launch-distribution method is frozen as public onchain CCA/LBP launch auction (Option A). Do not write Solidity or initiate a production deployment until L1 fully closes.
