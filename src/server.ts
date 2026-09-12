@@ -15,7 +15,17 @@ async function getServerEntry(): Promise<ServerEntry> {
       (m) => (m.default ?? m) as ServerEntry,
     );
   }
-  return serverEntryPromise;
+
+  const pendingEntry = serverEntryPromise;
+  try {
+    return await pendingEntry;
+  } catch (error) {
+    // A transient dev rebuild can reject this import once. Never retain that
+    // rejected promise: doing so turns one failed request into a permanent 500
+    // loop until the server process is restarted.
+    if (serverEntryPromise === pendingEntry) serverEntryPromise = undefined;
+    throw error;
+  }
 }
 
 // h3 swallows in-handler throws into a normal 500 Response with body

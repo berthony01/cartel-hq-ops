@@ -25,6 +25,28 @@ export function renderErrorPage(): string {
         <a class="secondary" href="/">Go home</a>
       </div>
     </div>
+    <script>
+      // This document is intentionally independent of the app bundle because it
+      // is served when that bundle cannot start. Check for server recovery here
+      // so a preview tab cannot remain stranded on a stale emergency response.
+      const recoveryProbe = async () => {
+        if (document.visibilityState === "hidden") return;
+        try {
+          const response = await fetch(location.href, {
+            cache: "no-store",
+            credentials: "same-origin",
+            headers: { "x-cartel-recovery-probe": "1" },
+          });
+          if (!response.ok) return;
+          const body = await response.text();
+          if (!body.includes("This page didn't load")) location.reload();
+        } catch {
+          // The server is still rebuilding or temporarily unreachable.
+        }
+      };
+      setInterval(recoveryProbe, 2000);
+      window.addEventListener("focus", recoveryProbe);
+    </script>
   </body>
 </html>`;
 }
