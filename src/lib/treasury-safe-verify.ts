@@ -117,9 +117,10 @@ export function decodeAddressArray(data: unknown): string[] | null {
   const out: string[] = [];
   for (let i = 0; i < count; i += 1) {
     const word = w[2 + i];
-    if (!/^0{24}[0-9a-fA-F]{40}$/.test(word)) return null;
+    if (word === undefined || !/^0{24}[0-9a-fA-F]{40}$/.test(word)) return null;
     out.push(`0x${word.slice(24).toLowerCase()}`);
   }
+
   return out;
 }
 
