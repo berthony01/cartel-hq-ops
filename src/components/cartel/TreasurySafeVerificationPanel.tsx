@@ -72,7 +72,7 @@ export function TreasurySafeVerificationPanel({
           Treasury Safe verification
         </p>
         {busy ? (
-          <StatusBadge tone="amber">
+          <StatusBadge tone="gold">
             <span>Checking</span>
           </StatusBadge>
         ) : verified ? (
