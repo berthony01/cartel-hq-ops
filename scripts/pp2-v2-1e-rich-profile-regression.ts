@@ -149,7 +149,7 @@ check(
 check(
   "E-13b — platform review reset stays explanatory, with no client-side mutation",
   STUDIO.includes("clears") &&
-    count(STUDIO, "useMutation") === 2 &&
+    count(STUDIO, "useMutation(") === 2 &&
     !/verification_status:\s/.test(STUDIO),
 );
 
