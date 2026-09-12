@@ -87,9 +87,14 @@ type Form = {
   primary_chain: string;
   public_slug: string;
   description: string;
+  tagline: string;
+  about_long: string;
+  highlights: string[];
   website_url: string;
   telegram_url: string;
   x_url: string;
+  docs_url: string;
+  github_url: string;
   logo_asset_id: string;
   discovery_status: DiscoveryStatus;
 };
@@ -100,9 +105,14 @@ const EMPTY_FORM: Form = {
   primary_chain: "",
   public_slug: "",
   description: "",
+  tagline: "",
+  about_long: "",
+  highlights: [],
   website_url: "",
   telegram_url: "",
   x_url: "",
+  docs_url: "",
+  github_url: "",
   logo_asset_id: "",
   discovery_status: "draft",
 };
