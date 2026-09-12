@@ -2021,6 +2021,342 @@ export type Database = {
           },
         ]
       }
+      social_metric_snapshots: {
+        Row: {
+          availability: Json
+          comments: number | null
+          created_at: string
+          id: string
+          likes: number | null
+          metadata: Json
+          mission_id: string
+          observed_at: string
+          poll_bucket: string
+          provider: string
+          saves: number | null
+          shares: number | null
+          views: number | null
+          workspace_id: string
+        }
+        Insert: {
+          availability?: Json
+          comments?: number | null
+          created_at?: string
+          id?: string
+          likes?: number | null
+          metadata?: Json
+          mission_id: string
+          observed_at?: string
+          poll_bucket: string
+          provider: string
+          saves?: number | null
+          shares?: number | null
+          views?: number | null
+          workspace_id: string
+        }
+        Update: {
+          availability?: Json
+          comments?: number | null
+          created_at?: string
+          id?: string
+          likes?: number | null
+          metadata?: Json
+          mission_id?: string
+          observed_at?: string
+          poll_bucket?: string
+          provider?: string
+          saves?: number | null
+          shares?: number | null
+          views?: number | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_metric_snapshots_mission_workspace_fkey"
+            columns: ["mission_id", "workspace_id"]
+            isOneToOne: false
+            referencedRelation: "social_missions"
+            referencedColumns: ["id", "workspace_id"]
+          },
+          {
+            foreignKeyName: "social_metric_snapshots_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_mission_targets: {
+        Row: {
+          created_at: string
+          delivery_state: string
+          group_connection_id: string | null
+          id: string
+          last_error: string | null
+          mission_id: string
+          sent_at: string | null
+          telegram_chat_id: number
+          telegram_message_id: number | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          delivery_state?: string
+          group_connection_id?: string | null
+          id?: string
+          last_error?: string | null
+          mission_id: string
+          sent_at?: string | null
+          telegram_chat_id: number
+          telegram_message_id?: number | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          delivery_state?: string
+          group_connection_id?: string | null
+          id?: string
+          last_error?: string | null
+          mission_id?: string
+          sent_at?: string | null
+          telegram_chat_id?: number
+          telegram_message_id?: number | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_mission_targets_group_workspace_chat_fkey"
+            columns: ["group_connection_id", "workspace_id", "telegram_chat_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_group_connections"
+            referencedColumns: ["id", "workspace_id", "telegram_chat_id"]
+          },
+          {
+            foreignKeyName: "social_mission_targets_mission_workspace_fkey"
+            columns: ["mission_id", "workspace_id"]
+            isOneToOne: false
+            referencedRelation: "social_missions"
+            referencedColumns: ["id", "workspace_id"]
+          },
+          {
+            foreignKeyName: "social_mission_targets_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_missions: {
+        Row: {
+          baseline_comments: number | null
+          baseline_likes: number | null
+          baseline_observed_at: string | null
+          baseline_saves: number | null
+          baseline_shares: number | null
+          baseline_views: number | null
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          ends_at: string | null
+          id: string
+          metadata: Json
+          social_post_id: string
+          started_at: string | null
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          baseline_comments?: number | null
+          baseline_likes?: number | null
+          baseline_observed_at?: string | null
+          baseline_saves?: number | null
+          baseline_shares?: number | null
+          baseline_views?: number | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          ends_at?: string | null
+          id?: string
+          metadata?: Json
+          social_post_id: string
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          baseline_comments?: number | null
+          baseline_likes?: number | null
+          baseline_observed_at?: string | null
+          baseline_saves?: number | null
+          baseline_shares?: number | null
+          baseline_views?: number | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          ends_at?: string | null
+          id?: string
+          metadata?: Json
+          social_post_id?: string
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_missions_post_workspace_fkey"
+            columns: ["social_post_id", "workspace_id"]
+            isOneToOne: false
+            referencedRelation: "social_posts"
+            referencedColumns: ["id", "workspace_id"]
+          },
+          {
+            foreignKeyName: "social_missions_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_posts: {
+        Row: {
+          author_display_name: string | null
+          author_handle: string | null
+          canonical_url: string
+          content_text: string | null
+          created_at: string
+          external_post_id: string
+          id: string
+          media_type: string | null
+          metadata: Json
+          platform: string
+          published_at: string | null
+          social_source_id: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          author_display_name?: string | null
+          author_handle?: string | null
+          canonical_url: string
+          content_text?: string | null
+          created_at?: string
+          external_post_id: string
+          id?: string
+          media_type?: string | null
+          metadata?: Json
+          platform: string
+          published_at?: string | null
+          social_source_id?: string | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          author_display_name?: string | null
+          author_handle?: string | null
+          canonical_url?: string
+          content_text?: string | null
+          created_at?: string
+          external_post_id?: string
+          id?: string
+          media_type?: string | null
+          metadata?: Json
+          platform?: string
+          published_at?: string | null
+          social_source_id?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_posts_source_workspace_fkey"
+            columns: ["social_source_id", "workspace_id"]
+            isOneToOne: false
+            referencedRelation: "social_sources"
+            referencedColumns: ["id", "workspace_id"]
+          },
+          {
+            foreignKeyName: "social_posts_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_sources: {
+        Row: {
+          auto_detect_enabled: boolean
+          canonical_url: string
+          created_at: string
+          external_account_id: string | null
+          handle: string | null
+          id: string
+          last_checked_at: string | null
+          last_external_post_id: string | null
+          metadata: Json
+          platform: string
+          polling_interval_seconds: number
+          provider_cursor: string | null
+          provider_preference: string | null
+          source_type: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          auto_detect_enabled?: boolean
+          canonical_url: string
+          created_at?: string
+          external_account_id?: string | null
+          handle?: string | null
+          id?: string
+          last_checked_at?: string | null
+          last_external_post_id?: string | null
+          metadata?: Json
+          platform: string
+          polling_interval_seconds?: number
+          provider_cursor?: string | null
+          provider_preference?: string | null
+          source_type?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          auto_detect_enabled?: boolean
+          canonical_url?: string
+          created_at?: string
+          external_account_id?: string | null
+          handle?: string | null
+          id?: string
+          last_checked_at?: string | null
+          last_external_post_id?: string | null
+          metadata?: Json
+          platform?: string
+          polling_interval_seconds?: number
+          provider_cursor?: string | null
+          provider_preference?: string | null
+          source_type?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_sources_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sticker_drop_events: {
         Row: {
           created_at: string
