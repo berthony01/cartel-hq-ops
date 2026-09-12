@@ -231,12 +231,12 @@ export function extractYouTubeVideoId(value: string | null | undefined): string 
   const segments = url.pathname.split("/").filter(Boolean);
 
   if (host === "youtu.be") {
-    candidate = segments.length === 1 ? segments[0] : null;
+    candidate = segments.length === 1 ? (segments[0] ?? null) : null;
   } else if (YOUTUBE_WATCH_HOSTS.has(host)) {
     if (url.pathname === "/watch") {
       candidate = url.searchParams.get("v");
     } else if (segments.length === 2 && (segments[0] === "shorts" || segments[0] === "embed")) {
-      candidate = segments[1];
+      candidate = segments[1] ?? null;
     }
   } else {
     return null;
