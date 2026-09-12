@@ -9,6 +9,7 @@ import {
 import {
   fetchNetworkProject,
   fetchNetworkProjectLaunches,
+  fetchNetworkProjectVideos,
   networkKeys,
 } from "@/lib/cartel-network";
 
@@ -16,7 +17,7 @@ type ProjectHubSearch = { tab?: PublicProjectHubTab };
 
 function validateProjectHubSearch(search: Record<string, unknown>): ProjectHubSearch {
   const tab = search["tab"];
-  return tab === "launch" || tab === "trust" ? { tab } : {};
+  return tab === "launch" || tab === "media" || tab === "trust" ? { tab } : {};
 }
 
 export const Route = createFileRoute("/network/project/$projectSlug")({
@@ -32,7 +33,13 @@ export const Route = createFileRoute("/network/project/$projectSlug")({
           queryFn: () => fetchNetworkProjectLaunches(params.projectSlug),
         })
       : [];
-    return { project, launches };
+    const videos = project
+      ? await context.queryClient.ensureQueryData({
+          queryKey: networkKeys.projectVideos(params.projectSlug),
+          queryFn: () => fetchNetworkProjectVideos(params.projectSlug),
+        })
+      : [];
+    return { project, launches, videos };
   },
   head: ({ loaderData }) => {
     const project = loaderData?.project ?? null;
