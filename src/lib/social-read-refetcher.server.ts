@@ -257,7 +257,7 @@ export function mapPost(
     asText(result["id"], 512) ??
     // Links-only recent references carry no id field; derive it from the
     // canonical link rather than dropping a real item or inventing a value.
-    lastPathSegment(canonicalUrl);
+    idFromUrl(canonicalUrl);
   if (!externalPostId) return null;
 
   const { metrics, availability } = buildMetrics(
