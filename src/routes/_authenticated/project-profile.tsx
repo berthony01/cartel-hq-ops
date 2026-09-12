@@ -23,6 +23,7 @@ import {
 } from "@/lib/project-profile";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
+import { SectionNav, type SectionNavItem } from "@/components/cartel/SectionNav";
 import { formatDateTime } from "@/lib/cartel-network";
 import {
   canRequestVerification,
