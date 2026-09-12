@@ -49,6 +49,13 @@ check("data: rejected", extractYouTubeVideoId("data:text/html,<b>x</b>") === nul
 check("short id rejected", extractYouTubeVideoId("abc123") === null);
 check("long id rejected", extractYouTubeVideoId("dQw4w9WgXcQXX") === null);
 check("non-youtube host rejected", extractYouTubeVideoId(`https://vimeo.com/watch?v=${ID}`) === null);
+check("music.youtube.com rejected", extractYouTubeVideoId(`https://music.youtube.com/watch?v=${ID}`) === null);
+check("www.youtu.be rejected", extractYouTubeVideoId(`https://www.youtu.be/${ID}`) === null);
+check("/v/ID rejected", extractYouTubeVideoId(`https://www.youtube.com/v/${ID}`) === null);
+check("youtu.be extra segment rejected", extractYouTubeVideoId(`https://youtu.be/x/${ID}`) === null);
+check("shorts extra segment rejected", extractYouTubeVideoId(`https://www.youtube.com/x/shorts/${ID}`) === null);
+check("embed extra segment rejected", extractYouTubeVideoId(`https://www.youtube.com/embed/${ID}/extra`) === null);
+check("shorts query kept", extractYouTubeVideoId(`https://www.youtube.com/shorts/${ID}?feature=share#t=1`) === ID);
 
 const highlights = normalizeHighlights(["  Alpha ", "", "  ", "Beta"]);
 check("highlights trim/drop/order", JSON.stringify(highlights) === JSON.stringify(["Alpha", "Beta"]));
