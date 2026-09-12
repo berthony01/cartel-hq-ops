@@ -1,31 +1,38 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { NetworkEmpty } from "@/components/cartel-network/NetworkPieces";
 import {
-  ExternalLinks,
-  NetworkEmpty,
-  ProjectLogo,
-  StatusPill,
-  VerificationSignals,
-  WatchButton,
-} from "@/components/cartel-network/NetworkPieces";
+  PublicProjectHub,
+  type PublicProjectHubTab,
+} from "@/components/cartel-network/PublicProjectHub";
 import {
   fetchNetworkProject,
   fetchNetworkProjectLaunches,
-  formatSchedule,
-  formatTicker,
-  launchStatusLabel,
-  launchStatusTone,
   networkKeys,
 } from "@/lib/cartel-network";
 
+type ProjectHubSearch = { tab?: PublicProjectHubTab };
+
+function validateProjectHubSearch(search: Record<string, unknown>): ProjectHubSearch {
+  const tab = search["tab"];
+  return tab === "launch" || tab === "trust" ? { tab } : {};
+}
+
 export const Route = createFileRoute("/network/project/$projectSlug")({
+  validateSearch: validateProjectHubSearch,
   loader: async ({ params, context }) => {
     const project = await context.queryClient.ensureQueryData({
       queryKey: networkKeys.project(params.projectSlug),
       queryFn: () => fetchNetworkProject(params.projectSlug),
     });
-    return { project };
+    const launches = project
+      ? await context.queryClient.ensureQueryData({
+          queryKey: networkKeys.projectLaunches(params.projectSlug),
+          queryFn: () => fetchNetworkProjectLaunches(params.projectSlug),
+        })
+      : [];
+    return { project, launches };
   },
   head: ({ loaderData }) => {
     const project = loaderData?.project ?? null;
@@ -57,16 +64,20 @@ export const Route = createFileRoute("/network/project/$projectSlug")({
 
 function PublicProjectPage() {
   const { projectSlug } = Route.useParams();
+  const { tab } = Route.useSearch();
+  const { project: initialProject, launches: initialLaunches } = Route.useLoaderData();
 
   const projectQuery = useQuery({
     queryKey: networkKeys.project(projectSlug),
     queryFn: () => fetchNetworkProject(projectSlug),
+    initialData: initialProject,
   });
 
   const launchesQuery = useQuery({
     queryKey: networkKeys.projectLaunches(projectSlug),
     queryFn: () => fetchNetworkProjectLaunches(projectSlug),
     enabled: !!projectQuery.data,
+    initialData: initialLaunches,
   });
 
   if (projectQuery.isLoading) {
@@ -104,117 +115,31 @@ function PublicProjectPage() {
     );
   }
 
-  const ticker = formatTicker(project.ticker);
   const launches = launchesQuery.data ?? [];
+  const requestedTab = tab === "launch" || tab === "trust" ? tab : "overview";
+  const activeTab = requestedTab === "launch" && launches.length === 0 ? "overview" : requestedTab;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <nav className="text-xs text-muted-foreground">
         <Link to="/network/projects" className="hover:text-foreground">
           Projects
         </Link>{" "}
         / <span className="text-foreground">{project.project_name}</span>
       </nav>
-
-      <header className="flex flex-col gap-4 rounded-lg border border-gold/20 bg-surface-elevated p-5 shadow-elevated sm:flex-row sm:items-start sm:p-6">
-        <ProjectLogo
-          slug={project.public_slug}
-          hasLogo={project.has_logo}
-          name={project.project_name}
-          size="lg"
-        />
-        <div className="min-w-0">
-          <h1 className="font-display text-3xl uppercase leading-tight text-foreground sm:text-4xl [overflow-wrap:anywhere]">
-            {project.project_name}
-          </h1>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {ticker ? <StatusPill tone="gold">{ticker}</StatusPill> : null}
-            {project.primary_chain ? (
-              <StatusPill tone="muted">{project.primary_chain}</StatusPill>
-            ) : null}
-          </div>
-          <div className="mt-3">
-            <ExternalLinks
-              website={project.website_url}
-              telegram={project.telegram_url}
-              x={project.x_url}
-            />
-          </div>
-        </div>
-      </header>
-
-      {project.description ? (
-        <section className="max-w-3xl border-l-2 border-gold/30 pl-4 whitespace-pre-line text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-          {project.description}
-        </section>
-      ) : null}
-
-      <VerificationSignals
-        verificationStatus={project.verification_status}
-        verifiedAt={project.verified_at}
-      />
-
-      <section className="space-y-4">
-        <h2 className="border-b border-border pb-3 font-display text-xl uppercase text-foreground sm:text-2xl">
-          Launches
-        </h2>
-        {launchesQuery.isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading launches…</p>
-        ) : launchesQuery.isError ? (
-          <div className="space-y-3">
-            <NetworkEmpty
-              title="Launches unavailable"
-              description="We could not load launches for this project right now. Try again shortly."
-            />
-            <Button variant="outline" size="sm" onClick={() => launchesQuery.refetch()}>
-              Retry
-            </Button>
-          </div>
-        ) : launches.length === 0 ? (
+      {launchesQuery.isError ? (
+        <div className="space-y-3">
           <NetworkEmpty
-            title="No launches announced yet"
-            description="This project has not announced a launch on the Cartel Network."
+            title="Launch details unavailable"
+            description="The project is available, but its launch details could not be loaded. Try again shortly."
           />
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {launches.map((l) => (
-              <article
-                key={l.public_slug}
-                className="flex h-full flex-col gap-3 rounded-lg border border-border/80 bg-surface-elevated p-4 shadow-inset transition-colors hover:border-gold/35"
-              >
-                <div className="min-w-0">
-                  <h3 className="truncate font-display text-lg uppercase text-foreground">
-                    {l.token_name}
-                  </h3>
-                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                    {formatTicker(l.ticker) ? (
-                      <StatusPill tone="gold">{formatTicker(l.ticker)}</StatusPill>
-                    ) : null}
-                    <StatusPill tone="muted">{l.chain}</StatusPill>
-                    <StatusPill tone={launchStatusTone(l.status)}>
-                      {launchStatusLabel(l.status)}
-                    </StatusPill>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">{formatSchedule(l)}</p>
-                <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
-                  {l.join_launch_watch_url ? (
-                    <WatchButton url={l.join_launch_watch_url} status={l.status} />
-                  ) : null}
-                  <Button asChild variant="outline" size="sm">
-                    <Link
-                      to="/network/launch/$launchSlug"
-                      params={{ launchSlug: l.public_slug }}
-                    >
-                      View Launch
-                    </Link>
-                  </Button>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
+          <Button variant="outline" size="sm" onClick={() => launchesQuery.refetch()}>
+            Retry launch details
+          </Button>
+        </div>
+      ) : (
+        <PublicProjectHub project={project} launches={launches} activeTab={activeTab} />
+      )}
     </div>
   );
 }
