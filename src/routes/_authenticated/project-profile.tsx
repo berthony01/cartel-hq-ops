@@ -328,6 +328,18 @@ function ProjectProfilePage() {
   const slugValid = isValidSlug(form.public_slug.trim().toLowerCase());
   const canSave = nameValid && slugValid && !!workspaceId;
 
+  /**
+   * Explanatory only. The database trigger owns the Platform Reviewed reset;
+   * nothing here mutates review state.
+   */
+  const reviewResetNotice =
+    verificationStatus === "verified" ? (
+      <p className="mb-4 max-w-prose rounded-md border border-border-subtle bg-background/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+        This project is Platform Reviewed. Saving material changes to the public profile clears
+        Platform Reviewed until CARTEL HQ reviews the updated profile again.
+      </p>
+    ) : null;
+
   const save = useMutation({
     mutationFn: async () => {
       if (!workspaceId) throw new Error("No active project.");
