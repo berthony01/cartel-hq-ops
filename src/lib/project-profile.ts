@@ -44,11 +44,15 @@ export type ProjectProfilePayload = {
   telegram_url: string | null;
   x_url: string | null;
   discovery_status: DiscoveryStatus;
-  tagline: string | null;
-  about_long: string | null;
-  highlights: string[] | null;
-  docs_url: string | null;
-  github_url: string | null;
+  /**
+   * Rich profile fields. Optional so callers that do not own these fields
+   * (identity-only saves) never blank them; a present key is always written.
+   */
+  tagline?: string | null;
+  about_long?: string | null;
+  highlights?: string[] | null;
+  docs_url?: string | null;
+  github_url?: string | null;
 };
 
 export const PROJECT_NAME_MAX = 120;
