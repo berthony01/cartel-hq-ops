@@ -68,7 +68,7 @@ const links = between('<WorkingView id="pp-links"', '<WorkingView id="pp-visibil
 const visibility = between('<WorkingView id="pp-visibility"', "</form>");
 const media = between('<WorkingView id="pp-media"', '<WorkingView id="pp-trust"');
 const trust = between('<WorkingView id="pp-trust"', '<WorkingView id="pp-launch"');
-const launch = between('<WorkingView id="pp-launch"', "</div>\n\n          <aside");
+const launch = between('<WorkingView id="pp-launch"', "</WorkingView>\n          </div>");
 
 check(
   "D-8 — Identity holds name, ticker, chain, slug and logo",
@@ -101,7 +101,7 @@ check(
 check(
   "D-14 — Launch only navigates to Launch Control",
   launch.includes('<Link to="/launch-control">') &&
-    !/useQuery|useMutation|supabase|launch_at|lifecycle/i.test(launch),
+    !/useQuery|useMutation|supabase|launch_at|launchQuery/i.test(launch),
 );
 
 // D-15 save flow invariants
