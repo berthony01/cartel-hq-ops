@@ -302,3 +302,17 @@ At the start of every future phase:
 PCART-L1A economics are now OWNER-APPROVED AND FROZEN. L1 remains open only for genuinely unresolved implementation gates: exact operational ETH reserve for gas, exact multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility confirmation, fork/testnet simulation, and exact on-chain encoding derived from frozen policy.
 
 **Immediate next phase:** read-only Treasury/Multisig Implementation + Live Robinhood/Uniswap CCA Compatibility Audit. Do not authorize Solidity or value movement merely by this documentation freeze. Do not write Solidity or initiate a production deployment until L1 fully closes.
+
+## 12. PCART-L1B — Safe Treasury Verification Foundation (BUILT, QA-PASSED)
+
+**Status: BUILT AND QA-PASSED.** A read-only Safe treasury verifier exists in CARTEL HQ for Robinhood Chain mainnet (4663). An authenticated workspace owner can check the production-recipient address already entered in Launch Control and see whether it is a Safe-compatible 2-of-3 multisig.
+
+Scope and limits of what was built:
+- Server-side, authenticated, read-only only: `eth_chainId`, `eth_getCode`, and `eth_call` for `getOwners()`, `getThreshold()` and optional `VERSION()`, over the existing managed Robinhood mainnet RPC path only. No second RPC transport, no client-side RPC URL.
+- Suitability requires contract code present, exactly 3 unique non-zero owners, threshold exactly 2, and successful decoding. Every malformed, reverted, wrong-chain or ambiguous outcome fails closed.
+- The result is labelled Safe-**compatible** 2-of-3 based on live interface reads. It is NOT cryptographic proof of a specific Safe proxy/singleton version.
+- Ephemeral only: no Supabase migration, no schema change, no persistence, no lifecycle change, no Telegram, no wallet signing, no transaction, no value movement, no liquidity change. Mainnet runtime execution control and `MAINNET_LIQUIDITY_TX_ENABLED` were untouched.
+- No production-request submission gating was added. Generic launchpad users are NOT forced into a 2-of-3 Safe.
+
+**Still unresolved:** the actual PEPECARTEL Safe has NOT been created. The Safe address and the 3 signer addresses remain undetermined, and no PCART initial recipient is fixed. PCART-L1 remains OPEN.
+
