@@ -712,25 +712,126 @@ function ProjectProfilePage() {
             <Section
               variant="surface"
               title="About"
-              description="The public description shown on this project's Cartel Network profile today."
+              description="The public story this project publishes on its Cartel Network profile."
             >
-              <div className="max-w-2xl">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  rows={6}
-                  maxLength={DESCRIPTION_MAX}
-                  className="mt-2"
-                  value={form.description}
-                  onChange={(e) => set({ description: e.target.value })}
-                />
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {form.description.length} / {DESCRIPTION_MAX} characters
-                </p>
-                <p className="mt-2 max-w-prose text-xs leading-relaxed text-muted-foreground">
-                  This is the only description this profile publishes right now. Keep it accurate
-                  and specific to what the project actually does.
-                </p>
+              {reviewResetNotice}
+              <div className="max-w-2xl space-y-6">
+                <div>
+                  <Label htmlFor="tagline">Tagline</Label>
+                  <Input
+                    id="tagline"
+                    maxLength={TAGLINE_MAX}
+                    className="mt-2 min-h-11"
+                    value={form.tagline}
+                    onChange={(e) => set({ tagline: e.target.value })}
+                  />
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {form.tagline.length} / {TAGLINE_MAX} characters
+                  </p>
+                  <p className="mt-2 max-w-prose text-xs leading-relaxed text-muted-foreground">
+                    A short positioning line shown in the public Project Hub hero.
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    rows={5}
+                    maxLength={DESCRIPTION_MAX}
+                    className="mt-2"
+                    value={form.description}
+                    onChange={(e) => set({ description: e.target.value })}
+                  />
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {form.description.length} / {DESCRIPTION_MAX} characters
+                  </p>
+                  <p className="mt-2 max-w-prose text-xs leading-relaxed text-muted-foreground">
+                    The compact project summary. It is used in Cartel Network directory listings
+                    and as the About fallback when no full About is written.
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="about_long">Full About</Label>
+                  <Textarea
+                    id="about_long"
+                    rows={10}
+                    maxLength={ABOUT_LONG_MAX}
+                    className="mt-2"
+                    value={form.about_long}
+                    onChange={(e) => set({ about_long: e.target.value })}
+                  />
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {form.about_long.length} / {ABOUT_LONG_MAX} characters
+                  </p>
+                  <p className="mt-2 max-w-prose text-xs leading-relaxed text-muted-foreground">
+                    The longer project story: what it is, what it does and who it is for. When
+                    filled in, this becomes the main About body on the public Project Hub.
+                  </p>
+                </div>
+
+                <div>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label htmlFor="highlight-0">Project highlights</Label>
+                    <span className="text-xs text-muted-foreground">
+                      {form.highlights.length} / {HIGHLIGHT_MAX_COUNT}
+                    </span>
+                  </div>
+                  <p className="mt-2 max-w-prose text-xs leading-relaxed text-muted-foreground">
+                    Up to {HIGHLIGHT_MAX_COUNT} short factual points, shown in order beneath About.
+                    Empty rows are dropped when you save.
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {form.highlights.map((highlight, index) => (
+                      <div key={index} className="flex min-w-0 items-center gap-2">
+                        <Input
+                          id={`highlight-${index}`}
+                          aria-label={`Highlight ${index + 1}`}
+                          maxLength={HIGHLIGHT_MAX}
+                          className="min-h-11"
+                          value={highlight}
+                          onChange={(e) =>
+                            set({
+                              highlights: form.highlights.map((item, i) =>
+                                i === index ? e.target.value : item,
+                              ),
+                            })
+                          }
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="size-11 shrink-0"
+                          aria-label={`Remove highlight ${index + 1}`}
+                          onClick={() =>
+                            set({ highlights: form.highlights.filter((_, i) => i !== index) })
+                          }
+                        >
+                          <Trash2 className="size-4" aria-hidden="true" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 min-h-11"
+                    disabled={form.highlights.length >= HIGHLIGHT_MAX_COUNT}
+                    onClick={() => set({ highlights: [...form.highlights, ""] })}
+                  >
+                    <Plus className="size-4" aria-hidden="true" />
+                    Add highlight
+                  </Button>
+                  {form.highlights.length >= HIGHLIGHT_MAX_COUNT ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      You have reached the maximum of {HIGHLIGHT_MAX_COUNT} highlights. Remove one
+                      to add another.
+                    </p>
+                  ) : null}
+                </div>
               </div>
             </Section>
             </WorkingView>
@@ -741,12 +842,14 @@ function ProjectProfilePage() {
               title="Official links"
               description="Only add links the project actually controls."
             >
+              {reviewResetNotice}
               <div className="grid gap-4 md:grid-cols-3 [&>*]:min-w-0">
                 <div>
                   <Label htmlFor="website_url">Official website</Label>
                   <Input
                     id="website_url"
                     type="url"
+                    maxLength={PROFILE_RESOURCE_URL_MAX}
                     className="mt-2 min-h-11"
                     value={form.website_url}
                     onChange={(e) => set({ website_url: e.target.value })}
@@ -772,9 +875,38 @@ function ProjectProfilePage() {
                     onChange={(e) => set({ x_url: e.target.value })}
                   />
                 </div>
+                <div>
+                  <Label htmlFor="docs_url">Documentation</Label>
+                  <Input
+                    id="docs_url"
+                    type="url"
+                    maxLength={PROFILE_RESOURCE_URL_MAX}
+                    className="mt-2 min-h-11"
+                    placeholder="https://docs.example.com"
+                    value={form.docs_url}
+                    onChange={(e) => set({ docs_url: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="github_url">GitHub</Label>
+                  <Input
+                    id="github_url"
+                    type="url"
+                    maxLength={PROFILE_RESOURCE_URL_MAX}
+                    className="mt-2 min-h-11"
+                    placeholder="https://github.com/your-project"
+                    value={form.github_url}
+                    onChange={(e) => set({ github_url: e.target.value })}
+                  />
+                </div>
               </div>
+              <p className="mt-4 max-w-prose text-xs leading-relaxed text-muted-foreground">
+                Documentation and GitHub should point at official project-controlled resources.
+                They are published alongside your other official links.
+              </p>
             </Section>
             </WorkingView>
+
 
             <WorkingView id="pp-visibility" active={activeSection === "pp-visibility"}>
             <Section
