@@ -322,6 +322,7 @@ async function ensureCommands(token: string) {
         { command: "start", description: "Open Cartel HQ menu" },
         { command: "help", description: "How to use the bot" },
         { command: "roadmap", description: "What's live and what's coming" },
+        { command: "mission", description: "Start a Social Mission from an X post" },
       ],
     });
   } catch { }
