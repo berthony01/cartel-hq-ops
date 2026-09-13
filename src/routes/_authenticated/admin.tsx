@@ -1492,6 +1492,8 @@ function AdminPage() {
       </Section>
 
       <SocialMissionTestControl />
+
+      <BrandedSocialMissionTestControl />
     </div>
   );
 }
