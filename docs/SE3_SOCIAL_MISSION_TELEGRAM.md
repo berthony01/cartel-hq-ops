@@ -210,3 +210,47 @@ call `public.is_workspace_operator(workspace_id)`. The only live operator helper
 `public.is_workspace_operator(_workspace_id uuid, _user_id uuid)`. The policy
 was corrected to `public.is_workspace_operator(workspace_id, (SELECT auth.uid()))`,
 matching the existing target policies, before any SQL is applied.
+
+## 12. SE-3.3 branded project identity transport
+
+A mission card may now be delivered as the project's own branded card instead of
+plain text. The card copy, gating, claim sequence and one-call guarantees are
+unchanged; only the Telegram method changes.
+
+### Transport selection
+
+- Before anything is claimed, `resolveProjectLogo()` reads the workspace's
+  `project_profiles` logo asset, then the matching `media_assets` row **in the
+  same workspace**, and downloads the object from the private
+  `workspace-assets` bucket with the service-role storage client.
+- A missing, cross-workspace, wrong-type, non-image, empty or oversize asset
+  simply returns `null`. That is a normal outcome and selects the plain text
+  transport. This is the only point at which the text fallback may occur.
+- No signed URL and no public URL is ever produced; the bucket stays private.
+  Telegram receives raw bytes as a multipart upload.
+
+### Durable transport kind
+
+`social_mission_targets.transport_kind` (`TEXT` | `PHOTO`, default `TEXT`) is
+claimed together with the send intent, before transport. The edit path reads
+that stored value and never re-resolves the logo, so a later logo change cannot
+switch an existing message to the wrong edit method. Historical rows default to
+`TEXT`, so the already-proven message keeps using `editMessageText` with no
+backfill. The authenticated INSERT policy pins new operator rows to `TEXT`; the
+browser cannot preselect the branded transport and sends no media input at all.
+
+### One call per outcome
+
+- Branded send: exactly one `sendPhoto` (multipart, card as caption, same inline
+  button), with its own bounded upload timeout.
+- Plain send: exactly one `sendMessage`.
+- Branded edit: exactly one `editMessageCaption` on the same message id.
+- Plain edit: exactly one `editMessageText`.
+
+The branches are mutually exclusive. A rejected or ambiguous `sendPhoto` is
+never retried as text, there is no companion message, and no probe-then-fallback
+exists on the edit path. Captions are rendered under the 1024-character Telegram
+caption budget; text cards keep the 4096 budget. Null metrics remain omitted.
+
+Applied SQL parity copy: `docs/sql/SE33_social_mission_transport_kind.sql`
+(applied externally; Lovable never runs it).

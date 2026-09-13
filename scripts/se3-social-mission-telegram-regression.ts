@@ -532,6 +532,179 @@ check(
 );
 
 // ---------------------------------------------------------------------------
+// 14. SE-3.3 branded project identity transport
+// ---------------------------------------------------------------------------
+
+const se33Sql = readFileSync("docs/sql/SE33_social_mission_transport_kind.sql", "utf8");
+
+// 14a. Durable transport kind
+check("14.1 transport kind type is TEXT|PHOTO only", indexSrc.includes('type TransportKind = "TEXT" | "PHOTO"'));
+check(
+  "14.2 applied SQL parity copy declares the column with a TEXT default",
+  se33Sql.includes("transport_kind text NOT NULL DEFAULT 'TEXT'"),
+);
+check("14.3 applied SQL parity copy constrains the enumeration", se33Sql.includes("transport_kind IN ('TEXT', 'PHOTO')"));
+check("14.4 insert policy pins operator rows to TEXT", se33Sql.includes("AND transport_kind = 'TEXT'"));
+check(
+  "14.5 insert policy keeps the two-argument operator signature",
+  se33Sql.includes("public.is_workspace_operator(workspace_id, (SELECT auth.uid()))"),
+);
+check("14.6 SQL parity copy is audit-only, never run from Lovable", se33Sql.includes("ALREADY APPLIED"));
+
+// 14b. Workspace-bound logo resolution
+const logoBlock = indexSrc.slice(
+  indexSrc.indexOf("async function resolveProjectLogo"),
+  indexSrc.indexOf("async function renderAuthoritativeCard"),
+);
+check("14.7 logo resolution exists", logoBlock.length > 0);
+check("14.8 profile resolved by workspace", logoBlock.includes('from("project_profiles")') && logoBlock.includes('.eq("workspace_id", workspaceId)'));
+check(
+  "14.9 asset resolved profile -> media_assets within the SAME workspace",
+  logoBlock.includes('from("media_assets")') &&
+    logoBlock.includes('.eq("id", logoAssetId)') &&
+    logoBlock.includes('.eq("workspace_id", workspaceId)'),
+);
+check(
+  "14.10 cross-workspace asset mismatch rejected defensively",
+  logoBlock.includes('a["workspace_id"] !== workspaceId'),
+);
+check("14.11 asset_type constrained to logo", logoBlock.includes('.eq("asset_type", LOGO_ASSET_TYPE)') && indexSrc.includes('LOGO_ASSET_TYPE = "logo"'));
+check("14.12 empty storage path rejected", logoBlock.includes("if (!storagePath) return null"));
+check("14.13 mime restricted to Telegram-safe images", logoBlock.includes("LOGO_ALLOWED_MIME.includes(mimeType)"));
+check("14.14 oversize or empty object rejected", logoBlock.includes("bytes.byteLength > LOGO_MAX_BYTES"));
+check(
+  "14.15 private workspace-assets bucket used server-side",
+  indexSrc.includes('WORKSPACE_ASSET_BUCKET = "workspace-assets"') && logoBlock.includes(".from(WORKSPACE_ASSET_BUCKET)"),
+);
+check("14.16 download uses the service-role storage client", logoBlock.includes("admin.storage") && logoBlock.includes(".download(storagePath)"));
+check(
+  "14.17 no signed or public URL is produced anywhere",
+  !indexCode.includes("createSignedUrl") && !indexCode.includes("getPublicUrl"),
+);
+check("14.18 bucket never made public", !indexCode.includes("public: true") && !indexCode.includes("updateBucket"));
+check("14.19 logo failure returns null rather than throwing", logoBlock.includes("} catch {") && logoBlock.includes("return null"));
+const cardCode = stripComments(cardSrc);
+check("14.20 no logo URL is placed in card copy", !cardCode.includes("logo") && !cardCode.includes("photo"));
+
+// 14c. Nothing media-related may come from the browser
+for (const browserInput of [
+  'body["assetId"]',
+  'body["logoAssetId"]',
+  'body["storagePath"]',
+  'body["photo"]',
+  'body["photoUrl"]',
+  'body["mediaUrl"]',
+  'body["caption"]',
+  'body["transportKind"]',
+  'body["bucket"]',
+]) {
+  check(`14.x browser cannot supply ${browserInput}`, !indexCode.includes(browserInput));
+}
+const bodyKeys = new Set((indexSrc.match(/body\["(\w+)"\]/g) ?? []).map((m) => m.slice(6, -2)));
+check(
+  "14.21 request body still only carries ids, action and revision",
+  [...bodyKeys].sort().join(",") === "action,clientRequestId,missionId,revision,targetId,workspaceId",
+);
+check(
+  "14.22 client never mentions media, bucket, caption or transport kind",
+  (() => {
+    const clientCode = stripComments(clientSrc);
+    return (
+      !clientCode.includes("transportKind") &&
+      !clientCode.includes("transport_kind") &&
+      !clientCode.includes("caption") &&
+      !clientCode.includes("workspace-assets") &&
+      !clientCode.includes("asset")
+    );
+  })(),
+);
+
+// 14d. Send path
+const sendBlock33 = indexSrc.slice(indexSrc.indexOf("async function handleSend"), indexSrc.indexOf("async function handleEdit"));
+check("14.23 logo resolved before the claim", sendBlock33.indexOf("resolveProjectLogo") < sendBlock33.indexOf('delivery_state: "SENDING"'));
+check(
+  "14.24 desired transport kind decided before the claim",
+  sendBlock33.includes('const desiredTransportKind: TransportKind = logo ? "PHOTO" : "TEXT"') &&
+    sendBlock33.indexOf("desiredTransportKind") < sendBlock33.indexOf('delivery_state: "SENDING"'),
+);
+check(
+  "14.25 claim durably persists the transport kind before Telegram",
+  sendBlock33.includes("transport_kind: desiredTransportKind") &&
+    sendBlock33.indexOf("transport_kind: desiredTransportKind") < sendBlock33.indexOf('"sendPhoto"'),
+);
+check("14.26 exactly one sendPhoto call path", (indexSrc.match(/"sendPhoto"/g) ?? []).length === 1);
+check("14.27 sendPhoto is multipart with binary bytes", sendBlock33.includes("new FormData()") && sendBlock33.includes('form.append("photo"'));
+check("14.28 caption carries the rendered card", sendBlock33.includes('form.append("caption", rendered.text)'));
+check("14.29 branded send reuses the existing inline keyboard", sendBlock33.includes('form.append("reply_markup", JSON.stringify(rendered.replyMarkup))'));
+check("14.30 photo upload gets its own bounded timeout", sendBlock33.includes("TELEGRAM_UPLOAD_TIMEOUT_MS") && indexSrc.includes("TELEGRAM_UPLOAD_TIMEOUT_MS = 20_000"));
+check("14.31 sendMessage remains exactly one path", (indexSrc.match(/"sendMessage"/g) ?? []).length === 1);
+check(
+  "14.32 photo and text transports are mutually exclusive branches",
+  /if \(logo\) \{[\s\S]{0,800}"sendPhoto"[\s\S]{0,200}\} else \{[\s\S]{0,400}"sendMessage"/.test(sendBlock33),
+);
+check(
+  "14.33 TEXT fallback happens only before any Telegram call",
+  sendBlock33.indexOf("resolveProjectLogo") < sendBlock33.indexOf("verifyGroup") &&
+    sendBlock33.indexOf("resolveProjectLogo") < sendBlock33.indexOf('"sendPhoto"'),
+);
+check(
+  "14.34 a failed or ambiguous sendPhoto is never retried as text",
+  !/sendPhoto[\s\S]*?(rejected|uncertain)[\s\S]{0,400}"sendMessage"/.test(sendBlock33) &&
+    (sendBlock33.match(/callTelegram\(botToken, "sendMessage"/g) ?? []).length === 1 &&
+    (sendBlock33.match(/callTelegram\(botToken, "sendPhoto"/g) ?? []).length === 1,
+);
+check("14.35 no companion message accompanies a branded card", !sendBlock33.includes("sendMediaGroup") && !sendBlock33.includes("copyMessage"));
+
+// 14e. Edit path
+const editBlock33 = indexSrc.slice(indexSrc.indexOf("async function handleEdit"));
+check(
+  "14.36 edit method comes from the durable persisted transport kind",
+  editBlock33.includes('t["transport_kind"] === "PHOTO" ? "PHOTO" : "TEXT"'),
+);
+check("14.37 PHOTO edits use exactly one editMessageCaption", (indexSrc.match(/"editMessageCaption"/g) ?? []).length === 1);
+check("14.38 TEXT edits use exactly one editMessageText", (indexSrc.match(/"editMessageText"/g) ?? []).length === 1);
+check(
+  "14.39 the edit branch is a single exclusive choice, not a probe",
+  /transportKind === "PHOTO"\s*\?\s*await callTelegram\(botToken, "editMessageCaption"[\s\S]{0,500}:\s*await callTelegram\(botToken, "editMessageText"/.test(
+    editBlock33,
+  ),
+);
+check("14.40 no second edit call after a rejection", (editBlock33.match(/await callTelegram\(botToken, "edit/g) ?? []).length === 2);
+check("14.41 edit never sends a photo or a replacement", !editBlock33.includes("sendPhoto") && !editBlock33.includes("sendMessage"));
+check(
+  "14.42 historical rows default to TEXT so message #1848 stays compatible",
+  editBlock33.includes('"PHOTO" : "TEXT"') && se33Sql.includes("DEFAULT 'TEXT'"),
+);
+check("14.43 caption edit targets the same stored message id", editBlock33.includes("message_id: messageId"));
+check("14.44 transport kind is never re-decided at edit time", !editBlock33.includes("resolveProjectLogo"));
+
+// 14f. Caption length safety
+check("14.45 caption limit exported by the renderer", cardSrc.includes("TELEGRAM_CAPTION_MAX = 1024"));
+check("14.46 function applies the caption budget for PHOTO", indexSrc.includes('transportKind === "PHOTO" ? TELEGRAM_CAPTION_MAX : TELEGRAM_TEXT_LIMIT'));
+
+const captionCard = renderMissionCard({ ...liveInput, contentText: "y".repeat(4000), maxLength: 1024 });
+check("14.47 caption fits the Telegram caption limit", captionCard.text.length <= 1024);
+check("14.48 caption keeps project identity", captionCard.text.includes("PEPE CARTEL") && captionCard.text.includes("$PCART"));
+check("14.49 caption keeps the participation line", captionCard.text.includes("Read the update and add your perspective."));
+check("14.50 caption keeps metrics", captionCard.text.includes("Views: 180 (+80)"));
+
+const tightCaption = renderMissionCard({ ...liveInput, contentText: "z".repeat(4000), maxLength: 200 });
+check("14.51 an impossible excerpt budget drops the excerpt, not the structure", !tightCaption.text.includes("zzzz"));
+check("14.52 structure survives a tiny budget", tightCaption.text.includes("CARTEL SOCIAL MISSION") && tightCaption.text.length <= 200);
+check(
+  "14.53 default rendering is unchanged when no budget is supplied",
+  renderMissionCard(liveInput).text === liveCard.text,
+);
+check("14.54 caption rendering stays null-honest", !renderMissionCard({ ...liveInput, baseline: { ...EMPTY_METRICS }, latest: null, maxLength: 1024 }).text.includes(": 0"));
+
+// 14g. Automation architecture lock (documentation only, no scheduler here)
+check(
+  "14.55 no scheduler, poller or auto-detection was introduced",
+  !indexCode.includes("Deno.cron") && !indexCode.includes("setInterval") && !indexCode.includes("setTimeout(poll"),
+);
+check("14.56 still exactly two actions after SE-3.3", (indexSrc.match(/action !== "send_mission" && action !== "edit_mission"/g) ?? []).length === 1);
+
+// ---------------------------------------------------------------------------
 
 console.log(`SE-3 regression: ${passed} passed, ${failures.length} failed`);
 if (failures.length > 0) {

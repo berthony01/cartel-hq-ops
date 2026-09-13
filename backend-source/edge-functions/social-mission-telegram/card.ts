@@ -17,6 +17,8 @@
  */
 
 export const TELEGRAM_TEXT_MAX = 4096;
+/** Telegram photo captions are hard-limited to 1024 characters. */
+export const TELEGRAM_CAPTION_MAX = 1024;
 export const EXCERPT_MAX = 180;
 
 export type MissionCardPlatform = "x" | "instagram" | "tiktok" | "youtube" | "facebook";
@@ -52,6 +54,11 @@ export type MissionCardInput = {
   baseline: CanonicalMetrics;
   /** Latest metric snapshot, or null when nothing has been observed yet. */
   latest: CanonicalMetrics | null;
+  /**
+   * Hard character budget. Defaults to the plain-text limit; the branded photo
+   * transport passes TELEGRAM_CAPTION_MAX so a caption can never be rejected.
+   */
+  maxLength?: number;
 };
 
 export type MissionCardButton = { text: string; url: string };
@@ -168,8 +175,7 @@ function metricsHeading(status: MissionCardStatus): string {
   return status === "LIVE" ? "Observed so far:" : `${COMPLETED_OBSERVED_PHRASE}:`;
 }
 
-/** Deterministic, length-safe card. Never throws on ordinary data. */
-export function renderMissionCard(input: MissionCardInput): MissionCard {
+function composeLines(input: MissionCardInput, excerptBudget: number | null): string[] {
   const lines: string[] = [];
 
   const project = projectLine(input);
@@ -179,7 +185,7 @@ export function renderMissionCard(input: MissionCardInput): MissionCard {
   const handle = clean(input.authorHandle, 64);
   if (handle) lines.push(`Post by @${handle.replace(/^@/, "")}`);
 
-  const excerpt = clean(input.contentText, EXCERPT_MAX);
+  const excerpt = excerptBudget === null ? null : clean(input.contentText, excerptBudget);
   if (excerpt) {
     lines.push("");
     lines.push(excerpt);
@@ -200,7 +206,31 @@ export function renderMissionCard(input: MissionCardInput): MissionCard {
     lines.push(NO_CAUSATION_CAVEAT);
   }
 
-  const text = lines.join("\n").slice(0, TELEGRAM_TEXT_MAX);
+  return lines;
+}
+
+/**
+ * Deterministic, length-safe card. Never throws on ordinary data.
+ *
+ * Length safety is progressive so the mandatory identity, status, caveat and
+ * metric lines always survive: the excerpt is first shortened to the remaining
+ * budget, then dropped entirely, and only then is the result hard-clamped.
+ */
+export function renderMissionCard(input: MissionCardInput): MissionCard {
+  const limit =
+    typeof input.maxLength === "number" && Number.isFinite(input.maxLength) && input.maxLength > 0
+      ? Math.min(Math.floor(input.maxLength), TELEGRAM_TEXT_MAX)
+      : TELEGRAM_TEXT_MAX;
+
+  let body = composeLines(input, EXCERPT_MAX).join("\n");
+  if (body.length > limit) {
+    // Reserve the exact space the non-excerpt structure needs, then refit.
+    const withoutExcerpt = composeLines(input, null).join("\n");
+    const room = limit - withoutExcerpt.length - 2; // two newlines around the excerpt
+    body = room >= 24 ? composeLines(input, room).join("\n") : withoutExcerpt;
+  }
+
+  const text = body.slice(0, limit);
 
   const replyMarkup = isHttpUrl(input.canonicalUrl)
     ? { inline_keyboard: [[{ text: buttonLabel(input.platform), url: input.canonicalUrl.trim() }]] }

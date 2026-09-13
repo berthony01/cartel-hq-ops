@@ -23,11 +23,29 @@ import { createClient } from "@supabase/supabase-js";
 
 const TG_BASE = "https://api.telegram.org";
 const TELEGRAM_TIMEOUT_MS = 10_000;
+const TELEGRAM_UPLOAD_TIMEOUT_MS = 20_000;
 const TELEGRAM_TEXT_LIMIT = 4096;
+
+/**
+ * SE-3.3 branded identity transport.
+ *
+ * The private workspace asset bucket is fixed server-side. A logo is only ever
+ * resolved profile -> media_assets inside the SAME workspace, downloaded with
+ * the service-role storage client, and attached as binary bytes. No signed URL,
+ * no public URL and no asset identifier ever reaches the browser, and the
+ * browser can never supply a media path, asset id or transport kind.
+ */
+const WORKSPACE_ASSET_BUCKET = "workspace-assets";
+const LOGO_ASSET_TYPE = "logo";
+const LOGO_ALLOWED_MIME = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+const LOGO_MAX_BYTES = 5_000_000;
+
+type TransportKind = "TEXT" | "PHOTO";
 
 import {
   renderMissionCard,
   EMPTY_METRICS,
+  TELEGRAM_CAPTION_MAX,
   type CanonicalMetrics,
   type MissionCardPlatform,
   type MissionCardStatus,
@@ -67,14 +85,21 @@ type TelegramOutcome =
   | { kind: "rejected"; description: string; code: number }
   | { kind: "uncertain"; description: string };
 
-async function callTelegram(token: string, method: string, body: Json): Promise<TelegramOutcome> {
+async function callTelegram(
+  token: string,
+  method: string,
+  body: Json | FormData,
+  timeoutMs: number = TELEGRAM_TIMEOUT_MS,
+): Promise<TelegramOutcome> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TELEGRAM_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const multipart = body instanceof FormData;
   try {
     const response = await fetch(`${TG_BASE}/bot${token}/${method}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      // multipart/form-data sets its own boundary header; JSON keeps the old one.
+      ...(multipart ? {} : { headers: { "Content-Type": "application/json" } }),
+      body: multipart ? body : JSON.stringify(body),
       signal: controller.signal,
     });
 
@@ -176,10 +201,70 @@ function cardStatus(missionStatus: string): MissionCardStatus | null {
   return null; // DRAFT (or anything unknown) is never rendered.
 }
 
+/**
+ * SE-3.3 — canonical project logo resolution.
+ *
+ * Strictly workspace-bound: the profile is loaded by workspace, and the asset
+ * is loaded by (asset id AND the SAME workspace id AND asset_type 'logo'), so a
+ * cross-workspace `logo_asset_id` can never resolve to another project's asset.
+ * Any miss, wrong mime, empty path, oversize object or download failure simply
+ * yields null, which the caller treats as "send the plain text card" — never as
+ * a send failure. This runs BEFORE the transport claim, so a fallback to TEXT
+ * is always a pre-Telegram decision.
+ */
+async function resolveProjectLogo(
+  admin: ReturnType<typeof createClient>,
+  workspaceId: string,
+): Promise<{ bytes: Uint8Array; mimeType: string; fileName: string } | null> {
+  try {
+    const { data: profile } = await admin
+      .from("project_profiles")
+      .select("workspace_id, logo_asset_id")
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    const logoAssetId = profile ? ((profile as LoadedRow)["logo_asset_id"] as string | null) : null;
+    if (!logoAssetId) return null;
+
+    const { data: asset } = await admin
+      .from("media_assets")
+      .select("id, workspace_id, asset_type, storage_path, mime_type")
+      .eq("id", logoAssetId)
+      .eq("workspace_id", workspaceId)
+      .eq("asset_type", LOGO_ASSET_TYPE)
+      .maybeSingle();
+    if (!asset) return null;
+
+    const a = asset as LoadedRow;
+    // Defence in depth: never trust the join alone.
+    if (a["workspace_id"] !== workspaceId) return null;
+
+    const storagePath = typeof a["storage_path"] === "string" ? a["storage_path"].trim() : "";
+    if (!storagePath) return null;
+
+    const mimeType = typeof a["mime_type"] === "string" ? a["mime_type"].toLowerCase() : "";
+    if (!LOGO_ALLOWED_MIME.includes(mimeType)) return null;
+
+    const { data: blob, error: downloadError } = await admin.storage
+      .from(WORKSPACE_ASSET_BUCKET)
+      .download(storagePath);
+    if (downloadError || !blob) return null;
+
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    if (bytes.byteLength === 0 || bytes.byteLength > LOGO_MAX_BYTES) return null;
+
+    const extension = mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
+    return { bytes, mimeType, fileName: `logo.${extension}` };
+  } catch {
+    // A logo problem is never a transport failure.
+    return null;
+  }
+}
+
 async function renderAuthoritativeCard(
   admin: ReturnType<typeof createClient>,
   workspaceId: string,
   mission: LoadedRow,
+  transportKind: TransportKind,
 ): Promise<{ text: string; replyMarkup: unknown } | { error: string }> {
   const status = cardStatus(String(mission["status"] ?? ""));
   if (!status) return { error: "This mission is not in a sendable state." };
@@ -220,9 +305,13 @@ async function renderAuthoritativeCard(
     ticker: profile ? ((profile as LoadedRow)["ticker"] as string | null) ?? null : null,
     baseline: metricsFrom(mission, "baseline_"),
     latest: snapshot ? metricsFrom(snapshot as LoadedRow, "") : null,
+    // A photo caption is hard-limited by Telegram; the renderer refits instead
+    // of risking a rejected transport.
+    maxLength: transportKind === "PHOTO" ? TELEGRAM_CAPTION_MAX : TELEGRAM_TEXT_LIMIT,
   });
 
-  if (!card.text.trim() || card.text.length > TELEGRAM_TEXT_LIMIT) {
+  const limit = transportKind === "PHOTO" ? TELEGRAM_CAPTION_MAX : TELEGRAM_TEXT_LIMIT;
+  if (!card.text.trim() || card.text.length > limit) {
     return { error: "The mission card could not be rendered safely." };
   }
   return { text: card.text, replyMarkup: card.replyMarkup };
@@ -417,17 +506,27 @@ async function handleSend(args: {
     );
   }
 
-  // 3b. Render authoritatively, then durably claim the intent BEFORE transport.
-  const rendered = await renderAuthoritativeCard(admin, workspaceId, mission);
+  // 3b. Resolve the branded identity BEFORE anything is claimed or sent. A
+  // missing or unusable logo is a normal outcome: it simply selects the plain
+  // text transport. This is the ONLY point at which TEXT fallback is allowed.
+  const logo = await resolveProjectLogo(admin, workspaceId);
+  const desiredTransportKind: TransportKind = logo ? "PHOTO" : "TEXT";
+
+  // 3c. Render authoritatively, then durably claim the intent BEFORE transport.
+  const rendered = await renderAuthoritativeCard(admin, workspaceId, mission, desiredTransportKind);
   if ("error" in rendered) return fail(rendered.error, 409);
 
   // Compare-and-set. The claim must return exactly one row: a zero-row update
   // reports no error, and treating that as success would let a second
   // concurrent request continue to Telegram and duplicate the send.
+  //
+  // transport_kind is claimed together with the send intent so that even an
+  // ambiguous outcome durably remembers which Telegram edit method applies.
   const { data: claimedRow, error: claimError } = await admin
     .from("social_mission_targets")
     .update({
       delivery_state: "SENDING",
+      transport_kind: desiredTransportKind,
       send_client_request_id: clientRequestId,
       send_text_intent: rendered.text,
       telegram_message_id: null,
@@ -462,13 +561,26 @@ async function handleSend(args: {
     return json({ deliveryState: nextState, message: verified.message }, verified.definite ? 409 : 202);
   }
 
-  // 3d. Exactly ONE sendMessage transport call.
-  const outcome = await callTelegram(botToken, "sendMessage", {
-    chat_id: chatId,
-    text: rendered.text,
-    disable_web_page_preview: true,
-    ...(rendered.replyMarkup ? { reply_markup: rendered.replyMarkup } : {}),
-  });
+  // 3e. Exactly ONE transport call. A branded target sends one sendPhoto with
+  // the logo bytes as multipart body and the card as caption; a plain target
+  // sends one sendMessage. There is no companion message and, once a call has
+  // been attempted, no text retry: a rejection or ambiguity is recorded as-is.
+  let outcome: TelegramOutcome;
+  if (logo) {
+    const form = new FormData();
+    form.append("chat_id", String(chatId));
+    form.append("caption", rendered.text);
+    if (rendered.replyMarkup) form.append("reply_markup", JSON.stringify(rendered.replyMarkup));
+    form.append("photo", new Blob([logo.bytes as BlobPart], { type: logo.mimeType }), logo.fileName);
+    outcome = await callTelegram(botToken, "sendPhoto", form, TELEGRAM_UPLOAD_TIMEOUT_MS);
+  } else {
+    outcome = await callTelegram(botToken, "sendMessage", {
+      chat_id: chatId,
+      text: rendered.text,
+      disable_web_page_preview: true,
+      ...(rendered.replyMarkup ? { reply_markup: rendered.replyMarkup } : {}),
+    });
+  }
 
   if (outcome.kind === "ok") {
     const messageId = (outcome.result as { message_id?: unknown }).message_id;
@@ -580,7 +692,12 @@ async function handleEdit(args: {
     return fail("Stale or conflicting edit revision.", 409, { editState, editRevision: currentRevision });
   }
 
-  const rendered = await renderAuthoritativeCard(admin, workspaceId, mission);
+  // The Telegram edit method is decided by the DURABLE transport kind recorded
+  // when the message was claimed and sent. Historical rows default to TEXT, so
+  // pre-SE-3.3 messages keep using editMessageText. There is no probing.
+  const transportKind: TransportKind = t["transport_kind"] === "PHOTO" ? "PHOTO" : "TEXT";
+
+  const rendered = await renderAuthoritativeCard(admin, workspaceId, mission, transportKind);
   if ("error" in rendered) return fail(rendered.error, 409);
 
   // Compare-and-set on revision + edit state. A zero-row update returns no
@@ -620,14 +737,24 @@ async function handleEdit(args: {
     return json({ editState: nextState, message: verified.message }, verified.definite ? 409 : 202);
   }
 
-  // Exactly ONE editMessageText call. There is no replacement-send fallback.
-  const outcome = await callTelegram(botToken, "editMessageText", {
-    chat_id: chatId,
-    message_id: messageId,
-    text: rendered.text,
-    disable_web_page_preview: true,
-    ...(rendered.replyMarkup ? { reply_markup: rendered.replyMarkup } : {}),
-  });
+  // Exactly ONE edit call on the SAME message: editMessageCaption for a branded
+  // photo card, editMessageText for a text card. Never both, never a probe of
+  // one followed by the other, and never a replacement send.
+  const outcome =
+    transportKind === "PHOTO"
+      ? await callTelegram(botToken, "editMessageCaption", {
+          chat_id: chatId,
+          message_id: messageId,
+          caption: rendered.text,
+          ...(rendered.replyMarkup ? { reply_markup: rendered.replyMarkup } : {}),
+        })
+      : await callTelegram(botToken, "editMessageText", {
+          chat_id: chatId,
+          message_id: messageId,
+          text: rendered.text,
+          disable_web_page_preview: true,
+          ...(rendered.replyMarkup ? { reply_markup: rendered.replyMarkup } : {}),
+        });
 
   const confirmed =
     outcome.kind === "ok" || (outcome.kind === "rejected" && isNotModified(outcome.description));

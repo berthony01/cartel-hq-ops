@@ -2107,6 +2107,7 @@ export type Database = {
           sent_at: string | null
           telegram_chat_id: number
           telegram_message_id: number | null
+          transport_kind: string
           updated_at: string
           workspace_id: string
         }
@@ -2129,6 +2130,7 @@ export type Database = {
           sent_at?: string | null
           telegram_chat_id: number
           telegram_message_id?: number | null
+          transport_kind?: string
           updated_at?: string
           workspace_id: string
         }
@@ -2151,6 +2153,7 @@ export type Database = {
           sent_at?: string | null
           telegram_chat_id?: number
           telegram_message_id?: number | null
+          transport_kind?: string
           updated_at?: string
           workspace_id?: string
         }
