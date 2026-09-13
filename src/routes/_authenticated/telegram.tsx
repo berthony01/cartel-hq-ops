@@ -67,10 +67,14 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 type TelegramSearch = { tab?: TabKey; launch?: string; conversation?: string };
 
 function validateTelegramSearch(search: Record<string, unknown>): TelegramSearch {
-  const rawTab = search["tab"];
-  const tab = (TAB_KEYS as readonly string[]).includes(String(rawTab))
-    ? (String(rawTab) as TabKey)
-    : undefined;
+  const rawTab = String(search["tab"] ?? "");
+  const aliased = LEGACY_TAB_ALIASES[rawTab];
+  const tab = aliased
+    ? aliased
+    : (TAB_KEYS as readonly string[]).includes(rawTab)
+      ? (rawTab as TabKey)
+      : undefined;
+
   const rawLaunch = search["launch"];
   const launch =
     typeof rawLaunch === "string" && rawLaunch.trim().length > 0 && rawLaunch.length <= 100
