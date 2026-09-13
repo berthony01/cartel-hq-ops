@@ -545,13 +545,12 @@ export function SocialMissionTestControl() {
                 />
               ) : null}
 
-              <div className="flex min-w-0 flex-wrap gap-2">
+              <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
                 <Button
                   type="button"
-                  variant="secondary"
                   disabled={!canUpdate}
                   onClick={() => setUpdateConfirmOpen(true)}
-                  className="min-w-0"
+                  className="min-w-0 h-11 w-full px-5 text-sm font-semibold sm:w-auto"
                 >
                   {updating ? (
                     <Loader2 className="size-4 animate-spin" aria-hidden="true" />
