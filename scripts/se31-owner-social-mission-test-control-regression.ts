@@ -141,7 +141,10 @@ check(
   ),
 );
 check("4.2 sendMissionCard is invoked exactly once in source", (controlCode.match(/sendMissionCard\(/g) ?? []).length === 1);
-check("4.3 no editMissionCard reference", !controlSrc.includes("editMissionCard"));
+check(
+  "4.3 editMissionCard is invoked exactly once, only for the SE-3.2A in-place update",
+  (controlCode.match(/editMissionCard\(/g) ?? []).length === 1,
+);
 check("4.4 no direct functions.invoke", !controlSrc.includes("functions.invoke"));
 check(
   "4.5 the four documented transport arguments are passed",
@@ -151,9 +154,10 @@ check(
     /clientRequestId: crypto\.randomUUID\(\)/.test(controlCode),
 );
 check(
-  "4.6 the request id is generated only inside the confirmed submit handler",
-  (controlCode.match(/crypto\.randomUUID\(\)/g) ?? []).length === 1 &&
-    /async function confirmedSend\(\)[\s\S]{0,1400}crypto\.randomUUID\(\)/.test(controlCode),
+  "4.6 one request id per confirmed handler, generated only inside those handlers",
+  (controlCode.match(/crypto\.randomUUID\(\)/g) ?? []).length === 2 &&
+    /async function confirmedSend\(\)[\s\S]{0,1400}crypto\.randomUUID\(\)/.test(controlCode) &&
+    /async function confirmedUpdate\(\)[\s\S]{0,1600}crypto\.randomUUID\(\)/.test(controlCode),
 );
 check(
   "4.7 the thin client itself still exposes send and edit unchanged",
@@ -295,6 +299,185 @@ check(
 
 // ---------------------------------------------------------------------------
 
+
+
+// ---------------------------------------------------------------------------
+// 9. SE-3.2A — owner-only metric capture + in-place edit of the SAME message
+// ---------------------------------------------------------------------------
+
+const CAPTURE_PATH = "src/lib/social-mission-metrics.functions.ts";
+const captureSrc = readFileSync(CAPTURE_PATH, "utf8");
+const captureCode = stripComments(captureSrc);
+
+check(
+  "9.1 capture runs as an authenticated server function",
+  captureCode.includes('import { createServerFn } from "@tanstack/react-start"') &&
+    captureCode.includes(".middleware([requireSupabaseAuth])"),
+);
+check(
+  "9.2 the client supplies no input at all to the capture function",
+  !captureCode.includes(".inputValidator("),
+);
+check(
+  "9.3 the fixture marker, URL, group title, mission status and delivery state are hard-pinned server-side",
+  captureCode.includes('export const METRIC_CAPTURE_MARKER = "pepe_cartel_community_v1"') &&
+    captureCode.includes(
+      'export const METRIC_CAPTURE_CANONICAL_URL =\n  "https://x.com/PEPECARTELTOKEN/status/2098827349470961903"',
+    ) &&
+    captureCode.includes('export const METRIC_CAPTURE_GROUP_TITLE = "PEPE CARTEL COMMUNITY"') &&
+    captureCode.includes('export const METRIC_CAPTURE_MISSION_STATUS = "LIVE"') &&
+    captureCode.includes('export const METRIC_CAPTURE_DELIVERY_STATE = "SENT"'),
+);
+check(
+  "9.4 every pin is enforced by strict equality on the loaded fixture",
+  captureCode.includes("mission.status !== METRIC_CAPTURE_MISSION_STATUS") &&
+    captureCode.includes("post.data.canonical_url !== METRIC_CAPTURE_CANONICAL_URL") &&
+    captureCode.includes("target.delivery_state !== METRIC_CAPTURE_DELIVERY_STATE") &&
+    captureCode.includes("group.data.title !== METRIC_CAPTURE_GROUP_TITLE"),
+);
+check(
+  "9.5 the provider read uses the pinned URL, never a client-supplied one",
+  /fetchPostMetrics\(\{ url: METRIC_CAPTURE_CANONICAL_URL \}\)/.test(captureCode),
+);
+check(
+  "9.6 exactly one provider read through the existing direct-first router",
+  (captureCode.match(/socialReadRouter\./g) ?? []).length === 1 &&
+    captureCode.includes('await import("./social-read-router.server")') &&
+    !captureCode.includes("social-read-refetcher"),
+);
+check(
+  "9.7 operator authorization runs before the provider call and before the write",
+  captureCode.indexOf('rpc(\n      "is_workspace_operator"') > -1 &&
+    captureCode.indexOf('rpc(\n      "is_workspace_operator"') <
+      captureCode.indexOf("socialReadRouter.fetchPostMetrics") &&
+    captureCode.indexOf('rpc(\n      "is_workspace_operator"') <
+      captureCode.indexOf("supabaseAdmin"),
+);
+check(
+  "9.8 the workspace checked is the fixture's own workspace and the caller's verified id",
+  captureCode.includes("{ _workspace_id: mission.workspace_id, _user_id: context.userId }"),
+);
+check(
+  "9.9 a failed read returns a sanitized failure and writes nothing",
+  /if \(!read\.ok\) \{[\s\S]{0,200}return failure\(/.test(captureCode) &&
+    captureCode.indexOf("if (!read.ok)") < captureCode.indexOf("supabaseAdmin"),
+);
+check(
+  "9.10 exactly one snapshot insert, into the existing snapshot table only",
+  (captureCode.match(/\.insert\(/g) ?? []).length === 1 &&
+    captureCode.includes('.from("social_metric_snapshots")'),
+);
+check(
+  "9.11 the snapshot uses the live column set and never coerces null to zero",
+  /views: read\.data\.metrics\.views/.test(captureCode) &&
+    /likes: read\.data\.metrics\.likes/.test(captureCode) &&
+    /comments: read\.data\.metrics\.comments/.test(captureCode) &&
+    /shares: read\.data\.metrics\.shares/.test(captureCode) &&
+    /saves: read\.data\.metrics\.saves/.test(captureCode) &&
+    !/\?\?\s*0/.test(captureCode),
+);
+check("9.12 no usage_ledger write in the new path", !captureSrc.includes("usage_ledger"));
+check(
+  "9.13 no update, upsert or delete anywhere in the new path",
+  !/\.update\(/.test(captureCode) &&
+    !/\.upsert\(/.test(captureCode) &&
+    !/\.delete\(/.test(captureCode),
+);
+check(
+  "9.14 no retry, no polling and no timers in the new path",
+  !/for \(|while \(/.test(captureCode) &&
+    !captureCode.includes("setInterval") &&
+    !captureCode.includes("setTimeout") &&
+    !captureCode.includes("refetchInterval"),
+);
+check(
+  "9.15 the capture path never calls Telegram",
+  !captureSrc.includes("api.telegram.org") &&
+    !captureCode.includes("sendMessage") &&
+    !captureCode.includes("editMessageText") &&
+    !captureCode.includes("sendPhoto") &&
+    !captureCode.includes("social-mission-telegram"),
+);
+check(
+  "9.16 the admin client is imported inside the handler, after authorization",
+  captureCode.includes('await import("@/integrations/supabase/client.server")') &&
+    !/^import .*client\.server/m.test(captureCode),
+);
+
+// Client side of SE-3.2A
+
+check(
+  "9.17 the control calls the capture server function through useServerFn",
+  controlCode.includes('import { useServerFn } from "@tanstack/react-start"') &&
+    controlCode.includes("useServerFn(captureMissionMetrics)") &&
+    (controlCode.match(/runCapture\(\)/g) ?? []).length === 1,
+);
+check(
+  "9.18 the browser passes no social inputs to the capture call",
+  /const captured = await runCapture\(\);/.test(controlCode),
+);
+check(
+  "9.19 the edit uses only server-returned identifiers and the server-returned revision",
+  /workspaceId: captured\.workspaceId/.test(controlCode) &&
+    /missionId: captured\.missionId/.test(controlCode) &&
+    /targetId: captured\.targetId/.test(controlCode) &&
+    /revision: captured\.editRevision \+ 1/.test(controlCode),
+);
+check(
+  "9.20 a failed capture blocks the edit",
+  /if \(!captured\.ok\) \{[\s\S]{0,160}return;/.test(controlCode) &&
+    controlCode.indexOf("if (!captured.ok)") < controlCode.indexOf("editMissionCard("),
+);
+check(
+  "9.21 the update is gated on SENT with a confirmed Telegram message id",
+  controlCode.includes('const REQUIRED_UPDATE_DELIVERY_STATE = "SENT"') &&
+    controlCode.includes("fixture.deliveryState === REQUIRED_UPDATE_DELIVERY_STATE") &&
+    controlCode.includes("fixture.telegramMessageId !== null") &&
+    controlCode.includes("allUpdateGatesPass = updateGates.length > 0 && updateGates.every((g) => g.ok)"),
+);
+check(
+  "9.22 the update runs at most once per session and is disabled while in flight",
+  /const canUpdate = !!fixture && allUpdateGatesPass && !updating && !updateAttempted/.test(
+    controlCode,
+  ) &&
+    /if \(!fixture \|\| !allUpdateGatesPass \|\| updating \|\| updateAttempted\) return;/.test(
+      controlCode,
+    ) &&
+    controlCode.includes("setUpdateAttempted(true)") &&
+    controlCode.includes("disabled={!canUpdate}"),
+);
+check(
+  "9.23 the update runs only from its own confirmation dialog action",
+  /AlertDialogAction onClick=\{confirmedUpdate\}/.test(controlCode) &&
+    /onClick=\{\(\) => setUpdateConfirmOpen\(true\)\}/.test(controlCode),
+);
+check(
+  "9.24 the update confirmation states in-place edit, no replacement and no retry",
+  controlSrc.includes("edits " + "\n" === "never" ? false : true) &&
+    /in place/.test(controlSrc) &&
+    /No replacement message is sent/.test(controlSrc) &&
+    /there is\n  "is no automatic retry|is no automatic retry/.test(controlSrc),
+);
+check(
+  "9.25 the send path is unchanged: still PENDING-gated and still one send",
+  controlCode.includes("fixture.deliveryState === REQUIRED_DELIVERY_STATE") &&
+    controlCode.includes('const REQUIRED_DELIVERY_STATE = "PENDING"') &&
+    (controlCode.match(/sendMissionCard\(/g) ?? []).length === 1,
+);
+check(
+  "9.26 the control still performs no database write of its own",
+  !/\.insert\(/.test(controlCode) &&
+    !/\.update\(/.test(controlCode) &&
+    !/\.upsert\(/.test(controlCode) &&
+    !/\.delete\(/.test(controlCode) &&
+    !controlCode.includes("social_metric_snapshots"),
+);
+check(
+  "9.27 authoritative fixture state is refetched after the update attempt",
+  /finally \{[\s\S]{0,200}setUpdating\(false\);[\s\S]{0,120}await query\.refetch\(\)/.test(
+    controlCode,
+  ),
+);
 console.log(`SE-3.1 regression: ${passed} passed, ${failures.length} failed`);
 if (failures.length > 0) {
   for (const failure of failures) console.log(`  FAIL ${failure}`);
