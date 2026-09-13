@@ -229,6 +229,34 @@ async function renderAuthoritativeCard(
 }
 
 // --------------------------------------------------------------------------
+// Durable state persistence.
+//
+// Supabase returns no error when an UPDATE matches ZERO rows. Every state write
+// therefore returns the affected row and is only treated as persisted when
+// exactly one row comes back. A write that cannot be proven is never reported
+// to the caller as a durable terminal state.
+// --------------------------------------------------------------------------
+
+async function updateTargetState(
+  admin: ReturnType<typeof createClient>,
+  targetId: string,
+  workspaceId: string,
+  patch: Record<string, unknown>,
+): Promise<boolean> {
+  const { data, error } = await admin
+    .from("social_mission_targets")
+    .update(patch)
+    .eq("id", targetId)
+    .eq("workspace_id", workspaceId)
+    .select("id")
+    .maybeSingle();
+  return !error && !!data;
+}
+
+const UNRESOLVED_SEND = "The send could not be resolved; this target is left unresolved and will not be retried.";
+const UNRESOLVED_EDIT = "The edit could not be resolved; this target is left unresolved and will not be retried.";
+
+// --------------------------------------------------------------------------
 // Entry point
 // --------------------------------------------------------------------------
 
@@ -393,7 +421,10 @@ async function handleSend(args: {
   const rendered = await renderAuthoritativeCard(admin, workspaceId, mission);
   if ("error" in rendered) return fail(rendered.error, 409);
 
-  const { error: claimError } = await admin
+  // Compare-and-set. The claim must return exactly one row: a zero-row update
+  // reports no error, and treating that as success would let a second
+  // concurrent request continue to Telegram and duplicate the send.
+  const { data: claimedRow, error: claimError } = await admin
     .from("social_mission_targets")
     .update({
       delivery_state: "SENDING",
@@ -406,8 +437,12 @@ async function handleSend(args: {
     })
     .eq("id", targetId)
     .eq("workspace_id", workspaceId)
-    .eq("delivery_state", state);
-  if (claimError) {
+    .eq("delivery_state", state)
+    .select("id")
+    .maybeSingle();
+  if (claimError || !claimedRow) {
+    // Not claimed: another request owns this target. Stop before verification
+    // and before Telegram. No retry.
     return fail("Could not claim this target for sending.", 409);
   }
 
@@ -415,11 +450,15 @@ async function handleSend(args: {
   const verified = await verifyGroup(botToken, chatId);
   if (!verified.ok) {
     const nextState = verified.definite ? "FAILED" : "AMBIGUOUS";
-    await admin
-      .from("social_mission_targets")
-      .update({ delivery_state: nextState, last_error: verified.message.slice(0, 1000) })
-      .eq("id", targetId)
-      .eq("workspace_id", workspaceId);
+    const persisted = await updateTargetState(admin, targetId, workspaceId, {
+      delivery_state: nextState,
+      last_error: verified.message.slice(0, 1000),
+    });
+    if (!persisted) {
+      // The durable SENDING claim remains and keeps blocking fresh sends. That
+      // is safer than advertising a terminal state we could not record.
+      return json({ deliveryState: "AMBIGUOUS", message: UNRESOLVED_SEND }, 202);
+    }
     return json({ deliveryState: nextState, message: verified.message }, verified.definite ? 409 : 202);
   }
 
@@ -434,28 +473,29 @@ async function handleSend(args: {
   if (outcome.kind === "ok") {
     const messageId = (outcome.result as { message_id?: unknown }).message_id;
     if (typeof messageId !== "number") {
-      await admin
-        .from("social_mission_targets")
-        .update({ delivery_state: "AMBIGUOUS", last_error: "Telegram did not confirm a message id." })
-        .eq("id", targetId)
-        .eq("workspace_id", workspaceId);
-      return json({ deliveryState: "AMBIGUOUS", message: "Telegram did not confirm a message id." }, 202);
+      const persisted = await updateTargetState(admin, targetId, workspaceId, {
+        delivery_state: "AMBIGUOUS",
+        last_error: "Telegram did not confirm a message id.",
+      });
+      return json(
+        {
+          deliveryState: "AMBIGUOUS",
+          message: persisted ? "Telegram did not confirm a message id." : UNRESOLVED_SEND,
+        },
+        202,
+      );
     }
 
     const sentAt = new Date().toISOString();
-    const { error: finalizeError } = await admin
-      .from("social_mission_targets")
-      .update({
-        delivery_state: "SENT",
-        telegram_message_id: messageId,
-        sent_at: sentAt,
-        message_text_snapshot: rendered.text,
-        last_error: null,
-      })
-      .eq("id", targetId)
-      .eq("workspace_id", workspaceId);
+    const finalized = await updateTargetState(admin, targetId, workspaceId, {
+      delivery_state: "SENT",
+      telegram_message_id: messageId,
+      sent_at: sentAt,
+      message_text_snapshot: rendered.text,
+      last_error: null,
+    });
 
-    if (finalizeError) {
+    if (!finalized) {
       // Message exists but the durable row could not be finalized. The row keeps
       // its SENDING claim, so no attempt can ever resend it. No second call.
       return json(
@@ -470,20 +510,21 @@ async function handleSend(args: {
   }
 
   if (outcome.kind === "rejected") {
-    await admin
-      .from("social_mission_targets")
-      .update({ delivery_state: "FAILED", last_error: outcome.description.slice(0, 1000) })
-      .eq("id", targetId)
-      .eq("workspace_id", workspaceId);
+    const persisted = await updateTargetState(admin, targetId, workspaceId, {
+      delivery_state: "FAILED",
+      last_error: outcome.description.slice(0, 1000),
+    });
+    if (!persisted) {
+      return json({ deliveryState: "AMBIGUOUS", message: UNRESOLVED_SEND }, 202);
+    }
     return json({ deliveryState: "FAILED", message: outcome.description }, 409);
   }
 
-  await admin
-    .from("social_mission_targets")
-    .update({ delivery_state: "AMBIGUOUS", last_error: outcome.description.slice(0, 1000) })
-    .eq("id", targetId)
-    .eq("workspace_id", workspaceId);
-  return json({ deliveryState: "AMBIGUOUS", message: outcome.description }, 202);
+  const persisted = await updateTargetState(admin, targetId, workspaceId, {
+    delivery_state: "AMBIGUOUS",
+    last_error: outcome.description.slice(0, 1000),
+  });
+  return json({ deliveryState: "AMBIGUOUS", message: persisted ? outcome.description : UNRESOLVED_SEND }, 202);
 }
 
 // --------------------------------------------------------------------------
@@ -542,7 +583,9 @@ async function handleEdit(args: {
   const rendered = await renderAuthoritativeCard(admin, workspaceId, mission);
   if ("error" in rendered) return fail(rendered.error, 409);
 
-  const { error: claimError } = await admin
+  // Compare-and-set on revision + edit state. A zero-row update returns no
+  // error, so the claim must return exactly one row before any transport.
+  const { data: claimedRow, error: claimError } = await admin
     .from("social_mission_targets")
     .update({
       edit_state: "EDITING",
@@ -555,17 +598,25 @@ async function handleEdit(args: {
     .eq("id", targetId)
     .eq("workspace_id", workspaceId)
     .eq("edit_revision", currentRevision)
-    .eq("edit_state", editState);
-  if (claimError) return fail("Could not claim this target for editing.", 409);
+    .eq("edit_state", editState)
+    .select("id")
+    .maybeSingle();
+  if (claimError || !claimedRow) {
+    // Not claimed: stop before verification and before Telegram. No retry.
+    return fail("Could not claim this target for editing.", 409);
+  }
 
   const verified = await verifyGroup(botToken, chatId);
   if (!verified.ok) {
     const nextState = verified.definite ? "FAILED" : "AMBIGUOUS";
-    await admin
-      .from("social_mission_targets")
-      .update({ edit_state: nextState, edit_last_error: verified.message.slice(0, 1000) })
-      .eq("id", targetId)
-      .eq("workspace_id", workspaceId);
+    const persisted = await updateTargetState(admin, targetId, workspaceId, {
+      edit_state: nextState,
+      edit_last_error: verified.message.slice(0, 1000),
+    });
+    if (!persisted) {
+      // The EDITING claim remains and blocks future revisions.
+      return json({ editState: "AMBIGUOUS", message: UNRESOLVED_EDIT }, 202);
+    }
     return json({ editState: nextState, message: verified.message }, verified.definite ? 409 : 202);
   }
 
@@ -583,17 +634,13 @@ async function handleEdit(args: {
 
   if (confirmed) {
     const editedAt = new Date().toISOString();
-    const { error: finalizeError } = await admin
-      .from("social_mission_targets")
-      .update({
-        edit_state: "EDITED",
-        message_text_snapshot: rendered.text,
-        edit_last_error: null,
-        last_edit_at: editedAt,
-      })
-      .eq("id", targetId)
-      .eq("workspace_id", workspaceId);
-    if (finalizeError) {
+    const finalized = await updateTargetState(admin, targetId, workspaceId, {
+      edit_state: "EDITED",
+      message_text_snapshot: rendered.text,
+      edit_last_error: null,
+      last_edit_at: editedAt,
+    });
+    if (!finalized) {
       // Row stays EDITING: future revisions are blocked, and nothing is resent.
       return json(
         { editState: "AMBIGUOUS", message: "The edit was applied but its state could not be recorded." },
@@ -605,18 +652,19 @@ async function handleEdit(args: {
 
   if (outcome.kind === "rejected") {
     // Definite rejection: confirmed snapshot is untouched, no replacement sent.
-    await admin
-      .from("social_mission_targets")
-      .update({ edit_state: "FAILED", edit_last_error: outcome.description.slice(0, 1000) })
-      .eq("id", targetId)
-      .eq("workspace_id", workspaceId);
+    const persisted = await updateTargetState(admin, targetId, workspaceId, {
+      edit_state: "FAILED",
+      edit_last_error: outcome.description.slice(0, 1000),
+    });
+    if (!persisted) {
+      return json({ editState: "AMBIGUOUS", message: UNRESOLVED_EDIT }, 202);
+    }
     return json({ editState: "FAILED", message: outcome.description }, 409);
   }
 
-  await admin
-    .from("social_mission_targets")
-    .update({ edit_state: "AMBIGUOUS", edit_last_error: outcome.description.slice(0, 1000) })
-    .eq("id", targetId)
-    .eq("workspace_id", workspaceId);
-  return json({ editState: "AMBIGUOUS", message: outcome.description }, 202);
+  const persisted = await updateTargetState(admin, targetId, workspaceId, {
+    edit_state: "AMBIGUOUS",
+    edit_last_error: outcome.description.slice(0, 1000),
+  });
+  return json({ editState: "AMBIGUOUS", message: persisted ? outcome.description : UNRESOLVED_EDIT }, 202);
 }
