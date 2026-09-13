@@ -421,6 +421,23 @@ check(
 );
 check("12.5 card rendered server-side only", !clientSrc.includes("renderMissionCard"));
 check("12.6 no operator free text accepted", !indexSrc.includes('body["text"]') && !indexSrc.includes('body["message"]'));
+check(
+  "12.7 snapshot select uses authoritative column names (views/likes/comments/shares/saves)",
+  indexSrc.includes('.select("views, likes, comments, shares, saves, observed_at")'),
+);
+check(
+  "12.8 snapshot mapping does not use the discarded metric_ prefix",
+  indexSrc.includes('metricsFrom(snapshot as LoadedRow, "")') &&
+    !indexSrc.includes('metricsFrom(snapshot as LoadedRow, "metric_")'),
+);
+check(
+  "12.9 metric_views etc. cannot be silently reintroduced",
+  !indexSrc.includes("metric_views") &&
+    !indexSrc.includes("metric_likes") &&
+    !indexSrc.includes("metric_comments") &&
+    !indexSrc.includes("metric_shares") &&
+    !indexSrc.includes("metric_saves"),
+);
 
 // ---------------------------------------------------------------------------
 // 13. Pre-deploy concurrency + durability hardening
