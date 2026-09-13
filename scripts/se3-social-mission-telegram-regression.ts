@@ -692,7 +692,7 @@ check("14.46 function applies the caption budget for PHOTO", indexSrc.includes('
 const captionCard = renderMissionCard({ ...liveInput, contentText: "y".repeat(4000), maxLength: 1024 });
 check("14.47 caption fits the Telegram caption limit", captionCard.text.length <= 1024);
 check("14.48 caption keeps project identity", captionCard.text.includes("PEPE CARTEL") && captionCard.text.includes("$PCART"));
-check("14.49 caption keeps the participation line", captionCard.text.includes("Read the update and add your perspective."));
+check("14.49 caption keeps the participation block", captionCard.text.includes(LIVE_ACTION_LINE));
 check("14.50 caption keeps metrics", captionCard.text.includes("Views: 180 (+80)"));
 
 const tightCaption = renderMissionCard({ ...liveInput, contentText: "z".repeat(4000), maxLength: 200 });
