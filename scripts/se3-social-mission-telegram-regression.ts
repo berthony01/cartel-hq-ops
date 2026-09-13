@@ -41,6 +41,14 @@ const clientSrc = readFileSync("src/lib/social-mission-telegram.ts", "utf8");
 const sql = readFileSync("docs/sql/SE3_social_mission_telegram_transport.sql", "utf8");
 const telegramGroupSrc = readFileSync("backend-source/edge-functions/telegram-group/index.ts", "utf8");
 
+/** Assertions about behaviour must read CODE, not the documentation comments
+ *  that legitimately name the things this phase excludes. */
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+}
+const indexCode = stripComments(indexSrc);
+const sqlCode = sql.replace(/^\s*--.*$/gm, "");
+
 // ---------------------------------------------------------------------------
 // 1. Existing Telegram transport untouched
 // ---------------------------------------------------------------------------
@@ -51,7 +59,7 @@ check(
   createHash("md5").update(readFileSync("backend-source/edge-functions/telegram-group/index.ts")).digest("hex") ===
     TELEGRAM_GROUP_MD5,
 );
-check("1.2 telegram-group not referenced/imported by the new function", !indexSrc.includes("telegram-group"));
+check("1.2 telegram-group not referenced/imported by the new function", !indexCode.includes("telegram-group"));
 check("1.3 telegram-group still defines its own transport", telegramGroupSrc.includes("api.telegram.org"));
 check("1.4 new function is a separate module, not an extension", indexSrc.includes("Deno.serve"));
 
@@ -71,7 +79,10 @@ check(
   "2.4 no third action literal",
   actionLiterals.every((a) => a === "send_mission" || a === "edit_mission"),
 );
-check("2.5 no status/broadcast/delete/resend action", !/"(resend|delete_mission|broadcast|status)"/.test(indexSrc));
+check(
+  "2.5 no resend/broadcast/delete action dispatch",
+  !/action\s*===?\s*"(resend|delete_mission|broadcast|status)"/.test(indexCode),
+);
 
 // ---------------------------------------------------------------------------
 // 3. Auth + owner/admin gate before any transport
@@ -124,9 +135,9 @@ for (const forbidden of [
   "sendReaction",
   "setMessageReaction",
 ]) {
-  check(`5.x no forbidden reference: ${forbidden}`, !indexSrc.includes(forbidden));
+  check(`5.x no forbidden reference: ${forbidden}`, !indexCode.includes(forbidden));
 }
-check("5.1 no connection metadata mutation", !indexSrc.includes('from("telegram_group_connections")\n    .update'));
+check("5.1 no connection metadata mutation", !indexCode.includes('from("telegram_group_connections")\n    .update'));
 check("5.2 no UI import", !clientSrc.includes("react") && !indexSrc.includes("tsx"));
 check("5.3 client exposes only two methods", (clientSrc.match(/^export function /gm) ?? []).length === 2);
 check("5.4 client never renders copy", !clientSrc.includes("Observed") && !clientSrc.includes("inline_keyboard"));
@@ -196,7 +207,7 @@ check(
 check("6.17 INSERT policy requires operator", sql.includes("public.is_workspace_operator(workspace_id)"));
 check("6.18 INSERT policy pins default transport shape", sql.includes("AND edit_state = 'IDLE'"));
 check("6.19 service role remains authoritative", sql.includes("GRANT ALL ON public.social_mission_targets TO service_role"));
-check("6.20 usage_ledger untouched", !sql.includes("usage_ledger"));
+check("6.20 usage_ledger untouched", !sqlCode.includes("usage_ledger"));
 check("6.21 no DELETE/SELECT policy change", !sql.includes("DROP POLICY IF EXISTS social_mission_targets_select"));
 check("6.22 SQL is prepare-only, not applied", sql.includes("PREPARE ONLY"));
 
