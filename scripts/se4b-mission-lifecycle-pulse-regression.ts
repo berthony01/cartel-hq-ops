@@ -166,7 +166,7 @@ check("7.4 no cleanup job table is recreated", !/CREATE TABLE[^;]*telegram_messa
 // ---------------------------------------------------------------------------
 
 check("8.1 the Vault secret is created only when missing", /IF NOT EXISTS \(SELECT 1 FROM vault\.secrets WHERE name = 'social_mission_scheduler_secret'\)/.test(sqlCode));
-check("8.2 the secret value is generated inside the database", /vault\.create_secret\(\s*\n\s*encode\(gen_random_bytes\(32\), 'hex'\)/.test(sqlCode));
+check("8.2 the secret value is generated inside the database", /vault\.create_secret\(\s*\n\s*encode\(extensions\.gen_random_bytes\(32\), 'hex'\)/.test(sqlCode));
 check("8.3 no literal secret value is embedded", !/social_mission_scheduler_secret'\s*,\s*'[A-Za-z0-9+/=]{16,}'/.test(sqlCode));
 check("8.4 the secret-match RPC reads vault.decrypted_secrets", /FUNCTION public\.social_mission_scheduler_secret_matches\(p_secret text\)/.test(sqlCode) && /FROM vault\.decrypted_secrets/.test(sqlCode));
 check("8.5 the secret-match RPC is not callable by the browser", /REVOKE ALL ON FUNCTION public\.social_mission_scheduler_secret_matches\(text\)\s*\n\s*FROM PUBLIC, anon, authenticated/.test(sqlCode));
@@ -299,7 +299,8 @@ check("13.24 a rejected pulse is finalized FAILED, never reposted", /outcome\.ki
 check("13.25 the pulse URL validator is narrow and pure", /export function isCanonicalXStatusUrl/.test(runnerCode) && /url\.username \|\| url\.password \|\| url\.port/.test(runnerCode));
 check("13.26 the pulse URL validator pins the exact X hosts", /PULSE_X_HOSTS = \["x\.com", "www\.x\.com", "twitter\.com", "www\.twitter\.com", "mobile\.twitter\.com"\]/.test(runnerCode));
 check("13.27 the pulse URL validator requires handle/status/numeric-id", /segments\.length !== 3/.test(runnerCode) && /!== "status"/.test(runnerCode) && /\^\[0-9\]\{1,32\}\$/.test(runnerCode));
-check("13.28 the pulse URL validator makes no network call", !/isCanonicalXStatusUrl[\s\S]{0,900}fetch\(/.test(runnerCode));
+const validatorBody = runnerCode.match(/export function isCanonicalXStatusUrl[\s\S]*?\n}\n/)?.[0] ?? "";
+check("13.28 the pulse URL validator makes no network call", validatorBody.length > 0 && !/fetch\(|await /.test(validatorBody));
 
 // pure behaviour of the mirrored validator
 const PULSE_X_HOSTS = ["x.com", "www.x.com", "twitter.com", "www.twitter.com", "mobile.twitter.com"];
