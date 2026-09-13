@@ -98,17 +98,17 @@ export const Route = createFileRoute("/_authenticated/telegram")({
   validateSearch: validateTelegramSearch,
   head: () => ({
     meta: [
-      { title: "Community Command — CARTEL HQ" },
+      { title: "Community Command Center — CARTEL HQ" },
       {
         name: "description",
         content:
-          "Operator control center for connected Telegram communities. Manage onboarding, Sticker Drops, sticker sends, and connection health from one place.",
+          "Workspace-scoped community operations hub: Telegram communities, Social Missions, broadcasts, the member Inbox and Launch Watch in one place.",
       },
-      { property: "og:title", content: "Community Command — CARTEL HQ" },
+      { property: "og:title", content: "Community Command Center — CARTEL HQ" },
       {
         property: "og:description",
         content:
-          "Operator control center for Telegram communities, onboarding, Sticker Drops, sticker sends, and connection health.",
+          "One hub for Telegram community health, Social Missions, broadcasts, member Inbox and Launch Watch.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -121,12 +121,14 @@ export const Route = createFileRoute("/_authenticated/telegram")({
 
 const TABS: Array<{ value: TabKey; label: string; shortLabel: string }> = [
   { value: "overview", label: "Overview", shortLabel: "Overview" },
-  { value: "broadcasts", label: "Broadcasts", shortLabel: "Broadcasts" },
-  { value: "audience", label: "Audience", shortLabel: "Audience" },
+  { value: "communities", label: "Telegram", shortLabel: "Telegram" },
+  { value: "missions", label: "Missions", shortLabel: "Missions" },
+  { value: "broadcasts", label: "Broadcasts", shortLabel: "Broadcast" },
   { value: "inbox", label: "Inbox", shortLabel: "Inbox" },
-  { value: "communities", label: "Communities", shortLabel: "Communities" },
-  { value: "history", label: "History", shortLabel: "History" },
+  { value: "audience", label: "Launch Watch", shortLabel: "Watch" },
+  { value: "analytics", label: "Analytics", shortLabel: "Stats" },
 ];
+
 
 /**
  * Shell placeholder for a Community Command capability that is not built yet.
