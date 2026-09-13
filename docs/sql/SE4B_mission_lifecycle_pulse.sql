@@ -645,7 +645,7 @@ DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM vault.secrets WHERE name = 'social_mission_scheduler_secret') THEN
     PERFORM vault.create_secret(
-      encode(gen_random_bytes(32), 'hex'),
+      encode(extensions.gen_random_bytes(32), 'hex'),
       'social_mission_scheduler_secret',
       'Shared secret for the social-mission-runner cron invocation.'
     );
