@@ -109,7 +109,9 @@ check(
   "2.7 the /mission branch runs before the unknown-slash no-op",
   webhookCode.indexOf("runMissionCommand({") < webhookCode.indexOf('if (text.startsWith("/")) return json({ ok: true });'),
 );
-check("2.8 no /mission latest|refresh|close in this phase", !/\/mission\s+(latest|refresh|close)/i.test(webhookSrc));
+// SE-4B re-pin: `/mission close` is now a frozen Phase 1B command. The
+// boundary assertion still forbids the commands that remain out of scope.
+check("2.8 no /mission latest|refresh in this phase", !/\/mission\s+(latest|refresh)/i.test(webhookSrc));
 
 // ---------------------------------------------------------------------------
 // 3. Authorization chain in the webhook
@@ -186,7 +188,15 @@ check("5.28 the migration is prepared only, never applied here", sql.includes("P
 // ---------------------------------------------------------------------------
 
 check("6.1 internal source constant is the webhook", transportCode.includes('const INTERNAL_SOURCE = "telegram-webhook"'));
-check("6.2 internal path requires BOTH the service bearer and the source header", transportCode.includes("internalSource === INTERNAL_SOURCE && bearerToken === serviceKey"));
+// SE-4B re-pin: the single-source equality became an exact two-source
+// allowlist. The security property asserted is unchanged: an internal
+// caller needs BOTH an allowlisted source header AND the service bearer.
+check(
+  "6.2 internal path requires BOTH the service bearer and an allowlisted source header",
+  transportCode.includes("INTERNAL_SOURCES.includes(internalSource) && bearerToken === serviceKey")
+    && !/isInternalCaller = INTERNAL_SOURCES\.includes\(internalSource\);/.test(transportCode)
+    && !/isInternalCaller = true/.test(transportCode),
+);
 check("6.3 internal path requires a UUID actor header", transportCode.includes('uuid(request.headers.get("X-Cartel-Actor-User-Id"))'));
 check("6.4 a missing internal actor is rejected", transportCode.includes("if (!internalActor) return fail(\"Authentication required.\", 401)"));
 check("6.5 the end-user JWT path is preserved", transportCode.includes("authClient.auth.getUser()") && transportCode.includes("actorUserId = user.id"));
@@ -196,7 +206,13 @@ check("6.8 JWT verification stays enabled", readFileSync("backend-source/edge-fu
 check("6.9 still exactly two actions", transportCode.includes('action !== "send_mission" && action !== "edit_mission"'));
 check("6.10 authoritative row binding checks are untouched", transportCode.includes('.from("telegram_group_connections")') && transportCode.includes("The Telegram community connection for this target no longer matches."));
 check("6.11 the service key is never returned or logged by the transport", !/console\.log\([^)]*serviceKey/.test(transportCode) && !/json\(\{[^}]*serviceKey/.test(transportCode));
-check("6.12 no second transport endpoint was created", (webhookCode.match(/functions\/v1\/social-mission-telegram/g) ?? []).length === 1);
+// SE-4B re-pin: launch and close both reuse the SAME transport endpoint.
+// The assertion now proves endpoint UNIQUENESS rather than call count.
+check(
+  "6.12 no alternate social-mission transport endpoint was created",
+  new Set((webhookCode.match(/functions\/v1\/[a-z0-9-]+/g) ?? []).filter((path) => path.includes("social-mission"))).size === 1
+    && (webhookCode.match(/functions\/v1\/social-mission-telegram/g) ?? []).length >= 1,
+);
 
 // ---------------------------------------------------------------------------
 // 7. Delivery reuse, determinism, no retries

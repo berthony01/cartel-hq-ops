@@ -60,16 +60,52 @@ it is still null, so re-activation is a safe no-op.
 | `finish_social_mission_schedule_event(...)` | Narrow finalizer: only `CLAIMED` → `SENT`/`FAILED`/`AMBIGUOUS`. `AMBIGUOUS` is terminal. |
 | `close_social_mission_from_telegram(chat_id, user_id)` | Re-authorizes chat binding, linked account and workspace operator; completes at most one LIVE mission for that exact community; cancels pending pulses; returns the single completion event. |
 
+### Concurrency and terminal states
+
+`claim_due_social_mission_schedule_events` returns only the event ids that the
+calling invocation itself claimed, collected from the `RETURNING` clause of its
+own claiming updates. Ownership is never inferred from a timestamp window, so
+two overlapping runner invocations can never process the same pulse or
+completion. A stale `CLAIMED` completion may be reclaimed after five minutes
+solely because the downstream edit is idempotent by the SAME stored
+`client_request_id`; no event is created and no request id is rewritten.
+
+`/mission close` never reopens a terminal event. Outcomes:
+
+| Completion event state | Close outcome |
+| --- | --- |
+| missing | created `PENDING`, then claimed |
+| `PENDING` | claimed |
+| `SENT` | `ALREADY_COMPLETED` (already synced) |
+| `CLAIMED` | `UNRESOLVED` — another worker holds it; no state change, no retry |
+| `FAILED`, `AMBIGUOUS`, `CANCELLED` | `COMPLETED_UNSYNCED` — terminal; no state change, no retry |
+
+Manual close is attributed to the **current** authorized closer, who just passed
+both the Cartel HQ operator check and the live Telegram administrator check.
+Automatic completion continues to use `mission.created_by` and fails closed if
+that account no longer qualifies.
+
+After its single edit attempt, the manual close finalizes its own completion
+event exactly once (`EDITED` → `SENT`, explicit `FAILED` → `FAILED`, anything
+else → `AMBIGUOUS`), so the runner never picks it up again. If the finalizer
+itself fails, the mission stays closed, nothing is retried and nothing is
+replaced; the admin gets a sync diagnostic.
+
 ## Pulse
 
 `sendMessage` only, replying to the canonical card's `message_id`, with a single
-`OPEN ON X` button built from the authoritative `social_posts.canonical_url`.
+`OPEN ON X` button built from the authoritative `social_posts.canonical_url`,
+which must pass a narrow pure validator for canonical X/Twitter status links —
+an invalid URL simply means no button. The pulse is always a reply to the
+canonical card and never falls back to a standalone message: if that card is
+gone, Telegram rejects the send and the event is finalized `FAILED`.
 Never `sendPhoto`, never a resend of the branded card, no metrics, no quotas,
 points, rewards or mandatory engagement. A confirmed pulse is queued into the
 existing `telegram_message_cleanup_jobs` table with
 `cleanup_kind = 'social_mission_pulse'` and `delete_after = sent_at + 120s`; the
-existing cleanup worker is unmodified and only its `cleanup_kind` CHECK was
-widened. Because that worker runs once per minute, a pulse disappears roughly
+existing cleanup worker is unmodified; only the exact live constraint
+`telegram_message_cleanup_jobs_cleanup_kind_check` is dropped and replaced with
+a widened `..._ck` allowing both kinds (rerunnable, no other CHECK touched). Because that worker runs once per minute, a pulse disappears roughly
 120–180 seconds after it is posted.
 
 Pulses are never retried. An ambiguous send is recorded `AMBIGUOUS`, a definite

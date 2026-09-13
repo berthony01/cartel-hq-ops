@@ -166,7 +166,7 @@ check("7.4 no cleanup job table is recreated", !/CREATE TABLE[^;]*telegram_messa
 // ---------------------------------------------------------------------------
 
 check("8.1 the Vault secret is created only when missing", /IF NOT EXISTS \(SELECT 1 FROM vault\.secrets WHERE name = 'social_mission_scheduler_secret'\)/.test(sqlCode));
-check("8.2 the secret value is generated inside the database", /vault\.create_secret\(\s*\n\s*encode\(gen_random_bytes\(32\), 'hex'\)/.test(sqlCode));
+check("8.2 the secret value is generated inside the database", /vault\.create_secret\(\s*\n\s*encode\(extensions\.gen_random_bytes\(32\), 'hex'\)/.test(sqlCode));
 check("8.3 no literal secret value is embedded", !/social_mission_scheduler_secret'\s*,\s*'[A-Za-z0-9+/=]{16,}'/.test(sqlCode));
 check("8.4 the secret-match RPC reads vault.decrypted_secrets", /FUNCTION public\.social_mission_scheduler_secret_matches\(p_secret text\)/.test(sqlCode) && /FROM vault\.decrypted_secrets/.test(sqlCode));
 check("8.5 the secret-match RPC is not callable by the browser", /REVOKE ALL ON FUNCTION public\.social_mission_scheduler_secret_matches\(text\)\s*\n\s*FROM PUBLIC, anon, authenticated/.test(sqlCode));
@@ -188,7 +188,7 @@ check("9.6 the runner never calls sendPhoto", !runnerCode.includes("sendPhoto"))
 check("9.7 the runner never calls editMessageCaption or editMessageText directly", !runnerCode.includes("editMessageCaption") && !runnerCode.includes("editMessageText"));
 check("9.8 the pulse replies to the canonical mission card", /reply_to_message_id: event\.telegram_message_id/.test(runnerCode));
 check("9.9 the pulse carries an OPEN ON X button from the authoritative canonical URL", runnerCode.includes('text: "OPEN ON X"') && /pulseKeyboard\(event\.canonical_url\)/.test(runnerCode));
-check("9.10 the OPEN ON X button is omitted when the URL is not https", (await import("node:util"), true) && /isHttpsUrl\(canonicalUrl\)/.test(runnerCode));
+check("9.10 the OPEN ON X button is omitted when the URL is not a canonical X status link", /isCanonicalXStatusUrl\(canonicalUrl\)/.test(runnerCode));
 check("9.11 the pulse cleanup job uses the new cleanup kind", /cleanup_kind: "social_mission_pulse"/.test(runnerCode));
 check("9.12 the pulse lifetime is 120 seconds", /PULSE_LIFETIME_SECONDS = 120/.test(runnerCode) && /PULSE_LIFETIME_SECONDS \* 1000/.test(runnerCode));
 check("9.13 a pulse with no durable cleanup is deleted immediately", /cleanupError[\s\S]{0,200}"deleteMessage"/.test(runnerCode));
@@ -216,7 +216,8 @@ check("9.29 the runner rejects non-POST calls", /request\.method !== "POST"/.tes
 check("10.1 the webhook internal source constant is preserved", transportCode.includes('const INTERNAL_SOURCE = "telegram-webhook"'));
 check("10.2 the runner internal source constant is added", transportCode.includes('const INTERNAL_SOURCE_RUNNER = "social-mission-runner"'));
 check("10.3 the allowlist contains exactly those two callers", /INTERNAL_SOURCES: readonly string\[\] = \[INTERNAL_SOURCE, INTERNAL_SOURCE_RUNNER\]/.test(transportCode));
-check("10.4 every internal caller still needs the exact service bearer", (transportCode.match(/bearerToken === serviceKey/g) ?? []).length >= 2 && !/isInternalCaller = true/.test(transportCode));
+check("10.3b the internal check is a single exact allowlist expression", transportCode.includes("const isInternalCaller = INTERNAL_SOURCES.includes(internalSource) && bearerToken === serviceKey;"));
+check("10.4 every internal caller still needs the exact service bearer", (transportCode.match(/bearerToken === serviceKey/g) ?? []).length >= 1 && !/isInternalCaller = true/.test(transportCode));
 check("10.5 the internal actor must still be a UUID", /uuid\(request\.headers\.get\("X-Cartel-Actor-User-Id"\)\)/.test(transportCode));
 check("10.6 the JWT path is unchanged", transportCode.includes("const authClient = createClient(supabaseUrl, anonKey"));
 check("10.7 the owner/admin membership gate is still applied to every caller", /workspace_members/.test(transportCode));
@@ -259,6 +260,79 @@ check("12.4 no contributor recognition, points or billing in this phase", !/cont
 check("12.5 no polling of X or provider metrics is introduced", !/social_metric_snapshots/.test(runnerCode + sqlCode));
 check("12.6 the documentation exists and states the DB-first completion rule", docSrc.includes("COMPLETED") && /database[- ]first/i.test(docSrc));
 check("12.7 the documentation records that the SQL is prepare-only", /prepare[- ]only/i.test(docSrc) && /PREPARE ONLY/i.test(sql));
+
+// ---------------------------------------------------------------------------
+// 13. SE-4B hardening pass
+// ---------------------------------------------------------------------------
+
+// 13.1-13.5 invocation-scoped claims
+check("13.1 claim ownership is accumulated in a local array", /v_claimed uuid\[\] := ARRAY\[\]::uuid\[\]/.test(sqlCode));
+check("13.2 both claiming UPDATEs RETURN their own ids", (sqlCode.match(/claimed AS \(\s*\n\s*UPDATE public\.social_mission_schedule_events e[\s\S]{0,300}RETURNING e\.id\s*\n\s*\)/g) ?? []).length === 2);
+check("13.3 the claimed ids are aggregated into the invocation batch", (sqlCode.match(/SELECT COALESCE\(array_agg\(claimed\.id\), ARRAY\[\]::uuid\[\]\) INTO v_batch FROM claimed;/g) ?? []).length === 2 && (sqlCode.match(/v_claimed := v_claimed \|\| v_batch;/g) ?? []).length === 2);
+check("13.4 only this invocation's own claims are returned", /WHERE e\.id = ANY\(v_claimed\)/.test(sqlCode));
+check("13.5 ownership is never inferred from a timestamp window", !/claimed_at >= now\(\) - interval '30 seconds'/.test(sqlCode) && !/claimed_at >= now\(\)/.test(sqlCode));
+check("13.6 SKIP LOCKED is preserved on both claim queries", (sqlCode.match(/FOR UPDATE SKIP LOCKED/g) ?? []).length === 2);
+check("13.7 an empty batch returns no rows", /IF array_length\(v_claimed, 1\) IS NULL THEN\s*\n\s*RETURN;/.test(sqlCode));
+check("13.8 reclaiming a stale completion never rewrites client_request_id", !/SET[^;]*client_request_id\s*=/.test(sqlCode));
+check("13.9 the claim never inserts a schedule event", !/claim_due_social_mission_schedule_events[\s\S]*?INSERT INTO public\.social_mission_schedule_events[\s\S]*?finish_social_mission_schedule_event/.test(sqlCode));
+
+// 13.10-13.16 close terminal-state safety and actor
+check("13.10 a CLAIMED completion returns UNRESOLVED without a state change", /IF v_event\.state = 'CLAIMED' THEN[\s\S]{0,400}'outcome', 'UNRESOLVED'/.test(sqlCode));
+check("13.11 FAILED, AMBIGUOUS and CANCELLED are terminal for close", /IF v_event\.state IN \('FAILED', 'AMBIGUOUS', 'CANCELLED'\) THEN[\s\S]{0,400}'outcome', 'COMPLETED_UNSYNCED'/.test(sqlCode));
+check("13.12 only a PENDING completion event may be claimed by close", /IF v_event\.state <> 'PENDING' THEN/.test(sqlCode) && /WHERE id = v_event\.id\s*\n\s*AND state = 'PENDING';/.test(sqlCode));
+check("13.13 close never unconditionally reopens an event", !/WHERE id = v_event\.id;/.test(sqlCode));
+check("13.14 manual close is attributed to the current authorized closer", /'actor_user_id', v_actor_user_id/.test(sqlCode) && !/'actor_user_id', COALESCE\(v_mission\.created_by/.test(sqlCode));
+check("13.15 automatic completion still uses mission.created_by", /m\.created_by,/.test(sqlCode) && /"X-Cartel-Actor-User-Id": event\.mission_created_by/.test(runnerCode));
+check("13.16 the runner fails closed when created_by is missing", /!event\.mission_created_by[\s\S]{0,200}_state: "FAILED"/.test(runnerCode));
+
+// 13.17-13.22 manual-close finalizer
+check("13.17 close returns the event id", /'event_id', v_event\.id/.test(sqlCode));
+check("13.18 the webhook close result carries event_id", /event_id\?: string;/.test(webhookCode));
+check("13.19 the webhook finalizes its own completion event exactly once", (webhookCode.match(/finish_social_mission_schedule_event/g) ?? []).length === 1);
+check("13.20 EDITED maps to SENT, FAILED to FAILED, everything else to AMBIGUOUS", /closeEditState === "EDITED" \? "SENT" : closeEditState === "FAILED" \? "FAILED" : "AMBIGUOUS"/.test(webhookCode));
+check("13.21 a finalizer failure never triggers a second Telegram attempt", (webhookCode.match(/action: "edit_mission"/g) ?? []).length === 1 && /finalizedOk[\s\S]{0,400}delivery record could not be saved/.test(webhookCode));
+check("13.22 the webhook handles UNRESOLVED and COMPLETED_UNSYNCED without retrying", webhookCode.includes('closeResult.outcome === "UNRESOLVED"') && webhookCode.includes('closeResult.outcome === "COMPLETED_UNSYNCED"'));
+
+// 13.23-13.28 pulse hardening
+check("13.23 a pulse never falls back to a non-reply message", !runnerCode.includes("allow_sending_without_reply"));
+check("13.24 a rejected pulse is finalized FAILED, never reposted", /outcome\.kind === "rejected"[\s\S]{0,200}_state: "FAILED"/.test(runnerCode));
+check("13.25 the pulse URL validator is narrow and pure", /export function isCanonicalXStatusUrl/.test(runnerCode) && /url\.username \|\| url\.password \|\| url\.port/.test(runnerCode));
+check("13.26 the pulse URL validator pins the exact X hosts", /PULSE_X_HOSTS = \["x\.com", "www\.x\.com", "twitter\.com", "www\.twitter\.com", "mobile\.twitter\.com"\]/.test(runnerCode));
+check("13.27 the pulse URL validator requires handle/status/numeric-id", /segments\.length !== 3/.test(runnerCode) && /!== "status"/.test(runnerCode) && /\^\[0-9\]\{1,32\}\$/.test(runnerCode));
+const validatorBody = runnerCode.match(/export function isCanonicalXStatusUrl[\s\S]*?\n}\n/)?.[0] ?? "";
+check("13.28 the pulse URL validator makes no network call", validatorBody.length > 0 && !/fetch\(|await /.test(validatorBody));
+
+// pure behaviour of the mirrored validator
+const PULSE_X_HOSTS = ["x.com", "www.x.com", "twitter.com", "www.twitter.com", "mobile.twitter.com"];
+function isCanonicalXStatusUrl(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const raw = value.trim();
+  if (!raw || raw.length > 2048) return false;
+  let url: URL;
+  try { url = new URL(raw); } catch { return false; }
+  if (url.protocol !== "https:") return false;
+  if (url.username || url.password || url.port) return false;
+  if (!PULSE_X_HOSTS.includes(url.hostname.toLowerCase())) return false;
+  const segments = url.pathname.split("/").filter((segment) => segment.length > 0);
+  if (segments.length !== 3) return false;
+  const handle = String(segments[0]).toLowerCase();
+  if (!/^[a-z0-9_]{1,15}$/.test(handle) || handle === "i") return false;
+  if (String(segments[1]).toLowerCase() !== "status") return false;
+  return /^[0-9]{1,32}$/.test(String(segments[2]));
+}
+check("13.29 a canonical X status URL is accepted", isCanonicalXStatusUrl("https://x.com/pepecarteltoken/status/2098827349470961903"));
+check("13.30 an arbitrary https URL is refused", !isCanonicalXStatusUrl("https://evil.com/anything"));
+check("13.31 an X profile URL without a status is refused", !isCanonicalXStatusUrl("https://x.com/pepecarteltoken"));
+check("13.32 a lookalike host is refused", !isCanonicalXStatusUrl("https://x.com.evil.com/a/status/1"));
+check("13.33 credentials and ports are refused", !isCanonicalXStatusUrl("https://u:p@x.com/a/status/1") && !isCanonicalXStatusUrl("https://x.com:8443/a/status/1"));
+check("13.34 http is refused", !isCanonicalXStatusUrl("http://x.com/a/status/1"));
+check("13.35 a non-numeric status id is refused", !isCanonicalXStatusUrl("https://x.com/a/status/abc"));
+
+// 13.36-13.39 SQL precision
+check("13.36 only the exact live cleanup constraint is dropped", /DROP CONSTRAINT IF EXISTS telegram_message_cleanup_jobs_cleanup_kind_check;/.test(sqlCode));
+check("13.37 the widened constraint drop makes the migration rerunnable", /DROP CONSTRAINT IF EXISTS telegram_message_cleanup_jobs_cleanup_kind_ck;/.test(sqlCode));
+check("13.38 no loop drops arbitrary cleanup_kind checks", !/pg_get_constraintdef\(oid\) ILIKE '%cleanup_kind%'/.test(sqlCode));
+check("13.39 random bytes are schema-qualified to extensions", /extensions\.gen_random_bytes\(32\)/.test(sqlCode) && !/[^.]\bgen_random_bytes\(32\)/.test(sqlCode.replace(/extensions\.gen_random_bytes\(32\)/g, "")));
 
 // ---------------------------------------------------------------------------
 

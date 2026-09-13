@@ -386,9 +386,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
   const bearerToken = authHeader.slice("Bearer ".length).trim();
 
   const internalSource = request.headers.get("X-Cartel-Internal-Source") ?? "";
-  const isInternalCaller =
-    (internalSource === INTERNAL_SOURCE && bearerToken === serviceKey) ||
-    (INTERNAL_SOURCES.includes(internalSource) && bearerToken === serviceKey);
+  const isInternalCaller = INTERNAL_SOURCES.includes(internalSource) && bearerToken === serviceKey;
 
   let actorUserId: string;
   if (isInternalCaller) {

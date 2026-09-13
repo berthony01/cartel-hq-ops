@@ -137,21 +137,17 @@ CREATE POLICY social_mission_schedule_events_select_member
 -- ---------------------------------------------------------------------------
 -- 2. Cleanup-kind widening. Additive only: `launch_watch_cta` keeps working
 --    and the generic cleanup worker is untouched.
+--
+--    ONLY the exact live constraint `telegram_message_cleanup_jobs_cleanup_kind_check`
+--    is dropped. No other CHECK on this table is inspected or removed. The
+--    block is rerunnable: the widened constraint is dropped by its exact name
+--    first if a previous run already created it.
 -- ---------------------------------------------------------------------------
-DO $$
-DECLARE
-  v_name text;
-BEGIN
-  FOR v_name IN
-    SELECT conname FROM pg_constraint
-     WHERE conrelid = 'public.telegram_message_cleanup_jobs'::regclass
-       AND contype = 'c'
-       AND pg_get_constraintdef(oid) ILIKE '%cleanup_kind%'
-  LOOP
-    EXECUTE format('ALTER TABLE public.telegram_message_cleanup_jobs DROP CONSTRAINT %I', v_name);
-  END LOOP;
-END
-$$;
+ALTER TABLE public.telegram_message_cleanup_jobs
+  DROP CONSTRAINT IF EXISTS telegram_message_cleanup_jobs_cleanup_kind_check;
+
+ALTER TABLE public.telegram_message_cleanup_jobs
+  DROP CONSTRAINT IF EXISTS telegram_message_cleanup_jobs_cleanup_kind_ck;
 
 ALTER TABLE public.telegram_message_cleanup_jobs
   ADD CONSTRAINT telegram_message_cleanup_jobs_cleanup_kind_ck
@@ -300,6 +296,11 @@ AS $$
 DECLARE
   v_limit integer := LEAST(GREATEST(COALESCE(_limit, 25), 1), 200);
   v_stale timestamptz := now() - interval '5 minutes';
+  -- Ownership is established by the RETURNING clause of THIS invocation's own
+  -- claiming UPDATEs, never by a timestamp window. Two overlapping runners can
+  -- therefore never receive the same event.
+  v_claimed uuid[] := ARRAY[]::uuid[];
+  v_batch uuid[];
 BEGIN
   -- Maintenance: an unresolved pulse is retired, never retried.
   UPDATE public.social_mission_schedule_events e
@@ -311,7 +312,9 @@ BEGIN
      AND e.claimed_at IS NOT NULL
      AND e.claimed_at < v_stale;
 
-  -- COMPLETE: database-first completion.
+  -- COMPLETE: database-first completion. A stale CLAIMED completion may be
+  -- reclaimed ONLY because the downstream edit is idempotent by the SAME
+  -- stored client_request_id; no event is created and no request id changes.
   WITH due AS (
     SELECT e.id
       FROM public.social_mission_schedule_events e
@@ -345,11 +348,16 @@ BEGIN
        AND p.event_type = 'PULSE'
        AND p.state = 'PENDING'
      RETURNING p.id
+  ),
+  claimed AS (
+    UPDATE public.social_mission_schedule_events e
+       SET state = 'CLAIMED',
+           claimed_at = now()
+     WHERE e.id IN (SELECT id FROM due)
+     RETURNING e.id
   )
-  UPDATE public.social_mission_schedule_events e
-     SET state = 'CLAIMED',
-         claimed_at = now()
-   WHERE e.id IN (SELECT id FROM due);
+  SELECT COALESCE(array_agg(claimed.id), ARRAY[]::uuid[]) INTO v_batch FROM claimed;
+  v_claimed := v_claimed || v_batch;
 
   -- PULSE: only while the mission is genuinely still live.
   WITH due AS (
@@ -366,12 +374,22 @@ BEGIN
      ORDER BY e.due_at
      LIMIT v_limit
      FOR UPDATE SKIP LOCKED
+  ),
+  claimed AS (
+    UPDATE public.social_mission_schedule_events e
+       SET state = 'CLAIMED',
+           claimed_at = now()
+     WHERE e.id IN (SELECT id FROM due)
+     RETURNING e.id
   )
-  UPDATE public.social_mission_schedule_events e
-     SET state = 'CLAIMED',
-         claimed_at = now()
-   WHERE e.id IN (SELECT id FROM due);
+  SELECT COALESCE(array_agg(claimed.id), ARRAY[]::uuid[]) INTO v_batch FROM claimed;
+  v_claimed := v_claimed || v_batch;
 
+  IF array_length(v_claimed, 1) IS NULL THEN
+    RETURN;
+  END IF;
+
+  -- Only this invocation's own claims are returned.
   RETURN QUERY
   SELECT e.id,
          e.event_type,
@@ -390,11 +408,8 @@ BEGIN
     JOIN public.social_mission_targets t ON t.id = e.target_id
     JOIN public.social_missions m ON m.id = e.mission_id
     JOIN public.social_posts p ON p.id = m.social_post_id
-   WHERE e.state = 'CLAIMED'
-     AND e.claimed_at IS NOT NULL
-     AND e.claimed_at >= now() - interval '30 seconds'
-   ORDER BY e.due_at
-   LIMIT v_limit;
+   WHERE e.id = ANY(v_claimed)
+   ORDER BY e.due_at;
 END;
 $$;
 
@@ -536,7 +551,8 @@ BEGIN
      AND event_type = 'PULSE'
      AND state = 'PENDING';
 
-  -- Get-or-create the single COMPLETE event, then claim it. Never a second one.
+  -- Get-or-create the single COMPLETE event. Never a second one, and never a
+  -- reopening of a terminal state.
   INSERT INTO public.social_mission_schedule_events (
     workspace_id, mission_id, target_id, event_type, sequence_no, due_at
   )
@@ -550,6 +566,7 @@ BEGIN
    WHERE target_id = v_target.id AND event_type = 'COMPLETE' AND sequence_no = 1
    FOR UPDATE;
 
+  -- Already synced.
   IF v_event.state = 'SENT' THEN
     RETURN jsonb_build_object(
       'outcome', 'ALREADY_COMPLETED',
@@ -560,10 +577,40 @@ BEGIN
     );
   END IF;
 
+  -- Another worker holds this completion right now. Fail closed: no state
+  -- change, no second Telegram attempt.
+  IF v_event.state = 'CLAIMED' THEN
+    RETURN jsonb_build_object(
+      'outcome', 'UNRESOLVED',
+      'workspace_id', v_mission.workspace_id,
+      'mission_id', v_mission.id,
+      'target_id', v_target.id,
+      'event_state', v_event.state
+    );
+  END IF;
+
+  -- Terminal delivery-sync states are never reopened. The mission is closed in
+  -- the database; only its card could not be updated.
+  IF v_event.state IN ('FAILED', 'AMBIGUOUS', 'CANCELLED') THEN
+    RETURN jsonb_build_object(
+      'outcome', 'COMPLETED_UNSYNCED',
+      'workspace_id', v_mission.workspace_id,
+      'mission_id', v_mission.id,
+      'target_id', v_target.id,
+      'event_state', v_event.state
+    );
+  END IF;
+
+  -- Only a PENDING completion event may be claimed here.
+  IF v_event.state <> 'PENDING' THEN
+    RETURN jsonb_build_object('outcome', 'UNRESOLVED', 'event_state', v_event.state);
+  END IF;
+
   UPDATE public.social_mission_schedule_events
      SET state = 'CLAIMED',
          claimed_at = now()
-   WHERE id = v_event.id;
+   WHERE id = v_event.id
+     AND state = 'PENDING';
 
   RETURN jsonb_build_object(
     'outcome', 'CLOSED',
@@ -575,7 +622,10 @@ BEGIN
     'edit_revision', COALESCE(v_target.edit_revision, 0),
     'telegram_chat_id', v_target.telegram_chat_id,
     'telegram_message_id', v_target.telegram_message_id,
-    'actor_user_id', COALESCE(v_mission.created_by, v_actor_user_id)
+    -- Manual close is attributed to the CURRENT authorized closer, who just
+    -- passed both the Cartel HQ operator check and the live Telegram admin
+    -- check. The original creator is irrelevant here.
+    'actor_user_id', v_actor_user_id
   );
 END;
 $$;
@@ -595,7 +645,7 @@ DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM vault.secrets WHERE name = 'social_mission_scheduler_secret') THEN
     PERFORM vault.create_secret(
-      encode(gen_random_bytes(32), 'hex'),
+      encode(extensions.gen_random_bytes(32), 'hex'),
       'social_mission_scheduler_secret',
       'Shared secret for the social-mission-runner cron invocation.'
     );

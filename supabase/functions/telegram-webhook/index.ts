@@ -569,9 +569,11 @@ Deno.serve(async (req: Request) => {
         | {
           outcome?: string;
           reason?: string;
+          event_state?: string;
           workspace_id?: string;
           mission_id?: string;
           target_id?: string;
+          event_id?: string;
           client_request_id?: string;
           edit_revision?: number;
           actor_user_id?: string;
@@ -587,6 +589,17 @@ Deno.serve(async (req: Request) => {
       }
       if (closeResult.outcome === "ALREADY_COMPLETED") {
         await reply("This Social Mission is already closed.");
+        return;
+      }
+      if (closeResult.outcome === "UNRESOLVED") {
+        // Another worker holds this completion right now. Never a second edit.
+        await reply("This Social Mission is already being closed. Do not retry.");
+        return;
+      }
+      if (closeResult.outcome === "COMPLETED_UNSYNCED") {
+        // Terminal delivery-sync state: closed in Cartel HQ, card not updated.
+        // Never retried and never replaced.
+        await reply("This Social Mission is closed. Its mission card could not be updated in place; do not resend it.");
         return;
       }
       if (closeResult.outcome !== "CLOSED") {
@@ -631,8 +644,26 @@ Deno.serve(async (req: Request) => {
         closeTransport = null;
       }
 
-      if (String(closeTransport?.editState ?? "") === "EDITED") {
-        await reply("This Social Mission is closed. The mission card above has been updated.");
+      // The manual close finalizes its OWN completion event exactly once, so
+      // the runner never picks it up again five minutes later. A finalizer
+      // failure never triggers a second Telegram attempt, never sends a
+      // replacement and never reverts the completion already persisted.
+      const closeEditState = String(closeTransport?.editState ?? "");
+      const finalState = closeEditState === "EDITED" ? "SENT" : closeEditState === "FAILED" ? "FAILED" : "AMBIGUOUS";
+      const { data: finalized, error: finalizeError } = await admin.rpc("finish_social_mission_schedule_event", {
+        _event_id: closeResult.event_id,
+        _state: finalState,
+        _telegram_message_id: null,
+        _last_error: finalState === "SENT" ? null : "The manual close edit was not confirmed.",
+      });
+      const finalizedOk = !finalizeError && finalized === true;
+
+      if (closeEditState === "EDITED") {
+        await reply(
+          finalizedOk
+            ? "This Social Mission is closed. The mission card above has been updated."
+            : "This Social Mission is closed and its card was updated, but the delivery record could not be saved. Do not resend it.",
+        );
         return;
       }
       // Completion already persisted. Never resend, never revert.
