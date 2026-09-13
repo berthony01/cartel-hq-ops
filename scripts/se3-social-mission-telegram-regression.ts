@@ -583,7 +583,8 @@ check(
 );
 check("14.18 bucket never made public", !indexCode.includes("public: true") && !indexCode.includes("updateBucket"));
 check("14.19 logo failure returns null rather than throwing", logoBlock.includes("} catch {") && logoBlock.includes("return null"));
-check("14.20 no logo URL is placed in card copy", !cardSrc.includes("logo") && !cardSrc.includes("photo"));
+const cardCode = stripComments(cardSrc);
+check("14.20 no logo URL is placed in card copy", !cardCode.includes("logo") && !cardCode.includes("photo") && !cardCode.includes("http"));
 
 // 14c. Nothing media-related may come from the browser
 for (const browserInput of [
@@ -599,13 +600,22 @@ for (const browserInput of [
 ]) {
   check(`14.x browser cannot supply ${browserInput}`, !indexCode.includes(browserInput));
 }
-check("14.21 request body still only carries ids, action and revision", (indexSrc.match(/body\["/g) ?? []).length === 6);
+const bodyKeys = new Set((indexSrc.match(/body\["(\w+)"\]/g) ?? []).map((m) => m.slice(6, -2)));
+check(
+  "14.21 request body still only carries ids, action and revision",
+  [...bodyKeys].sort().join(",") === "action,clientRequestId,missionId,revision,targetId,workspaceId",
+);
 check(
   "14.22 client never mentions media, bucket, caption or transport kind",
-  !clientSrc.includes("transport") &&
-    !clientSrc.includes("caption") &&
-    !clientSrc.includes("workspace-assets") &&
-    !clientSrc.includes("asset"),
+  (() => {
+    const clientCode = stripComments(clientSrc);
+    return (
+      !clientCode.includes("transport") &&
+      !clientCode.includes("caption") &&
+      !clientCode.includes("workspace-assets") &&
+      !clientCode.includes("asset")
+    );
+  })(),
 );
 
 // 14d. Send path
