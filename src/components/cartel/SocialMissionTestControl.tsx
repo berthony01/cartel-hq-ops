@@ -588,6 +588,21 @@ export function SocialMissionTestControl() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={updateConfirmOpen} onOpenChange={setUpdateConfirmOpen}>
+        <AlertDialogContent className="max-w-[min(32rem,92vw)]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{UPDATE_CONFIRM_TITLE}</AlertDialogTitle>
+            <AlertDialogDescription className="[overflow-wrap:anywhere]">
+              {UPDATE_CONFIRM_BODY}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmedUpdate}>Update the same message</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Section>
   );
 }
