@@ -60,6 +60,37 @@ it is still null, so re-activation is a safe no-op.
 | `finish_social_mission_schedule_event(...)` | Narrow finalizer: only `CLAIMED` → `SENT`/`FAILED`/`AMBIGUOUS`. `AMBIGUOUS` is terminal. |
 | `close_social_mission_from_telegram(chat_id, user_id)` | Re-authorizes chat binding, linked account and workspace operator; completes at most one LIVE mission for that exact community; cancels pending pulses; returns the single completion event. |
 
+### Concurrency and terminal states
+
+`claim_due_social_mission_schedule_events` returns only the event ids that the
+calling invocation itself claimed, collected from the `RETURNING` clause of its
+own claiming updates. Ownership is never inferred from a timestamp window, so
+two overlapping runner invocations can never process the same pulse or
+completion. A stale `CLAIMED` completion may be reclaimed after five minutes
+solely because the downstream edit is idempotent by the SAME stored
+`client_request_id`; no event is created and no request id is rewritten.
+
+`/mission close` never reopens a terminal event. Outcomes:
+
+| Completion event state | Close outcome |
+| --- | --- |
+| missing | created `PENDING`, then claimed |
+| `PENDING` | claimed |
+| `SENT` | `ALREADY_COMPLETED` (already synced) |
+| `CLAIMED` | `UNRESOLVED` — another worker holds it; no state change, no retry |
+| `FAILED`, `AMBIGUOUS`, `CANCELLED` | `COMPLETED_UNSYNCED` — terminal; no state change, no retry |
+
+Manual close is attributed to the **current** authorized closer, who just passed
+both the Cartel HQ operator check and the live Telegram administrator check.
+Automatic completion continues to use `mission.created_by` and fails closed if
+that account no longer qualifies.
+
+After its single edit attempt, the manual close finalizes its own completion
+event exactly once (`EDITED` → `SENT`, explicit `FAILED` → `FAILED`, anything
+else → `AMBIGUOUS`), so the runner never picks it up again. If the finalizer
+itself fails, the mission stays closed, nothing is retried and nothing is
+replaced; the admin gets a sync diagnostic.
+
 ## Pulse
 
 `sendMessage` only, replying to the canonical card's `message_id`, with a single
