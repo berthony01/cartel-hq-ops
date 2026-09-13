@@ -416,6 +416,98 @@ check("12.5 card rendered server-side only", !clientSrc.includes("renderMissionC
 check("12.6 no operator free text accepted", !indexSrc.includes('body["text"]') && !indexSrc.includes('body["message"]'));
 
 // ---------------------------------------------------------------------------
+// 13. Pre-deploy concurrency + durability hardening
+// ---------------------------------------------------------------------------
+
+check(
+  "13.1 send claim returns the claimed row",
+  /delivery_state: "SENDING"[\s\S]{0,600}\.select\("id"\)\s*\n\s*\.maybeSingle\(\)/.test(sendBlock),
+);
+check(
+  "13.2 send claim treats zero rows as a conflict",
+  sendBlock.includes("claimError || !claimedRow"),
+);
+check(
+  "13.3 send stops before verification and Telegram when the claim returns no row",
+  sendBlock.indexOf("claimError || !claimedRow") < sendBlock.indexOf("verifyGroup") &&
+    sendBlock.indexOf("claimError || !claimedRow") < sendBlock.indexOf('"sendMessage"'),
+);
+check(
+  "13.4 send claim still compare-and-sets on the prior delivery state",
+  sendBlock.includes('.eq("delivery_state", state)'),
+);
+check(
+  "13.5 edit claim returns the claimed row",
+  /edit_state: "EDITING"[\s\S]{0,600}\.select\("id"\)\s*\n\s*\.maybeSingle\(\)/.test(editBlock),
+);
+check(
+  "13.6 edit claim treats zero rows as a conflict",
+  editBlock.includes("claimError || !claimedRow"),
+);
+check(
+  "13.7 edit stops before verification and Telegram when the claim returns no row",
+  editBlock.indexOf("claimError || !claimedRow") < editBlock.indexOf("verifyGroup") &&
+    editBlock.indexOf("claimError || !claimedRow") < editBlock.indexOf('"editMessageText"'),
+);
+check(
+  "13.8 edit claim still compare-and-sets on revision and edit state",
+  editBlock.includes('.eq("edit_revision", currentRevision)') && editBlock.includes('.eq("edit_state", editState)'),
+);
+
+check(
+  "13.9 a single confirmed-persistence helper exists",
+  indexSrc.includes("async function updateTargetState(") &&
+    /\.select\("id"\)\s*\n\s*\.maybeSingle\(\);\s*\n\s*return !error && !!data;/.test(indexSrc),
+);
+check(
+  "13.10 no state write ignores its result",
+  !/\n\s*await admin\s*\n\s*\.from\("social_mission_targets"\)/.test(indexSrc),
+);
+check(
+  "13.11 every post-claim state write goes through the confirmed helper",
+  (indexSrc.match(/await updateTargetState\(/g) ?? []).length === 8,
+);
+check(
+  "13.12 send post-claim writes are all confirmed",
+  (sendBlock.match(/await updateTargetState\(/g) ?? []).length === 4,
+);
+check(
+  "13.13 edit post-claim writes are all confirmed",
+  (editBlock.match(/await updateTargetState\(/g) ?? []).length === 4,
+);
+check(
+  "13.14 unproven send persistence is reported as unresolved, not terminal",
+  sendBlock.includes("UNRESOLVED_SEND") && indexSrc.includes("will not be retried"),
+);
+check(
+  "13.15 unproven edit persistence is reported as unresolved, not terminal",
+  editBlock.includes("UNRESOLVED_EDIT"),
+);
+check(
+  "13.16 unresolved persistence never triggers a second Telegram call",
+  (indexSrc.match(/"sendMessage"/g) ?? []).length === 1 &&
+    (indexSrc.match(/"editMessageText"/g) ?? []).length === 1 &&
+    (indexSrc.match(/callTelegram\(botToken, "sendMessage"/g) ?? []).length === 1,
+);
+check(
+  "13.17 pre-transport verification persistence failure returns AMBIGUOUS",
+  /verified\.ok[\s\S]{0,700}if \(!persisted\)[\s\S]{0,200}AMBIGUOUS/.test(sendBlock) &&
+    /verified\.ok[\s\S]{0,700}if \(!persisted\)[\s\S]{0,200}AMBIGUOUS/.test(editBlock),
+);
+check(
+  "13.18 send DB-finalization uncertainty keeps the SENDING claim and blocks resends",
+  sendBlock.includes("if (!finalized)") && sendBlock.includes("no attempt can ever resend it"),
+);
+check(
+  "13.19 edit DB-finalization uncertainty keeps EDITING and blocks future revisions",
+  editBlock.includes("if (!finalized)") && editBlock.includes("future revisions are blocked"),
+);
+check(
+  "13.20 helper is scoped to target id + workspace only",
+  /updateTargetState\([\s\S]{0,600}\.eq\("id", targetId\)\s*\n\s*\.eq\("workspace_id", workspaceId\)/.test(indexSrc),
+);
+
+// ---------------------------------------------------------------------------
 
 console.log(`SE-3 regression: ${passed} passed, ${failures.length} failed`);
 if (failures.length > 0) {
