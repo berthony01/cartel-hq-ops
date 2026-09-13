@@ -352,7 +352,10 @@ const liveInput: MissionCardInput = {
 
 const liveCard = renderMissionCard(liveInput);
 
-check("11.4 LIVE copy invites perspective", liveCard.text.includes("Read the update and add your perspective."));
+check("11.4 LIVE copy shows community mission header", liveCard.text.includes(LIVE_MISSION_HEADER));
+check("11.4a LIVE copy states the natural action", liveCard.text.includes(LIVE_ACTION_LINE));
+check("11.4b LIVE copy says participation is optional", liveCard.text.includes(LIVE_OPTIONAL_LINE));
+check("11.4c LIVE metric heading is live results", liveCard.text.includes(LIVE_METRICS_HEADING));
 check("11.5 LIVE card shows project name and ticker", liveCard.text.includes("PEPE CARTEL") && liveCard.text.includes("$PCART"));
 check("11.6 null metric omitted (saves)", !liveCard.text.includes("Bookmarks"));
 check("11.7 null latest with non-null baseline shows baseline, no delta", liveCard.text.includes("Reposts: 3") && !liveCard.text.includes("Reposts: 3 ("));
