@@ -58,6 +58,16 @@ const CONFIRM_BODY =
   "if the send fails or is inconclusive, this control stays disabled and the authoritative " +
   "state is reported instead.";
 
+/** SE-3.2A — metric capture + in-place edit of the SAME sent message. */
+const REQUIRED_UPDATE_DELIVERY_STATE = "SENT";
+const UPDATE_CONFIRM_TITLE = "Update the card that is already posted?";
+const UPDATE_CONFIRM_BODY =
+  "This reads the pinned X post once on the server, stores ONE metric snapshot, then edits " +
+  `the SAME existing Telegram message in ${REQUIRED_GROUP_TITLE} in place, using the existing ` +
+  "@PepeCartelHQBot bot. No replacement message is sent, no second message appears, and there " +
+  "is no automatic retry: if the read, the snapshot or the edit fails, this control stays " +
+  "disabled and the authoritative state is reported instead.";
+
 type Fixture = {
   missionId: string;
   workspaceId: string;
@@ -70,6 +80,10 @@ type Fixture = {
   lastError: string | null;
   groupTitle: string | null;
   canonicalUrl: string | null;
+  editRevision: number;
+  editState: string;
+  lastEditAt: string | null;
+  editLastError: string | null;
 };
 
 type FixtureLoad =
