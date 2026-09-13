@@ -17,16 +17,30 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { sendMissionCard, type SendMissionCardResult } from "@/lib/social-mission-telegram";
+import {
+  editMissionCard,
+  sendMissionCard,
+  type EditMissionCardResult,
+  type SendMissionCardResult,
+} from "@/lib/social-mission-telegram";
+import {
+  captureMissionMetrics,
+  type CaptureMissionMetricsResult,
+} from "@/lib/social-mission-metrics.functions";
 
 /**
  * SE-3.1 — owner-only, single-fixture Social Mission live-test control.
  *
  * This control NEVER creates social posts, missions or targets, never writes
- * transport-state columns, never edits a sent card, never polls, never retries
- * and never calls a social provider. It performs exactly one
+ * transport-state columns, never polls, never retries and never calls a social
+ * provider directly from the browser. It performs exactly one
  * `sendMissionCard()` invocation, and only after explicit owner confirmation
  * against one pre-prepared, hard-pinned production fixture.
+ *
+ * SE-3.2A adds ONE further owner-only action against the SAME fixture: capture
+ * current X metrics server-side (one official read, one snapshot row) and then
+ * edit the SAME already-sent Telegram message in place exactly once. There is
+ * no replacement send, no retry and no second edit from this control.
  */
 
 /** The ONLY fixture this control will ever operate on. */
