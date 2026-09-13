@@ -201,10 +201,70 @@ function cardStatus(missionStatus: string): MissionCardStatus | null {
   return null; // DRAFT (or anything unknown) is never rendered.
 }
 
+/**
+ * SE-3.3 — canonical project logo resolution.
+ *
+ * Strictly workspace-bound: the profile is loaded by workspace, and the asset
+ * is loaded by (asset id AND the SAME workspace id AND asset_type 'logo'), so a
+ * cross-workspace `logo_asset_id` can never resolve to another project's asset.
+ * Any miss, wrong mime, empty path, oversize object or download failure simply
+ * yields null, which the caller treats as "send the plain text card" — never as
+ * a send failure. This runs BEFORE the transport claim, so a fallback to TEXT
+ * is always a pre-Telegram decision.
+ */
+async function resolveProjectLogo(
+  admin: ReturnType<typeof createClient>,
+  workspaceId: string,
+): Promise<{ bytes: Uint8Array; mimeType: string; fileName: string } | null> {
+  try {
+    const { data: profile } = await admin
+      .from("project_profiles")
+      .select("workspace_id, logo_asset_id")
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    const logoAssetId = profile ? ((profile as LoadedRow)["logo_asset_id"] as string | null) : null;
+    if (!logoAssetId) return null;
+
+    const { data: asset } = await admin
+      .from("media_assets")
+      .select("id, workspace_id, asset_type, storage_path, mime_type")
+      .eq("id", logoAssetId)
+      .eq("workspace_id", workspaceId)
+      .eq("asset_type", LOGO_ASSET_TYPE)
+      .maybeSingle();
+    if (!asset) return null;
+
+    const a = asset as LoadedRow;
+    // Defence in depth: never trust the join alone.
+    if (a["workspace_id"] !== workspaceId) return null;
+
+    const storagePath = typeof a["storage_path"] === "string" ? a["storage_path"].trim() : "";
+    if (!storagePath) return null;
+
+    const mimeType = typeof a["mime_type"] === "string" ? a["mime_type"].toLowerCase() : "";
+    if (!LOGO_ALLOWED_MIME.includes(mimeType)) return null;
+
+    const { data: blob, error: downloadError } = await admin.storage
+      .from(WORKSPACE_ASSET_BUCKET)
+      .download(storagePath);
+    if (downloadError || !blob) return null;
+
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    if (bytes.byteLength === 0 || bytes.byteLength > LOGO_MAX_BYTES) return null;
+
+    const extension = mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
+    return { bytes, mimeType, fileName: `logo.${extension}` };
+  } catch {
+    // A logo problem is never a transport failure.
+    return null;
+  }
+}
+
 async function renderAuthoritativeCard(
   admin: ReturnType<typeof createClient>,
   workspaceId: string,
   mission: LoadedRow,
+  transportKind: TransportKind,
 ): Promise<{ text: string; replyMarkup: unknown } | { error: string }> {
   const status = cardStatus(String(mission["status"] ?? ""));
   if (!status) return { error: "This mission is not in a sendable state." };
