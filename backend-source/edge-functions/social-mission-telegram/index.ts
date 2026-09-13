@@ -305,9 +305,13 @@ async function renderAuthoritativeCard(
     ticker: profile ? ((profile as LoadedRow)["ticker"] as string | null) ?? null : null,
     baseline: metricsFrom(mission, "baseline_"),
     latest: snapshot ? metricsFrom(snapshot as LoadedRow, "") : null,
+    // A photo caption is hard-limited by Telegram; the renderer refits instead
+    // of risking a rejected transport.
+    maxLength: transportKind === "PHOTO" ? TELEGRAM_CAPTION_MAX : TELEGRAM_TEXT_LIMIT,
   });
 
-  if (!card.text.trim() || card.text.length > TELEGRAM_TEXT_LIMIT) {
+  const limit = transportKind === "PHOTO" ? TELEGRAM_CAPTION_MAX : TELEGRAM_TEXT_LIMIT;
+  if (!card.text.trim() || card.text.length > limit) {
     return { error: "The mission card could not be rendered safely." };
   }
   return { text: card.text, replyMarkup: card.replyMarkup };
