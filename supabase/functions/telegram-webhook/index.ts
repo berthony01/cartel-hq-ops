@@ -106,6 +106,62 @@ async function editMessage(token: string, chatId: string, messageId: number, tex
   } catch { }
 }
 function escapeHtml(value: string) { return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+/**
+ * SE-4A — `/mission <X link>` zero-X-read launcher helpers.
+ *
+ * This command NEVER reads the X API. Everything the mission is created from is
+ * derived from the exact link an authorized admin typed, and any link that is
+ * not a plain public X/Twitter status URL is rejected outright.
+ */
+const MISSION_X_HOSTS = ["x.com", "www.x.com", "twitter.com", "www.twitter.com", "mobile.twitter.com"];
+
+type ParsedXStatus = { handle: string; postId: string; canonicalUrl: string };
+
+function parseXStatusUrl(raw: string): ParsedXStatus | null {
+  const value = String(raw ?? "").trim();
+  if (!value || value.length > 2048) return null;
+  let url: URL;
+  try { url = new URL(value); } catch { return null; }
+  if (url.protocol !== "https:") return null;
+  // No credentials and no explicit port: nothing that can smuggle another host.
+  if (url.username || url.password || url.port) return null;
+  if (!MISSION_X_HOSTS.includes(url.hostname.toLowerCase())) return null;
+  // Trailing slash and query string are canonicalised away here.
+  const segments = url.pathname.split("/").filter((segment) => segment.length > 0);
+  if (segments.length !== 3) return null;
+  const handle = String(segments[0]).toLowerCase();
+  if (String(segments[1]).toLowerCase() !== "status") return null;
+  // `i/web/status/...` and every other non-handle path shape fails here.
+  if (!/^[a-z0-9_]{1,15}$/.test(handle) || handle === "i") return null;
+  const postId = String(segments[2]);
+  if (!/^[0-9]{1,32}$/.test(postId)) return null;
+  return { handle, postId, canonicalUrl: `https://x.com/${handle}/status/${postId}` };
+}
+
+/** The workspace's official X handle, taken only from the canonical profile. */
+function officialXHandle(xUrl: unknown): string | null {
+  if (typeof xUrl !== "string") return null;
+  const match = xUrl.trim().match(/^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/@?([A-Za-z0-9_]{1,15})(?:[/?#].*)?$/i);
+  return match ? String(match[1]).toLowerCase() : null;
+}
+
+/**
+ * Deterministic RFC-4122-shaped request id derived from the Telegram update id.
+ * A Telegram webhook retry of the SAME update therefore produces the SAME
+ * clientRequestId, so the transport's own idempotency absorbs it instead of
+ * producing a second mission card.
+ */
+async function missionRequestUuid(updateId: number) {
+  const hex = await sha256Hex(`cartelhq-mission-send:${updateId}`);
+  const chars = hex.slice(0, 32).split("");
+  chars[12] = "5";
+  chars[16] = ["8", "9", "a", "b"][parseInt(hex[16], 16) % 4];
+  const h = chars.join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+}
+
+const MISSION_USAGE = "Usage: /mission https://x.com/&lt;official handle&gt;/status/&lt;id&gt;\n\nOnly a public X post link from this project's official X account can start a Social Mission, and only current group admins can run it.";
 function encodeChatId(chatId: string) { return chatId.startsWith("-") ? `n${chatId.slice(1)}` : chatId; }
 function decodeChatId(encoded: string) { return encoded.startsWith("n") ? `-${encoded.slice(1)}` : encoded; }
 function shouldSendWelcome(value: string | null | undefined) {
