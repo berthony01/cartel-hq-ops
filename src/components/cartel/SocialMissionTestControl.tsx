@@ -196,6 +196,13 @@ export function SocialMissionTestControl() {
   const [result, setResult] = useState<SendMissionCardResult | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
+  const [updateConfirmOpen, setUpdateConfirmOpen] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const [updateAttempted, setUpdateAttempted] = useState(false);
+  const [capture, setCapture] = useState<CaptureMissionMetricsResult | null>(null);
+  const [editResult, setEditResult] = useState<EditMissionCardResult | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const runCapture = useServerFn(captureMissionMetrics);
 
   const query = useQuery({
     queryKey: ["owner-social-mission-test-fixture", OWNER_TEST_CONTROL_MARKER],
