@@ -168,14 +168,14 @@ function headline(status: MissionCardStatus): string {
 
 function statusBody(status: MissionCardStatus): string[] {
   // Activation only: read, think, contribute. No promise, reward or quota.
-  if (status === "LIVE") return [LIVE_PARTICIPATION_LINE];
+  if (status === "LIVE") return [LIVE_MISSION_HEADER, LIVE_ACTION_LINE, LIVE_OPTIONAL_LINE];
   if (status === "COMPLETED") return ["This mission window is closed."];
   if (status === "CANCELLED") return ["This mission was cancelled before it completed."];
   return ["This mission ended in a failed state."];
 }
 
 function metricsHeading(status: MissionCardStatus): string {
-  return status === "LIVE" ? "Observed so far:" : `${COMPLETED_OBSERVED_PHRASE}:`;
+  return status === "LIVE" ? LIVE_METRICS_HEADING : `${COMPLETED_OBSERVED_PHRASE}:`;
 }
 
 function composeLines(input: MissionCardInput, excerptBudget: number | null): string[] {
