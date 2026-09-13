@@ -6,19 +6,14 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
-// Browser-only UI runtimes pulled in by the wallet connector. `lit` evaluates
-// `class extends HTMLElement` at module scope, which throws on Cloudflare
-// Workers, so these packages must never end up in a chunk that the SSR entry
-// graph imports eagerly.
-const BROWSER_ONLY_PACKAGES =
-  /node_modules[\\/](@reown|@walletconnect|@phosphor-icons|lit|lit-html|lit-element|@lit|@lit-labs)[\\/]/;
-
 // unenv injects a shared `globalthis` polyfill that router-core and
 // supabase-realtime also use. Nitro's default per-package grouping let that
-// polyfill land inside the @reown/appkit chunk, which made those server-side
-// modules statically import the browser-only chunk and crash SSR module
-// evaluation. Give the polyfill its own chunk with the highest priority so it
-// can never be co-located with browser-only code again.
+// polyfill land inside the browser-only @reown/appkit chunk, so those
+// server-side modules statically imported that chunk — and `lit` evaluates
+// `class extends HTMLElement` at module scope, which throws on Cloudflare
+// Workers and killed SSR module evaluation before any route ran.
+// Give the unenv runtime its own chunk with the highest priority so it can
+// never be co-located with browser-only code again.
 const UNENV_RUNTIME = /node_modules[\\/]unenv[\\/]/;
 
 const serverChunkIsolation = {
@@ -32,17 +27,13 @@ const serverChunkIsolation = {
               test: UNENV_RUNTIME,
               priority: 100,
             },
-            {
-              name: "_libs/browser-only-wallet",
-              test: BROWSER_ONLY_PACKAGES,
-              priority: 50,
-            },
           ],
         },
       },
     },
   },
 };
+
 
 export default defineConfig({
   tanstackStart: {
