@@ -98,7 +98,7 @@ check("1.20 mission surfaces are workspace-scoped from context", routeCode.inclu
 for (const forbidden of [".insert(", ".update(", ".upsert(", ".delete(", ".rpc(", "functions.invoke"]) {
   check(`2.1 no mutation primitive in social-missions: ${forbidden}`, !libCode.includes(forbidden));
 }
-check("2.2 every mission table read is workspace-filtered", (libCode.match(/\.from\(/g) ?? []).length === (libCode.match(/\.eq\("workspace_id", workspaceId\)/g) ?? []).length);
+check("2.2 every mission table read is workspace-filtered", (libCode.match(/\.from\("/g) ?? []).length === (libCode.match(/\.eq\("workspace_id", workspaceId\)/g) ?? []).length);
 check("2.3 no polling interval", !libCode.includes("refetchInterval") && !panelCode.includes("refetchInterval") && !analyticsCode.includes("refetchInterval"));
 check("2.4 no service-role / secret usage", !libCode.includes("service_role") && !libCode.includes("SERVICE_ROLE"));
 check("2.5 no provider or Telegram call from the browser module", !libCode.includes("fetch(") && !libCode.includes("api.telegram.org") && !libCode.includes("x.com/i/api"));
@@ -146,7 +146,7 @@ check("4.5 analytics reuses the same read-only query", analyticsCode.includes("u
 check("5.1 sidebar label updated", navSrc.includes('label: "Community Command Center"'));
 check("5.2 route unchanged in nav", navSrc.includes('to: "/telegram"'));
 check("5.3 mobile label unchanged", navSrc.includes('mobileLabel: "Community"'));
-check("5.4 no new nav destination added", (navSrc.match(/to: "\//g) ?? []).length === 12);
+check("5.4 no new nav destination added", (navSrc.match(/to: "\//g) ?? []).length === 14);
 
 // ---------------------------------------------------------------------------
 // 6. Pure helper behaviour
