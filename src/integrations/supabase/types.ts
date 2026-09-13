@@ -4686,6 +4686,18 @@ export type Database = {
           message_id: string
         }[]
       }
+      create_social_mission_from_telegram_link: {
+        Args: {
+          _author_handle: string
+          _canonical_url: string
+          _external_post_id: string
+          _telegram_chat_id: number
+          _telegram_message_id: number
+          _telegram_update_id: number
+          _telegram_user_id: number
+        }
+        Returns: Json
+      }
       delete_sticker_pack_if_eligible: {
         Args: { _pack_id: string }
         Returns: Json
