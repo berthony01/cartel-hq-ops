@@ -569,9 +569,11 @@ Deno.serve(async (req: Request) => {
         | {
           outcome?: string;
           reason?: string;
+          event_state?: string;
           workspace_id?: string;
           mission_id?: string;
           target_id?: string;
+          event_id?: string;
           client_request_id?: string;
           edit_revision?: number;
           actor_user_id?: string;
@@ -587,6 +589,17 @@ Deno.serve(async (req: Request) => {
       }
       if (closeResult.outcome === "ALREADY_COMPLETED") {
         await reply("This Social Mission is already closed.");
+        return;
+      }
+      if (closeResult.outcome === "UNRESOLVED") {
+        // Another worker holds this completion right now. Never a second edit.
+        await reply("This Social Mission is already being closed. Do not retry.");
+        return;
+      }
+      if (closeResult.outcome === "COMPLETED_UNSYNCED") {
+        // Terminal delivery-sync state: closed in Cartel HQ, card not updated.
+        // Never retried and never replaced.
+        await reply("This Social Mission is closed. Its mission card could not be updated in place; do not resend it.");
         return;
       }
       if (closeResult.outcome !== "CLOSED") {
