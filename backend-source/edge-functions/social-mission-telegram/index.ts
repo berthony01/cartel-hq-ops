@@ -229,6 +229,34 @@ async function renderAuthoritativeCard(
 }
 
 // --------------------------------------------------------------------------
+// Durable state persistence.
+//
+// Supabase returns no error when an UPDATE matches ZERO rows. Every state write
+// therefore returns the affected row and is only treated as persisted when
+// exactly one row comes back. A write that cannot be proven is never reported
+// to the caller as a durable terminal state.
+// --------------------------------------------------------------------------
+
+async function updateTargetState(
+  admin: ReturnType<typeof createClient>,
+  targetId: string,
+  workspaceId: string,
+  patch: Record<string, unknown>,
+): Promise<boolean> {
+  const { data, error } = await admin
+    .from("social_mission_targets")
+    .update(patch)
+    .eq("id", targetId)
+    .eq("workspace_id", workspaceId)
+    .select("id")
+    .maybeSingle();
+  return !error && !!data;
+}
+
+const UNRESOLVED_SEND = "The send could not be resolved; this target is left unresolved and will not be retried.";
+const UNRESOLVED_EDIT = "The edit could not be resolved; this target is left unresolved and will not be retried.";
+
+// --------------------------------------------------------------------------
 // Entry point
 // --------------------------------------------------------------------------
 
