@@ -429,7 +429,29 @@ function TelegramPage() {
               </Button>
             </div>
           </Section>
+
+          {/* Read-only Social Mission strip. Same query as the Missions tab. */}
+          <SocialMissionsSummary
+            workspaceId={workspaceId ?? null}
+            onOpenMissions={() => setTab("missions")}
+          />
         </TabsContent>
+
+        {/* ---------------------------------------------------------------- */}
+        <TabsContent value="missions" className="mt-0 min-w-0">
+          <SocialMissionsPanel workspaceId={workspaceId ?? null} />
+        </TabsContent>
+
+        {/* ---------------------------------------------------------------- */}
+        <TabsContent value="analytics" className="mt-0 min-w-0">
+          <CommunityAnalyticsPanel
+            workspaceId={workspaceId ?? null}
+            connectedGroupCount={groupCount}
+            readyGroupCount={readyCount}
+            groupsUnavailable={groupsError && groupCount === 0}
+          />
+        </TabsContent>
+
 
         {/* ---------------------------------------------------------------- */}
         <TabsContent value="broadcasts" className="mt-0 min-w-0">
