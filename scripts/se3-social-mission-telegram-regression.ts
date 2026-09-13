@@ -18,6 +18,10 @@ import {
   TELEGRAM_TEXT_MAX,
   COMPLETED_OBSERVED_PHRASE,
   NO_CAUSATION_CAVEAT,
+  LIVE_MISSION_HEADER,
+  LIVE_ACTION_LINE,
+  LIVE_OPTIONAL_LINE,
+  LIVE_METRICS_HEADING,
   type CanonicalMetrics,
   type MissionCardInput,
 } from "../backend-source/edge-functions/social-mission-telegram/card.ts";
