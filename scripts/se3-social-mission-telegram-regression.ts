@@ -204,7 +204,14 @@ check(
   "6.16 safe-column INSERT grant only",
   sql.includes("GRANT INSERT (workspace_id, mission_id, group_connection_id, telegram_chat_id)"),
 );
-check("6.17 INSERT policy requires operator", sql.includes("public.is_workspace_operator(workspace_id)"));
+check(
+  "6.17 INSERT policy requires operator with two-argument live signature",
+  sql.includes("public.is_workspace_operator(workspace_id, (SELECT auth.uid()))"),
+);
+check(
+  "6.17a INSERT policy does not use invalid one-argument operator call",
+  !sql.includes("public.is_workspace_operator(workspace_id)"),
+);
 check("6.18 INSERT policy pins default transport shape", sql.includes("AND edit_state = 'IDLE'"));
 check("6.19 service role remains authoritative", sql.includes("GRANT ALL ON public.social_mission_targets TO service_role"));
 check("6.20 usage_ledger untouched", !sqlCode.includes("usage_ledger"));
