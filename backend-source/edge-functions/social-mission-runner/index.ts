@@ -72,13 +72,33 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-function isHttpsUrl(value: unknown): value is string {
+/**
+ * Narrow, pure validator. The OPEN ON X button is only ever built from a
+ * canonical public X/Twitter status URL. Arbitrary HTTPS links, credentials,
+ * explicit ports and non-status paths are all refused, and no network call is
+ * made. An invalid URL simply means no button.
+ */
+const PULSE_X_HOSTS = ["x.com", "www.x.com", "twitter.com", "www.twitter.com", "mobile.twitter.com"];
+
+export function isCanonicalXStatusUrl(value: unknown): value is string {
   if (typeof value !== "string") return false;
+  const raw = value.trim();
+  if (!raw || raw.length > 2048) return false;
+  let url: URL;
   try {
-    return new URL(value.trim()).protocol === "https:";
+    url = new URL(raw);
   } catch {
     return false;
   }
+  if (url.protocol !== "https:") return false;
+  if (url.username || url.password || url.port) return false;
+  if (!PULSE_X_HOSTS.includes(url.hostname.toLowerCase())) return false;
+  const segments = url.pathname.split("/").filter((segment) => segment.length > 0);
+  if (segments.length !== 3) return false;
+  const handle = String(segments[0]).toLowerCase();
+  if (!/^[a-z0-9_]{1,15}$/.test(handle) || handle === "i") return false;
+  if (String(segments[1]).toLowerCase() !== "status") return false;
+  return /^[0-9]{1,32}$/.test(String(segments[2]));
 }
 
 /**
@@ -90,7 +110,7 @@ export const PULSE_TEXT =
   "This Social Mission is still active. Read the official post above and join the conversation naturally if you have something to add.";
 
 export function pulseKeyboard(canonicalUrl: unknown) {
-  return isHttpsUrl(canonicalUrl)
+  return isCanonicalXStatusUrl(canonicalUrl)
     ? { inline_keyboard: [[{ text: "OPEN ON X", url: String(canonicalUrl).trim() }]] }
     : null;
 }
@@ -191,8 +211,11 @@ Deno.serve(async (request: Request) => {
       const outcome = await callTelegram(BOT_TOKEN, "sendMessage", {
         chat_id: event.telegram_chat_id,
         text: PULSE_TEXT,
+        // No allow_sending_without_reply: a pulse is meaningful ONLY as a
+        // reply to the canonical mission card. If that card is gone, Telegram
+        // rejects the send and the event is finalized FAILED rather than
+        // posting an orphan reminder.
         reply_to_message_id: event.telegram_message_id,
-        allow_sending_without_reply: true,
         disable_web_page_preview: true,
         disable_notification: true,
         ...(keyboard ? { reply_markup: keyboard } : {}),
