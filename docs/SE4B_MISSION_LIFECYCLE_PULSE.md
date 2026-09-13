@@ -94,13 +94,18 @@ replaced; the admin gets a sync diagnostic.
 ## Pulse
 
 `sendMessage` only, replying to the canonical card's `message_id`, with a single
-`OPEN ON X` button built from the authoritative `social_posts.canonical_url`.
+`OPEN ON X` button built from the authoritative `social_posts.canonical_url`,
+which must pass a narrow pure validator for canonical X/Twitter status links —
+an invalid URL simply means no button. The pulse is always a reply to the
+canonical card and never falls back to a standalone message: if that card is
+gone, Telegram rejects the send and the event is finalized `FAILED`.
 Never `sendPhoto`, never a resend of the branded card, no metrics, no quotas,
 points, rewards or mandatory engagement. A confirmed pulse is queued into the
 existing `telegram_message_cleanup_jobs` table with
 `cleanup_kind = 'social_mission_pulse'` and `delete_after = sent_at + 120s`; the
-existing cleanup worker is unmodified and only its `cleanup_kind` CHECK was
-widened. Because that worker runs once per minute, a pulse disappears roughly
+existing cleanup worker is unmodified; only the exact live constraint
+`telegram_message_cleanup_jobs_cleanup_kind_check` is dropped and replaced with
+a widened `..._ck` allowing both kinds (rerunnable, no other CHECK touched). Because that worker runs once per minute, a pulse disappears roughly
 120–180 seconds after it is posted.
 
 Pulses are never retried. An ambiguous send is recorded `AMBIGUOUS`, a definite
