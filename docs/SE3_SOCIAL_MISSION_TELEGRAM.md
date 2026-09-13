@@ -169,3 +169,35 @@ No migration applied, no SQL executed, no Supabase read or write, no Edge
 Function deployment, no live Telegram call, no X/provider call, no secret change,
 no cron or scheduler, and no UI. SE-5 owns dashboard presentation; SE-4 owns
 polling and automation.
+
+## 10. Pre-deploy concurrency + durability hardening
+
+Independent review before authoritative migration/deployment found a zero-row
+compare-and-set race. The send and edit claims used `.update(...).eq(...)` and
+inspected only `error`. PostgREST returns no error when an UPDATE matches **zero**
+rows, so with two concurrent fresh request ids request A could claim the target
+while request B continued through live verification to Telegram — duplicating a
+send or reordering an edit.
+
+Correction (function source only; SQL, renderer and thin client untouched):
+
+- Both claims now append `.select("id").maybeSingle()`. `error || !claimedRow` is
+  a 409 conflict that stops **before** `verifyGroup` and before any Telegram call.
+  There is no retry.
+- A single in-file `updateTargetState(...)` helper performs every post-claim
+  state write by target id + workspace with `.select("id").maybeSingle()`, and
+  returns true only when exactly one row is confirmed updated. It is used for
+  send verification failure, malformed success, definite rejection, transport
+  uncertainty and final SENT; and for edit verification failure, EDITED,
+  definite rejection and transport uncertainty.
+- If any state write errors or affects zero rows, the response is a sanitized
+  `AMBIGUOUS`/unresolved outcome and no second Telegram call is ever made. The
+  durable SENDING claim keeps blocking fresh sends; the durable EDITING claim
+  keeps blocking future revisions. A terminal state is never advertised unless
+  it was provably persisted — including for pre-transport verification results.
+
+Behaviour is otherwise unchanged: exactly one `sendMessage` path, exactly one
+`editMessageText` path, no retries, no replacement send, no scheduler, no UI, no
+provider call, no usage ledger, no `telegram-group` change. Regression extended
+with section 13 covering returning-row claims, no-row stop-before-transport,
+confirmed persistence on every terminal write, and unresolved-state blocking.
