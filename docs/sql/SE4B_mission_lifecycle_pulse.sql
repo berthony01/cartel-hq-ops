@@ -551,7 +551,8 @@ BEGIN
      AND event_type = 'PULSE'
      AND state = 'PENDING';
 
-  -- Get-or-create the single COMPLETE event, then claim it. Never a second one.
+  -- Get-or-create the single COMPLETE event. Never a second one, and never a
+  -- reopening of a terminal state.
   INSERT INTO public.social_mission_schedule_events (
     workspace_id, mission_id, target_id, event_type, sequence_no, due_at
   )
@@ -565,6 +566,7 @@ BEGIN
    WHERE target_id = v_target.id AND event_type = 'COMPLETE' AND sequence_no = 1
    FOR UPDATE;
 
+  -- Already synced.
   IF v_event.state = 'SENT' THEN
     RETURN jsonb_build_object(
       'outcome', 'ALREADY_COMPLETED',
@@ -575,10 +577,40 @@ BEGIN
     );
   END IF;
 
+  -- Another worker holds this completion right now. Fail closed: no state
+  -- change, no second Telegram attempt.
+  IF v_event.state = 'CLAIMED' THEN
+    RETURN jsonb_build_object(
+      'outcome', 'UNRESOLVED',
+      'workspace_id', v_mission.workspace_id,
+      'mission_id', v_mission.id,
+      'target_id', v_target.id,
+      'event_state', v_event.state
+    );
+  END IF;
+
+  -- Terminal delivery-sync states are never reopened. The mission is closed in
+  -- the database; only its card could not be updated.
+  IF v_event.state IN ('FAILED', 'AMBIGUOUS', 'CANCELLED') THEN
+    RETURN jsonb_build_object(
+      'outcome', 'COMPLETED_UNSYNCED',
+      'workspace_id', v_mission.workspace_id,
+      'mission_id', v_mission.id,
+      'target_id', v_target.id,
+      'event_state', v_event.state
+    );
+  END IF;
+
+  -- Only a PENDING completion event may be claimed here.
+  IF v_event.state <> 'PENDING' THEN
+    RETURN jsonb_build_object('outcome', 'UNRESOLVED', 'event_state', v_event.state);
+  END IF;
+
   UPDATE public.social_mission_schedule_events
      SET state = 'CLAIMED',
          claimed_at = now()
-   WHERE id = v_event.id;
+   WHERE id = v_event.id
+     AND state = 'PENDING';
 
   RETURN jsonb_build_object(
     'outcome', 'CLOSED',
@@ -590,7 +622,10 @@ BEGIN
     'edit_revision', COALESCE(v_target.edit_revision, 0),
     'telegram_chat_id', v_target.telegram_chat_id,
     'telegram_message_id', v_target.telegram_message_id,
-    'actor_user_id', COALESCE(v_mission.created_by, v_actor_user_id)
+    -- Manual close is attributed to the CURRENT authorized closer, who just
+    -- passed both the Cartel HQ operator check and the live Telegram admin
+    -- check. The original creator is irrelevant here.
+    'actor_user_id', v_actor_user_id
   );
 END;
 $$;
