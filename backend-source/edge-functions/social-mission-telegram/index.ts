@@ -197,7 +197,7 @@ async function renderAuthoritativeCard(
 
   const { data: snapshot } = await admin
     .from("social_metric_snapshots")
-    .select("metric_views, metric_likes, metric_comments, metric_shares, metric_saves, observed_at")
+    .select("views, likes, comments, shares, saves, observed_at")
     .eq("mission_id", mission["id"] as string)
     .eq("workspace_id", workspaceId)
     .order("observed_at", { ascending: false })
@@ -219,7 +219,7 @@ async function renderAuthoritativeCard(
     projectName: profile ? ((profile as LoadedRow)["project_name"] as string | null) ?? null : null,
     ticker: profile ? ((profile as LoadedRow)["ticker"] as string | null) ?? null : null,
     baseline: metricsFrom(mission, "baseline_"),
-    latest: snapshot ? metricsFrom(snapshot as LoadedRow, "metric_") : null,
+    latest: snapshot ? metricsFrom(snapshot as LoadedRow, "") : null,
   });
 
   if (!card.text.trim() || card.text.length > TELEGRAM_TEXT_LIMIT) {
