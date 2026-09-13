@@ -2091,19 +2091,10 @@ export type Database = {
         Row: {
           created_at: string
           delivery_state: string
-          edit_client_request_id: string | null
-          edit_last_error: string | null
-          edit_revision: number
-          edit_state: string
-          edit_text_snapshot: string | null
           group_connection_id: string | null
           id: string
-          last_edit_at: string | null
           last_error: string | null
-          message_text_snapshot: string | null
           mission_id: string
-          send_client_request_id: string | null
-          send_text_intent: string | null
           sent_at: string | null
           telegram_chat_id: number
           telegram_message_id: number | null
@@ -2113,19 +2104,10 @@ export type Database = {
         Insert: {
           created_at?: string
           delivery_state?: string
-          edit_client_request_id?: string | null
-          edit_last_error?: string | null
-          edit_revision?: number
-          edit_state?: string
-          edit_text_snapshot?: string | null
           group_connection_id?: string | null
           id?: string
-          last_edit_at?: string | null
           last_error?: string | null
-          message_text_snapshot?: string | null
           mission_id: string
-          send_client_request_id?: string | null
-          send_text_intent?: string | null
           sent_at?: string | null
           telegram_chat_id: number
           telegram_message_id?: number | null
@@ -2135,19 +2117,10 @@ export type Database = {
         Update: {
           created_at?: string
           delivery_state?: string
-          edit_client_request_id?: string | null
-          edit_last_error?: string | null
-          edit_revision?: number
-          edit_state?: string
-          edit_text_snapshot?: string | null
           group_connection_id?: string | null
           id?: string
-          last_edit_at?: string | null
           last_error?: string | null
-          message_text_snapshot?: string | null
           mission_id?: string
-          send_client_request_id?: string | null
-          send_text_intent?: string | null
           sent_at?: string | null
           telegram_chat_id?: number
           telegram_message_id?: number | null
