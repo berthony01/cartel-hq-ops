@@ -85,14 +85,21 @@ type TelegramOutcome =
   | { kind: "rejected"; description: string; code: number }
   | { kind: "uncertain"; description: string };
 
-async function callTelegram(token: string, method: string, body: Json): Promise<TelegramOutcome> {
+async function callTelegram(
+  token: string,
+  method: string,
+  body: Json | FormData,
+  timeoutMs: number = TELEGRAM_TIMEOUT_MS,
+): Promise<TelegramOutcome> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TELEGRAM_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const multipart = body instanceof FormData;
   try {
     const response = await fetch(`${TG_BASE}/bot${token}/${method}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      // multipart/form-data sets its own boundary header; JSON keeps the old one.
+      ...(multipart ? {} : { headers: { "Content-Type": "application/json" } }),
+      body: multipart ? body : JSON.stringify(body),
       signal: controller.signal,
     });
 
