@@ -155,6 +155,10 @@ async function loadFixture(): Promise<FixtureLoad> {
       lastError: target.last_error,
       groupTitle,
       canonicalUrl: post.data.canonical_url,
+      editRevision: target.edit_revision,
+      editState: target.edit_state,
+      lastEditAt: target.last_edit_at,
+      editLastError: target.edit_last_error,
     },
   };
 }
