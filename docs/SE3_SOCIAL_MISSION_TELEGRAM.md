@@ -201,3 +201,12 @@ Behaviour is otherwise unchanged: exactly one `sendMessage` path, exactly one
 provider call, no usage ledger, no `telegram-group` change. Regression extended
 with section 13 covering returning-row claims, no-row stop-before-transport,
 confirmed persistence on every terminal write, and unresolved-state blocking.
+
+## 11. Pre-deploy RLS signature correction
+
+Authoritative read-only inspection of the live Supabase project before migration
+application found the replacement INSERT policy used the invalid one-argument
+call `public.is_workspace_operator(workspace_id)`. The only live operator helper is
+`public.is_workspace_operator(_workspace_id uuid, _user_id uuid)`. The policy
+was corrected to `public.is_workspace_operator(workspace_id, (SELECT auth.uid()))`,
+matching the existing target policies, before any SQL is applied.

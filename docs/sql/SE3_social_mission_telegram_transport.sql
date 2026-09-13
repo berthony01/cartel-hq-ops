@@ -144,7 +144,7 @@ CREATE POLICY social_mission_targets_insert_operator
   FOR INSERT
   TO authenticated
   WITH CHECK (
-    public.is_workspace_operator(workspace_id)
+    public.is_workspace_operator(workspace_id, (SELECT auth.uid()))
     AND group_connection_id IS NOT NULL
     AND telegram_chat_id IS NOT NULL
     AND delivery_state = 'PENDING'
