@@ -43,11 +43,14 @@ const LOGO_MAX_BYTES = 5_000_000;
 type TransportKind = "TEXT" | "PHOTO";
 
 /**
- * SE-4A — the single recognised server-only internal caller. Paired with an
- * exact service-role bearer token; neither half is sufficient alone, and the
- * value never reaches the browser.
+ * SE-4A / SE-4B — the exact allowlist of server-only internal callers. Each is
+ * paired with an exact service-role bearer token; neither half is sufficient
+ * alone, and no value here ever reaches the browser. Every internal call still
+ * passes the full owner/admin, workspace-binding and live-group checks below.
  */
 const INTERNAL_SOURCE = "telegram-webhook";
+const INTERNAL_SOURCE_RUNNER = "social-mission-runner";
+const INTERNAL_SOURCES: readonly string[] = [INTERNAL_SOURCE, INTERNAL_SOURCE_RUNNER];
 
 import {
   renderMissionCard,
@@ -383,7 +386,9 @@ Deno.serve(async (request: Request): Promise<Response> => {
   const bearerToken = authHeader.slice("Bearer ".length).trim();
 
   const internalSource = request.headers.get("X-Cartel-Internal-Source") ?? "";
-  const isInternalCaller = internalSource === INTERNAL_SOURCE && bearerToken === serviceKey;
+  const isInternalCaller =
+    (internalSource === INTERNAL_SOURCE && bearerToken === serviceKey) ||
+    (INTERNAL_SOURCES.includes(internalSource) && bearerToken === serviceKey);
 
   let actorUserId: string;
   if (isInternalCaller) {

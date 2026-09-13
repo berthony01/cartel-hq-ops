@@ -310,7 +310,7 @@ Launch Watch is opt-in and can be muted or stopped. Deployment verification conf
 }
 function helpText(isGroup: boolean) {
   return isGroup
-    ? `<b>CARTEL HQ BOT • PRIVATE BETA</b>\n\nCurrent group capabilities include community join welcomes with optional auto-delete, Telegram sticker-pack distribution and native sticker delivery. Additional community tools are in development.\n\n<b>Commands</b>\n/roadmap — see what's live and what's coming\n/mission &lt;X link&gt; — start a Social Mission (admins only)\n/help — show this guide\n\nAdmins can follow PEPECARTEL and join Early Access through @${BOT_USERNAME}.`
+    ? `<b>CARTEL HQ BOT • PRIVATE BETA</b>\n\nCurrent group capabilities include community join welcomes with optional auto-delete, Telegram sticker-pack distribution and native sticker delivery. Additional community tools are in development.\n\n<b>Commands</b>\n/roadmap — see what's live and what's coming\n/mission &lt;X link&gt; — start a Social Mission (admins only)\n/mission close — close the active Social Mission (admins only)\n/help — show this guide\n\nAdmins can follow PEPECARTEL and join Early Access through @${BOT_USERNAME}.`
     : `<b>CARTEL HQ BOT • HELP</b>\n\n/start — open the Cartel HQ menu\n/roadmap — what's live and what's coming\n/help — show this guide\n\nSticker creation and workspace management currently happen through Cartel HQ beta workspaces. Public Cartel HQ web access will be added when ready.`;
 }
 async function ensureCommands(token: string) {
@@ -503,8 +503,12 @@ Deno.serve(async (req: Request) => {
       return;
     }
 
-    const parsed = parseXStatusUrl(argument);
-    if (!parsed) {
+    // SE-4B — `/mission close` shares the exact same authorization chain and
+    // reads no X link at all.
+    const isClose = String(argument ?? "").trim().toLowerCase() === "close";
+
+    const parsed = isClose ? null : parseXStatusUrl(argument);
+    if (!isClose && !parsed) {
       await reply(MISSION_USAGE);
       return;
     }
@@ -551,6 +555,92 @@ Deno.serve(async (req: Request) => {
       return;
     }
 
+    // SE-4B — `/mission close`. Admin-only, zero X reads, no new mission and
+    // no replacement message. The DATABASE lifecycle is authoritative: the
+    // close RPC completes the mission and cancels remaining pulses first, and
+    // the single same-message edit is attempted afterwards. A failed or
+    // ambiguous edit never reverts the completion.
+    if (isClose) {
+      const { data: closed, error: closeError } = await admin.rpc("close_social_mission_from_telegram", {
+        _telegram_chat_id: numericChatId,
+        _telegram_user_id: telegramUserId,
+      });
+      const closeResult = (closed ?? null) as
+        | {
+          outcome?: string;
+          reason?: string;
+          workspace_id?: string;
+          mission_id?: string;
+          target_id?: string;
+          client_request_id?: string;
+          edit_revision?: number;
+          actor_user_id?: string;
+        }
+        | null;
+      if (closeError || !closeResult?.outcome) {
+        await reply("This Social Mission could not be closed right now.");
+        return;
+      }
+      if (closeResult.outcome === "NO_ACTIVE_MISSION") {
+        await reply("There is no active Social Mission in this community.");
+        return;
+      }
+      if (closeResult.outcome === "ALREADY_COMPLETED") {
+        await reply("This Social Mission is already closed.");
+        return;
+      }
+      if (closeResult.outcome !== "CLOSED") {
+        const reason = String(closeResult.reason ?? "");
+        await reply(
+          reason === "actor_not_operator"
+            ? "Only this project's Cartel HQ owners and admins can close a Social Mission."
+            : reason === "actor_not_linked"
+              ? `Connect your Telegram account to Cartel HQ through @${BOT_USERNAME} first.`
+              : reason === "group_not_connected"
+                ? "This community is not connected to Cartel HQ yet."
+                : "This Social Mission could not be closed right now.",
+        );
+        return;
+      }
+
+      // Exactly one same-message edit through the existing transport, using
+      // the deterministic request id stored on the completion event.
+      let closeTransport: { editState?: string } | null = null;
+      try {
+        const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/social-mission-telegram`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: SERVICE_KEY,
+            Authorization: `Bearer ${SERVICE_KEY}`,
+            "X-Cartel-Internal-Source": "telegram-webhook",
+            "X-Cartel-Actor-User-Id": String(closeResult.actor_user_id ?? linked.user_id),
+          },
+          body: JSON.stringify({
+            action: "edit_mission",
+            workspaceId: closeResult.workspace_id,
+            missionId: closeResult.mission_id,
+            targetId: closeResult.target_id,
+            clientRequestId: closeResult.client_request_id,
+            revision: Number(closeResult.edit_revision ?? 0) + 1,
+          }),
+          signal: AbortSignal.timeout(30_000),
+        });
+        closeTransport = (await response.json().catch(() => null)) as typeof closeTransport;
+      } catch {
+        closeTransport = null;
+      }
+
+      if (String(closeTransport?.editState ?? "") === "EDITED") {
+        await reply("This Social Mission is closed. The mission card above has been updated.");
+        return;
+      }
+      // Completion already persisted. Never resend, never revert.
+      await reply("This Social Mission is closed. The mission card could not be updated in place; do not resend it.");
+      return;
+    }
+
+
     // 5. One atomic service-only RPC. It re-authorizes everything above and
     //    verifies the official X handle independently before creating rows.
     const { data: created, error: createError } = await admin.rpc("create_social_mission_from_telegram_link", {
@@ -558,9 +648,9 @@ Deno.serve(async (req: Request) => {
       _telegram_chat_id: numericChatId,
       _telegram_message_id: messageId,
       _telegram_user_id: telegramUserId,
-      _canonical_url: parsed.canonicalUrl,
-      _external_post_id: parsed.postId,
-      _author_handle: parsed.handle,
+      _canonical_url: parsed!.canonicalUrl,
+      _external_post_id: parsed!.postId,
+      _author_handle: parsed!.handle,
     });
     const result = (created ?? null) as
       | {
@@ -651,9 +741,25 @@ Deno.serve(async (req: Request) => {
 
     const transportState = String(transport?.deliveryState ?? "");
     if (transportState === "SENT") {
+      // SE-4B — the mission clock starts from CONFIRMED delivery. One
+      // activation call anchors ends_at to the card's own sent_at and seeds
+      // the durable pulse/completion schedule idempotently. A failed
+      // activation NEVER resends the card: the delivered card stays intact and
+      // the admin gets a concise diagnostic instead.
+      const { data: activated, error: activateError } = await admin.rpc("activate_social_mission_schedule", {
+        _mission_id: result.mission_id,
+        _target_id: result.target_id,
+      });
+      const activation = (activated ?? null) as { outcome?: string } | null;
+      const activationOutcome = String(activation?.outcome ?? "");
+      if (activateError || (activationOutcome !== "ACTIVATED" && activationOutcome !== "EXISTING")) {
+        await reply("The mission card was delivered, but its 45-minute schedule could not be activated. Do not resend; close it with /mission close when you are done.");
+        return;
+      }
       // The branded card itself is the confirmation. No extra success text.
       return;
     }
+
     if (transportState === "FAILED") {
       await reply("The mission card could not be delivered to this community.");
       return;
