@@ -137,21 +137,17 @@ CREATE POLICY social_mission_schedule_events_select_member
 -- ---------------------------------------------------------------------------
 -- 2. Cleanup-kind widening. Additive only: `launch_watch_cta` keeps working
 --    and the generic cleanup worker is untouched.
+--
+--    ONLY the exact live constraint `telegram_message_cleanup_jobs_cleanup_kind_check`
+--    is dropped. No other CHECK on this table is inspected or removed. The
+--    block is rerunnable: the widened constraint is dropped by its exact name
+--    first if a previous run already created it.
 -- ---------------------------------------------------------------------------
-DO $$
-DECLARE
-  v_name text;
-BEGIN
-  FOR v_name IN
-    SELECT conname FROM pg_constraint
-     WHERE conrelid = 'public.telegram_message_cleanup_jobs'::regclass
-       AND contype = 'c'
-       AND pg_get_constraintdef(oid) ILIKE '%cleanup_kind%'
-  LOOP
-    EXECUTE format('ALTER TABLE public.telegram_message_cleanup_jobs DROP CONSTRAINT %I', v_name);
-  END LOOP;
-END
-$$;
+ALTER TABLE public.telegram_message_cleanup_jobs
+  DROP CONSTRAINT IF EXISTS telegram_message_cleanup_jobs_cleanup_kind_check;
+
+ALTER TABLE public.telegram_message_cleanup_jobs
+  DROP CONSTRAINT IF EXISTS telegram_message_cleanup_jobs_cleanup_kind_ck;
 
 ALTER TABLE public.telegram_message_cleanup_jobs
   ADD CONSTRAINT telegram_message_cleanup_jobs_cleanup_kind_ck
