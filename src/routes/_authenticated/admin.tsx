@@ -966,7 +966,7 @@ function AdminPage() {
       <PageHeader
         eyebrow="Platform Owner"
         title="Owner Console"
-        description="Platform command center. Operational data is read-only; platform Telegram system messages can be edited here. Owner identity is verified server-side on every load."
+        description="Platform command center. Metrics and operational listings are read-only; platform Telegram system messages and the single pinned Social Mission live test are the only actions here. Owner identity is verified server-side on every load."
         status="Owner Access"
       />
 
@@ -992,9 +992,9 @@ function AdminPage() {
             {hasUnrestrictedAccess
               ? "Unrestricted access is granted by the platform service, not by this interface."
               : "The platform service did not report unrestricted access for this session."}{" "}
-            Operational data in this console is read-only: it never edits users, roles, plans or
-            Sticker Drop schedules. The only editable surface is the platform Telegram system
-            messages below.
+            Operational listings in this console are read-only: they never edit users, roles, plans
+            or Sticker Drop schedules. The only actions available here are editing the platform
+            Telegram system messages and running the single pinned Social Mission live test.
 
           </p>
           {capabilities.length > 0 ? (
@@ -1489,6 +1489,8 @@ function AdminPage() {
           ) : null}
         </div>
       </Section>
+
+      <SocialMissionTestControl />
     </div>
   );
 }
