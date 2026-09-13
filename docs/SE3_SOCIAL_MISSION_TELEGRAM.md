@@ -138,15 +138,16 @@ Input: `workspaceId`, `missionId`, `targetId`, `clientRequestId`, `revision`.
 ## 7. Copy and safety rules
 
 The renderer is pure and dependency-free and never accepts operator free text.
-LIVE cards invite legitimate participation ("Read the update and add your
-perspective.") with no promise, reward, points, payout or quota. Terminal cards
-are truthful, use the exact phrase **"Observed during the mission window"** and
-state that observed change is not proof Telegram caused the growth. Metrics with
-a null canonical value are omitted — null never becomes zero — and a delta is
-shown only when baseline and latest both exist. X labels are Views, Likes,
-Replies, Reposts, Bookmarks. Output is plain text under 4096 characters with no
-parse mode, and exactly one inline URL button (`OPEN ON X` for X) pointing at
-the stored canonical post URL.
+LIVE cards identify the mission as a community mission tied to an official
+project post, ask the reader to open/read/join the conversation naturally, and
+make clear that likes, replies and reposts are optional with no reward, points,
+payout or quota. Terminal cards are truthful, use the exact phrase **"Observed
+during the mission window"** and state that observed change is not proof
+Telegram caused the growth. Metrics with a null canonical value are omitted —
+null never becomes zero — and a delta is shown only when baseline and latest
+both exist. X labels are Views, Likes, Replies, Reposts, Bookmarks. Output is
+plain text under 4096 characters with no parse mode, and exactly one inline URL
+button (`OPEN ON X` for X) pointing at the stored canonical post URL.
 
 ## 8. Tests
 

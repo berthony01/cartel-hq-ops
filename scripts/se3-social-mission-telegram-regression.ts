@@ -18,6 +18,10 @@ import {
   TELEGRAM_TEXT_MAX,
   COMPLETED_OBSERVED_PHRASE,
   NO_CAUSATION_CAVEAT,
+  LIVE_MISSION_HEADER,
+  LIVE_ACTION_LINE,
+  LIVE_OPTIONAL_LINE,
+  LIVE_METRICS_HEADING,
   type CanonicalMetrics,
   type MissionCardInput,
 } from "../backend-source/edge-functions/social-mission-telegram/card.ts";
@@ -348,7 +352,10 @@ const liveInput: MissionCardInput = {
 
 const liveCard = renderMissionCard(liveInput);
 
-check("11.4 LIVE copy invites perspective", liveCard.text.includes("Read the update and add your perspective."));
+check("11.4 LIVE copy shows community mission header", liveCard.text.includes(LIVE_MISSION_HEADER));
+check("11.4a LIVE copy states the natural action", liveCard.text.includes(LIVE_ACTION_LINE));
+check("11.4b LIVE copy says participation is optional", liveCard.text.includes(LIVE_OPTIONAL_LINE));
+check("11.4c LIVE metric heading is live results", liveCard.text.includes(LIVE_METRICS_HEADING));
 check("11.5 LIVE card shows project name and ticker", liveCard.text.includes("PEPE CARTEL") && liveCard.text.includes("$PCART"));
 check("11.6 null metric omitted (saves)", !liveCard.text.includes("Bookmarks"));
 check("11.7 null latest with non-null baseline shows baseline, no delta", liveCard.text.includes("Reposts: 3") && !liveCard.text.includes("Reposts: 3 ("));
@@ -385,7 +392,7 @@ const emptyCard = renderMissionCard({
   projectName: null,
   ticker: null,
 });
-check("11.25 all-null metrics render no metric block", !emptyCard.text.includes("Views") && !emptyCard.text.includes("Likes"));
+check("11.25 all-null metrics render no metric block", !emptyCard.text.includes(LIVE_METRICS_HEADING) && !emptyCard.text.includes("Views:") && !emptyCard.text.includes("Likes:"));
 check("11.26 all-null metrics never become zero", !/: 0(\s|$)/m.test(emptyCard.text));
 check("11.27 card still renders without project/author/excerpt", emptyCard.text.includes("CARTEL SOCIAL MISSION"));
 
@@ -685,7 +692,7 @@ check("14.46 function applies the caption budget for PHOTO", indexSrc.includes('
 const captionCard = renderMissionCard({ ...liveInput, contentText: "y".repeat(4000), maxLength: 1024 });
 check("14.47 caption fits the Telegram caption limit", captionCard.text.length <= 1024);
 check("14.48 caption keeps project identity", captionCard.text.includes("PEPE CARTEL") && captionCard.text.includes("$PCART"));
-check("14.49 caption keeps the participation line", captionCard.text.includes("Read the update and add your perspective."));
+check("14.49 caption keeps the participation block", captionCard.text.includes(LIVE_ACTION_LINE));
 check("14.50 caption keeps metrics", captionCard.text.includes("Views: 180 (+80)"));
 
 const tightCaption = renderMissionCard({ ...liveInput, contentText: "z".repeat(4000), maxLength: 200 });

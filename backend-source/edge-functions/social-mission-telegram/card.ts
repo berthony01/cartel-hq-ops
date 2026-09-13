@@ -93,7 +93,10 @@ const GENERIC_LABELS: Record<MetricKey, string> = {
 export const COMPLETED_OBSERVED_PHRASE = "Observed during the mission window";
 export const NO_CAUSATION_CAVEAT =
   "Observed changes are not proof that Telegram caused the growth.";
-export const LIVE_PARTICIPATION_LINE = "Read the update and add your perspective.";
+export const LIVE_MISSION_HEADER = "🎯 COMMUNITY MISSION";
+export const LIVE_ACTION_LINE = "Open the official post, read it, and join the conversation.";
+export const LIVE_OPTIONAL_LINE = "Likes, replies, and reposts are optional. Participate naturally.";
+export const LIVE_METRICS_HEADING = "📊 LIVE RESULTS";
 
 export function metricLabels(platform: MissionCardPlatform): Record<MetricKey, string> {
   return platform === "x" ? X_LABELS : GENERIC_LABELS;
@@ -165,14 +168,14 @@ function headline(status: MissionCardStatus): string {
 
 function statusBody(status: MissionCardStatus): string[] {
   // Activation only: read, think, contribute. No promise, reward or quota.
-  if (status === "LIVE") return [LIVE_PARTICIPATION_LINE];
+  if (status === "LIVE") return [LIVE_MISSION_HEADER, LIVE_ACTION_LINE, LIVE_OPTIONAL_LINE];
   if (status === "COMPLETED") return ["This mission window is closed."];
   if (status === "CANCELLED") return ["This mission was cancelled before it completed."];
   return ["This mission ended in a failed state."];
 }
 
 function metricsHeading(status: MissionCardStatus): string {
-  return status === "LIVE" ? "Observed so far:" : `${COMPLETED_OBSERVED_PHRASE}:`;
+  return status === "LIVE" ? LIVE_METRICS_HEADING : `${COMPLETED_OBSERVED_PHRASE}:`;
 }
 
 function composeLines(input: MissionCardInput, excerptBudget: number | null): string[] {
