@@ -477,9 +477,102 @@ export function SocialMissionTestControl() {
                 resend; the authoritative state above is the record of what happened.
               </p>
             ) : null}
+
+            <div className="mt-2 flex min-w-0 flex-col gap-2 border-t border-border pt-3">
+              <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm [overflow-wrap:anywhere]">
+                Metric refresh: one server-side official X read, one stored snapshot, then the same
+                Telegram message is edited in place. No replacement message is ever sent.
+              </p>
+
+              {updateGates.map((gate) => (
+                <Gate key={gate.label} label={gate.label} ok={gate.ok} detail={gate.detail} />
+              ))}
+
+              <InlineRow
+                title="Authoritative edit state"
+                subtitle={`Revision: ${fixture.editRevision} · Last edit: ${formatWhen(
+                  fixture.lastEditAt,
+                )}${fixture.editLastError ? ` · ${fixture.editLastError}` : ""}`}
+                trailing={
+                  <StatusBadge tone={fixture.editState === "EDITED" ? "green" : "muted"}>
+                    <span>{fixture.editState}</span>
+                  </StatusBadge>
+                }
+              />
+
+              {capture && capture.ok ? (
+                <InlineRow
+                  title="Metric snapshot stored"
+                  subtitle={`Views ${capture.metrics.views ?? "—"} · Likes ${
+                    capture.metrics.likes ?? "—"
+                  } · Replies ${capture.metrics.comments ?? "—"} · Reposts ${
+                    capture.metrics.shares ?? "—"
+                  } · Bookmarks ${capture.metrics.saves ?? "—"} · Observed ${formatWhen(
+                    capture.observedAt,
+                  )}`}
+                  trailing={
+                    <StatusBadge tone="green">
+                      <span>Captured</span>
+                    </StatusBadge>
+                  }
+                />
+              ) : null}
+
+              {editResult ? (
+                <InlineRow
+                  title="Last edit result"
+                  subtitle={`${editResult.message ?? "No additional detail."}${
+                    editResult.duplicate ? " (Duplicate request — no second edit was made.)" : ""
+                  }`}
+                  trailing={
+                    <StatusBadge tone={editResult.editState === "EDITED" ? "green" : "red"}>
+                      <span>{editResult.editState}</span>
+                    </StatusBadge>
+                  }
+                />
+              ) : null}
+
+              {updateError ? (
+                <InlineRow
+                  leading={<AlertTriangle className="size-4" aria-hidden="true" />}
+                  title="Metric refresh did not complete"
+                  subtitle={updateError}
+                  trailing={
+                    <StatusBadge tone="red">
+                      <span>Unresolved</span>
+                    </StatusBadge>
+                  }
+                />
+              ) : null}
+
+              <div className="flex min-w-0 flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={!canUpdate}
+                  onClick={() => setUpdateConfirmOpen(true)}
+                  className="min-w-0"
+                >
+                  {updating ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <RefreshCw className="size-4" aria-hidden="true" />
+                  )}
+                  <span>Capture metrics and update the card</span>
+                </Button>
+              </div>
+
+              {updateAttempted ? (
+                <p className="text-[11px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+                  A metric refresh was already attempted in this session. This control offers no
+                  retry and no second edit; the authoritative state above is the record.
+                </p>
+              ) : null}
+            </div>
           </>
         ) : null}
       </div>
+
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent className="max-w-[min(32rem,92vw)]">
