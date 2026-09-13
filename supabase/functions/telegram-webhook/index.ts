@@ -1987,6 +1987,22 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true });
     }
 
+    // SE-4A — `/mission <X link>`. Runs before every generic fallthrough and
+    // before the unknown-slash-command no-op, and touches no other command.
+    const missionMatch = text.match(/^\/mission(?:@\w+)?(?:\s+(\S+))?\s*$/i);
+    if (missionMatch && from?.is_bot !== true) {
+      await runMissionCommand({
+        chatId,
+        chatType: String(chat?.type ?? ""),
+        updateId: update?.update_id,
+        messageId: message?.message_id,
+        telegramUserId: Number(from.id),
+        argument: String(missionMatch[1] ?? ""),
+      });
+      return json({ ok: true });
+    }
+
+
 
     const isHelp = /^\/help(?:@\w+)?$/i.test(text);
     const isRoadmap = /^\/roadmap(?:@\w+)?$/i.test(text);
