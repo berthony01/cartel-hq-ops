@@ -4,8 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
   CalendarClock,
-  Clock3,
-  Megaphone,
   Radio,
 } from "lucide-react";
 
@@ -17,7 +15,13 @@ import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
 import { BroadcastsPanel } from "@/components/cartel/BroadcastsPanel";
 import { AudiencePanel } from "@/components/cartel/AudiencePanel";
 import { ProjectInboxPanel } from "@/components/cartel/ProjectInboxPanel";
+import {
+  SocialMissionsPanel,
+  SocialMissionsSummary,
+} from "@/components/cartel/SocialMissionsPanel";
+import { CommunityAnalyticsPanel } from "@/components/cartel/CommunityAnalyticsPanel";
 import { RelatedLinks, relatedLinkClass } from "@/components/cartel/RelatedLinks";
+
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWorkspace } from "@/lib/workspace-context";
@@ -33,8 +37,28 @@ import {
   useTelegramGroupSetup,
 } from "@/components/cartel/TelegramGroupCard";
 
-const TAB_KEYS = ["overview", "broadcasts", "audience", "inbox", "communities", "history"] as const;
+/**
+ * Canonical tab keys. `communities` and `audience` keep their original key so
+ * every existing `?tab=` URL keeps resolving; only their presentation labels
+ * changed (Telegram / Launch Watch). `history` is retired from navigation and
+ * is remapped below instead of silently 404-ing.
+ */
+const TAB_KEYS = [
+  "overview",
+  "communities",
+  "missions",
+  "broadcasts",
+  "inbox",
+  "audience",
+  "analytics",
+] as const;
 type TabKey = (typeof TAB_KEYS)[number];
+
+/** Retired tab keys mapped to their current home. */
+const LEGACY_TAB_ALIASES: Record<string, TabKey> = {
+  history: "overview",
+};
+
 
 /** Strict UUID shape for the Inbox `conversation` param; anything else is dropped. */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -47,10 +71,14 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 type TelegramSearch = { tab?: TabKey; launch?: string; conversation?: string };
 
 function validateTelegramSearch(search: Record<string, unknown>): TelegramSearch {
-  const rawTab = search["tab"];
-  const tab = (TAB_KEYS as readonly string[]).includes(String(rawTab))
-    ? (String(rawTab) as TabKey)
-    : undefined;
+  const rawTab = String(search["tab"] ?? "");
+  const aliased = LEGACY_TAB_ALIASES[rawTab];
+  const tab = aliased
+    ? aliased
+    : (TAB_KEYS as readonly string[]).includes(rawTab)
+      ? (rawTab as TabKey)
+      : undefined;
+
   const rawLaunch = search["launch"];
   const launch =
     typeof rawLaunch === "string" && rawLaunch.trim().length > 0 && rawLaunch.length <= 100
@@ -74,17 +102,17 @@ export const Route = createFileRoute("/_authenticated/telegram")({
   validateSearch: validateTelegramSearch,
   head: () => ({
     meta: [
-      { title: "Community Command — CARTEL HQ" },
+      { title: "Community Command Center — CARTEL HQ" },
       {
         name: "description",
         content:
-          "Operator control center for connected Telegram communities. Manage onboarding, Sticker Drops, sticker sends, and connection health from one place.",
+          "Workspace-scoped community operations hub: Telegram communities, Social Missions, broadcasts, the member Inbox and Launch Watch in one place.",
       },
-      { property: "og:title", content: "Community Command — CARTEL HQ" },
+      { property: "og:title", content: "Community Command Center — CARTEL HQ" },
       {
         property: "og:description",
         content:
-          "Operator control center for Telegram communities, onboarding, Sticker Drops, sticker sends, and connection health.",
+          "One hub for Telegram community health, Social Missions, broadcasts, member Inbox and Launch Watch.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -97,55 +125,15 @@ export const Route = createFileRoute("/_authenticated/telegram")({
 
 const TABS: Array<{ value: TabKey; label: string; shortLabel: string }> = [
   { value: "overview", label: "Overview", shortLabel: "Overview" },
-  { value: "broadcasts", label: "Broadcasts", shortLabel: "Broadcasts" },
-  { value: "audience", label: "Audience", shortLabel: "Audience" },
+  { value: "communities", label: "Telegram", shortLabel: "Telegram" },
+  { value: "missions", label: "Missions", shortLabel: "Missions" },
+  { value: "broadcasts", label: "Broadcasts", shortLabel: "Broadcast" },
   { value: "inbox", label: "Inbox", shortLabel: "Inbox" },
-  { value: "communities", label: "Communities", shortLabel: "Communities" },
-  { value: "history", label: "History", shortLabel: "History" },
+  { value: "audience", label: "Launch Watch", shortLabel: "Watch" },
+  { value: "analytics", label: "Analytics", shortLabel: "Stats" },
 ];
 
-/**
- * Shell placeholder for a Community Command capability that is not built yet.
- * Deliberately renders no counts, no records and no send controls so nothing
- * can read as live functionality.
- */
-function ComingSoonPanel({
-  icon: Icon,
-  title,
-  summary,
-  points,
-  footnote,
-}: {
-  icon: typeof Megaphone;
-  title: string;
-  summary: string;
-  points: string[];
-  footnote: string;
-}) {
-  return (
-    <Section
-      variant="primary"
-      title={title}
-      description={summary}
-      leading={<Icon className="size-4" aria-hidden="true" />}
-      actions={<StatusBadge tone="muted">Planned</StatusBadge>}
-    >
-      <div className="rounded-lg border border-dashed border-border/70 bg-background/40 p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          What will live here
-        </p>
-        <ul className="mt-2 list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-muted-foreground">
-          {points.map((point) => (
-            <li key={point}>{point}</li>
-          ))}
-        </ul>
-        <p className="mt-3 border-t border-border/60 pt-3 text-xs leading-relaxed text-muted-foreground">
-          {footnote}
-        </p>
-      </div>
-    </Section>
-  );
-}
+
 
 /** Presentation-only metric tile for the community-state summaries. */
 function StateMetric({ label, value }: { label: string; value: string }) {
@@ -292,10 +280,11 @@ function TelegramPage() {
     <div className="flex max-w-5xl min-w-0 flex-col gap-4 sm:gap-6">
       <PageHeader
         eyebrow="Community Operations"
-        title="Community Command"
-        description="Connection health, onboarding, the member Inbox and per-community controls for every Telegram community you have connected."
+        title="Community Command Center"
+        description="Your workspace's community operations hub: connected Telegram communities, Social Missions, broadcasts, the member Inbox and Launch Watch in one place."
         status={groupCount > 0 ? "Connected · Live Beta" : "Live Beta"}
       />
+
 
       <RelatedLinks label="Go to">
         <Link to="/distribution" className={relatedLinkClass}>
@@ -440,7 +429,29 @@ function TelegramPage() {
               </Button>
             </div>
           </Section>
+
+          {/* Read-only Social Mission strip. Same query as the Missions tab. */}
+          <SocialMissionsSummary
+            workspaceId={workspaceId ?? null}
+            onOpenMissions={() => setTab("missions")}
+          />
         </TabsContent>
+
+        {/* ---------------------------------------------------------------- */}
+        <TabsContent value="missions" className="mt-0 min-w-0">
+          <SocialMissionsPanel workspaceId={workspaceId ?? null} />
+        </TabsContent>
+
+        {/* ---------------------------------------------------------------- */}
+        <TabsContent value="analytics" className="mt-0 min-w-0">
+          <CommunityAnalyticsPanel
+            workspaceId={workspaceId ?? null}
+            connectedGroupCount={groupCount}
+            readyGroupCount={readyCount}
+            groupsUnavailable={groupsError && groupCount === 0}
+          />
+        </TabsContent>
+
 
         {/* ---------------------------------------------------------------- */}
         <TabsContent value="broadcasts" className="mt-0 min-w-0">
@@ -523,33 +534,19 @@ function TelegramPage() {
             </div>
           </details>
         </TabsContent>
-
-        {/* ---------------------------------------------------------------- */}
-        <TabsContent value="history" className="mt-0 min-w-0">
-          <ComingSoonPanel
-            icon={Clock3}
-            title="History"
-            summary="What was communicated, where it landed, and what the automations did. Not available yet."
-            points={[
-              "Messages: watcher updates, launch notifications and community broadcasts, with aggregate delivery outcomes.",
-              "Activity: onboarding welcomes, Launch Watch cards and Sticker Drops, kept separate so the log stays readable.",
-              "Outcomes reported honestly — an uncertain Telegram result will never be shown as delivered.",
-            ]}
-            footnote="Recent watcher update outcomes remain visible in Launch Control until this view ships."
-          />
-        </TabsContent>
       </Tabs>
 
       <p className="flex items-center gap-2 text-[11px] leading-relaxed text-muted-foreground">
         <Radio className="size-3.5 shrink-0" aria-hidden="true" />
         <span>
-          History is being added in a later controlled phase. It is a placeholder today and cannot
-          send or expose anything. Broadcasts sends private watcher updates, and can post one
+          Missions is read-only: missions are started and closed with <code>/mission</code> in your
+          connected Telegram community. Broadcasts sends private watcher updates, and can post one
           official project message into a connected community you select. Inbox shows explicit
           private replies to official Launch Watch bot messages — sending team replies from it is
-          not available yet.
+          not available yet. Analytics is a current-state summary, not historical reporting.
         </span>
       </p>
+
     </div>
   );
 

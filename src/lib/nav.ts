@@ -60,12 +60,13 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Community",
     items: [
       {
-        label: "Community Command",
+        label: "Community Command Center",
         to: "/telegram",
         icon: MessageSquare,
         mobilePrimary: true,
         mobileLabel: "Community",
       },
+
       { label: "Sticker Drops", to: "/distribution", icon: Send, subordinate: true },
     ],
   },
