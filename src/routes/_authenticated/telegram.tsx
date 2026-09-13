@@ -280,10 +280,11 @@ function TelegramPage() {
     <div className="flex max-w-5xl min-w-0 flex-col gap-4 sm:gap-6">
       <PageHeader
         eyebrow="Community Operations"
-        title="Community Command"
-        description="Connection health, onboarding, the member Inbox and per-community controls for every Telegram community you have connected."
+        title="Community Command Center"
+        description="Your workspace's community operations hub: connected Telegram communities, Social Missions, broadcasts, the member Inbox and Launch Watch in one place."
         status={groupCount > 0 ? "Connected · Live Beta" : "Live Beta"}
       />
+
 
       <RelatedLinks label="Go to">
         <Link to="/distribution" className={relatedLinkClass}>
