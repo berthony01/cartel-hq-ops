@@ -737,14 +737,24 @@ async function handleEdit(args: {
     return json({ editState: nextState, message: verified.message }, verified.definite ? 409 : 202);
   }
 
-  // Exactly ONE editMessageText call. There is no replacement-send fallback.
-  const outcome = await callTelegram(botToken, "editMessageText", {
-    chat_id: chatId,
-    message_id: messageId,
-    text: rendered.text,
-    disable_web_page_preview: true,
-    ...(rendered.replyMarkup ? { reply_markup: rendered.replyMarkup } : {}),
-  });
+  // Exactly ONE edit call on the SAME message: editMessageCaption for a branded
+  // photo card, editMessageText for a text card. Never both, never a probe of
+  // one followed by the other, and never a replacement send.
+  const outcome =
+    transportKind === "PHOTO"
+      ? await callTelegram(botToken, "editMessageCaption", {
+          chat_id: chatId,
+          message_id: messageId,
+          caption: rendered.text,
+          ...(rendered.replyMarkup ? { reply_markup: rendered.replyMarkup } : {}),
+        })
+      : await callTelegram(botToken, "editMessageText", {
+          chat_id: chatId,
+          message_id: messageId,
+          text: rendered.text,
+          disable_web_page_preview: true,
+          ...(rendered.replyMarkup ? { reply_markup: rendered.replyMarkup } : {}),
+        });
 
   const confirmed =
     outcome.kind === "ok" || (outcome.kind === "rejected" && isNotModified(outcome.description));
