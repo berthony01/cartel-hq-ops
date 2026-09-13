@@ -23,11 +23,29 @@ import { createClient } from "@supabase/supabase-js";
 
 const TG_BASE = "https://api.telegram.org";
 const TELEGRAM_TIMEOUT_MS = 10_000;
+const TELEGRAM_UPLOAD_TIMEOUT_MS = 20_000;
 const TELEGRAM_TEXT_LIMIT = 4096;
+
+/**
+ * SE-3.3 branded identity transport.
+ *
+ * The private workspace asset bucket is fixed server-side. A logo is only ever
+ * resolved profile -> media_assets inside the SAME workspace, downloaded with
+ * the service-role storage client, and attached as binary bytes. No signed URL,
+ * no public URL and no asset identifier ever reaches the browser, and the
+ * browser can never supply a media path, asset id or transport kind.
+ */
+const WORKSPACE_ASSET_BUCKET = "workspace-assets";
+const LOGO_ASSET_TYPE = "logo";
+const LOGO_ALLOWED_MIME = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+const LOGO_MAX_BYTES = 5_000_000;
+
+type TransportKind = "TEXT" | "PHOTO";
 
 import {
   renderMissionCard,
   EMPTY_METRICS,
+  TELEGRAM_CAPTION_MAX,
   type CanonicalMetrics,
   type MissionCardPlatform,
   type MissionCardStatus,
