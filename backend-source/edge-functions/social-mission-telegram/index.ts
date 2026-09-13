@@ -1,0 +1,622 @@
+/**
+ * SE-3 — `social-mission-telegram` (authenticated Edge Function, verify_jwt=true).
+ *
+ * Repository parity copy. Deployment is performed externally against the
+ * authoritative Supabase project; Lovable never deploys or writes the DB.
+ *
+ * Narrow transport for Cartel Social Missions. Deliberately NOT an extension of
+ * the mature `telegram-group` function: it reuses that function's proven
+ * patterns (auth + owner/admin gate, live group verification, fixed API host,
+ * 10s timeout, SENT / FAILED / AMBIGUOUS honesty) without touching any existing
+ * Telegram behaviour, connection metadata, bot or ledger.
+ *
+ * Exactly two actions: `send_mission`, `edit_mission`.
+ *
+ * Hard boundaries:
+ * - no X / social provider / Refetcher call
+ * - no usage_ledger write, no cron, no scheduler, no background work
+ * - no second bot, no connection mutation, no webhook change
+ * - never logs or returns the bot token or a raw Telegram payload
+ */
+
+import { createClient } from "@supabase/supabase-js";
+
+const TG_BASE = "https://api.telegram.org";
+const TELEGRAM_TIMEOUT_MS = 10_000;
+const TELEGRAM_TEXT_LIMIT = 4096;
+
+import {
+  renderMissionCard,
+  EMPTY_METRICS,
+  type CanonicalMetrics,
+  type MissionCardPlatform,
+  type MissionCardStatus,
+} from "./card.ts";
+
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+type Json = Record<string, unknown>;
+
+function json(payload: Json, status = 200): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { ...CORS, "Content-Type": "application/json" },
+  });
+}
+
+function fail(message: string, status: number, extra: Json = {}): Response {
+  return json({ error: message, ...extra }, status);
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function uuid(value: unknown): string | null {
+  return typeof value === "string" && UUID_RE.test(value.trim()) ? value.trim() : null;
+}
+
+// --------------------------------------------------------------------------
+// Telegram transport. One fixed host, one bounded call, no token in output.
+// --------------------------------------------------------------------------
+
+type TelegramOutcome =
+  | { kind: "ok"; result: Json }
+  | { kind: "rejected"; description: string; code: number }
+  | { kind: "uncertain"; description: string };
+
+async function callTelegram(token: string, method: string, body: Json): Promise<TelegramOutcome> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TELEGRAM_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${TG_BASE}/bot${token}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    // 429 and 5xx are transport-uncertain: the message may still have been sent.
+    if (response.status === 429 || response.status >= 500) {
+      return { kind: "uncertain", description: `Telegram returned ${response.status}.` };
+    }
+
+    let payload: { ok?: boolean; result?: unknown; description?: unknown; error_code?: unknown };
+    try {
+      payload = (await response.json()) as typeof payload;
+    } catch {
+      return { kind: "uncertain", description: "Telegram returned an unreadable response." };
+    }
+
+    if (payload && payload.ok === true && payload.result && typeof payload.result === "object") {
+      return { kind: "ok", result: payload.result as Json };
+    }
+    if (payload && payload.ok === false) {
+      const description =
+        typeof payload.description === "string" ? payload.description : "Telegram rejected the request.";
+      const code = typeof payload.error_code === "number" ? payload.error_code : response.status;
+      return { kind: "rejected", description, code };
+    }
+    return { kind: "uncertain", description: "Telegram returned an inconclusive response." };
+  } catch (_error) {
+    // Abort (timeout) and network failure are both uncertain, never "failed".
+    return { kind: "uncertain", description: "Telegram did not respond in time." };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function isNotModified(description: string): boolean {
+  return description.toLowerCase().includes("message is not modified");
+}
+
+/** Live verification at execution time: getMe + getChat + getChatMember. */
+async function verifyGroup(
+  token: string,
+  chatId: number,
+): Promise<{ ok: true } | { ok: false; definite: boolean; message: string }> {
+  const me = await callTelegram(token, "getMe", {});
+  if (me.kind === "uncertain") return { ok: false, definite: false, message: me.description };
+  if (me.kind === "rejected") return { ok: false, definite: true, message: "Bot credentials rejected." };
+  const botId = (me.result as { id?: unknown }).id;
+  if (typeof botId !== "number") {
+    return { ok: false, definite: false, message: "Bot identity unavailable." };
+  }
+
+  const chat = await callTelegram(token, "getChat", { chat_id: chatId });
+  if (chat.kind === "uncertain") return { ok: false, definite: false, message: chat.description };
+  if (chat.kind === "rejected") {
+    return { ok: false, definite: true, message: "The Telegram community is not reachable." };
+  }
+  const chatType = (chat.result as { type?: unknown }).type;
+  if (chatType !== "group" && chatType !== "supergroup") {
+    return { ok: false, definite: true, message: "The target chat is not a group or supergroup." };
+  }
+
+  const member = await callTelegram(token, "getChatMember", { chat_id: chatId, user_id: botId });
+  if (member.kind === "uncertain") return { ok: false, definite: false, message: member.description };
+  if (member.kind === "rejected") {
+    return { ok: false, definite: true, message: "The bot is no longer in this community." };
+  }
+  const status = (member.result as { status?: unknown }).status;
+  if (status !== "administrator" && status !== "creator") {
+    return { ok: false, definite: true, message: "The bot must be an administrator of this community." };
+  }
+  return { ok: true };
+}
+
+// --------------------------------------------------------------------------
+// Authoritative render load
+// --------------------------------------------------------------------------
+
+type LoadedRow = Record<string, unknown>;
+
+function metricsFrom(row: LoadedRow | null, prefix: string): CanonicalMetrics {
+  if (!row) return { ...EMPTY_METRICS };
+  const read = (key: string): number | null => {
+    const value = row[`${prefix}${key}`];
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+  };
+  return {
+    views: read("views"),
+    likes: read("likes"),
+    comments: read("comments"),
+    shares: read("shares"),
+    saves: read("saves"),
+  };
+}
+
+function cardStatus(missionStatus: string): MissionCardStatus | null {
+  if (missionStatus === "LIVE") return "LIVE";
+  if (missionStatus === "COMPLETED") return "COMPLETED";
+  if (missionStatus === "CANCELLED") return "CANCELLED";
+  if (missionStatus === "FAILED") return "FAILED";
+  return null; // DRAFT (or anything unknown) is never rendered.
+}
+
+async function renderAuthoritativeCard(
+  admin: ReturnType<typeof createClient>,
+  workspaceId: string,
+  mission: LoadedRow,
+): Promise<{ text: string; replyMarkup: unknown } | { error: string }> {
+  const status = cardStatus(String(mission["status"] ?? ""));
+  if (!status) return { error: "This mission is not in a sendable state." };
+
+  const postId = mission["social_post_id"];
+  if (typeof postId !== "string") return { error: "This mission has no bound social post." };
+
+  const { data: post } = await admin
+    .from("social_posts")
+    .select("id, workspace_id, platform, canonical_url, author_handle, content_text")
+    .eq("id", postId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (!post) return { error: "The mission post is not available." };
+
+  const { data: snapshot } = await admin
+    .from("social_metric_snapshots")
+    .select("metric_views, metric_likes, metric_comments, metric_shares, metric_saves, observed_at")
+    .eq("mission_id", mission["id"] as string)
+    .eq("workspace_id", workspaceId)
+    .order("observed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data: profile } = await admin
+    .from("project_profiles")
+    .select("project_name, ticker")
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+
+  const card = renderMissionCard({
+    missionStatus: status,
+    platform: String((post as LoadedRow)["platform"] ?? "x") as MissionCardPlatform,
+    canonicalUrl: String((post as LoadedRow)["canonical_url"] ?? ""),
+    authorHandle: ((post as LoadedRow)["author_handle"] as string | null) ?? null,
+    contentText: ((post as LoadedRow)["content_text"] as string | null) ?? null,
+    projectName: profile ? ((profile as LoadedRow)["project_name"] as string | null) ?? null : null,
+    ticker: profile ? ((profile as LoadedRow)["ticker"] as string | null) ?? null : null,
+    baseline: metricsFrom(mission, "baseline_"),
+    latest: snapshot ? metricsFrom(snapshot as LoadedRow, "metric_") : null,
+  });
+
+  if (!card.text.trim() || card.text.length > TELEGRAM_TEXT_LIMIT) {
+    return { error: "The mission card could not be rendered safely." };
+  }
+  return { text: card.text, replyMarkup: card.replyMarkup };
+}
+
+// --------------------------------------------------------------------------
+// Entry point
+// --------------------------------------------------------------------------
+
+Deno.serve(async (request: Request): Promise<Response> => {
+  if (request.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  if (request.method !== "POST") return fail("Method not allowed.", 405);
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN");
+  if (!supabaseUrl || !serviceKey || !anonKey) return fail("Server configuration error.", 500);
+  if (!botToken) return fail("Telegram is not configured.", 500);
+
+  // 1. Authenticated caller ------------------------------------------------
+  const authHeader = request.headers.get("Authorization") ?? "";
+  if (!authHeader.startsWith("Bearer ")) return fail("Authentication required.", 401);
+
+  const authClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { persistSession: false },
+  });
+  const { data: userData, error: userError } = await authClient.auth.getUser();
+  const user = userData?.user;
+  if (userError || !user) return fail("Authentication required.", 401);
+
+  let body: Json;
+  try {
+    body = (await request.json()) as Json;
+  } catch {
+    return fail("Invalid request body.", 400);
+  }
+
+  const action = typeof body["action"] === "string" ? body["action"] : "";
+  if (action !== "send_mission" && action !== "edit_mission") {
+    return fail("Unsupported action.", 400);
+  }
+
+  const workspaceId = uuid(body["workspaceId"]);
+  const missionId = uuid(body["missionId"]);
+  const targetId = uuid(body["targetId"]);
+  const clientRequestId = uuid(body["clientRequestId"]);
+  if (!workspaceId || !missionId || !targetId || !clientRequestId) {
+    return fail("Invalid request parameters.", 400);
+  }
+
+  const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
+
+  // 2. Owner/admin membership gate — ordinary members cannot run transport.
+  const { data: membership } = await admin
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const role = membership ? String((membership as LoadedRow)["role"] ?? "") : "";
+  if (role !== "owner" && role !== "admin") {
+    return fail("Only workspace owners and admins can run mission transport.", 403);
+  }
+
+  // 3. Authoritative rows, rechecked server-side ---------------------------
+  const { data: mission } = await admin
+    .from("social_missions")
+    .select("*")
+    .eq("id", missionId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (!mission) return fail("Mission not found.", 404);
+  if (String((mission as LoadedRow)["status"] ?? "") === "DRAFT") {
+    return fail("A draft mission cannot be sent or edited.", 409);
+  }
+
+  const { data: target } = await admin
+    .from("social_mission_targets")
+    .select("*")
+    .eq("id", targetId)
+    .eq("workspace_id", workspaceId)
+    .eq("mission_id", missionId)
+    .maybeSingle();
+  if (!target) return fail("Mission target not found.", 404);
+  const t = target as LoadedRow;
+
+  const chatId = typeof t["telegram_chat_id"] === "number" ? (t["telegram_chat_id"] as number) : null;
+  const connectionId = typeof t["group_connection_id"] === "string" ? (t["group_connection_id"] as string) : null;
+  if (chatId === null || !connectionId) {
+    return fail("This target is no longer bound to a Telegram community.", 409);
+  }
+
+  const { data: connection } = await admin
+    .from("telegram_group_connections")
+    .select("id, workspace_id, telegram_chat_id")
+    .eq("id", connectionId)
+    .eq("workspace_id", workspaceId)
+    .eq("telegram_chat_id", chatId)
+    .maybeSingle();
+  if (!connection) {
+    return fail("The Telegram community connection for this target no longer matches.", 409);
+  }
+
+  if (action === "send_mission") {
+    return await handleSend({ admin, botToken, workspaceId, mission: mission as LoadedRow, t, chatId, clientRequestId });
+  }
+
+  const revision = body["revision"];
+  if (typeof revision !== "number" || !Number.isInteger(revision) || revision < 1) {
+    return fail("Invalid revision.", 400);
+  }
+  return await handleEdit({
+    admin,
+    botToken,
+    workspaceId,
+    mission: mission as LoadedRow,
+    t,
+    chatId,
+    clientRequestId,
+    revision,
+  });
+});
+
+// --------------------------------------------------------------------------
+// send_mission
+// --------------------------------------------------------------------------
+
+async function handleSend(args: {
+  admin: ReturnType<typeof createClient>;
+  botToken: string;
+  workspaceId: string;
+  mission: LoadedRow;
+  t: LoadedRow;
+  chatId: number;
+  clientRequestId: string;
+}): Promise<Response> {
+  const { admin, botToken, workspaceId, mission, t, chatId, clientRequestId } = args;
+  const targetId = String(t["id"]);
+  const state = String(t["delivery_state"] ?? "");
+
+  // 3a. Idempotency resolved BEFORE live verification and BEFORE Telegram.
+  if (t["send_client_request_id"] === clientRequestId) {
+    return json({
+      deliveryState: state,
+      duplicate: true,
+      telegramMessageId: (t["telegram_message_id"] as number | null) ?? null,
+      sentAt: (t["sent_at"] as string | null) ?? null,
+      message: "This send request was already recorded.",
+    });
+  }
+
+  // A fresh request may only claim PENDING, or retry a definitively FAILED
+  // target (FAILED proves nothing was delivered). SENDING/AMBIGUOUS/SENT are
+  // refused so a duplicate message can never be produced.
+  if (state !== "PENDING" && state !== "FAILED") {
+    return fail(
+      state === "SENT"
+        ? "This target was already sent."
+        : "A previous send attempt is unresolved; this target cannot be sent again.",
+      409,
+      { deliveryState: state },
+    );
+  }
+
+  // 3b. Render authoritatively, then durably claim the intent BEFORE transport.
+  const rendered = await renderAuthoritativeCard(admin, workspaceId, mission);
+  if ("error" in rendered) return fail(rendered.error, 409);
+
+  const { error: claimError } = await admin
+    .from("social_mission_targets")
+    .update({
+      delivery_state: "SENDING",
+      send_client_request_id: clientRequestId,
+      send_text_intent: rendered.text,
+      telegram_message_id: null,
+      sent_at: null,
+      message_text_snapshot: null,
+      last_error: null,
+    })
+    .eq("id", targetId)
+    .eq("workspace_id", workspaceId)
+    .eq("delivery_state", state);
+  if (claimError) {
+    return fail("Could not claim this target for sending.", 409);
+  }
+
+  // 3c. Live verification after the claim.
+  const verified = await verifyGroup(botToken, chatId);
+  if (!verified.ok) {
+    const nextState = verified.definite ? "FAILED" : "AMBIGUOUS";
+    await admin
+      .from("social_mission_targets")
+      .update({ delivery_state: nextState, last_error: verified.message.slice(0, 1000) })
+      .eq("id", targetId)
+      .eq("workspace_id", workspaceId);
+    return json({ deliveryState: nextState, message: verified.message }, verified.definite ? 409 : 202);
+  }
+
+  // 3d. Exactly ONE sendMessage transport call.
+  const outcome = await callTelegram(botToken, "sendMessage", {
+    chat_id: chatId,
+    text: rendered.text,
+    disable_web_page_preview: true,
+    ...(rendered.replyMarkup ? { reply_markup: rendered.replyMarkup } : {}),
+  });
+
+  if (outcome.kind === "ok") {
+    const messageId = (outcome.result as { message_id?: unknown }).message_id;
+    if (typeof messageId !== "number") {
+      await admin
+        .from("social_mission_targets")
+        .update({ delivery_state: "AMBIGUOUS", last_error: "Telegram did not confirm a message id." })
+        .eq("id", targetId)
+        .eq("workspace_id", workspaceId);
+      return json({ deliveryState: "AMBIGUOUS", message: "Telegram did not confirm a message id." }, 202);
+    }
+
+    const sentAt = new Date().toISOString();
+    const { error: finalizeError } = await admin
+      .from("social_mission_targets")
+      .update({
+        delivery_state: "SENT",
+        telegram_message_id: messageId,
+        sent_at: sentAt,
+        message_text_snapshot: rendered.text,
+        last_error: null,
+      })
+      .eq("id", targetId)
+      .eq("workspace_id", workspaceId);
+
+    if (finalizeError) {
+      // Message exists but the durable row could not be finalized. The row keeps
+      // its SENDING claim, so no attempt can ever resend it. No second call.
+      return json(
+        {
+          deliveryState: "AMBIGUOUS",
+          message: "The message was sent but its state could not be recorded.",
+        },
+        202,
+      );
+    }
+    return json({ deliveryState: "SENT", telegramMessageId: messageId, sentAt });
+  }
+
+  if (outcome.kind === "rejected") {
+    await admin
+      .from("social_mission_targets")
+      .update({ delivery_state: "FAILED", last_error: outcome.description.slice(0, 1000) })
+      .eq("id", targetId)
+      .eq("workspace_id", workspaceId);
+    return json({ deliveryState: "FAILED", message: outcome.description }, 409);
+  }
+
+  await admin
+    .from("social_mission_targets")
+    .update({ delivery_state: "AMBIGUOUS", last_error: outcome.description.slice(0, 1000) })
+    .eq("id", targetId)
+    .eq("workspace_id", workspaceId);
+  return json({ deliveryState: "AMBIGUOUS", message: outcome.description }, 202);
+}
+
+// --------------------------------------------------------------------------
+// edit_mission
+// --------------------------------------------------------------------------
+
+async function handleEdit(args: {
+  admin: ReturnType<typeof createClient>;
+  botToken: string;
+  workspaceId: string;
+  mission: LoadedRow;
+  t: LoadedRow;
+  chatId: number;
+  clientRequestId: string;
+  revision: number;
+}): Promise<Response> {
+  const { admin, botToken, workspaceId, mission, t, chatId, clientRequestId, revision } = args;
+  const targetId = String(t["id"]);
+  const editState = String(t["edit_state"] ?? "IDLE");
+  const currentRevision = typeof t["edit_revision"] === "number" ? (t["edit_revision"] as number) : 0;
+  const messageId = typeof t["telegram_message_id"] === "number" ? (t["telegram_message_id"] as number) : null;
+
+  if (String(t["delivery_state"] ?? "") !== "SENT" || messageId === null) {
+    return fail("Only a confirmed sent target can be edited.", 409);
+  }
+
+  // Idempotency BEFORE live verification and BEFORE Telegram.
+  if (t["edit_client_request_id"] === clientRequestId) {
+    if (currentRevision !== revision) {
+      return fail("This edit request id is already bound to a different revision.", 409, {
+        editState,
+        editRevision: currentRevision,
+      });
+    }
+    return json({
+      editState,
+      duplicate: true,
+      editRevision: currentRevision,
+      lastEditAt: (t["last_edit_at"] as string | null) ?? null,
+      message: "This edit request was already recorded.",
+    });
+  }
+
+  // An unresolved edit blocks the next revision so updates cannot reorder.
+  if (editState === "EDITING" || editState === "AMBIGUOUS") {
+    return fail("A previous edit is unresolved; this target cannot be edited again.", 409, {
+      editState,
+      editRevision: currentRevision,
+    });
+  }
+
+  if (revision !== currentRevision + 1) {
+    return fail("Stale or conflicting edit revision.", 409, { editState, editRevision: currentRevision });
+  }
+
+  const rendered = await renderAuthoritativeCard(admin, workspaceId, mission);
+  if ("error" in rendered) return fail(rendered.error, 409);
+
+  const { error: claimError } = await admin
+    .from("social_mission_targets")
+    .update({
+      edit_state: "EDITING",
+      edit_client_request_id: clientRequestId,
+      edit_revision: revision,
+      edit_text_snapshot: rendered.text,
+      edit_last_error: null,
+      last_edit_at: null,
+    })
+    .eq("id", targetId)
+    .eq("workspace_id", workspaceId)
+    .eq("edit_revision", currentRevision)
+    .eq("edit_state", editState);
+  if (claimError) return fail("Could not claim this target for editing.", 409);
+
+  const verified = await verifyGroup(botToken, chatId);
+  if (!verified.ok) {
+    const nextState = verified.definite ? "FAILED" : "AMBIGUOUS";
+    await admin
+      .from("social_mission_targets")
+      .update({ edit_state: nextState, edit_last_error: verified.message.slice(0, 1000) })
+      .eq("id", targetId)
+      .eq("workspace_id", workspaceId);
+    return json({ editState: nextState, message: verified.message }, verified.definite ? 409 : 202);
+  }
+
+  // Exactly ONE editMessageText call. There is no replacement-send fallback.
+  const outcome = await callTelegram(botToken, "editMessageText", {
+    chat_id: chatId,
+    message_id: messageId,
+    text: rendered.text,
+    disable_web_page_preview: true,
+    ...(rendered.replyMarkup ? { reply_markup: rendered.replyMarkup } : {}),
+  });
+
+  const confirmed =
+    outcome.kind === "ok" || (outcome.kind === "rejected" && isNotModified(outcome.description));
+
+  if (confirmed) {
+    const editedAt = new Date().toISOString();
+    const { error: finalizeError } = await admin
+      .from("social_mission_targets")
+      .update({
+        edit_state: "EDITED",
+        message_text_snapshot: rendered.text,
+        edit_last_error: null,
+        last_edit_at: editedAt,
+      })
+      .eq("id", targetId)
+      .eq("workspace_id", workspaceId);
+    if (finalizeError) {
+      // Row stays EDITING: future revisions are blocked, and nothing is resent.
+      return json(
+        { editState: "AMBIGUOUS", message: "The edit was applied but its state could not be recorded." },
+        202,
+      );
+    }
+    return json({ editState: "EDITED", editRevision: revision, lastEditAt: editedAt });
+  }
+
+  if (outcome.kind === "rejected") {
+    // Definite rejection: confirmed snapshot is untouched, no replacement sent.
+    await admin
+      .from("social_mission_targets")
+      .update({ edit_state: "FAILED", edit_last_error: outcome.description.slice(0, 1000) })
+      .eq("id", targetId)
+      .eq("workspace_id", workspaceId);
+    return json({ editState: "FAILED", message: outcome.description }, 409);
+  }
+
+  await admin
+    .from("social_mission_targets")
+    .update({ edit_state: "AMBIGUOUS", edit_last_error: outcome.description.slice(0, 1000) })
+    .eq("id", targetId)
+    .eq("workspace_id", workspaceId);
+  return json({ editState: "AMBIGUOUS", message: outcome.description }, 202);
+}
