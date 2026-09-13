@@ -583,7 +583,9 @@ async function handleEdit(args: {
   const rendered = await renderAuthoritativeCard(admin, workspaceId, mission);
   if ("error" in rendered) return fail(rendered.error, 409);
 
-  const { error: claimError } = await admin
+  // Compare-and-set on revision + edit state. A zero-row update returns no
+  // error, so the claim must return exactly one row before any transport.
+  const { data: claimedRow, error: claimError } = await admin
     .from("social_mission_targets")
     .update({
       edit_state: "EDITING",
@@ -596,17 +598,25 @@ async function handleEdit(args: {
     .eq("id", targetId)
     .eq("workspace_id", workspaceId)
     .eq("edit_revision", currentRevision)
-    .eq("edit_state", editState);
-  if (claimError) return fail("Could not claim this target for editing.", 409);
+    .eq("edit_state", editState)
+    .select("id")
+    .maybeSingle();
+  if (claimError || !claimedRow) {
+    // Not claimed: stop before verification and before Telegram. No retry.
+    return fail("Could not claim this target for editing.", 409);
+  }
 
   const verified = await verifyGroup(botToken, chatId);
   if (!verified.ok) {
     const nextState = verified.definite ? "FAILED" : "AMBIGUOUS";
-    await admin
-      .from("social_mission_targets")
-      .update({ edit_state: nextState, edit_last_error: verified.message.slice(0, 1000) })
-      .eq("id", targetId)
-      .eq("workspace_id", workspaceId);
+    const persisted = await updateTargetState(admin, targetId, workspaceId, {
+      edit_state: nextState,
+      edit_last_error: verified.message.slice(0, 1000),
+    });
+    if (!persisted) {
+      // The EDITING claim remains and blocks future revisions.
+      return json({ editState: "AMBIGUOUS", message: UNRESOLVED_EDIT }, 202);
+    }
     return json({ editState: nextState, message: verified.message }, verified.definite ? 409 : 202);
   }
 
@@ -624,17 +634,13 @@ async function handleEdit(args: {
 
   if (confirmed) {
     const editedAt = new Date().toISOString();
-    const { error: finalizeError } = await admin
-      .from("social_mission_targets")
-      .update({
-        edit_state: "EDITED",
-        message_text_snapshot: rendered.text,
-        edit_last_error: null,
-        last_edit_at: editedAt,
-      })
-      .eq("id", targetId)
-      .eq("workspace_id", workspaceId);
-    if (finalizeError) {
+    const finalized = await updateTargetState(admin, targetId, workspaceId, {
+      edit_state: "EDITED",
+      message_text_snapshot: rendered.text,
+      edit_last_error: null,
+      last_edit_at: editedAt,
+    });
+    if (!finalized) {
       // Row stays EDITING: future revisions are blocked, and nothing is resent.
       return json(
         { editState: "AMBIGUOUS", message: "The edit was applied but its state could not be recorded." },
@@ -646,18 +652,19 @@ async function handleEdit(args: {
 
   if (outcome.kind === "rejected") {
     // Definite rejection: confirmed snapshot is untouched, no replacement sent.
-    await admin
-      .from("social_mission_targets")
-      .update({ edit_state: "FAILED", edit_last_error: outcome.description.slice(0, 1000) })
-      .eq("id", targetId)
-      .eq("workspace_id", workspaceId);
+    const persisted = await updateTargetState(admin, targetId, workspaceId, {
+      edit_state: "FAILED",
+      edit_last_error: outcome.description.slice(0, 1000),
+    });
+    if (!persisted) {
+      return json({ editState: "AMBIGUOUS", message: UNRESOLVED_EDIT }, 202);
+    }
     return json({ editState: "FAILED", message: outcome.description }, 409);
   }
 
-  await admin
-    .from("social_mission_targets")
-    .update({ edit_state: "AMBIGUOUS", edit_last_error: outcome.description.slice(0, 1000) })
-    .eq("id", targetId)
-    .eq("workspace_id", workspaceId);
-  return json({ editState: "AMBIGUOUS", message: outcome.description }, 202);
+  const persisted = await updateTargetState(admin, targetId, workspaceId, {
+    edit_state: "AMBIGUOUS",
+    edit_last_error: outcome.description.slice(0, 1000),
+  });
+  return json({ editState: "AMBIGUOUS", message: persisted ? outcome.description : UNRESOLVED_EDIT }, 202);
 }
