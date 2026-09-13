@@ -188,7 +188,15 @@ check("5.28 the migration is prepared only, never applied here", sql.includes("P
 // ---------------------------------------------------------------------------
 
 check("6.1 internal source constant is the webhook", transportCode.includes('const INTERNAL_SOURCE = "telegram-webhook"'));
-check("6.2 internal path requires BOTH the service bearer and the source header", transportCode.includes("internalSource === INTERNAL_SOURCE && bearerToken === serviceKey"));
+// SE-4B re-pin: the single-source equality became an exact two-source
+// allowlist. The security property asserted is unchanged: an internal
+// caller needs BOTH an allowlisted source header AND the service bearer.
+check(
+  "6.2 internal path requires BOTH the service bearer and an allowlisted source header",
+  transportCode.includes("INTERNAL_SOURCES.includes(internalSource) && bearerToken === serviceKey")
+    && !/isInternalCaller = INTERNAL_SOURCES\.includes\(internalSource\);/.test(transportCode)
+    && !/isInternalCaller = true/.test(transportCode),
+);
 check("6.3 internal path requires a UUID actor header", transportCode.includes('uuid(request.headers.get("X-Cartel-Actor-User-Id"))'));
 check("6.4 a missing internal actor is rejected", transportCode.includes("if (!internalActor) return fail(\"Authentication required.\", 401)"));
 check("6.5 the end-user JWT path is preserved", transportCode.includes("authClient.auth.getUser()") && transportCode.includes("actorUserId = user.id"));
