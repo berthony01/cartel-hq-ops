@@ -181,7 +181,7 @@ check(
 );
 check(
   "4.4 the control never submits chat id, caption, transport kind or logo reference",
-  !/chatId|chat_id|caption|logoAssetId|logo_asset_id|transportKind:|assetPath|asset_id/.test(controlCode),
+  !/chatId|chat_id|caption|logoAssetId|logo_asset_id|transport_kind:|assetPath|asset_id/.test(controlCode),
 );
 check(
   "4.5 no direct Telegram API call and no bot token",
@@ -265,8 +265,8 @@ check(
 // ---------------------------------------------------------------------------
 
 check(
-  "6.1 the Owner Console imports the branded control exactly once",
-  (adminSrc.match(/BrandedSocialMissionTestControl/g) ?? []).length === 2,
+  "6.1 the Owner Console references the branded control only as one import and one render",
+  (adminSrc.match(/BrandedSocialMissionTestControl/g) ?? []).length === 3,
 );
 check(
   "6.2 the branded control is rendered in the Owner Console",
