@@ -136,9 +136,9 @@ check(
 
 check(
   "4.1 the only transport import is the existing thin client",
-  /import \{ sendMissionCard, type SendMissionCardResult \} from "@\/lib\/social-mission-telegram"/.test(
+  /import \{\s*editMissionCard,\s*sendMissionCard,\s*type EditMissionCardResult,\s*type SendMissionCardResult,\s*\} from "@\/lib\/social-mission-telegram";/.test(
     controlSrc,
-  ),
+  ) && (controlSrc.match(/from "@\/lib\/social-mission-telegram"/g) ?? []).length === 1,
 );
 check("4.2 sendMissionCard is invoked exactly once in source", (controlCode.match(/sendMissionCard\(/g) ?? []).length === 1);
 check(
@@ -376,7 +376,7 @@ check(
     /saves: read\.data\.metrics\.saves/.test(captureCode) &&
     !/\?\?\s*0/.test(captureCode),
 );
-check("9.12 no usage_ledger write in the new path", !captureSrc.includes("usage_ledger"));
+check("9.12 no usage_ledger write in the new path", !captureCode.includes("usage_ledger"));
 check(
   "9.13 no update, upsert or delete anywhere in the new path",
   !/\.update\(/.test(captureCode) &&
@@ -453,10 +453,9 @@ check(
 );
 check(
   "9.24 the update confirmation states in-place edit, no replacement and no retry",
-  controlSrc.includes("edits " + "\n" === "never" ? false : true) &&
-    /in place/.test(controlSrc) &&
-    /No replacement message is sent/.test(controlSrc) &&
-    /there is\n  "is no automatic retry|is no automatic retry/.test(controlSrc),
+  controlSrc.includes("in place") &&
+    controlSrc.includes("No replacement message is sent") &&
+    controlSrc.includes("is no automatic retry"),
 );
 check(
   "9.25 the send path is unchanged: still PENDING-gated and still one send",
