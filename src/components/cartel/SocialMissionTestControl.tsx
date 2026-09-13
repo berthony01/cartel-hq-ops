@@ -118,7 +118,7 @@ async function loadFixture(): Promise<FixtureLoad> {
   const targets = await supabase
     .from("social_mission_targets")
     .select(
-      "id, delivery_state, group_connection_id, telegram_message_id, sent_at, last_error",
+      "id, delivery_state, group_connection_id, telegram_message_id, sent_at, last_error, edit_revision, edit_state, last_edit_at, edit_last_error",
     )
     .eq("mission_id", mission.id)
     .limit(5);
