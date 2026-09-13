@@ -2087,6 +2087,82 @@ export type Database = {
           },
         ]
       }
+      social_mission_schedule_events: {
+        Row: {
+          claimed_at: string | null
+          client_request_id: string
+          created_at: string
+          due_at: string
+          event_type: string
+          finished_at: string | null
+          id: string
+          last_error: string | null
+          mission_id: string
+          sequence_no: number
+          state: string
+          target_id: string
+          telegram_message_id: number | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          claimed_at?: string | null
+          client_request_id?: string
+          created_at?: string
+          due_at: string
+          event_type: string
+          finished_at?: string | null
+          id?: string
+          last_error?: string | null
+          mission_id: string
+          sequence_no: number
+          state?: string
+          target_id: string
+          telegram_message_id?: number | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          claimed_at?: string | null
+          client_request_id?: string
+          created_at?: string
+          due_at?: string
+          event_type?: string
+          finished_at?: string | null
+          id?: string
+          last_error?: string | null
+          mission_id?: string
+          sequence_no?: number
+          state?: string
+          target_id?: string
+          telegram_message_id?: number | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_mission_schedule_events_mission_workspace_fkey"
+            columns: ["mission_id", "workspace_id"]
+            isOneToOne: false
+            referencedRelation: "social_missions"
+            referencedColumns: ["id", "workspace_id"]
+          },
+          {
+            foreignKeyName: "social_mission_schedule_events_target_workspace_fkey"
+            columns: ["target_id", "workspace_id"]
+            isOneToOne: false
+            referencedRelation: "social_mission_targets"
+            referencedColumns: ["id", "workspace_id"]
+          },
+          {
+            foreignKeyName: "social_mission_schedule_events_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       social_mission_targets: {
         Row: {
           created_at: string
@@ -3854,6 +3930,10 @@ export type Database = {
           uncertainty_acknowledged_at: string
         }[]
       }
+      activate_social_mission_schedule: {
+        Args: { _mission_id: string; _target_id: string }
+        Returns: Json
+      }
       apply_launch_chain_deployment_verification: {
         Args: {
           _block_hash?: string
@@ -4374,6 +4454,24 @@ export type Database = {
         }
         Returns: string
       }
+      claim_due_social_mission_schedule_events: {
+        Args: { _limit?: number }
+        Returns: {
+          canonical_url: string
+          client_request_id: string
+          edit_revision: number
+          event_id: string
+          event_type: string
+          group_connection_id: string
+          mission_created_by: string
+          mission_id: string
+          sequence_no: number
+          target_id: string
+          telegram_chat_id: number
+          telegram_message_id: number
+          workspace_id: string
+        }[]
+      }
       claim_launch_chain_production_presign_authorization: {
         Args: {
           _authorization_id: string
@@ -4456,6 +4554,10 @@ export type Database = {
           telegram_chat_id: number
           telegram_message_id: number
         }[]
+      }
+      close_social_mission_from_telegram: {
+        Args: { _telegram_chat_id: number; _telegram_user_id: number }
+        Returns: Json
       }
       correct_verified_launch_contract: {
         Args: {
@@ -4772,6 +4874,15 @@ export type Database = {
           sent_at: string
           status: string
         }[]
+      }
+      finish_social_mission_schedule_event: {
+        Args: {
+          _event_id: string
+          _last_error?: string
+          _state: string
+          _telegram_message_id?: number
+        }
+        Returns: boolean
       }
       format_launch_schedule_snapshot: {
         Args: { _at: string; _tz: string; _we: string; _ws: string }
@@ -5297,6 +5408,7 @@ export type Database = {
       }
       invoke_launch_notification_scheduler: { Args: never; Returns: number }
       invoke_project_inbox_delivery_scheduler: { Args: never; Returns: number }
+      invoke_social_mission_runner: { Args: never; Returns: undefined }
       invoke_sticker_drop_scheduler: { Args: never; Returns: number }
       invoke_telegram_message_cleanup_scheduler: {
         Args: never
@@ -5791,6 +5903,10 @@ export type Database = {
       set_sticker_current_version: {
         Args: { _sticker_id: string; _version_id: string }
         Returns: Json
+      }
+      social_mission_scheduler_secret_matches: {
+        Args: { p_secret: string }
+        Returns: boolean
       }
       sticker_drop_scheduler_secret_matches: {
         Args: { p_secret: string }
