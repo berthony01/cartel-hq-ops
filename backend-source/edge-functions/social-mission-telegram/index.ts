@@ -561,13 +561,26 @@ async function handleSend(args: {
     return json({ deliveryState: nextState, message: verified.message }, verified.definite ? 409 : 202);
   }
 
-  // 3d. Exactly ONE sendMessage transport call.
-  const outcome = await callTelegram(botToken, "sendMessage", {
-    chat_id: chatId,
-    text: rendered.text,
-    disable_web_page_preview: true,
-    ...(rendered.replyMarkup ? { reply_markup: rendered.replyMarkup } : {}),
-  });
+  // 3e. Exactly ONE transport call. A branded target sends one sendPhoto with
+  // the logo bytes as multipart body and the card as caption; a plain target
+  // sends one sendMessage. There is no companion message and, once a call has
+  // been attempted, no text retry: a rejection or ambiguity is recorded as-is.
+  let outcome: TelegramOutcome;
+  if (logo) {
+    const form = new FormData();
+    form.append("chat_id", String(chatId));
+    form.append("caption", rendered.text);
+    if (rendered.replyMarkup) form.append("reply_markup", JSON.stringify(rendered.replyMarkup));
+    form.append("photo", new Blob([logo.bytes as BlobPart], { type: logo.mimeType }), logo.fileName);
+    outcome = await callTelegram(botToken, "sendPhoto", form, TELEGRAM_UPLOAD_TIMEOUT_MS);
+  } else {
+    outcome = await callTelegram(botToken, "sendMessage", {
+      chat_id: chatId,
+      text: rendered.text,
+      disable_web_page_preview: true,
+      ...(rendered.replyMarkup ? { reply_markup: rendered.replyMarkup } : {}),
+    });
+  }
 
   if (outcome.kind === "ok") {
     const messageId = (outcome.result as { message_id?: unknown }).message_id;
