@@ -8,7 +8,8 @@
  * content, defensively flattened and truncated.
  *
  * Copy safety (V1, frozen):
- * - No promise, reward, points, payout, quota or engagement instruction.
+ * - Genuine participation language only; no promise, reward, points, payout,
+ *   quota, coercion, or required engagement.
  * - COMPLETED cards use the exact phrase "Observed during the mission window"
  *   and state that observed change is NOT proof Telegram caused the growth.
  * - A metric whose canonical value is null is OMITTED. Null never becomes 0.
