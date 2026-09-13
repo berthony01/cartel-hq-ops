@@ -465,11 +465,11 @@ check(
 );
 check(
   "13.11 every post-claim state write goes through the confirmed helper",
-  (indexSrc.match(/await updateTargetState\(/g) ?? []).length === 8,
+  (indexSrc.match(/await updateTargetState\(/g) ?? []).length === 9,
 );
 check(
   "13.12 send post-claim writes are all confirmed",
-  (sendBlock.match(/await updateTargetState\(/g) ?? []).length === 4,
+  (sendBlock.match(/await updateTargetState\(/g) ?? []).length === 5,
 );
 check(
   "13.13 edit post-claim writes are all confirmed",
