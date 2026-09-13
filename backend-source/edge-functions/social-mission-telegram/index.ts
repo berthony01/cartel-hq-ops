@@ -361,16 +361,38 @@ Deno.serve(async (request: Request): Promise<Response> => {
   if (!botToken) return fail("Telegram is not configured.", 500);
 
   // 1. Authenticated caller ------------------------------------------------
+  //
+  // Two mutually exclusive caller shapes. The end-user path is unchanged: a
+  // real Supabase user JWT resolved through the anon client.
+  //
+  // SE-4A adds ONE server-only internal path for the Telegram webhook. It is
+  // recognised only when BOTH the bearer token is exactly the service-role key
+  // AND the internal source header names the webhook, and it still requires an
+  // explicit UUID actor. That actor is a claim, never an authorization: every
+  // existing gate below (owner/admin membership, mission/target/connection row
+  // binding, idempotency, live group verification) runs identically.
   const authHeader = request.headers.get("Authorization") ?? "";
   if (!authHeader.startsWith("Bearer ")) return fail("Authentication required.", 401);
+  const bearerToken = authHeader.slice("Bearer ".length).trim();
 
-  const authClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
-    auth: { persistSession: false },
-  });
-  const { data: userData, error: userError } = await authClient.auth.getUser();
-  const user = userData?.user;
-  if (userError || !user) return fail("Authentication required.", 401);
+  const internalSource = request.headers.get("X-Cartel-Internal-Source") ?? "";
+  const isInternalCaller = internalSource === INTERNAL_SOURCE && bearerToken === serviceKey;
+
+  let actorUserId: string;
+  if (isInternalCaller) {
+    const internalActor = uuid(request.headers.get("X-Cartel-Actor-User-Id"));
+    if (!internalActor) return fail("Authentication required.", 401);
+    actorUserId = internalActor;
+  } else {
+    const authClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false },
+    });
+    const { data: userData, error: userError } = await authClient.auth.getUser();
+    const user = userData?.user;
+    if (userError || !user) return fail("Authentication required.", 401);
+    actorUserId = user.id;
+  }
 
   let body: Json;
   try {
