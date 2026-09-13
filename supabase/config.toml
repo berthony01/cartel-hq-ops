@@ -10,6 +10,9 @@ verify_jwt = false
 [functions.telegram-message-cleanup]
 verify_jwt = false
 
+[functions.social-mission-runner]
+verify_jwt = false
+
 [functions.cartel-network-logo]
 verify_jwt = false
 
