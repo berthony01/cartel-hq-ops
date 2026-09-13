@@ -296,6 +296,11 @@ AS $$
 DECLARE
   v_limit integer := LEAST(GREATEST(COALESCE(_limit, 25), 1), 200);
   v_stale timestamptz := now() - interval '5 minutes';
+  -- Ownership is established by the RETURNING clause of THIS invocation's own
+  -- claiming UPDATEs, never by a timestamp window. Two overlapping runners can
+  -- therefore never receive the same event.
+  v_claimed uuid[] := ARRAY[]::uuid[];
+  v_batch uuid[];
 BEGIN
   -- Maintenance: an unresolved pulse is retired, never retried.
   UPDATE public.social_mission_schedule_events e
@@ -307,7 +312,9 @@ BEGIN
      AND e.claimed_at IS NOT NULL
      AND e.claimed_at < v_stale;
 
-  -- COMPLETE: database-first completion.
+  -- COMPLETE: database-first completion. A stale CLAIMED completion may be
+  -- reclaimed ONLY because the downstream edit is idempotent by the SAME
+  -- stored client_request_id; no event is created and no request id changes.
   WITH due AS (
     SELECT e.id
       FROM public.social_mission_schedule_events e
@@ -341,11 +348,16 @@ BEGIN
        AND p.event_type = 'PULSE'
        AND p.state = 'PENDING'
      RETURNING p.id
+  ),
+  claimed AS (
+    UPDATE public.social_mission_schedule_events e
+       SET state = 'CLAIMED',
+           claimed_at = now()
+     WHERE e.id IN (SELECT id FROM due)
+     RETURNING e.id
   )
-  UPDATE public.social_mission_schedule_events e
-     SET state = 'CLAIMED',
-         claimed_at = now()
-   WHERE e.id IN (SELECT id FROM due);
+  SELECT COALESCE(array_agg(claimed.id), ARRAY[]::uuid[]) INTO v_batch FROM claimed;
+  v_claimed := v_claimed || v_batch;
 
   -- PULSE: only while the mission is genuinely still live.
   WITH due AS (
@@ -362,12 +374,22 @@ BEGIN
      ORDER BY e.due_at
      LIMIT v_limit
      FOR UPDATE SKIP LOCKED
+  ),
+  claimed AS (
+    UPDATE public.social_mission_schedule_events e
+       SET state = 'CLAIMED',
+           claimed_at = now()
+     WHERE e.id IN (SELECT id FROM due)
+     RETURNING e.id
   )
-  UPDATE public.social_mission_schedule_events e
-     SET state = 'CLAIMED',
-         claimed_at = now()
-   WHERE e.id IN (SELECT id FROM due);
+  SELECT COALESCE(array_agg(claimed.id), ARRAY[]::uuid[]) INTO v_batch FROM claimed;
+  v_claimed := v_claimed || v_batch;
 
+  IF array_length(v_claimed, 1) IS NULL THEN
+    RETURN;
+  END IF;
+
+  -- Only this invocation's own claims are returned.
   RETURN QUERY
   SELECT e.id,
          e.event_type,
@@ -386,11 +408,8 @@ BEGIN
     JOIN public.social_mission_targets t ON t.id = e.target_id
     JOIN public.social_missions m ON m.id = e.mission_id
     JOIN public.social_posts p ON p.id = m.social_post_id
-   WHERE e.state = 'CLAIMED'
-     AND e.claimed_at IS NOT NULL
-     AND e.claimed_at >= now() - interval '30 seconds'
-   ORDER BY e.due_at
-   LIMIT v_limit;
+   WHERE e.id = ANY(v_claimed)
+   ORDER BY e.due_at;
 END;
 $$;
 
