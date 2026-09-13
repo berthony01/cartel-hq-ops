@@ -4,8 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
   CalendarClock,
-  Clock3,
-  Megaphone,
   Radio,
 } from "lucide-react";
 
@@ -17,7 +15,13 @@ import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
 import { BroadcastsPanel } from "@/components/cartel/BroadcastsPanel";
 import { AudiencePanel } from "@/components/cartel/AudiencePanel";
 import { ProjectInboxPanel } from "@/components/cartel/ProjectInboxPanel";
+import {
+  SocialMissionsPanel,
+  SocialMissionsSummary,
+} from "@/components/cartel/SocialMissionsPanel";
+import { CommunityAnalyticsPanel } from "@/components/cartel/CommunityAnalyticsPanel";
 import { RelatedLinks, relatedLinkClass } from "@/components/cartel/RelatedLinks";
+
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWorkspace } from "@/lib/workspace-context";
