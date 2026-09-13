@@ -106,6 +106,62 @@ async function editMessage(token: string, chatId: string, messageId: number, tex
   } catch { }
 }
 function escapeHtml(value: string) { return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+/**
+ * SE-4A — `/mission <X link>` zero-X-read launcher helpers.
+ *
+ * This command NEVER reads the X API. Everything the mission is created from is
+ * derived from the exact link an authorized admin typed, and any link that is
+ * not a plain public X/Twitter status URL is rejected outright.
+ */
+const MISSION_X_HOSTS = ["x.com", "www.x.com", "twitter.com", "www.twitter.com", "mobile.twitter.com"];
+
+type ParsedXStatus = { handle: string; postId: string; canonicalUrl: string };
+
+function parseXStatusUrl(raw: string): ParsedXStatus | null {
+  const value = String(raw ?? "").trim();
+  if (!value || value.length > 2048) return null;
+  let url: URL;
+  try { url = new URL(value); } catch { return null; }
+  if (url.protocol !== "https:") return null;
+  // No credentials and no explicit port: nothing that can smuggle another host.
+  if (url.username || url.password || url.port) return null;
+  if (!MISSION_X_HOSTS.includes(url.hostname.toLowerCase())) return null;
+  // Trailing slash and query string are canonicalised away here.
+  const segments = url.pathname.split("/").filter((segment) => segment.length > 0);
+  if (segments.length !== 3) return null;
+  const handle = String(segments[0]).toLowerCase();
+  if (String(segments[1]).toLowerCase() !== "status") return null;
+  // `i/web/status/...` and every other non-handle path shape fails here.
+  if (!/^[a-z0-9_]{1,15}$/.test(handle) || handle === "i") return null;
+  const postId = String(segments[2]);
+  if (!/^[0-9]{1,32}$/.test(postId)) return null;
+  return { handle, postId, canonicalUrl: `https://x.com/${handle}/status/${postId}` };
+}
+
+/** The workspace's official X handle, taken only from the canonical profile. */
+function officialXHandle(xUrl: unknown): string | null {
+  if (typeof xUrl !== "string") return null;
+  const match = xUrl.trim().match(/^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/@?([A-Za-z0-9_]{1,15})(?:[/?#].*)?$/i);
+  return match ? String(match[1]).toLowerCase() : null;
+}
+
+/**
+ * Deterministic RFC-4122-shaped request id derived from the Telegram update id.
+ * A Telegram webhook retry of the SAME update therefore produces the SAME
+ * clientRequestId, so the transport's own idempotency absorbs it instead of
+ * producing a second mission card.
+ */
+async function missionRequestUuid(updateId: number) {
+  const hex = await sha256Hex(`cartelhq-mission-send:${updateId}`);
+  const chars = hex.slice(0, 32).split("");
+  chars[12] = "5";
+  chars[16] = ["8", "9", "a", "b"][parseInt(hex[16], 16) % 4];
+  const h = chars.join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+}
+
+const MISSION_USAGE = "Usage: /mission https://x.com/&lt;official handle&gt;/status/&lt;id&gt;\n\nOnly a public X post link from this project's official X account can start a Social Mission, and only current group admins can run it.";
 function encodeChatId(chatId: string) { return chatId.startsWith("-") ? `n${chatId.slice(1)}` : chatId; }
 function decodeChatId(encoded: string) { return encoded.startsWith("n") ? `-${encoded.slice(1)}` : encoded; }
 function shouldSendWelcome(value: string | null | undefined) {
@@ -254,7 +310,7 @@ Launch Watch is opt-in and can be muted or stopped. Deployment verification conf
 }
 function helpText(isGroup: boolean) {
   return isGroup
-    ? `<b>CARTEL HQ BOT • PRIVATE BETA</b>\n\nCurrent group capabilities include community join welcomes with optional auto-delete, Telegram sticker-pack distribution and native sticker delivery. Additional community tools are in development.\n\n<b>Commands</b>\n/roadmap — see what's live and what's coming\n/help — show this guide\n\nAdmins can follow PEPECARTEL and join Early Access through @${BOT_USERNAME}.`
+    ? `<b>CARTEL HQ BOT • PRIVATE BETA</b>\n\nCurrent group capabilities include community join welcomes with optional auto-delete, Telegram sticker-pack distribution and native sticker delivery. Additional community tools are in development.\n\n<b>Commands</b>\n/roadmap — see what's live and what's coming\n/mission &lt;X link&gt; — start a Social Mission (admins only)\n/help — show this guide\n\nAdmins can follow PEPECARTEL and join Early Access through @${BOT_USERNAME}.`
     : `<b>CARTEL HQ BOT • HELP</b>\n\n/start — open the Cartel HQ menu\n/roadmap — what's live and what's coming\n/help — show this guide\n\nSticker creation and workspace management currently happen through Cartel HQ beta workspaces. Public Cartel HQ web access will be added when ready.`;
 }
 async function ensureCommands(token: string) {
@@ -266,6 +322,7 @@ async function ensureCommands(token: string) {
         { command: "start", description: "Open Cartel HQ menu" },
         { command: "help", description: "How to use the bot" },
         { command: "roadmap", description: "What's live and what's coming" },
+        { command: "mission", description: "Start a Social Mission from an X post" },
       ],
     });
   } catch { }
@@ -410,6 +467,200 @@ Deno.serve(async (req: Request) => {
     const { data } = await admin.from("telegram_beta_contacts").select("*").eq("subject_type", "group").eq("telegram_chat_id", telegramChatId).maybeSingle();
     return data ?? null;
   };
+
+  // ---- SE-4A: `/mission <X link>` zero-X-read launcher --------------------
+  //
+  // Cheapest possible launch path. Authorization is established in this order
+  // so the only *live* Telegram round trip happens last, and only for a caller
+  // that is already a linked current workspace owner/admin of a connected
+  // community. Mission creation itself is ONE atomic service-only RPC that
+  // independently re-checks every one of these facts server-side.
+  //
+  // No X API call, no metric read, no usage_ledger write, no polling, no
+  // auto-retry and no duplicated card/photo logic: delivery is always the
+  // existing `social-mission-telegram` transport.
+  const runMissionCommand = async (args: {
+    chatId: string;
+    chatType: string;
+    updateId: unknown;
+    messageId: unknown;
+    telegramUserId: number;
+    argument: string;
+  }) => {
+    const { chatId, chatType, telegramUserId, argument } = args;
+    const reply = (text: string) => sendMessage(TELEGRAM_BOT_TOKEN, chatId, text, { parse_mode: "HTML" });
+
+    if (chatType !== "group" && chatType !== "supergroup") {
+      await reply("Social Missions run inside a connected Cartel HQ community group.");
+      return;
+    }
+
+    const updateId = Number(args.updateId);
+    const messageId = Number(args.messageId);
+    const numericChatId = Number(chatId);
+    if (!Number.isFinite(updateId) || !Number.isFinite(messageId) || !Number.isFinite(numericChatId)) {
+      await reply("This command could not be processed.");
+      return;
+    }
+
+    const parsed = parseXStatusUrl(argument);
+    if (!parsed) {
+      await reply(MISSION_USAGE);
+      return;
+    }
+
+    // 1. The exact chat must already be a connected community.
+    const { data: connection } = await admin
+      .from("telegram_group_connections")
+      .select("id,workspace_id")
+      .eq("telegram_chat_id", chatId)
+      .maybeSingle();
+    if (!connection?.workspace_id) {
+      await reply("This community is not connected to Cartel HQ yet.");
+      return;
+    }
+
+    // 2. The sender must be linked to a Cartel HQ account.
+    const linked = await getLinkedUser(String(telegramUserId));
+    if (!linked?.user_id) {
+      await reply(`Connect your Telegram account to Cartel HQ through @${BOT_USERNAME} first.`);
+      return;
+    }
+
+    // 3. …and be a current owner/admin of that workspace.
+    const { data: isOperator, error: operatorError } = await admin.rpc("is_workspace_operator", {
+      _workspace_id: connection.workspace_id,
+      _user_id: linked.user_id,
+    });
+    if (operatorError || isOperator !== true) {
+      await reply("Only this project's Cartel HQ owners and admins can start a Social Mission.");
+      return;
+    }
+
+    // 4. …and be a CURRENT Telegram administrator/creator, verified live.
+    let memberStatus = "";
+    try {
+      const member = await telegramJson(TELEGRAM_BOT_TOKEN, "getChatMember", { chat_id: chatId, user_id: telegramUserId });
+      memberStatus = String((member as { status?: unknown })?.status ?? "");
+    } catch {
+      await reply("Telegram could not confirm your group role right now. Try again shortly.");
+      return;
+    }
+    if (memberStatus !== "administrator" && memberStatus !== "creator") {
+      await reply("Only current administrators of this group can start a Social Mission.");
+      return;
+    }
+
+    // 5. One atomic service-only RPC. It re-authorizes everything above and
+    //    verifies the official X handle independently before creating rows.
+    const { data: created, error: createError } = await admin.rpc("create_social_mission_from_telegram_link", {
+      _telegram_update_id: updateId,
+      _telegram_chat_id: numericChatId,
+      _telegram_message_id: messageId,
+      _telegram_user_id: telegramUserId,
+      _canonical_url: parsed.canonicalUrl,
+      _external_post_id: parsed.postId,
+      _author_handle: parsed.handle,
+    });
+    const result = (created ?? null) as
+      | {
+        outcome?: string;
+        reason?: string;
+        actor_user_id?: string;
+        workspace_id?: string;
+        mission_id?: string;
+        target_id?: string;
+        delivery_state?: string;
+      }
+      | null;
+    if (createError || !result?.outcome) {
+      await reply("The Social Mission could not be created right now.");
+      return;
+    }
+
+    if (result.outcome === "REJECTED") {
+      const reason = String(result.reason ?? "");
+      const message =
+        reason === "handle_not_official"
+          ? "That post is not from this project's official X account."
+          : reason === "official_x_account_missing"
+            ? "Add this project's official X account to its Cartel HQ Project Profile first."
+            : reason === "actor_not_operator"
+              ? "Only this project's Cartel HQ owners and admins can start a Social Mission."
+              : reason === "actor_not_linked"
+                ? `Connect your Telegram account to Cartel HQ through @${BOT_USERNAME} first.`
+                : reason === "group_not_connected"
+                  ? "This community is not connected to Cartel HQ yet."
+                  : MISSION_USAGE;
+      await reply(message);
+      return;
+    }
+
+    if (result.outcome === "DUPLICATE_UPDATE") {
+      // A repeated Telegram delivery of the same command. Never act twice.
+      return;
+    }
+
+    if (result.outcome !== "CREATED" && result.outcome !== "EXISTING") {
+      await reply("The Social Mission could not be resolved. Please do not retry immediately.");
+      return;
+    }
+
+    const deliveryState = String(result.delivery_state ?? "");
+    if (deliveryState === "SENT") {
+      await reply("This post already has a Social Mission in this community.");
+      return;
+    }
+    if (deliveryState === "SENDING" || deliveryState === "AMBIGUOUS") {
+      await reply("This mission's delivery is unresolved. Please do not retry immediately.");
+      return;
+    }
+    if (deliveryState !== "PENDING" && deliveryState !== "FAILED") {
+      await reply("This mission is not in a sendable state.");
+      return;
+    }
+
+    // 6. Delivery reuses the existing authenticated transport unchanged.
+    //    The request id is derived from the Telegram update id, so a webhook
+    //    retry is absorbed by the transport's own idempotency.
+    const clientRequestId = await missionRequestUuid(updateId);
+    let transport: { deliveryState?: string; message?: string; error?: string } | null = null;
+    try {
+      const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/social-mission-telegram`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: SERVICE_KEY,
+          Authorization: `Bearer ${SERVICE_KEY}`,
+          "X-Cartel-Internal-Source": "telegram-webhook",
+          "X-Cartel-Actor-User-Id": String(result.actor_user_id ?? linked.user_id),
+        },
+        body: JSON.stringify({
+          action: "send_mission",
+          workspaceId: result.workspace_id,
+          missionId: result.mission_id,
+          targetId: result.target_id,
+          clientRequestId,
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      transport = (await response.json().catch(() => null)) as typeof transport;
+    } catch {
+      transport = null;
+    }
+
+    const transportState = String(transport?.deliveryState ?? "");
+    if (transportState === "SENT") {
+      // The branded card itself is the confirmation. No extra success text.
+      return;
+    }
+    if (transportState === "FAILED") {
+      await reply("The mission card could not be delivered to this community.");
+      return;
+    }
+    await reply("The mission card delivery is unresolved. Please do not retry immediately.");
+  };
+
 
   // ---- Launch Watch helpers (service role; opt-in state only) -------------
   // Every read/write checks its Supabase error. A backend failure must throw
@@ -1735,6 +1986,22 @@ Deno.serve(async (req: Request) => {
       await bindGroup({ chat, actor: from, link });
       return json({ ok: true });
     }
+
+    // SE-4A — `/mission <X link>`. Runs before every generic fallthrough and
+    // before the unknown-slash-command no-op, and touches no other command.
+    const missionMatch = text.match(/^\/mission(?:@\w+)?(?:\s+(\S+))?\s*$/i);
+    if (missionMatch && from?.is_bot !== true) {
+      await runMissionCommand({
+        chatId,
+        chatType: String(chat?.type ?? ""),
+        updateId: update?.update_id,
+        messageId: message?.message_id,
+        telegramUserId: Number(from.id),
+        argument: String(missionMatch[1] ?? ""),
+      });
+      return json({ ok: true });
+    }
+
 
 
     const isHelp = /^\/help(?:@\w+)?$/i.test(text);
