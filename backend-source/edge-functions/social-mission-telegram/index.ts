@@ -692,7 +692,12 @@ async function handleEdit(args: {
     return fail("Stale or conflicting edit revision.", 409, { editState, editRevision: currentRevision });
   }
 
-  const rendered = await renderAuthoritativeCard(admin, workspaceId, mission);
+  // The Telegram edit method is decided by the DURABLE transport kind recorded
+  // when the message was claimed and sent. Historical rows default to TEXT, so
+  // pre-SE-3.3 messages keep using editMessageText. There is no probing.
+  const transportKind: TransportKind = t["transport_kind"] === "PHOTO" ? "PHOTO" : "TEXT";
+
+  const rendered = await renderAuthoritativeCard(admin, workspaceId, mission, transportKind);
   if ("error" in rendered) return fail(rendered.error, 409);
 
   // Compare-and-set on revision + edit state. A zero-row update returns no
