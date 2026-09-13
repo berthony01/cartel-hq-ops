@@ -130,48 +130,6 @@ const TABS: Array<{ value: TabKey; label: string; shortLabel: string }> = [
 ];
 
 
-/**
- * Shell placeholder for a Community Command capability that is not built yet.
- * Deliberately renders no counts, no records and no send controls so nothing
- * can read as live functionality.
- */
-function ComingSoonPanel({
-  icon: Icon,
-  title,
-  summary,
-  points,
-  footnote,
-}: {
-  icon: typeof Megaphone;
-  title: string;
-  summary: string;
-  points: string[];
-  footnote: string;
-}) {
-  return (
-    <Section
-      variant="primary"
-      title={title}
-      description={summary}
-      leading={<Icon className="size-4" aria-hidden="true" />}
-      actions={<StatusBadge tone="muted">Planned</StatusBadge>}
-    >
-      <div className="rounded-lg border border-dashed border-border/70 bg-background/40 p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          What will live here
-        </p>
-        <ul className="mt-2 list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-muted-foreground">
-          {points.map((point) => (
-            <li key={point}>{point}</li>
-          ))}
-        </ul>
-        <p className="mt-3 border-t border-border/60 pt-3 text-xs leading-relaxed text-muted-foreground">
-          {footnote}
-        </p>
-      </div>
-    </Section>
-  );
-}
 
 /** Presentation-only metric tile for the community-state summaries. */
 function StateMetric({ label, value }: { label: string; value: string }) {
