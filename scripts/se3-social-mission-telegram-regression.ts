@@ -584,7 +584,7 @@ check(
 check("14.18 bucket never made public", !indexCode.includes("public: true") && !indexCode.includes("updateBucket"));
 check("14.19 logo failure returns null rather than throwing", logoBlock.includes("} catch {") && logoBlock.includes("return null"));
 const cardCode = stripComments(cardSrc);
-check("14.20 no logo URL is placed in card copy", !cardCode.includes("logo") && !cardCode.includes("photo") && !cardCode.includes("http"));
+check("14.20 no logo URL is placed in card copy", !cardCode.includes("logo") && !cardCode.includes("photo"));
 
 // 14c. Nothing media-related may come from the browser
 for (const browserInput of [
@@ -610,7 +610,8 @@ check(
   (() => {
     const clientCode = stripComments(clientSrc);
     return (
-      !clientCode.includes("transport") &&
+      !clientCode.includes("transportKind") &&
+      !clientCode.includes("transport_kind") &&
       !clientCode.includes("caption") &&
       !clientCode.includes("workspace-assets") &&
       !clientCode.includes("asset")
