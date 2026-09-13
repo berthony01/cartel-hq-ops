@@ -38,6 +38,7 @@ SET search_path = public
 AS $$
 DECLARE
   v_claimed boolean := false;
+  v_claim_rows integer := 0;
   v_workspace_id uuid;
   v_connection_id uuid;
   v_actor_user_id uuid;
@@ -82,7 +83,8 @@ BEGIN
   )
   ON CONFLICT (telegram_update_id) DO NOTHING;
 
-  GET DIAGNOSTICS v_claimed = ROW_COUNT;
+  GET DIAGNOSTICS v_claim_rows = ROW_COUNT;
+  v_claimed := v_claim_rows = 1;
 
   IF NOT v_claimed THEN
     -- Duplicate delivery of the SAME Telegram update. Return the already
