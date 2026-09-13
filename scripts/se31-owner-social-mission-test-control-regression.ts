@@ -215,7 +215,7 @@ check(
 );
 check(
   "6.3 confirmation names the existing bot",
-  controlSrc.includes("existing @PepeCartelHQBot bot"),
+  controlSrc.includes("the existing @PepeCartelHQBot bot"),
 );
 check(
   "6.4 confirmation states there is no automatic retry",

@@ -37,8 +37,9 @@ const REQUIRED_DELIVERY_STATE = "PENDING";
 
 const CONFIRM_TITLE = "Post one live Telegram message?";
 const CONFIRM_BODY =
-  `This posts ONE visible Telegram message into ${REQUIRED_GROUP_TITLE} through the existing ` +
-  "@PepeCartelHQBot bot. It cannot be unsent from here, and there is no automatic retry: " +
+  `This posts ONE visible Telegram message into ${REQUIRED_GROUP_TITLE}, ` +
+  "sent by the existing @PepeCartelHQBot bot. It cannot be unsent from here, " +
+  "and there is no automatic retry: " +
   "if the send fails or is inconclusive, this control stays disabled and the authoritative " +
   "state is reported instead.";
 
