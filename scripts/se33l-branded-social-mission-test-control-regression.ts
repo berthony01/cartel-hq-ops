@@ -181,7 +181,7 @@ check(
 );
 check(
   "4.4 the control never submits chat id, caption, transport kind or logo reference",
-  !/chatId|chat_id|caption|logoAssetId|logo_asset_id|transportKind:/.test(controlCode),
+  !/chatId|chat_id|caption|logoAssetId|logo_asset_id|transportKind:|assetPath|asset_id/.test(controlCode),
 );
 check(
   "4.5 no direct Telegram API call and no bot token",
