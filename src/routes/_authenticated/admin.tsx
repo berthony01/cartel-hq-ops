@@ -27,6 +27,7 @@ import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { PlatformMessageEditor } from "@/components/cartel/PlatformMessageEditor";
+import { SocialMissionTestControl } from "@/components/cartel/SocialMissionTestControl";
 
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { InlineRow } from "@/components/cartel/InlineRow";
