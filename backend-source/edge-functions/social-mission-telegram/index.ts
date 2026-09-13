@@ -506,17 +506,27 @@ async function handleSend(args: {
     );
   }
 
-  // 3b. Render authoritatively, then durably claim the intent BEFORE transport.
-  const rendered = await renderAuthoritativeCard(admin, workspaceId, mission);
+  // 3b. Resolve the branded identity BEFORE anything is claimed or sent. A
+  // missing or unusable logo is a normal outcome: it simply selects the plain
+  // text transport. This is the ONLY point at which TEXT fallback is allowed.
+  const logo = await resolveProjectLogo(admin, workspaceId);
+  const desiredTransportKind: TransportKind = logo ? "PHOTO" : "TEXT";
+
+  // 3c. Render authoritatively, then durably claim the intent BEFORE transport.
+  const rendered = await renderAuthoritativeCard(admin, workspaceId, mission, desiredTransportKind);
   if ("error" in rendered) return fail(rendered.error, 409);
 
   // Compare-and-set. The claim must return exactly one row: a zero-row update
   // reports no error, and treating that as success would let a second
   // concurrent request continue to Telegram and duplicate the send.
+  //
+  // transport_kind is claimed together with the send intent so that even an
+  // ambiguous outcome durably remembers which Telegram edit method applies.
   const { data: claimedRow, error: claimError } = await admin
     .from("social_mission_targets")
     .update({
       delivery_state: "SENDING",
+      transport_kind: desiredTransportKind,
       send_client_request_id: clientRequestId,
       send_text_intent: rendered.text,
       telegram_message_id: null,
