@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Loader2, Send, ShieldAlert } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, Send, ShieldAlert } from "lucide-react";
 import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { InlineRow } from "@/components/cartel/InlineRow";
@@ -16,16 +17,30 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { sendMissionCard, type SendMissionCardResult } from "@/lib/social-mission-telegram";
+import {
+  editMissionCard,
+  sendMissionCard,
+  type EditMissionCardResult,
+  type SendMissionCardResult,
+} from "@/lib/social-mission-telegram";
+import {
+  captureMissionMetrics,
+  type CaptureMissionMetricsResult,
+} from "@/lib/social-mission-metrics.functions";
 
 /**
  * SE-3.1 — owner-only, single-fixture Social Mission live-test control.
  *
  * This control NEVER creates social posts, missions or targets, never writes
- * transport-state columns, never edits a sent card, never polls, never retries
- * and never calls a social provider. It performs exactly one
+ * transport-state columns, never polls, never retries and never calls a social
+ * provider directly from the browser. It performs exactly one
  * `sendMissionCard()` invocation, and only after explicit owner confirmation
  * against one pre-prepared, hard-pinned production fixture.
+ *
+ * SE-3.2A adds ONE further owner-only action against the SAME fixture: capture
+ * current X metrics server-side (one official read, one snapshot row) and then
+ * edit the SAME already-sent Telegram message in place exactly once. There is
+ * no replacement send, no retry and no second edit from this control.
  */
 
 /** The ONLY fixture this control will ever operate on. */
@@ -43,6 +58,16 @@ const CONFIRM_BODY =
   "if the send fails or is inconclusive, this control stays disabled and the authoritative " +
   "state is reported instead.";
 
+/** SE-3.2A — metric capture + in-place edit of the SAME sent message. */
+const REQUIRED_UPDATE_DELIVERY_STATE = "SENT";
+const UPDATE_CONFIRM_TITLE = "Update the card that is already posted?";
+const UPDATE_CONFIRM_BODY =
+  "This reads the pinned X post once on the server, stores ONE metric snapshot, then edits " +
+  `the SAME existing Telegram message in ${REQUIRED_GROUP_TITLE} in place, using the existing ` +
+  "@PepeCartelHQBot bot. No replacement message is sent, no second message appears, and there " +
+  "is no automatic retry: if the read, the snapshot or the edit fails, this control stays " +
+  "disabled and the authoritative state is reported instead.";
+
 type Fixture = {
   missionId: string;
   workspaceId: string;
@@ -55,6 +80,10 @@ type Fixture = {
   lastError: string | null;
   groupTitle: string | null;
   canonicalUrl: string | null;
+  editRevision: number;
+  editState: string;
+  lastEditAt: string | null;
+  editLastError: string | null;
 };
 
 type FixtureLoad =
@@ -89,7 +118,7 @@ async function loadFixture(): Promise<FixtureLoad> {
   const targets = await supabase
     .from("social_mission_targets")
     .select(
-      "id, delivery_state, group_connection_id, telegram_message_id, sent_at, last_error",
+      "id, delivery_state, group_connection_id, telegram_message_id, sent_at, last_error, edit_revision, edit_state, last_edit_at, edit_last_error",
     )
     .eq("mission_id", mission.id)
     .limit(5);
@@ -126,6 +155,10 @@ async function loadFixture(): Promise<FixtureLoad> {
       lastError: target.last_error,
       groupTitle,
       canonicalUrl: post.data.canonical_url,
+      editRevision: target.edit_revision,
+      editState: target.edit_state,
+      lastEditAt: target.last_edit_at,
+      editLastError: target.edit_last_error,
     },
   };
 }
@@ -163,6 +196,13 @@ export function SocialMissionTestControl() {
   const [result, setResult] = useState<SendMissionCardResult | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
+  const [updateConfirmOpen, setUpdateConfirmOpen] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const [updateAttempted, setUpdateAttempted] = useState(false);
+  const [capture, setCapture] = useState<CaptureMissionMetricsResult | null>(null);
+  const [editResult, setEditResult] = useState<EditMissionCardResult | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const runCapture = useServerFn(captureMissionMetrics);
 
   const query = useQuery({
     queryKey: ["owner-social-mission-test-fixture", OWNER_TEST_CONTROL_MARKER],
@@ -233,6 +273,74 @@ export function SocialMissionTestControl() {
       await query.refetch();
     }
   }
+
+  const updateGates = fixture
+    ? [
+        {
+          label: "Target delivery state is SENT",
+          ok: fixture.deliveryState === REQUIRED_UPDATE_DELIVERY_STATE,
+          detail: `Reported: ${fixture.deliveryState}`,
+        },
+        {
+          label: "A confirmed Telegram message exists to edit in place",
+          ok: fixture.telegramMessageId !== null,
+          detail: `Message id: ${fixture.telegramMessageId ?? "—"}`,
+        },
+        {
+          label: `Group title is exactly ${REQUIRED_GROUP_TITLE}`,
+          ok: fixture.groupTitle === REQUIRED_GROUP_TITLE,
+          detail: `Reported: ${fixture.groupTitle ?? "—"}`,
+        },
+        {
+          label: "Post canonical URL is the pinned PEPE CARTEL post",
+          ok: fixture.canonicalUrl === REQUIRED_CANONICAL_URL,
+          detail: `Reported: ${fixture.canonicalUrl ?? "—"}`,
+        },
+      ]
+    : [];
+
+  const allUpdateGatesPass = updateGates.length > 0 && updateGates.every((g) => g.ok);
+  const canUpdate = !!fixture && allUpdateGatesPass && !updating && !updateAttempted;
+
+  /**
+   * One capture, one edit. The server owns the X read, the snapshot write and
+   * the card text; the browser only supplies the revision it just read back.
+   */
+  async function confirmedUpdate() {
+    if (!fixture || !allUpdateGatesPass || updating || updateAttempted) return;
+    setUpdateConfirmOpen(false);
+    setUpdating(true);
+    setUpdateAttempted(true);
+    setUpdateError(null);
+    setCapture(null);
+    setEditResult(null);
+    try {
+      const captured = await runCapture();
+      setCapture(captured);
+      if (!captured.ok) {
+        setUpdateError(captured.reason);
+        return;
+      }
+      const edited = await editMissionCard({
+        workspaceId: captured.workspaceId,
+        missionId: captured.missionId,
+        targetId: captured.targetId,
+        clientRequestId: crypto.randomUUID(),
+        revision: captured.editRevision + 1,
+      });
+      setEditResult(edited);
+    } catch (error) {
+      setUpdateError(
+        error instanceof Error && error.message
+          ? error.message
+          : "The metric capture or the card edit did not return a usable result.",
+      );
+    } finally {
+      setUpdating(false);
+      await query.refetch();
+    }
+  }
+
 
   return (
     <Section
@@ -369,9 +477,102 @@ export function SocialMissionTestControl() {
                 resend; the authoritative state above is the record of what happened.
               </p>
             ) : null}
+
+            <div className="mt-2 flex min-w-0 flex-col gap-2 border-t border-border pt-3">
+              <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm [overflow-wrap:anywhere]">
+                Metric refresh: one server-side official X read, one stored snapshot, then the same
+                Telegram message is edited in place. No replacement message is ever sent.
+              </p>
+
+              {updateGates.map((gate) => (
+                <Gate key={gate.label} label={gate.label} ok={gate.ok} detail={gate.detail} />
+              ))}
+
+              <InlineRow
+                title="Authoritative edit state"
+                subtitle={`Revision: ${fixture.editRevision} · Last edit: ${formatWhen(
+                  fixture.lastEditAt,
+                )}${fixture.editLastError ? ` · ${fixture.editLastError}` : ""}`}
+                trailing={
+                  <StatusBadge tone={fixture.editState === "EDITED" ? "green" : "muted"}>
+                    <span>{fixture.editState}</span>
+                  </StatusBadge>
+                }
+              />
+
+              {capture && capture.ok ? (
+                <InlineRow
+                  title="Metric snapshot stored"
+                  subtitle={`Views ${capture.metrics.views ?? "—"} · Likes ${
+                    capture.metrics.likes ?? "—"
+                  } · Replies ${capture.metrics.comments ?? "—"} · Reposts ${
+                    capture.metrics.shares ?? "—"
+                  } · Bookmarks ${capture.metrics.saves ?? "—"} · Observed ${formatWhen(
+                    capture.observedAt,
+                  )}`}
+                  trailing={
+                    <StatusBadge tone="green">
+                      <span>Captured</span>
+                    </StatusBadge>
+                  }
+                />
+              ) : null}
+
+              {editResult ? (
+                <InlineRow
+                  title="Last edit result"
+                  subtitle={`${editResult.message ?? "No additional detail."}${
+                    editResult.duplicate ? " (Duplicate request — no second edit was made.)" : ""
+                  }`}
+                  trailing={
+                    <StatusBadge tone={editResult.editState === "EDITED" ? "green" : "red"}>
+                      <span>{editResult.editState}</span>
+                    </StatusBadge>
+                  }
+                />
+              ) : null}
+
+              {updateError ? (
+                <InlineRow
+                  leading={<AlertTriangle className="size-4" aria-hidden="true" />}
+                  title="Metric refresh did not complete"
+                  subtitle={updateError}
+                  trailing={
+                    <StatusBadge tone="red">
+                      <span>Unresolved</span>
+                    </StatusBadge>
+                  }
+                />
+              ) : null}
+
+              <div className="flex min-w-0 flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={!canUpdate}
+                  onClick={() => setUpdateConfirmOpen(true)}
+                  className="min-w-0"
+                >
+                  {updating ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <RefreshCw className="size-4" aria-hidden="true" />
+                  )}
+                  <span>Capture metrics and update the card</span>
+                </Button>
+              </div>
+
+              {updateAttempted ? (
+                <p className="text-[11px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+                  A metric refresh was already attempted in this session. This control offers no
+                  retry and no second edit; the authoritative state above is the record.
+                </p>
+              ) : null}
+            </div>
           </>
         ) : null}
       </div>
+
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent className="max-w-[min(32rem,92vw)]">
@@ -384,6 +585,21 @@ export function SocialMissionTestControl() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={confirmedSend}>Post the message</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={updateConfirmOpen} onOpenChange={setUpdateConfirmOpen}>
+        <AlertDialogContent className="max-w-[min(32rem,92vw)]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{UPDATE_CONFIRM_TITLE}</AlertDialogTitle>
+            <AlertDialogDescription className="[overflow-wrap:anywhere]">
+              {UPDATE_CONFIRM_BODY}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmedUpdate}>Update the same message</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
