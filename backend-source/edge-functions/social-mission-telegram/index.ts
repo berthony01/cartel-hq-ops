@@ -42,6 +42,13 @@ const LOGO_MAX_BYTES = 5_000_000;
 
 type TransportKind = "TEXT" | "PHOTO";
 
+/**
+ * SE-4A — the single recognised server-only internal caller. Paired with an
+ * exact service-role bearer token; neither half is sufficient alone, and the
+ * value never reaches the browser.
+ */
+const INTERNAL_SOURCE = "telegram-webhook";
+
 import {
   renderMissionCard,
   EMPTY_METRICS,
@@ -421,7 +428,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     .from("workspace_members")
     .select("role")
     .eq("workspace_id", workspaceId)
-    .eq("user_id", user.id)
+    .eq("user_id", actorUserId)
     .maybeSingle();
   const role = membership ? String((membership as LoadedRow)["role"] ?? "") : "";
   if (role !== "owner" && role !== "admin") {
