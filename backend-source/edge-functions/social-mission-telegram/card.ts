@@ -17,6 +17,8 @@
  */
 
 export const TELEGRAM_TEXT_MAX = 4096;
+/** Telegram photo captions are hard-limited to 1024 characters. */
+export const TELEGRAM_CAPTION_MAX = 1024;
 export const EXCERPT_MAX = 180;
 
 export type MissionCardPlatform = "x" | "instagram" | "tiktok" | "youtube" | "facebook";
@@ -52,6 +54,11 @@ export type MissionCardInput = {
   baseline: CanonicalMetrics;
   /** Latest metric snapshot, or null when nothing has been observed yet. */
   latest: CanonicalMetrics | null;
+  /**
+   * Hard character budget. Defaults to the plain-text limit; the branded photo
+   * transport passes TELEGRAM_CAPTION_MAX so a caption can never be rejected.
+   */
+  maxLength?: number;
 };
 
 export type MissionCardButton = { text: string; url: string };
