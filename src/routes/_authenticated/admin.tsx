@@ -28,6 +28,7 @@ import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { PlatformMessageEditor } from "@/components/cartel/PlatformMessageEditor";
 import { SocialMissionTestControl } from "@/components/cartel/SocialMissionTestControl";
+import { BrandedSocialMissionTestControl } from "@/components/cartel/BrandedSocialMissionTestControl";
 
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { InlineRow } from "@/components/cartel/InlineRow";
