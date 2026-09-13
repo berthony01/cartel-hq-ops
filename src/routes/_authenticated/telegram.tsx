@@ -33,8 +33,28 @@ import {
   useTelegramGroupSetup,
 } from "@/components/cartel/TelegramGroupCard";
 
-const TAB_KEYS = ["overview", "broadcasts", "audience", "inbox", "communities", "history"] as const;
+/**
+ * Canonical tab keys. `communities` and `audience` keep their original key so
+ * every existing `?tab=` URL keeps resolving; only their presentation labels
+ * changed (Telegram / Launch Watch). `history` is retired from navigation and
+ * is remapped below instead of silently 404-ing.
+ */
+const TAB_KEYS = [
+  "overview",
+  "communities",
+  "missions",
+  "broadcasts",
+  "inbox",
+  "audience",
+  "analytics",
+] as const;
 type TabKey = (typeof TAB_KEYS)[number];
+
+/** Retired tab keys mapped to their current home. */
+const LEGACY_TAB_ALIASES: Record<string, TabKey> = {
+  history: "overview",
+};
+
 
 /** Strict UUID shape for the Inbox `conversation` param; anything else is dropped. */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
