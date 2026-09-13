@@ -274,6 +274,74 @@ export function SocialMissionTestControl() {
     }
   }
 
+  const updateGates = fixture
+    ? [
+        {
+          label: "Target delivery state is SENT",
+          ok: fixture.deliveryState === REQUIRED_UPDATE_DELIVERY_STATE,
+          detail: `Reported: ${fixture.deliveryState}`,
+        },
+        {
+          label: "A confirmed Telegram message exists to edit in place",
+          ok: fixture.telegramMessageId !== null,
+          detail: `Message id: ${fixture.telegramMessageId ?? "—"}`,
+        },
+        {
+          label: `Group title is exactly ${REQUIRED_GROUP_TITLE}`,
+          ok: fixture.groupTitle === REQUIRED_GROUP_TITLE,
+          detail: `Reported: ${fixture.groupTitle ?? "—"}`,
+        },
+        {
+          label: "Post canonical URL is the pinned PEPE CARTEL post",
+          ok: fixture.canonicalUrl === REQUIRED_CANONICAL_URL,
+          detail: `Reported: ${fixture.canonicalUrl ?? "—"}`,
+        },
+      ]
+    : [];
+
+  const allUpdateGatesPass = updateGates.length > 0 && updateGates.every((g) => g.ok);
+  const canUpdate = !!fixture && allUpdateGatesPass && !updating && !updateAttempted;
+
+  /**
+   * One capture, one edit. The server owns the X read, the snapshot write and
+   * the card text; the browser only supplies the revision it just read back.
+   */
+  async function confirmedUpdate() {
+    if (!fixture || !allUpdateGatesPass || updating || updateAttempted) return;
+    setUpdateConfirmOpen(false);
+    setUpdating(true);
+    setUpdateAttempted(true);
+    setUpdateError(null);
+    setCapture(null);
+    setEditResult(null);
+    try {
+      const captured = await runCapture();
+      setCapture(captured);
+      if (!captured.ok) {
+        setUpdateError(captured.reason);
+        return;
+      }
+      const edited = await editMissionCard({
+        workspaceId: captured.workspaceId,
+        missionId: captured.missionId,
+        targetId: captured.targetId,
+        clientRequestId: crypto.randomUUID(),
+        revision: captured.editRevision + 1,
+      });
+      setEditResult(edited);
+    } catch (error) {
+      setUpdateError(
+        error instanceof Error && error.message
+          ? error.message
+          : "The metric capture or the card edit did not return a usable result.",
+      );
+    } finally {
+      setUpdating(false);
+      await query.refetch();
+    }
+  }
+
+
   return (
     <Section
       variant="surface"
