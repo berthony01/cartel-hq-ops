@@ -534,33 +534,19 @@ function TelegramPage() {
             </div>
           </details>
         </TabsContent>
-
-        {/* ---------------------------------------------------------------- */}
-        <TabsContent value="history" className="mt-0 min-w-0">
-          <ComingSoonPanel
-            icon={Clock3}
-            title="History"
-            summary="What was communicated, where it landed, and what the automations did. Not available yet."
-            points={[
-              "Messages: watcher updates, launch notifications and community broadcasts, with aggregate delivery outcomes.",
-              "Activity: onboarding welcomes, Launch Watch cards and Sticker Drops, kept separate so the log stays readable.",
-              "Outcomes reported honestly — an uncertain Telegram result will never be shown as delivered.",
-            ]}
-            footnote="Recent watcher update outcomes remain visible in Launch Control until this view ships."
-          />
-        </TabsContent>
       </Tabs>
 
       <p className="flex items-center gap-2 text-[11px] leading-relaxed text-muted-foreground">
         <Radio className="size-3.5 shrink-0" aria-hidden="true" />
         <span>
-          History is being added in a later controlled phase. It is a placeholder today and cannot
-          send or expose anything. Broadcasts sends private watcher updates, and can post one
+          Missions is read-only: missions are started and closed with <code>/mission</code> in your
+          connected Telegram community. Broadcasts sends private watcher updates, and can post one
           official project message into a connected community you select. Inbox shows explicit
           private replies to official Launch Watch bot messages — sending team replies from it is
-          not available yet.
+          not available yet. Analytics is a current-state summary, not historical reporting.
         </span>
       </p>
+
     </div>
   );
 
