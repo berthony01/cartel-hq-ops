@@ -113,9 +113,9 @@ check("2.12 the card edit is gated on a changed metric signature", /metricSignat
 // ---------------------------------------------------------------------------
 // 3. Requirement 3 — Pulse 2.0: preset cadence, stored metrics, ZERO X reads.
 // ---------------------------------------------------------------------------
-const pulseStart = runnerRaw.indexOf('event.event_type === "PULSE"');
-const pulseEnd = runnerRaw.indexOf('"COMPLETE"', pulseStart);
-const pulseBranch = runnerRaw.slice(pulseStart, pulseEnd > pulseStart ? pulseEnd : pulseStart + 4000);
+const pulseStart = runnerCode.indexOf('event.event_type === "PULSE"');
+const pulseEnd = runnerCode.indexOf('"COMPLETE"', pulseStart);
+const pulseBranch = runnerCode.slice(pulseStart, pulseEnd > pulseStart ? pulseEnd : pulseStart + 4000);
 check("3.1 the PULSE branch performs no provider lookup", !/lookupXPostMetrics/.test(pulseBranch));
 check("3.2 the PULSE branch reads STORED snapshots only", /social_metric_snapshots/.test(pulseBranch));
 check("3.3 a pulse is exactly one reply-only sendMessage", /sendMessage/.test(pulseBranch) && !/sendPhoto/.test(pulseBranch));
