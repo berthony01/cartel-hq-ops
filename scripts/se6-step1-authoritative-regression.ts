@@ -1058,7 +1058,8 @@ check(
 );
 check(
   "16.37 pin recording is still confirmation-only",
-  /if \(pinned\) \{\s*\n\s*await admin\.rpc\("record_social_mission_target_pin"/.test(missionFn),
+  /if \(!pinned\) return false;\s*\n\s*const \{ error: recordError \} = await admin\.rpc\("record_social_mission_target_pin"/
+    .test(missionFn),
 );
 check(
   "16.38 START still remains PENDING until finalization",
