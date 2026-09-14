@@ -1838,7 +1838,7 @@ Deno.serve(async (req: Request) => {
         }
 
         await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Starting the mission…");
-        const missionOutcome = await runMissionCommand({
+        await runMissionCommand({
           // The mission is launched into the candidate's OWN chat, always.
           chatId: String(candidateChatId),
           chatType: String(callbackChat?.type ?? ""),
@@ -1849,21 +1849,24 @@ Deno.serve(async (req: Request) => {
           telegramUserId: Number(from.id),
           argument: String(decision.canonical_url ?? ""),
           source: "telegram_link_finder",
+          // Only a mission that actually reached a confirmed card + active
+          // schedule (or a retry finding one already sent) removes the prompt
+          // and finalizes the candidate. Anything else — create failure,
+          // delivery failure, activation failure — never runs this, so the
+          // prompt, the source post and the PENDING candidate all survive for
+          // a clean retry.
+          onMissionSettled: async (settled) => {
+            await deleteLinkFinderPrompt();
+            await admin.rpc("finalize_social_mission_link_candidate_start", {
+              _candidate_id: candidateId,
+              _telegram_user_id: Number(from.id),
+              _verified_chat_id: candidateChatId,
+              _mission_id: settled.missionId,
+            });
+          },
         });
-
-        // Only a mission that actually reached a confirmed card + active
-        // schedule (or a retry finding one already sent) finalizes the
-        // candidate and removes the prompt. Anything else stays retryable.
-        if (missionOutcome.outcome === "ACTIVATED" || missionOutcome.outcome === "ALREADY_SENT") {
-          await deleteLinkFinderPrompt();
-          await admin.rpc("finalize_social_mission_link_candidate_start", {
-            _candidate_id: candidateId,
-            _telegram_user_id: Number(from.id),
-            _verified_chat_id: candidateChatId,
-            _mission_id: missionOutcome.missionId,
-          });
-        }
         return json({ ok: true });
+
 
       }
 
