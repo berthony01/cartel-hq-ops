@@ -223,6 +223,138 @@ async function callTelegram(
   return { kind: "uncertain", description: "Telegram returned an inconclusive response." };
 }
 
+/** One idempotent same-message edit through the existing transport. */
+async function requestCardEdit(args: {
+  supabaseUrl: string;
+  serviceKey: string;
+  workspaceId: string;
+  missionId: string;
+  targetId: string;
+  actorUserId: string;
+  clientRequestId: string;
+  revision: number;
+}): Promise<string> {
+  try {
+    const response = await fetch(
+      `${args.supabaseUrl.replace(/\/$/, "")}/functions/v1/social-mission-telegram`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: args.serviceKey,
+          Authorization: `Bearer ${args.serviceKey}`,
+          "X-Cartel-Internal-Source": INTERNAL_SOURCE_HEADER_VALUE,
+          "X-Cartel-Actor-User-Id": args.actorUserId,
+        },
+        body: JSON.stringify({
+          action: "edit_mission",
+          workspaceId: args.workspaceId,
+          missionId: args.missionId,
+          targetId: args.targetId,
+          clientRequestId: args.clientRequestId,
+          revision: args.revision,
+        }),
+        signal: AbortSignal.timeout(TRANSPORT_TIMEOUT_MS),
+      },
+    );
+    const body = (await response.json().catch(() => null)) as { editState?: string } | null;
+    return String(body?.editState ?? "");
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * SE-5 metrics phase. Never throws, and a failure here must not prevent the
+ * SE-4B pulse/completion phase from running.
+ */
+async function runMetricsRefresh(
+  admin: ReturnType<typeof createClient>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<{ missions: number; lookups: number; snapshots: number; cardsEdited: number }> {
+  const stats = { missions: 0, lookups: 0, snapshots: 0, cardsEdited: 0 };
+  const bearer = Deno.env.get("X_API_BEARER_TOKEN") ?? "";
+  if (!bearer) return stats;
+
+  const { data, error } = await admin.rpc("list_active_social_missions_for_metrics", {
+    _limit: METRICS_WORKLIST_LIMIT,
+  });
+  if (error) return stats;
+  const rows = ((data ?? []) as MetricsRow[]).filter(
+    (row) => typeof row.external_post_id === "string" && row.telegram_message_id !== null,
+  );
+  stats.missions = rows.length;
+  if (rows.length === 0) return stats;
+
+  // De-duplicate ids across missions, then look them up in batches of <= 100.
+  const batches = batchPostIds(rows.map((row) => row.external_post_id), X_BATCH_MAX).slice(
+    0,
+    METRICS_MAX_BATCHES,
+  );
+  const found = new Map<string, { metrics: XCanonicalMetrics; observedAt: string }>();
+  for (const batch of batches) {
+    const read = await lookupXPostMetrics(bearer, batch);
+    stats.lookups += 1;
+    if (!read.ok) continue; // No snapshot, no synthetic zeroes, no retry.
+    for (const [id, post] of read.posts) {
+      found.set(id, { metrics: post.metrics, observedAt: read.observedAt });
+    }
+  }
+  if (found.size === 0) return stats;
+
+  for (const row of rows) {
+    const hit = found.get(row.external_post_id);
+    if (!hit) continue;
+
+    const recorded = await admin.rpc("record_social_mission_metric_snapshot", {
+      _mission_id: row.mission_id,
+      _provider: X_PROVIDER,
+      _observed_at: hit.observedAt,
+      _poll_bucket: minuteBucket(Date.parse(hit.observedAt)),
+      _views: hit.metrics.views,
+      _likes: hit.metrics.likes,
+      _comments: hit.metrics.comments,
+      _shares: hit.metrics.shares,
+      _saves: hit.metrics.saves,
+      _availability: availabilityOf(hit.metrics),
+      _metadata: { phase: "SE-5", source: "mission_runner" },
+    });
+    if (recorded.error) continue;
+    stats.snapshots += 1;
+
+    const result = (recorded.data ?? {}) as { accomplished_at?: string | null };
+    const accomplished =
+      typeof result.accomplished_at === "string" || typeof row.accomplished_at === "string";
+    const signature = metricSignature(hit.metrics, { accomplished, missionStatus: "LIVE" });
+    if (signature === row.last_metric_signature) continue; // Nothing visible changed.
+    if (!row.mission_created_by) continue;
+
+    // Atomic compare-and-set, so two overlapping invocations cannot both edit.
+    const claim = await admin.rpc("claim_social_mission_card_refresh", {
+      _target_id: row.target_id,
+      _signature: signature,
+    });
+    if (claim.error || claim.data !== true) continue;
+
+    const editState = await requestCardEdit({
+      supabaseUrl,
+      serviceKey,
+      workspaceId: row.workspace_id,
+      missionId: row.mission_id,
+      targetId: row.target_id,
+      actorUserId: row.mission_created_by,
+      // Deterministic per target+signature: a replay can never double-edit.
+      clientRequestId: `se5-metrics:${row.target_id}:${signature}`,
+      revision: Number(row.edit_revision ?? 0) + 1,
+    });
+    if (editState === "EDITED") stats.cardsEdited += 1;
+    // FAILED / AMBIGUOUS / empty: never retried inside this invocation.
+  }
+
+  return stats;
+}
+
 Deno.serve(async (request: Request) => {
   if (request.method !== "POST") {
     return json({ error: "Method not allowed" }, 405);
