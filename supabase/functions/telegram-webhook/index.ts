@@ -1648,6 +1648,72 @@ Deno.serve(async (req: Request) => {
       const callbackChatId = callbackChat?.id != null ? String(callbackChat.id) : String(from.id);
       const linked = await getLinkedUser(String(from.id));
 
+      // SE-5 — X Link Finder decision. START reuses the EXACT `/mission`
+      // pipeline (including its live admin re-verification), so this button can
+      // never become a second, weaker way to launch a mission. IGNORE only
+      // closes the candidate.
+      const smStart = callbackData.match(/^sm_lf_start_([0-9a-f-]{36})$/i);
+      const smIgnore = callbackData.match(/^sm_lf_ignore_([0-9a-f-]{36})$/i);
+      if ((smStart || smIgnore) && (callbackChat?.type === "group" || callbackChat?.type === "supergroup")) {
+        const candidateId = String((smStart ?? smIgnore)![1]);
+        const { data: resolved } = await admin.rpc("resolve_social_mission_link_candidate", {
+          _candidate_id: candidateId,
+          _telegram_user_id: Number(from.id),
+          _decision: smStart ? "START" : "IGNORE",
+        });
+        const decision = (resolved ?? {}) as {
+          outcome?: string;
+          reason?: string;
+          canonical_url?: string;
+          prompt_message_id?: number;
+          telegram_message_id?: number;
+        };
+
+        if (decision.outcome === "EXPIRED") {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "This suggestion has expired.");
+          return json({ ok: true });
+        }
+        if (decision.outcome === "ALREADY_RESOLVED") {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "This suggestion was already handled.");
+          return json({ ok: true });
+        }
+        if (decision.outcome !== "START" && decision.outcome !== "IGNORE") {
+          await answerCallback(
+            TELEGRAM_BOT_TOKEN,
+            callback.id,
+            decision.reason === "actor_not_operator"
+              ? "Only this project's owners and admins can do this."
+              : "This suggestion could not be handled.",
+          );
+          return json({ ok: true });
+        }
+
+        // The prompt is transient in both directions.
+        if (typeof decision.prompt_message_id === "number") {
+          await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
+            chat_id: callbackChatId,
+            message_id: decision.prompt_message_id,
+          }).catch(() => null);
+        }
+
+        if (decision.outcome === "IGNORE") {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Ignored.");
+          return json({ ok: true });
+        }
+
+        await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Starting the mission…");
+        await runMissionCommand({
+          chatId: callbackChatId,
+          chatType: String(callbackChat?.type ?? ""),
+          updateId: update?.update_id,
+          // The ORIGINAL post message is never deleted as a "command".
+          messageId: null,
+          telegramUserId: Number(from.id),
+          argument: String(decision.canonical_url ?? ""),
+        });
+        return json({ ok: true });
+      }
+
       // C7.3 — Project Inbox console callbacks. Private chat only; every one
       // re-authorizes inside the service-only RPC before exposing anything.
       const piWorkspace = callbackData.match(/^pi_w_([0-9a-f-]{36})$/i);
