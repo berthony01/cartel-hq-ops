@@ -348,9 +348,8 @@ DECLARE
   v_next_likes bigint;
   v_next_shares bigint;
   v_next_comments bigint;
-
-  FUNCTION_PLACEHOLDER boolean;
 BEGIN
+
   INSERT INTO public.social_mission_pulse_marks (mission_id, workspace_id)
   VALUES (_mission_id, _workspace_id)
   ON CONFLICT (mission_id) DO NOTHING;
@@ -488,7 +487,7 @@ SET search_path = public
 AS $$
 DECLARE
   v_m public.social_missions%ROWTYPE;
-  v_last record;
+  v_views bigint; v_likes bigint; v_comments bigint; v_shares bigint; v_saves bigint;
   v_post record;
   v_snapshots integer := 0;
   v_pulses integer := 0;
