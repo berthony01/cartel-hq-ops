@@ -189,7 +189,12 @@ check("5.10 the old unverified 3-argument resolver is dropped", /DROP FUNCTION I
 check("5.11 the resolver revalidates operator authority itself", /resolve_social_mission_link_candidate[\s\S]*?is_workspace_operator/.test(se6Sql));
 check("5.12 the admin check uses the candidate's OWN chat", /telegram_chat_id.*preflight|candidateChatId/.test(webhookCode));
 check("5.13 START reuses the existing authorized mission pipeline", /runMissionCommand\(\{[\s\S]{0,400}telegram_link_finder/.test(webhookCode));
-check("5.14 the member's own post is never deleted as a command", /messageId: null/.test(webhookCode));
+// RE-PINNED by SE-7, not loosened: the withdrawn "never delete the member's
+// post" rule (asserted as `messageId: null`) is replaced by the frozen product
+// behaviour — START passes the candidate's REAL source message id, and that
+// post is deleted ONLY after a confirmed card send plus an active schedule.
+check("5.14 START carries the candidate's real source message id, never null", !/messageId: null/.test(webhookCode) && /messageId: sourceMessageId/.test(webhookCode));
+
 
 // ---------------------------------------------------------------------------
 // 6. Requirement 8 / (E) — final X snapshot on MANUAL close.
