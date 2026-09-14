@@ -707,6 +707,8 @@ Deno.serve(async (req: Request) => {
       _canonical_url: parsed!.canonicalUrl,
       _external_post_id: parsed!.postId,
       _author_handle: parsed!.handle,
+      // SE-5 provenance only. It never changes authorization or behaviour.
+      _source: args.source === "telegram_link_finder" ? "telegram_link_finder" : "telegram_mission_command",
     });
     const result = (created ?? null) as
       | {
