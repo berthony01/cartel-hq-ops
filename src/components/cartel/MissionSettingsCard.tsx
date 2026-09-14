@@ -108,6 +108,39 @@ export function MissionSettingsCard({ workspaceId }: { workspaceId: string | nul
     });
   };
 
+  const presets = presetsQuery.data ?? [];
+  const editingPreset = presetDraft;
+  const presetInvalid = editingPreset ? validateTierPreset(editingPreset) : null;
+
+  const onSelectPreset = (value: string) => {
+    setPresetSaved(false);
+    if (value === "none") {
+      patch({ active_preset_id: null });
+      setPresetDraft(null);
+      return;
+    }
+    if (value === "new") {
+      setPresetDraft(workspaceId ? blankTierPreset(workspaceId) : null);
+      return;
+    }
+    const found = presets.find((preset) => preset.id === value);
+    patch({ active_preset_id: value });
+    setPresetDraft(found ? { ...found } : null);
+  };
+
+  const onSavePreset = () => {
+    if (!editingPreset) return;
+    savePreset.mutate(editingPreset, {
+      onSuccess: () => {
+        setPresetSaved(true);
+        toast.success("Preset saved.");
+      },
+      onError: (error) =>
+        toast.error(error instanceof Error ? error.message : "The preset could not be saved."),
+    });
+  };
+
+
   return (
     <Section
       variant="surface"
