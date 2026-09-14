@@ -878,62 +878,67 @@ const missionFn = webhookRaw.slice(
 );
 
 // 16.a — Link Finder source cleanup is MANDATORY and preference-independent.
-check(
-  "16.1 a dedicated Link Finder source cleanup helper exists",
-  /const ensureLinkFinderSourceCleanup = async \(targetId: string\): Promise<boolean>/.test(missionFn),
+//
+//        SE-9 RE-PIN: the objective is unchanged and NOT relaxed — the original
+//        X-link post must still be removed, must still ignore the workspace
+//        command preference, and must still never be reported clean on an
+//        unproven outcome. Only its POSITION moved: it now runs at detection,
+//        immediately after the prompt is confirmed sent and attached, in the
+//        dedicated `ensureLinkFinderSourceDeleted` helper.
+const se9SourceHelper = webhookRaw.slice(
+  webhookRaw.indexOf("const ensureLinkFinderSourceDeleted = async (params: {"),
+  webhookRaw.indexOf("const runMissionCommand = async (args: {"),
 );
+check("16.1 a dedicated Link Finder source cleanup helper exists", se9SourceHelper.length > 200);
 check(
-  "16.2 the helper is a no-op for every non-Link-Finder source",
-  /if \(!isLinkFinder\) return true;/.test(missionFn),
+  "16.2 the /mission launch path no longer performs Link Finder source cleanup",
+  !/ensureLinkFinderSourceCleanup|ensureLinkFinderSourceDeleted/.test(missionFn),
 );
 check(
   "16.3 Link Finder cleanup does NOT consult delete_command_after_send",
-  !/delete_command_after_send/.test(
-    missionFn.slice(
-      missionFn.indexOf("const ensureLinkFinderSourceCleanup"),
-      missionFn.indexOf("return !recordError && recordedOk === true;"),
-    ),
-  ),
+  !/delete_command_after_send/.test(se9SourceHelper),
 );
 check(
   "16.4 the /mission command cleanup keeps the workspace preference",
   /if \(!isLinkFinder && cfg\["delete_command_after_send"\] !== false && messageId > 0\)/.test(missionFn),
 );
 check(
-  "16.5 a durably recorded deletion for the same message is already-clean",
-  /command_deleted_at && Number\(recorded\.command_message_id\) === messageId/.test(missionFn),
+  "16.5 a durably recorded deletion costs no Telegram call at all",
+  /if \(params\.alreadyDeletedAt\) return true;/.test(se9SourceHelper) &&
+    se9SourceHelper.indexOf("params.alreadyDeletedAt") < se9SourceHelper.indexOf("deleteMessage"),
 );
 check(
   "16.6 a definitive Telegram 'already gone' satisfies the objective",
-  /message to delete not found\|message_id_invalid/.test(missionFn),
+  /removed = \/message to delete not found\|message_id_invalid\/i\.test\(reason\);/.test(se9SourceHelper),
 );
 check(
   "16.7 a permission/transport failure does NOT count as clean",
-  /if \(!removed\) return false;/.test(missionFn),
+  /if \(!removed\) \{[\s\S]{0,200}return false;/.test(se9SourceHelper),
 );
 check(
-  "16.8 successful cleanup is recorded through the existing RPC",
-  /record_social_mission_command_deleted"?,?\s*\n?\s*\{ _target_id: targetId, _command_message_id: messageId \}/.test(missionFn),
+  "16.8 successful cleanup is recorded through the durable candidate RPC",
+  /record_social_mission_link_candidate_source_cleanup/.test(se9SourceHelper),
 );
 check(
   "16.9 cleanup only reports clean when the recording persisted",
-  /return !recordError && recordedOk === true;/.test(missionFn),
+  /if \(recordError \|\| \(outcome !== "CLEAN" && outcome !== "ALREADY_CLEAN"\)\) \{[\s\S]{0,300}return false;/
+    .test(se9SourceHelper),
 );
 
-// 16.b — fresh ACTIVATED path ordering: cleanup -> settled -> finalize -> prompt.
+// 16.b — fresh ACTIVATED path ordering: pin -> settled -> finalize -> prompt.
 const idxActivate = missionFn.indexOf("activate_social_mission_schedule");
-const idxCleanupCall = missionFn.indexOf("const sourceClean = await ensureLinkFinderSourceCleanup(");
 // lastIndexOf: the first `kind: "ACTIVATED"` is the callback's TYPE union.
 const idxActivatedSettle = missionFn.lastIndexOf('kind: "ACTIVATED"');
+const idxCleanupCall = missionFn.indexOf("const canonicalPinned = await ensureCanonicalMissionPin(");
 
-check("16.10 cleanup runs after schedule activation", idxActivate > 0 && idxActivate < idxCleanupCall);
-check("16.11 cleanup runs BEFORE the settled callback", idxCleanupCall > 0 && idxCleanupCall < idxActivatedSettle);
+check("16.10 the required objective runs after schedule activation", idxActivate > 0 && idxActivate < idxCleanupCall);
+check("16.11 it runs BEFORE the settled callback", idxCleanupCall > 0 && idxCleanupCall < idxActivatedSettle);
 check(
-  "16.12 the settled callback fires only when the source is clean (and SE-8 pinned)",
-  /if \(sourceClean && canonicalPinned\) \{\s*\n\s*await args\.onMissionSettled\?\.\(\{\s*\n\s*kind: "ACTIVATED"/.test(missionFn),
+  "16.12 the settled callback fires only when the required pin is confirmed",
+  /if \(canonicalPinned\) \{\s*\n\s*await args\.onMissionSettled\?\.\(\{\s*\n\s*kind: "ACTIVATED"/.test(missionFn),
 );
 check(
-  "16.13 cleanup sits OUTSIDE the best-effort housekeeping try/catch",
+  "16.13 it sits OUTSIDE the best-effort housekeeping try/catch",
   idxCleanupCall > missionFn.indexOf("// Cosmetic housekeeping only; never surfaced and never retried."),
 );
 
