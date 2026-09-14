@@ -303,14 +303,17 @@ AS $$
          COALESCE(m.highest_tier, 0),
          tg.group_connection_id,
          base.effective_config,
-         COALESCE(pr.tier_targets, '[]'::jsonb),
-         COALESCE(pr.pulse_deltas,
+         -- SE-6 correction (B): tier targets and pulse deltas come from the
+         -- mission's OWN frozen effective_config snapshot. A workspace preset
+         -- edited mid-flight can never change a mission already running. Old
+         -- missions with no snapshot fall back to the shared defaults.
+         COALESCE(base.effective_config -> 'tier_targets', '[]'::jsonb),
+         COALESCE(base.effective_config -> 'pulse_deltas',
                   jsonb_build_object('views', 100, 'likes', 10, 'shares', 5, 'comments', 5))
     FROM public.list_active_social_missions_for_metrics(_limit) AS base
     JOIN public.social_missions m ON m.id = base.mission_id
     JOIN public.social_mission_targets tg ON tg.id = base.target_id
-    LEFT JOIN public.social_mission_settings s ON s.workspace_id = base.workspace_id
-    LEFT JOIN public.social_mission_presets pr ON pr.id = s.active_preset_id
+
    WHERE NOT EXISTS (
 
            SELECT 1
