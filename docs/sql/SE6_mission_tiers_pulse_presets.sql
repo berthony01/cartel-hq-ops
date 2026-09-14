@@ -517,9 +517,12 @@ BEGIN
   SELECT count(*) INTO v_snapshots
     FROM public.social_metric_snapshots WHERE mission_id = _mission_id;
 
-  SELECT count(*) INTO v_pulses
-    FROM public.social_mission_schedule_events
-   WHERE mission_id = _mission_id AND event_type = 'PULSE' AND state = 'SENT';
+  -- SE-6 correction (G): count the THRESHOLD-CROSSING pulses recorded on the
+  -- mission's pulse marks, never the superseded time-based schedule rows.
+  SELECT COALESCE(pulse_count, 0) INTO v_pulses
+    FROM public.social_mission_pulse_marks
+   WHERE mission_id = _mission_id;
+
 
   INSERT INTO public.social_mission_performance_history (
     mission_id, workspace_id, mission_code, preset, canonical_url, external_post_id,
