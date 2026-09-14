@@ -115,6 +115,9 @@ CREATE TABLE IF NOT EXISTS public.social_mission_pulse_marks (
   shares_mark bigint,
   comments_mark bigint,
   last_pulse_at timestamptz,
+  -- SE-6 correction (G): the truthful number of threshold-crossing pulses.
+  pulse_count integer NOT NULL DEFAULT 0,
+
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
