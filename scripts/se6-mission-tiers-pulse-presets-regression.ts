@@ -329,8 +329,8 @@ const se6CaptionCard = renderMissionCard({
   contentText: "z".repeat(4000),
   projectName: "PEPE CARTEL",
   ticker: "$PCART",
-  baseline: null,
-  latest: null,
+  baseline: { views: 100, likes: 10, comments: 2, shares: 3, saves: null },
+  latest: { views: 180, likes: 12, comments: 5, shares: 4, saves: null },
   maxLength: 1024,
 });
 check("C3 the branded caption stays inside 1024 characters",
