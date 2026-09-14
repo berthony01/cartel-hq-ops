@@ -11,6 +11,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import {
   X_BATCH_MAX,
+  X_PROVIDER,
   batchPostIds,
   minuteBucket,
 } from "../backend-source/edge-functions/_shared/x-metrics";
@@ -209,7 +210,18 @@ check("6.9 no scraper or second provider path was added", !/puppeteer|scrape|nit
 // ---------------------------------------------------------------------------
 check("7.1 usage is recorded on the existing usage_ledger", /INSERT INTO public\.usage_ledger/.test(se6Sql));
 check("7.2 the unit is a clearly named tracked-post read", /social_x_tracked_post_read/.test(se6Sql));
-check("7.3 usage is written only when a NEW snapshot row was inserted", /IF v_snapshot_inserted AND _provider = 'x' THEN[\s\S]{0,300}usage_ledger/.test(se6Sql));
+check("7.3 usage is written only when a NEW snapshot row was inserted", /IF v_snapshot_inserted AND _provider = 'x-official' THEN[\s\S]{0,600}usage_ledger/.test(se6Sql));
+check(
+  "7.3a the SQL telemetry gate matches the runtime X_PROVIDER constant exactly",
+  new RegExp(`IF v_snapshot_inserted AND _provider = '${X_PROVIDER}' THEN`).test(se6Sql),
+);
+check("7.3b the runtime official provider constant is still x-official", X_PROVIDER === "x-official");
+check("7.3c no stale bare 'x' provider telemetry gate remains", !/_provider = 'x'\s/.test(se6Sql) && !/_provider = 'x' THEN/.test(se6Sql));
+check("7.3d telemetry is not broadened to arbitrary providers", !/_provider IS NOT NULL THEN|_provider LIKE/.test(se6Sql));
+check(
+  "7.3e the documented unit names the official provider constant",
+  /x-official/.test(readFileSync(SE6_SQL, "utf8")),
+);
 check("7.4 a retry cannot multiply usage", /v_snapshot_inserted := v_rows = 1;/.test(se6Sql));
 check("7.5 no dollar pricing is encoded", !/provider_cost\s*,|internal_cost\s*,/.test(se6Sql));
 check("7.6 no billing, limit or entitlement is introduced", !/stripe|invoice|entitlement|quota|billing/i.test(se6Sql));

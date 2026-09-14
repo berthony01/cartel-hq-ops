@@ -37,6 +37,8 @@ BEGIN;
 --      action_type = 'social_x_tracked_post_read'
 --      units       = 1
 --    means "one tracked X post was read into a new stored snapshot for this
+--    workspace" — written ONLY for the official X provider, whose snapshots
+--    carry the exact runtime constant `x-official`.
 --    workspace". It is OPERATIONAL TELEMETRY, not billable usage and not an
 --    exact invoice cost: the official X batch endpoint reads up to 100 posts
 --    per HTTP call, and that call cannot be truthfully split across
@@ -102,7 +104,11 @@ BEGIN
   v_snapshot_inserted := v_rows = 1;
 
   -- Internal-only telemetry, tied to the durable snapshot idempotency fact.
-  IF v_snapshot_inserted AND _provider = 'x' THEN
+  -- PROVIDER GATE: the official X adapter is the ONLY metered provider. It
+  -- writes snapshots under the exact runtime constant X_PROVIDER = 'x-official'
+  -- (backend-source/edge-functions/_shared/x-metrics.ts). No other provider
+  -- string is metered.
+  IF v_snapshot_inserted AND _provider = 'x-official' THEN
     INSERT INTO public.usage_ledger (workspace_id, user_id, action_type, units)
     VALUES (v_mission.workspace_id, NULL, 'social_x_tracked_post_read', 1);
   END IF;
