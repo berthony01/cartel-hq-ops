@@ -1775,6 +1775,7 @@ Deno.serve(async (req: Request) => {
             // The candidate's own chat, always. Never the callback chat.
             chat_id: candidateChatId,
 
+
             message_id: decision.prompt_message_id,
           }).catch(() => null);
         }
