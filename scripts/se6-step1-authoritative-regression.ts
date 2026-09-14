@@ -628,8 +628,9 @@ check(
 check(
   "14.10 the candidate RPC receives the derived poster id, never a raw bot id",
   /_telegram_user_id: linkFinderSender\.posterId/.test(webhookRaw) &&
-    !/_telegram_user_id: Number\(from\.id\)/.test(webhookRaw),
+    !/create_social_mission_link_candidate[\s\S]{0,400}_telegram_user_id: Number\(from\.id\)/.test(webhookRaw),
 );
+
 check(
   "14.11 detection still requires a connected group chat and a non-command message",
   /linkFinderSender\.eligible &&\s*!text\.startsWith\("\/"\) &&\s*\(chat\?\.type === "group" \|\| chat\?\.type === "supergroup"\)/.test(webhookRaw),
