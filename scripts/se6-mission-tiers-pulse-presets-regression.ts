@@ -28,6 +28,7 @@ import {
   isClosingSoon,
   X_LINK_UNAVAILABLE_LABEL,
   isXLinkStatus,
+  MISSION_FOOTER_LEGEND as PROGRESS_FOOTER_LEGEND,
 } from "../backend-source/edge-functions/_shared/mission-progress.ts";
 
 import {
@@ -41,6 +42,11 @@ import {
   tierSummaryChips,
   validateTierPreset,
 } from "../src/lib/social-mission-settings.ts";
+
+import {
+  renderMissionCard,
+  MISSION_FOOTER_LEGEND as CARD_FOOTER_LEGEND,
+} from "../backend-source/edge-functions/social-mission-telegram/card.ts";
 
 let passed = 0;
 const failures: string[] = [];
@@ -253,6 +259,132 @@ check("no second scheduler was created", !/cron\.schedule/.test(SQL));
 check("mission creation stays in Telegram", /\/mission/.test(PANEL));
 check("service-only RPCs revoke public access", /REVOKE ALL ON FUNCTION[\s\S]{0,400}FROM PUBLIC/.test(SQL));
 check("browser code never uses the service role", !/service_role/.test(SETTINGS_LIB) && !/service_role/.test(PANEL));
+
+/* ============================================================================
+ * SE-6 hardening corrections (A) - (G).
+ * ========================================================================== */
+
+/* (A) threshold-only pulses */
+
+check("A1 the runner has no scheduled PULSE Telegram send path",
+  !/event_type === "PULSE"[\s\S]{0,1200}sendMessage/.test(RUNNER));
+check("A2 a legacy PULSE row is retired, never delivered",
+  /event_type === "PULSE"[\s\S]{0,600}retire_legacy_social_mission_pulse_event/.test(RUNNER));
+check("A3 activation seeds COMPLETE only",
+  /COMPLETE only\. No PULSE row is seeded/.test(SQL)
+  && !/VALUES[\s\S]{0,200}'PULSE'/.test(SQL));
+check("A4 pending legacy pulse rows are retired by the migration",
+  /UPDATE public\.social_mission_schedule_events[\s\S]{0,300}state = 'CANCELLED'[\s\S]{0,300}event_type = 'PULSE'[\s\S]{0,80}AND state = 'PENDING'/.test(SQL));
+check("A5 the retire RPC is service-only",
+  /REVOKE ALL ON FUNCTION public\.retire_legacy_social_mission_pulse_event\(uuid\)[\s\S]{0,120}FROM PUBLIC/.test(SQL));
+check("A6 manual close and the schedule table survive",
+  /close_social_mission_from_telegram|finish_social_mission_schedule_event/.test(RUNNER)
+  && !/DROP TABLE[\s\S]{0,60}social_mission_schedule_events/.test(SQL));
+check("A7 COMPLETE behaviour is preserved", /event\.event_type === "COMPLETE"|edit_mission/.test(RUNNER));
+
+/* (B) preset immutability per mission */
+
+check("B1 the due-list reads the mission's frozen snapshot",
+  /COALESCE\(base\.effective_config -> 'tier_targets'/.test(SQL)
+  && /COALESCE\(base\.effective_config -> 'pulse_deltas'/.test(SQL));
+check("B2 the due-list no longer joins the live workspace preset",
+  !/LEFT JOIN public\.social_mission_presets pr ON pr\.id = s\.active_preset_id/.test(SQL));
+check("B3 the preset is frozen onto the mission at creation",
+  /social_missions_freeze_preset_snapshot/.test(SQL)
+  && /BEFORE INSERT ON public\.social_missions/.test(SQL));
+check("B4 the snapshot carries preset id, name, code, targets and deltas",
+  /'preset_id', v_preset\.id/.test(SQL) && /'preset_name', v_preset\.name/.test(SQL)
+  && /'mission_code', v_preset\.mission_code/.test(SQL)
+  && /'tier_targets', v_preset\.tier_targets/.test(SQL)
+  && /'pulse_deltas', v_preset\.pulse_deltas/.test(SQL)
+  && /'base_preset'/.test(SQL));
+check("B5 an existing snapshot is never re-frozen", /Never re-freeze/.test(SQL));
+check("B6 missions without a snapshot fall back safely",
+  /COALESCE\(base\.effective_config -> 'tier_targets', '\[\]'::jsonb\)/.test(SQL));
+check("B7 HQ states that a running mission keeps its targets",
+  /already running keeps the targets it launched with/.test(SETTINGS_CARD));
+
+/* (C) canonical Telegram footer */
+
+const se6LiveCard = renderMissionCard({
+  missionStatus: "LIVE",
+  platform: "x",
+  canonicalUrl: "https://x.com/PEPECARTELTOKEN/status/2098827349470961903",
+  authorHandle: "PEPECARTELTOKEN",
+  contentText: "WEEKEND WITH THE CARTEL",
+  projectName: "PEPE CARTEL",
+  ticker: "$PCART",
+  baseline: { views: 100, likes: 10, comments: 2, shares: 3, saves: null },
+  latest: { views: 180, likes: 12, comments: 5, shares: 4, saves: null },
+});
+check("C1 the rendered LIVE card contains the footer legend",
+  se6LiveCard.text.includes(CARD_FOOTER_LEGEND));
+check("C2 the footer states the five-minute refresh",
+  /5 minutes/.test(CARD_FOOTER_LEGEND) && CARD_FOOTER_LEGEND === PROGRESS_FOOTER_LEGEND);
+const se6CaptionCard = renderMissionCard({
+  missionStatus: "LIVE",
+  platform: "x",
+  canonicalUrl: "https://x.com/PEPECARTELTOKEN/status/2098827349470961903",
+  authorHandle: "PEPECARTELTOKEN",
+  contentText: "z".repeat(4000),
+  projectName: "PEPE CARTEL",
+  ticker: "$PCART",
+  baseline: { views: 100, likes: 10, comments: 2, shares: 3, saves: null },
+  latest: { views: 180, likes: 12, comments: 5, shares: 4, saves: null },
+  maxLength: 1024,
+});
+check("C3 the branded caption stays inside 1024 characters",
+  se6CaptionCard.text.length <= 1024);
+check("C4 the footer survives caption truncation",
+  se6CaptionCard.text.includes(CARD_FOOTER_LEGEND));
+
+/* (D) provider-independent lifecycle */
+
+check("D1 mission active is recorded at canonical delivery, not after an X read",
+  /Provider-independent lifecycle milestone[\s\S]{0,200}'MISSION_ACTIVE'/.test(SQL));
+check("D2 every LIVE to COMPLETED transition finalizes",
+  /social_missions_finalize_on_completion/.test(SQL)
+  && /AFTER UPDATE OF status ON public\.social_missions/.test(SQL));
+check("D3 the completion hook records the milestone and the history",
+  /'MISSION_COMPLETED'[\s\S]{0,300}finalize_social_mission_performance/.test(SQL));
+check("D4 manual close is covered by the same transition hook",
+  /admin `\/mission close`/.test(SQL));
+check("D5 both completion operations stay idempotent",
+  /ON CONFLICT \(mission_id\) DO NOTHING/.test(SQL) && /both operations are idempotent/.test(SQL));
+
+/* (E) one tier default bundle */
+
+check("E1 backend and UI tier defaults are byte-identical",
+  JSON.stringify(normalizeTierTargets(UI_TIER_TARGETS)) === JSON.stringify(normalizeTierTargets([])));
+
+/* (F) saved preset UX */
+
+check("F1 a saved preset returns its persisted row",
+  /\.select\("\*"\)\.single\(\)/.test(SETTINGS_LIB) && /normalizePreset\(\(data/.test(SETTINGS_LIB));
+check("F2 the persisted id becomes the selected active preset",
+  /active_preset_id: saved\.id/.test(SETTINGS_CARD));
+check("F3 HQ does not claim an unsaved selection affects missions",
+  /Save mission defaults to use it for the next mission/.test(SETTINGS_CARD));
+check("F4 mission code stays optional",
+  /mission_code: preset\.mission_code\?\.trim\(\) \|\| null/.test(SETTINGS_LIB));
+
+/* (G) truthful pulse count */
+
+check("G1 history counts threshold-crossing pulses",
+  /COALESCE\(pulse_count, 0\) INTO v_pulses[\s\S]{0,200}social_mission_pulse_marks/.test(SQL));
+check("G2 history no longer counts legacy schedule pulse rows",
+  !/INTO v_pulses[\s\S]{0,200}social_mission_schedule_events/.test(SQL));
+check("G3 the crossing evaluator increments the pulse count",
+  /pulse_count = pulse_count \+ CASE WHEN jsonb_array_length\(v_crossings\) > 0/.test(SQL));
+
+/* stale narrative */
+
+check("H1 no source still claims per-minute X reads",
+  !/every minute[\s\S]{0,40}(X|provider) read/i.test(RUNNER));
+check("H2 the runner header documents the superseded pulse",
+  /SUPERSEDED by SE-6/.test(RUNNER));
+check("H3 the provider due-list is bucketed to five minutes",
+  /poll_bucket = _bucket/.test(SQL) && REFRESH_INTERVAL_MINUTES === 5);
 
 console.log(`SE-6 mission tiers / pulse / presets: ${passed}/${passed + failures.length} passed`);
 if (failures.length) {

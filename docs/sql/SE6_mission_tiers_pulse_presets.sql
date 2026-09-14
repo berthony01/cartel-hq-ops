@@ -115,6 +115,9 @@ CREATE TABLE IF NOT EXISTS public.social_mission_pulse_marks (
   shares_mark bigint,
   comments_mark bigint,
   last_pulse_at timestamptz,
+  -- SE-6 correction (G): the truthful number of threshold-crossing pulses.
+  pulse_count integer NOT NULL DEFAULT 0,
+
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -300,14 +303,17 @@ AS $$
          COALESCE(m.highest_tier, 0),
          tg.group_connection_id,
          base.effective_config,
-         COALESCE(pr.tier_targets, '[]'::jsonb),
-         COALESCE(pr.pulse_deltas,
+         -- SE-6 correction (B): tier targets and pulse deltas come from the
+         -- mission's OWN frozen effective_config snapshot. A workspace preset
+         -- edited mid-flight can never change a mission already running. Old
+         -- missions with no snapshot fall back to the shared defaults.
+         COALESCE(base.effective_config -> 'tier_targets', '[]'::jsonb),
+         COALESCE(base.effective_config -> 'pulse_deltas',
                   jsonb_build_object('views', 100, 'likes', 10, 'shares', 5, 'comments', 5))
     FROM public.list_active_social_missions_for_metrics(_limit) AS base
     JOIN public.social_missions m ON m.id = base.mission_id
     JOIN public.social_mission_targets tg ON tg.id = base.target_id
-    LEFT JOIN public.social_mission_settings s ON s.workspace_id = base.workspace_id
-    LEFT JOIN public.social_mission_presets pr ON pr.id = s.active_preset_id
+
    WHERE NOT EXISTS (
 
            SELECT 1
@@ -423,7 +429,10 @@ BEGIN
          likes_mark = v_next_likes,
          shares_mark = v_next_shares,
          comments_mark = v_next_comments,
-         last_pulse_at = CASE WHEN jsonb_array_length(v_crossings) > 0 THEN now() ELSE last_pulse_at END
+         last_pulse_at = CASE WHEN jsonb_array_length(v_crossings) > 0 THEN now() ELSE last_pulse_at END,
+         -- SE-6 (G): one increment per announced crossing batch.
+         pulse_count = pulse_count + CASE WHEN jsonb_array_length(v_crossings) > 0 THEN 1 ELSE 0 END
+
    WHERE mission_id = _mission_id;
 
   RETURN jsonb_build_object(
@@ -517,9 +526,12 @@ BEGIN
   SELECT count(*) INTO v_snapshots
     FROM public.social_metric_snapshots WHERE mission_id = _mission_id;
 
-  SELECT count(*) INTO v_pulses
-    FROM public.social_mission_schedule_events
-   WHERE mission_id = _mission_id AND event_type = 'PULSE' AND state = 'SENT';
+  -- SE-6 correction (G): count the THRESHOLD-CROSSING pulses recorded on the
+  -- mission's pulse marks, never the superseded time-based schedule rows.
+  SELECT COALESCE(pulse_count, 0) INTO v_pulses
+    FROM public.social_mission_pulse_marks
+   WHERE mission_id = _mission_id;
+
 
   INSERT INTO public.social_mission_performance_history (
     mission_id, workspace_id, mission_code, preset, canonical_url, external_post_id,
@@ -558,5 +570,235 @@ $$;
 REVOKE ALL ON FUNCTION public.finalize_social_mission_performance(uuid)
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.finalize_social_mission_performance(uuid) TO service_role, postgres;
+
+-- ---------------------------------------------------------------------------
+-- 11. SE-6 correction (B) — freeze the selected saved preset onto the mission.
+--     The launcher already snapshots `metadata.effective_config`; this trigger
+--     extends that SAME snapshot with the workspace's active saved preset at
+--     creation time. Nothing reads the workspace preset afterwards, so editing
+--     or deleting a preset can never mutate a mission already in flight.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.social_missions_freeze_preset_snapshot()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_config jsonb;
+  v_preset public.social_mission_presets%ROWTYPE;
+BEGIN
+  v_config := COALESCE(NEW.metadata -> 'effective_config', '{}'::jsonb);
+
+  -- Never re-freeze: an explicit snapshot supplied by the caller wins.
+  IF v_config ? 'tier_targets' THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT pr.* INTO v_preset
+    FROM public.social_mission_settings s
+    JOIN public.social_mission_presets pr ON pr.id = s.active_preset_id
+   WHERE s.workspace_id = NEW.workspace_id;
+
+  IF NOT FOUND THEN
+    RETURN NEW;
+  END IF;
+
+  v_config := v_config || jsonb_build_object(
+    'preset_id', v_preset.id,
+    'preset_name', v_preset.name,
+    'base_preset', COALESCE(v_preset.base_preset, v_config ->> 'preset', 'STANDARD'),
+    'mission_code', v_preset.mission_code,
+    'tier_targets', v_preset.tier_targets,
+    'pulse_deltas', v_preset.pulse_deltas
+  );
+
+  NEW.metadata := COALESCE(NEW.metadata, '{}'::jsonb) || jsonb_build_object('effective_config', v_config);
+  NEW.mission_code := COALESCE(NEW.mission_code, v_preset.mission_code);
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS social_missions_freeze_preset_snapshot ON public.social_missions;
+CREATE TRIGGER social_missions_freeze_preset_snapshot
+  BEFORE INSERT ON public.social_missions
+  FOR EACH ROW EXECUTE FUNCTION public.social_missions_freeze_preset_snapshot();
+
+-- ---------------------------------------------------------------------------
+-- 12. SE-6 correction (A) — activation seeds the COMPLETE lifecycle event ONLY.
+--     Requirement 4 allows a pulse only on a metric threshold crossing, so no
+--     time-offset PULSE row is ever created again. Manual close, the schedule
+--     table and COMPLETE behaviour are unchanged. Requirement 5 / correction
+--     (D): MISSION_ACTIVE is recorded here, at confirmed canonical delivery,
+--     so it never depends on a successful X read.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.activate_social_mission_schedule(
+  _mission_id uuid,
+  _target_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_mission public.social_missions%ROWTYPE;
+  v_target public.social_mission_targets%ROWTYPE;
+  v_config jsonb;
+  v_duration integer;
+  v_ends timestamptz;
+  v_seeded integer := 0;
+  v_inserted integer;
+BEGIN
+  IF _mission_id IS NULL OR _target_id IS NULL THEN
+    RETURN jsonb_build_object('outcome', 'REJECTED', 'reason', 'invalid_identifiers');
+  END IF;
+
+  SELECT * INTO v_mission FROM public.social_missions WHERE id = _mission_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('outcome', 'REJECTED', 'reason', 'mission_not_found');
+  END IF;
+
+  SELECT * INTO v_target
+    FROM public.social_mission_targets
+   WHERE id = _target_id
+     AND mission_id = _mission_id
+     AND workspace_id = v_mission.workspace_id
+   FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('outcome', 'REJECTED', 'reason', 'target_not_bound');
+  END IF;
+
+  IF v_target.delivery_state <> 'SENT'
+     OR v_target.telegram_message_id IS NULL
+     OR v_target.sent_at IS NULL THEN
+    RETURN jsonb_build_object('outcome', 'REJECTED', 'reason', 'delivery_not_confirmed');
+  END IF;
+
+  IF v_mission.status = 'COMPLETED' THEN
+    RETURN jsonb_build_object('outcome', 'ALREADY_COMPLETED', 'mission_id', _mission_id, 'target_id', _target_id);
+  END IF;
+
+  IF v_mission.status <> 'LIVE' THEN
+    RETURN jsonb_build_object('outcome', 'REJECTED', 'reason', 'mission_not_live');
+  END IF;
+
+  v_config := public.social_mission_effective_config(_mission_id);
+  v_duration := GREATEST(1, LEAST(1440, (v_config ->> 'duration_minutes')::integer));
+
+  -- Duration is anchored to CONFIRMED delivery, never to command time.
+  v_ends := v_target.sent_at + make_interval(mins => v_duration);
+
+  UPDATE public.social_missions
+     SET started_at = COALESCE(started_at, v_target.sent_at),
+         ends_at = COALESCE(ends_at, v_ends)
+   WHERE id = _mission_id;
+
+  -- COMPLETE only. No PULSE row is seeded by SE-6 or later.
+  INSERT INTO public.social_mission_schedule_events (
+    workspace_id, mission_id, target_id, event_type, sequence_no, due_at
+  )
+  VALUES (
+    v_mission.workspace_id, _mission_id, _target_id, 'COMPLETE', 1::smallint,
+    v_target.sent_at + make_interval(mins => v_duration)
+  )
+  ON CONFLICT (target_id, event_type, sequence_no) DO NOTHING;
+  GET DIAGNOSTICS v_inserted = ROW_COUNT;
+  v_seeded := v_seeded + v_inserted;
+
+  -- Provider-independent lifecycle milestone. Idempotent.
+  PERFORM public.record_social_mission_milestone(
+    _mission_id, v_mission.workspace_id, 'MISSION_ACTIVE', NULL,
+    jsonb_build_object('source', 'canonical_delivery'));
+
+  RETURN jsonb_build_object(
+    'outcome', CASE WHEN v_seeded = 0 THEN 'EXISTING' ELSE 'ACTIVATED' END,
+    'workspace_id', v_mission.workspace_id,
+    'mission_id', _mission_id,
+    'target_id', _target_id,
+    'preset', v_config ->> 'preset',
+    'duration_minutes', v_duration,
+    'sent_at', v_target.sent_at,
+    'ends_at', (SELECT ends_at FROM public.social_missions WHERE id = _mission_id),
+    'events_seeded', v_seeded
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.activate_social_mission_schedule(uuid, uuid)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.activate_social_mission_schedule(uuid, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.activate_social_mission_schedule(uuid, uuid) TO postgres;
+
+-- ---------------------------------------------------------------------------
+-- 13. SE-6 correction (A) — retire legacy time-based PULSE rows.
+--     Data step: every PENDING legacy row is cancelled at migration time, so
+--     no superseded reminder can fire after rollout. Already-sent history is
+--     untouched. Runtime step: a legacy row that somehow reaches the worker is
+--     retired through this service-only RPC instead of being delivered.
+-- ---------------------------------------------------------------------------
+UPDATE public.social_mission_schedule_events
+   SET state = 'CANCELLED',
+       last_error = 'Superseded by SE-6 threshold-crossing pulses.',
+       updated_at = now()
+ WHERE event_type = 'PULSE'
+   AND state = 'PENDING';
+
+CREATE OR REPLACE FUNCTION public.retire_legacy_social_mission_pulse_event(_event_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_id uuid;
+BEGIN
+  UPDATE public.social_mission_schedule_events
+     SET state = 'CANCELLED',
+         last_error = 'Superseded by SE-6 threshold-crossing pulses.',
+         updated_at = now()
+   WHERE id = _event_id
+     AND event_type = 'PULSE'
+     AND state IN ('PENDING', 'CLAIMED')
+  RETURNING id INTO v_id;
+
+  RETURN v_id IS NOT NULL;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.retire_legacy_social_mission_pulse_event(uuid)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.retire_legacy_social_mission_pulse_event(uuid)
+  TO service_role, postgres;
+
+-- ---------------------------------------------------------------------------
+-- 14. SE-6 correction (D) — provider-independent completion.
+--     EVERY LIVE -> COMPLETED transition, whether it comes from the scheduled
+--     completion RPC or from an admin `/mission close`, idempotently records
+--     MISSION_COMPLETED and writes the performance history row. The runner's
+--     existing calls remain harmless: both operations are idempotent.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.social_missions_finalize_on_completion()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NEW.status = 'COMPLETED' AND COALESCE(OLD.status, '') <> 'COMPLETED' THEN
+    PERFORM public.record_social_mission_milestone(
+      NEW.id, NEW.workspace_id, 'MISSION_COMPLETED', NULL,
+      jsonb_build_object('source', 'status_transition'));
+    PERFORM public.finalize_social_mission_performance(NEW.id);
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS social_missions_finalize_on_completion ON public.social_missions;
+CREATE TRIGGER social_missions_finalize_on_completion
+  AFTER UPDATE OF status ON public.social_missions
+  FOR EACH ROW EXECUTE FUNCTION public.social_missions_finalize_on_completion();
+
 
 COMMIT;

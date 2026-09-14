@@ -159,18 +159,25 @@ export const MILESTONE_COPY: Record<string, string> = {
 export type TierTarget = { tier: number; views: number | null; likes: number | null; shares: number | null; comments: number | null };
 
 /** Tier 1 -> Tier 10 default bundle. Admins may override per preset. */
+/**
+ * SE-6 correction (E): THE single default tier bundle. This array is mirrored
+ * byte-for-byte by `DEFAULT_TIER_TARGETS` in `src/lib/social-mission-settings.ts`
+ * so an unsaved HQ default and the worker fallback can never disagree. Change
+ * both together or the regression fails.
+ */
 export const DEFAULT_TIER_TARGETS: readonly TierTarget[] = [
   { tier: 1, views: 250, likes: 10, shares: 3, comments: 3 },
-  { tier: 2, views: 500, likes: 25, shares: 8, comments: 6 },
-  { tier: 3, views: 1_000, likes: 50, shares: 15, comments: 10 },
-  { tier: 4, views: 2_500, likes: 100, shares: 30, comments: 20 },
-  { tier: 5, views: 5_000, likes: 200, shares: 60, comments: 35 },
-  { tier: 6, views: 10_000, likes: 400, shares: 120, comments: 60 },
-  { tier: 7, views: 25_000, likes: 800, shares: 250, comments: 100 },
-  { tier: 8, views: 50_000, likes: 1_500, shares: 500, comments: 175 },
-  { tier: 9, views: 100_000, likes: 3_000, shares: 1_000, comments: 300 },
-  { tier: 10, views: 250_000, likes: 6_000, shares: 2_000, comments: 500 },
+  { tier: 2, views: 1_000, likes: 30, shares: 10, comments: 8 },
+  { tier: 3, views: 2_500, likes: 75, shares: 25, comments: 15 },
+  { tier: 4, views: 5_000, likes: 150, shares: 50, comments: 25 },
+  { tier: 5, views: 10_000, likes: 300, shares: 100, comments: 40 },
+  { tier: 6, views: 25_000, likes: 700, shares: 200, comments: 75 },
+  { tier: 7, views: 50_000, likes: 1_500, shares: 400, comments: 120 },
+  { tier: 8, views: 100_000, likes: 3_000, shares: 800, comments: 200 },
+  { tier: 9, views: 250_000, likes: 6_000, shares: 2_000, comments: 500 },
+  { tier: 10, views: 500_000, likes: 12_000, shares: 4_000, comments: 1_000 },
 ];
+
 
 export function normalizeTierTargets(raw: unknown): TierTarget[] {
   const rows = Array.isArray(raw) ? (raw as Record<string, unknown>[]) : [];
