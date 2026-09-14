@@ -87,8 +87,15 @@ type MetricsRow = {
   mission_created_by: string | null;
   accomplished_at: string | null;
   last_metric_signature: string | null;
+  ends_at: string | null;
+  x_link_status: string | null;
+  highest_tier: number | null;
+  group_connection_id: string | null;
   effective_config: Record<string, unknown> | null;
+  tier_targets: unknown;
+  pulse_deltas: unknown;
 };
+
 
 const SCHEDULER_HEADER = "x-cartel-social-mission-scheduler-secret";
 const TELEGRAM_API = "https://api.telegram.org";
