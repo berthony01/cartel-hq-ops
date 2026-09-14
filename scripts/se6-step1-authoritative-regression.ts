@@ -834,12 +834,14 @@ check(
 
 // 15.g — pin recording stays confirmation-only.
 check(
-  "15.38 auto-pin is still attempted after delivery",
-  /cfg\["auto_pin_mission"\] !== false/.test(cleanupBlock) && /"pinChatMessage"/.test(cleanupBlock),
+  "15.38 auto-pin is still attempted after delivery (SE-8: through the idempotent helper)",
+  /cfg\["auto_pin_mission"\] !== false/.test(cleanupBlock) &&
+    /await ensureCanonicalMissionPin\(/.test(cleanupBlock),
 );
 check(
   "15.39 pinned_by_hq is recorded ONLY when Telegram confirms the pin",
-  /if \(pinned\) \{\s*\n\s*await admin\.rpc\("record_social_mission_target_pin"/.test(cleanupBlock),
+  /if \(!pinned\) return false;\s*\n\s*const \{ error: recordError \} = await admin\.rpc\("record_social_mission_target_pin"/
+    .test(webhookRaw),
 );
 check(
   "15.40 completion still unpins only a pin CARTEL HQ recorded",
@@ -927,8 +929,8 @@ const idxActivatedSettle = missionFn.lastIndexOf('kind: "ACTIVATED"');
 check("16.10 cleanup runs after schedule activation", idxActivate > 0 && idxActivate < idxCleanupCall);
 check("16.11 cleanup runs BEFORE the settled callback", idxCleanupCall > 0 && idxCleanupCall < idxActivatedSettle);
 check(
-  "16.12 the settled callback fires only when the source is clean",
-  /if \(sourceClean\) \{\s*\n\s*await args\.onMissionSettled\?\.\(\{\s*\n\s*kind: "ACTIVATED"/.test(missionFn),
+  "16.12 the settled callback fires only when the source is clean (and SE-8 pinned)",
+  /if \(sourceClean && canonicalPinned\) \{\s*\n\s*await args\.onMissionSettled\?\.\(\{\s*\n\s*kind: "ACTIVATED"/.test(missionFn),
 );
 check(
   "16.13 cleanup sits OUTSIDE the best-effort housekeeping try/catch",
@@ -968,8 +970,8 @@ check(
     alreadySentBranch.indexOf('kind: "ALREADY_SENT"'),
 );
 check(
-  "16.19 the retry only settles when cleanup succeeded",
-  /if \(retryClean\) \{/.test(alreadySentBranch),
+  "16.19 the retry only settles when cleanup AND the required pin succeeded",
+  /if \(retryClean && retryPinned\) \{/.test(alreadySentBranch),
 );
 check(
   "16.20 the retry never sends a second card",
@@ -1058,7 +1060,8 @@ check(
 );
 check(
   "16.37 pin recording is still confirmation-only",
-  /if \(pinned\) \{\s*\n\s*await admin\.rpc\("record_social_mission_target_pin"/.test(missionFn),
+  /if \(!pinned\) return false;\s*\n\s*const \{ error: recordError \} = await admin\.rpc\("record_social_mission_target_pin"/
+    .test(missionFn),
 );
 check(
   "16.38 START still remains PENDING until finalization",
@@ -1071,6 +1074,247 @@ check(
 check(
   "16.40 SE-7 still creates no table and adds no scheduler",
   !/CREATE TABLE/i.test(se7Hardened) && !/cron\.schedule/i.test(se7Hardened),
+);
+
+// ---------------------------------------------------------------------------
+// 17. SE-8 — live bot permission preflight + idempotent canonical pin.
+// ---------------------------------------------------------------------------
+
+// 17.a — the preflight itself.
+check(
+  "17.1 a live bot permission reader exists",
+  /async function readBotChatPermissions\(\s*\n\s*token: string,\s*\n\s*chatId: string \| number,\s*\n\): Promise<BotChatPermissions>/.test(webhookRaw),
+);
+check(
+  "17.2 it resolves the bot's own id through getMe and caches it",
+  /cachedBotUserId/.test(webhookRaw) && /telegramJson\(token, "getMe"\)/.test(webhookRaw),
+);
+check(
+  "17.3 it reads the live membership with getChatMember for the bot",
+  /telegramJson\(token, "getChatMember", \{ chat_id: chatId, user_id: botId \}\)/.test(webhookRaw),
+);
+check(
+  "17.4 an unreachable Telegram is never treated as permission granted",
+  /resolved: false,\s*\n\s*status: "",\s*\n\s*isAdmin: false,\s*\n\s*canDeleteMessages: false,\s*\n\s*canPinMessages: false,/.test(webhookRaw),
+);
+check(
+  "17.5 a creator implicitly holds delete and pin rights",
+  /canDeleteMessages: creator \|\| \(isAdmin && row\.can_delete_messages === true\)/.test(webhookRaw) &&
+    /canPinMessages: creator \|\| \(isAdmin && row\.can_pin_messages === true\)/.test(webhookRaw),
+);
+
+// 17.b — the preflight runs BEFORE anything is created or recovered.
+const idxPreflight = missionFn.indexOf("const botPermissions = await readBotChatPermissions(");
+const idxCreateRpc = missionFn.indexOf('admin.rpc("create_social_mission_from_telegram_link"');
+check("17.6 the preflight runs before the mission-creation RPC", idxPreflight > 0 && idxPreflight < idxCreateRpc);
+check(
+  "17.7 a missing right returns before any mission exists",
+  /if \(missingRights\.length > 0\) \{[\s\S]{0,400}await blockLaunch\([\s\S]{0,300}return;/.test(missionFn),
+);
+check(
+  "17.8 Link Finder ALWAYS requires delete, regardless of the preference",
+  /const deletionRequired = isLinkFinder\s*\n\s*\? true\s*\n\s*: workspaceSettings\?\.delete_command_after_send !== false;/.test(missionFn),
+);
+check(
+  "17.9 auto-pin defaults ON, so pin rights are required by default",
+  /const autoPinRequired = workspaceSettings\?\.auto_pin_mission !== false;/.test(missionFn),
+);
+check(
+  "17.10 pin rights are NOT required when auto-pin is disabled",
+  /if \(autoPinRequired && !botPermissions\.canPinMessages\) missingRights\.push\("Pin Messages"\);/.test(missionFn),
+);
+check(
+  "17.11 delete rights are NOT required when no cleanup is required",
+  /if \(deletionRequired && !botPermissions\.canDeleteMessages\) missingRights\.push\("Delete Messages"\);/.test(missionFn),
+);
+check(
+  "17.12 the workspace preferences come from social_mission_settings",
+  /\.from\("social_mission_settings"\)\s*\n\s*\.select\("delete_command_after_send, auto_pin_mission"\)/.test(missionFn),
+);
+check(
+  "17.13 a non-admin bot is refused with a precise message",
+  /needs @\$\{BOT_USERNAME\} to be an administrator/.test(missionFn),
+);
+check(
+  "17.14 the refusal names the exact missing Telegram rights",
+  /CARTEL HQ needs \$\{missingRights\.join\(" and "\)\} enabled for @\$\{BOT_USERNAME\}/.test(missionFn),
+);
+check(
+  "17.15 actor authorization is untouched — the operator and live admin checks remain",
+  /is_workspace_operator|telegram_operator/.test(webhookRaw) && /getChatMember/.test(missionFn) === false
+    ? true
+    : /getChatMember/.test(webhookRaw),
+);
+
+// 17.c — only non-sensitive diagnostics are persisted.
+const diagBlock = missionFn.slice(
+  missionFn.indexOf("bot_permissions_checked_at"),
+  missionFn.indexOf("const blockLaunch"),
+);
+check(
+  "17.16 diagnostics persist into the existing group connection metadata",
+  /\.from\("telegram_group_connections"\)\s*\n\s*\.update\(\{\s*\n\s*metadata: \{/.test(missionFn),
+);
+check(
+  "17.17 diagnostics are only status, booleans and a timestamp",
+  /bot_status: botPermissions\.status/.test(diagBlock) &&
+    /bot_is_admin: botPermissions\.isAdmin/.test(diagBlock) &&
+    /bot_can_delete_messages: botPermissions\.canDeleteMessages/.test(diagBlock) &&
+    /bot_can_pin_messages: botPermissions\.canPinMessages/.test(diagBlock),
+);
+check(
+  "17.18 no token, key, header or raw payload is ever persisted or logged",
+  !/TELEGRAM_BOT_TOKEN|SERVICE_ROLE|apikey|Authorization/i.test(diagBlock),
+);
+check(
+  "17.19 diagnostics never change or block the decision",
+  /\} catch \{\s*\n\s*\/\/ Diagnostics are never allowed to block or alter the decision below\./.test(missionFn),
+);
+check(
+  "17.20 diagnostic reasons are bounded and whitespace-normalized",
+  /function boundedReason\(value: unknown\): string \{\s*\n\s*return String\(value \?\? ""\)\.replace\(\/\\s\+\/g, " "\)\.slice\(0, 200\);/.test(webhookRaw),
+);
+
+// 17.d — the idempotent canonical pin helper.
+const pinHelper = missionFn.slice(
+  missionFn.indexOf("const ensureCanonicalMissionPin = async ("),
+  missionFn.indexOf("// SE-4B — `/mission close`"),
+);
+check(
+  "17.21 an idempotent canonical pin helper exists",
+  /const ensureCanonicalMissionPin = async \(/.test(missionFn),
+);
+check(
+  "17.22 an auto-pin-disabled mission needs no pin at all",
+  /if \(!autoPinEnabled\) return true;/.test(pinHelper),
+);
+check(
+  "17.23 an already-pinned target costs no Telegram call",
+  pinHelper.indexOf("if (target?.pinned_by_hq === true) return true;") <
+    pinHelper.indexOf('telegramJson(TELEGRAM_BOT_TOKEN, "pinChatMessage"'),
+);
+check(
+  "17.24 the pinned message is the stored canonical card id",
+  /\.select\("pinned_by_hq, telegram_message_id"\)/.test(pinHelper) &&
+    /message_id: cardMessageId/.test(pinHelper),
+);
+check(
+  "17.25 the source post and the prompt are never pinned",
+  !/sourceMessageId|promptMessageId/.test(pinHelper),
+);
+check(
+  "17.26 only a definitive Telegram 'nothing changed' counts as already pinned",
+  /message is not modified\|chat not modified\|chat_not_modified/.test(pinHelper),
+);
+check(
+  "17.27 a refusal or transport failure is false, never success",
+  /if \(!pinned\) return false;/.test(pinHelper),
+);
+check(
+  "17.28 the pin is recorded only after confirmed Telegram success",
+  pinHelper.indexOf("if (!pinned) return false;") <
+    pinHelper.indexOf('record_social_mission_target_pin'),
+);
+check(
+  "17.29 a pin that could not be persisted is reported as failed",
+  /if \(recordError\) \{[\s\S]{0,300}return false;/.test(pinHelper),
+);
+
+// 17.e — fresh path settles only after BOTH objectives.
+const idxPinCall = missionFn.indexOf("const canonicalPinned = await ensureCanonicalMissionPin(");
+check("17.30 the canonical pin runs after schedule activation", idxActivate < idxPinCall);
+check("17.31 the canonical pin runs before the settled callback", idxPinCall > 0 && idxPinCall < idxActivatedSettle);
+check(
+  "17.32 a cleanup failure leaves the candidate PENDING and the prompt intact",
+  /if \(sourceClean && canonicalPinned\) \{/.test(missionFn),
+);
+check(
+  "17.33 a pin failure equally blocks settlement",
+  /canonical lifecycle incomplete: cleanup=\$\{sourceClean\} pin=\$\{canonicalPinned\}/.test(missionFn),
+);
+check(
+  "17.34 the required pin uses the mission's OWN immutable effective config",
+  /const autoPinEnabled = cfg\["auto_pin_mission"\] !== false;/.test(missionFn),
+);
+
+// 17.f — ALREADY_SENT recovery retries both objectives, creates nothing new.
+const retryBranch = missionFn.slice(
+  missionFn.indexOf('if (deliveryState === "SENT") {'),
+  missionFn.indexOf('if (deliveryState === "SENDING"'),
+);
+check(
+  "17.35 the retry re-attempts source cleanup idempotently",
+  /const retryClean = await ensureLinkFinderSourceCleanup\(retryTargetId\);/.test(retryBranch),
+);
+check(
+  "17.36 the retry re-attempts the canonical pin idempotently",
+  /const retryPinned = await ensureCanonicalMissionPin\(retryTargetId, retryAutoPin, null\);/.test(retryBranch),
+);
+check(
+  "17.37 the retry never sends a second card",
+  !/send_mission|social-mission-telegram/.test(retryBranch),
+);
+check(
+  "17.38 the retry never re-activates the schedule or creates duplicate events",
+  !/activate_social_mission_schedule|social_mission_schedule_events|create_social_mission_from_telegram_link/.test(retryBranch),
+);
+check(
+  "17.39 the retry never issues a raw pin call of its own",
+  !/pinChatMessage/.test(retryBranch),
+);
+check(
+  "17.40 an incomplete recovery is reported, not silently swallowed",
+  /already-sent recovery incomplete: cleanup=\$\{retryClean\} pin=\$\{retryPinned\}/.test(retryBranch),
+);
+
+// 17.g — START latency UX without weakening the first real snapshot.
+const startBranch = lfFullBranch.slice(lfFullBranch.indexOf("const sourceMessageId"));
+check(
+  "17.41 the blanket pre-acknowledgement is gone",
+  !/Starting the mission…/.test(webhookRaw),
+);
+check(
+  "17.42 START acknowledges the real live-metric latency, without claiming success",
+  /"Starting mission… fetching live X metrics\."/.test(startBranch),
+);
+check(
+  "17.43 the acknowledgement fires only AFTER the preflight passed",
+  missionFn.indexOf("await args.onStartAccepted?.();") > idxPreflight &&
+    missionFn.indexOf("await args.onStartAccepted?.();") < idxCreateRpc,
+);
+check(
+  "17.44 a blocked preflight answers the callback with the precise reason",
+  /onPermissionBlocked: async \(text\) => \{\s*\n\s*await answerCallback\(TELEGRAM_BOT_TOKEN, callback\.id, text\);/.test(startBranch),
+);
+check(
+  "17.45 feedback stays in the callback — no extra group message is posted",
+  !/sendMessage\(TELEGRAM_BOT_TOKEN/.test(
+    startBranch.slice(0, startBranch.indexOf("onMissionSettled:")),
+  ),
+);
+check(
+  "17.46 Link Finder detection still performs ZERO X reads",
+  !/x-metrics|fetchXMetrics|social_read/i.test(
+    webhookRaw.slice(webhookRaw.indexOf("create_social_mission_link_candidate") - 2000,
+      webhookRaw.indexOf("create_social_mission_link_candidate") + 2000),
+  ),
+);
+check(
+  "17.47 the webhook still reads no X metric of its own — the card's real snapshot is server-side",
+  !/api\.twitter\.com|api\.x\.com|x_metrics|fetchXMetrics/i.test(webhookRaw),
+);
+check(
+  "17.48 exactly one runMissionCommand call still exists in the Link Finder branch",
+  (lfFullBranch.match(/runMissionCommand\(/g) ?? []).length === 1,
+);
+check(
+  "17.49 the prompt is still deleted only after same-mission finalization",
+  settledCb.indexOf("finalize_social_mission_link_candidate_start") <
+    settledCb.indexOf("await deleteLinkFinderPrompt();"),
+);
+check(
+  "17.50 SE-8 adds no table, no scheduler and no new migration",
+  !/CREATE TABLE/i.test(missionFn) && !/cron\.schedule/i.test(webhookRaw),
 );
 
 console.log(`Step 1 authoritative regression: ${passed} passed, ${failures.length} failed`);

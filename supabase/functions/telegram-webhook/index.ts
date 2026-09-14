@@ -93,6 +93,84 @@ async function sendMessageWithOutcome(
 async function answerCallback(token: string, callbackId: string, text: string) {
   try { await telegramJson(token, "answerCallbackQuery", { callback_query_id: callbackId, text, show_alert: false }); } catch { }
 }
+
+/**
+ * SE-8 — LIVE BOT PERMISSION PREFLIGHT.
+ *
+ * The frozen Link Finder lifecycle REQUIRES the bot to delete the source post
+ * and (unless auto-pin is disabled) to pin the canonical card. Those rights are
+ * read live from Telegram BEFORE a mission is created, so a mission that could
+ * never satisfy its own lifecycle is never created in the first place.
+ *
+ * Only non-sensitive facts are produced here: membership status and two
+ * booleans. No token, header, key or raw payload ever leaves this helper.
+ */
+let cachedBotUserId: number | null = null;
+async function resolveBotUserId(token: string): Promise<number | null> {
+  if (cachedBotUserId !== null) return cachedBotUserId;
+  try {
+    const me = await telegramJson(token, "getMe");
+    const id = Number((me as { id?: unknown } | null)?.id ?? NaN);
+    if (Number.isFinite(id) && id > 0) cachedBotUserId = id;
+  } catch {
+    return null;
+  }
+  return cachedBotUserId;
+}
+
+type BotChatPermissions = {
+  /** False whenever Telegram could not be asked; never treated as "allowed". */
+  resolved: boolean;
+  status: string;
+  isAdmin: boolean;
+  canDeleteMessages: boolean;
+  canPinMessages: boolean;
+  checkedAt: string;
+};
+
+async function readBotChatPermissions(
+  token: string,
+  chatId: string | number,
+): Promise<BotChatPermissions> {
+  const checkedAt = new Date().toISOString();
+  const blank: BotChatPermissions = {
+    resolved: false,
+    status: "",
+    isAdmin: false,
+    canDeleteMessages: false,
+    canPinMessages: false,
+    checkedAt,
+  };
+  const botId = await resolveBotUserId(token);
+  if (botId === null) return blank;
+  try {
+    const member = await telegramJson(token, "getChatMember", { chat_id: chatId, user_id: botId });
+    const row = (member ?? {}) as {
+      status?: unknown;
+      can_delete_messages?: unknown;
+      can_pin_messages?: unknown;
+    };
+    const status = String(row.status ?? "");
+    const isAdmin = status === "administrator" || status === "creator";
+    // A creator holds every right implicitly and Telegram omits the flags.
+    const creator = status === "creator";
+    return {
+      resolved: true,
+      status,
+      isAdmin,
+      canDeleteMessages: creator || (isAdmin && row.can_delete_messages === true),
+      canPinMessages: creator || (isAdmin && row.can_pin_messages === true),
+      checkedAt,
+    };
+  } catch {
+    return blank;
+  }
+}
+
+/** Bounded, secret-free diagnostic line for a required lifecycle objective. */
+function boundedReason(value: unknown): string {
+  return String(value ?? "").replace(/\s+/g, " ").slice(0, 200);
+}
 async function editMessage(token: string, chatId: string, messageId: number, text: string, replyMarkup?: unknown) {
   try {
     await telegramJson(token, "editMessageText", {
@@ -502,6 +580,18 @@ Deno.serve(async (req: Request) => {
       missionId: string;
       targetId: string;
     }) => Promise<void>;
+    /**
+     * SE-8 — the live bot permission preflight refused BEFORE any mission was
+     * created or recovered. Nothing was mutated: the caller's candidate, its
+     * prompt and the source post all stay exactly as they were.
+     */
+    onPermissionBlocked?: (text: string) => Promise<void>;
+    /**
+     * SE-8 — preflight passed and the mission launch is now starting. Used for
+     * immediate START feedback while the first real X snapshot is fetched. It
+     * never claims success.
+     */
+    onStartAccepted?: () => Promise<void>;
   }) => {
 
     const { chatId, chatType, telegramUserId, argument } = args;
@@ -583,6 +673,69 @@ Deno.serve(async (req: Request) => {
       );
       return !recordError && recordedOk === true;
     };
+
+    /**
+     * SE-8 — IDEMPOTENT CANONICAL PIN.
+     *
+     * Pins the EXACT canonical mission card — never the source X link and never
+     * the transient START/IGNORE prompt. The stored target row is authoritative:
+     *
+     *   - a target already recorded as `pinned_by_hq` costs no Telegram call;
+     *   - auto-pin disabled means the objective is not required at all;
+     *   - `record_social_mission_target_pin(..., true)` is written ONLY after
+     *     Telegram confirms the pin, and its failure to persist is a failure;
+     *   - permission refusal or transport uncertainty is FALSE, never success.
+     */
+    const ensureCanonicalMissionPin = async (
+      targetId: string,
+      autoPinEnabled: boolean,
+      fallbackMessageId: number | null,
+    ): Promise<boolean> => {
+      if (!autoPinEnabled) return true;
+      if (!targetId) return false;
+
+      const { data: pinRow, error: pinReadError } = await admin
+        .from("social_mission_targets")
+        .select("pinned_by_hq, telegram_message_id")
+        .eq("id", targetId)
+        .maybeSingle();
+      if (pinReadError) return false;
+      const target = pinRow as
+        | { pinned_by_hq?: boolean | null; telegram_message_id?: number | null }
+        | null;
+      if (target?.pinned_by_hq === true) return true;
+
+      const cardMessageId = Number(target?.telegram_message_id ?? fallbackMessageId ?? NaN);
+      if (!Number.isFinite(cardMessageId) || cardMessageId <= 0) return false;
+
+      let pinned = false;
+      try {
+        await telegramJson(TELEGRAM_BOT_TOKEN, "pinChatMessage", {
+          chat_id: chatId,
+          message_id: cardMessageId,
+          disable_notification: true,
+        });
+        pinned = true;
+      } catch (error) {
+        // ONLY Telegram's definitive "nothing changed" counts as already-pinned.
+        const detail = boundedReason((error as Error)?.message);
+        pinned = /message is not modified|chat not modified|chat_not_modified/i.test(detail);
+        if (!pinned) console.warn(`[SE-8] canonical pin refused: ${detail}`);
+      }
+      if (!pinned) return false;
+
+      const { error: recordError } = await admin.rpc("record_social_mission_target_pin", {
+        _target_id: targetId,
+        _pinned: true,
+      });
+      if (recordError) {
+        console.warn(`[SE-8] pin recorded in Telegram but not persisted: ${boundedReason(recordError.message)}`);
+        return false;
+      }
+      return true;
+    };
+
+
 
 
 
@@ -779,6 +932,85 @@ Deno.serve(async (req: Request) => {
       return;
     }
 
+    // ---- SE-8. LIVE BOT PERMISSION PREFLIGHT -------------------------------
+    //
+    // Runs BEFORE mission creation AND before an ALREADY_SENT recovery, so a
+    // mission that cannot satisfy its frozen canonical lifecycle is never
+    // created, and a retry after the rights are corrected can complete it.
+    //
+    // Actor authorization above is untouched: this checks only what the BOT
+    // itself may do in this exact chat.
+    const { data: settingsRow } = await admin
+      .from("social_mission_settings")
+      .select("delete_command_after_send, auto_pin_mission")
+      .eq("workspace_id", connection.workspace_id)
+      .maybeSingle();
+    const workspaceSettings = (settingsRow ?? null) as
+      | { delete_command_after_send?: boolean | null; auto_pin_mission?: boolean | null }
+      | null;
+    // Defaults ON, exactly as the frozen Step 1 experience specifies.
+    const autoPinRequired = workspaceSettings?.auto_pin_mission !== false;
+    // Link Finder source cleanup is MANDATORY and preference-independent; raw
+    // `/mission <link>` cleanup stays governed by the workspace preference.
+    const deletionRequired = isLinkFinder
+      ? true
+      : workspaceSettings?.delete_command_after_send !== false;
+
+    const botPermissions = await readBotChatPermissions(TELEGRAM_BOT_TOKEN, chatId);
+    // Non-sensitive diagnostics only: status, two booleans and a timestamp.
+    try {
+      const { data: metaRow } = await admin
+        .from("telegram_group_connections")
+        .select("metadata")
+        .eq("id", connection.id)
+        .maybeSingle();
+      const existingMeta = ((metaRow as { metadata?: Record<string, unknown> } | null)?.metadata
+        ?? {}) as Record<string, unknown>;
+      await admin
+        .from("telegram_group_connections")
+        .update({
+          metadata: {
+            ...existingMeta,
+            bot_permissions_checked_at: botPermissions.checkedAt,
+            bot_status: botPermissions.status,
+            bot_is_admin: botPermissions.isAdmin,
+            bot_can_delete_messages: botPermissions.canDeleteMessages,
+            bot_can_pin_messages: botPermissions.canPinMessages,
+          },
+        })
+        .eq("id", connection.id);
+    } catch {
+      // Diagnostics are never allowed to block or alter the decision below.
+    }
+
+    const blockLaunch = async (text: string) => {
+      if (args.onPermissionBlocked) await args.onPermissionBlocked(text);
+      else await reply(text);
+    };
+
+    if (!botPermissions.resolved) {
+      await blockLaunch(`Telegram could not confirm @${BOT_USERNAME}'s permissions in this group right now. Try again shortly.`);
+      return;
+    }
+    if (!botPermissions.isAdmin) {
+      await blockLaunch(`CARTEL HQ needs @${BOT_USERNAME} to be an administrator of this group before a Social Mission can start.`);
+      return;
+    }
+    const missingRights: string[] = [];
+    if (deletionRequired && !botPermissions.canDeleteMessages) missingRights.push("Delete Messages");
+    if (autoPinRequired && !botPermissions.canPinMessages) missingRights.push("Pin Messages");
+    if (missingRights.length > 0) {
+      console.warn(`[SE-8] mission launch blocked: missing ${boundedReason(missingRights.join(", "))}`);
+      await blockLaunch(
+        `CARTEL HQ needs ${missingRights.join(" and ")} enabled for @${BOT_USERNAME} in this group before a Social Mission can start.`,
+      );
+      return;
+    }
+
+    // Preflight passed. Acknowledge immediately — the first canonical card
+    // still waits for a REAL official-X snapshot, which is never prefetched.
+    await args.onStartAccepted?.();
+
 
     // 5. One atomic service-only RPC. It re-authorizes everything above and
     //    verifies the official X handle independently before creating rows.
@@ -839,17 +1071,28 @@ Deno.serve(async (req: Request) => {
 
     const deliveryState = String(result.delivery_state ?? "");
     if (deliveryState === "SENT") {
-      // A retry. The card already exists, so NO second card is ever sent. This
-      // is the recovery path for a first attempt that delivered the card but
-      // could not remove the source post: cleanup is retried FIRST, and only a
-      // clean result lets the caller finalize.
-      const retryClean = await ensureLinkFinderSourceCleanup(String(result.target_id ?? ""));
-      if (retryClean) {
+      // SE-8 RECOVERY. The card already exists, so NO second card is ever sent,
+      // the schedule is never re-activated and no duplicate Pulse event is ever
+      // created. The live permission preflight above has already re-run; this
+      // path only re-attempts the two REQUIRED objectives idempotently, and the
+      // caller may finalize only when BOTH are confirmed.
+      const retryTargetId = String(result.target_id ?? "");
+      const { data: retryConfig } = await admin.rpc("social_mission_effective_config", {
+        _mission_id: result.mission_id,
+      });
+      const retryAutoPin = ((retryConfig ?? {}) as Record<string, unknown>)["auto_pin_mission"] !== false;
+      const retryClean = await ensureLinkFinderSourceCleanup(retryTargetId);
+      const retryPinned = await ensureCanonicalMissionPin(retryTargetId, retryAutoPin, null);
+      if (retryClean && retryPinned) {
         await args.onMissionSettled?.({
           kind: "ALREADY_SENT",
           missionId: String(result.mission_id ?? ""),
-          targetId: String(result.target_id ?? ""),
+          targetId: retryTargetId,
         });
+      } else {
+        console.warn(
+          `[SE-8] already-sent recovery incomplete: cleanup=${retryClean} pin=${retryPinned}`,
+        );
       }
       await reply("This post already has a Social Mission in this community.");
 
@@ -911,18 +1154,19 @@ Deno.serve(async (req: Request) => {
         await reply("The mission card was delivered, but its 45-minute schedule could not be activated. Do not resend; close it with /mission close when you are done.");
         return;
       }
-      // SE-5 — command cleanup and optional auto-pin. Both run ONLY after the
-      // card is confirmed SENT and the schedule is active, so a failure here
-      // can never lose a mission. Both are best-effort and never retried.
-      try {
-        const { data: config } = await admin.rpc("social_mission_effective_config", {
-          _mission_id: result.mission_id,
-        });
-        const cfg = (config ?? {}) as Record<string, unknown>;
+      // SE-8 — the mission's OWN immutable effective config decides whether the
+      // canonical pin is a required objective for this mission.
+      const { data: config } = await admin.rpc("social_mission_effective_config", {
+        _mission_id: result.mission_id,
+      });
+      const cfg = (config ?? {}) as Record<string, unknown>;
+      const autoPinEnabled = cfg["auto_pin_mission"] !== false;
 
-        // Raw `/mission <link>` command cleanup ONLY, governed by the workspace
-        // preference exactly as before. Link Finder source cleanup is handled
-        // separately below because it is mandatory and must be retryable.
+      // SE-5 — raw `/mission <link>` command cleanup ONLY, governed by the
+      // workspace preference exactly as before. It runs after the confirmed
+      // send and active schedule and stays best-effort here; Link Finder source
+      // cleanup is handled separately below because it is mandatory.
+      try {
         if (!isLinkFinder && cfg["delete_command_after_send"] !== false && messageId > 0) {
           const deleted = await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
             chat_id: chatId,
@@ -935,52 +1179,39 @@ Deno.serve(async (req: Request) => {
             });
           }
         }
-
-
-        // Auto-pin defaults ON for the frozen Step 1 experience. The pin is
-        // recorded ONLY when Telegram accepts it, so completion can never
-        // unpin a pin CARTEL HQ did not set. An existing persisted workspace
-        // setting of `false` still wins.
-        if (cfg["auto_pin_mission"] !== false) {
-
-
-          const sentMessageId = Number(
-            (transport as { telegramMessageId?: unknown } | null)?.telegramMessageId ?? NaN,
-          );
-          if (Number.isFinite(sentMessageId)) {
-            const pinned = await telegramJson(TELEGRAM_BOT_TOKEN, "pinChatMessage", {
-              chat_id: chatId,
-              message_id: sentMessageId,
-              disable_notification: true,
-            }).then(() => true).catch(() => false);
-            if (pinned) {
-              await admin.rpc("record_social_mission_target_pin", {
-                _target_id: result.target_id,
-                _pinned: true,
-              });
-            }
-          }
-        }
       } catch {
         // Cosmetic housekeeping only; never surfaced and never retried.
       }
 
-      // SE-7 — the mandatory Link Finder source cleanup runs here, AFTER the
-      // confirmed send and active schedule and OUTSIDE the best-effort
-      // housekeeping block, because its result decides whether the caller may
-      // finalize. A no-op returning true for every other source.
+      // SE-7/SE-8 — the two REQUIRED canonical objectives run here, AFTER the
+      // confirmed send and active schedule and OUTSIDE the best-effort block,
+      // because their result decides whether the caller may finalize. Source
+      // cleanup is a no-op returning true for every non-Link-Finder source.
+      const sentMessageId = Number(
+        (transport as { telegramMessageId?: unknown } | null)?.telegramMessageId ?? NaN,
+      );
       const sourceClean = await ensureLinkFinderSourceCleanup(String(result.target_id ?? ""));
+      const canonicalPinned = await ensureCanonicalMissionPin(
+        String(result.target_id ?? ""),
+        autoPinEnabled,
+        Number.isFinite(sentMessageId) ? sentMessageId : null,
+      );
 
-      // Confirmed card + active schedule + clean source. Only now may the
-      // caller finalize its own transient state (Link Finder candidate, then
-      // its prompt).
-      if (sourceClean) {
+      // Confirmed card + active schedule + clean source + required pin. Only
+      // now may the caller finalize its own transient state (Link Finder
+      // candidate, then its prompt).
+      if (sourceClean && canonicalPinned) {
         await args.onMissionSettled?.({
           kind: "ACTIVATED",
           missionId: String(result.mission_id ?? ""),
           targetId: String(result.target_id ?? ""),
         });
+      } else {
+        console.warn(
+          `[SE-8] canonical lifecycle incomplete: cleanup=${sourceClean} pin=${canonicalPinned}`,
+        );
       }
+
 
 
       // The branded card itself is the confirmation. No extra success text.
@@ -1917,7 +2148,11 @@ Deno.serve(async (req: Request) => {
           return json({ ok: true });
         }
 
-        await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Starting the mission…");
+        // SE-8 — the callback is answered from INSIDE the launch: a refused
+        // permission preflight answers with the precise missing right and
+        // nothing is created, while a passed preflight acknowledges the real
+        // latency source (the first live official-X snapshot) without ever
+        // claiming success. Exactly one answer is sent either way.
         await runMissionCommand({
           // The mission is launched into the candidate's OWN chat, always.
           chatId: String(candidateChatId),
@@ -1929,6 +2164,20 @@ Deno.serve(async (req: Request) => {
           telegramUserId: Number(from.id),
           argument: String(decision.canonical_url ?? ""),
           source: "telegram_link_finder",
+          // SE-8 — refused BEFORE anything was created. The candidate stays
+          // PENDING, the prompt stays, the source post stays.
+          onPermissionBlocked: async (text) => {
+            await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, text);
+          },
+          // SE-8 — honest immediate feedback. No group message, no clutter, no
+          // prefetched X read and no weakened first real snapshot.
+          onStartAccepted: async () => {
+            await answerCallback(
+              TELEGRAM_BOT_TOKEN,
+              callback.id,
+              "Starting mission… fetching live X metrics.",
+            );
+          },
           // Only a mission that actually reached a confirmed card + active
           // schedule (or a retry finding one already sent) removes the prompt
           // and finalizes the candidate. Anything else — create failure,
