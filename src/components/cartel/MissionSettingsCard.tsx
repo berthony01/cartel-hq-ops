@@ -227,6 +227,133 @@ export function MissionSettingsCard({ workspaceId }: { workspaceId: string | nul
             </div>
           </div>
 
+          {/* SE-6 — saved target presets. Read-only for non-operators. */}
+          <div className="min-w-0 rounded-md border border-border/50 bg-background/30 px-3 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label className="type-eyebrow text-muted-foreground">Saved preset</Label>
+              {presetSaved ? <StatusBadge tone="gold">Saved</StatusBadge> : null}
+            </div>
+            <Select
+              value={editingPreset && !editingPreset.id ? "new" : (current.active_preset_id ?? "none")}
+              disabled={!canEdit}
+              onValueChange={onSelectPreset}
+            >
+              <SelectTrigger className="mt-1.5 min-h-11">
+                <SelectValue placeholder="No preset" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No preset</SelectItem>
+                {presets.map((preset) => (
+                  <SelectItem key={preset.id} value={preset.id}>
+                    {preset.name}
+                    {preset.mission_code ? ` · ${preset.mission_code}` : ""}
+                  </SelectItem>
+                ))}
+                {canEdit ? <SelectItem value="new">Create a new preset…</SelectItem> : null}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              Tier 1 to Tier {TIER_COUNT} targets applied to the next mission you start. A mission
+              already running keeps the targets it launched with.
+            </p>
+
+            {editingPreset ? (
+              <div className="mt-3 flex min-w-0 flex-col gap-2">
+                <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+                  <Input
+                    className="min-h-11"
+                    aria-label="Preset name"
+                    placeholder="Preset name"
+                    value={editingPreset.name}
+                    disabled={!canEdit}
+                    onChange={(event) => {
+                      setPresetSaved(false);
+                      setPresetDraft({ ...editingPreset, name: event.target.value });
+                    }}
+                  />
+                  <Input
+                    className="min-h-11"
+                    aria-label="Mission code (optional)"
+                    placeholder="Mission code (optional)"
+                    value={editingPreset.mission_code ?? ""}
+                    disabled={!canEdit}
+                    onChange={(event) => {
+                      setPresetSaved(false);
+                      setPresetDraft({
+                        ...editingPreset,
+                        mission_code: event.target.value || null,
+                      });
+                    }}
+                  />
+                </div>
+
+                <div className="flex min-w-0 flex-col gap-1.5">
+                  {editingPreset.tier_targets.map((target, index) => (
+                    <div key={target.tier} className="flex min-w-0 items-center gap-2">
+                      <span className="w-10 shrink-0 text-[11px] text-muted-foreground">
+                        T{target.tier}
+                      </span>
+                      {(["views", "likes", "shares", "comments"] as const).map((metric) => (
+                        <Input
+                          key={metric}
+                          type="number"
+                          min={1}
+                          step={1}
+                          inputMode="numeric"
+                          className="min-h-10 min-w-0 flex-1"
+                          aria-label={`Tier ${target.tier} ${metric}`}
+                          placeholder={metric}
+                          value={target[metric] ?? ""}
+                          disabled={!canEdit}
+                          onChange={(event) => {
+                            const parsed = Number.parseInt(event.target.value, 10);
+                            const next = editingPreset.tier_targets.map((row, rowIndex) =>
+                              rowIndex === index
+                                ? { ...row, [metric]: Number.isFinite(parsed) ? parsed : null }
+                                : row,
+                            );
+                            setPresetSaved(false);
+                            setPresetDraft({ ...editingPreset, tier_targets: next });
+                          }}
+                        />
+                      ))}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {tierSummaryChips(editingPreset).map((chip) => (
+                    <span
+                      key={chip}
+                      className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] text-muted-foreground"
+                    >
+                      {chip}
+                    </span>
+                  ))}
+                </div>
+
+                {canEdit ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="min-h-11"
+                      disabled={!!presetInvalid || savePreset.isPending}
+                      onClick={onSavePreset}
+                    >
+                      {savePreset.isPending ? "Saving…" : "Save preset"}
+                    </Button>
+                    {presetInvalid ? (
+                      <span className="text-xs text-muted-foreground">{presetInvalid}</span>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+
+
           <ToggleRow
             id="mission-live-metrics"
             label="Live results on the mission card"
