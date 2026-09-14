@@ -78,6 +78,60 @@ import {
 
 const MILESTONE_TYPES = ["VIEWS", "LIKES", "REPLIES", "REPOSTS", "TOTAL_INTERACTIONS"] as const;
 
+/**
+ * SE-5 launch read. Fail-soft by construction:
+ * - returns void, so no caller can branch the mission on its outcome;
+ * - never throws;
+ * - performs at most ONE official lookup and never retries;
+ * - writes at most ONE snapshot, through the same RPC the runner uses, so
+ *   baseline capture and milestone evaluation stay in a single place.
+ */
+async function attemptLaunchMetricsRead(
+  admin: ReturnType<typeof createClient>,
+  workspaceId: string,
+  mission: LoadedRow,
+): Promise<void> {
+  try {
+    const bearer = Deno.env.get("X_API_BEARER_TOKEN") ?? "";
+    if (!bearer) return;
+
+    const postId = mission["social_post_id"];
+    if (typeof postId !== "string") return;
+    const { data: post } = await admin
+      .from("social_posts")
+      .select("platform, external_post_id")
+      .eq("id", postId)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (!post) return;
+    const row = post as LoadedRow;
+    if (String(row["platform"] ?? "") !== "x") return;
+    const externalId = row["external_post_id"];
+    if (typeof externalId !== "string" || !/^[0-9]{1,32}$/.test(externalId)) return;
+
+    const read = await lookupXPostMetrics(bearer, [externalId]);
+    if (!read.ok) return;
+    const found = read.posts.get(externalId);
+    if (!found) return;
+
+    await admin.rpc("record_social_mission_metric_snapshot", {
+      _mission_id: mission["id"] as string,
+      _provider: X_PROVIDER,
+      _observed_at: read.observedAt,
+      _poll_bucket: minuteBucket(Date.parse(read.observedAt)),
+      _views: found.metrics.views,
+      _likes: found.metrics.likes,
+      _comments: found.metrics.comments,
+      _shares: found.metrics.shares,
+      _saves: found.metrics.saves,
+      _availability: availabilityOf(found.metrics),
+      _metadata: { phase: "SE-5", source: "mission_launch" },
+    });
+  } catch {
+    // Fail-soft: a metrics problem must never prevent the mission card.
+  }
+}
+
 /** Milestone read ONLY from the mission's own immutable config snapshot. */
 function missionMilestone(mission: LoadedRow): MissionMilestone | null {
   const metadata = mission["metadata"];
