@@ -295,6 +295,9 @@ function composeLines(input: MissionCardInput, excerptBudget: number | null): st
     const remaining = approximateRemaining(input.endsAt, nowMs);
     const state = accomplished ? MISSION_STATE_ACCOMPLISHED : MISSION_STATE_LIVE;
     lines.push(remaining ? `Status: ${state} · ${remaining}` : `Status: ${state}`);
+    // SE-6 (C): stable refresh legend on every LIVE card.
+    lines.push(MISSION_FOOTER_LEGEND);
+
   } else if (metricLines.length > 0) {
     lines.push("");
     lines.push(metricsHeading(input.missionStatus));
