@@ -2096,6 +2096,7 @@ export type Database = {
           external_post_id: string
           group_connection_id: string
           id: string
+          mission_id: string | null
           prompt_message_id: number | null
           resolved_at: string | null
           resolved_by: string | null
@@ -2114,6 +2115,7 @@ export type Database = {
           external_post_id: string
           group_connection_id: string
           id?: string
+          mission_id?: string | null
           prompt_message_id?: number | null
           resolved_at?: string | null
           resolved_by?: string | null
@@ -2132,6 +2134,7 @@ export type Database = {
           external_post_id?: string
           group_connection_id?: string
           id?: string
+          mission_id?: string | null
           prompt_message_id?: number | null
           resolved_at?: string | null
           resolved_by?: string | null
@@ -2148,6 +2151,13 @@ export type Database = {
             columns: ["group_connection_id"]
             isOneToOne: false
             referencedRelation: "telegram_group_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_mission_link_candidates_mission_id_fkey"
+            columns: ["mission_id"]
+            isOneToOne: false
+            referencedRelation: "social_missions"
             referencedColumns: ["id"]
           },
           {
@@ -5032,6 +5042,15 @@ export type Database = {
           sent_at: string
           status: string
         }[]
+      }
+      finalize_social_mission_link_candidate_start: {
+        Args: {
+          _candidate_id: string
+          _mission_id: string
+          _telegram_user_id: number
+          _verified_chat_id: number
+        }
+        Returns: Json
       }
       finish_social_mission_schedule_event: {
         Args: {
