@@ -497,10 +497,13 @@ BEGIN
       WHEN 'LIKES' THEN _likes
       WHEN 'REPLIES' THEN _comments
       WHEN 'REPOSTS' THEN _shares
+      -- NULL-HONEST: computable ONLY when ALL THREE components are known.
+      -- Any NULL component makes the total unknown, so a partial interaction
+      -- set can never accomplish the milestone.
       WHEN 'TOTAL_INTERACTIONS' THEN
         CASE
-          WHEN _likes IS NULL AND _comments IS NULL AND _shares IS NULL THEN NULL
-          ELSE COALESCE(_likes, 0) + COALESCE(_comments, 0) + COALESCE(_shares, 0)
+          WHEN _likes IS NULL OR _comments IS NULL OR _shares IS NULL THEN NULL
+          ELSE _likes + _comments + _shares
         END
       ELSE NULL
     END;

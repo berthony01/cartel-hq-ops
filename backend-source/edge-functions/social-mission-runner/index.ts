@@ -13,7 +13,9 @@
  * `telegram-message-cleanup` worker.
  *
  * Frozen behaviour:
- *   * ZERO X / provider calls. ZERO metric reads. No usage ledger.
+ *   * ZERO X / provider calls. ZERO provider/X reads. No usage ledger.
+ *     (Scheduled Pulses DO read STORED database metric snapshots; that is
+ *      the intended source and costs nothing.)
  *   * PULSE  — exactly one `sendMessage`, replying to the canonical mission
  *              card, with an OPEN ON X button built from the authoritative
  *              `social_posts.canonical_url`. Never `sendPhoto`, never a
