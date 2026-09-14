@@ -2372,8 +2372,36 @@ Deno.serve(async (req: Request) => {
     // START / IGNORE prompt. It NEVER starts a mission by itself, never
     // deletes the member's message, and the RPC fails closed on every
     // ownership fact (connected group, link finder enabled, official handle).
+    //
+    // Anonymous group admins are delivered by Telegram as a bot-like sender
+    // (`GroupAnonymousBot`) with `sender_chat` pointing at the group itself.
+    // Those posts are eligible ONLY when Telegram proves the message is sent
+    // on behalf of this exact connected group; the original poster id is then
+    // unknown and stored as NULL. START authorization is unchanged: it still
+    // authorizes the callback actor and re-verifies live Telegram admin.
+    const senderChat = (message as { sender_chat?: { id?: unknown; type?: unknown } } | undefined)
+      ?.sender_chat;
+    const linkFinderSender = ((msg) => {
+      const sender = msg?.from;
+      const senderChatOf = msg?.sender_chat;
+      const chatOf = msg?.chat;
+      if (sender && sender.is_bot !== true && sender.id != null) {
+        return { eligible: true, posterId: Number(sender.id) };
+      }
+      const t = senderChatOf?.type;
+      if (
+        senderChatOf &&
+        (t === "group" || t === "supergroup") &&
+        senderChatOf.id != null &&
+        chatOf?.id != null &&
+        String(senderChatOf.id) === String(chatOf.id)
+      ) {
+        return { eligible: true, posterId: null };
+      }
+      return { eligible: false, posterId: null };
+    })({ from, sender_chat: senderChat, chat } as any);
     if (
-      from?.is_bot !== true &&
+      linkFinderSender.eligible &&
       !text.startsWith("/") &&
       (chat?.type === "group" || chat?.type === "supergroup")
     ) {
@@ -2385,12 +2413,13 @@ Deno.serve(async (req: Request) => {
         const { data: candidate } = await admin.rpc("create_social_mission_link_candidate", {
           _telegram_chat_id: Number(chatId),
           _telegram_message_id: Number(message?.message_id),
-          _telegram_user_id: Number(from.id),
+          _telegram_user_id: linkFinderSender.posterId,
           _canonical_url: parsedLink.canonicalUrl,
           _external_post_id: parsedLink.postId,
           _author_handle: parsedLink.handle,
           _ttl_minutes: 15,
         });
+
         const created = (candidate ?? {}) as { outcome?: string; candidate_id?: string };
         // EXISTING = a webhook retry or a repost of the same message: silent.
         if (created.outcome === "CREATED" && created.candidate_id) {
