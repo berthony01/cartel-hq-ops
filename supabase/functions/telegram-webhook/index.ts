@@ -920,13 +920,10 @@ Deno.serve(async (req: Request) => {
         });
         const cfg = (config ?? {}) as Record<string, unknown>;
 
-        // Remove the message that launched this mission so the group sees the
-        // card, not the trigger: the raw `/mission <link>` command, or — for
-        // Link Finder START — the original X-link post itself, which is the
-        // frozen SE-7 product behaviour. Never deletes anything else, and only
-        // ever after a confirmed send plus an active schedule.
-
-        if (cfg["delete_command_after_send"] !== false && messageId > 0) {
+        // Raw `/mission <link>` command cleanup ONLY, governed by the workspace
+        // preference exactly as before. Link Finder source cleanup is handled
+        // separately below because it is mandatory and must be retryable.
+        if (!isLinkFinder && cfg["delete_command_after_send"] !== false && messageId > 0) {
           const deleted = await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
             chat_id: chatId,
             message_id: messageId,
@@ -938,6 +935,7 @@ Deno.serve(async (req: Request) => {
             });
           }
         }
+
 
         // Auto-pin defaults ON for the frozen Step 1 experience. The pin is
         // recorded ONLY when Telegram accepts it, so completion can never
