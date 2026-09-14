@@ -1709,6 +1709,16 @@ Deno.serve(async (req: Request) => {
           return json({ ok: true });
         }
 
+        // CONTEXT BINDING, BEFORE live verification and BEFORE any resolve.
+        // A tap delivered from any chat other than the candidate's own chat is
+        // refused outright: nothing is verified, nothing is mutated, and the
+        // candidate stays PENDING for an authorized admin in the right group.
+        if (String(candidateChatId) !== String(callbackChatId)) {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "This suggestion could not be handled.");
+          return json({ ok: true });
+        }
+
+
         let lfStatus = "";
         try {
           const member = await telegramJson(TELEGRAM_BOT_TOKEN, "getChatMember", {
@@ -1762,7 +1772,10 @@ Deno.serve(async (req: Request) => {
         // The prompt is transient in both directions.
         if (typeof decision.prompt_message_id === "number") {
           await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
-            chat_id: callbackChatId,
+            // The candidate's own chat, always. Never the callback chat.
+            chat_id: candidateChatId,
+
+
             message_id: decision.prompt_message_id,
           }).catch(() => null);
         }
@@ -1774,7 +1787,10 @@ Deno.serve(async (req: Request) => {
 
         await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Starting the mission…");
         await runMissionCommand({
-          chatId: callbackChatId,
+          // The mission is launched into the candidate's OWN chat, always.
+          chatId: String(candidateChatId),
+
+
           chatType: String(callbackChat?.type ?? ""),
           updateId: update?.update_id,
           // The ORIGINAL post message is never deleted as a "command".

@@ -67,13 +67,17 @@ export function pulseMilestoneLine(
 
   let progress: number | null;
   if (key === "total") {
+    // NULL-HONEST: TOTAL_INTERACTIONS is computable ONLY when ALL THREE
+    // components are known. If any one of likes / replies / reposts is
+    // unknown, the total is unknown — an unknown component is never 0.
     progress =
-      metrics.likes === null && metrics.comments === null && metrics.shares === null
+      metrics.likes === null || metrics.comments === null || metrics.shares === null
         ? null
-        : (metrics.likes ?? 0) + (metrics.comments ?? 0) + (metrics.shares ?? 0);
+        : metrics.likes + metrics.comments + metrics.shares;
   } else {
     progress = metrics[key];
   }
+
   if (progress === null) return null;
 
   const label = type === "TOTAL_INTERACTIONS" ? "interactions" : type.toLowerCase();
