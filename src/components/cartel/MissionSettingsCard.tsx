@@ -131,10 +131,17 @@ export function MissionSettingsCard({ workspaceId }: { workspaceId: string | nul
   const onSavePreset = () => {
     if (!editingPreset) return;
     savePreset.mutate(editingPreset, {
-      onSuccess: () => {
+      // SE-6 correction (F): use the PERSISTED row returned by the database, so
+      // a brand new preset immediately carries its real id and becomes the
+      // selected preset. It only reaches the next Telegram mission once the
+      // mission defaults below are saved with it.
+      onSuccess: (saved) => {
+        setPresetDraft({ ...saved });
+        patch({ active_preset_id: saved.id });
         setPresetSaved(true);
-        toast.success("Preset saved.");
+        toast.success("Preset saved. Save mission defaults to use it for the next mission.");
       },
+
       onError: (error) =>
         toast.error(error instanceof Error ? error.message : "The preset could not be saved."),
     });
