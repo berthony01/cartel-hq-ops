@@ -473,7 +473,20 @@ BEGIN
     RETURN jsonb_build_object('outcome', 'REJECTED', 'reason', 'handle_not_official');
   END IF;
 
+  -- 6b. CONCURRENCY GUARD. The bare ON CONFLICT DO NOTHING claim above is what
+  --     makes a retry possible, so it can no longer be relied on to serialize
+  --     two simultaneous callbacks for the same post in the same chat. There is
+  --     no unique constraint on (workspace, post, chat) across missions, so a
+  --     transaction-scoped advisory lock keyed on exactly that tuple serializes
+  --     them: the loser waits, then sees the winner's mission at step 8 and
+  --     returns EXISTING. The lock is released automatically at COMMIT or
+  --     ROLLBACK. No new table, no new scheduler, no new state.
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended(v_workspace_id::text || ':' || v_post_external || ':' || _telegram_chat_id::text, 0)
+  );
+
   -- 7. Get-or-create the social post. An existing row is PRESERVED as-is.
+
   INSERT INTO public.social_posts (
     workspace_id, platform, external_post_id, canonical_url, author_handle, content_text, metadata
   )
