@@ -557,6 +557,70 @@ Deno.serve(async (req: Request) => {
   // No X API call, no metric read, no usage_ledger write, no polling, no
   // auto-retry and no duplicated card/photo logic: delivery is always the
   // existing `social-mission-telegram` transport.
+  /**
+   * SE-9 — LINK FINDER SOURCE CLEANUP, AT DETECTION TIME.
+   *
+   * The frozen SE-9 UX deletes the ORIGINAL X-link message as soon as the
+   * transient START/IGNORE prompt is confirmed sent AND attached to the
+   * candidate — no longer only after a successful START. The candidate row is
+   * the durable record of that outcome, and its real `telegram_message_id`
+   * survives deletion as provenance.
+   *
+   * Idempotent and honest:
+   *   - a candidate already recorded clean costs no Telegram call;
+   *   - Telegram definitively reporting the message as absent counts as clean;
+   *   - ANY other failure (permission refusal, transport uncertainty) records a
+   *     BOUNDED, secret-free diagnostic on the candidate and returns false, so
+   *     the prompt and the PENDING candidate stay fully retryable instead of
+   *     pretending success;
+   *   - a Telegram deletion that the database refuses to persist is a failure.
+   */
+  const ensureLinkFinderSourceDeleted = async (params: {
+    candidateId: string;
+    chatId: string;
+    sourceMessageId: number;
+    alreadyDeletedAt?: string | null;
+  }): Promise<boolean> => {
+    if (params.alreadyDeletedAt) return true;
+    if (!params.candidateId || !(params.sourceMessageId > 0)) return false;
+
+    let removed = false;
+    let reason = "";
+    try {
+      await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
+        chat_id: params.chatId,
+        message_id: params.sourceMessageId,
+      });
+      removed = true;
+    } catch (error) {
+      reason = boundedReason((error as Error)?.message);
+      // ONLY a definitive "it is already gone" counts as clean.
+      removed = /message to delete not found|message_id_invalid/i.test(reason);
+    }
+
+    const { data: recorded, error: recordError } = await admin.rpc(
+      "record_social_mission_link_candidate_source_cleanup",
+      {
+        _candidate_id: params.candidateId,
+        _deleted: removed,
+        _reason: removed ? null : (reason || "source deletion failed"),
+      },
+    );
+
+    if (!removed) {
+      console.warn(`[SE-9] link finder source deletion failed: ${reason || "unresolved"}`);
+      return false;
+    }
+    const outcome = String(((recorded ?? {}) as { outcome?: unknown })?.outcome ?? "");
+    if (recordError || (outcome !== "CLEAN" && outcome !== "ALREADY_CLEAN")) {
+      console.warn(
+        `[SE-9] source deletion not persisted: ${boundedReason(recordError?.message ?? outcome)}`,
+      );
+      return false;
+    }
+    return true;
+  };
+
   const runMissionCommand = async (args: {
     chatId: string;
     chatType: string;
