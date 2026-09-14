@@ -569,7 +569,92 @@ check(
     !/CREATE POLICY[^;]*social_mission_link_candidates[^;]*TO authenticated/.test(se5Sql + se6Sql),
 );
 
+// ---------------------------------------------------------------------------
+// 14. Link Finder anonymous-admin compatibility (executes production source)
+// ---------------------------------------------------------------------------
+const senderFnStart = webhookRaw.indexOf("const linkFinderSender = ((msg) => {");
+const senderFnSrc = webhookRaw.slice(
+  webhookRaw.indexOf("((msg) => {", senderFnStart),
+  webhookRaw.indexOf(")({ from, sender_chat: senderChat, chat }", senderFnStart) + 1,
+);
+check("14.1 the sender predicate is extractable from the production webhook", senderFnStart > 0 && senderFnSrc.length > 50);
+type SenderResult = { eligible: boolean; posterId: number | null };
+const senderEligibility = new Function(`return ${senderFnSrc};`)() as (
+  msg: unknown,
+) => SenderResult;
+
+const human = senderEligibility({ from: { id: 42, is_bot: false }, chat: { id: -100123 } });
+check("14.2 an ordinary human post is still eligible with its own poster id", human.eligible && human.posterId === 42);
+
+const anon = senderEligibility({
+  from: { id: 1087968824, is_bot: true, username: "GroupAnonymousBot" },
+  sender_chat: { id: -100123, type: "supergroup" },
+  chat: { id: -100123, type: "supergroup" },
+});
+check("14.3 an anonymous admin post in the same group is eligible", anon.eligible);
+check("14.4 the anonymous poster id is stored as unknown, never a bot id", anon.posterId === null);
+
+const anonGroup = senderEligibility({
+  from: { id: 1087968824, is_bot: true },
+  sender_chat: { id: -55, type: "group" },
+  chat: { id: -55, type: "group" },
+});
+check("14.5 a legacy group sender_chat is accepted the same way", anonGroup.eligible && anonGroup.posterId === null);
+
+check(
+  "14.6 an arbitrary bot post with no sender_chat is ignored",
+  senderEligibility({ from: { id: 777, is_bot: true }, chat: { id: -100123 } }).eligible === false,
+);
+check(
+  "14.7 a sender_chat from a different chat is ignored",
+  senderEligibility({
+    from: { id: 1087968824, is_bot: true },
+    sender_chat: { id: -100999, type: "supergroup" },
+    chat: { id: -100123, type: "supergroup" },
+  }).eligible === false,
+);
+check(
+  "14.8 a channel sender_chat is ignored",
+  senderEligibility({
+    from: { id: 136817688, is_bot: true },
+    sender_chat: { id: -100123, type: "channel" },
+    chat: { id: -100123, type: "supergroup" },
+  }).eligible === false,
+);
+check(
+  "14.9 a message with no sender at all is ignored",
+  senderEligibility({ chat: { id: -100123 } }).eligible === false,
+);
+check(
+  "14.10 the candidate RPC receives the derived poster id, never a raw bot id",
+  /_telegram_user_id: linkFinderSender\.posterId/.test(webhookRaw) &&
+    !/_telegram_user_id: Number\(from\.id\)/.test(webhookRaw),
+);
+check(
+  "14.11 detection still requires a connected group chat and a non-command message",
+  /linkFinderSender\.eligible &&\s*!text\.startsWith\("\/"\) &&\s*\(chat\?\.type === "group" \|\| chat\?\.type === "supergroup"\)/.test(webhookRaw),
+);
+check(
+  "14.12 the member's own message is still never deleted by the finder",
+  !/deleteMessage[\s\S]{0,200}message\?\.message_id/.test(
+    webhookRaw.slice(senderFnStart, senderFnStart + 3000),
+  ),
+);
+check(
+  "14.13 the finder still never starts a mission on its own",
+  !/linkFinderSender[\s\S]{0,2000}runMissionCommand\(/.test(webhookRaw.slice(senderFnStart, senderFnStart + 2200)),
+);
+check(
+  "14.14 START/IGNORE authorization is unchanged: peek, live getChatMember, then resolve",
+  idxMismatch >= 0 && idxMismatch < idxGetMember && idxGetMember < idxResolve,
+);
+check(
+  "14.15 START still runs through runMissionCommand with live admin verification",
+  /runMissionCommand\(\{[\s\S]{0,400}chatId: String\(candidateChatId\)/.test(lfBranch),
+);
+
 console.log(`Step 1 authoritative regression: ${passed} passed, ${failures.length} failed`);
+
 
 
 if (failures.length > 0) {
