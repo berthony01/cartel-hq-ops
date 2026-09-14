@@ -532,7 +532,45 @@ check(
   !/latest\.(likes|comments|shares)\s*\?\?\s*0/.test(cardCode),
 );
 
+
+// ---------------------------------------------------------------------------
+// 13. social_mission_effective_config is SERVICE-ONLY.
+// ---------------------------------------------------------------------------
+const effectiveConfigGrants = [se5Sql, se6Sql]
+  .join("\n")
+  .split("\n")
+  .filter((line) => /social_mission_effective_config\(uuid\)/.test(line) && /GRANT|REVOKE/i.test(line));
+
+check("13.1 the helper's grants are declared exactly once", effectiveConfigGrants.filter((l) => /^\s*GRANT/i.test(l)).length === 1);
+check(
+  "13.2 EXECUTE is revoked from PUBLIC, anon AND authenticated",
+  /REVOKE ALL ON FUNCTION public\.social_mission_effective_config\(uuid\) FROM PUBLIC, anon, authenticated;/.test(se5Sql),
+);
+check(
+  "13.3 EXECUTE is granted only to service_role and postgres",
+  /GRANT EXECUTE ON FUNCTION public\.social_mission_effective_config\(uuid\) TO service_role, postgres;/.test(se5Sql),
+);
+check(
+  "13.4 no prepared SQL grants the helper to authenticated or anon",
+  !effectiveConfigGrants.some((line) => /^\s*GRANT/i.test(line) && /\b(authenticated|anon|PUBLIC)\b/.test(line)),
+);
+check(
+  "13.5 the helper is still SECURITY DEFINER with an unchanged body contract",
+  /CREATE OR REPLACE FUNCTION public\.social_mission_effective_config\(_mission_id uuid\)[\s\S]{0,600}SECURITY DEFINER/.test(se5Sql),
+);
+check(
+  "13.6 only service-side code calls the helper from the app runtime",
+  /admin\.rpc\("social_mission_effective_config"/.test(webhookRaw) &&
+    !/supabase\.rpc\(\s*"social_mission_effective_config"/.test(missionsLibCode + missionsUiCode + settingsLibCode + settingsUiCode),
+);
+check(
+  "13.7 Link Finder candidates stay service-only with RLS and no authenticated policy",
+  /ALTER TABLE public\.social_mission_link_candidates ENABLE ROW LEVEL SECURITY/.test(se5Sql) &&
+    !/CREATE POLICY[^;]*social_mission_link_candidates[^;]*TO authenticated/.test(se5Sql + se6Sql),
+);
+
 console.log(`Step 1 authoritative regression: ${passed} passed, ${failures.length} failed`);
+
 
 if (failures.length > 0) {
   for (const failure of failures) console.log(`  FAIL ${failure}`);
