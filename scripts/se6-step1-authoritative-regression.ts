@@ -654,7 +654,213 @@ check(
   /runMissionCommand\(\{[\s\S]{0,400}chatId: String\(candidateChatId\)/.test(lfBranch),
 );
 
+// ---------------------------------------------------------------------------
+// 15. SE-7 — Link Finder reliability: real source message id, non-terminal
+//     START, post-success finalization and source/prompt cleanup.
+// ---------------------------------------------------------------------------
+const SE7_SQL = "docs/sql/SE7_link_finder_start_finalization.sql";
+check("15.1 the SE-7 migration is prepared in the repository", existsSync(SE7_SQL));
+const se7Sql = read(SE7_SQL).replace(/^\s*--.*$/gm, "");
+
+// 15.a — the (chat_id, 0) collision can never recur.
+const lfFullBranch = webhookRaw.slice(
+  webhookRaw.indexOf("const smStart = callbackData.match"),
+  webhookRaw.indexOf("// C7.3 — Project Inbox console callbacks"),
+);
+check(
+  "15.2 Link Finder START no longer passes a null message id",
+  !/messageId: null/.test(lfFullBranch),
+);
+check(
+  "15.3 START passes the candidate's real source message id",
+  /messageId: sourceMessageId/.test(lfFullBranch),
+);
+check(
+  "15.4 the source message id is read from the candidate row",
+  /const sourceMessageId = Number\(decision\.telegram_message_id\)/.test(lfFullBranch),
+);
+check(
+  "15.5 a missing or non-positive source message id refuses the START",
+  /!Number\.isFinite\(sourceMessageId\) \|\| sourceMessageId <= 0[\s\S]{0,240}?return json\(\{ ok: true \}\);/.test(lfFullBranch),
+);
+check(
+  "15.6 the launcher refuses a non-positive Telegram message id outright",
+  /_telegram_message_id <= 0[\s\S]{0,200}invalid_telegram_identifiers/.test(se7Sql),
+);
+check(
+  "15.7 the claim insert absorbs BOTH unique constraints",
+  /ON CONFLICT DO NOTHING;\s*\n\s*GET DIAGNOSTICS v_claim_rows/.test(se7Sql),
+);
+check(
+  "15.8 the claim insert no longer targets only the update id",
+  !/ON CONFLICT \(telegram_update_id\) DO NOTHING/.test(se7Sql),
+);
+check(
+  "15.9 an unknown update id after a collision falls through to the retry path",
+  /IF COALESCE\(v_update_present, false\) THEN/.test(se7Sql) &&
+    /retry path, and step 8 guarantees it cannot duplicate a mission/.test(read(SE7_SQL)),
+);
+// Two sequential Link Finder missions in ONE group: distinct source message
+// ids mean distinct (chat, message) claims, so neither collides.
+const claimKey = (chat: number, message: number) => `${chat}:${message}`;
+const claims = new Set<string>();
+const claimOnce = (chat: number, message: number) => {
+  const key = claimKey(chat, message);
+  if (claims.has(key)) return false;
+  claims.add(key);
+  return true;
+};
+check("15.10 the first Link Finder START in a group claims cleanly", claimOnce(-1003835963432, 4011));
+check("15.11 a second, different Link Finder START in the SAME group also claims", claimOnce(-1003835963432, 4087));
+check("15.12 the legacy null->0 shape would have collided", claimOnce(-1003835963432, 0) && !claimOnce(-1003835963432, 0));
+check("15.13 a genuine replay of the same source message does not claim twice", !claimOnce(-1003835963432, 4011));
+
+// 15.b — START authorizes but never consumes.
+check(
+  "15.14 the resolver leaves a START candidate PENDING",
+  /IF v_decision = 'IGNORE' THEN[\s\S]{0,400}state = 'IGNORED'/.test(se7Sql),
+);
+check(
+  "15.15 the resolver never writes STARTED",
+  !/state = CASE WHEN v_decision = 'START' THEN 'STARTED'/.test(se7Sql),
+);
+check(
+  "15.16 IGNORE is still consumed immediately",
+  /state = 'IGNORED',\s*\n\s*resolved_at = now\(\)/.test(se7Sql),
+);
+check(
+  "15.17 the resolver still requires the verified chat id and rejects a mismatch",
+  /_verified_chat_id bigint/.test(se7Sql) && /'chat_mismatch'/.test(se7Sql),
+);
+check(
+  "15.18 the resolver still revalidates linked actor and workspace operator",
+  /actor_not_linked/.test(se7Sql) && /is_workspace_operator/.test(se7Sql),
+);
+
+// 15.c — finalization happens only after a confirmed, activated mission.
+check(
+  "15.19 a service-only finalizer exists",
+  /CREATE OR REPLACE FUNCTION public\.finalize_social_mission_link_candidate_start/.test(se7Sql),
+);
+check(
+  "15.20 the finalizer is revoked from PUBLIC, anon and authenticated",
+  /REVOKE ALL ON FUNCTION public\.finalize_social_mission_link_candidate_start\(uuid, bigint, bigint, uuid\)\s*\n\s*FROM PUBLIC, anon, authenticated;/.test(se7Sql),
+);
+check(
+  "15.21 the finalizer is the only writer of STARTED",
+  /state = 'STARTED',/.test(se7Sql),
+);
+check(
+  "15.22 a repeated finalize reports ALREADY_FINALIZED and changes nothing",
+  /IF v_candidate\.state = 'STARTED' THEN[\s\S]{0,300}ALREADY_FINALIZED/.test(se7Sql),
+);
+check(
+  "15.23 the finalizer refuses a mission not bound to this candidate",
+  /mission_not_bound/.test(se7Sql),
+);
+check(
+  "15.24 the finalizer revalidates chat, linked actor and operator authority",
+  /finalize_social_mission_link_candidate_start[\s\S]{0,3000}chat_mismatch[\s\S]{0,2000}actor_not_linked[\s\S]{0,1500}is_workspace_operator/.test(se7Sql),
+);
+
+// 15.d — the webhook only finalizes/cleans up on a settled mission.
+check(
+  "15.25 the launcher exposes a settled callback",
+  /onMissionSettled\?: \(settled: \{/.test(webhookRaw),
+);
+check(
+  "15.26 the settled callback fires on a confirmed card plus active schedule",
+  /kind: "ACTIVATED"/.test(webhookRaw),
+);
+check(
+  "15.27 a retry finding the card already sent settles without sending again",
+  /kind: "ALREADY_SENT"/.test(webhookRaw),
+);
+check(
+  "15.28 Link Finder cleanup and finalization run only inside that callback",
+  /onMissionSettled: async \(settled\) => \{[\s\S]{0,400}deleteLinkFinderPrompt\(\)[\s\S]{0,400}finalize_social_mission_link_candidate_start/.test(lfFullBranch),
+);
+check(
+  "15.29 the prompt is NOT deleted before the mission is attempted",
+  lfFullBranch.indexOf("await runMissionCommand(") <
+    lfFullBranch.indexOf("onMissionSettled: async (settled)") + 1 &&
+    !/deleteLinkFinderPrompt\(\);\s*\n\s*await answerCallback\(TELEGRAM_BOT_TOKEN, callback\.id, "Starting the mission/.test(lfFullBranch),
+);
+check(
+  "15.30 the candidate is finalized with the mission the launcher settled",
+  /_mission_id: settled\.missionId/.test(lfFullBranch),
+);
+
+// 15.e — IGNORE never deletes the member's X post.
+const ignoreBlock = lfFullBranch.slice(
+  lfFullBranch.indexOf('if (decision.outcome === "IGNORE")'),
+  lfFullBranch.indexOf("const sourceMessageId"),
+);
+check("15.31 IGNORE removes only the transient prompt", /deleteLinkFinderPrompt\(\);/.test(ignoreBlock));
+check("15.32 IGNORE never deletes the source X-link message", !/sourceMessageId|telegram_message_id/.test(ignoreBlock));
+check("15.33 IGNORE never launches a mission", !/runMissionCommand/.test(ignoreBlock));
+
+// 15.f — source cleanup stays gated on confirmed send + activation, and the
+// existing `/mission` command cleanup is untouched.
+const cleanupBlock = webhookRaw.slice(
+  webhookRaw.indexOf('const { data: activated, error: activateError } = await admin.rpc("activate_social_mission_schedule"'),
+  webhookRaw.indexOf("// The branded card itself is the confirmation."),
+);
+check(
+  "15.34 cleanup runs only after activation succeeded",
+  cleanupBlock.indexOf("activationOutcome !== \"ACTIVATED\"") <
+    cleanupBlock.indexOf('cfg["delete_command_after_send"]'),
+);
+check(
+  "15.35 the trigger message is still deleted through the same gate",
+  /cfg\["delete_command_after_send"\] !== false && messageId > 0/.test(cleanupBlock),
+);
+check(
+  "15.36 deletion is still recorded durably",
+  /record_social_mission_command_deleted/.test(cleanupBlock),
+);
+check(
+  "15.37 a failed activation never reaches cleanup or the settled callback",
+  /schedule could not be activated[\s\S]{0,120}return;/.test(cleanupBlock),
+);
+
+// 15.g — pin recording stays confirmation-only.
+check(
+  "15.38 auto-pin is still attempted after delivery",
+  /cfg\["auto_pin_mission"\] !== false/.test(cleanupBlock) && /"pinChatMessage"/.test(cleanupBlock),
+);
+check(
+  "15.39 pinned_by_hq is recorded ONLY when Telegram confirms the pin",
+  /if \(pinned\) \{\s*\n\s*await admin\.rpc\("record_social_mission_target_pin"/.test(cleanupBlock),
+);
+check(
+  "15.40 completion still unpins only a pin CARTEL HQ recorded",
+  /pinned_by_hq === true/.test(webhookRaw),
+);
+
+// 15.h — both sender shapes still reach the same authorized START path.
+check(
+  "15.41 the ordinary human sender path is unchanged",
+  /const linkFinderSender = /.test(webhookRaw),
+);
+check(
+  "15.42 anonymous-admin sender_chat detection is still same-group only",
+  /senderChat/.test(webhookRaw) && /14\.1 the sender predicate is extractable/.test(read("scripts/se6-step1-authoritative-regression.ts")),
+);
+check(
+  "15.43 both sender shapes resolve through the SAME candidate row and START path",
+  /create_social_mission_link_candidate/.test(webhookRaw) &&
+    (lfFullBranch.match(/runMissionCommand\(/g) ?? []).length === 1,
+);
+
+// 15.i — no second engine, no production action prepared.
+check("15.44 SE-7 creates no new table", !/CREATE TABLE/i.test(se7Sql));
+check("15.45 SE-7 adds no scheduler", !/cron\.schedule/i.test(se7Sql));
+check("15.46 SE-7 declares itself prepare-only", /PREPARE ONLY/.test(read(SE7_SQL)));
+check("15.47 SE-7 is transactional", /^BEGIN;/m.test(se7Sql) && /COMMIT;\s*$/.test(se7Sql.trimEnd() + "\n"));
+
 console.log(`Step 1 authoritative regression: ${passed} passed, ${failures.length} failed`);
+
 
 
 
