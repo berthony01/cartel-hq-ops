@@ -183,15 +183,17 @@ check("9.1 the runner authenticates through the DB secret RPC", runnerCode.inclu
 check("9.2 an invalid secret is rejected with 401", /secretError \|\| secretOk !== true/.test(runnerCode) && runnerCode.includes('json({ error: "Unauthorized" }, 401)'));
 check("9.3 the presented secret is never logged or returned", !/console\.(log|error|warn)\([^)]*presented/.test(runnerCode) && !/presented[^;]*json\(/.test(runnerCode));
 check("9.4 the runner never logs anything at all", !/console\./.test(runnerCode));
-check("9.5 a pulse is sent with sendMessage", runnerCode.includes('callTelegram(BOT_TOKEN, "sendMessage"'));
+// SE-6 re-pin: pulses are threshold crossings, sent by the shared ephemeral
+// sender. Still exactly one sendMessage, never sendPhoto.
+check("9.5 a pulse is sent with sendMessage", /callTelegram\(botToken, "sendMessage"/.test(runnerCode) && !/"sendPhoto"/.test(runnerCode));
 check("9.6 the runner never calls sendPhoto", !runnerCode.includes("sendPhoto"));
 check("9.7 the runner never calls editMessageCaption or editMessageText directly", !runnerCode.includes("editMessageCaption") && !runnerCode.includes("editMessageText"));
-check("9.8 the pulse replies to the canonical mission card", /reply_to_message_id: event\.telegram_message_id/.test(runnerCode));
-check("9.9 the pulse carries an OPEN ON X button from the authoritative canonical URL", runnerCode.includes('text: "OPEN ON X"') && /pulseKeyboard\(event\.canonical_url\)/.test(runnerCode));
+check("9.8 the pulse replies to the canonical mission card", /reply_to_message_id: row\.telegram_message_id/.test(runnerCode));
+check("9.9 the pulse carries an OPEN ON X button from the authoritative canonical URL", runnerCode.includes('text: "OPEN ON X"') && /pulseKeyboard\(row\.canonical_url\)/.test(runnerCode));
 check("9.10 the OPEN ON X button is omitted when the URL is not a canonical X status link", /isCanonicalXStatusUrl\(canonicalUrl\)/.test(runnerCode));
 check("9.11 the pulse cleanup job uses the new cleanup kind", /cleanup_kind: "social_mission_pulse"/.test(runnerCode));
 check("9.12 the pulse lifetime is 120 seconds", /PULSE_LIFETIME_SECONDS = 120/.test(runnerCode) && /PULSE_LIFETIME_SECONDS \* 1000/.test(runnerCode));
-check("9.13 a pulse with no durable cleanup is deleted immediately", /cleanupError[\s\S]{0,200}"deleteMessage"/.test(runnerCode));
+check("9.13 a pulse with no durable cleanup is deleted immediately", /cleanup_kind: "social_mission_pulse"[\s\S]{0,400}"deleteMessage"/.test(runnerCode));
 check("9.14 an uncertain pulse outcome is finalized AMBIGUOUS", /_state: "AMBIGUOUS"/.test(runnerCode));
 check("9.15 a definite rejection is finalized FAILED", /_state: "FAILED"/.test(runnerCode));
 // SE-5 re-pin: the runner now also performs one official metrics lookup per
@@ -271,7 +273,7 @@ for (const [index, forbidden] of ["ACCOMPLISHED", "/mission refresh", "/mission 
 check("12.4 no contributor recognition, points or billing in this phase", !/contributor_badge|points_awarded|billing/i.test(runnerCode + sqlCode));
 // SE-5 re-pin: stored snapshots are now read and written by the metrics phase.
 // The frozen rule that survives is that the PULSE path never fetches.
-check("12.5 the pulse text is built only from a stored snapshot", /function buildPulseText\([\s\S]{0,1200}?\n\}/.test(runnerCode) && !/function buildPulseText\([\s\S]{0,1200}?\n\}/.exec(runnerCode)![0].includes("lookupXPostMetrics") && /social_metric_snapshots/.test(runnerCode));
+check("12.5 the pulse text is built only from a stored snapshot", /buildCrossingPulseText/.test(runnerCode) && /social_metric_snapshots/.test(runnerCode) && !/lookupXPostMetrics[\s\S]{0,200}sendEphemeralMissionMessage/.test(runnerCode));
 check("12.6 the documentation exists and states the DB-first completion rule", docSrc.includes("COMPLETED") && /database[- ]first/i.test(docSrc));
 check("12.7 the documentation records that the SQL is prepare-only", /prepare[- ]only/i.test(docSrc) && /PREPARE ONLY/i.test(sql));
 
@@ -309,7 +311,9 @@ check("13.22 the webhook handles UNRESOLVED and COMPLETED_UNSYNCED without retry
 
 // 13.23-13.28 pulse hardening
 check("13.23 a pulse never falls back to a non-reply message", !runnerCode.includes("allow_sending_without_reply"));
-check("13.24 a rejected pulse is finalized FAILED, never reposted", /outcome\.kind === "rejected"[\s\S]{0,200}_state: "FAILED"/.test(runnerCode));
+// SE-6 re-pin: a legacy scheduled PULSE row is retired to CANCELLED and is
+// never delivered or reposted.
+check("13.24 a legacy scheduled pulse is retired, never reposted", /event_type === "PULSE"[\s\S]{0,600}retire_legacy_social_mission_pulse_event/.test(runnerCode) && !/event_type === "PULSE"[\s\S]{0,1200}sendMessage/.test(runnerCode));
 check("13.25 the pulse URL validator is narrow and pure", /export function isCanonicalXStatusUrl/.test(runnerCode) && /url\.username \|\| url\.password \|\| url\.port/.test(runnerCode));
 check("13.26 the pulse URL validator pins the exact X hosts", /PULSE_X_HOSTS = \["x\.com", "www\.x\.com", "twitter\.com", "www\.twitter\.com", "mobile\.twitter\.com"\]/.test(runnerCode));
 check("13.27 the pulse URL validator requires handle/status/numeric-id", /segments\.length !== 3/.test(runnerCode) && /!== "status"/.test(runnerCode) && /\^\[0-9\]\{1,32\}\$/.test(runnerCode));
