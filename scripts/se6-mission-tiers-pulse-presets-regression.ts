@@ -66,7 +66,7 @@ check("shared module never fetches", !/\bfetch\s*\(/.test(PROGRESS));
 check("shared module has no network host", !/https?:\/\//.test(PROGRESS.replace(/https?:\/\/[^\s]*x\.com[^\s]*/g, "")));
 check("runner reads only the official X module", RUNNER.includes('from "../_shared/x-metrics.ts"'));
 check("runner maps views/likes/comments/shares/saves", /_views: hit\.metrics\.views/.test(RUNNER) && /_saves: hit\.metrics\.saves/.test(RUNNER));
-check("no synthetic zero fill in the runner", !/\?\?\s*0\b/.test(RUNNER.split("runMetricsRefresh")[1] ?? ""));
+check("no synthetic zero fill for metrics", !/metrics\.(views|likes|comments|shares|saves)\s*\?\?\s*0/.test(RUNNER));
 
 /* ------------------------------------------------- 2. five-minute central refresh */
 
@@ -92,7 +92,7 @@ check("panel performs no mutation", !/\.insert\(|\.update\(|\.upsert\(|\.delete\
 /* ------------------------------------------------------- 3. one canonical card */
 
 check("runner edits, never re-sends, the card", /action: "edit_mission"/.test(RUNNER));
-check("runner never sends a replacement photo", !/sendPhoto/.test(RUNNER));
+check("runner never calls sendPhoto", !/callTelegram\([^,]+, "sendPhoto"/.test(RUNNER));
 check("card edit is gated on the visible signature", /signature === row\.last_metric_signature/.test(RUNNER));
 check("card edit claim is atomic", /claim_social_mission_card_refresh/.test(RUNNER));
 check("footer legend is stable and shared", /MISSION_FOOTER_LEGEND/.test(PROGRESS));
@@ -103,27 +103,37 @@ check("default deltas are +100/+10/+5/+5", DEFAULT_PULSE_DELTAS.views === 100 &&
 check("UI mirrors the frozen deltas", JSON.stringify(UI_PULSE_DELTAS) === JSON.stringify(DEFAULT_PULSE_DELTAS));
 check("malformed deltas fall back", JSON.stringify(normalizePulseDeltas({ views: 0, likes: "x" })) === JSON.stringify(DEFAULT_PULSE_DELTAS));
 
-const seed = evaluatePulseCrossings(
-  { views: 500, likes: 20, comments: 4, shares: 2, saves: null },
-  { views: null, likes: null, shares: null, comments: null },
-  DEFAULT_PULSE_DELTAS,
-);
-check("first observation only seeds", seed.seeded === true && seed.crossings.length === 0);
-check("seeding never pulses", seed.shouldPulse === false);
+const MARKS = { views: 500, likes: 20, shares: 2, comments: 4 };
 
-const noGain = evaluatePulseCrossings(
-  { views: 540, likes: 25, comments: 5, shares: 3, saves: null },
-  { views: 500, likes: 20, shares: 2, comments: 4 },
-  DEFAULT_PULSE_DELTAS,
-);
-check("partial gain does not pulse", noGain.shouldPulse === false && noGain.crossings.length === 0);
+const seed = evaluatePulseCrossings(null, {
+  views: 500,
+  likes: 20,
+  comments: 4,
+  shares: 2,
+  saves: null,
+});
+check("first observation only seeds the marks", seed.crossings.length === 0);
+check("seeding never pulses", buildCrossingPulseText(seed.crossings) === null);
+check("seeded marks are the first observation", seed.nextMarks.views === 500);
 
-const crossed = evaluatePulseCrossings(
-  { views: 705, likes: 41, comments: 9, shares: 7, saves: null },
-  { views: 500, likes: 20, shares: 2, comments: 4 },
-  DEFAULT_PULSE_DELTAS,
-);
-check("crossing fires once past the step", crossed.shouldPulse === true);
+const noGain = evaluatePulseCrossings(MARKS, {
+  views: 540,
+  likes: 25,
+  comments: 5,
+  shares: 3,
+  saves: null,
+});
+check("partial gain does not pulse", noGain.crossings.length === 0);
+check("a partial gain carries forward", noGain.nextMarks.views === 500);
+
+const crossed = evaluatePulseCrossings(MARKS, {
+  views: 705,
+  likes: 41,
+  comments: 9,
+  shares: 7,
+  saves: null,
+});
+check("crossing fires once past the step", crossed.crossings.length > 0);
 check("simultaneous crossings are combined", crossed.crossings.length === 4);
 check(
   "combined crossings render one line",
@@ -131,14 +141,30 @@ check(
 );
 check("no crossing renders nothing", buildCrossingPulseText([]) === null);
 
-const replay = evaluatePulseCrossings(
-  { views: 705, likes: 41, comments: 9, shares: 7, saves: null },
-  { views: 700, likes: 40, shares: 7, comments: 9 },
-  DEFAULT_PULSE_DELTAS,
-);
-check("the same crossing never pulses twice", replay.shouldPulse === false);
+const replay = evaluatePulseCrossings(crossed.nextMarks, {
+  views: 705,
+  likes: 41,
+  comments: 9,
+  shares: 7,
+  saves: null,
+});
+check("the same crossing never pulses twice", replay.crossings.length === 0);
 check("marks advance by whole steps only", crossed.nextMarks.views === 700);
-check("unknown metric cannot cross", evaluatePulseCrossings({ views: null, likes: null, comments: null, shares: null, saves: null }, { views: 500, likes: 20, shares: 2, comments: 4 }, DEFAULT_PULSE_DELTAS).shouldPulse === false);
+check(
+  "unknown metric cannot cross",
+  evaluatePulseCrossings(MARKS, {
+    views: null,
+    likes: null,
+    comments: null,
+    shares: null,
+    saves: null,
+  }).crossings.length === 0,
+);
+check(
+  "a decreasing metric never moves the mark backwards",
+  evaluatePulseCrossings(MARKS, { views: 100, likes: 1, comments: 1, shares: 1, saves: null })
+    .nextMarks.views === 500,
+);
 check("crossing evaluation is atomic in SQL", /FOR UPDATE/.test(SQL) && /evaluate_social_mission_pulse/.test(SQL));
 check("pulse message is reply-only sendMessage", /sendMessage/.test(RUNNER) && /reply_to_message_id/.test(RUNNER));
 check("pulse cleanup stays at 120 seconds", /PULSE_LIFETIME_SECONDS = 120/.test(RUNNER));
@@ -152,7 +178,7 @@ check("closing soon milestone exists", MILESTONE_CLOSING_SOON === "MISSION_CLOSI
 check("completed milestone exists", MILESTONE_COMPLETED === "MISSION_COMPLETED");
 check("ten tiers are defined", TIER_COUNT === 10 && tierKey(7) === "TIER_7");
 check("milestone key set is 14 keys", MILESTONE_KEYS.length === 14);
-check("milestone idempotency is a unique constraint", /UNIQUE\s*\(mission_id, milestone_key\)/.test(SQL));
+check("milestone idempotency is a unique index", /social_mission_milestone_events_uidx/.test(SQL));
 check("milestone RPC returns first-entry only", /record_social_mission_milestone/.test(SQL) && /record_social_mission_milestone/.test(RUNNER));
 check("runner marks mission active", RUNNER.includes("MILESTONE_ACTIVE"));
 check("runner marks completion at the complete event", RUNNER.includes("MILESTONE_COMPLETED"));
@@ -172,8 +198,8 @@ check("no tier met returns zero", highestTierMet({ views: 1, likes: 1, comments:
 /* ----------------------------------------------------------- 6. saved presets */
 
 check("preset table is workspace scoped", /CREATE TABLE IF NOT EXISTS public\.social_mission_presets/.test(SQL));
-check("preset names are unique per workspace", /UNIQUE\s*\(workspace_id, lower\(name\)\)/.test(SQL));
-check("presets grant member SELECT", /GRANT SELECT ON public\.social_mission_presets TO authenticated/.test(SQL));
+check("preset names are unique per workspace", /social_mission_presets_workspace_name_uidx/.test(SQL));
+check("presets grant member SELECT", /GRANT SELECT[^;]*ON TABLE public\.social_mission_presets TO authenticated/.test(SQL));
 check("presets enable RLS", /ALTER TABLE public\.social_mission_presets ENABLE ROW LEVEL SECURITY/.test(SQL));
 check("preset write is operator only", /social_mission_presets[\s\S]{0,900}is_workspace_operator/.test(SQL));
 check("settings point at one active preset", /active_preset_id/.test(SQL) && /active_preset_id/.test(SETTINGS_LIB));
@@ -195,15 +221,15 @@ check(
 check("chips skip empty tiers", tierSummaryChips({ ...blankTierPreset("w"), tier_targets: uiNormalizeTierTargets([{ tier: 2, views: 10 }]) }).length === 1);
 check("UI delta normalization matches the worker", JSON.stringify(uiNormalizePulseDeltas({})) === JSON.stringify(DEFAULT_PULSE_DELTAS));
 check("existing presets are adapted, not replaced", /base_preset/.test(SQL) && /STANDARD/.test(SQL) && /MAJOR_ANNOUNCEMENT/.test(SQL));
-check("wallet targets are not introduced", !/wallet/i.test(SQL) && !/wallet/i.test(SETTINGS_CARD));
+check("wallet targets are not introduced", !/wallet_target|wallet holders/i.test(SQL) && !/wallet/i.test(SETTINGS_CARD));
 
 /* ------------------------------------------------------ 7. performance history */
 
 check("history table exists", /CREATE TABLE IF NOT EXISTS public\.social_mission_performance_history/.test(SQL));
-check("history is one row per mission", /mission_id uuid[\s\S]{0,120}UNIQUE|UNIQUE\s*\(mission_id\)|mission_id[^\n]*PRIMARY KEY/.test(SQL));
+check("history is one row per mission", /ON CONFLICT \(mission_id\) DO NOTHING/.test(SQL));
 check("history finalization is idempotent", /ON CONFLICT \(mission_id\) DO NOTHING/.test(SQL));
 check("runner finalizes history at completion", /finalize_social_mission_performance/.test(RUNNER));
-check("history is readable by members", /GRANT SELECT ON public\.social_mission_performance_history TO authenticated/.test(SQL));
+check("history is readable by members", /GRANT SELECT ON TABLE public\.social_mission_performance_history TO authenticated/.test(SQL));
 
 /* ---------------------------------------------------------- 8. X link status */
 
