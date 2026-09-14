@@ -64,84 +64,70 @@ zero database, zero Telegram, zero X.
 
 ---
 
-# SE-6 — tiers, crossing pulses, saved presets (reconciliation)
+## Step 1 authoritative reconciliation (supersedes the withdrawn SE-6 tier direction)
 
-Repository implementation + prepared SQL only. No migration applied, no
-function deployed, no publish, no Telegram send, no X call, no secret, no cron
-change, no pinning.
+The tier/threshold/5-minute SE-6 direction was **withdrawn**. Its surfaces are
+deleted from the repository: `_shared/mission-progress.ts`,
+`docs/sql/SE6_mission_tiers_pulse_presets.sql`, the tier regression script,
+`social_mission_presets`, pulse-mark and tier-milestone machinery, and the
+separate performance-history table. Nothing in the mission cone references
+them. The frozen Step 1 contract below is authoritative.
 
-1. **Real X metrics** — unchanged official-only path (`_shared/x-metrics.ts`):
-   views/impressions, likes, reposts, replies (saves also stored). Unknown
-   stays `NULL`.
-2. **Central 5-minute refresh** — `refreshBucket()` floors to 5 minutes and
-   `list_social_missions_due_for_metrics(_bucket, _limit)` skips any mission
-   already snapshotted in that bucket. One read per mission per window,
-   regardless of cron cadence or viewer count. HQ never calls a provider.
-3. **One canonical card** — same PHOTO card, edited in place, gated on the
-   visible signature; stable shared footer legend (`MISSION_FOOTER_LEGEND`).
-4. **Pulse defaults** — +100 views, +10 likes, +5 reposts, +5 replies.
-   `evaluate_social_mission_pulse` advances marks atomically (`FOR UPDATE`);
-   first observation only seeds, partial gains carry forward, simultaneous
-   crossings combine into ONE reply-only `sendMessage` cleaned up after 120s.
-5. **Idempotent milestones** — `MISSION_ACTIVE`, `TIER_1..TIER_10`,
-   `PROJECT_TRENDING`, `MISSION_CLOSING_SOON`, `MISSION_COMPLETED`, unique per
-   `(mission_id, milestone_key)`.
-6. **Admin presets** — `social_mission_presets`: named, reusable Tier 1-10
-   target bundles with optional mission code, layered on the existing
-   STANDARD/QUICK/MAJOR_ANNOUNCEMENT/LAUNCH shapes (adapted, not replaced).
-   HQ gains a Saved Preset dropdown, tier editor, summary chips and Saved
-   badge. Wallet targets deliberately absent.
-7. **Performance history** — `finalize_social_mission_performance` writes one
-   idempotent row per mission at completion, from stored snapshots only.
-8. **X link status** — `OK | UNAVAILABLE | UNKNOWN`. A post the official API
-   no longer returns is marked UNAVAILABLE and shown as "X link unavailable" in
-   HQ; the mission lifecycle keeps running. A provider outage never marks it.
+### Contract as implemented
 
-Auto-pin is now OFF unless a workspace opts in.
+1. **Official X metrics.** One fail-soft read before the first canonical card,
+   then centralized refresh by the existing ONE-MINUTE runner. Batches of at
+   most 100 post ids. One snapshot per mission per minute bucket
+   (`social_metric_snapshots` unique on mission/provider/bucket). Unknown stays
+   NULL, never a false zero. Pulses never cause a paid read.
+2. **Canonical card.** Branded PHOTO card, same-message edits only, edited only
+   when the stored metric/state signature actually changed. Raw `/mission` is
+   deleted only after a confirmed send; only a pin CARTEL HQ recorded is
+   unpinned. Auto-pin defaults ON unless a persisted setting says otherwise.
+3. **Pulse 2.0 — preset time cadence, kept.** STANDARD 45m at 3/8/15/25/35;
+   QUICK 20m at 2/5/10/15; MAJOR_ANNOUNCEMENT 120m at 5/15/30/60/90; LAUNCH 60m
+   at 3/8/15/30/45. Each pulse is one reply-only `sendMessage`, auto-deleted
+   after 120s, built from the LATEST STORED snapshot plus optional milestone
+   progress and an approximate remaining time — with ZERO provider reads. The
+   copy lives in the pure `_shared/mission-pulse-copy.ts` module.
+4. **State.** ACTIVE -> ACCOMPLISHED -> COMPLETED. The milestone is optional and
+   project-defined; a missing milestone is not a failure. No points, badges,
+   rewards or payouts are tied to engagement.
+5. **X Link Finder sequencing (fixed).** READ-ONLY
+   `peek_social_mission_link_candidate` -> live Telegram `getChatMember`
+   verification in the candidate's OWN chat -> only then the consuming
+   `resolve_social_mission_link_candidate`, which now REQUIRES the verified chat
+   id and revalidates operator authority itself. A denied or non-admin tap
+   mutates nothing and leaves the candidate PENDING.
+6. **Settings.** One workspace-scoped system with the four presets. The
+   effective config is snapshotted into the mission at launch and is immutable
+   afterwards; pulses and the due-list read that frozen snapshot.
+7. **History/Summary.** Built from the EXISTING mission, target, schedule and
+   snapshot tables — no duplicate subsystem. The customer surface shows a
+   bounded stored-metric history and, for completed missions, final values,
+   baseline-to-final change where both ends are known, and duration.
+8. **Manual close final reading.** `/mission close` takes a best-effort final
+   official read BEFORE the completion card renders, skipped entirely when the
+   current minute bucket already has a snapshot, and fail-soft so the close
+   always completes.
 
-## Verification
+### Internal usage telemetry
 
-`scripts/se6-mission-tiers-pulse-presets-regression.ts` — deterministic, zero
-network, zero database, zero Telegram, zero X.
+`record_social_mission_metric_snapshot` writes one `usage_ledger` row
+(`action_type = 'social_x_tracked_post_read'`, `units = 1`) ONLY when a new
+snapshot row was actually inserted, so retries cannot multiply it. This is
+**operational telemetry, not billable usage and not an exact invoice cost** —
+the official batch endpoint reads up to 100 posts per HTTP call and that cost
+cannot be truthfully split per workspace. No dollar pricing is encoded.
 
-## External operations still pending (separate approval gate)
+### Rollout sequence (requires explicit approval; nothing was applied)
 
-1. Secret `X_API_BEARER_TOKEN`.
-2. Apply `docs/sql/SE5_social_mission_engine.sql`, then
-   `docs/sql/SE6_mission_tiers_pulse_presets.sql`.
-3. Deploy `_shared/x-metrics.ts` **and** `_shared/mission-progress.ts`
-   alongside `social-mission-runner` and `social-mission-telegram`, then
-   redeploy `telegram-webhook`.
+1. Set the server secret `X_API_BEARER_TOKEN`.
+2. Apply `docs/sql/SE5_social_mission_engine.sql`.
+3. Apply `docs/sql/SE6_step1_reconciliation.sql`.
+4. Deploy `_shared/x-metrics.ts` and `_shared/mission-pulse-copy.ts` with
+   `social-mission-runner` and `social-mission-telegram`.
+5. Redeploy `telegram-webhook`.
 
-## SE-6 hardening corrections (A)-(G)
-
-- **A — threshold-only pulses.** `activate_social_mission_schedule` now seeds the
-  `COMPLETE` lifecycle event only. The migration retires every PENDING legacy
-  `PULSE` row to `CANCELLED`, and the runner retires any straggler through
-  `retire_legacy_social_mission_pulse_event` without ever sending Telegram.
-  Manual close, the schedule table and COMPLETE behaviour are unchanged.
-- **B — preset immutability.** A BEFORE INSERT trigger freezes the workspace's
-  active saved preset (id, name, base preset, mission code, tier targets, pulse
-  deltas) into `metadata.effective_config`. The metrics due-list reads those
-  frozen values; it no longer joins live workspace settings, so editing a preset
-  cannot change a mission already running. Missions without a snapshot fall back
-  to the shared defaults.
-- **C — canonical footer.** `MISSION_FOOTER_LEGEND` is rendered on every LIVE
-  card, inside the existing progressive length safety for the 1024-character
-  branded caption.
-- **D — provider-independent lifecycle.** `MISSION_ACTIVE` is recorded at
-  confirmed canonical delivery, not after an X read. An AFTER UPDATE trigger on
-  `social_missions` records `MISSION_COMPLETED` and finalizes performance
-  history for every LIVE -> COMPLETED transition, scheduled or manual close.
-- **E — one tier bundle.** Backend and HQ tier defaults are byte-identical and
-  asserted as such.
-- **F — saved preset UX.** A saved preset returns its persisted row, becomes the
-  selected active preset, and is described as reaching the next mission only
-  once mission defaults are saved. Mission code stays optional; wallet target
-  remains postponed.
-- **G — truthful pulse count.** Performance history counts threshold-crossing
-  pulses recorded on `social_mission_pulse_marks.pulse_count`.
-
-The single runner still ticks every minute for lifecycle precision; the X
-provider due-list enforces at most one provider read per mission per
-five-minute bucket. No second cron job exists.
+Until step 5 completes, the Link Finder buttons must not be exposed against the
+new resolver signature: the webhook and the SQL change together.

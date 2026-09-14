@@ -842,10 +842,12 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        // Auto-pin defaults ON. The pin is recorded ONLY when Telegram accepts
-        // it, so completion can never unpin a pin CARTEL HQ did not set.
-        // SE-6: auto-pin is OFF unless a workspace explicitly opts in.
-        if (cfg["auto_pin_mission"] === true) {
+        // Auto-pin defaults ON for the frozen Step 1 experience. The pin is
+        // recorded ONLY when Telegram accepts it, so completion can never
+        // unpin a pin CARTEL HQ did not set. An existing persisted workspace
+        // setting of `false` still wins.
+        if (cfg["auto_pin_mission"] !== false) {
+
 
           const sentMessageId = Number(
             (transport as { telegramMessageId?: unknown } | null)?.telegramMessageId ?? NaN,
@@ -1656,18 +1658,79 @@ Deno.serve(async (req: Request) => {
       const callbackChatId = callbackChat?.id != null ? String(callbackChat.id) : String(from.id);
       const linked = await getLinkedUser(String(from.id));
 
-      // SE-5 — X Link Finder decision. START reuses the EXACT `/mission`
-      // pipeline (including its live admin re-verification), so this button can
-      // never become a second, weaker way to launch a mission. IGNORE only
-      // closes the candidate.
+      // SE-6 Step 1 — X Link Finder decision. STRICT SEQUENCING:
+      //   1. READ-ONLY preflight (`peek_...`) — mutates nothing.
+      //   2. LIVE Telegram administrator/creator verification in the
+      //      candidate's OWN chat.
+      //   3. Only then the consuming resolver, which revalidates every fact
+      //      and requires the verified chat id.
+      // A denied or non-admin tap therefore leaves the candidate PENDING for
+      // an authorized admin. START still reuses the EXACT `/mission`
+      // pipeline, so this button can never become a weaker launch path.
       const smStart = callbackData.match(/^sm_lf_start_([0-9a-f-]{36})$/i);
       const smIgnore = callbackData.match(/^sm_lf_ignore_([0-9a-f-]{36})$/i);
       if ((smStart || smIgnore) && (callbackChat?.type === "group" || callbackChat?.type === "supergroup")) {
         const candidateId = String((smStart ?? smIgnore)![1]);
+
+        const { data: peeked } = await admin.rpc("peek_social_mission_link_candidate", {
+          _candidate_id: candidateId,
+          _telegram_user_id: Number(from.id),
+        });
+        const preflight = (peeked ?? {}) as {
+          outcome?: string;
+          reason?: string;
+          telegram_chat_id?: number;
+          prompt_message_id?: number;
+        };
+
+        if (preflight.outcome === "EXPIRED") {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "This suggestion has expired.");
+          return json({ ok: true });
+        }
+        if (preflight.outcome === "ALREADY_RESOLVED") {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "This suggestion was already handled.");
+          return json({ ok: true });
+        }
+        if (preflight.outcome !== "ELIGIBLE") {
+          await answerCallback(
+            TELEGRAM_BOT_TOKEN,
+            callback.id,
+            preflight.reason === "actor_not_operator"
+              ? "Only this project's owners and admins can do this."
+              : "This suggestion could not be handled.",
+          );
+          return json({ ok: true });
+        }
+
+        // The candidate's OWN chat, never the chat the tap claims to be in.
+        const candidateChatId = Number(preflight.telegram_chat_id);
+        if (!Number.isFinite(candidateChatId)) {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "This suggestion could not be handled.");
+          return json({ ok: true });
+        }
+
+        let lfStatus = "";
+        try {
+          const member = await telegramJson(TELEGRAM_BOT_TOKEN, "getChatMember", {
+            chat_id: candidateChatId,
+            user_id: Number(from.id),
+          });
+          lfStatus = String((member as { status?: unknown })?.status ?? "");
+        } catch {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Telegram could not confirm your group role. Try again shortly.");
+          return json({ ok: true });
+        }
+        if (lfStatus !== "administrator" && lfStatus !== "creator") {
+          // Nothing was mutated: the candidate stays PENDING.
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Only current administrators of this group can do this.");
+          return json({ ok: true });
+        }
+
         const { data: resolved } = await admin.rpc("resolve_social_mission_link_candidate", {
           _candidate_id: candidateId,
           _telegram_user_id: Number(from.id),
           _decision: smStart ? "START" : "IGNORE",
+          _verified_chat_id: candidateChatId,
         });
         const decision = (resolved ?? {}) as {
           outcome?: string;
@@ -1722,6 +1785,7 @@ Deno.serve(async (req: Request) => {
         });
         return json({ ok: true });
       }
+
 
       // C7.3 — Project Inbox console callbacks. Private chat only; every one
       // re-authorizes inside the service-only RPC before exposing anything.

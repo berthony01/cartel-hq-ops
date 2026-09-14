@@ -9,14 +9,17 @@ import {
   deliveryTone,
   eventStateTone,
   formatMetric,
+  formatMetricChange,
   formatMissionTime,
   isMissionActive,
   missionStatusTone,
+  missionSummary,
   missionTimeRemaining,
   rollupMissions,
   useWorkspaceMissions,
   type MissionView,
 } from "@/lib/social-missions";
+
 
 /**
  * Step 1C — customer-facing, STRICTLY READ-ONLY Social Mission surface.
@@ -67,16 +70,13 @@ function TimelineRow({ label, state, due }: { label: string; state: string; due:
 function MissionCard({ view }: { view: MissionView }) {
   const { mission, canonicalUrl, authorHandle, targets, scheduleEvents, latestSnapshot } = view;
   const remaining = missionTimeRemaining(mission);
+  const summary = missionSummary(view);
+
   const active = isMissionActive(mission);
   // SE-5 product state. ACCOMPLISHED is derived, not a database status, and the
   // column is newer than the committed generated types.
   const accomplishedAt = (mission as unknown as Record<string, unknown>)["accomplished_at"];
   const accomplished = typeof accomplishedAt === "string";
-  // SE-6 requirement 8: a source post the official API can no longer resolve is
-  // surfaced here. The mission keeps running; nothing is closed automatically.
-  const xLinkUnavailable =
-    (mission as unknown as Record<string, unknown>)["x_link_status"] === "UNAVAILABLE";
-
 
   return (
     <article className="min-w-0 rounded-lg border border-border/70 bg-surface-elevated p-3.5 sm:p-4">
@@ -108,25 +108,11 @@ function MissionCard({ view }: { view: MissionView }) {
               <span>ACCOMPLISHED</span>
             </StatusBadge>
           ) : null}
-          {xLinkUnavailable ? (
-            <StatusBadge tone="red">
-              <span>X link unavailable</span>
-            </StatusBadge>
-          ) : null}
           <StatusBadge tone={active && !remaining.expired ? "gold" : "muted"}>
             <span>{remaining.label}</span>
           </StatusBadge>
         </div>
       </div>
-
-      {xLinkUnavailable ? (
-        <p className="mt-2 text-xs text-muted-foreground">
-          X link unavailable — the source post can no longer be read. Tracking continues with the
-          numbers already recorded.
-        </p>
-      ) : null}
-
-
 
       <dl className="mt-3 grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3">
         <div className="surface-quiet min-w-0 rounded-md p-2.5">
@@ -217,9 +203,65 @@ function MissionCard({ view }: { view: MissionView }) {
           </p>
         </div>
       ) : null}
+
+      {view.snapshots.length > 1 ? (
+        <div className="mt-3">
+          <p className="type-eyebrow text-muted-foreground">
+            Stored metric history · {view.snapshotCount} reading
+            {view.snapshotCount === 1 ? "" : "s"} recorded
+          </p>
+          <ul className="mt-1.5 space-y-1">
+            {view.snapshots.map((snapshot) => (
+              <li
+                key={snapshot.id}
+                className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md border border-border/50 bg-background/30 px-2.5 py-1.5"
+              >
+                <span className="shrink-0 text-[11px] text-muted-foreground">
+                  {formatMissionTime(snapshot.observed_at)}
+                </span>
+                <span className="min-w-0 truncate text-[11px] text-foreground">
+                  {formatMetric(snapshot.views)} views · {formatMetric(snapshot.likes)} likes ·{" "}
+                  {formatMetric(snapshot.comments)} replies · {formatMetric(snapshot.shares)} reposts
+                </span>
+              </li>
+            ))}
+          </ul>
+          {view.snapshotCount > view.snapshots.length ? (
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Showing the {view.snapshots.length} most recent readings.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {summary.completed ? (
+        <div className="mt-3 rounded-md border border-border/60 bg-background/30 p-2.5">
+          <p className="type-eyebrow text-muted-foreground">
+            Final result
+            {summary.durationMinutes !== null ? ` · ran ${summary.durationMinutes} min` : ""}
+          </p>
+          <dl className="mt-1.5 grid grid-cols-2 gap-2 sm:grid-cols-5">
+            {summary.changes.map((change) => (
+              <div key={change.key} className="surface-quiet min-w-0 rounded-md p-2">
+                <dt className="type-eyebrow text-muted-foreground">{change.label}</dt>
+                <dd className="mt-1 truncate text-xs text-foreground">
+                  {formatMetric(change.final)}
+                </dd>
+                <dd className="truncate text-[11px] text-muted-foreground">
+                  {formatMetricChange(change.change)} since first reading
+                </dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+            Stored readings only. A dash means the value was never recorded, not zero.
+          </p>
+        </div>
+      ) : null}
     </article>
   );
 }
+
 
 export function SocialMissionsPanel({ workspaceId }: { workspaceId: string | null }) {
   const query = useWorkspaceMissions(workspaceId);
