@@ -37,6 +37,8 @@ BEGIN;
 --      action_type = 'social_x_tracked_post_read'
 --      units       = 1
 --    means "one tracked X post was read into a new stored snapshot for this
+--    workspace" — written ONLY for the official X provider, whose snapshots
+--    carry the exact runtime constant `x-official`.
 --    workspace". It is OPERATIONAL TELEMETRY, not billable usage and not an
 --    exact invoice cost: the official X batch endpoint reads up to 100 posts
 --    per HTTP call, and that call cannot be truthfully split across
