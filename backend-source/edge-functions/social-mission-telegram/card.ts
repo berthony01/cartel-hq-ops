@@ -116,6 +116,13 @@ export const LIVE_MISSION_HEADER = "🎯 COMMUNITY MISSION";
 export const LIVE_ACTION_LINE = "Open the official post, read it, and join the conversation.";
 export const LIVE_OPTIONAL_LINE = "Likes, replies, and reposts are optional. Participate naturally.";
 export const LIVE_METRICS_HEADING = "📊 LIVE RESULTS";
+/**
+ * SE-5 — shown INSTEAD of metric lines when no snapshot exists yet, so a live
+ * card never looks like a generic bot announcement and never shows fake zeroes.
+ */
+export const LIVE_METRICS_PENDING = "Live metrics updating…";
+export const MISSION_STATE_LIVE = "LIVE";
+export const MISSION_STATE_ACCOMPLISHED = "ACCOMPLISHED";
 
 export function metricLabels(platform: MissionCardPlatform): Record<MetricKey, string> {
   return platform === "x" ? X_LABELS : GENERIC_LABELS;
