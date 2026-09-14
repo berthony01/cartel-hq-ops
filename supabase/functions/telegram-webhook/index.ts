@@ -1154,18 +1154,19 @@ Deno.serve(async (req: Request) => {
         await reply("The mission card was delivered, but its 45-minute schedule could not be activated. Do not resend; close it with /mission close when you are done.");
         return;
       }
-      // SE-5 — command cleanup and optional auto-pin. Both run ONLY after the
-      // card is confirmed SENT and the schedule is active, so a failure here
-      // can never lose a mission. Both are best-effort and never retried.
-      try {
-        const { data: config } = await admin.rpc("social_mission_effective_config", {
-          _mission_id: result.mission_id,
-        });
-        const cfg = (config ?? {}) as Record<string, unknown>;
+      // SE-8 — the mission's OWN immutable effective config decides whether the
+      // canonical pin is a required objective for this mission.
+      const { data: config } = await admin.rpc("social_mission_effective_config", {
+        _mission_id: result.mission_id,
+      });
+      const cfg = (config ?? {}) as Record<string, unknown>;
+      const autoPinEnabled = cfg["auto_pin_mission"] !== false;
 
-        // Raw `/mission <link>` command cleanup ONLY, governed by the workspace
-        // preference exactly as before. Link Finder source cleanup is handled
-        // separately below because it is mandatory and must be retryable.
+      // SE-5 — raw `/mission <link>` command cleanup ONLY, governed by the
+      // workspace preference exactly as before. It runs after the confirmed
+      // send and active schedule and stays best-effort here; Link Finder source
+      // cleanup is handled separately below because it is mandatory.
+      try {
         if (!isLinkFinder && cfg["delete_command_after_send"] !== false && messageId > 0) {
           const deleted = await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
             chat_id: chatId,
@@ -1178,52 +1179,39 @@ Deno.serve(async (req: Request) => {
             });
           }
         }
-
-
-        // Auto-pin defaults ON for the frozen Step 1 experience. The pin is
-        // recorded ONLY when Telegram accepts it, so completion can never
-        // unpin a pin CARTEL HQ did not set. An existing persisted workspace
-        // setting of `false` still wins.
-        if (cfg["auto_pin_mission"] !== false) {
-
-
-          const sentMessageId = Number(
-            (transport as { telegramMessageId?: unknown } | null)?.telegramMessageId ?? NaN,
-          );
-          if (Number.isFinite(sentMessageId)) {
-            const pinned = await telegramJson(TELEGRAM_BOT_TOKEN, "pinChatMessage", {
-              chat_id: chatId,
-              message_id: sentMessageId,
-              disable_notification: true,
-            }).then(() => true).catch(() => false);
-            if (pinned) {
-              await admin.rpc("record_social_mission_target_pin", {
-                _target_id: result.target_id,
-                _pinned: true,
-              });
-            }
-          }
-        }
       } catch {
         // Cosmetic housekeeping only; never surfaced and never retried.
       }
 
-      // SE-7 — the mandatory Link Finder source cleanup runs here, AFTER the
-      // confirmed send and active schedule and OUTSIDE the best-effort
-      // housekeeping block, because its result decides whether the caller may
-      // finalize. A no-op returning true for every other source.
+      // SE-7/SE-8 — the two REQUIRED canonical objectives run here, AFTER the
+      // confirmed send and active schedule and OUTSIDE the best-effort block,
+      // because their result decides whether the caller may finalize. Source
+      // cleanup is a no-op returning true for every non-Link-Finder source.
+      const sentMessageId = Number(
+        (transport as { telegramMessageId?: unknown } | null)?.telegramMessageId ?? NaN,
+      );
       const sourceClean = await ensureLinkFinderSourceCleanup(String(result.target_id ?? ""));
+      const canonicalPinned = await ensureCanonicalMissionPin(
+        String(result.target_id ?? ""),
+        autoPinEnabled,
+        Number.isFinite(sentMessageId) ? sentMessageId : null,
+      );
 
-      // Confirmed card + active schedule + clean source. Only now may the
-      // caller finalize its own transient state (Link Finder candidate, then
-      // its prompt).
-      if (sourceClean) {
+      // Confirmed card + active schedule + clean source + required pin. Only
+      // now may the caller finalize its own transient state (Link Finder
+      // candidate, then its prompt).
+      if (sourceClean && canonicalPinned) {
         await args.onMissionSettled?.({
           kind: "ACTIVATED",
           missionId: String(result.mission_id ?? ""),
           targetId: String(result.target_id ?? ""),
         });
+      } else {
+        console.warn(
+          `[SE-8] canonical lifecycle incomplete: cleanup=${sourceClean} pin=${canonicalPinned}`,
+        );
       }
+
 
 
       // The branded card itself is the confirmation. No extra success text.
