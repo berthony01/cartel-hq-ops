@@ -33,6 +33,46 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import {
+  lookupXPostMetrics,
+  batchPostIds,
+  minuteBucket,
+  availabilityOf,
+  metricSignature,
+  X_PROVIDER,
+  X_BATCH_MAX,
+  type XCanonicalMetrics,
+} from "../_shared/x-metrics.ts";
+
+/**
+ * SE-5 metrics refresh, layered ON TOP of the frozen SE-4B behaviour above.
+ *
+ * - The ONLY provider contacted is the official X API v2 batch lookup.
+ * - Each minute the worker collects LIVE missions, de-duplicates post ids and
+ *   issues at most `METRICS_MAX_BATCHES` lookups of at most 100 ids each.
+ * - At most ONE snapshot is written per mission per minute bucket.
+ * - A Telegram edit happens ONLY when the visible metric signature changed,
+ *   so an unchanged minute performs zero Telegram calls.
+ * - Pulses still make ZERO provider calls: they read stored snapshots only.
+ */
+const METRICS_WORKLIST_LIMIT = 300;
+const METRICS_MAX_BATCHES = 3;
+
+type MetricsRow = {
+  mission_id: string;
+  workspace_id: string;
+  target_id: string;
+  external_post_id: string;
+  canonical_url: string | null;
+  telegram_chat_id: number;
+  telegram_message_id: number | null;
+  edit_revision: number;
+  edit_state: string;
+  mission_created_by: string | null;
+  accomplished_at: string | null;
+  last_metric_signature: string | null;
+  effective_config: Record<string, unknown> | null;
+};
 
 const SCHEDULER_HEADER = "x-cartel-social-mission-scheduler-secret";
 const TELEGRAM_API = "https://api.telegram.org";
@@ -109,6 +149,34 @@ export function isCanonicalXStatusUrl(value: unknown): value is string {
 export const PULSE_TEXT =
   "This Social Mission is still active. Read the official post above and join the conversation naturally if you have something to add.";
 
+export const PULSE_ACCOMPLISHED_TEXT =
+  "This Social Mission has hit its milestone and is still open. Read the official post above and join the conversation naturally if you have something to add.";
+
+/**
+ * SE-5 Pulse 2.0 — the pulse may quote the LATEST STORED snapshot, but it
+ * performs ZERO provider reads of its own. Unknown metrics are omitted, never
+ * printed as 0, and the line is dropped entirely when nothing is known.
+ */
+export function pulseMetricLine(metrics: XCanonicalMetrics | null): string | null {
+  if (!metrics) return null;
+  const parts: string[] = [];
+  if (metrics.views !== null) parts.push(`${metrics.views} views`);
+  if (metrics.likes !== null) parts.push(`${metrics.likes} likes`);
+  if (metrics.comments !== null) parts.push(`${metrics.comments} replies`);
+  if (metrics.shares !== null) parts.push(`${metrics.shares} reposts`);
+  if (parts.length === 0) return null;
+  return `Last observed: ${parts.join(" · ")}.`;
+}
+
+export function buildPulseText(
+  metrics: XCanonicalMetrics | null,
+  accomplished: boolean,
+): string {
+  const head = accomplished ? PULSE_ACCOMPLISHED_TEXT : PULSE_TEXT;
+  const line = pulseMetricLine(metrics);
+  return line ? `${head}\n\n${line}` : head;
+}
+
 export function pulseKeyboard(canonicalUrl: unknown) {
   return isCanonicalXStatusUrl(canonicalUrl)
     ? { inline_keyboard: [[{ text: "OPEN ON X", url: String(canonicalUrl).trim() }]] }
@@ -155,6 +223,138 @@ async function callTelegram(
   return { kind: "uncertain", description: "Telegram returned an inconclusive response." };
 }
 
+/** One idempotent same-message edit through the existing transport. */
+async function requestCardEdit(args: {
+  supabaseUrl: string;
+  serviceKey: string;
+  workspaceId: string;
+  missionId: string;
+  targetId: string;
+  actorUserId: string;
+  clientRequestId: string;
+  revision: number;
+}): Promise<string> {
+  try {
+    const response = await fetch(
+      `${args.supabaseUrl.replace(/\/$/, "")}/functions/v1/social-mission-telegram`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: args.serviceKey,
+          Authorization: `Bearer ${args.serviceKey}`,
+          "X-Cartel-Internal-Source": INTERNAL_SOURCE_HEADER_VALUE,
+          "X-Cartel-Actor-User-Id": args.actorUserId,
+        },
+        body: JSON.stringify({
+          action: "edit_mission",
+          workspaceId: args.workspaceId,
+          missionId: args.missionId,
+          targetId: args.targetId,
+          clientRequestId: args.clientRequestId,
+          revision: args.revision,
+        }),
+        signal: AbortSignal.timeout(TRANSPORT_TIMEOUT_MS),
+      },
+    );
+    const body = (await response.json().catch(() => null)) as { editState?: string } | null;
+    return String(body?.editState ?? "");
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * SE-5 metrics phase. Never throws, and a failure here must not prevent the
+ * SE-4B pulse/completion phase from running.
+ */
+async function runMetricsRefresh(
+  admin: ReturnType<typeof createClient>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<{ missions: number; lookups: number; snapshots: number; cardsEdited: number }> {
+  const stats = { missions: 0, lookups: 0, snapshots: 0, cardsEdited: 0 };
+  const bearer = Deno.env.get("X_API_BEARER_TOKEN") ?? "";
+  if (!bearer) return stats;
+
+  const { data, error } = await admin.rpc("list_active_social_missions_for_metrics", {
+    _limit: METRICS_WORKLIST_LIMIT,
+  });
+  if (error) return stats;
+  const rows = ((data ?? []) as MetricsRow[]).filter(
+    (row) => typeof row.external_post_id === "string" && row.telegram_message_id !== null,
+  );
+  stats.missions = rows.length;
+  if (rows.length === 0) return stats;
+
+  // De-duplicate ids across missions, then look them up in batches of <= 100.
+  const batches = batchPostIds(rows.map((row) => row.external_post_id), X_BATCH_MAX).slice(
+    0,
+    METRICS_MAX_BATCHES,
+  );
+  const found = new Map<string, { metrics: XCanonicalMetrics; observedAt: string }>();
+  for (const batch of batches) {
+    const read = await lookupXPostMetrics(bearer, batch);
+    stats.lookups += 1;
+    if (!read.ok) continue; // No snapshot, no synthetic zeroes, no retry.
+    for (const [id, post] of read.posts) {
+      found.set(id, { metrics: post.metrics, observedAt: read.observedAt });
+    }
+  }
+  if (found.size === 0) return stats;
+
+  for (const row of rows) {
+    const hit = found.get(row.external_post_id);
+    if (!hit) continue;
+
+    const recorded = await admin.rpc("record_social_mission_metric_snapshot", {
+      _mission_id: row.mission_id,
+      _provider: X_PROVIDER,
+      _observed_at: hit.observedAt,
+      _poll_bucket: minuteBucket(Date.parse(hit.observedAt)),
+      _views: hit.metrics.views,
+      _likes: hit.metrics.likes,
+      _comments: hit.metrics.comments,
+      _shares: hit.metrics.shares,
+      _saves: hit.metrics.saves,
+      _availability: availabilityOf(hit.metrics),
+      _metadata: { phase: "SE-5", source: "mission_runner" },
+    });
+    if (recorded.error) continue;
+    stats.snapshots += 1;
+
+    const result = (recorded.data ?? {}) as { accomplished_at?: string | null };
+    const accomplished =
+      typeof result.accomplished_at === "string" || typeof row.accomplished_at === "string";
+    const signature = metricSignature(hit.metrics, { accomplished, missionStatus: "LIVE" });
+    if (signature === row.last_metric_signature) continue; // Nothing visible changed.
+    if (!row.mission_created_by) continue;
+
+    // Atomic compare-and-set, so two overlapping invocations cannot both edit.
+    const claim = await admin.rpc("claim_social_mission_card_refresh", {
+      _target_id: row.target_id,
+      _signature: signature,
+    });
+    if (claim.error || claim.data !== true) continue;
+
+    const editState = await requestCardEdit({
+      supabaseUrl,
+      serviceKey,
+      workspaceId: row.workspace_id,
+      missionId: row.mission_id,
+      targetId: row.target_id,
+      actorUserId: row.mission_created_by,
+      // Deterministic per target+signature: a replay can never double-edit.
+      clientRequestId: `se5-metrics:${row.target_id}:${signature}`,
+      revision: Number(row.edit_revision ?? 0) + 1,
+    });
+    if (editState === "EDITED") stats.cardsEdited += 1;
+    // FAILED / AMBIGUOUS / empty: never retried inside this invocation.
+  }
+
+  return stats;
+}
+
 Deno.serve(async (request: Request) => {
   if (request.method !== "POST") {
     return json({ error: "Method not allowed" }, 405);
@@ -178,6 +378,15 @@ Deno.serve(async (request: Request) => {
   if (secretError || secretOk !== true) {
     return json({ error: "Unauthorized" }, 401);
   }
+
+  // SE-5 metrics phase first, so a pulse in this same invocation can quote the
+  // freshest STORED snapshot without performing any provider call of its own.
+  const metrics = await runMetricsRefresh(admin, SUPABASE_URL, SERVICE_KEY).catch(() => ({
+    missions: 0,
+    lookups: 0,
+    snapshots: 0,
+    cardsEdited: 0,
+  }));
 
   const { data: claimed, error: claimError } = await admin.rpc(
     "claim_due_social_mission_schedule_events",
@@ -207,10 +416,37 @@ Deno.serve(async (request: Request) => {
       }
 
       const keyboard = pulseKeyboard(event.canonical_url);
+
+      // SE-5 Pulse 2.0: STORED snapshot only. Zero provider calls here.
+      const { data: storedSnapshot } = await admin
+        .from("social_metric_snapshots")
+        .select("views, likes, comments, shares, saves")
+        .eq("mission_id", event.mission_id)
+        .eq("workspace_id", event.workspace_id)
+        .order("observed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const { data: missionRow } = await admin
+        .from("social_missions")
+        .select("accomplished_at")
+        .eq("id", event.mission_id)
+        .maybeSingle();
+      const storedMetrics = storedSnapshot
+        ? ({
+            views: (storedSnapshot as Record<string, number | null>)["views"] ?? null,
+            likes: (storedSnapshot as Record<string, number | null>)["likes"] ?? null,
+            comments: (storedSnapshot as Record<string, number | null>)["comments"] ?? null,
+            shares: (storedSnapshot as Record<string, number | null>)["shares"] ?? null,
+            saves: (storedSnapshot as Record<string, number | null>)["saves"] ?? null,
+          } as XCanonicalMetrics)
+        : null;
+      const pulseAccomplished =
+        typeof (missionRow as Record<string, unknown> | null)?.["accomplished_at"] === "string";
+
       // Exactly ONE sendMessage. Never sendPhoto, never the branded card.
       const outcome = await callTelegram(BOT_TOKEN, "sendMessage", {
         chat_id: event.telegram_chat_id,
-        text: PULSE_TEXT,
+        text: buildPulseText(storedMetrics, pulseAccomplished),
         // No allow_sending_without_reply: a pulse is meaningful ONLY as a
         // reply to the canonical mission card. If that card is gone, Telegram
         // rejects the send and the event is finalized FAILED rather than
@@ -357,5 +593,6 @@ Deno.serve(async (request: Request) => {
     completionsEdited,
     unresolved,
     failed,
+    metrics,
   });
 });

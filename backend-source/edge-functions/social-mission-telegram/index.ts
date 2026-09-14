@@ -59,7 +59,92 @@ import {
   type CanonicalMetrics,
   type MissionCardPlatform,
   type MissionCardStatus,
+  type MissionMilestone,
 } from "./card.ts";
+
+/**
+ * SE-5 — the launch-time official X read. Exactly ONE batch lookup of ONE post
+ * id, performed BEFORE the branded card is sent so the first visible card can
+ * carry real current metrics. Every failure is fail-soft: no snapshot is
+ * written, the mission is neither duplicated nor lost, and the card renders
+ * "Live metrics updating…" instead of fake zeroes.
+ */
+import {
+  lookupXPostMetrics,
+  minuteBucket,
+  availabilityOf,
+  X_PROVIDER,
+} from "../_shared/x-metrics.ts";
+
+const MILESTONE_TYPES = ["VIEWS", "LIKES", "REPLIES", "REPOSTS", "TOTAL_INTERACTIONS"] as const;
+
+/**
+ * SE-5 launch read. Fail-soft by construction:
+ * - returns void, so no caller can branch the mission on its outcome;
+ * - never throws;
+ * - performs at most ONE official lookup and never retries;
+ * - writes at most ONE snapshot, through the same RPC the runner uses, so
+ *   baseline capture and milestone evaluation stay in a single place.
+ */
+async function attemptLaunchMetricsRead(
+  admin: ReturnType<typeof createClient>,
+  workspaceId: string,
+  mission: LoadedRow,
+): Promise<void> {
+  try {
+    const bearer = Deno.env.get("X_API_BEARER_TOKEN") ?? "";
+    if (!bearer) return;
+
+    const postId = mission["social_post_id"];
+    if (typeof postId !== "string") return;
+    const { data: post } = await admin
+      .from("social_posts")
+      .select("platform, external_post_id")
+      .eq("id", postId)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (!post) return;
+    const row = post as LoadedRow;
+    if (String(row["platform"] ?? "") !== "x") return;
+    const externalId = row["external_post_id"];
+    if (typeof externalId !== "string" || !/^[0-9]{1,32}$/.test(externalId)) return;
+
+    const read = await lookupXPostMetrics(bearer, [externalId]);
+    if (!read.ok) return;
+    const found = read.posts.get(externalId);
+    if (!found) return;
+
+    await admin.rpc("record_social_mission_metric_snapshot", {
+      _mission_id: mission["id"] as string,
+      _provider: X_PROVIDER,
+      _observed_at: read.observedAt,
+      _poll_bucket: minuteBucket(Date.parse(read.observedAt)),
+      _views: found.metrics.views,
+      _likes: found.metrics.likes,
+      _comments: found.metrics.comments,
+      _shares: found.metrics.shares,
+      _saves: found.metrics.saves,
+      _availability: availabilityOf(found.metrics),
+      _metadata: { phase: "SE-5", source: "mission_launch" },
+    });
+  } catch {
+    // Fail-soft: a metrics problem must never prevent the mission card.
+  }
+}
+
+/** Milestone read ONLY from the mission's own immutable config snapshot. */
+function missionMilestone(mission: LoadedRow): MissionMilestone | null {
+  const metadata = mission["metadata"];
+  if (!metadata || typeof metadata !== "object") return null;
+  const config = (metadata as Record<string, unknown>)["effective_config"];
+  if (!config || typeof config !== "object") return null;
+  const raw = config as Record<string, unknown>;
+  const type = String(raw["milestone_type"] ?? "NONE").toUpperCase();
+  const target = Number(raw["milestone_target"]);
+  if (!(MILESTONE_TYPES as readonly string[]).includes(type)) return null;
+  if (!Number.isInteger(target) || target <= 0) return null;
+  return { type: type as MissionMilestone["type"], target };
+}
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -315,6 +400,9 @@ async function renderAuthoritativeCard(
     ticker: profile ? ((profile as LoadedRow)["ticker"] as string | null) ?? null : null,
     baseline: metricsFrom(mission, "baseline_"),
     latest: snapshot ? metricsFrom(snapshot as LoadedRow, "") : null,
+    accomplished: typeof mission["accomplished_at"] === "string",
+    endsAt: (mission["ends_at"] as string | null) ?? null,
+    milestone: missionMilestone(mission),
     // A photo caption is hard-limited by Telegram; the renderer refits instead
     // of risking a rejected transport.
     maxLength: transportKind === "PHOTO" ? TELEGRAM_CAPTION_MAX : TELEGRAM_TEXT_LIMIT,
@@ -543,6 +631,11 @@ async function handleSend(args: {
   // text transport. This is the ONLY point at which TEXT fallback is allowed.
   const logo = await resolveProjectLogo(admin, workspaceId);
   const desiredTransportKind: TransportKind = logo ? "PHOTO" : "TEXT";
+
+  // SE-5. ONE fail-soft official X read before the first card is rendered, so
+  // the launch card can show real current numbers. A failure here NEVER blocks
+  // the mission and NEVER writes a snapshot.
+  await attemptLaunchMetricsRead(admin, workspaceId, mission);
 
   // 3c. Render authoritatively, then durably claim the intent BEFORE transport.
   const rendered = await renderAuthoritativeCard(admin, workspaceId, mission, desiredTransportKind);

@@ -486,6 +486,8 @@ Deno.serve(async (req: Request) => {
     messageId: unknown;
     telegramUserId: number;
     argument: string;
+    /** SE-5 provenance only. Authorization is identical for every source. */
+    source?: "telegram_mission_command" | "telegram_link_finder";
   }) => {
     const { chatId, chatType, telegramUserId, argument } = args;
     const reply = (text: string) => sendMessage(TELEGRAM_BOT_TOKEN, chatId, text, { parse_mode: "HTML" });
@@ -658,6 +660,31 @@ Deno.serve(async (req: Request) => {
       });
       const finalizedOk = !finalizeError && finalized === true;
 
+      // SE-5 — unpin ONLY a pin CARTEL HQ itself recorded. A pin the community
+      // set by hand is never touched.
+      try {
+        const { data: pinRow } = await admin
+          .from("social_mission_targets")
+          .select("pinned_by_hq, telegram_message_id")
+          .eq("id", closeResult.target_id as string)
+          .maybeSingle();
+        const pinned = pinRow as { pinned_by_hq?: boolean; telegram_message_id?: number } | null;
+        if (pinned?.pinned_by_hq === true && typeof pinned.telegram_message_id === "number") {
+          const unpinned = await telegramJson(TELEGRAM_BOT_TOKEN, "unpinChatMessage", {
+            chat_id: chatId,
+            message_id: pinned.telegram_message_id,
+          }).then(() => true).catch(() => false);
+          if (unpinned) {
+            await admin.rpc("record_social_mission_target_pin", {
+              _target_id: closeResult.target_id,
+              _pinned: false,
+            });
+          }
+        }
+      } catch {
+        // Cosmetic only. A pin left in place never blocks the close.
+      }
+
       if (closeEditState === "EDITED") {
         await reply(
           finalizedOk
@@ -682,6 +709,8 @@ Deno.serve(async (req: Request) => {
       _canonical_url: parsed!.canonicalUrl,
       _external_post_id: parsed!.postId,
       _author_handle: parsed!.handle,
+      // SE-5 provenance only. It never changes authorization or behaviour.
+      _source: args.source === "telegram_link_finder" ? "telegram_link_finder" : "telegram_mission_command",
     });
     const result = (created ?? null) as
       | {
@@ -787,6 +816,56 @@ Deno.serve(async (req: Request) => {
         await reply("The mission card was delivered, but its 45-minute schedule could not be activated. Do not resend; close it with /mission close when you are done.");
         return;
       }
+      // SE-5 — command cleanup and optional auto-pin. Both run ONLY after the
+      // card is confirmed SENT and the schedule is active, so a failure here
+      // can never lose a mission. Both are best-effort and never retried.
+      try {
+        const { data: config } = await admin.rpc("social_mission_effective_config", {
+          _mission_id: result.mission_id,
+        });
+        const cfg = (config ?? {}) as Record<string, unknown>;
+
+        // Delete the raw `/mission <link>` command so the group sees the card,
+        // not the operator's command. Never deletes anything else.
+        // messageId <= 0 means there is no raw command to remove (Link Finder
+        // START): the member's own post must never be deleted.
+        if (cfg["delete_command_after_send"] !== false && messageId > 0) {
+          const deleted = await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
+            chat_id: chatId,
+            message_id: messageId,
+          }).then(() => true).catch(() => false);
+          if (deleted) {
+            await admin.rpc("record_social_mission_command_deleted", {
+              _target_id: result.target_id,
+              _command_message_id: messageId,
+            });
+          }
+        }
+
+        // Auto-pin defaults ON. The pin is recorded ONLY when Telegram accepts
+        // it, so completion can never unpin a pin CARTEL HQ did not set.
+        if (cfg["auto_pin_mission"] !== false) {
+          const sentMessageId = Number(
+            (transport as { telegramMessageId?: unknown } | null)?.telegramMessageId ?? NaN,
+          );
+          if (Number.isFinite(sentMessageId)) {
+            const pinned = await telegramJson(TELEGRAM_BOT_TOKEN, "pinChatMessage", {
+              chat_id: chatId,
+              message_id: sentMessageId,
+              disable_notification: true,
+            }).then(() => true).catch(() => false);
+            if (pinned) {
+              await admin.rpc("record_social_mission_target_pin", {
+                _target_id: result.target_id,
+                _pinned: true,
+              });
+            }
+          }
+        }
+      } catch {
+        // Cosmetic housekeeping only; never surfaced and never retried.
+      }
+
       // The branded card itself is the confirmation. No extra success text.
       return;
     }
@@ -1575,6 +1654,73 @@ Deno.serve(async (req: Request) => {
       const callbackChatId = callbackChat?.id != null ? String(callbackChat.id) : String(from.id);
       const linked = await getLinkedUser(String(from.id));
 
+      // SE-5 — X Link Finder decision. START reuses the EXACT `/mission`
+      // pipeline (including its live admin re-verification), so this button can
+      // never become a second, weaker way to launch a mission. IGNORE only
+      // closes the candidate.
+      const smStart = callbackData.match(/^sm_lf_start_([0-9a-f-]{36})$/i);
+      const smIgnore = callbackData.match(/^sm_lf_ignore_([0-9a-f-]{36})$/i);
+      if ((smStart || smIgnore) && (callbackChat?.type === "group" || callbackChat?.type === "supergroup")) {
+        const candidateId = String((smStart ?? smIgnore)![1]);
+        const { data: resolved } = await admin.rpc("resolve_social_mission_link_candidate", {
+          _candidate_id: candidateId,
+          _telegram_user_id: Number(from.id),
+          _decision: smStart ? "START" : "IGNORE",
+        });
+        const decision = (resolved ?? {}) as {
+          outcome?: string;
+          reason?: string;
+          canonical_url?: string;
+          prompt_message_id?: number;
+          telegram_message_id?: number;
+        };
+
+        if (decision.outcome === "EXPIRED") {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "This suggestion has expired.");
+          return json({ ok: true });
+        }
+        if (decision.outcome === "ALREADY_RESOLVED") {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "This suggestion was already handled.");
+          return json({ ok: true });
+        }
+        if (decision.outcome !== "START" && decision.outcome !== "IGNORE") {
+          await answerCallback(
+            TELEGRAM_BOT_TOKEN,
+            callback.id,
+            decision.reason === "actor_not_operator"
+              ? "Only this project's owners and admins can do this."
+              : "This suggestion could not be handled.",
+          );
+          return json({ ok: true });
+        }
+
+        // The prompt is transient in both directions.
+        if (typeof decision.prompt_message_id === "number") {
+          await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
+            chat_id: callbackChatId,
+            message_id: decision.prompt_message_id,
+          }).catch(() => null);
+        }
+
+        if (decision.outcome === "IGNORE") {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Ignored.");
+          return json({ ok: true });
+        }
+
+        await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Starting the mission…");
+        await runMissionCommand({
+          chatId: callbackChatId,
+          chatType: String(callbackChat?.type ?? ""),
+          updateId: update?.update_id,
+          // The ORIGINAL post message is never deleted as a "command".
+          messageId: null,
+          telegramUserId: Number(from.id),
+          argument: String(decision.canonical_url ?? ""),
+          source: "telegram_link_finder",
+        });
+        return json({ ok: true });
+      }
+
       // C7.3 — Project Inbox console callbacks. Private chat only; every one
       // re-authorizes inside the service-only RPC before exposing anything.
       const piWorkspace = callbackData.match(/^pi_w_([0-9a-f-]{36})$/i);
@@ -2139,7 +2285,57 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true });
     }
 
-
+    // SE-5 — X Link Finder. A human posting a link to the project's OWN
+    // official X account in a connected group gets a private-to-the-group
+    // START / IGNORE prompt. It NEVER starts a mission by itself, never
+    // deletes the member's message, and the RPC fails closed on every
+    // ownership fact (connected group, link finder enabled, official handle).
+    if (
+      from?.is_bot !== true &&
+      !text.startsWith("/") &&
+      (chat?.type === "group" || chat?.type === "supergroup")
+    ) {
+      const linkMatch = text.match(
+        /https:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/[A-Za-z0-9_]{1,15}\/status\/[0-9]{1,32}(?![0-9])/i,
+      );
+      const parsedLink = linkMatch ? parseXStatusUrl(String(linkMatch[0])) : null;
+      if (parsedLink) {
+        const { data: candidate } = await admin.rpc("create_social_mission_link_candidate", {
+          _telegram_chat_id: Number(chatId),
+          _telegram_message_id: Number(message?.message_id),
+          _telegram_user_id: Number(from.id),
+          _canonical_url: parsedLink.canonicalUrl,
+          _external_post_id: parsedLink.postId,
+          _author_handle: parsedLink.handle,
+          _ttl_minutes: 15,
+        });
+        const created = (candidate ?? {}) as { outcome?: string; candidate_id?: string };
+        // EXISTING = a webhook retry or a repost of the same message: silent.
+        if (created.outcome === "CREATED" && created.candidate_id) {
+          const prompt = await telegramJson(TELEGRAM_BOT_TOKEN, "sendMessage", {
+            chat_id: chatId,
+            text: "This is an official project post. Admins can start a Social Mission for it.",
+            reply_to_message_id: Number(message?.message_id),
+            disable_notification: true,
+            disable_web_page_preview: true,
+            reply_markup: {
+              inline_keyboard: [[
+                { text: "START MISSION", callback_data: `sm_lf_start_${created.candidate_id}` },
+                { text: "IGNORE", callback_data: `sm_lf_ignore_${created.candidate_id}` },
+              ]],
+            },
+          }).catch(() => null);
+          const promptId = (prompt as { message_id?: number } | null)?.message_id;
+          if (typeof promptId === "number") {
+            await admin.rpc("attach_social_mission_link_prompt", {
+              _candidate_id: created.candidate_id,
+              _prompt_message_id: promptId,
+            });
+          }
+          return json({ ok: true });
+        }
+      }
+    }
 
     const isHelp = /^\/help(?:@\w+)?$/i.test(text);
     const isRoadmap = /^\/roadmap(?:@\w+)?$/i.test(text);
