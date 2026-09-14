@@ -69,7 +69,7 @@ check("1.3 the lookup asks for exactly the documented tweet fields", buildLookup
 check("1.4 the bearer is read only from X_API_BEARER_TOKEN", /X_API_BEARER_TOKEN/.test(runnerCode) && /X_API_BEARER_TOKEN/.test(transportCode));
 check("1.5 no secret value is ever logged from the shared module", !/console\.(log|error|warn)/.test(sharedCode));
 check("1.6 the bearer never reaches a URL", !/\$\{bearerToken\}/.test(sharedCode.replace(/Bearer \$\{bearerToken\}/g, "")));
-check("1.7 the token name is never echoed back to a caller", !/reason:\s*`?[^`"']*bearer/i.test(sharedCode));
+check("1.7 no failure reason string mentions the token", (sharedCode.match(/reason: "[^"]*"/g) ?? []).every((r) => !/bearer|token/i.test(r)));
 
 // ---------------------------------------------------------------------------
 // 2. Metric mapping — exact, and never zero-filled
@@ -146,7 +146,7 @@ check("6.6 a pulse omits an unknown metric instead of printing zero", /pulseMetr
 // ---------------------------------------------------------------------------
 check("7.1 the card still renders as a branded photo card", /sendPhoto/.test(transportCode));
 check("7.2 edits still target the same message", /editMessageCaption|editMessageText/.test(transportCode));
-check("7.3 the canonical URL button is preserved", /inline_keyboard/.test(transportCode));
+check("7.3 the canonical URL button is preserved", /reply_markup/.test(transportCode) && /replyMarkup/.test(transportCode));
 check("7.4 pending metrics are stated, not zeroed", /LIVE_METRICS_PENDING/.test(cardCode));
 check("7.5 remaining time is approximate, never a live countdown", /approximateRemaining/.test(cardCode) && /~/.test(cardCode));
 check("7.6 ACCOMPLISHED is a card state, not a database status", /MISSION_STATE_ACCOMPLISHED/.test(cardCode) && !/'ACCOMPLISHED'/.test(sqlCode.replace(/accomplished_at/g, "")));
@@ -156,9 +156,9 @@ check("7.7 the milestone line renders progress against the target", /milestonePr
 // 8. Command cleanup and pin safety
 // ---------------------------------------------------------------------------
 check("8.1 the command is deleted only after a confirmed send", webhookCode.indexOf('transportState === "SENT"') < webhookCode.indexOf("deleteMessage"));
-check("8.2 command deletion honours the workspace setting", /delete_command_after_send !== false/.test(webhookCode));
+check("8.2 command deletion honours the workspace setting", /\["delete_command_after_send"\] !== false/.test(webhookCode));
 check("8.3 a link-finder start never deletes a member post", /messageId > 0/.test(webhookCode));
-check("8.4 auto pin honours the workspace setting", /auto_pin_mission !== false/.test(webhookCode));
+check("8.4 auto pin honours the workspace setting", /\["auto_pin_mission"\] !== false/.test(webhookCode));
 check("8.5 only a card HQ pinned is ever unpinned", /pinned_by_hq/.test(webhookCode) && /unpinChatMessage/.test(webhookCode));
 check("8.6 pin state is recorded through the dedicated RPC", /record_social_mission_target_pin/.test(webhookCode) && /record_social_mission_target_pin/.test(sqlCode));
 
