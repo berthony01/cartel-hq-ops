@@ -1143,24 +1143,23 @@ Deno.serve(async (req: Request) => {
         // Cosmetic housekeeping only; never surfaced and never retried.
       }
 
-      // SE-7/SE-8 — the two REQUIRED canonical objectives run here, AFTER the
-      // confirmed send and active schedule and OUTSIDE the best-effort block,
-      // because their result decides whether the caller may finalize. Source
-      // cleanup is a no-op returning true for every non-Link-Finder source.
+      // SE-9 — the REQUIRED canonical objective runs here, AFTER the confirmed
+      // send and active schedule and OUTSIDE the best-effort block, because its
+      // result decides whether the caller may finalize. The Link Finder source
+      // post is no longer part of this gate: it was deleted at detection time.
       const sentMessageId = Number(
         (transport as { telegramMessageId?: unknown } | null)?.telegramMessageId ?? NaN,
       );
-      const sourceClean = await ensureLinkFinderSourceCleanup(String(result.target_id ?? ""));
       const canonicalPinned = await ensureCanonicalMissionPin(
         String(result.target_id ?? ""),
         autoPinEnabled,
         Number.isFinite(sentMessageId) ? sentMessageId : null,
       );
 
-      // Confirmed card + active schedule + clean source + required pin. Only
-      // now may the caller finalize its own transient state (Link Finder
-      // candidate, then its prompt).
-      if (sourceClean && canonicalPinned) {
+      // Confirmed card + active schedule + required pin. Only now may the
+      // caller finalize its own transient state (Link Finder candidate, then
+      // its prompt).
+      if (canonicalPinned) {
         await args.onMissionSettled?.({
           kind: "ACTIVATED",
           missionId: String(result.mission_id ?? ""),
@@ -1168,7 +1167,7 @@ Deno.serve(async (req: Request) => {
         });
       } else {
         console.warn(
-          `[SE-8] canonical lifecycle incomplete: cleanup=${sourceClean} pin=${canonicalPinned}`,
+          `[SE-9] canonical lifecycle incomplete: pin=${canonicalPinned}`,
         );
       }
 
