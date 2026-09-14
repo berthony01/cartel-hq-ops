@@ -89,7 +89,7 @@ check("1.5 no pulse-mark table remains", !/social_mission_pulse_marks/.test(allS
 check("1.6 no tier milestone table remains", !/social_mission_milestone_events/.test(allSources));
 check("1.7 no duplicate performance-history table remains", !/social_mission_performance_history/.test(allSources));
 check("1.8 no Tier 1-10 machinery remains", !/TIER_COUNT|DEFAULT_TIER_TARGETS|highestTierMet|tierIsMet|highest_tier/.test(allSources));
-check("1.9 no five-minute refresh contract remains", !/REFRESH_INTERVAL_MINUTES|refreshBucket|five-minute|5-minute/i.test(allSources));
+check("1.9 no five-minute refresh contract remains", !/REFRESH_INTERVAL_MINUTES|refreshBucket|five-minute|\bfive minute|(?<![0-9])5-minute/i.test(allSources));
 check("1.10 no threshold-crossing pulse contract remains", !/evaluatePulseCrossings|PulseCrossing|pulse_deltas|DEFAULT_PULSE_DELTAS/.test(allSources));
 check("1.11 no dead import of the removed shared module remains", !/mission-progress/.test(allSources));
 check("1.12 no Connect X / OAuth surface was added", !/oauth|connect x/i.test(missionsUiCode + settingsUiCode + missionsLibCode));
@@ -113,7 +113,9 @@ check("2.12 the card edit is gated on a changed metric signature", /metricSignat
 // ---------------------------------------------------------------------------
 // 3. Requirement 3 — Pulse 2.0: preset cadence, stored metrics, ZERO X reads.
 // ---------------------------------------------------------------------------
-const pulseBranch = runnerRaw.slice(runnerRaw.indexOf('event.event_type === "PULSE"'), runnerRaw.indexOf('event.event_type === "PULSE"') + 4000);
+const pulseStart = runnerRaw.indexOf('event.event_type === "PULSE"');
+const pulseEnd = runnerRaw.indexOf('"COMPLETE"', pulseStart);
+const pulseBranch = runnerRaw.slice(pulseStart, pulseEnd > pulseStart ? pulseEnd : pulseStart + 4000);
 check("3.1 the PULSE branch performs no provider lookup", !/lookupXPostMetrics/.test(pulseBranch));
 check("3.2 the PULSE branch reads STORED snapshots only", /social_metric_snapshots/.test(pulseBranch));
 check("3.3 a pulse is exactly one reply-only sendMessage", /sendMessage/.test(pulseBranch) && !/sendPhoto/.test(pulseBranch));
@@ -153,7 +155,7 @@ check("4.3 STANDARD pulses at 3, 8, 15, 25 and 35 minutes", offsets("STANDARD") 
 check("4.4 QUICK runs 20 minutes at 2, 5, 10, 15", presets["QUICK"]?.durationMinutes === 20 && offsets("QUICK") === "2,5,10,15");
 check("4.5 MAJOR_ANNOUNCEMENT runs 120 minutes at 5, 15, 30, 60, 90", presets["MAJOR_ANNOUNCEMENT"]?.durationMinutes === 120 && offsets("MAJOR_ANNOUNCEMENT") === "5,15,30,60,90");
 check("4.6 LAUNCH runs 60 minutes at 3, 8, 15, 30, 45", presets["LAUNCH"]?.durationMinutes === 60 && offsets("LAUNCH") === "3,8,15,30,45");
-check("4.7 the default preset is STANDARD", defaultMissionSettings().preset === "STANDARD");
+check("4.7 the default preset is STANDARD", defaultMissionSettings("w").default_preset === "STANDARD");
 check("4.8 the SQL seeds preset-driven scheduled PULSE rows", /activate_social_mission_schedule/.test(se5Sql) && /'PULSE'/.test(se5Sql));
 check("4.9 the effective config is snapshotted per mission at launch", /effective_config/.test(se5Sql));
 check("4.10 the due-list and pulses read the frozen snapshot, not live settings", /metadata/.test(runnerCode) && /effective_config/.test(runnerCode));
