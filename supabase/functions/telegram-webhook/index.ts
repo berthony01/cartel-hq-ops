@@ -674,6 +674,69 @@ Deno.serve(async (req: Request) => {
       return !recordError && recordedOk === true;
     };
 
+    /**
+     * SE-8 — IDEMPOTENT CANONICAL PIN.
+     *
+     * Pins the EXACT canonical mission card — never the source X link and never
+     * the transient START/IGNORE prompt. The stored target row is authoritative:
+     *
+     *   - a target already recorded as `pinned_by_hq` costs no Telegram call;
+     *   - auto-pin disabled means the objective is not required at all;
+     *   - `record_social_mission_target_pin(..., true)` is written ONLY after
+     *     Telegram confirms the pin, and its failure to persist is a failure;
+     *   - permission refusal or transport uncertainty is FALSE, never success.
+     */
+    const ensureCanonicalMissionPin = async (
+      targetId: string,
+      autoPinEnabled: boolean,
+      fallbackMessageId: number | null,
+    ): Promise<boolean> => {
+      if (!autoPinEnabled) return true;
+      if (!targetId) return false;
+
+      const { data: pinRow, error: pinReadError } = await admin
+        .from("social_mission_targets")
+        .select("pinned_by_hq, telegram_message_id")
+        .eq("id", targetId)
+        .maybeSingle();
+      if (pinReadError) return false;
+      const target = pinRow as
+        | { pinned_by_hq?: boolean | null; telegram_message_id?: number | null }
+        | null;
+      if (target?.pinned_by_hq === true) return true;
+
+      const cardMessageId = Number(target?.telegram_message_id ?? fallbackMessageId ?? NaN);
+      if (!Number.isFinite(cardMessageId) || cardMessageId <= 0) return false;
+
+      let pinned = false;
+      try {
+        await telegramJson(TELEGRAM_BOT_TOKEN, "pinChatMessage", {
+          chat_id: chatId,
+          message_id: cardMessageId,
+          disable_notification: true,
+        });
+        pinned = true;
+      } catch (error) {
+        // ONLY Telegram's definitive "nothing changed" counts as already-pinned.
+        const detail = boundedReason((error as Error)?.message);
+        pinned = /message is not modified|chat not modified|chat_not_modified/i.test(detail);
+        if (!pinned) console.warn(`[SE-8] canonical pin refused: ${detail}`);
+      }
+      if (!pinned) return false;
+
+      const { error: recordError } = await admin.rpc("record_social_mission_target_pin", {
+        _target_id: targetId,
+        _pinned: true,
+      });
+      if (recordError) {
+        console.warn(`[SE-8] pin recorded in Telegram but not persisted: ${boundedReason(recordError.message)}`);
+        return false;
+      }
+      return true;
+    };
+
+
+
 
 
     // SE-4B — `/mission close` shares the exact same authorization chain and
