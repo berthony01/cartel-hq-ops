@@ -685,7 +685,7 @@ Deno.serve(async (request: Request) => {
   return json({
     ok: true,
     claimed: events.length,
-    pulsesSent,
+    legacyPulsesRetired,
     completionsEdited,
     unresolved,
     failed,
