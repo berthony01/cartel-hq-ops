@@ -573,118 +573,25 @@ Deno.serve(async (request: Request) => {
   }
 
   const events = (claimed ?? []) as ClaimedEvent[];
-  let pulsesSent = 0;
+  let legacyPulsesRetired = 0;
   let completionsEdited = 0;
   let unresolved = 0;
   let failed = 0;
 
   for (const event of events) {
     if (event.event_type === "PULSE") {
-      if (event.telegram_message_id === null) {
-        await admin.rpc("finish_social_mission_schedule_event", {
-          _event_id: event.event_id,
-          _state: "FAILED",
-          _telegram_message_id: null,
-          _last_error: "The canonical mission message id is missing.",
-        });
-        failed += 1;
-        continue;
-      }
-
-      const keyboard = pulseKeyboard(event.canonical_url);
-
-      // SE-5 Pulse 2.0: STORED snapshot only. Zero provider calls here.
-      const { data: storedSnapshot } = await admin
-        .from("social_metric_snapshots")
-        .select("views, likes, comments, shares, saves")
-        .eq("mission_id", event.mission_id)
-        .eq("workspace_id", event.workspace_id)
-        .order("observed_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      const { data: missionRow } = await admin
-        .from("social_missions")
-        .select("accomplished_at")
-        .eq("id", event.mission_id)
-        .maybeSingle();
-      const storedMetrics = storedSnapshot
-        ? ({
-            views: (storedSnapshot as Record<string, number | null>)["views"] ?? null,
-            likes: (storedSnapshot as Record<string, number | null>)["likes"] ?? null,
-            comments: (storedSnapshot as Record<string, number | null>)["comments"] ?? null,
-            shares: (storedSnapshot as Record<string, number | null>)["shares"] ?? null,
-            saves: (storedSnapshot as Record<string, number | null>)["saves"] ?? null,
-          } as XCanonicalMetrics)
-        : null;
-      const pulseAccomplished =
-        typeof (missionRow as Record<string, unknown> | null)?.["accomplished_at"] === "string";
-
-      // Exactly ONE sendMessage. Never sendPhoto, never the branded card.
-      const outcome = await callTelegram(BOT_TOKEN, "sendMessage", {
-        chat_id: event.telegram_chat_id,
-        text: buildPulseText(storedMetrics, pulseAccomplished),
-        // No allow_sending_without_reply: a pulse is meaningful ONLY as a
-        // reply to the canonical mission card. If that card is gone, Telegram
-        // rejects the send and the event is finalized FAILED rather than
-        // posting an orphan reminder.
-        reply_to_message_id: event.telegram_message_id,
-        disable_web_page_preview: true,
-        disable_notification: true,
-        ...(keyboard ? { reply_markup: keyboard } : {}),
-      });
-
-      if (outcome.kind === "ok" && outcome.messageId !== null) {
-        const deleteAfter = new Date(Date.now() + PULSE_LIFETIME_SECONDS * 1000).toISOString();
-        const { error: cleanupError } = await admin.from("telegram_message_cleanup_jobs").insert({
-          workspace_id: event.workspace_id,
-          group_connection_id: event.group_connection_id,
-          telegram_chat_id: event.telegram_chat_id,
-          telegram_message_id: outcome.messageId,
-          cleanup_kind: "social_mission_pulse",
-          delete_after: deleteAfter,
-          next_attempt_at: deleteAfter,
-        });
-
-        if (cleanupError) {
-          // A pulse with no durable expiry path is removed immediately. One
-          // attempt only, and never a replacement message.
-          await callTelegram(BOT_TOKEN, "deleteMessage", {
-            chat_id: event.telegram_chat_id,
-            message_id: outcome.messageId,
-          });
-        }
-
-        await admin.rpc("finish_social_mission_schedule_event", {
-          _event_id: event.event_id,
-          _state: "SENT",
-          _telegram_message_id: outcome.messageId,
-          _last_error: cleanupError ? "Pulse cleanup could not be scheduled; the pulse was deleted." : null,
-        });
-        pulsesSent += 1;
-        continue;
-      }
-
-      if (outcome.kind === "rejected") {
-        await admin.rpc("finish_social_mission_schedule_event", {
-          _event_id: event.event_id,
-          _state: "FAILED",
-          _telegram_message_id: null,
-          _last_error: outcome.description.slice(0, 1000),
-        });
-        failed += 1;
-        continue;
-      }
-
-      // Uncertain, or an ok response with no message id: never retried.
-      await admin.rpc("finish_social_mission_schedule_event", {
+      // SE-6 correction (A): scheduled, time-based pulses are superseded.
+      // Requirement 4 allows a pulse ONLY on a metric threshold crossing, so a
+      // legacy row that predates this migration must never reach Telegram. It
+      // is retired through the dedicated service-only RPC using the existing
+      // terminal CANCELLED state; no send, no edit, no retry.
+      await admin.rpc("retire_legacy_social_mission_pulse_event", {
         _event_id: event.event_id,
-        _state: "AMBIGUOUS",
-        _telegram_message_id: null,
-        _last_error: (outcome.kind === "uncertain" ? outcome.description : "Telegram confirmed no message id.").slice(0, 1000),
       });
-      unresolved += 1;
+      legacyPulsesRetired += 1;
       continue;
     }
+
 
     // COMPLETE. The mission is ALREADY COMPLETED in the database; this is the
     // single same-message edit attempt and it can never revert completion.
