@@ -112,3 +112,36 @@ network, zero database, zero Telegram, zero X.
 3. Deploy `_shared/x-metrics.ts` **and** `_shared/mission-progress.ts`
    alongside `social-mission-runner` and `social-mission-telegram`, then
    redeploy `telegram-webhook`.
+
+## SE-6 hardening corrections (A)-(G)
+
+- **A — threshold-only pulses.** `activate_social_mission_schedule` now seeds the
+  `COMPLETE` lifecycle event only. The migration retires every PENDING legacy
+  `PULSE` row to `CANCELLED`, and the runner retires any straggler through
+  `retire_legacy_social_mission_pulse_event` without ever sending Telegram.
+  Manual close, the schedule table and COMPLETE behaviour are unchanged.
+- **B — preset immutability.** A BEFORE INSERT trigger freezes the workspace's
+  active saved preset (id, name, base preset, mission code, tier targets, pulse
+  deltas) into `metadata.effective_config`. The metrics due-list reads those
+  frozen values; it no longer joins live workspace settings, so editing a preset
+  cannot change a mission already running. Missions without a snapshot fall back
+  to the shared defaults.
+- **C — canonical footer.** `MISSION_FOOTER_LEGEND` is rendered on every LIVE
+  card, inside the existing progressive length safety for the 1024-character
+  branded caption.
+- **D — provider-independent lifecycle.** `MISSION_ACTIVE` is recorded at
+  confirmed canonical delivery, not after an X read. An AFTER UPDATE trigger on
+  `social_missions` records `MISSION_COMPLETED` and finalizes performance
+  history for every LIVE -> COMPLETED transition, scheduled or manual close.
+- **E — one tier bundle.** Backend and HQ tier defaults are byte-identical and
+  asserted as such.
+- **F — saved preset UX.** A saved preset returns its persisted row, becomes the
+  selected active preset, and is described as reaching the next mission only
+  once mission defaults are saved. Mission code stays optional; wallet target
+  remains postponed.
+- **G — truthful pulse count.** Performance history counts threshold-crossing
+  pulses recorded on `social_mission_pulse_marks.pulse_count`.
+
+The single runner still ticks every minute for lifecycle precision; the X
+provider due-list enforces at most one provider read per mission per
+five-minute bucket. No second cron job exists.
