@@ -2120,6 +2120,7 @@ Deno.serve(async (req: Request) => {
           canonical_url?: string;
           prompt_message_id?: number;
           telegram_message_id?: number;
+          source_deleted_at?: string | null;
         };
 
         if (decision.outcome === "EXPIRED") {
