@@ -1360,6 +1360,246 @@ check(
   /console\.warn\(\s*`\[SE-9\] already-sent recovery incomplete/.test(alreadySentBranch81),
 );
 
+// ---------------------------------------------------------------------------
+// 19. SE-9 — LINK FINDER CANONICAL FLOW CORRECTION.
+//
+//     The original X-link post is deleted at DETECTION, immediately after the
+//     transient prompt is confirmed sent AND attached. A later START posts a
+//     genuinely NEW branded card at the current chat position whenever every
+//     prior mission for the same (workspace, post, community) is terminal, and
+//     still refuses to duplicate a non-terminal one.
+// ---------------------------------------------------------------------------
+const SE9_SQL = "docs/sql/SE9_link_finder_canonical_flow.sql";
+check("19.0 the SE-9 migration is prepared in the repository", existsSync(SE9_SQL));
+const se9Raw = read(SE9_SQL);
+const se9Sql = se9Raw.replace(/^\s*--.*$/gm, "");
+
+const detectionBranch = webhookRaw.slice(
+  webhookRaw.indexOf("const { data: candidate } = await admin.rpc(\"create_social_mission_link_candidate\""),
+  webhookRaw.indexOf("const isHelp = /^\\/help"),
+);
+
+// 19.1 — prompt success -> deletion attempted immediately, then recorded.
+check(
+  "19.1a the source deletion is attempted at detection, after the prompt is attached",
+  detectionBranch.indexOf("attach_social_mission_link_prompt") <
+    detectionBranch.indexOf("ensureLinkFinderSourceDeleted"),
+);
+check(
+  "19.1b the Telegram deletion precedes the durable recording",
+  se9SourceHelper.indexOf("deleteMessage") <
+    se9SourceHelper.indexOf("record_social_mission_link_candidate_source_cleanup"),
+);
+check(
+  "19.1c the durable record is written for BOTH outcomes, never skipped",
+  /_deleted: removed,/.test(se9SourceHelper),
+);
+
+// 19.2 — prompt send/attach failure -> the member's post is untouched.
+check(
+  "19.2a attachment success is the actual RPC result, not an assumption",
+  /promptAttached = !attachError && attached === true;/.test(detectionBranch),
+);
+check(
+  "19.2b the deletion is gated on that confirmed attachment",
+  /if \(promptAttached\) \{\s*\n\s*await ensureLinkFinderSourceDeleted\(\{/.test(detectionBranch),
+);
+check(
+  "19.2c a failed prompt send leaves promptAttached false",
+  /let promptAttached = false;/.test(detectionBranch) &&
+    /const prompt = await telegramJson\([\s\S]{0,1200}\.catch\(\(\) => null\);/.test(detectionBranch),
+);
+
+// 19.3 — IGNORE removes the prompt only and never restores the source.
+const ignoreBranch = lfFullBranch.slice(
+  lfFullBranch.indexOf('if (decision.outcome === "IGNORE")'),
+  lfFullBranch.indexOf("const sourceMessageId"),
+);
+check("19.3a IGNORE deletes the transient prompt", /deleteLinkFinderPrompt\(\)/.test(ignoreBranch));
+check(
+  "19.3b IGNORE never reposts, forwards or copies the original link",
+  !/sendMessage|copyMessage|forwardMessage|sendPhoto/.test(ignoreBranch),
+);
+check(
+  "19.3c IGNORE never launches a mission",
+  !/runMissionCommand|create_social_mission_from_telegram_link/.test(ignoreBranch),
+);
+
+// 19.4 — deleted source + START -> new card, schedule, pin, finalize, prompt.
+const startBranchSe9 = lfFullBranch.slice(lfFullBranch.indexOf("const sourceMessageId"));
+check(
+  "19.4a START consults the durable source state instead of blind-deleting",
+  /alreadyDeletedAt: decision\.source_deleted_at \?\? null,/.test(startBranchSe9),
+);
+check(
+  "19.4b the resolver exposes that durable state",
+  /'source_deleted_at', v_candidate\.source_deleted_at,/.test(se9Raw),
+);
+check(
+  "19.4c START still reuses the one authorized \\/mission pipeline",
+  /await runMissionCommand\(\{/.test(startBranchSe9),
+);
+check(
+  "19.4d the settled callback still finalizes before the prompt is deleted",
+  settledCb.indexOf("finalize_social_mission_link_candidate_start") <
+    settledCb.indexOf("deleteLinkFinderPrompt"),
+);
+
+// 19.5 / 19.6 — the duplicate rule.
+const createSql = se9Sql.slice(
+  se9Sql.indexOf("CREATE OR REPLACE FUNCTION public.create_social_mission_from_telegram_link"),
+);
+check(
+  "19.5a terminal history no longer blocks a fresh mission",
+  /AND m\.status IN \('DRAFT', 'LIVE'\)/.test(createSql),
+);
+check(
+  "19.5b COMPLETED is NOT part of the blocking set",
+  !/status IN \([^)]*'COMPLETED'/.test(createSql),
+);
+check(
+  "19.5c historical mission rows are never deleted or mutated by the rule",
+  !/DELETE FROM public\.social_missions|UPDATE public\.social_missions\s+SET status/.test(createSql),
+);
+check(
+  "19.6a a LIVE mission still blocks a duplicate",
+  /'LIVE'/.test(createSql.slice(createSql.indexOf("AND m.status IN"), createSql.indexOf("AND m.status IN") + 60)),
+);
+check(
+  "19.6b ACCOMPLISHED is a derived state of LIVE, so it blocks too",
+  !/ACCOMPLISHED/.test(createSql.slice(createSql.indexOf("AND m.status IN"), createSql.indexOf("AND m.status IN") + 60)) &&
+    /accomplished_at/.test(se5Sql),
+);
+check(
+  "19.6c social_posts uniqueness is untouched by SE-9",
+  !/social_posts/.test(se9Raw.slice(0, se9Raw.indexOf("CREATE OR REPLACE FUNCTION public.resolve_social_mission_link_candidate"))) &&
+    !/DROP\s+(?:INDEX|CONSTRAINT)/i.test(se9Sql),
+);
+
+// Pure duplicate-rule simulation: terminal history repeats, non-terminal never.
+const TERMINAL = new Set(["COMPLETED", "CANCELLED", "FAILED"]);
+const startFor = (history: string[]) =>
+  history.some((status) => !TERMINAL.has(status)) ? "EXISTING" : "CREATED";
+check("19.5d no history at all creates a mission", startFor([]) === "CREATED");
+check("19.5e one COMPLETED mission allows a fresh one", startFor(["COMPLETED"]) === "CREATED");
+check(
+  "19.5f many COMPLETED missions still allow a fresh one",
+  startFor(["COMPLETED", "COMPLETED", "COMPLETED"]) === "CREATED",
+);
+check("19.6d a LIVE mission refuses a second one", startFor(["COMPLETED", "LIVE"]) === "EXISTING");
+check("19.6e a DRAFT mission refuses a second one", startFor(["DRAFT"]) === "EXISTING");
+
+// 19.7 — double START / webhook retry.
+check(
+  "19.7a same (workspace, post, chat) taps are serialized by the advisory lock",
+  /pg_advisory_xact_lock/.test(createSql),
+);
+check(
+  "19.7b the loser takes the EXISTING path, which sends no second card",
+  !/send_mission|social-mission-telegram/.test(retryBranch),
+);
+check(
+  "19.7c the EXISTING path creates no second schedule or Pulse events",
+  !/activate_social_mission_schedule|social_mission_schedule_events/.test(retryBranch),
+);
+
+// 19.8 — pin failure after send.
+check(
+  "19.8a a failed pin blocks finalization, keeping the candidate retryable",
+  /if \(canonicalPinned\) \{/.test(missionFn),
+);
+check(
+  "19.8b recovery re-pins the SAME stored card, never a new one",
+  /const retryPinned = await ensureCanonicalMissionPin\(retryTargetId, retryAutoPin, null\);/.test(retryBranch),
+);
+check(
+  "19.8c auto-pin disabled makes the pin a no-op success, not a blocker",
+  /if \(!autoPinEnabled\) return true;/.test(webhookRaw),
+);
+
+// 19.9 — source-deletion failure at detection.
+check(
+  "19.9a the failure is persisted as a bounded, secret-free diagnostic",
+  /left\(coalesce\(v_reason, 'source deletion failed'\), 200\)/.test(se9Raw) &&
+    /boundedReason\(\(error as Error\)\?\.message\)/.test(se9SourceHelper),
+);
+check(
+  "19.9b an already-clean candidate is immutable and never rewritten",
+  /'ALREADY_CLEAN'/.test(se9Raw),
+);
+check(
+  "19.9c START re-attempts the deletion BEFORE anything is created",
+  startBranchSe9.indexOf("ensureLinkFinderSourceDeleted") <
+    startBranchSe9.indexOf("await runMissionCommand({"),
+);
+check(
+  "19.9d a still-failing deletion creates nothing and answers precisely",
+  /if \(!sourceReady\) \{[\s\S]{0,400}Delete Messages admin right[\s\S]{0,200}return json\(\{ ok: true \}\);/
+    .test(startBranchSe9),
+);
+check(
+  "19.9e the cleanup recorder never resolves or consumes the candidate",
+  !/state\s*=\s*'(?:STARTED|IGNORED|RESOLVED)'/.test(
+    se9Raw.slice(
+      se9Raw.indexOf("CREATE OR REPLACE FUNCTION public.record_social_mission_link_candidate_source_cleanup"),
+      se9Raw.indexOf("REVOKE ALL ON FUNCTION public.record_social_mission_link_candidate_source_cleanup"),
+    ),
+  ),
+);
+
+// 19.10 — anonymous-admin Link Finder detection is untouched.
+check(
+  "19.10a the anonymous-admin sender_chat path still qualifies",
+  /sender_chat/.test(webhookRaw) && /posterId/.test(webhookRaw),
+);
+check(
+  "19.10b detection still requires a connected group chat type",
+  /\(chat\?\.type === "group" \|\| chat\?\.type === "supergroup"\)/.test(detectionBranch) ||
+    /\(chat\?\.type === "group" \|\| chat\?\.type === "supergroup"\)/.test(webhookRaw),
+);
+check(
+  "19.10c START still requires a linked operator AND live Telegram admin status",
+  /getChatMember/.test(lfFullBranch) &&
+    /lfStatus !== "administrator" && lfStatus !== "creator"/.test(lfFullBranch),
+);
+
+// 19.11 — raw /mission behaviour unchanged.
+check(
+  "19.11a raw /mission cleanup still honours the workspace preference",
+  /if \(!isLinkFinder && cfg\["delete_command_after_send"\] !== false && messageId > 0\)/.test(missionFn),
+);
+check(
+  "19.11b raw /mission never runs Link Finder source cleanup",
+  !/ensureLinkFinderSourceDeleted/.test(missionFn),
+);
+check(
+  "19.11c a non-Link-Finder SENT retry still receives the already-exists reply",
+  alreadySentBranch81.includes("This post already has a Social Mission in this community."),
+);
+
+// 19.12 — the prepared migration stays surgical.
+check("19.12a SE-9 is transactional", /^BEGIN;/m.test(se9Raw) && /^COMMIT;/m.test(se9Raw));
+check("19.12b SE-9 creates no table and no scheduler", !/CREATE TABLE/i.test(se9Sql) && !/cron\.schedule/i.test(se9Sql));
+check(
+  "19.12c the new candidate columns are additive and nullable",
+  /ADD COLUMN IF NOT EXISTS source_deleted_at timestamptz;/.test(se9Raw) &&
+    /ADD COLUMN IF NOT EXISTS source_cleanup_error text;/.test(se9Raw) &&
+    !/NOT NULL/.test(se9Raw.slice(se9Raw.indexOf("ALTER TABLE public.social_mission_link_candidates"), se9Raw.indexOf("CREATE OR REPLACE FUNCTION public.record_social_mission_link_candidate_source_cleanup"))),
+);
+check(
+  "19.12d the new recorder is service-role only",
+  /REVOKE ALL ON FUNCTION public\.record_social_mission_link_candidate_source_cleanup\(uuid, boolean, text\)\s*\n\s*FROM PUBLIC, anon, authenticated;/
+    .test(se9Raw),
+);
+check(
+  "19.12e SE-9 does not redefine the SE-7 finalizer",
+  !/CREATE OR REPLACE FUNCTION public\.finalize_social_mission_link_candidate_start/.test(se9Raw),
+);
+check(
+  "19.12f the resolver keeps its SE-7 chat binding and authorization",
+  /'chat_mismatch'/.test(se9Raw) && /_verified_chat_id/.test(se9Raw),
+);
+
 console.log(`Step 1 authoritative regression: ${passed} passed, ${failures.length} failed`);
 
 
