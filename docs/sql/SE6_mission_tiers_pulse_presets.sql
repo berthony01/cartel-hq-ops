@@ -426,7 +426,10 @@ BEGIN
          likes_mark = v_next_likes,
          shares_mark = v_next_shares,
          comments_mark = v_next_comments,
-         last_pulse_at = CASE WHEN jsonb_array_length(v_crossings) > 0 THEN now() ELSE last_pulse_at END
+         last_pulse_at = CASE WHEN jsonb_array_length(v_crossings) > 0 THEN now() ELSE last_pulse_at END,
+         -- SE-6 (G): one increment per announced crossing batch.
+         pulse_count = pulse_count + CASE WHEN jsonb_array_length(v_crossings) > 0 THEN 1 ELSE 0 END
+
    WHERE mission_id = _mission_id;
 
   RETURN jsonb_build_object(
