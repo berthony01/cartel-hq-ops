@@ -28,6 +28,7 @@ import {
   isClosingSoon,
   X_LINK_UNAVAILABLE_LABEL,
   isXLinkStatus,
+  MISSION_FOOTER_LEGEND as PROGRESS_FOOTER_LEGEND,
 } from "../backend-source/edge-functions/_shared/mission-progress.ts";
 
 import {
@@ -319,7 +320,7 @@ const se6LiveCard = renderMissionCard({
 check("C1 the rendered LIVE card contains the footer legend",
   se6LiveCard.text.includes(CARD_FOOTER_LEGEND));
 check("C2 the footer states the five-minute refresh",
-  /5 minutes/.test(CARD_FOOTER_LEGEND) && CARD_FOOTER_LEGEND === MISSION_FOOTER_LEGEND);
+  /5 minutes/.test(CARD_FOOTER_LEGEND) && CARD_FOOTER_LEGEND === PROGRESS_FOOTER_LEGEND);
 const se6CaptionCard = renderMissionCard({
   missionStatus: "LIVE",
   platform: "x",
