@@ -161,21 +161,27 @@ check("7.7 the milestone line renders progress against the target", /milestonePr
 // ---------------------------------------------------------------------------
 // RE-PINNED by the SE-7 hardening pass, not loosened. The old positional
 // heuristic assumed the FIRST `deleteMessage` in the file was the cleanup call;
-// the Link Finder cleanup helper is now declared earlier in the same function.
-// Both call sites are still reachable only after a confirmed send, which these
-// assertions now pin directly.
+// SE-9 re-pin: raw `/mission` command deletion is still reachable only after a
+// confirmed send, and the required canonical pin now shares that gate. The Link
+// Finder SOURCE post is no longer deleted here at all — it is removed at
+// detection time, immediately after the transient prompt is attached.
 check(
   "8.1 the command is deleted only after a confirmed send",
   webhookCode.indexOf('transportState === "SENT"') <
     webhookCode.indexOf('cfg["delete_command_after_send"]') &&
     webhookCode.indexOf('transportState === "SENT"') <
-      webhookCode.indexOf("const sourceClean = await ensureLinkFinderSourceCleanup("),
+      webhookCode.indexOf("const canonicalPinned = await ensureCanonicalMissionPin("),
 );
 check("8.2 command deletion honours the workspace setting", /\["delete_command_after_send"\] !== false/.test(webhookCode));
-// SE-7 supersedes "a link-finder start never deletes a member post": the source
-// X-link post IS deleted, but only after a confirmed send plus an active
-// schedule, and only for a real positive message id.
-check("8.3 a link-finder start deletes only a real positive source message id", /messageId > 0/.test(webhookCode) && /const ensureLinkFinderSourceCleanup/.test(webhookCode));
+// SE-9 supersedes SE-7 here: the source X-link post IS deleted, but at
+// detection, only after the transient prompt is confirmed sent AND attached,
+// and only for a real positive message id.
+check(
+  "8.3 a link-finder start deletes only a real positive source message id",
+  /messageId > 0/.test(webhookCode) &&
+    /const ensureLinkFinderSourceDeleted/.test(webhookCode) &&
+    /if \(!params\.candidateId \|\| !\(params\.sourceMessageId > 0\)\) return false;/.test(webhookCode),
+);
 
 check("8.4 auto pin honours the workspace setting", /\["auto_pin_mission"\] !== false/.test(webhookCode));
 check("8.5 only a card HQ pinned is ever unpinned", /pinned_by_hq/.test(webhookCode) && /unpinChatMessage/.test(webhookCode));

@@ -557,6 +557,70 @@ Deno.serve(async (req: Request) => {
   // No X API call, no metric read, no usage_ledger write, no polling, no
   // auto-retry and no duplicated card/photo logic: delivery is always the
   // existing `social-mission-telegram` transport.
+  /**
+   * SE-9 — LINK FINDER SOURCE CLEANUP, AT DETECTION TIME.
+   *
+   * The frozen SE-9 UX deletes the ORIGINAL X-link message as soon as the
+   * transient START/IGNORE prompt is confirmed sent AND attached to the
+   * candidate — no longer only after a successful START. The candidate row is
+   * the durable record of that outcome, and its real `telegram_message_id`
+   * survives deletion as provenance.
+   *
+   * Idempotent and honest:
+   *   - a candidate already recorded clean costs no Telegram call;
+   *   - Telegram definitively reporting the message as absent counts as clean;
+   *   - ANY other failure (permission refusal, transport uncertainty) records a
+   *     BOUNDED, secret-free diagnostic on the candidate and returns false, so
+   *     the prompt and the PENDING candidate stay fully retryable instead of
+   *     pretending success;
+   *   - a Telegram deletion that the database refuses to persist is a failure.
+   */
+  const ensureLinkFinderSourceDeleted = async (params: {
+    candidateId: string;
+    chatId: string;
+    sourceMessageId: number;
+    alreadyDeletedAt?: string | null;
+  }): Promise<boolean> => {
+    if (params.alreadyDeletedAt) return true;
+    if (!params.candidateId || !(params.sourceMessageId > 0)) return false;
+
+    let removed = false;
+    let reason = "";
+    try {
+      await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
+        chat_id: params.chatId,
+        message_id: params.sourceMessageId,
+      });
+      removed = true;
+    } catch (error) {
+      reason = boundedReason((error as Error)?.message);
+      // ONLY a definitive "it is already gone" counts as clean.
+      removed = /message to delete not found|message_id_invalid/i.test(reason);
+    }
+
+    const { data: recorded, error: recordError } = await admin.rpc(
+      "record_social_mission_link_candidate_source_cleanup",
+      {
+        _candidate_id: params.candidateId,
+        _deleted: removed,
+        _reason: removed ? null : (reason || "source deletion failed"),
+      },
+    );
+
+    if (!removed) {
+      console.warn(`[SE-9] link finder source deletion failed: ${reason || "unresolved"}`);
+      return false;
+    }
+    const outcome = String(((recorded ?? {}) as { outcome?: unknown })?.outcome ?? "");
+    if (recordError || (outcome !== "CLEAN" && outcome !== "ALREADY_CLEAN")) {
+      console.warn(
+        `[SE-9] source deletion not persisted: ${boundedReason(recordError?.message ?? outcome)}`,
+      );
+      return false;
+    }
+    return true;
+  };
+
   const runMissionCommand = async (args: {
     chatId: string;
     chatType: string;
@@ -613,66 +677,19 @@ Deno.serve(async (req: Request) => {
     const isLinkFinder = args.source === "telegram_link_finder";
 
     /**
-     * SE-7 — Link Finder SOURCE CLEANUP.
+     * SE-9 — Link Finder SOURCE CLEANUP MOVED TO DETECTION.
      *
-     * After a confirmed card send plus an active schedule the original X-link
-     * post MUST disappear so the branded card is what the group is left with.
-     * This is frozen product behaviour for Link Finder and is deliberately
-     * INDEPENDENT of the workspace `delete_command_after_send` preference,
-     * which continues to govern raw `/mission <link>` command cleanup only.
+     * The original X-link post is now deleted the moment the transient
+     * START/IGNORE prompt is confirmed sent and attached to the candidate, and
+     * the outcome is recorded durably on the candidate row itself. START
+     * therefore no longer waits on, gates on, or re-runs source deletion here:
+     * by the time this function runs the post is already gone (or the
+     * candidate carries a bounded retryable diagnostic and the callback has
+     * re-attempted the deletion before launching).
      *
-     * Idempotent and retryable:
-     *   - a durably recorded deletion for this exact target/message is
-     *     already-clean and costs no Telegram call;
-     *   - Telegram definitively reporting the message as absent satisfies the
-     *     objective and is recorded the same way;
-     *   - ANY other failure (permissions, transport uncertainty) returns
-     *     false, so the caller must NOT finalize the candidate or delete its
-     *     prompt. The card and schedule may already be live; pressing START
-     *     again re-runs only the cleanup, never a second card.
-     *
-     * For every non-Link-Finder source this is a no-op returning true, so
-     * `/mission` semantics are untouched.
+     * Raw `/mission <link>` command cleanup is UNCHANGED and still governed by
+     * the workspace `delete_command_after_send` preference further below.
      */
-    const ensureLinkFinderSourceCleanup = async (targetId: string): Promise<boolean> => {
-      if (!isLinkFinder) return true;
-      if (!(messageId > 0) || !targetId) return false;
-
-      const { data: targetRow, error: targetError } = await admin
-        .from("social_mission_targets")
-        .select("command_deleted_at, command_message_id")
-        .eq("id", targetId)
-        .maybeSingle();
-      if (targetError) return false;
-      const recorded = targetRow as
-        | { command_deleted_at?: string | null; command_message_id?: number | null }
-        | null;
-      if (recorded?.command_deleted_at && Number(recorded.command_message_id) === messageId) {
-        return true;
-      }
-
-      let removed = false;
-      try {
-        await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
-          chat_id: chatId,
-          message_id: messageId,
-        });
-        removed = true;
-      } catch (error) {
-        // ONLY a definitive "it is already gone" counts. A permission refusal
-        // or an unreachable Telegram leaves the objective unmet.
-        removed = /message to delete not found|message_id_invalid/i.test(
-          String((error as Error)?.message ?? ""),
-        );
-      }
-      if (!removed) return false;
-
-      const { data: recordedOk, error: recordError } = await admin.rpc(
-        "record_social_mission_command_deleted",
-        { _target_id: targetId, _command_message_id: messageId },
-      );
-      return !recordError && recordedOk === true;
-    };
 
     /**
      * SE-8 — IDEMPOTENT CANONICAL PIN.
@@ -1071,19 +1088,19 @@ Deno.serve(async (req: Request) => {
 
     const deliveryState = String(result.delivery_state ?? "");
     if (deliveryState === "SENT") {
-      // SE-8 RECOVERY. The card already exists, so NO second card is ever sent,
-      // the schedule is never re-activated and no duplicate Pulse event is ever
-      // created. The live permission preflight above has already re-run; this
-      // path only re-attempts the two REQUIRED objectives idempotently, and the
-      // caller may finalize only when BOTH are confirmed.
+      // SE-8/SE-9 RECOVERY. The card already exists, so NO second card is ever
+      // sent, the schedule is never re-activated and no duplicate Pulse event
+      // is ever created. The live permission preflight above has already
+      // re-run; this path re-attempts only the REQUIRED pin idempotently. The
+      // Link Finder source post was already removed at detection time, so it is
+      // no longer part of this gate.
       const retryTargetId = String(result.target_id ?? "");
       const { data: retryConfig } = await admin.rpc("social_mission_effective_config", {
         _mission_id: result.mission_id,
       });
       const retryAutoPin = ((retryConfig ?? {}) as Record<string, unknown>)["auto_pin_mission"] !== false;
-      const retryClean = await ensureLinkFinderSourceCleanup(retryTargetId);
       const retryPinned = await ensureCanonicalMissionPin(retryTargetId, retryAutoPin, null);
-      if (retryClean && retryPinned) {
+      if (retryPinned) {
         await args.onMissionSettled?.({
           kind: "ALREADY_SENT",
           missionId: String(result.mission_id ?? ""),
@@ -1091,7 +1108,7 @@ Deno.serve(async (req: Request) => {
         });
       } else {
         console.warn(
-          `[SE-8] already-sent recovery incomplete: cleanup=${retryClean} pin=${retryPinned}`,
+          `[SE-9] already-sent recovery incomplete: pin=${retryPinned}`,
         );
       }
       // SE-8.1 — Link Finder recovery leaves NO extra group text. The frozen UX
@@ -1190,24 +1207,23 @@ Deno.serve(async (req: Request) => {
         // Cosmetic housekeeping only; never surfaced and never retried.
       }
 
-      // SE-7/SE-8 — the two REQUIRED canonical objectives run here, AFTER the
-      // confirmed send and active schedule and OUTSIDE the best-effort block,
-      // because their result decides whether the caller may finalize. Source
-      // cleanup is a no-op returning true for every non-Link-Finder source.
+      // SE-9 — the REQUIRED canonical objective runs here, AFTER the confirmed
+      // send and active schedule and OUTSIDE the best-effort block, because its
+      // result decides whether the caller may finalize. The Link Finder source
+      // post is no longer part of this gate: it was deleted at detection time.
       const sentMessageId = Number(
         (transport as { telegramMessageId?: unknown } | null)?.telegramMessageId ?? NaN,
       );
-      const sourceClean = await ensureLinkFinderSourceCleanup(String(result.target_id ?? ""));
       const canonicalPinned = await ensureCanonicalMissionPin(
         String(result.target_id ?? ""),
         autoPinEnabled,
         Number.isFinite(sentMessageId) ? sentMessageId : null,
       );
 
-      // Confirmed card + active schedule + clean source + required pin. Only
-      // now may the caller finalize its own transient state (Link Finder
-      // candidate, then its prompt).
-      if (sourceClean && canonicalPinned) {
+      // Confirmed card + active schedule + required pin. Only now may the
+      // caller finalize its own transient state (Link Finder candidate, then
+      // its prompt).
+      if (canonicalPinned) {
         await args.onMissionSettled?.({
           kind: "ACTIVATED",
           missionId: String(result.mission_id ?? ""),
@@ -1215,7 +1231,7 @@ Deno.serve(async (req: Request) => {
         });
       } else {
         console.warn(
-          `[SE-8] canonical lifecycle incomplete: cleanup=${sourceClean} pin=${canonicalPinned}`,
+          `[SE-9] canonical lifecycle incomplete: pin=${canonicalPinned}`,
         );
       }
 
@@ -2104,6 +2120,7 @@ Deno.serve(async (req: Request) => {
           canonical_url?: string;
           prompt_message_id?: number;
           telegram_message_id?: number;
+          source_deleted_at?: string | null;
         };
 
         if (decision.outcome === "EXPIRED") {
@@ -2155,6 +2172,27 @@ Deno.serve(async (req: Request) => {
           return json({ ok: true });
         }
 
+        // SE-9 — the source post is normally already gone (deleted at
+        // detection). This is the bounded retry for the case where detection
+        // could not remove it: it runs BEFORE anything is created, costs no
+        // Telegram call when the candidate is already recorded clean, and on
+        // failure creates NOTHING, leaves the candidate PENDING and the prompt
+        // in place, and returns a precise permission message.
+        const sourceReady = await ensureLinkFinderSourceDeleted({
+          candidateId,
+          chatId: String(candidateChatId),
+          sourceMessageId,
+          alreadyDeletedAt: decision.source_deleted_at ?? null,
+        });
+        if (!sourceReady) {
+          await answerCallback(
+            TELEGRAM_BOT_TOKEN,
+            callback.id,
+            "I could not remove the original link post. Give @PepeCartelHQBot the Delete Messages admin right, then tap START MISSION again.",
+          );
+          return json({ ok: true });
+        }
+
         // SE-8 — the callback is answered from INSIDE the launch: a refused
         // permission preflight answers with the precise missing right and
         // nothing is created, while a passed preflight acknowledges the real
@@ -2165,8 +2203,8 @@ Deno.serve(async (req: Request) => {
           chatId: String(candidateChatId),
           chatType: String(callbackChat?.type ?? ""),
           updateId: update?.update_id,
-          // The candidate's own source message. On success it is deleted as
-          // the Link Finder source post — the frozen product behaviour.
+          // The candidate's own source message: provenance and idempotency key
+          // only. SE-9 already deleted the post itself at detection time.
           messageId: sourceMessageId,
           telegramUserId: Number(from.id),
           argument: String(decision.canonical_url ?? ""),
@@ -2861,10 +2899,26 @@ Deno.serve(async (req: Request) => {
             },
           }).catch(() => null);
           const promptId = (prompt as { message_id?: number } | null)?.message_id;
+          let promptAttached = false;
           if (typeof promptId === "number") {
-            await admin.rpc("attach_social_mission_link_prompt", {
-              _candidate_id: created.candidate_id,
-              _prompt_message_id: promptId,
+            const { data: attached, error: attachError } = await admin.rpc(
+              "attach_social_mission_link_prompt",
+              { _candidate_id: created.candidate_id, _prompt_message_id: promptId },
+            );
+            promptAttached = !attachError && attached === true;
+          }
+
+          // SE-9 — the ORIGINAL X-link message is removed here, immediately
+          // after the prompt is CONFIRMED sent AND attached, and never before.
+          // A prompt that failed to send or failed to attach leaves the
+          // member's post completely untouched. A failed deletion records a
+          // bounded diagnostic and leaves the PENDING candidate retryable; the
+          // START path re-attempts it before launching.
+          if (promptAttached) {
+            await ensureLinkFinderSourceDeleted({
+              candidateId: String(created.candidate_id),
+              chatId: String(chatId),
+              sourceMessageId: Number(message?.message_id),
             });
           }
           return json({ ok: true });
