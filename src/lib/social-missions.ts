@@ -354,21 +354,51 @@ function metricOf(row: MissionMetricSnapshotRow | null, key: MissionMetricKey): 
 }
 
 /**
- * Baseline-to-final change derived from the mission's OWN stored snapshots.
- * Honest by construction: an unknown end of a comparison makes the change
- * unknown rather than substituting zero.
+ * The mission's DURABLE baseline, written once from its very first stored
+ * snapshot. This is the only correct baseline: `view.snapshots` is capped at
+ * `MISSION_HISTORY_LIMIT`, so on a long mission the oldest LOADED reading is
+ * not the first reading and would produce a false change.
+ *
+ * A durable baseline metric that is NULL stays unknown. It is never filled in
+ * from a later snapshot and never coerced to 0.
+ */
+function durableBaselineOf(view: MissionView, key: MissionMetricKey): number | null {
+  const row = view.mission as unknown as Record<string, unknown>;
+  const value = row[`baseline_${key}`];
+  return typeof value === "number" ? value : null;
+}
+
+/** True once the mission recorded its first snapshot, i.e. a baseline exists. */
+function hasDurableBaseline(view: MissionView): boolean {
+  const observed = (view.mission as unknown as Record<string, unknown>)["baseline_observed_at"];
+  return typeof observed === "string" && observed.length > 0;
+}
+
+/**
+ * Baseline-to-final change for the mission. The baseline comes from the
+ * mission's durable `baseline_*` columns; the final comes from the newest
+ * stored snapshot. Honest by construction: an unknown end of a comparison
+ * makes the change unknown rather than substituting zero.
  */
 export function missionSummary(view: MissionView): MissionSummary {
   const status = view.mission.status.toUpperCase();
-  // `snapshots` is newest-first, so the baseline is the oldest loaded reading.
+  // `snapshots` is newest-first, so index 0 is the most recent stored reading.
   const newest = view.snapshots[0] ?? null;
-  const oldest = view.snapshots.length > 0 ? view.snapshots[view.snapshots.length - 1]! : null;
+  // LEGACY ONLY: missions predating the durable baseline have no
+  // `baseline_observed_at`. For those, and only those, the oldest LOADED
+  // reading is the best available baseline — there is no durable one to use.
+  const legacyOldest =
+    !hasDurableBaseline(view) && view.snapshots.length > 0
+      ? view.snapshots[view.snapshots.length - 1]!
+      : null;
+  const useDurable = hasDurableBaseline(view);
 
   const changes: MissionMetricChange[] = (
     ["views", "likes", "comments", "shares", "saves"] as const
   ).map((key) => {
-    const baseline = metricOf(oldest, key);
+    const baseline = useDurable ? durableBaselineOf(view, key) : metricOf(legacyOldest, key);
     const final = metricOf(newest, key);
+
     return {
       key,
       label: MISSION_METRIC_LABELS[key],
