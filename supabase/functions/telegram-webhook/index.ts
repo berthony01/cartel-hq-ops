@@ -520,6 +520,72 @@ Deno.serve(async (req: Request) => {
       return;
     }
 
+    const isLinkFinder = args.source === "telegram_link_finder";
+
+    /**
+     * SE-7 — Link Finder SOURCE CLEANUP.
+     *
+     * After a confirmed card send plus an active schedule the original X-link
+     * post MUST disappear so the branded card is what the group is left with.
+     * This is frozen product behaviour for Link Finder and is deliberately
+     * INDEPENDENT of the workspace `delete_command_after_send` preference,
+     * which continues to govern raw `/mission <link>` command cleanup only.
+     *
+     * Idempotent and retryable:
+     *   - a durably recorded deletion for this exact target/message is
+     *     already-clean and costs no Telegram call;
+     *   - Telegram definitively reporting the message as absent satisfies the
+     *     objective and is recorded the same way;
+     *   - ANY other failure (permissions, transport uncertainty) returns
+     *     false, so the caller must NOT finalize the candidate or delete its
+     *     prompt. The card and schedule may already be live; pressing START
+     *     again re-runs only the cleanup, never a second card.
+     *
+     * For every non-Link-Finder source this is a no-op returning true, so
+     * `/mission` semantics are untouched.
+     */
+    const ensureLinkFinderSourceCleanup = async (targetId: string): Promise<boolean> => {
+      if (!isLinkFinder) return true;
+      if (!(messageId > 0) || !targetId) return false;
+
+      const { data: targetRow, error: targetError } = await admin
+        .from("social_mission_targets")
+        .select("command_deleted_at, command_message_id")
+        .eq("id", targetId)
+        .maybeSingle();
+      if (targetError) return false;
+      const recorded = targetRow as
+        | { command_deleted_at?: string | null; command_message_id?: number | null }
+        | null;
+      if (recorded?.command_deleted_at && Number(recorded.command_message_id) === messageId) {
+        return true;
+      }
+
+      let removed = false;
+      try {
+        await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
+          chat_id: chatId,
+          message_id: messageId,
+        });
+        removed = true;
+      } catch (error) {
+        // ONLY a definitive "it is already gone" counts. A permission refusal
+        // or an unreachable Telegram leaves the objective unmet.
+        removed = /message to delete not found|message_id_invalid/i.test(
+          String((error as Error)?.message ?? ""),
+        );
+      }
+      if (!removed) return false;
+
+      const { data: recordedOk, error: recordError } = await admin.rpc(
+        "record_social_mission_command_deleted",
+        { _target_id: targetId, _command_message_id: messageId },
+      );
+      return !recordError && recordedOk === true;
+    };
+
+
+
     // SE-4B — `/mission close` shares the exact same authorization chain and
     // reads no X link at all.
     const isClose = String(argument ?? "").trim().toLowerCase() === "close";
@@ -773,14 +839,20 @@ Deno.serve(async (req: Request) => {
 
     const deliveryState = String(result.delivery_state ?? "");
     if (deliveryState === "SENT") {
-      // A retry. The card already exists, so NO second card is ever sent, but
-      // the caller may still finish its own cleanup/finalization exactly once.
-      await args.onMissionSettled?.({
-        kind: "ALREADY_SENT",
-        missionId: String(result.mission_id ?? ""),
-        targetId: String(result.target_id ?? ""),
-      });
+      // A retry. The card already exists, so NO second card is ever sent. This
+      // is the recovery path for a first attempt that delivered the card but
+      // could not remove the source post: cleanup is retried FIRST, and only a
+      // clean result lets the caller finalize.
+      const retryClean = await ensureLinkFinderSourceCleanup(String(result.target_id ?? ""));
+      if (retryClean) {
+        await args.onMissionSettled?.({
+          kind: "ALREADY_SENT",
+          missionId: String(result.mission_id ?? ""),
+          targetId: String(result.target_id ?? ""),
+        });
+      }
       await reply("This post already has a Social Mission in this community.");
+
       return;
     }
 
@@ -848,13 +920,10 @@ Deno.serve(async (req: Request) => {
         });
         const cfg = (config ?? {}) as Record<string, unknown>;
 
-        // Remove the message that launched this mission so the group sees the
-        // card, not the trigger: the raw `/mission <link>` command, or — for
-        // Link Finder START — the original X-link post itself, which is the
-        // frozen SE-7 product behaviour. Never deletes anything else, and only
-        // ever after a confirmed send plus an active schedule.
-
-        if (cfg["delete_command_after_send"] !== false && messageId > 0) {
+        // Raw `/mission <link>` command cleanup ONLY, governed by the workspace
+        // preference exactly as before. Link Finder source cleanup is handled
+        // separately below because it is mandatory and must be retryable.
+        if (!isLinkFinder && cfg["delete_command_after_send"] !== false && messageId > 0) {
           const deleted = await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
             chat_id: chatId,
             message_id: messageId,
@@ -866,6 +935,7 @@ Deno.serve(async (req: Request) => {
             });
           }
         }
+
 
         // Auto-pin defaults ON for the frozen Step 1 experience. The pin is
         // recorded ONLY when Telegram accepts it, so completion can never
@@ -895,13 +965,23 @@ Deno.serve(async (req: Request) => {
         // Cosmetic housekeeping only; never surfaced and never retried.
       }
 
-      // Confirmed card + active schedule. Only now may the caller finalize its
-      // own transient state (Link Finder prompt + candidate).
-      await args.onMissionSettled?.({
-        kind: "ACTIVATED",
-        missionId: String(result.mission_id ?? ""),
-        targetId: String(result.target_id ?? ""),
-      });
+      // SE-7 — the mandatory Link Finder source cleanup runs here, AFTER the
+      // confirmed send and active schedule and OUTSIDE the best-effort
+      // housekeeping block, because its result decides whether the caller may
+      // finalize. A no-op returning true for every other source.
+      const sourceClean = await ensureLinkFinderSourceCleanup(String(result.target_id ?? ""));
+
+      // Confirmed card + active schedule + clean source. Only now may the
+      // caller finalize its own transient state (Link Finder candidate, then
+      // its prompt).
+      if (sourceClean) {
+        await args.onMissionSettled?.({
+          kind: "ACTIVATED",
+          missionId: String(result.mission_id ?? ""),
+          targetId: String(result.target_id ?? ""),
+        });
+      }
+
 
       // The branded card itself is the confirmation. No extra success text.
       return;
@@ -1856,14 +1936,30 @@ Deno.serve(async (req: Request) => {
           // prompt, the source post and the PENDING candidate all survive for
           // a clean retry.
           onMissionSettled: async (settled) => {
+            // FINALIZE FIRST. The candidate is the durable record; the prompt
+            // is only a transient button. Removing the prompt before the
+            // database agrees would leave an invisible, unrecoverable
+            // suggestion. A failed or rejected finalization therefore leaves
+            // the prompt in place and the candidate PENDING for a clean retry.
+            const { data: finalized, error: finalizeError } = await admin.rpc(
+              "finalize_social_mission_link_candidate_start",
+              {
+                _candidate_id: candidateId,
+                _telegram_user_id: Number(from.id),
+                _verified_chat_id: candidateChatId,
+                _mission_id: settled.missionId,
+              },
+            );
+            const finalization = (finalized ?? {}) as { outcome?: string; mission_id?: string };
+            const finalOutcome = String(finalization.outcome ?? "");
+            const sameMission = finalOutcome === "FINALIZED"
+              || (finalOutcome === "ALREADY_FINALIZED"
+                && String(finalization.mission_id ?? "") === settled.missionId);
+            if (finalizeError || !sameMission) return;
+
             await deleteLinkFinderPrompt();
-            await admin.rpc("finalize_social_mission_link_candidate_start", {
-              _candidate_id: candidateId,
-              _telegram_user_id: Number(from.id),
-              _verified_chat_id: candidateChatId,
-              _mission_id: settled.missionId,
-            });
           },
+
         });
         return json({ ok: true });
 
@@ -2437,9 +2533,13 @@ Deno.serve(async (req: Request) => {
 
     // SE-5 — X Link Finder. A human posting a link to the project's OWN
     // official X account in a connected group gets a private-to-the-group
-    // START / IGNORE prompt. It NEVER starts a mission by itself, never
-    // deletes the member's message, and the RPC fails closed on every
+    // START / IGNORE prompt. It NEVER starts a mission by itself, nothing is
+    // deleted at detection time, and the RPC fails closed on every
     // ownership fact (connected group, link finder enabled, official handle).
+    // SE-7: if an admin later presses START and the mission reaches a
+    // confirmed card plus an active schedule, THAT post is then deleted so the
+    // branded card is what the group is left with. IGNORE never deletes it.
+
     //
     // Anonymous group admins are delivered by Telegram as a bot-like sender
     // (`GroupAnonymousBot`) with `sender_chat` pointing at the group itself.

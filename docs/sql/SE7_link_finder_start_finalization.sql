@@ -162,6 +162,11 @@ DECLARE
   v_actor_user_id uuid;
   v_mission_workspace uuid;
   v_target_chat bigint;
+  v_target_id uuid;
+  v_delivery_state text;
+  v_ends_at timestamptz;
+  v_schedule_active boolean;
+
 BEGIN
   IF _candidate_id IS NULL OR _telegram_user_id IS NULL
      OR _verified_chat_id IS NULL OR _mission_id IS NULL THEN
@@ -180,7 +185,13 @@ BEGIN
     RETURN jsonb_build_object('outcome', 'REJECTED', 'reason', 'chat_mismatch');
   END IF;
 
+  -- ALREADY_FINALIZED is reported ONLY for the very mission this candidate is
+  -- already bound to. A different mission id is a deterministic mismatch, never
+  -- a silent success.
   IF v_candidate.state = 'STARTED' THEN
+    IF v_candidate.mission_id IS DISTINCT FROM _mission_id THEN
+      RETURN jsonb_build_object('outcome', 'REJECTED', 'reason', 'mission_mismatch');
+    END IF;
     RETURN jsonb_build_object(
       'outcome', 'ALREADY_FINALIZED',
       'candidate_id', _candidate_id,
@@ -206,8 +217,8 @@ BEGIN
 
   -- The mission must genuinely belong to this candidate's workspace AND have a
   -- target in this candidate's own chat.
-  SELECT m.workspace_id, t.telegram_chat_id
-    INTO v_mission_workspace, v_target_chat
+  SELECT m.workspace_id, t.telegram_chat_id, t.id, t.delivery_state, m.ends_at
+    INTO v_mission_workspace, v_target_chat, v_target_id, v_delivery_state, v_ends_at
     FROM public.social_missions m
     JOIN public.social_mission_targets t
       ON t.mission_id = m.id AND t.workspace_id = m.workspace_id
@@ -219,6 +230,33 @@ BEGIN
      OR v_target_chat IS DISTINCT FROM v_candidate.telegram_chat_id THEN
     RETURN jsonb_build_object('outcome', 'REJECTED', 'reason', 'mission_not_bound');
   END IF;
+
+  -- DATABASE TRUTH, not "a mission exists in this chat". The candidate may only
+  -- become terminal STARTED once the canonical card is durably recorded as SENT
+  -- and the schedule this webhook claims to have activated actually exists.
+  IF v_delivery_state IS DISTINCT FROM 'SENT' THEN
+    RETURN jsonb_build_object('outcome', 'REJECTED', 'reason', 'card_not_sent');
+  END IF;
+
+  IF v_ends_at IS NULL THEN
+    RETURN jsonb_build_object('outcome', 'REJECTED', 'reason', 'schedule_not_active');
+  END IF;
+
+  -- The durable COMPLETE event seeded by activate_social_mission_schedule is
+  -- the authoritative proof of an active schedule. No new scheduler, no new
+  -- state: this is the same row the runner already drives.
+  SELECT EXISTS (
+    SELECT 1
+      FROM public.social_mission_schedule_events e
+     WHERE e.mission_id = _mission_id
+       AND e.target_id = v_target_id
+       AND e.event_type = 'COMPLETE'
+  ) INTO v_schedule_active;
+
+  IF NOT COALESCE(v_schedule_active, false) THEN
+    RETURN jsonb_build_object('outcome', 'REJECTED', 'reason', 'schedule_not_active');
+  END IF;
+
 
   UPDATE public.social_mission_link_candidates
      SET state = 'STARTED',
@@ -435,7 +473,20 @@ BEGIN
     RETURN jsonb_build_object('outcome', 'REJECTED', 'reason', 'handle_not_official');
   END IF;
 
+  -- 6b. CONCURRENCY GUARD. The bare ON CONFLICT DO NOTHING claim above is what
+  --     makes a retry possible, so it can no longer be relied on to serialize
+  --     two simultaneous callbacks for the same post in the same chat. There is
+  --     no unique constraint on (workspace, post, chat) across missions, so a
+  --     transaction-scoped advisory lock keyed on exactly that tuple serializes
+  --     them: the loser waits, then sees the winner's mission at step 8 and
+  --     returns EXISTING. The lock is released automatically at COMMIT or
+  --     ROLLBACK. No new table, no new scheduler, no new state.
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended(v_workspace_id::text || ':' || v_post_external || ':' || _telegram_chat_id::text, 0)
+  );
+
   -- 7. Get-or-create the social post. An existing row is PRESERVED as-is.
+
   INSERT INTO public.social_posts (
     workspace_id, platform, external_post_id, canonical_url, author_handle, content_text, metadata
   )

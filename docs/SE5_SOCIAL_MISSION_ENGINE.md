@@ -17,7 +17,11 @@ create a secret.
    and `Status: LIVE · ~Nm remaining` / `Status: ACCOMPLISHED`.
 3. **Command cleanup and auto-pin.** After a *confirmed* send the raw `/mission`
    command is deleted (setting-gated) and the card is pinned (default ON). Only
-   a card HQ pinned is ever unpinned. A member's own post is never deleted.
+   a card HQ pinned is ever unpinned. SE-7 supersedes the original "a member's
+   own post is never deleted" rule for Link Finder only: after an authorized
+   START reaches a confirmed card plus an active schedule, the original X-link
+   post is deleted (mandatory, not setting-gated). IGNORE never deletes it.
+
 4. **Pulse 2.0.** Reply-only `sendMessage`, built from the **latest stored
    snapshot**, never from a live fetch, with the existing 120-second cleanup.
 5. **Milestones.** `NONE | VIEWS | LIKES | REPLIES | REPOSTS |

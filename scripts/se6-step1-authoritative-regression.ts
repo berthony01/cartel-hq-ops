@@ -781,10 +781,13 @@ check(
   "15.27 a retry finding the card already sent settles without sending again",
   /kind: "ALREADY_SENT"/.test(webhookRaw),
 );
+// RE-PINNED by the SE-7 hardening pass, not loosened: the order is now
+// finalizer FIRST, prompt deletion only after the database agrees.
 check(
-  "15.28 Link Finder cleanup and finalization run only inside that callback",
-  /onMissionSettled: async \(settled\) => \{[\s\S]{0,400}deleteLinkFinderPrompt\(\)[\s\S]{0,400}finalize_social_mission_link_candidate_start/.test(lfFullBranch),
+  "15.28 Link Finder finalization then prompt cleanup run only inside that callback",
+  /onMissionSettled: async \(settled\) => \{[\s\S]{0,900}finalize_social_mission_link_candidate_start[\s\S]{0,900}deleteLinkFinderPrompt\(\)/.test(lfFullBranch),
 );
+
 check(
   "15.29 the prompt is NOT deleted before the mission is attempted",
   lfFullBranch.indexOf("await runMissionCommand(") <
@@ -864,7 +867,214 @@ check("15.45 SE-7 adds no scheduler", !/cron\.schedule/i.test(se7Sql));
 check("15.46 SE-7 declares itself prepare-only", /PREPARE ONLY/.test(read(SE7_SQL)));
 check("15.47 SE-7 is transactional", /^BEGIN;/m.test(se7Sql) && /COMMIT;\s*$/.test(se7Sql.trimEnd() + "\n"));
 
+// ---------------------------------------------------------------------------
+// 16. SE-7 HARDENING — cleanup/finalization ordering and database truth.
+// ---------------------------------------------------------------------------
+const missionFn = webhookRaw.slice(
+  webhookRaw.indexOf("const runMissionCommand = async (args: {"),
+  webhookRaw.indexOf("// ---- Launch Watch helpers"),
+);
+
+// 16.a — Link Finder source cleanup is MANDATORY and preference-independent.
+check(
+  "16.1 a dedicated Link Finder source cleanup helper exists",
+  /const ensureLinkFinderSourceCleanup = async \(targetId: string\): Promise<boolean>/.test(missionFn),
+);
+check(
+  "16.2 the helper is a no-op for every non-Link-Finder source",
+  /if \(!isLinkFinder\) return true;/.test(missionFn),
+);
+check(
+  "16.3 Link Finder cleanup does NOT consult delete_command_after_send",
+  !/delete_command_after_send/.test(
+    missionFn.slice(
+      missionFn.indexOf("const ensureLinkFinderSourceCleanup"),
+      missionFn.indexOf("return !recordError && recordedOk === true;"),
+    ),
+  ),
+);
+check(
+  "16.4 the /mission command cleanup keeps the workspace preference",
+  /if \(!isLinkFinder && cfg\["delete_command_after_send"\] !== false && messageId > 0\)/.test(missionFn),
+);
+check(
+  "16.5 a durably recorded deletion for the same message is already-clean",
+  /command_deleted_at && Number\(recorded\.command_message_id\) === messageId/.test(missionFn),
+);
+check(
+  "16.6 a definitive Telegram 'already gone' satisfies the objective",
+  /message to delete not found\|message_id_invalid/.test(missionFn),
+);
+check(
+  "16.7 a permission/transport failure does NOT count as clean",
+  /if \(!removed\) return false;/.test(missionFn),
+);
+check(
+  "16.8 successful cleanup is recorded through the existing RPC",
+  /record_social_mission_command_deleted"?,?\s*\n?\s*\{ _target_id: targetId, _command_message_id: messageId \}/.test(missionFn),
+);
+check(
+  "16.9 cleanup only reports clean when the recording persisted",
+  /return !recordError && recordedOk === true;/.test(missionFn),
+);
+
+// 16.b — fresh ACTIVATED path ordering: cleanup -> settled -> finalize -> prompt.
+const idxActivate = missionFn.indexOf("activate_social_mission_schedule");
+const idxCleanupCall = missionFn.indexOf("const sourceClean = await ensureLinkFinderSourceCleanup(");
+// lastIndexOf: the first `kind: "ACTIVATED"` is the callback's TYPE union.
+const idxActivatedSettle = missionFn.lastIndexOf('kind: "ACTIVATED"');
+
+check("16.10 cleanup runs after schedule activation", idxActivate > 0 && idxActivate < idxCleanupCall);
+check("16.11 cleanup runs BEFORE the settled callback", idxCleanupCall > 0 && idxCleanupCall < idxActivatedSettle);
+check(
+  "16.12 the settled callback fires only when the source is clean",
+  /if \(sourceClean\) \{\s*\n\s*await args\.onMissionSettled\?\.\(\{\s*\n\s*kind: "ACTIVATED"/.test(missionFn),
+);
+check(
+  "16.13 cleanup sits OUTSIDE the best-effort housekeeping try/catch",
+  idxCleanupCall > missionFn.indexOf("// Cosmetic housekeeping only; never surfaced and never retried."),
+);
+
+const settledCb = webhookRaw.slice(
+  webhookRaw.indexOf("onMissionSettled: async (settled) => {"),
+  webhookRaw.indexOf("return json({ ok: true });", webhookRaw.indexOf("onMissionSettled: async (settled) => {")),
+);
+check(
+  "16.14 the finalizer is called BEFORE the prompt is deleted",
+  settledCb.indexOf("finalize_social_mission_link_candidate_start") <
+    settledCb.indexOf("await deleteLinkFinderPrompt();"),
+);
+check(
+  "16.15 the finalizer RPC error is actually inspected",
+  /const \{ data: finalized, error: finalizeError \} = await admin\.rpc\(/.test(settledCb),
+);
+check(
+  "16.16 only FINALIZED or a same-mission ALREADY_FINALIZED counts",
+  /finalOutcome === "FINALIZED"[\s\S]{0,200}finalOutcome === "ALREADY_FINALIZED"[\s\S]{0,200}String\(finalization\.mission_id \?\? ""\) === settled\.missionId/.test(settledCb),
+);
+check(
+  "16.17 a failed or rejected finalization leaves the prompt in place",
+  /if \(finalizeError \|\| !sameMission\) return;/.test(settledCb),
+);
+
+// 16.c — ALREADY_SENT retry: cleanup first, no second card.
+const alreadySentBranch = missionFn.slice(
+  missionFn.indexOf('if (deliveryState === "SENT") {'),
+  missionFn.indexOf('if (deliveryState === "SENDING"'),
+);
+check(
+  "16.18 the retry branch runs cleanup before settling",
+  alreadySentBranch.indexOf("ensureLinkFinderSourceCleanup") <
+    alreadySentBranch.indexOf('kind: "ALREADY_SENT"'),
+);
+check(
+  "16.19 the retry only settles when cleanup succeeded",
+  /if \(retryClean\) \{/.test(alreadySentBranch),
+);
+check(
+  "16.20 the retry never sends a second card",
+  !/send_mission/.test(alreadySentBranch) && !/social-mission-telegram/.test(alreadySentBranch),
+);
+check(
+  "16.21 the retry never re-activates or re-pins",
+  !/activate_social_mission_schedule|pinChatMessage/.test(alreadySentBranch),
+);
+
+// 16.d — finalizer enforces database truth.
+const se7Raw = read(SE7_SQL);
+const se7Hardened = se7Raw.replace(/^\s*--.*$/gm, "");
+const finalizerSql = se7Hardened.slice(
+  se7Hardened.indexOf("CREATE OR REPLACE FUNCTION public.finalize_social_mission_link_candidate_start"),
+  se7Hardened.indexOf("REVOKE ALL ON FUNCTION public.finalize_social_mission_link_candidate_start"),
+);
+check(
+  "16.22 ALREADY_FINALIZED requires the SAME mission id",
+  /v_candidate\.mission_id IS DISTINCT FROM _mission_id[\s\S]{0,200}'mission_mismatch'/.test(finalizerSql),
+);
+check(
+  "16.23 a first finalization requires the target to be SENT",
+  /v_delivery_state IS DISTINCT FROM 'SENT'[\s\S]{0,200}'card_not_sent'/.test(finalizerSql),
+);
+check(
+  "16.24 a first finalization requires a persisted ends_at",
+  /v_ends_at IS NULL[\s\S]{0,200}'schedule_not_active'/.test(finalizerSql),
+);
+check(
+  "16.25 schedule proof uses the durable COMPLETE event for this target",
+  /social_mission_schedule_events[\s\S]{0,300}e\.event_type = 'COMPLETE'/.test(finalizerSql),
+);
+check(
+  "16.26 the finalizer invents no new scheduler",
+  !/cron\.schedule|pg_net/.test(finalizerSql),
+);
+check(
+  "16.27 all existing actor/chat/operator/workspace checks survive",
+  /chat_mismatch/.test(finalizerSql) && /actor_not_linked/.test(finalizerSql) &&
+    /is_workspace_operator/.test(finalizerSql) && /mission_not_bound/.test(finalizerSql),
+);
+check(
+  "16.28 the finalizer stays service-only",
+  /REVOKE ALL ON FUNCTION public\.finalize_social_mission_link_candidate_start\(uuid, bigint, bigint, uuid\)\s*\n\s*FROM PUBLIC, anon, authenticated;/.test(se7Hardened) &&
+    /GRANT EXECUTE ON FUNCTION public\.finalize_social_mission_link_candidate_start\(uuid, bigint, bigint, uuid\) TO service_role;/.test(se7Hardened),
+);
+
+// 16.e — concurrency: two simultaneous callbacks cannot make two missions.
+check(
+  "16.29 a transaction-scoped advisory lock serializes same (workspace, post, chat)",
+  /PERFORM pg_advisory_xact_lock\(/.test(se7Hardened),
+);
+check(
+  "16.30 the lock key is exactly the workspace, post and chat tuple",
+  /hashtextextended\(v_workspace_id::text \|\| ':' \|\| v_post_external \|\| ':' \|\| _telegram_chat_id::text, 0\)/.test(se7Hardened),
+);
+check(
+  "16.31 the lock is taken BEFORE the get-or-create post and mission lookup",
+  se7Hardened.indexOf("pg_advisory_xact_lock") < se7Hardened.indexOf("INSERT INTO public.social_posts"),
+);
+check(
+  "16.32 the loser still returns the winner's mission, never a duplicate",
+  /'outcome', 'EXISTING',\s*\n\s*'reason', 'mission_already_exists'/.test(se7Hardened),
+);
+// Pure model of the serialized retry: one mission per (workspace, post, chat).
+const missions = new Map<string, string>();
+const getOrCreateMission = (key: string, id: string) => {
+  if (!missions.has(key)) missions.set(key, id);
+  return missions.get(key)!;
+};
+const tupleKey = "ws-1:2095597789229056360:-1003835963432";
+check("16.33 the first serialized caller creates the mission", getOrCreateMission(tupleKey, "m-1") === "m-1");
+check("16.34 a concurrent second caller reuses it", getOrCreateMission(tupleKey, "m-2") === "m-1");
+check("16.35 exactly one mission exists for the tuple", missions.size === 1);
+
+// 16.f — preserved invariants.
+check(
+  "16.36 IGNORE still never deletes the source X-link message",
+  !/sourceMessageId|ensureLinkFinderSourceCleanup/.test(
+    lfFullBranch.slice(
+      lfFullBranch.indexOf('if (decision.outcome === "IGNORE")'),
+      lfFullBranch.indexOf("const sourceMessageId"),
+    ),
+  ),
+);
+check(
+  "16.37 pin recording is still confirmation-only",
+  /if \(pinned\) \{\s*\n\s*await admin\.rpc\("record_social_mission_target_pin"/.test(missionFn),
+);
+check(
+  "16.38 START still remains PENDING until finalization",
+  !/state = CASE WHEN v_decision = 'START' THEN 'STARTED'/.test(se7Hardened),
+);
+check(
+  "16.39 the detection comment no longer claims the member post is never deleted",
+  !/never\s*\n?\s*\/\/ deletes the member's message/.test(webhookRaw),
+);
+check(
+  "16.40 SE-7 still creates no table and adds no scheduler",
+  !/CREATE TABLE/i.test(se7Hardened) && !/cron\.schedule/i.test(se7Hardened),
+);
+
 console.log(`Step 1 authoritative regression: ${passed} passed, ${failures.length} failed`);
+
 
 
 
