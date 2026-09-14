@@ -613,66 +613,19 @@ Deno.serve(async (req: Request) => {
     const isLinkFinder = args.source === "telegram_link_finder";
 
     /**
-     * SE-7 — Link Finder SOURCE CLEANUP.
+     * SE-9 — Link Finder SOURCE CLEANUP MOVED TO DETECTION.
      *
-     * After a confirmed card send plus an active schedule the original X-link
-     * post MUST disappear so the branded card is what the group is left with.
-     * This is frozen product behaviour for Link Finder and is deliberately
-     * INDEPENDENT of the workspace `delete_command_after_send` preference,
-     * which continues to govern raw `/mission <link>` command cleanup only.
+     * The original X-link post is now deleted the moment the transient
+     * START/IGNORE prompt is confirmed sent and attached to the candidate, and
+     * the outcome is recorded durably on the candidate row itself. START
+     * therefore no longer waits on, gates on, or re-runs source deletion here:
+     * by the time this function runs the post is already gone (or the
+     * candidate carries a bounded retryable diagnostic and the callback has
+     * re-attempted the deletion before launching).
      *
-     * Idempotent and retryable:
-     *   - a durably recorded deletion for this exact target/message is
-     *     already-clean and costs no Telegram call;
-     *   - Telegram definitively reporting the message as absent satisfies the
-     *     objective and is recorded the same way;
-     *   - ANY other failure (permissions, transport uncertainty) returns
-     *     false, so the caller must NOT finalize the candidate or delete its
-     *     prompt. The card and schedule may already be live; pressing START
-     *     again re-runs only the cleanup, never a second card.
-     *
-     * For every non-Link-Finder source this is a no-op returning true, so
-     * `/mission` semantics are untouched.
+     * Raw `/mission <link>` command cleanup is UNCHANGED and still governed by
+     * the workspace `delete_command_after_send` preference further below.
      */
-    const ensureLinkFinderSourceCleanup = async (targetId: string): Promise<boolean> => {
-      if (!isLinkFinder) return true;
-      if (!(messageId > 0) || !targetId) return false;
-
-      const { data: targetRow, error: targetError } = await admin
-        .from("social_mission_targets")
-        .select("command_deleted_at, command_message_id")
-        .eq("id", targetId)
-        .maybeSingle();
-      if (targetError) return false;
-      const recorded = targetRow as
-        | { command_deleted_at?: string | null; command_message_id?: number | null }
-        | null;
-      if (recorded?.command_deleted_at && Number(recorded.command_message_id) === messageId) {
-        return true;
-      }
-
-      let removed = false;
-      try {
-        await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
-          chat_id: chatId,
-          message_id: messageId,
-        });
-        removed = true;
-      } catch (error) {
-        // ONLY a definitive "it is already gone" counts. A permission refusal
-        // or an unreachable Telegram leaves the objective unmet.
-        removed = /message to delete not found|message_id_invalid/i.test(
-          String((error as Error)?.message ?? ""),
-        );
-      }
-      if (!removed) return false;
-
-      const { data: recordedOk, error: recordError } = await admin.rpc(
-        "record_social_mission_command_deleted",
-        { _target_id: targetId, _command_message_id: messageId },
-      );
-      return !recordError && recordedOk === true;
-    };
 
     /**
      * SE-8 — IDEMPOTENT CANONICAL PIN.
