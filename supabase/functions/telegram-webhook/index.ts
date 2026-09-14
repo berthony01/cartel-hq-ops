@@ -2148,7 +2148,11 @@ Deno.serve(async (req: Request) => {
           return json({ ok: true });
         }
 
-        await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Starting the mission…");
+        // SE-8 — the callback is answered from INSIDE the launch: a refused
+        // permission preflight answers with the precise missing right and
+        // nothing is created, while a passed preflight acknowledges the real
+        // latency source (the first live official-X snapshot) without ever
+        // claiming success. Exactly one answer is sent either way.
         await runMissionCommand({
           // The mission is launched into the candidate's OWN chat, always.
           chatId: String(candidateChatId),
