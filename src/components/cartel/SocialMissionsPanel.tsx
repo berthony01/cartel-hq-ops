@@ -72,6 +72,11 @@ function MissionCard({ view }: { view: MissionView }) {
   // column is newer than the committed generated types.
   const accomplishedAt = (mission as unknown as Record<string, unknown>)["accomplished_at"];
   const accomplished = typeof accomplishedAt === "string";
+  // SE-6 requirement 8: a source post the official API can no longer resolve is
+  // surfaced here. The mission keeps running; nothing is closed automatically.
+  const xLinkUnavailable =
+    (mission as unknown as Record<string, unknown>)["x_link_status"] === "UNAVAILABLE";
+
 
   return (
     <article className="min-w-0 rounded-lg border border-border/70 bg-surface-elevated p-3.5 sm:p-4">
@@ -103,11 +108,25 @@ function MissionCard({ view }: { view: MissionView }) {
               <span>ACCOMPLISHED</span>
             </StatusBadge>
           ) : null}
+          {xLinkUnavailable ? (
+            <StatusBadge tone="red">
+              <span>X link unavailable</span>
+            </StatusBadge>
+          ) : null}
           <StatusBadge tone={active && !remaining.expired ? "gold" : "muted"}>
             <span>{remaining.label}</span>
           </StatusBadge>
         </div>
       </div>
+
+      {xLinkUnavailable ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          X link unavailable — the source post can no longer be read. Tracking continues with the
+          numbers already recorded.
+        </p>
+      ) : null}
+
+
 
       <dl className="mt-3 grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3">
         <div className="surface-quiet min-w-0 rounded-md p-2.5">

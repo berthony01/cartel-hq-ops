@@ -158,7 +158,9 @@ check("7.7 the milestone line renders progress against the target", /milestonePr
 check("8.1 the command is deleted only after a confirmed send", webhookCode.indexOf('transportState === "SENT"') < webhookCode.indexOf("deleteMessage"));
 check("8.2 command deletion honours the workspace setting", /\["delete_command_after_send"\] !== false/.test(webhookCode));
 check("8.3 a link-finder start never deletes a member post", /messageId > 0/.test(webhookCode));
-check("8.4 auto pin honours the workspace setting", /\["auto_pin_mission"\] !== false/.test(webhookCode));
+// Re-pinned by SE-6: pinning is now explicitly opt-in, so the webhook must
+// require `=== true` rather than merely "not disabled".
+check("8.4 auto pin honours the workspace setting", /\["auto_pin_mission"\] === true/.test(webhookCode));
 check("8.5 only a card HQ pinned is ever unpinned", /pinned_by_hq/.test(webhookCode) && /unpinChatMessage/.test(webhookCode));
 check("8.6 pin state is recorded through the dedicated RPC", /record_social_mission_target_pin/.test(webhookCode) && /record_social_mission_target_pin/.test(sqlCode));
 
@@ -190,7 +192,8 @@ check("10.8 a historical mission with no snapshot falls back to STANDARD", /STAN
 
 const ws = "00000000-0000-0000-0000-000000000000";
 const defaults = defaultMissionSettings(ws);
-check("10.9 defaults are STANDARD with metrics, finder, cleanup and pin on", defaults.default_preset === "STANDARD" && defaults.live_metrics_enabled && defaults.link_finder_enabled && defaults.delete_command_after_send && defaults.auto_pin_mission);
+// Re-pinned by SE-6: auto-pin now defaults OFF; every other default is unchanged.
+check("10.9 defaults are STANDARD with metrics, finder and cleanup on, pin off", defaults.default_preset === "STANDARD" && defaults.live_metrics_enabled && defaults.link_finder_enabled && defaults.delete_command_after_send && defaults.auto_pin_mission === false);
 check("10.10 no milestone means no target", defaults.milestone_type === "NONE" && defaults.milestone_target === null && validateMissionSettings(defaults) === null);
 const withMilestone = (t: unknown): MissionSettings => ({ ...defaults, milestone_type: "VIEWS", milestone_target: t as number | null });
 check("10.11 a milestone requires a positive whole target", validateMissionSettings(withMilestone(1000)) === null && validateMissionSettings(withMilestone(0)) !== null && validateMissionSettings(withMilestone(-5)) !== null && validateMissionSettings(withMilestone(null)) !== null && validateMissionSettings(withMilestone(1.5)) !== null);
@@ -215,7 +218,9 @@ check("11.7 the UI gate is convenience only and the database still decides", /is
 // ---------------------------------------------------------------------------
 check("12.1 the mission read layer performs no mutation", !/\.insert\(|\.update\(|\.upsert\(|\.delete\(|\.rpc\(|functions\.invoke/.test(missionsLibCode));
 check("12.2 mission creation and closing stay Telegram-only", /\/mission/.test(missionsLibCode) && !/create_social_mission/.test(missionsLibCode));
-check("12.3 the settings module touches only the settings table", (settingsLibCode.match(/\.from\(/g) ?? []).length === (settingsLibCode.match(/\.from\(TABLE\)/g) ?? []).length);
+// Re-pinned by SE-6: the module may now also read/write the saved-preset table,
+// and nothing else. Any third table is still a failure.
+check("12.3 the settings module touches only the settings and preset tables", (settingsLibCode.match(/\.from\(/g) ?? []).length === (settingsLibCode.match(/\.from\(TABLE\)|\.from\(PRESET_TABLE\)/g) ?? []).length);
 check("12.4 no browser polling interval was introduced", !/refetchInterval/.test(missionsLibCode) && !/refetchInterval/.test(settingsLibCode));
 check("12.5 no OAuth, billing or contributor mechanic appears in the UI", !/oauth|stripe|billing|contributor/i.test(settingsUiCode));
 

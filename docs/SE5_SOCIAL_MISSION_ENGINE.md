@@ -61,3 +61,54 @@ create a secret.
 
 `scripts/se5-social-mission-engine-regression.ts` — deterministic, zero network,
 zero database, zero Telegram, zero X.
+
+---
+
+# SE-6 — tiers, crossing pulses, saved presets (reconciliation)
+
+Repository implementation + prepared SQL only. No migration applied, no
+function deployed, no publish, no Telegram send, no X call, no secret, no cron
+change, no pinning.
+
+1. **Real X metrics** — unchanged official-only path (`_shared/x-metrics.ts`):
+   views/impressions, likes, reposts, replies (saves also stored). Unknown
+   stays `NULL`.
+2. **Central 5-minute refresh** — `refreshBucket()` floors to 5 minutes and
+   `list_social_missions_due_for_metrics(_bucket, _limit)` skips any mission
+   already snapshotted in that bucket. One read per mission per window,
+   regardless of cron cadence or viewer count. HQ never calls a provider.
+3. **One canonical card** — same PHOTO card, edited in place, gated on the
+   visible signature; stable shared footer legend (`MISSION_FOOTER_LEGEND`).
+4. **Pulse defaults** — +100 views, +10 likes, +5 reposts, +5 replies.
+   `evaluate_social_mission_pulse` advances marks atomically (`FOR UPDATE`);
+   first observation only seeds, partial gains carry forward, simultaneous
+   crossings combine into ONE reply-only `sendMessage` cleaned up after 120s.
+5. **Idempotent milestones** — `MISSION_ACTIVE`, `TIER_1..TIER_10`,
+   `PROJECT_TRENDING`, `MISSION_CLOSING_SOON`, `MISSION_COMPLETED`, unique per
+   `(mission_id, milestone_key)`.
+6. **Admin presets** — `social_mission_presets`: named, reusable Tier 1-10
+   target bundles with optional mission code, layered on the existing
+   STANDARD/QUICK/MAJOR_ANNOUNCEMENT/LAUNCH shapes (adapted, not replaced).
+   HQ gains a Saved Preset dropdown, tier editor, summary chips and Saved
+   badge. Wallet targets deliberately absent.
+7. **Performance history** — `finalize_social_mission_performance` writes one
+   idempotent row per mission at completion, from stored snapshots only.
+8. **X link status** — `OK | UNAVAILABLE | UNKNOWN`. A post the official API
+   no longer returns is marked UNAVAILABLE and shown as "X link unavailable" in
+   HQ; the mission lifecycle keeps running. A provider outage never marks it.
+
+Auto-pin is now OFF unless a workspace opts in.
+
+## Verification
+
+`scripts/se6-mission-tiers-pulse-presets-regression.ts` — deterministic, zero
+network, zero database, zero Telegram, zero X.
+
+## External operations still pending (separate approval gate)
+
+1. Secret `X_API_BEARER_TOKEN`.
+2. Apply `docs/sql/SE5_social_mission_engine.sql`, then
+   `docs/sql/SE6_mission_tiers_pulse_presets.sql`.
+3. Deploy `_shared/x-metrics.ts` **and** `_shared/mission-progress.ts`
+   alongside `social-mission-runner` and `social-mission-telegram`, then
+   redeploy `telegram-webhook`.
