@@ -787,6 +787,54 @@ Deno.serve(async (req: Request) => {
         await reply("The mission card was delivered, but its 45-minute schedule could not be activated. Do not resend; close it with /mission close when you are done.");
         return;
       }
+      // SE-5 — command cleanup and optional auto-pin. Both run ONLY after the
+      // card is confirmed SENT and the schedule is active, so a failure here
+      // can never lose a mission. Both are best-effort and never retried.
+      try {
+        const { data: config } = await admin.rpc("social_mission_effective_config", {
+          _mission_id: result.mission_id,
+        });
+        const cfg = (config ?? {}) as Record<string, unknown>;
+
+        // Delete the raw `/mission <link>` command so the group sees the card,
+        // not the operator's command. Never deletes anything else.
+        if (cfg["delete_command_after_send"] !== false) {
+          const deleted = await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
+            chat_id: chatId,
+            message_id: messageId,
+          }).then(() => true).catch(() => false);
+          if (deleted) {
+            await admin.rpc("record_social_mission_command_deleted", {
+              _target_id: result.target_id,
+              _command_message_id: messageId,
+            });
+          }
+        }
+
+        // Auto-pin defaults ON. The pin is recorded ONLY when Telegram accepts
+        // it, so completion can never unpin a pin CARTEL HQ did not set.
+        if (cfg["auto_pin_mission"] !== false) {
+          const sentMessageId = Number(
+            (transport as { telegramMessageId?: unknown } | null)?.telegramMessageId ?? NaN,
+          );
+          if (Number.isFinite(sentMessageId)) {
+            const pinned = await telegramJson(TELEGRAM_BOT_TOKEN, "pinChatMessage", {
+              chat_id: chatId,
+              message_id: sentMessageId,
+              disable_notification: true,
+            }).then(() => true).catch(() => false);
+            if (pinned) {
+              await admin.rpc("record_social_mission_target_pin", {
+                _target_id: result.target_id,
+                _pinned: true,
+              });
+            }
+          }
+        }
+      } catch {
+        // Cosmetic housekeeping only; never surfaced and never retried.
+      }
+
       // The branded card itself is the confirmation. No extra success text.
       return;
     }
