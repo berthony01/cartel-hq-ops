@@ -379,6 +379,15 @@ Deno.serve(async (request: Request) => {
     return json({ error: "Unauthorized" }, 401);
   }
 
+  // SE-5 metrics phase first, so a pulse in this same invocation can quote the
+  // freshest STORED snapshot without performing any provider call of its own.
+  const metrics = await runMetricsRefresh(admin, SUPABASE_URL, SERVICE_KEY).catch(() => ({
+    missions: 0,
+    lookups: 0,
+    snapshots: 0,
+    cardsEdited: 0,
+  }));
+
   const { data: claimed, error: claimError } = await admin.rpc(
     "claim_due_social_mission_schedule_events",
     { _limit: CLAIM_LIMIT },
