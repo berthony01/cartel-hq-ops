@@ -685,7 +685,20 @@ Deno.serve(async (request: Request) => {
 
     // COMPLETE. The mission is ALREADY COMPLETED in the database; this is the
     // single same-message edit attempt and it can never revert completion.
+
+    // Requirement 5/7 — both idempotent, and both independent of whether the
+    // Telegram edit below succeeds.
+    await admin.rpc("record_social_mission_milestone", {
+      _mission_id: event.mission_id,
+      _workspace_id: event.workspace_id,
+      _milestone_key: MILESTONE_COMPLETED,
+      _tier: null,
+      _metadata: { source: "schedule_complete" },
+    });
+    await admin.rpc("finalize_social_mission_performance", { _mission_id: event.mission_id });
+
     if (!event.mission_created_by || event.telegram_message_id === null) {
+
       await admin.rpc("finish_social_mission_schedule_event", {
         _event_id: event.event_id,
         _state: "FAILED",
