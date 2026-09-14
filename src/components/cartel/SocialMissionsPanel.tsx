@@ -72,6 +72,11 @@ function MissionCard({ view }: { view: MissionView }) {
   // column is newer than the committed generated types.
   const accomplishedAt = (mission as unknown as Record<string, unknown>)["accomplished_at"];
   const accomplished = typeof accomplishedAt === "string";
+  // SE-6 requirement 8: a source post the official API can no longer resolve is
+  // surfaced here. The mission keeps running; nothing is closed automatically.
+  const xLinkUnavailable =
+    (mission as unknown as Record<string, unknown>)["x_link_status"] === "UNAVAILABLE";
+
 
   return (
     <article className="min-w-0 rounded-lg border border-border/70 bg-surface-elevated p-3.5 sm:p-4">
