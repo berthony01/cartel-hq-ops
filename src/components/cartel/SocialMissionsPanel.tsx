@@ -2,6 +2,7 @@ import { AlertTriangle, ExternalLink, Loader2, Radar, Target } from "lucide-reac
 import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { EmptyState } from "@/components/cartel/EmptyState";
+import { MissionSettingsCard } from "@/components/cartel/MissionSettingsCard";
 import { Button } from "@/components/ui/button";
 import {
   MISSION_OPERATOR_GUIDANCE,
