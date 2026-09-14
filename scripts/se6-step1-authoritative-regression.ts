@@ -834,12 +834,14 @@ check(
 
 // 15.g — pin recording stays confirmation-only.
 check(
-  "15.38 auto-pin is still attempted after delivery",
-  /cfg\["auto_pin_mission"\] !== false/.test(cleanupBlock) && /"pinChatMessage"/.test(cleanupBlock),
+  "15.38 auto-pin is still attempted after delivery (SE-8: through the idempotent helper)",
+  /cfg\["auto_pin_mission"\] !== false/.test(cleanupBlock) &&
+    /await ensureCanonicalMissionPin\(/.test(cleanupBlock),
 );
 check(
   "15.39 pinned_by_hq is recorded ONLY when Telegram confirms the pin",
-  /if \(pinned\) \{\s*\n\s*await admin\.rpc\("record_social_mission_target_pin"/.test(cleanupBlock),
+  /if \(!pinned\) return false;\s*\n\s*const \{ error: recordError \} = await admin\.rpc\("record_social_mission_target_pin"/
+    .test(webhookRaw),
 );
 check(
   "15.40 completion still unpins only a pin CARTEL HQ recorded",
