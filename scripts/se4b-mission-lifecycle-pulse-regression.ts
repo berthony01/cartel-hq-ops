@@ -194,14 +194,19 @@ check("9.12 the pulse lifetime is 120 seconds", /PULSE_LIFETIME_SECONDS = 120/.t
 check("9.13 a pulse with no durable cleanup is deleted immediately", /cleanupError[\s\S]{0,200}"deleteMessage"/.test(runnerCode));
 check("9.14 an uncertain pulse outcome is finalized AMBIGUOUS", /_state: "AMBIGUOUS"/.test(runnerCode));
 check("9.15 a definite rejection is finalized FAILED", /_state: "FAILED"/.test(runnerCode));
-check("9.16 the runner contains no retry loop", !/while\s*\(/.test(runnerCode) && !/setTimeout/.test(runnerCode) && !/retry/i.test(runnerCode.replace(/next_attempt_at/g, "")));
+// SE-5 re-pin: the runner now also performs one official metrics lookup per
+// batch. The frozen rule is unchanged — nothing is ever re-attempted inside a
+// single invocation.
+check("9.16 the runner contains no retry loop", !/while\s*\(/.test(runnerCode) && !/setTimeout/.test(runnerCode) && !/\bretry\(|retryCount|maxRetries/i.test(runnerCode));
 check("9.17 completion uses edit_mission only, never send_mission", runnerCode.includes('action: "edit_mission"') && !runnerCode.includes('"send_mission"'));
 check("9.18 completion sends the runner internal source header", runnerCode.includes('"X-Cartel-Internal-Source": INTERNAL_SOURCE_HEADER_VALUE') && runnerCode.includes('INTERNAL_SOURCE_HEADER_VALUE = "social-mission-runner"'));
 check("9.19 completion uses the service bearer and created_by actor", /Authorization: `Bearer \$\{SERVICE_KEY\}`/.test(runnerCode) && /"X-Cartel-Actor-User-Id": event\.mission_created_by/.test(runnerCode));
 check("9.20 completion uses the stored deterministic request id", /clientRequestId: event\.client_request_id/.test(runnerCode));
 check("9.21 completion bumps the revision by exactly one", /revision: Number\(event\.edit_revision \?\? 0\) \+ 1/.test(runnerCode));
 check("9.22 a duplicate EDITED result counts as success", /editState === "EDITED"/.test(runnerCode));
-check("9.23 the runner never touches mission status directly", !/from\("social_missions"\)/.test(runnerCode) && !/social_missions/.test(runnerCode.replace(/[A-Za-z_]*social_mission_[a-z_]*/g, "")));
+// SE-5 re-pin: the runner may READ `social_missions.accomplished_at` for the
+// pulse text. It still never writes mission status; lifecycle stays in the RPCs.
+check("9.23 the runner never writes mission status directly", !/from\("social_missions"\)[\s\S]{0,200}\.(update|insert|upsert|delete)\(/.test(runnerCode) && !/status:\s*"(LIVE|COMPLETED)"/.test(runnerCode));
 check("9.24 the runner makes zero X/provider calls", !/api\.twitter\.com|api\.x\.com|googleapis|refetcher/i.test(runnerSrc));
 check("9.25 the only Telegram host is the fixed official API", /TELEGRAM_API = "https:\/\/api\.telegram\.org"/.test(runnerCode) && (runnerCode.match(/https:\/\/api\.telegram\.org/g) ?? []).length === 1);
 check("9.26 429 and 5xx are treated as uncertain, never definite", /response\.status === 429 \|\| response\.status >= 500/.test(runnerCode));
@@ -253,11 +258,20 @@ check("11.19 the stale backend-source webhook copy was NOT modified", !staleWebh
 
 for (const [index, forbidden] of ["ACCOMPLISHED", "/mission refresh", "/mission latest"].entries()) {
   check(`12.${index + 1} ${forbidden} is absent from SQL`, !sqlCode.includes(forbidden));
-  check(`12.${index + 1}b ${forbidden} is absent from the runner`, !runnerCode.includes(forbidden));
+  // SE-5 re-pin: ACCOMPLISHED is a derived PRODUCT state rendered in the card
+  // and the pulse. It must still never be a database mission status.
+  check(
+    `12.${index + 1}b ${forbidden} is not a runner mission status`,
+    forbidden === "ACCOMPLISHED"
+      ? !/status[^\n]{0,20}ACCOMPLISHED/.test(runnerCode)
+      : !runnerCode.includes(forbidden),
+  );
   check(`12.${index + 1}c ${forbidden} is absent from the webhook`, !webhookCode.includes(forbidden));
 }
 check("12.4 no contributor recognition, points or billing in this phase", !/contributor_badge|points_awarded|billing/i.test(runnerCode + sqlCode));
-check("12.5 no polling of X or provider metrics is introduced", !/social_metric_snapshots/.test(runnerCode + sqlCode));
+// SE-5 re-pin: stored snapshots are now read and written by the metrics phase.
+// The frozen rule that survives is that the PULSE path never fetches.
+check("12.5 the pulse text is built only from a stored snapshot", /function buildPulseText\([\s\S]{0,1200}?\n\}/.test(runnerCode) && !/function buildPulseText\([\s\S]{0,1200}?\n\}/.exec(runnerCode)![0].includes("lookupXPostMetrics") && /social_metric_snapshots/.test(runnerCode));
 check("12.6 the documentation exists and states the DB-first completion rule", docSrc.includes("COMPLETED") && /database[- ]first/i.test(docSrc));
 check("12.7 the documentation records that the SQL is prepare-only", /prepare[- ]only/i.test(docSrc) && /PREPARE ONLY/i.test(sql));
 
