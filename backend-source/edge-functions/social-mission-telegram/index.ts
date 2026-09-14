@@ -578,6 +578,11 @@ async function handleSend(args: {
   const logo = await resolveProjectLogo(admin, workspaceId);
   const desiredTransportKind: TransportKind = logo ? "PHOTO" : "TEXT";
 
+  // SE-5. ONE fail-soft official X read before the first card is rendered, so
+  // the launch card can show real current numbers. A failure here NEVER blocks
+  // the mission and NEVER writes a snapshot.
+  await attemptLaunchMetricsRead(admin, workspaceId, mission);
+
   // 3c. Render authoritatively, then durably claim the intent BEFORE transport.
   const rendered = await renderAuthoritativeCard(admin, workspaceId, mission, desiredTransportKind);
   if ("error" in rendered) return fail(rendered.error, 409);
