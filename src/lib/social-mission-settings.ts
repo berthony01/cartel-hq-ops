@@ -291,18 +291,20 @@ export function normalizeTierTargets(raw: unknown): MissionTierTarget[] {
     const tier = Number(row?.["tier"]);
     if (Number.isInteger(tier) && tier >= 1 && tier <= TIER_COUNT) byTier.set(tier, row);
   }
-  return Array.from({ length: TIER_COUNT }, (_unused, index) => {
-    const tier = index + 1;
+  const normalized: MissionTierTarget[] = [];
+  for (let tier = 1; tier <= TIER_COUNT; tier += 1) {
     const row = byTier.get(tier);
-    return {
+    normalized.push({
       tier,
       views: positiveOrNull(row?.["views"]),
       likes: positiveOrNull(row?.["likes"]),
       shares: positiveOrNull(row?.["shares"]),
       comments: positiveOrNull(row?.["comments"]),
-    };
-  });
+    });
+  }
+  return normalized;
 }
+
 
 export function normalizePulseDeltas(raw: unknown): MissionPulseDeltas {
   const row = (raw ?? {}) as Record<string, unknown>;
