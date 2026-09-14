@@ -1736,6 +1736,10 @@ Deno.serve(async (req: Request) => {
           return json({ ok: true });
         }
 
+        // SE-7 — START is AUTHORIZED here but NOT consumed. The candidate only
+        // becomes terminal STARTED after the branded card is confirmed SENT and
+        // the schedule is activated, so a downstream failure leaves a fully
+        // retryable candidate, prompt and source post in place.
         const { data: resolved } = await admin.rpc("resolve_social_mission_link_candidate", {
           _candidate_id: candidateId,
           _telegram_user_id: Number(from.id),
@@ -1769,37 +1773,64 @@ Deno.serve(async (req: Request) => {
           return json({ ok: true });
         }
 
-        // The prompt is transient in both directions.
-        if (typeof decision.prompt_message_id === "number") {
+        const promptMessageId = typeof decision.prompt_message_id === "number"
+          ? decision.prompt_message_id
+          : null;
+        const deleteLinkFinderPrompt = async () => {
+          if (promptMessageId === null) return;
           await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
             // The candidate's own chat, always. Never the callback chat.
             chat_id: candidateChatId,
-
-
-            message_id: decision.prompt_message_id,
+            message_id: promptMessageId,
           }).catch(() => null);
-        }
+        };
 
         if (decision.outcome === "IGNORE") {
+          // IGNORE consumes the candidate and removes ONLY the transient
+          // prompt. The member's original X post is never deleted here.
+          await deleteLinkFinderPrompt();
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Ignored.");
           return json({ ok: true });
         }
 
+        // The candidate's REAL original message id is the provenance and
+        // idempotency key. A null/0 id collided on
+        // telegram_inbound_updates (chat_id, message_id) for every second
+        // Link Finder START in the same group.
+        const sourceMessageId = Number(decision.telegram_message_id);
+        if (!Number.isFinite(sourceMessageId) || sourceMessageId <= 0) {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "This suggestion could not be handled.");
+          return json({ ok: true });
+        }
+
         await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Starting the mission…");
-        await runMissionCommand({
+        const missionOutcome = await runMissionCommand({
           // The mission is launched into the candidate's OWN chat, always.
           chatId: String(candidateChatId),
-
-
           chatType: String(callbackChat?.type ?? ""),
           updateId: update?.update_id,
-          // The ORIGINAL post message is never deleted as a "command".
-          messageId: null,
+          // The candidate's own source message. On success it is deleted as
+          // the Link Finder source post — the frozen product behaviour.
+          messageId: sourceMessageId,
           telegramUserId: Number(from.id),
           argument: String(decision.canonical_url ?? ""),
           source: "telegram_link_finder",
         });
+
+        // Only a mission that actually reached a confirmed card + active
+        // schedule (or a retry finding one already sent) finalizes the
+        // candidate and removes the prompt. Anything else stays retryable.
+        if (missionOutcome.outcome === "ACTIVATED" || missionOutcome.outcome === "ALREADY_SENT") {
+          await deleteLinkFinderPrompt();
+          await admin.rpc("finalize_social_mission_link_candidate_start", {
+            _candidate_id: candidateId,
+            _telegram_user_id: Number(from.id),
+            _verified_chat_id: candidateChatId,
+            _mission_id: missionOutcome.missionId,
+          });
+        }
         return json({ ok: true });
+
       }
 
 
