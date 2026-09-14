@@ -19,6 +19,9 @@ function check(name: string, condition: boolean): void {
 
 const SQL_PATH = "docs/sql/SE4B_mission_lifecycle_pulse.sql";
 const RUNNER_PATH = "backend-source/edge-functions/social-mission-runner/index.ts";
+// Step 1: the pure pulse copy module the runner imports.
+const PULSE_COPY_PATH = "backend-source/edge-functions/_shared/mission-pulse-copy.ts";
+
 const TRANSPORT_PATH = "backend-source/edge-functions/social-mission-telegram/index.ts";
 const WEBHOOK_PATH = "supabase/functions/telegram-webhook/index.ts";
 const STALE_WEBHOOK_PATH = "backend-source/edge-functions/telegram-webhook/index.ts";
