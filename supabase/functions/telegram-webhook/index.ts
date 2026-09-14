@@ -839,14 +839,20 @@ Deno.serve(async (req: Request) => {
 
     const deliveryState = String(result.delivery_state ?? "");
     if (deliveryState === "SENT") {
-      // A retry. The card already exists, so NO second card is ever sent, but
-      // the caller may still finish its own cleanup/finalization exactly once.
-      await args.onMissionSettled?.({
-        kind: "ALREADY_SENT",
-        missionId: String(result.mission_id ?? ""),
-        targetId: String(result.target_id ?? ""),
-      });
+      // A retry. The card already exists, so NO second card is ever sent. This
+      // is the recovery path for a first attempt that delivered the card but
+      // could not remove the source post: cleanup is retried FIRST, and only a
+      // clean result lets the caller finalize.
+      const retryClean = await ensureLinkFinderSourceCleanup(String(result.target_id ?? ""));
+      if (retryClean) {
+        await args.onMissionSettled?.({
+          kind: "ALREADY_SENT",
+          missionId: String(result.mission_id ?? ""),
+          targetId: String(result.target_id ?? ""),
+        });
+      }
       await reply("This post already has a Social Mission in this community.");
+
       return;
     }
 
