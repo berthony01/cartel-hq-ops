@@ -965,13 +965,23 @@ Deno.serve(async (req: Request) => {
         // Cosmetic housekeeping only; never surfaced and never retried.
       }
 
-      // Confirmed card + active schedule. Only now may the caller finalize its
-      // own transient state (Link Finder prompt + candidate).
-      await args.onMissionSettled?.({
-        kind: "ACTIVATED",
-        missionId: String(result.mission_id ?? ""),
-        targetId: String(result.target_id ?? ""),
-      });
+      // SE-7 — the mandatory Link Finder source cleanup runs here, AFTER the
+      // confirmed send and active schedule and OUTSIDE the best-effort
+      // housekeeping block, because its result decides whether the caller may
+      // finalize. A no-op returning true for every other source.
+      const sourceClean = await ensureLinkFinderSourceCleanup(String(result.target_id ?? ""));
+
+      // Confirmed card + active schedule + clean source. Only now may the
+      // caller finalize its own transient state (Link Finder candidate, then
+      // its prompt).
+      if (sourceClean) {
+        await args.onMissionSettled?.({
+          kind: "ACTIVATED",
+          missionId: String(result.mission_id ?? ""),
+          targetId: String(result.target_id ?? ""),
+        });
+      }
+
 
       // The branded card itself is the confirmation. No extra success text.
       return;
