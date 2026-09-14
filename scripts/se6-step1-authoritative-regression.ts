@@ -60,6 +60,8 @@ const runnerRaw = read(RUNNER);
 const transportCode = stripTs(read(TRANSPORT));
 const cardCode = stripTs(read(CARD));
 const webhookCode = stripTs(read(WEBHOOK));
+const webhookRaw = read(WEBHOOK);
+
 const missionsLibCode = stripTs(read(MISSIONS_LIB));
 const settingsLibCode = stripTs(read(SETTINGS_LIB));
 const settingsUiCode = stripTs(read(SETTINGS_UI));
