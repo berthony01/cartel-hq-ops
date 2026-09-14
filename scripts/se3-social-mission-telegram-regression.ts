@@ -392,7 +392,9 @@ const emptyCard = renderMissionCard({
   projectName: null,
   ticker: null,
 });
-check("11.25 all-null metrics render no metric block", !emptyCard.text.includes(LIVE_METRICS_HEADING) && !emptyCard.text.includes("Views:") && !emptyCard.text.includes("Likes:"));
+// SE-5 re-pin: a LIVE card now always carries the results block, but with an
+// explicit pending line. The frozen rule is unchanged — no number is invented.
+check("11.25 all-null metrics render no numbers", !/Views:\s*\d/.test(emptyCard.text) && !/Likes:\s*\d/.test(emptyCard.text));
 check("11.26 all-null metrics never become zero", !/: 0(\s|$)/m.test(emptyCard.text));
 check("11.27 card still renders without project/author/excerpt", emptyCard.text.includes("CARTEL SOCIAL MISSION"));
 
