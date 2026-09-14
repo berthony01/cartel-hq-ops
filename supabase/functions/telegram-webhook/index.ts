@@ -2164,6 +2164,20 @@ Deno.serve(async (req: Request) => {
           telegramUserId: Number(from.id),
           argument: String(decision.canonical_url ?? ""),
           source: "telegram_link_finder",
+          // SE-8 — refused BEFORE anything was created. The candidate stays
+          // PENDING, the prompt stays, the source post stays.
+          onPermissionBlocked: async (text) => {
+            await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, text);
+          },
+          // SE-8 — honest immediate feedback. No group message, no clutter, no
+          // prefetched X read and no weakened first real snapshot.
+          onStartAccepted: async () => {
+            await answerCallback(
+              TELEGRAM_BOT_TOKEN,
+              callback.id,
+              "Starting mission… fetching live X metrics.",
+            );
+          },
           // Only a mission that actually reached a confirmed card + active
           // schedule (or a retry finding one already sent) removes the prompt
           // and finalizes the candidate. Anything else — create failure,
