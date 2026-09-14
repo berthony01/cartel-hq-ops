@@ -593,5 +593,6 @@ Deno.serve(async (request: Request) => {
     completionsEdited,
     unresolved,
     failed,
+    metrics,
   });
 });
