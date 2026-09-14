@@ -77,10 +77,17 @@ export function MissionSettingsCard({ workspaceId }: { workspaceId: string | nul
   const save = useSaveMissionSettings(workspaceId);
   const canEdit = operatorQuery.data === true;
 
+  // SE-6 saved tier presets (requirement 6).
+  const presetsQuery = useMissionTierPresets(workspaceId);
+  const savePreset = useSaveMissionTierPreset(workspaceId);
+  const [presetDraft, setPresetDraft] = useState<MissionTierPreset | null>(null);
+  const [presetSaved, setPresetSaved] = useState(false);
+
   const [draft, setDraft] = useState<MissionSettings | null>(null);
   useEffect(() => {
     if (settingsQuery.data) setDraft(settingsQuery.data);
   }, [settingsQuery.data]);
+
 
   const current = draft ?? (workspaceId ? defaultMissionSettings(workspaceId) : null);
   if (!current) return null;
