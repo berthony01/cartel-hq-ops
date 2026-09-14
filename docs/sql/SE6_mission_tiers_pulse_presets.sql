@@ -298,15 +298,18 @@ AS $$
          m.ends_at,
          m.x_link_status,
          COALESCE(m.highest_tier, 0),
+         tg.group_connection_id,
          base.effective_config,
          COALESCE(pr.tier_targets, '[]'::jsonb),
          COALESCE(pr.pulse_deltas,
                   jsonb_build_object('views', 100, 'likes', 10, 'shares', 5, 'comments', 5))
     FROM public.list_active_social_missions_for_metrics(_limit) AS base
     JOIN public.social_missions m ON m.id = base.mission_id
+    JOIN public.social_mission_targets tg ON tg.id = base.target_id
     LEFT JOIN public.social_mission_settings s ON s.workspace_id = base.workspace_id
     LEFT JOIN public.social_mission_presets pr ON pr.id = s.active_preset_id
    WHERE NOT EXISTS (
+
            SELECT 1
              FROM public.social_metric_snapshots sn
             WHERE sn.mission_id = base.mission_id
