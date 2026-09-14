@@ -273,7 +273,9 @@ for (const [index, forbidden] of ["ACCOMPLISHED", "/mission refresh", "/mission 
 check("12.4 no contributor recognition, points or billing in this phase", !/contributor_badge|points_awarded|billing/i.test(runnerCode + sqlCode));
 // SE-5 re-pin: stored snapshots are now read and written by the metrics phase.
 // The frozen rule that survives is that the PULSE path never fetches.
-check("12.5 the pulse text is built only from a stored snapshot", /buildCrossingPulseText/.test(runnerCode) && /social_metric_snapshots/.test(runnerCode) && !/lookupXPostMetrics[\s\S]{0,200}sendEphemeralMissionMessage/.test(runnerCode));
+// SE-6 re-pin: the pulse body comes from the DB crossing evaluation over
+// stored snapshots, never from a provider read taken at send time.
+check("12.5 the pulse text is built only from a stored snapshot", /buildCrossingPulseText\(crossings\)/.test(runnerCode) && /evaluate_social_mission_pulse/.test(runnerCode) && !/lookupXPostMetrics[\s\S]{0,200}sendEphemeralMissionMessage/.test(runnerCode));
 check("12.6 the documentation exists and states the DB-first completion rule", docSrc.includes("COMPLETED") && /database[- ]first/i.test(docSrc));
 check("12.7 the documentation records that the SQL is prepare-only", /prepare[- ]only/i.test(docSrc) && /PREPARE ONLY/i.test(sql));
 
