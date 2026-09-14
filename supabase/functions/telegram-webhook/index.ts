@@ -1936,14 +1936,30 @@ Deno.serve(async (req: Request) => {
           // prompt, the source post and the PENDING candidate all survive for
           // a clean retry.
           onMissionSettled: async (settled) => {
+            // FINALIZE FIRST. The candidate is the durable record; the prompt
+            // is only a transient button. Removing the prompt before the
+            // database agrees would leave an invisible, unrecoverable
+            // suggestion. A failed or rejected finalization therefore leaves
+            // the prompt in place and the candidate PENDING for a clean retry.
+            const { data: finalized, error: finalizeError } = await admin.rpc(
+              "finalize_social_mission_link_candidate_start",
+              {
+                _candidate_id: candidateId,
+                _telegram_user_id: Number(from.id),
+                _verified_chat_id: candidateChatId,
+                _mission_id: settled.missionId,
+              },
+            );
+            const finalization = (finalized ?? {}) as { outcome?: string; mission_id?: string };
+            const finalOutcome = String(finalization.outcome ?? "");
+            const sameMission = finalOutcome === "FINALIZED"
+              || (finalOutcome === "ALREADY_FINALIZED"
+                && String(finalization.mission_id ?? "") === settled.missionId);
+            if (finalizeError || !sameMission) return;
+
             await deleteLinkFinderPrompt();
-            await admin.rpc("finalize_social_mission_link_candidate_start", {
-              _candidate_id: candidateId,
-              _telegram_user_id: Number(from.id),
-              _verified_chat_id: candidateChatId,
-              _mission_id: settled.missionId,
-            });
           },
+
         });
         return json({ ok: true });
 
