@@ -59,7 +59,38 @@ import {
   type CanonicalMetrics,
   type MissionCardPlatform,
   type MissionCardStatus,
+  type MissionMilestone,
 } from "./card.ts";
+
+/**
+ * SE-5 — the launch-time official X read. Exactly ONE batch lookup of ONE post
+ * id, performed BEFORE the branded card is sent so the first visible card can
+ * carry real current metrics. Every failure is fail-soft: no snapshot is
+ * written, the mission is neither duplicated nor lost, and the card renders
+ * "Live metrics updating…" instead of fake zeroes.
+ */
+import {
+  lookupXPostMetrics,
+  minuteBucket,
+  availabilityOf,
+  X_PROVIDER,
+} from "../_shared/x-metrics.ts";
+
+const MILESTONE_TYPES = ["VIEWS", "LIKES", "REPLIES", "REPOSTS", "TOTAL_INTERACTIONS"] as const;
+
+/** Milestone read ONLY from the mission's own immutable config snapshot. */
+function missionMilestone(mission: LoadedRow): MissionMilestone | null {
+  const metadata = mission["metadata"];
+  if (!metadata || typeof metadata !== "object") return null;
+  const config = (metadata as Record<string, unknown>)["effective_config"];
+  if (!config || typeof config !== "object") return null;
+  const raw = config as Record<string, unknown>;
+  const type = String(raw["milestone_type"] ?? "NONE").toUpperCase();
+  const target = Number(raw["milestone_target"]);
+  if (!(MILESTONE_TYPES as readonly string[]).includes(type)) return null;
+  if (!Number.isInteger(target) || target <= 0) return null;
+  return { type: type as MissionMilestone["type"], target };
+}
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
