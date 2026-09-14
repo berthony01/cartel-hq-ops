@@ -346,6 +346,9 @@ async function renderAuthoritativeCard(
     ticker: profile ? ((profile as LoadedRow)["ticker"] as string | null) ?? null : null,
     baseline: metricsFrom(mission, "baseline_"),
     latest: snapshot ? metricsFrom(snapshot as LoadedRow, "") : null,
+    accomplished: typeof mission["accomplished_at"] === "string",
+    endsAt: (mission["ends_at"] as string | null) ?? null,
+    milestone: missionMilestone(mission),
     // A photo caption is hard-limited by Telegram; the renderer refits instead
     // of risking a rejected transport.
     maxLength: transportKind === "PHOTO" ? TELEGRAM_CAPTION_MAX : TELEGRAM_TEXT_LIMIT,
