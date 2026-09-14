@@ -416,10 +416,37 @@ Deno.serve(async (request: Request) => {
       }
 
       const keyboard = pulseKeyboard(event.canonical_url);
+
+      // SE-5 Pulse 2.0: STORED snapshot only. Zero provider calls here.
+      const { data: storedSnapshot } = await admin
+        .from("social_metric_snapshots")
+        .select("views, likes, comments, shares, saves")
+        .eq("mission_id", event.mission_id)
+        .eq("workspace_id", event.workspace_id)
+        .order("observed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const { data: missionRow } = await admin
+        .from("social_missions")
+        .select("accomplished_at")
+        .eq("id", event.mission_id)
+        .maybeSingle();
+      const storedMetrics = storedSnapshot
+        ? ({
+            views: (storedSnapshot as Record<string, number | null>)["views"] ?? null,
+            likes: (storedSnapshot as Record<string, number | null>)["likes"] ?? null,
+            comments: (storedSnapshot as Record<string, number | null>)["comments"] ?? null,
+            shares: (storedSnapshot as Record<string, number | null>)["shares"] ?? null,
+            saves: (storedSnapshot as Record<string, number | null>)["saves"] ?? null,
+          } as XCanonicalMetrics)
+        : null;
+      const pulseAccomplished =
+        typeof (missionRow as Record<string, unknown> | null)?.["accomplished_at"] === "string";
+
       // Exactly ONE sendMessage. Never sendPhoto, never the branded card.
       const outcome = await callTelegram(BOT_TOKEN, "sendMessage", {
         chat_id: event.telegram_chat_id,
-        text: PULSE_TEXT,
+        text: buildPulseText(storedMetrics, pulseAccomplished),
         // No allow_sending_without_reply: a pulse is meaningful ONLY as a
         // reply to the canonical mission card. If that card is gone, Telegram
         // rejects the send and the event is finalized FAILED rather than
