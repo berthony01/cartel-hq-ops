@@ -970,13 +970,16 @@ const alreadySentBranch = missionFn.slice(
   missionFn.indexOf('if (deliveryState === "SENDING"'),
 );
 check(
-  "16.18 the retry branch runs cleanup before settling",
-  alreadySentBranch.indexOf("ensureLinkFinderSourceCleanup") <
-    alreadySentBranch.indexOf('kind: "ALREADY_SENT"'),
+  "16.18 the retry branch resolves the required pin before settling",
+  alreadySentBranch.indexOf("ensureCanonicalMissionPin") > 0 &&
+    alreadySentBranch.indexOf("ensureCanonicalMissionPin") <
+      alreadySentBranch.indexOf('kind: "ALREADY_SENT"'),
 );
 check(
-  "16.19 the retry only settles when cleanup AND the required pin succeeded",
-  /if \(retryClean && retryPinned\) \{/.test(alreadySentBranch),
+  "16.19 the retry only settles when the required pin succeeded",
+  /if \(retryPinned\) \{/.test(alreadySentBranch) &&
+    // SE-9 TRIPWIRE: the retry must never regain a source-deletion gate.
+    !/ensureLinkFinderSourceCleanup|ensureLinkFinderSourceDeleted/.test(alreadySentBranch),
 );
 check(
   "16.20 the retry never sends a second card",
@@ -1230,12 +1233,12 @@ const idxPinCall = missionFn.indexOf("const canonicalPinned = await ensureCanoni
 check("17.30 the canonical pin runs after schedule activation", idxActivate < idxPinCall);
 check("17.31 the canonical pin runs before the settled callback", idxPinCall > 0 && idxPinCall < idxActivatedSettle);
 check(
-  "17.32 a cleanup failure leaves the candidate PENDING and the prompt intact",
-  /if \(sourceClean && canonicalPinned\) \{/.test(missionFn),
+  "17.32 an unconfirmed required objective leaves the candidate PENDING and the prompt intact",
+  /if \(canonicalPinned\) \{/.test(missionFn),
 );
 check(
-  "17.33 a pin failure equally blocks settlement",
-  /canonical lifecycle incomplete: cleanup=\$\{sourceClean\} pin=\$\{canonicalPinned\}/.test(missionFn),
+  "17.33 a pin failure blocks settlement and is reported",
+  /canonical lifecycle incomplete: pin=\$\{canonicalPinned\}/.test(missionFn),
 );
 check(
   "17.34 the required pin uses the mission's OWN immutable effective config",
@@ -1248,8 +1251,8 @@ const retryBranch = missionFn.slice(
   missionFn.indexOf('if (deliveryState === "SENDING"'),
 );
 check(
-  "17.35 the retry re-attempts source cleanup idempotently",
-  /const retryClean = await ensureLinkFinderSourceCleanup\(retryTargetId\);/.test(retryBranch),
+  "17.35 the retry re-attempts nothing beyond the idempotent pin",
+  !/ensureLinkFinderSourceCleanup|ensureLinkFinderSourceDeleted|deleteMessage/.test(retryBranch),
 );
 check(
   "17.36 the retry re-attempts the canonical pin idempotently",
@@ -1269,7 +1272,7 @@ check(
 );
 check(
   "17.40 an incomplete recovery is reported, not silently swallowed",
-  /already-sent recovery incomplete: cleanup=\$\{retryClean\} pin=\$\{retryPinned\}/.test(retryBranch),
+  /already-sent recovery incomplete: pin=\$\{retryPinned\}/.test(retryBranch),
 );
 
 // 17.g — START latency UX without weakening the first real snapshot.
@@ -1347,15 +1350,14 @@ check(
   alreadySentBranch81.indexOf('kind: "ALREADY_SENT"') < alreadySentBranch81.indexOf("if (!isLinkFinder)"),
 );
 check(
-  "18.5 SE-8.1 does not alter cleanup or pin in the recovery branch",
-  /const retryClean = await ensureLinkFinderSourceCleanup\(retryTargetId\);/.test(alreadySentBranch81) &&
-    /const retryPinned = await ensureCanonicalMissionPin\(retryTargetId, retryAutoPin, null\);/.test(
-      alreadySentBranch81,
-    ),
+  "18.5 SE-8.1 does not alter the required pin in the recovery branch",
+  /const retryPinned = await ensureCanonicalMissionPin\(retryTargetId, retryAutoPin, null\);/.test(
+    alreadySentBranch81,
+  ),
 );
 check(
   "18.6 the incomplete-recovery path stays diagnostic only, with no group message",
-  /console\.warn\(\s*`\[SE-8\] already-sent recovery incomplete/.test(alreadySentBranch81),
+  /console\.warn\(\s*`\[SE-9\] already-sent recovery incomplete/.test(alreadySentBranch81),
 );
 
 console.log(`Step 1 authoritative regression: ${passed} passed, ${failures.length} failed`);
