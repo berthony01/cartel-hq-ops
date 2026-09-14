@@ -288,6 +288,116 @@ check("10.4 every new RPC is service-role only", (se6Sql.match(/GRANT EXECUTE ON
 check("10.5 no secret value is embedded", !/eyJ|sb_secret_|Bearer /.test(se6Sql));
 check("10.6 it drops no table and deletes no data", !/DROP TABLE|TRUNCATE|DELETE FROM/i.test(se6Sql));
 
+// ---------------------------------------------------------------------------
+// 11. FINAL HARDENING — true durable baseline, null-honest TOTAL_INTERACTIONS,
+//     and Link Finder callback context binding.
+// ---------------------------------------------------------------------------
+
+// 11.a — the durable baseline, not the oldest DISPLAYED reading.
+// This mission stored far more readings than the UI loads, so the oldest
+// loaded snapshot (views 5000) is NOT the true baseline (views 100).
+const longMissionView = {
+  mission: {
+    id: "m2",
+    status: "COMPLETED",
+    started_at: "2026-01-01T10:00:00Z",
+    ends_at: "2026-01-01T11:00:00Z",
+    completed_at: "2026-01-01T11:00:00Z",
+    accomplished_at: null,
+    baseline_observed_at: "2026-01-01T10:01:00Z",
+    baseline_views: 100,
+    baseline_likes: null,
+    baseline_comments: null,
+    baseline_shares: null,
+    baseline_saves: null,
+  },
+  canonicalUrl: null,
+  authorHandle: null,
+  targets: [],
+  scheduleEvents: [],
+  latestSnapshot: null,
+  snapshots: [
+    baseSnapshot("2026-01-01T10:59:00Z", 9000, 320),
+    baseSnapshot("2026-01-01T10:30:00Z", 5000, 180),
+  ],
+  snapshotCount: MISSION_HISTORY_LIMIT + 7,
+} as unknown as MissionView;
+
+const longSummary = missionSummary(longMissionView);
+const longViews = longSummary.changes.find((c) => c.key === "views");
+const longLikes = longSummary.changes.find((c) => c.key === "likes");
+check("11.1 the truncated history is genuinely longer than what is displayed", longMissionView.snapshotCount > MISSION_HISTORY_LIMIT && longMissionView.snapshots.length <= MISSION_HISTORY_LIMIT);
+check("11.2 the oldest DISPLAYED reading is not the true baseline", longMissionView.snapshots[longMissionView.snapshots.length - 1]!.views === 5000);
+check("11.3 the summary baseline is the mission's durable baseline", longViews?.baseline === 100);
+check("11.4 baseline-to-final change uses the durable baseline", longViews?.change === 8900);
+check("11.5 the final value is still the newest stored reading", longViews?.final === 9000);
+check("11.6 a NULL durable baseline metric stays unknown", longLikes?.baseline === null);
+check("11.7 a NULL durable baseline is never filled from a later snapshot", longLikes?.change === null && longLikes?.final === 320);
+check("11.8 the durable baseline columns are read from the mission row", /baseline_\$\{key\}|baseline_observed_at/.test(missionsLibCode));
+check("11.9 the legacy fallback is documented and gated on a missing durable baseline", /LEGACY ONLY/.test(readFileSync(MISSIONS_LIB, "utf8")) && /hasDurableBaseline/.test(missionsLibCode));
+
+// Legacy missions, with no durable baseline at all, still summarise.
+check("11.10 a legacy mission without a durable baseline still summarises", missionSummary(completedView).changes.find((c) => c.key === "views")?.baseline === 100);
+
+// 11.b — TOTAL_INTERACTIONS is null-honest.
+const totalConfig = { milestone_type: "TOTAL_INTERACTIONS", milestone_target: 100 };
+const allKnown = pulseMilestoneLine(
+  { views: 10, likes: 30, comments: 20, shares: 10, saves: null } as never,
+  totalConfig,
+);
+const missingReplies = pulseMilestoneLine(
+  { views: 10, likes: 30, comments: null, shares: 10, saves: null } as never,
+  totalConfig,
+);
+const missingLikes = pulseMilestoneLine(
+  { views: 10, likes: null, comments: 20, shares: 10, saves: null } as never,
+  totalConfig,
+);
+const missingShares = pulseMilestoneLine(
+  { views: 10, likes: 30, comments: 20, shares: null, saves: null } as never,
+  totalConfig,
+);
+check("11.11 all three known components sum correctly", allKnown !== null && /60 \/ 100 interactions/.test(allKnown));
+check("11.12 a missing replies count yields no milestone progress", missingReplies === null);
+check("11.13 a missing likes count yields no milestone progress", missingLikes === null);
+check("11.14 a missing reposts count yields no milestone progress", missingShares === null);
+check("11.15 VIEWS milestone behaviour is preserved", (pulseMilestoneLine({ views: 500, likes: null, comments: null, shares: null, saves: null } as never, { milestone_type: "VIEWS", milestone_target: 400 }) ?? "").includes("Milestone reached"));
+check("11.16 an unknown single metric still yields no progress", pulseMilestoneLine({ views: null, likes: null, comments: null, shares: null, saves: null } as never, { milestone_type: "LIKES", milestone_target: 10 }) === null);
+const pulseCopySrc = read("backend-source/edge-functions/_shared/mission-pulse-copy.ts");
+check("11.17 the pulse total never coerces an unknown component to zero", !/\(metrics\.likes \?\? 0\)/.test(pulseCopySrc));
+check("11.18 the pulse total requires ALL THREE components", /metrics\.likes === null \|\| metrics\.comments === null \|\| metrics\.shares === null/.test(pulseCopySrc));
+
+// SQL side — both prepared migrations use the all-three gate, no COALESCE.
+for (const [label, sql] of [["SE-5", se5Sql], ["SE-6", se6Sql]] as const) {
+  const branch = sql.slice(sql.indexOf("WHEN 'TOTAL_INTERACTIONS' THEN"), sql.indexOf("WHEN 'TOTAL_INTERACTIONS' THEN") + 320);
+  check(`11.19 ${label} gates the total on all three components being non-null`, /_likes IS NULL OR _comments IS NULL OR _shares IS NULL/.test(branch));
+  check(`11.20 ${label} never coalesces an unknown interaction component to zero`, !/COALESCE\(_likes, 0\)/.test(branch));
+  check(`11.21 ${label} cannot accomplish from a partial interaction set`, /THEN NULL/.test(branch) && /IF v_progress IS NOT NULL AND v_progress >= v_target_value THEN/.test(sql));
+}
+
+// 11.c — Link Finder callback context binding.
+const lfBranch = webhookRaw.slice(
+  webhookRaw.indexOf("const smStart = callbackData.match"),
+  webhookRaw.indexOf('source: "telegram_link_finder"'),
+);
+const idxMismatch = lfBranch.indexOf("String(candidateChatId) !== String(callbackChatId)");
+const idxGetMember = lfBranch.indexOf('"getChatMember"');
+const idxResolve = lfBranch.indexOf("resolve_social_mission_link_candidate");
+check("11.22 the callback context is bound to the candidate's own chat", idxMismatch > 0);
+check("11.23 the mismatch guard runs BEFORE live admin verification", idxMismatch < idxGetMember);
+check("11.24 the mismatch guard runs BEFORE the consuming resolver", idxMismatch < idxResolve);
+check("11.25 a mismatched context returns without resolving", /String\(candidateChatId\) !== String\(callbackChatId\)[\s\S]{0,240}?return json\(\{ ok: true \}\);/.test(lfBranch));
+check("11.26 live verification uses the candidate chat", /chat_id: candidateChatId,\s*\n\s*user_id: Number\(from\.id\)/.test(lfBranch));
+check("11.27 the resolver still requires the verified chat id", /_verified_chat_id: candidateChatId/.test(lfBranch));
+check("11.28 prompt cleanup targets the candidate chat", /deleteMessage"[\s\S]{0,200}?chat_id: candidateChatId/.test(lfBranch));
+check("11.29 START launches into the candidate chat", /chatId: String\(candidateChatId\)/.test(webhookRaw));
+check("11.30 no Link Finder action uses callbackChatId", !/chat_id: callbackChatId|chatId: callbackChatId/.test(lfBranch));
+
+// 11.d — the runner header no longer claims zero metric reads of any kind.
+check("11.31 the runner header says ZERO provider/X reads", /ZERO provider\/X reads/.test(runnerRaw));
+check("11.32 the runner header no longer claims ZERO metric reads", !/ZERO metric reads/.test(runnerRaw));
+check("11.33 the runner still performs zero provider calls in the lifecycle loop", !/lookupXPostMetrics/.test(runnerCode.slice(runnerCode.indexOf("PULSE"))) || !/api\.x\.com/.test(runnerCode));
+
 console.log(`Step 1 authoritative regression: ${passed} passed, ${failures.length} failed`);
 if (failures.length > 0) {
   for (const failure of failures) console.log(`  FAIL ${failure}`);
