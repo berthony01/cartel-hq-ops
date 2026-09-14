@@ -162,6 +162,11 @@ DECLARE
   v_actor_user_id uuid;
   v_mission_workspace uuid;
   v_target_chat bigint;
+  v_target_id uuid;
+  v_delivery_state text;
+  v_ends_at timestamptz;
+  v_schedule_active boolean;
+
 BEGIN
   IF _candidate_id IS NULL OR _telegram_user_id IS NULL
      OR _verified_chat_id IS NULL OR _mission_id IS NULL THEN
