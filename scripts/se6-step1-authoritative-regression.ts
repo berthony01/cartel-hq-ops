@@ -21,6 +21,12 @@ import {
   pulseRemainingLine,
 } from "../backend-source/edge-functions/_shared/mission-pulse-copy";
 import {
+  EMPTY_METRICS,
+  milestoneProgressLine,
+  renderMissionCard,
+  type CanonicalMetrics,
+} from "../backend-source/edge-functions/social-mission-telegram/card";
+import {
   MISSION_PRESET_SHAPE,
   defaultMissionSettings,
 } from "../src/lib/social-mission-settings";
@@ -400,7 +406,122 @@ check("11.31 the runner header says ZERO provider/X reads", /ZERO provider\/X re
 check("11.32 the runner header no longer claims ZERO metric reads", !/ZERO metric reads/.test(runnerRaw));
 check("11.33 the runner still performs zero provider calls in the lifecycle loop", !/lookupXPostMetrics/.test(runnerCode.slice(runnerCode.indexOf("PULSE"))) || !/api\.x\.com/.test(runnerCode));
 
+
+// ---------------------------------------------------------------------------
+// 12. Telegram CARD renderer milestone progress is NULL-HONEST.
+// ---------------------------------------------------------------------------
+const cardMetrics = (over: Partial<CanonicalMetrics>): CanonicalMetrics => ({
+  ...EMPTY_METRICS,
+  ...over,
+});
+
+const totalMilestone = { type: "TOTAL_INTERACTIONS", target: 100 } as const;
+
+check(
+  "12.1 card TOTAL_INTERACTIONS sums when all three components are known",
+  milestoneProgressLine(totalMilestone, cardMetrics({ likes: 10, comments: 5, shares: 2 }), false) ===
+    "Milestone: Likes + replies + reposts 17 / 100",
+);
+check(
+  "12.2 card TOTAL_INTERACTIONS returns null when likes are unknown",
+  milestoneProgressLine(totalMilestone, cardMetrics({ comments: 5, shares: 2 }), false) === null,
+);
+check(
+  "12.3 card TOTAL_INTERACTIONS returns null when replies are unknown",
+  milestoneProgressLine(totalMilestone, cardMetrics({ likes: 10, shares: 2 }), false) === null,
+);
+check(
+  "12.4 card TOTAL_INTERACTIONS returns null when reposts are unknown",
+  milestoneProgressLine(totalMilestone, cardMetrics({ likes: 10, comments: 5 }), false) === null,
+);
+check(
+  "12.5 card TOTAL_INTERACTIONS never coerces a missing component to zero",
+  milestoneProgressLine(totalMilestone, cardMetrics({ likes: 10, comments: 5 }), false) !==
+    "Milestone: Likes + replies + reposts 15 / 100",
+);
+check(
+  "12.6 a LIVE card with a partial interaction set renders no milestone line",
+  !renderMissionCard({
+    missionStatus: "LIVE",
+    platform: "x",
+    canonicalUrl: "https://x.com/PEPECARTELTOKEN/status/2098827349470961903",
+    authorHandle: "PEPECARTELTOKEN",
+    contentText: null,
+    projectName: "PEPECARTEL",
+    ticker: "PCART",
+    baseline: EMPTY_METRICS,
+    latest: cardMetrics({ likes: 10, comments: 5 }),
+    milestone: totalMilestone,
+    nowMs: 0,
+  }).text.includes("Milestone:"),
+);
+check(
+  "12.7 a LIVE card with all three components renders the milestone line",
+  renderMissionCard({
+    missionStatus: "LIVE",
+    platform: "x",
+    canonicalUrl: "https://x.com/PEPECARTELTOKEN/status/2098827349470961903",
+    authorHandle: "PEPECARTELTOKEN",
+    contentText: null,
+    projectName: "PEPECARTEL",
+    ticker: "PCART",
+    baseline: EMPTY_METRICS,
+    latest: cardMetrics({ likes: 10, comments: 5, shares: 2 }),
+    milestone: totalMilestone,
+    nowMs: 0,
+  }).text.includes("Milestone: Likes + replies + reposts 17 / 100"),
+);
+
+// 12.b — single-metric milestone behavior is preserved exactly.
+check(
+  "12.8 card VIEWS milestone still reports known views",
+  milestoneProgressLine({ type: "VIEWS", target: 1000 }, cardMetrics({ views: 250 }), false) ===
+    "Milestone: Views 250 / 1000",
+);
+check(
+  "12.9 card LIKES milestone still reports known likes",
+  milestoneProgressLine({ type: "LIKES", target: 50 }, cardMetrics({ likes: 12 }), false) ===
+    "Milestone: Likes 12 / 50",
+);
+check(
+  "12.10 card REPLIES milestone still reports known replies",
+  milestoneProgressLine({ type: "REPLIES", target: 20 }, cardMetrics({ comments: 4 }), false) ===
+    "Milestone: Replies 4 / 20",
+);
+check(
+  "12.11 card REPOSTS milestone still reports known reposts",
+  milestoneProgressLine({ type: "REPOSTS", target: 20 }, cardMetrics({ shares: 6 }), false) ===
+    "Milestone: Reposts 6 / 20",
+);
+check(
+  "12.12 card single-metric milestones stay null when that metric is unknown",
+  milestoneProgressLine({ type: "VIEWS", target: 1000 }, EMPTY_METRICS, false) === null &&
+    milestoneProgressLine({ type: "LIKES", target: 50 }, EMPTY_METRICS, false) === null &&
+    milestoneProgressLine({ type: "REPLIES", target: 20 }, EMPTY_METRICS, false) === null &&
+    milestoneProgressLine({ type: "REPOSTS", target: 20 }, EMPTY_METRICS, false) === null,
+);
+check(
+  "12.13 card milestone reached marker still appears once the target is met",
+  milestoneProgressLine({ type: "LIKES", target: 10 }, cardMetrics({ likes: 10 }), false)?.endsWith("✅") === true,
+);
+
+// 12.c — source assertion: no partial-sum semantics may return.
+check(
+  "12.14 the card renderer cannot partial-sum TOTAL_INTERACTIONS",
+  !/\[latest\.likes, latest\.comments, latest\.shares\]\s*\.filter\(isCount\)/.test(cardCode) &&
+    !/filter\(isCount\)/.test(cardCode),
+);
+check(
+  "12.15 the card renderer gates the total on all three known components",
+  /isCount\(latest\.likes\)\s*&&\s*isCount\(latest\.comments\)\s*&&\s*isCount\(latest\.shares\)/.test(cardCode),
+);
+check(
+  "12.16 the card renderer never coalesces milestone components to zero",
+  !/latest\.(likes|comments|shares)\s*\?\?\s*0/.test(cardCode),
+);
+
 console.log(`Step 1 authoritative regression: ${passed} passed, ${failures.length} failed`);
+
 if (failures.length > 0) {
   for (const failure of failures) console.log(`  FAIL ${failure}`);
   process.exit(1);

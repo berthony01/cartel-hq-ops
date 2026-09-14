@@ -241,9 +241,15 @@ export function milestoneProgressLine(
   else if (milestone.type === "REPLIES") progress = isCount(latest.comments) ? latest.comments : null;
   else if (milestone.type === "REPOSTS") progress = isCount(latest.shares) ? latest.shares : null;
   else {
-    const parts = [latest.likes, latest.comments, latest.shares].filter(isCount);
-    progress = parts.length > 0 ? parts.reduce((sum, value) => sum + value, 0) : null;
+    // NULL-HONEST: TOTAL_INTERACTIONS is computable ONLY when ALL THREE
+    // components are known. A single unknown component makes the total
+    // unknown — it is never treated as 0 and partial subsets are never summed.
+    progress =
+      isCount(latest.likes) && isCount(latest.comments) && isCount(latest.shares)
+        ? latest.likes + latest.comments + latest.shares
+        : null;
   }
+
   if (progress === null) return null;
   const suffix = accomplished || progress >= milestone.target ? " ✅" : "";
   return `Milestone: ${MILESTONE_LABELS[milestone.type]} ${progress} / ${milestone.target}${suffix}`;
