@@ -43,6 +43,16 @@ export const EMPTY_METRICS: CanonicalMetrics = {
 /** DRAFT is deliberately absent: a draft mission has no transport and no card. */
 export type MissionCardStatus = "LIVE" | "COMPLETED" | "CANCELLED" | "FAILED";
 
+/**
+ * SE-5 — optional milestone display. A milestone is a PROJECT-level public
+ * metric target. It is never a requirement placed on an individual member and
+ * it never carries a reward, point, badge or payout.
+ */
+export type MissionMilestone = {
+  type: "VIEWS" | "LIKES" | "REPLIES" | "REPOSTS" | "TOTAL_INTERACTIONS";
+  target: number;
+};
+
 export type MissionCardInput = {
   missionStatus: MissionCardStatus;
   platform: MissionCardPlatform;
@@ -55,6 +65,14 @@ export type MissionCardInput = {
   baseline: CanonicalMetrics;
   /** Latest metric snapshot, or null when nothing has been observed yet. */
   latest: CanonicalMetrics | null;
+  /** SE-5 — product-level ACCOMPLISHED. The DB status stays LIVE/COMPLETED. */
+  accomplished?: boolean;
+  /** SE-5 — mission window end, used only for an approximate remaining time. */
+  endsAt?: string | null;
+  /** Injected clock so the renderer stays deterministic and testable. */
+  nowMs?: number;
+  /** SE-5 — optional configured milestone. Omitted entirely when unset. */
+  milestone?: MissionMilestone | null;
   /**
    * Hard character budget. Defaults to the plain-text limit; the branded photo
    * transport passes TELEGRAM_CAPTION_MAX so a caption can never be rejected.
