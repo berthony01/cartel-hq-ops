@@ -204,8 +204,55 @@ function metricsHeading(status: MissionCardStatus): string {
   return status === "LIVE" ? LIVE_METRICS_HEADING : `${COMPLETED_OBSERVED_PHRASE}:`;
 }
 
+/** Approximate, deliberately coarse. Never a countdown, never a deadline. */
+export function approximateRemaining(endsAt: unknown, nowMs: number): string | null {
+  if (typeof endsAt !== "string" || !endsAt.trim()) return null;
+  const end = new Date(endsAt).getTime();
+  if (!Number.isFinite(end)) return null;
+  const remaining = end - nowMs;
+  if (remaining <= 0) return null;
+  const minutes = Math.max(1, Math.round(remaining / 60_000));
+  return `~${minutes}m remaining`;
+}
+
+const MILESTONE_LABELS: Record<MissionMilestone["type"], string> = {
+  VIEWS: "Views",
+  LIKES: "Likes",
+  REPLIES: "Replies",
+  REPOSTS: "Reposts",
+  TOTAL_INTERACTIONS: "Likes + replies + reposts",
+};
+
+/**
+ * Milestone progress against ABSOLUTE public metrics. `TOTAL_INTERACTIONS`
+ * deliberately excludes views and bookmarks. Returns null when the milestone is
+ * unset or the metrics needed for it are unknown; unknown never becomes 0.
+ */
+export function milestoneProgressLine(
+  milestone: MissionMilestone | null | undefined,
+  latest: CanonicalMetrics | null,
+  accomplished: boolean,
+): string | null {
+  if (!milestone || !isCount(milestone.target) || milestone.target <= 0) return null;
+  if (!latest) return null;
+  let progress: number | null = null;
+  if (milestone.type === "VIEWS") progress = isCount(latest.views) ? latest.views : null;
+  else if (milestone.type === "LIKES") progress = isCount(latest.likes) ? latest.likes : null;
+  else if (milestone.type === "REPLIES") progress = isCount(latest.comments) ? latest.comments : null;
+  else if (milestone.type === "REPOSTS") progress = isCount(latest.shares) ? latest.shares : null;
+  else {
+    const parts = [latest.likes, latest.comments, latest.shares].filter(isCount);
+    progress = parts.length > 0 ? parts.reduce((sum, value) => sum + value, 0) : null;
+  }
+  if (progress === null) return null;
+  const suffix = accomplished || progress >= milestone.target ? " ✅" : "";
+  return `Milestone: ${MILESTONE_LABELS[milestone.type]} ${progress} / ${milestone.target}${suffix}`;
+}
+
 function composeLines(input: MissionCardInput, excerptBudget: number | null): string[] {
   const lines: string[] = [];
+  const nowMs = typeof input.nowMs === "number" && Number.isFinite(input.nowMs) ? input.nowMs : Date.now();
+  const accomplished = input.accomplished === true;
 
   const project = projectLine(input);
   if (project) lines.push(project);
@@ -224,14 +271,31 @@ function composeLines(input: MissionCardInput, excerptBudget: number | null): st
   for (const line of statusBody(input.missionStatus)) lines.push(line);
 
   const metricLines = renderMetricLines(input.platform, input.baseline, input.latest);
-  if (metricLines.length > 0) {
+  if (input.missionStatus === "LIVE") {
+    // A LIVE card ALWAYS carries the results block. With no snapshot yet it
+    // says so honestly instead of rendering zeroes.
+    lines.push("");
+    lines.push(LIVE_METRICS_HEADING);
+    if (metricLines.length > 0) for (const line of metricLines) lines.push(line);
+    else lines.push(LIVE_METRICS_PENDING);
+
+    const milestoneLine = milestoneProgressLine(input.milestone, input.latest, accomplished);
+    if (milestoneLine) lines.push(milestoneLine);
+
+    const remaining = approximateRemaining(input.endsAt, nowMs);
+    const state = accomplished ? MISSION_STATE_ACCOMPLISHED : MISSION_STATE_LIVE;
+    lines.push(remaining ? `Status: ${state} · ${remaining}` : `Status: ${state}`);
+  } else if (metricLines.length > 0) {
     lines.push("");
     lines.push(metricsHeading(input.missionStatus));
     for (const line of metricLines) lines.push(line);
+    const milestoneLine = milestoneProgressLine(input.milestone, input.latest, accomplished);
+    if (milestoneLine) lines.push(milestoneLine);
   }
 
   if (input.missionStatus !== "LIVE") {
     lines.push("");
+    if (accomplished) lines.push(`Status: ${MISSION_STATE_ACCOMPLISHED}`);
     lines.push(NO_CAUSATION_CAVEAT);
   }
 
