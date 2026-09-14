@@ -2280,7 +2280,57 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true });
     }
 
-
+    // SE-5 — X Link Finder. A human posting a link to the project's OWN
+    // official X account in a connected group gets a private-to-the-group
+    // START / IGNORE prompt. It NEVER starts a mission by itself, never
+    // deletes the member's message, and the RPC fails closed on every
+    // ownership fact (connected group, link finder enabled, official handle).
+    if (
+      from?.is_bot !== true &&
+      !text.startsWith("/") &&
+      (chat?.type === "group" || chat?.type === "supergroup")
+    ) {
+      const linkMatch = text.match(
+        /https:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/[A-Za-z0-9_]{1,15}\/status\/[0-9]{1,32}(?![0-9])/i,
+      );
+      const parsedLink = linkMatch ? parseXStatusUrl(String(linkMatch[0])) : null;
+      if (parsedLink) {
+        const { data: candidate } = await admin.rpc("create_social_mission_link_candidate", {
+          _telegram_chat_id: Number(chatId),
+          _telegram_message_id: Number(message?.message_id),
+          _telegram_user_id: Number(from.id),
+          _canonical_url: parsedLink.canonicalUrl,
+          _external_post_id: parsedLink.postId,
+          _author_handle: parsedLink.handle,
+          _ttl_minutes: 15,
+        });
+        const created = (candidate ?? {}) as { outcome?: string; candidate_id?: string };
+        // EXISTING = a webhook retry or a repost of the same message: silent.
+        if (created.outcome === "CREATED" && created.candidate_id) {
+          const prompt = await telegramJson(TELEGRAM_BOT_TOKEN, "sendMessage", {
+            chat_id: chatId,
+            text: "This is an official project post. Admins can start a Social Mission for it.",
+            reply_to_message_id: Number(message?.message_id),
+            disable_notification: true,
+            disable_web_page_preview: true,
+            reply_markup: {
+              inline_keyboard: [[
+                { text: "START MISSION", callback_data: `sm_lf_start_${created.candidate_id}` },
+                { text: "IGNORE", callback_data: `sm_lf_ignore_${created.candidate_id}` },
+              ]],
+            },
+          }).catch(() => null);
+          const promptId = (prompt as { message_id?: number } | null)?.message_id;
+          if (typeof promptId === "number") {
+            await admin.rpc("attach_social_mission_link_prompt", {
+              _candidate_id: created.candidate_id,
+              _prompt_message_id: promptId,
+            });
+          }
+          return json({ ok: true });
+        }
+      }
+    }
 
     const isHelp = /^\/help(?:@\w+)?$/i.test(text);
     const isRoadmap = /^\/roadmap(?:@\w+)?$/i.test(text);
