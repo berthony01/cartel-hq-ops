@@ -893,8 +893,17 @@ Deno.serve(async (req: Request) => {
         // Cosmetic housekeeping only; never surfaced and never retried.
       }
 
+      // Confirmed card + active schedule. Only now may the caller finalize its
+      // own transient state (Link Finder prompt + candidate).
+      await args.onMissionSettled?.({
+        kind: "ACTIVATED",
+        missionId: String(result.mission_id ?? ""),
+        targetId: String(result.target_id ?? ""),
+      });
+
       // The branded card itself is the confirmation. No extra success text.
       return;
+
     }
 
     if (transportState === "FAILED") {
