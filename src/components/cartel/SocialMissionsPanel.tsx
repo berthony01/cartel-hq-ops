@@ -67,6 +67,10 @@ function MissionCard({ view }: { view: MissionView }) {
   const { mission, canonicalUrl, authorHandle, targets, scheduleEvents, latestSnapshot } = view;
   const remaining = missionTimeRemaining(mission);
   const active = isMissionActive(mission);
+  // SE-5 product state. ACCOMPLISHED is derived, not a database status, and the
+  // column is newer than the committed generated types.
+  const accomplishedAt = (mission as unknown as Record<string, unknown>)["accomplished_at"];
+  const accomplished = typeof accomplishedAt === "string";
 
   return (
     <article className="min-w-0 rounded-lg border border-border/70 bg-surface-elevated p-3.5 sm:p-4">
