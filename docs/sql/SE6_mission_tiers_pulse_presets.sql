@@ -497,7 +497,8 @@ BEGIN
   IF NOT FOUND THEN RETURN false; END IF;
 
   SELECT views, likes, comments, shares, saves
-    INTO v_last
+    INTO v_views, v_likes, v_comments, v_shares, v_saves
+
     FROM public.social_metric_snapshots
    WHERE mission_id = _mission_id
    ORDER BY observed_at DESC
@@ -532,11 +533,12 @@ BEGIN
       THEN GREATEST(0, (EXTRACT(EPOCH FROM (COALESCE(v_m.completed_at, v_m.ends_at, now()) - v_m.started_at)) / 60)::integer)
     END,
     v_m.baseline_views, v_m.baseline_likes, v_m.baseline_comments, v_m.baseline_shares,
-    v_last.views, v_last.likes, v_last.comments, v_last.shares, v_last.saves,
-    CASE WHEN v_last.views IS NOT NULL AND v_m.baseline_views IS NOT NULL THEN v_last.views - v_m.baseline_views END,
-    CASE WHEN v_last.likes IS NOT NULL AND v_m.baseline_likes IS NOT NULL THEN v_last.likes - v_m.baseline_likes END,
-    CASE WHEN v_last.comments IS NOT NULL AND v_m.baseline_comments IS NOT NULL THEN v_last.comments - v_m.baseline_comments END,
-    CASE WHEN v_last.shares IS NOT NULL AND v_m.baseline_shares IS NOT NULL THEN v_last.shares - v_m.baseline_shares END,
+    v_views, v_likes, v_comments, v_shares, v_saves,
+    CASE WHEN v_views IS NOT NULL AND v_m.baseline_views IS NOT NULL THEN v_views - v_m.baseline_views END,
+    CASE WHEN v_likes IS NOT NULL AND v_m.baseline_likes IS NOT NULL THEN v_likes - v_m.baseline_likes END,
+    CASE WHEN v_comments IS NOT NULL AND v_m.baseline_comments IS NOT NULL THEN v_comments - v_m.baseline_comments END,
+    CASE WHEN v_shares IS NOT NULL AND v_m.baseline_shares IS NOT NULL THEN v_shares - v_m.baseline_shares END,
+
     COALESCE(v_m.highest_tier, 0),
     v_m.accomplished_at IS NOT NULL,
     COALESCE(v_m.x_link_status, 'UNKNOWN'),
