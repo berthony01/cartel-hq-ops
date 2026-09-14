@@ -102,7 +102,11 @@ BEGIN
   v_snapshot_inserted := v_rows = 1;
 
   -- Internal-only telemetry, tied to the durable snapshot idempotency fact.
-  IF v_snapshot_inserted AND _provider = 'x' THEN
+  -- PROVIDER GATE: the official X adapter is the ONLY metered provider. It
+  -- writes snapshots under the exact runtime constant X_PROVIDER = 'x-official'
+  -- (backend-source/edge-functions/_shared/x-metrics.ts). No other provider
+  -- string is metered.
+  IF v_snapshot_inserted AND _provider = 'x-official' THEN
     INSERT INTO public.usage_ledger (workspace_id, user_id, action_type, units)
     VALUES (v_mission.workspace_id, NULL, 'social_x_tracked_post_read', 1);
   END IF;
