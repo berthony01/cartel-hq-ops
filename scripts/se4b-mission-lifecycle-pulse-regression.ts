@@ -211,7 +211,9 @@ check("9.24 the runner makes zero X/provider calls", !/api\.twitter\.com|api\.x\
 check("9.25 the only Telegram host is the fixed official API", /TELEGRAM_API = "https:\/\/api\.telegram\.org"/.test(runnerCode) && (runnerCode.match(/https:\/\/api\.telegram\.org/g) ?? []).length === 1);
 check("9.26 429 and 5xx are treated as uncertain, never definite", /response\.status === 429 \|\| response\.status >= 500/.test(runnerCode));
 check("9.27 the pulse copy promises no reward, quota or mandatory engagement", !/point|reward|quota|streak|must like|must repost|airdrop/i.test(runnerCode.match(/PULSE_TEXT =[\s\S]*?;/)?.[0] ?? ""));
-check("9.28 the pulse copy states the mission is still active", /still active/.test(runnerSrc));
+// Re-pinned for Step 1: the pulse copy now lives in the pure shared module the
+// runner imports. The wording contract itself is unchanged.
+check("9.28 the pulse copy states the mission is still active", /still active/.test(readFileSync(PULSE_COPY_PATH, "utf8")));
 check("9.29 the runner rejects non-POST calls", /request\.method !== "POST"/.test(runnerCode));
 
 // ---------------------------------------------------------------------------
@@ -271,7 +273,10 @@ for (const [index, forbidden] of ["ACCOMPLISHED", "/mission refresh", "/mission 
 check("12.4 no contributor recognition, points or billing in this phase", !/contributor_badge|points_awarded|billing/i.test(runnerCode + sqlCode));
 // SE-5 re-pin: stored snapshots are now read and written by the metrics phase.
 // The frozen rule that survives is that the PULSE path never fetches.
-check("12.5 the pulse text is built only from a stored snapshot", /function buildPulseText\([\s\S]{0,1200}?\n\}/.test(runnerCode) && !/function buildPulseText\([\s\S]{0,1200}?\n\}/.exec(runnerCode)![0].includes("lookupXPostMetrics") && /social_metric_snapshots/.test(runnerCode));
+// Re-pinned for Step 1: `buildPulseText` moved into the pure shared module,
+// which has ZERO network and ZERO database access by construction.
+const pulseCopySrc = readFileSync(PULSE_COPY_PATH, "utf8");
+check("12.5 the pulse text is built only from a stored snapshot", /function buildPulseText\(/.test(pulseCopySrc) && !/lookupXPostMetrics|createClient|fetch\(/.test(pulseCopySrc) && /social_metric_snapshots/.test(runnerCode));
 check("12.6 the documentation exists and states the DB-first completion rule", docSrc.includes("COMPLETED") && /database[- ]first/i.test(docSrc));
 check("12.7 the documentation records that the SQL is prepare-only", /prepare[- ]only/i.test(docSrc) && /PREPARE ONLY/i.test(sql));
 

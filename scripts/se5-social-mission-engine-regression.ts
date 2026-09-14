@@ -124,7 +124,11 @@ check("4.10 one snapshot per mission and minute bucket is enforced in SQL", /pol
 // ---------------------------------------------------------------------------
 // 5. Launch read is fail-soft and single
 // ---------------------------------------------------------------------------
-check("5.1 the transport attempts exactly one launch metrics read", (transportCode.match(/lookupXPostMetrics\(/g) ?? []).length === 1);
+// Re-pinned for Step 1 (E): the transport now has EXACTLY TWO official read
+// sites and no more - one fail-soft launch read, and one fail-soft final read
+// for a MANUAL close that is skipped when the current minute already has a
+// snapshot. Neither may appear more than once.
+check("5.1 the transport attempts exactly one launch metrics read", (transportCode.match(/lookupXPostMetrics\(/g) ?? []).length === 2 && (transportCode.slice(transportCode.indexOf("async function attemptLaunchMetricsRead"), transportCode.indexOf("async function attemptFinalMetricsRead")).match(/lookupXPostMetrics\(/g) ?? []).length === 1);
 check("5.2 the launch read cannot break the send", /attemptLaunchMetricsRead/.test(transportCode) && /catch/.test(transportCode));
 check("5.3 the launch read reuses the same snapshot RPC as the runner", /record_social_mission_metric_snapshot/.test(transportCode) && /record_social_mission_metric_snapshot/.test(runnerCode));
 check("5.4 the runner refresh runs before the schedule claim", runnerCode.indexOf("runMetricsRefresh") < runnerCode.indexOf("claim_due_social_mission_schedule_events"));
