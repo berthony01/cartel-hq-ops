@@ -149,6 +149,34 @@ export function isCanonicalXStatusUrl(value: unknown): value is string {
 export const PULSE_TEXT =
   "This Social Mission is still active. Read the official post above and join the conversation naturally if you have something to add.";
 
+export const PULSE_ACCOMPLISHED_TEXT =
+  "This Social Mission has hit its milestone and is still open. Read the official post above and join the conversation naturally if you have something to add.";
+
+/**
+ * SE-5 Pulse 2.0 — the pulse may quote the LATEST STORED snapshot, but it
+ * performs ZERO provider reads of its own. Unknown metrics are omitted, never
+ * printed as 0, and the line is dropped entirely when nothing is known.
+ */
+export function pulseMetricLine(metrics: XCanonicalMetrics | null): string | null {
+  if (!metrics) return null;
+  const parts: string[] = [];
+  if (metrics.views !== null) parts.push(`${metrics.views} views`);
+  if (metrics.likes !== null) parts.push(`${metrics.likes} likes`);
+  if (metrics.comments !== null) parts.push(`${metrics.comments} replies`);
+  if (metrics.shares !== null) parts.push(`${metrics.shares} reposts`);
+  if (parts.length === 0) return null;
+  return `Last observed: ${parts.join(" · ")}.`;
+}
+
+export function buildPulseText(
+  metrics: XCanonicalMetrics | null,
+  accomplished: boolean,
+): string {
+  const head = accomplished ? PULSE_ACCOMPLISHED_TEXT : PULSE_TEXT;
+  const line = pulseMetricLine(metrics);
+  return line ? `${head}\n\n${line}` : head;
+}
+
 export function pulseKeyboard(canonicalUrl: unknown) {
   return isCanonicalXStatusUrl(canonicalUrl)
     ? { inline_keyboard: [[{ text: "OPEN ON X", url: String(canonicalUrl).trim() }]] }
