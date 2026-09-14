@@ -2877,10 +2877,26 @@ Deno.serve(async (req: Request) => {
             },
           }).catch(() => null);
           const promptId = (prompt as { message_id?: number } | null)?.message_id;
+          let promptAttached = false;
           if (typeof promptId === "number") {
-            await admin.rpc("attach_social_mission_link_prompt", {
-              _candidate_id: created.candidate_id,
-              _prompt_message_id: promptId,
+            const { data: attached, error: attachError } = await admin.rpc(
+              "attach_social_mission_link_prompt",
+              { _candidate_id: created.candidate_id, _prompt_message_id: promptId },
+            );
+            promptAttached = !attachError && attached === true;
+          }
+
+          // SE-9 — the ORIGINAL X-link message is removed here, immediately
+          // after the prompt is CONFIRMED sent AND attached, and never before.
+          // A prompt that failed to send or failed to attach leaves the
+          // member's post completely untouched. A failed deletion records a
+          // bounded diagnostic and leaves the PENDING candidate retryable; the
+          // START path re-attempts it before launching.
+          if (promptAttached) {
+            await ensureLinkFinderSourceDeleted({
+              candidateId: String(created.candidate_id),
+              chatId: String(chatId),
+              sourceMessageId: Number(message?.message_id),
             });
           }
           return json({ ok: true });
