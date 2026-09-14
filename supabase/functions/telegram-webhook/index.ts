@@ -1709,6 +1709,16 @@ Deno.serve(async (req: Request) => {
           return json({ ok: true });
         }
 
+        // CONTEXT BINDING, BEFORE live verification and BEFORE any resolve.
+        // A tap delivered from any chat other than the candidate's own chat is
+        // refused outright: nothing is verified, nothing is mutated, and the
+        // candidate stays PENDING for an authorized admin in the right group.
+        if (String(candidateChatId) !== String(callbackChatId)) {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "This suggestion could not be handled.");
+          return json({ ok: true });
+        }
+
+
         let lfStatus = "";
         try {
           const member = await telegramJson(TELEGRAM_BOT_TOKEN, "getChatMember", {
