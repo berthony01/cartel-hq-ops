@@ -21,6 +21,12 @@ import {
   pulseRemainingLine,
 } from "../backend-source/edge-functions/_shared/mission-pulse-copy";
 import {
+  EMPTY_METRICS,
+  milestoneProgressLine,
+  renderMissionCard,
+  type CanonicalMetrics,
+} from "../backend-source/edge-functions/social-mission-telegram/card";
+import {
   MISSION_PRESET_SHAPE,
   defaultMissionSettings,
 } from "../src/lib/social-mission-settings";
