@@ -217,8 +217,13 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.social_mission_effective_config(uuid) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.social_mission_effective_config(uuid) TO authenticated, service_role, postgres;
+-- SERVICE-ONLY. This SECURITY DEFINER helper reads a mission's immutable
+-- effective_config by id and is needed only by service-side mission RPCs and
+-- worker paths (all of which call it as their own definer owner, or through
+-- the service role). Signed-in clients never need direct EXECUTE, so it is
+-- revoked from PUBLIC, anon AND authenticated.
+REVOKE ALL ON FUNCTION public.social_mission_effective_config(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.social_mission_effective_config(uuid) TO service_role, postgres;
 
 -- ---------------------------------------------------------------------------
 -- 6. activate_social_mission_schedule — preset-driven, no hardcoded 45/3,8,...
