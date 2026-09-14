@@ -1716,6 +1716,7 @@ Deno.serve(async (req: Request) => {
           messageId: null,
           telegramUserId: Number(from.id),
           argument: String(decision.canonical_url ?? ""),
+          source: "telegram_link_finder",
         });
         return json({ ok: true });
       }
