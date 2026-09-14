@@ -1790,6 +1790,7 @@ Deno.serve(async (req: Request) => {
           // The mission is launched into the candidate's OWN chat, always.
           chatId: String(candidateChatId),
 
+
           chatType: String(callbackChat?.type ?? ""),
           updateId: update?.update_id,
           // The ORIGINAL post message is never deleted as a "command".
