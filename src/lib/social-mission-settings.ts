@@ -198,7 +198,9 @@ export function useSaveMissionSettings(workspaceId: string | null) {
           auto_pin_mission: settings.auto_pin_mission,
           milestone_type: settings.milestone_type,
           milestone_target: settings.milestone_type === "NONE" ? null : settings.milestone_target,
+          active_preset_id: settings.active_preset_id,
         },
+
         { onConflict: "workspace_id" },
       );
       if (error) throw error;
