@@ -287,20 +287,87 @@ async function requestCardEdit(args: {
   }
 }
 
+/** SE-6 — one ephemeral group message, replying to the canonical card. */
+async function sendEphemeralMissionMessage(
+  admin: ReturnType<typeof createClient>,
+  botToken: string,
+  row: { workspace_id: string; group_connection_id: string | null; telegram_chat_id: number; telegram_message_id: number | null; canonical_url: string | null },
+  text: string,
+): Promise<boolean> {
+  if (row.telegram_message_id === null) return false;
+  const keyboard = pulseKeyboard(row.canonical_url);
+  const outcome = await callTelegram(botToken, "sendMessage", {
+    chat_id: row.telegram_chat_id,
+    text,
+    reply_to_message_id: row.telegram_message_id,
+    disable_web_page_preview: true,
+    disable_notification: true,
+    ...(keyboard ? { reply_markup: keyboard } : {}),
+  });
+  if (outcome.kind !== "ok" || outcome.messageId === null) return false;
+
+  const deleteAfter = new Date(Date.now() + PULSE_LIFETIME_SECONDS * 1000).toISOString();
+  const { error } = await admin.from("telegram_message_cleanup_jobs").insert({
+    workspace_id: row.workspace_id,
+    group_connection_id: row.group_connection_id,
+    telegram_chat_id: row.telegram_chat_id,
+    telegram_message_id: outcome.messageId,
+    cleanup_kind: "social_mission_pulse",
+    delete_after: deleteAfter,
+    next_attempt_at: deleteAfter,
+  });
+  if (error) {
+    await callTelegram(botToken, "deleteMessage", {
+      chat_id: row.telegram_chat_id,
+      message_id: outcome.messageId,
+    });
+  }
+  return true;
+}
+
 /**
- * SE-5 metrics phase. Never throws, and a failure here must not prevent the
+ * SE-6 metrics phase. Never throws, and a failure here must not prevent the
  * SE-4B pulse/completion phase from running.
+ *
+ * Requirement 2: the work list already excludes any mission that has a
+ * snapshot in the current FIVE-MINUTE bucket, so this is the single
+ * centralized reader and a viewer can never cause an extra X call.
+ * Requirement 4: pulses come from threshold crossings evaluated atomically in
+ * the database, combined into ONE message.
+ * Requirement 5: milestones are recorded through an idempotent RPC and only
+ * announced the first time they are entered.
+ * Requirement 8: a post the official API cannot resolve is marked
+ * UNAVAILABLE; the mission keeps running.
  */
 async function runMetricsRefresh(
   admin: ReturnType<typeof createClient>,
   supabaseUrl: string,
   serviceKey: string,
-): Promise<{ missions: number; lookups: number; snapshots: number; cardsEdited: number }> {
-  const stats = { missions: 0, lookups: 0, snapshots: 0, cardsEdited: 0 };
+  botToken: string,
+): Promise<{
+  missions: number;
+  lookups: number;
+  snapshots: number;
+  cardsEdited: number;
+  pulses: number;
+  milestones: number;
+  unavailable: number;
+}> {
+  const stats = {
+    missions: 0,
+    lookups: 0,
+    snapshots: 0,
+    cardsEdited: 0,
+    pulses: 0,
+    milestones: 0,
+    unavailable: 0,
+  };
   const bearer = Deno.env.get("X_API_BEARER_TOKEN") ?? "";
   if (!bearer) return stats;
 
-  const { data, error } = await admin.rpc("list_active_social_missions_for_metrics", {
+  const bucket = refreshBucket();
+  const { data, error } = await admin.rpc("list_social_missions_due_for_metrics", {
+    _bucket: bucket,
     _limit: METRICS_WORKLIST_LIMIT,
   });
   if (error) return stats;
@@ -316,32 +383,53 @@ async function runMetricsRefresh(
     METRICS_MAX_BATCHES,
   );
   const found = new Map<string, { metrics: XCanonicalMetrics; observedAt: string }>();
+  let anyLookupOk = false;
   for (const batch of batches) {
     const read = await lookupXPostMetrics(bearer, batch);
     stats.lookups += 1;
     if (!read.ok) continue; // No snapshot, no synthetic zeroes, no retry.
+    anyLookupOk = true;
     for (const [id, post] of read.posts) {
       found.set(id, { metrics: post.metrics, observedAt: read.observedAt });
     }
   }
-  if (found.size === 0) return stats;
+  if (!anyLookupOk) return stats; // Provider outage: link status is left alone.
 
   for (const row of rows) {
     const hit = found.get(row.external_post_id);
-    if (!hit) continue;
+
+    // Requirement 8 — the lookup worked but this post was not returned: it was
+    // deleted or is no longer visible. The mission lifecycle continues.
+    if (!hit) {
+      if (row.x_link_status !== "UNAVAILABLE") {
+        await admin.rpc("record_social_mission_link_status", {
+          _mission_id: row.mission_id,
+          _status: "UNAVAILABLE",
+        });
+      }
+      stats.unavailable += 1;
+      continue;
+    }
+    if (row.x_link_status !== "OK") {
+      await admin.rpc("record_social_mission_link_status", {
+        _mission_id: row.mission_id,
+        _status: "OK",
+      });
+    }
 
     const recorded = await admin.rpc("record_social_mission_metric_snapshot", {
       _mission_id: row.mission_id,
       _provider: X_PROVIDER,
       _observed_at: hit.observedAt,
-      _poll_bucket: minuteBucket(Date.parse(hit.observedAt)),
+      // Requirement 2/3 — five-minute resolution, one snapshot per window.
+      _poll_bucket: bucket,
       _views: hit.metrics.views,
       _likes: hit.metrics.likes,
       _comments: hit.metrics.comments,
       _shares: hit.metrics.shares,
       _saves: hit.metrics.saves,
       _availability: availabilityOf(hit.metrics),
-      _metadata: { phase: "SE-5", source: "mission_runner" },
+      _metadata: { phase: "SE-6", source: "mission_runner", bucket },
     });
     if (recorded.error) continue;
     stats.snapshots += 1;
@@ -349,6 +437,60 @@ async function runMetricsRefresh(
     const result = (recorded.data ?? {}) as { accomplished_at?: string | null };
     const accomplished =
       typeof result.accomplished_at === "string" || typeof row.accomplished_at === "string";
+
+    // ---- Requirement 5: idempotent milestones -----------------------------
+    const announce: string[] = [];
+    const mark = async (key: string, tier: number | null) => {
+      const { data: first, error: milestoneError } = await admin.rpc(
+        "record_social_mission_milestone",
+        {
+          _mission_id: row.mission_id,
+          _workspace_id: row.workspace_id,
+          _milestone_key: key,
+          _tier: tier,
+          _metadata: { bucket },
+        },
+      );
+      if (milestoneError || first !== true) return;
+      stats.milestones += 1;
+      announce.push(tier === null ? (MILESTONE_COPY[key] ?? key) : `Tier ${tier} reached.`);
+    };
+
+    await mark(MILESTONE_ACTIVE, null);
+
+    const targets = normalizeTierTargets(row.tier_targets);
+    const tier = highestTierMet(hit.metrics, targets);
+    for (let t = Math.max(1, Number(row.highest_tier ?? 0) + 1); t <= tier; t += 1) {
+      await mark(tierKey(t), t);
+    }
+    if (tier >= TRENDING_TIER) await mark(MILESTONE_TRENDING, null);
+    if (isClosingSoon(row.ends_at)) await mark(MILESTONE_CLOSING_SOON, null);
+
+    // ---- Requirement 4: crossing-driven pulse -----------------------------
+    const deltas = normalizePulseDeltas(row.pulse_deltas);
+    const { data: pulse, error: pulseError } = await admin.rpc("evaluate_social_mission_pulse", {
+      _mission_id: row.mission_id,
+      _workspace_id: row.workspace_id,
+      _views: hit.metrics.views,
+      _likes: hit.metrics.likes,
+      _shares: hit.metrics.shares,
+      _comments: hit.metrics.comments,
+      _delta_views: deltas.views,
+      _delta_likes: deltas.likes,
+      _delta_shares: deltas.shares,
+      _delta_comments: deltas.comments,
+    });
+    const crossings = (!pulseError && (pulse as { crossings?: PulseCrossing[] } | null)?.crossings) || [];
+    const crossingLine = buildCrossingPulseText(crossings);
+
+    // ONE combined ephemeral message covering crossings and new milestones.
+    const body = [crossingLine, ...announce].filter(Boolean).join(" ");
+    if (body) {
+      const sent = await sendEphemeralMissionMessage(admin, botToken, row, `${PULSE_TEXT}\n\n${body}`);
+      if (sent) stats.pulses += 1;
+    }
+
+    // ---- Requirement 3: same canonical card, edited in place --------------
     const signature = metricSignature(hit.metrics, { accomplished, missionStatus: "LIVE" });
     if (signature === row.last_metric_signature) continue; // Nothing visible changed.
     if (!row.mission_created_by) continue;
@@ -377,6 +519,8 @@ async function runMetricsRefresh(
 
   return stats;
 }
+
+
 
 Deno.serve(async (request: Request) => {
   if (request.method !== "POST") {
