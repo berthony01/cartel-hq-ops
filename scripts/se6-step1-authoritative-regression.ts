@@ -921,7 +921,9 @@ check(
 // 16.b — fresh ACTIVATED path ordering: cleanup -> settled -> finalize -> prompt.
 const idxActivate = missionFn.indexOf("activate_social_mission_schedule");
 const idxCleanupCall = missionFn.indexOf("const sourceClean = await ensureLinkFinderSourceCleanup(");
-const idxActivatedSettle = missionFn.indexOf('kind: "ACTIVATED"');
+// lastIndexOf: the first `kind: "ACTIVATED"` is the callback's TYPE union.
+const idxActivatedSettle = missionFn.lastIndexOf('kind: "ACTIVATED"');
+
 check("16.10 cleanup runs after schedule activation", idxActivate > 0 && idxActivate < idxCleanupCall);
 check("16.11 cleanup runs BEFORE the settled callback", idxCleanupCall > 0 && idxCleanupCall < idxActivatedSettle);
 check(
