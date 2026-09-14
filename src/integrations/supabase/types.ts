@@ -2100,6 +2100,8 @@ export type Database = {
           prompt_message_id: number | null
           resolved_at: string | null
           resolved_by: string | null
+          source_cleanup_error: string | null
+          source_deleted_at: string | null
           state: string
           telegram_chat_id: number
           telegram_message_id: number
@@ -2119,6 +2121,8 @@ export type Database = {
           prompt_message_id?: number | null
           resolved_at?: string | null
           resolved_by?: string | null
+          source_cleanup_error?: string | null
+          source_deleted_at?: string | null
           state?: string
           telegram_chat_id: number
           telegram_message_id: number
@@ -2138,6 +2142,8 @@ export type Database = {
           prompt_message_id?: number | null
           resolved_at?: string | null
           resolved_by?: string | null
+          source_cleanup_error?: string | null
+          source_deleted_at?: string | null
           state?: string
           telegram_chat_id?: number
           telegram_message_id?: number
@@ -5862,6 +5868,10 @@ export type Database = {
       record_social_mission_command_deleted: {
         Args: { _command_message_id: number; _target_id: string }
         Returns: boolean
+      }
+      record_social_mission_link_candidate_source_cleanup: {
+        Args: { _candidate_id: string; _deleted: boolean; _reason?: string }
+        Returns: Json
       }
       record_social_mission_metric_snapshot: {
         Args: {
