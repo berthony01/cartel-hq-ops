@@ -97,6 +97,11 @@ function MissionCard({ view }: { view: MissionView }) {
           <StatusBadge tone={missionStatusTone(mission.status)}>
             <span>{mission.status}</span>
           </StatusBadge>
+          {accomplished ? (
+            <StatusBadge tone="green">
+              <span>ACCOMPLISHED</span>
+            </StatusBadge>
+          ) : null}
           <StatusBadge tone={active && !remaining.expired ? "gold" : "muted"}>
             <span>{remaining.label}</span>
           </StatusBadge>
@@ -211,6 +216,9 @@ export function SocialMissionsPanel({ workspaceId }: { workspaceId: string | nul
       >
         <GuidanceCard />
       </Section>
+
+      <MissionSettingsCard workspaceId={workspaceId} />
+
 
       <Section variant="surface" title="Missions">
         {query.isPending ? (
