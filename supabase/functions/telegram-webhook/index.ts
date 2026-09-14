@@ -486,6 +486,8 @@ Deno.serve(async (req: Request) => {
     messageId: unknown;
     telegramUserId: number;
     argument: string;
+    /** SE-5 provenance only. Authorization is identical for every source. */
+    source?: "telegram_mission_command" | "telegram_link_finder";
   }) => {
     const { chatId, chatType, telegramUserId, argument } = args;
     const reply = (text: string) => sendMessage(TELEGRAM_BOT_TOKEN, chatId, text, { parse_mode: "HTML" });
