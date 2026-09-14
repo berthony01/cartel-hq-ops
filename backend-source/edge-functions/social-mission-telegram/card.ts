@@ -121,8 +121,18 @@ export const LIVE_METRICS_HEADING = "📊 LIVE RESULTS";
  * card never looks like a generic bot announcement and never shows fake zeroes.
  */
 export const LIVE_METRICS_PENDING = "Live metrics updating…";
+/**
+ * SE-6 correction (C): the stable legend that tells a reader what the numbers
+ * are and how often they move. Mirrors `MISSION_FOOTER_LEGEND` in
+ * `_shared/mission-progress.ts`. It is part of the composed body, so the
+ * existing progressive length-safety keeps it inside the 1024-character
+ * branded caption: the post excerpt shrinks or is dropped before the footer.
+ */
+export const MISSION_FOOTER_LEGEND =
+  "Legend: views · likes · replies · reposts. Official X numbers, refreshed about every 5 minutes. A blank number is not yet available.";
 export const MISSION_STATE_LIVE = "LIVE";
 export const MISSION_STATE_ACCOMPLISHED = "ACCOMPLISHED";
+
 
 export function metricLabels(platform: MissionCardPlatform): Record<MetricKey, string> {
   return platform === "x" ? X_LABELS : GENERIC_LABELS;
