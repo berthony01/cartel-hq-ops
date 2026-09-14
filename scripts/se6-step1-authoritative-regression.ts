@@ -1300,8 +1300,8 @@ check(
   ),
 );
 check(
-  "17.47 the first canonical card still carries a real snapshot — no prefetch was added",
-  !/prefetch/i.test(webhookRaw),
+  "17.47 the webhook still reads no X metric of its own — the card's real snapshot is server-side",
+  !/api\.twitter\.com|api\.x\.com|x_metrics|fetchXMetrics/i.test(webhookRaw),
 );
 check(
   "17.48 exactly one runMissionCommand call still exists in the Link Finder branch",
