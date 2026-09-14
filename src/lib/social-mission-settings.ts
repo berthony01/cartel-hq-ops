@@ -71,6 +71,8 @@ export type MissionSettings = {
   auto_pin_mission: boolean;
   milestone_type: MissionMilestoneType;
   milestone_target: number | null;
+  /** SE-6: the saved tier preset applied to the next mission, if any. */
+  active_preset_id: string | null;
 };
 
 /** The stored defaults, used when a workspace has never saved a row. */
@@ -81,11 +83,14 @@ export function defaultMissionSettings(workspaceId: string): MissionSettings {
     live_metrics_enabled: true,
     link_finder_enabled: true,
     delete_command_after_send: true,
-    auto_pin_mission: true,
+    // SE-6: pinning is opt-in.
+    auto_pin_mission: false,
     milestone_type: "NONE",
     milestone_target: null,
+    active_preset_id: null,
   };
 }
+
 
 function normalize(workspaceId: string, row: Record<string, unknown> | null): MissionSettings {
   const base = defaultMissionSettings(workspaceId);
