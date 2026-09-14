@@ -1071,17 +1071,28 @@ Deno.serve(async (req: Request) => {
 
     const deliveryState = String(result.delivery_state ?? "");
     if (deliveryState === "SENT") {
-      // A retry. The card already exists, so NO second card is ever sent. This
-      // is the recovery path for a first attempt that delivered the card but
-      // could not remove the source post: cleanup is retried FIRST, and only a
-      // clean result lets the caller finalize.
-      const retryClean = await ensureLinkFinderSourceCleanup(String(result.target_id ?? ""));
-      if (retryClean) {
+      // SE-8 RECOVERY. The card already exists, so NO second card is ever sent,
+      // the schedule is never re-activated and no duplicate Pulse event is ever
+      // created. The live permission preflight above has already re-run; this
+      // path only re-attempts the two REQUIRED objectives idempotently, and the
+      // caller may finalize only when BOTH are confirmed.
+      const retryTargetId = String(result.target_id ?? "");
+      const { data: retryConfig } = await admin.rpc("social_mission_effective_config", {
+        _mission_id: result.mission_id,
+      });
+      const retryAutoPin = ((retryConfig ?? {}) as Record<string, unknown>)["auto_pin_mission"] !== false;
+      const retryClean = await ensureLinkFinderSourceCleanup(retryTargetId);
+      const retryPinned = await ensureCanonicalMissionPin(retryTargetId, retryAutoPin, null);
+      if (retryClean && retryPinned) {
         await args.onMissionSettled?.({
           kind: "ALREADY_SENT",
           missionId: String(result.mission_id ?? ""),
-          targetId: String(result.target_id ?? ""),
+          targetId: retryTargetId,
         });
+      } else {
+        console.warn(
+          `[SE-8] already-sent recovery incomplete: cleanup=${retryClean} pin=${retryPinned}`,
+        );
       }
       await reply("This post already has a Social Mission in this community.");
 
