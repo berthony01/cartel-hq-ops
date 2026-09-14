@@ -932,6 +932,85 @@ Deno.serve(async (req: Request) => {
       return;
     }
 
+    // ---- SE-8. LIVE BOT PERMISSION PREFLIGHT -------------------------------
+    //
+    // Runs BEFORE mission creation AND before an ALREADY_SENT recovery, so a
+    // mission that cannot satisfy its frozen canonical lifecycle is never
+    // created, and a retry after the rights are corrected can complete it.
+    //
+    // Actor authorization above is untouched: this checks only what the BOT
+    // itself may do in this exact chat.
+    const { data: settingsRow } = await admin
+      .from("social_mission_settings")
+      .select("delete_command_after_send, auto_pin_mission")
+      .eq("workspace_id", connection.workspace_id)
+      .maybeSingle();
+    const workspaceSettings = (settingsRow ?? null) as
+      | { delete_command_after_send?: boolean | null; auto_pin_mission?: boolean | null }
+      | null;
+    // Defaults ON, exactly as the frozen Step 1 experience specifies.
+    const autoPinRequired = workspaceSettings?.auto_pin_mission !== false;
+    // Link Finder source cleanup is MANDATORY and preference-independent; raw
+    // `/mission <link>` cleanup stays governed by the workspace preference.
+    const deletionRequired = isLinkFinder
+      ? true
+      : workspaceSettings?.delete_command_after_send !== false;
+
+    const botPermissions = await readBotChatPermissions(TELEGRAM_BOT_TOKEN, chatId);
+    // Non-sensitive diagnostics only: status, two booleans and a timestamp.
+    try {
+      const { data: metaRow } = await admin
+        .from("telegram_group_connections")
+        .select("metadata")
+        .eq("id", connection.id)
+        .maybeSingle();
+      const existingMeta = ((metaRow as { metadata?: Record<string, unknown> } | null)?.metadata
+        ?? {}) as Record<string, unknown>;
+      await admin
+        .from("telegram_group_connections")
+        .update({
+          metadata: {
+            ...existingMeta,
+            bot_permissions_checked_at: botPermissions.checkedAt,
+            bot_status: botPermissions.status,
+            bot_is_admin: botPermissions.isAdmin,
+            bot_can_delete_messages: botPermissions.canDeleteMessages,
+            bot_can_pin_messages: botPermissions.canPinMessages,
+          },
+        })
+        .eq("id", connection.id);
+    } catch {
+      // Diagnostics are never allowed to block or alter the decision below.
+    }
+
+    const blockLaunch = async (text: string) => {
+      if (args.onPermissionBlocked) await args.onPermissionBlocked(text);
+      else await reply(text);
+    };
+
+    if (!botPermissions.resolved) {
+      await blockLaunch(`Telegram could not confirm @${BOT_USERNAME}'s permissions in this group right now. Try again shortly.`);
+      return;
+    }
+    if (!botPermissions.isAdmin) {
+      await blockLaunch(`CARTEL HQ needs @${BOT_USERNAME} to be an administrator of this group before a Social Mission can start.`);
+      return;
+    }
+    const missingRights: string[] = [];
+    if (deletionRequired && !botPermissions.canDeleteMessages) missingRights.push("Delete Messages");
+    if (autoPinRequired && !botPermissions.canPinMessages) missingRights.push("Pin Messages");
+    if (missingRights.length > 0) {
+      console.warn(`[SE-8] mission launch blocked: missing ${boundedReason(missingRights.join(", "))}`);
+      await blockLaunch(
+        `CARTEL HQ needs ${missingRights.join(" and ")} enabled for @${BOT_USERNAME} in this group before a Social Mission can start.`,
+      );
+      return;
+    }
+
+    // Preflight passed. Acknowledge immediately — the first canonical card
+    // still waits for a REAL official-X snapshot, which is never prefetched.
+    await args.onStartAccepted?.();
+
 
     // 5. One atomic service-only RPC. It re-authorizes everything above and
     //    verifies the official X handle independently before creating rows.
