@@ -106,12 +106,15 @@ function normalize(workspaceId: string, row: Record<string, unknown> | null): Mi
     live_metrics_enabled: row["live_metrics_enabled"] !== false,
     link_finder_enabled: row["link_finder_enabled"] !== false,
     delete_command_after_send: row["delete_command_after_send"] !== false,
-    auto_pin_mission: row["auto_pin_mission"] !== false,
+    auto_pin_mission: row["auto_pin_mission"] === true,
     milestone_type: (MILESTONE_TYPES as readonly string[]).includes(milestone)
       ? (milestone as MissionMilestoneType)
       : base.milestone_type,
     milestone_target: typeof target === "number" && Number.isFinite(target) ? target : null,
+    active_preset_id:
+      typeof row["active_preset_id"] === "string" ? (row["active_preset_id"] as string) : null,
   };
+
 }
 
 /** The exact constraint the database enforces, mirrored for the form. */
