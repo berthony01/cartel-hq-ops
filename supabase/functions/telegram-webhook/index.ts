@@ -773,9 +773,17 @@ Deno.serve(async (req: Request) => {
 
     const deliveryState = String(result.delivery_state ?? "");
     if (deliveryState === "SENT") {
+      // A retry. The card already exists, so NO second card is ever sent, but
+      // the caller may still finish its own cleanup/finalization exactly once.
+      await args.onMissionSettled?.({
+        kind: "ALREADY_SENT",
+        missionId: String(result.mission_id ?? ""),
+        targetId: String(result.target_id ?? ""),
+      });
       await reply("This post already has a Social Mission in this community.");
       return;
     }
+
     if (deliveryState === "SENDING" || deliveryState === "AMBIGUOUS") {
       await reply("This mission's delivery is unresolved. Please do not retry immediately.");
       return;
