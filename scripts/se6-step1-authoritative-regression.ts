@@ -968,8 +968,8 @@ check(
     alreadySentBranch.indexOf('kind: "ALREADY_SENT"'),
 );
 check(
-  "16.19 the retry only settles when cleanup succeeded",
-  /if \(retryClean\) \{/.test(alreadySentBranch),
+  "16.19 the retry only settles when cleanup AND the required pin succeeded",
+  /if \(retryClean && retryPinned\) \{/.test(alreadySentBranch),
 );
 check(
   "16.20 the retry never sends a second card",
