@@ -2172,6 +2172,27 @@ Deno.serve(async (req: Request) => {
           return json({ ok: true });
         }
 
+        // SE-9 — the source post is normally already gone (deleted at
+        // detection). This is the bounded retry for the case where detection
+        // could not remove it: it runs BEFORE anything is created, costs no
+        // Telegram call when the candidate is already recorded clean, and on
+        // failure creates NOTHING, leaves the candidate PENDING and the prompt
+        // in place, and returns a precise permission message.
+        const sourceReady = await ensureLinkFinderSourceDeleted({
+          candidateId,
+          chatId: String(candidateChatId),
+          sourceMessageId,
+          alreadyDeletedAt: decision.source_deleted_at ?? null,
+        });
+        if (!sourceReady) {
+          await answerCallback(
+            TELEGRAM_BOT_TOKEN,
+            callback.id,
+            "I could not remove the original link post. Give @PepeCartelHQBot the Delete Messages admin right, then tap START MISSION again.",
+          );
+          return json({ ok: true });
+        }
+
         // SE-8 — the callback is answered from INSIDE the launch: a refused
         // permission preflight answers with the precise missing right and
         // nothing is created, while a passed preflight acknowledges the real
@@ -2182,8 +2203,8 @@ Deno.serve(async (req: Request) => {
           chatId: String(candidateChatId),
           chatType: String(callbackChat?.type ?? ""),
           updateId: update?.update_id,
-          // The candidate's own source message. On success it is deleted as
-          // the Link Finder source post — the frozen product behaviour.
+          // The candidate's own source message: provenance and idempotency key
+          // only. SE-9 already deleted the post itself at detection time.
           messageId: sourceMessageId,
           telegramUserId: Number(from.id),
           argument: String(decision.canonical_url ?? ""),
