@@ -13,15 +13,18 @@
  * `telegram-message-cleanup` worker.
  *
  * Frozen behaviour:
- *   * ZERO X / provider calls. ZERO metric reads. No usage ledger.
- *   * PULSE  — exactly one `sendMessage`, replying to the canonical mission
- *              card, with an OPEN ON X button built from the authoritative
- *              `social_posts.canonical_url`. Never `sendPhoto`, never a
- *              resend of the branded card. A confirmed pulse is queued into
- *              the EXISTING `telegram_message_cleanup_jobs` table with
+ *   * ZERO X / provider calls in the lifecycle loop.
+ *   * PULSE — SUPERSEDED by SE-6. Pulses are METRIC THRESHOLD CROSSINGS only;
+ *              activation no longer seeds time-based PULSE rows. A legacy
+ *              PENDING row that predates SE-6 is RETIRED to CANCELLED here and
+ *              never produces a Telegram message. The crossing pulse itself is
+ *              sent from the metrics phase, still as one reply-only
+ *              `sendMessage` queued into the EXISTING
+ *              `telegram_message_cleanup_jobs` table with
  *              `cleanup_kind='social_mission_pulse'` and
  *              `delete_after = sent_at + 120 seconds`. The cleanup worker
  *              itself is untouched.
+
  *   * COMPLETE — the mission is ALREADY COMPLETED in the database by the claim
  *              RPC. This worker then makes exactly ONE idempotent
  *              `edit_mission` call against the existing transport using the
