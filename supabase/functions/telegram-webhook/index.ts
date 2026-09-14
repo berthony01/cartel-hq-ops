@@ -844,7 +844,9 @@ Deno.serve(async (req: Request) => {
 
         // Auto-pin defaults ON. The pin is recorded ONLY when Telegram accepts
         // it, so completion can never unpin a pin CARTEL HQ did not set.
-        if (cfg["auto_pin_mission"] !== false) {
+        // SE-6: auto-pin is OFF unless a workspace explicitly opts in.
+        if (cfg["auto_pin_mission"] === true) {
+
           const sentMessageId = Number(
             (transport as { telegramMessageId?: unknown } | null)?.telegramMessageId ?? NaN,
           );
