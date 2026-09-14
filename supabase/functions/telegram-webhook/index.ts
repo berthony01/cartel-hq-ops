@@ -658,6 +658,31 @@ Deno.serve(async (req: Request) => {
       });
       const finalizedOk = !finalizeError && finalized === true;
 
+      // SE-5 — unpin ONLY a pin CARTEL HQ itself recorded. A pin the community
+      // set by hand is never touched.
+      try {
+        const { data: pinRow } = await admin
+          .from("social_mission_targets")
+          .select("pinned_by_hq, telegram_message_id")
+          .eq("id", closeResult.target_id as string)
+          .maybeSingle();
+        const pinned = pinRow as { pinned_by_hq?: boolean; telegram_message_id?: number } | null;
+        if (pinned?.pinned_by_hq === true && typeof pinned.telegram_message_id === "number") {
+          const unpinned = await telegramJson(TELEGRAM_BOT_TOKEN, "unpinChatMessage", {
+            chat_id: chatId,
+            message_id: pinned.telegram_message_id,
+          }).then(() => true).catch(() => false);
+          if (unpinned) {
+            await admin.rpc("record_social_mission_target_pin", {
+              _target_id: closeResult.target_id,
+              _pinned: false,
+            });
+          }
+        }
+      } catch {
+        // Cosmetic only. A pin left in place never blocks the close.
+      }
+
       if (closeEditState === "EDITED") {
         await reply(
           finalizedOk
