@@ -488,7 +488,22 @@ Deno.serve(async (req: Request) => {
     argument: string;
     /** SE-5 provenance only. Authorization is identical for every source. */
     source?: "telegram_mission_command" | "telegram_link_finder";
+    /**
+     * SE-7 — invoked ONLY when this community now genuinely holds a delivered
+     * mission card: either this call confirmed the send AND activated the
+     * schedule (`ACTIVATED`), or a retry found the card already sent
+     * (`ALREADY_SENT`) and must not send a second one. Every other path — a
+     * rejection, a failed create, a failed/ambiguous delivery, a failed
+     * activation — leaves it uncalled, so the caller's own state stays
+     * retryable.
+     */
+    onMissionSettled?: (settled: {
+      kind: "ACTIVATED" | "ALREADY_SENT";
+      missionId: string;
+      targetId: string;
+    }) => Promise<void>;
   }) => {
+
     const { chatId, chatType, telegramUserId, argument } = args;
     const reply = (text: string) => sendMessage(TELEGRAM_BOT_TOKEN, chatId, text, { parse_mode: "HTML" });
 
