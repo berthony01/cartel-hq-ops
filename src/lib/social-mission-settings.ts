@@ -411,12 +411,17 @@ export function useSaveMissionTierPreset(workspaceId: string | null) {
         tier_targets: preset.tier_targets,
         pulse_deltas: preset.pulse_deltas,
       };
+      // SE-6 correction (F): always return the PERSISTED row, so a newly
+      // created preset carries its real database id and can immediately be
+      // selected. A preset only affects the next Telegram mission once it is
+      // saved AND stored as the workspace active preset.
       const query = preset.id
         ? untyped.from(PRESET_TABLE).update(payload).eq("id", preset.id).eq("workspace_id", workspaceId)
         : untyped.from(PRESET_TABLE).insert(payload);
-      const { error } = await query;
+      const { data, error } = await query.select("*").single();
       if (error) throw error;
-      return preset;
+      return normalizePreset((data ?? {}) as Record<string, unknown>);
+
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: missionPresetKeys.list(workspaceId) });
