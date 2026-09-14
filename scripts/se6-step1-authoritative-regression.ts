@@ -781,10 +781,13 @@ check(
   "15.27 a retry finding the card already sent settles without sending again",
   /kind: "ALREADY_SENT"/.test(webhookRaw),
 );
+// RE-PINNED by the SE-7 hardening pass, not loosened: the order is now
+// finalizer FIRST, prompt deletion only after the database agrees.
 check(
-  "15.28 Link Finder cleanup and finalization run only inside that callback",
-  /onMissionSettled: async \(settled\) => \{[\s\S]{0,400}deleteLinkFinderPrompt\(\)[\s\S]{0,400}finalize_social_mission_link_candidate_start/.test(lfFullBranch),
+  "15.28 Link Finder finalization then prompt cleanup run only inside that callback",
+  /onMissionSettled: async \(settled\) => \{[\s\S]{0,900}finalize_social_mission_link_candidate_start[\s\S]{0,900}deleteLinkFinderPrompt\(\)/.test(lfFullBranch),
 );
+
 check(
   "15.29 the prompt is NOT deleted before the mission is attempted",
   lfFullBranch.indexOf("await runMissionCommand(") <
