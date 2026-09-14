@@ -2533,9 +2533,13 @@ Deno.serve(async (req: Request) => {
 
     // SE-5 — X Link Finder. A human posting a link to the project's OWN
     // official X account in a connected group gets a private-to-the-group
-    // START / IGNORE prompt. It NEVER starts a mission by itself, never
-    // deletes the member's message, and the RPC fails closed on every
+    // START / IGNORE prompt. It NEVER starts a mission by itself, nothing is
+    // deleted at detection time, and the RPC fails closed on every
     // ownership fact (connected group, link finder enabled, official handle).
+    // SE-7: if an admin later presses START and the mission reaches a
+    // confirmed card plus an active schedule, THAT post is then deleted so the
+    // branded card is what the group is left with. IGNORE never deletes it.
+
     //
     // Anonymous group admins are delivered by Telegram as a bot-like sender
     // (`GroupAnonymousBot`) with `sender_chat` pointing at the group itself.
