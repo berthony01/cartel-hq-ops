@@ -823,7 +823,9 @@ Deno.serve(async (req: Request) => {
 
         // Delete the raw `/mission <link>` command so the group sees the card,
         // not the operator's command. Never deletes anything else.
-        if (cfg["delete_command_after_send"] !== false) {
+        // messageId <= 0 means there is no raw command to remove (Link Finder
+        // START): the member's own post must never be deleted.
+        if (cfg["delete_command_after_send"] !== false && messageId > 0) {
           const deleted = await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
             chat_id: chatId,
             message_id: messageId,
