@@ -19,15 +19,23 @@ import {
   MILESTONE_TYPES,
   MISSION_PRESETS,
   MISSION_PRESET_SHAPE,
+  TIER_COUNT,
+  blankTierPreset,
   defaultMissionSettings,
+  tierSummaryChips,
   useIsWorkspaceOperator,
   useMissionSettings,
+  useMissionTierPresets,
   useSaveMissionSettings,
+  useSaveMissionTierPreset,
   validateMissionSettings,
+  validateTierPreset,
   type MissionMilestoneType,
   type MissionPreset,
   type MissionSettings,
+  type MissionTierPreset,
 } from "@/lib/social-mission-settings";
+
 
 /**
  * SE-5 — workspace mission defaults. Owner/admin can edit; other members see
