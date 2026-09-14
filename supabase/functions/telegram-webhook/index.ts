@@ -1094,7 +1094,14 @@ Deno.serve(async (req: Request) => {
           `[SE-8] already-sent recovery incomplete: cleanup=${retryClean} pin=${retryPinned}`,
         );
       }
-      await reply("This post already has a Social Mission in this community.");
+      // SE-8.1 — Link Finder recovery leaves NO extra group text. The frozen UX
+      // is: source link gone, transient prompt gone after finalization, branded
+      // canonical card remaining. Tap feedback is delivered by the callback, and
+      // an incomplete recovery stays diagnostic/retryable instead of chatty.
+      // Raw `/mission <link>` retries keep the existing informative reply.
+      if (!isLinkFinder) {
+        await reply("This post already has a Social Mission in this community.");
+      }
 
       return;
     }

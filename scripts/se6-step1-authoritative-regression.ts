@@ -1317,6 +1317,42 @@ check(
   !/CREATE TABLE/i.test(missionFn) && !/cron\.schedule/i.test(webhookRaw),
 );
 
+// ---------------------------------------------------------------------------
+// 18. SE-8.1 — Link Finder recovery leaves no extra group text.
+// ---------------------------------------------------------------------------
+const alreadySentBranch81 = missionFn.slice(
+  missionFn.indexOf('if (deliveryState === "SENT") {'),
+  missionFn.indexOf('if (deliveryState === "SENDING"'),
+);
+check(
+  "18.1 the already-exists group reply is gated on a non-Link-Finder source",
+  /if \(!isLinkFinder\) \{\s*await reply\("This post already has a Social Mission in this community\."\);\s*\}/
+    .test(alreadySentBranch81),
+);
+check(
+  "18.2 the SENT recovery branch contains no ungated group reply",
+  (alreadySentBranch81.match(/await reply\(/g) ?? []).length === 1,
+);
+check(
+  "18.3 non-Link-Finder SENT retry may still receive the already-exists reply",
+  alreadySentBranch81.includes("This post already has a Social Mission in this community."),
+);
+check(
+  "18.4 the gate sits after the settle decision so recovery ordering is unchanged",
+  alreadySentBranch81.indexOf('kind: "ALREADY_SENT"') < alreadySentBranch81.indexOf("if (!isLinkFinder)"),
+);
+check(
+  "18.5 SE-8.1 does not alter cleanup or pin in the recovery branch",
+  /const retryClean = await ensureLinkFinderSourceCleanup\(retryTargetId\);/.test(alreadySentBranch81) &&
+    /const retryPinned = await ensureCanonicalMissionPin\(retryTargetId, retryAutoPin, null\);/.test(
+      alreadySentBranch81,
+    ),
+);
+check(
+  "18.6 the incomplete-recovery path stays diagnostic only, with no group message",
+  /console\.warn\(\s*`\[SE-8\] already-sent recovery incomplete/.test(alreadySentBranch81),
+);
+
 console.log(`Step 1 authoritative regression: ${passed} passed, ${failures.length} failed`);
 
 
