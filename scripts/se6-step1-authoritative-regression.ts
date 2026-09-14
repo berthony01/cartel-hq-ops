@@ -11,6 +11,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import {
   X_BATCH_MAX,
+  X_PROVIDER,
   batchPostIds,
   minuteBucket,
 } from "../backend-source/edge-functions/_shared/x-metrics";
