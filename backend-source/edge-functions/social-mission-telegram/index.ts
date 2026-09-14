@@ -132,6 +132,79 @@ async function attemptLaunchMetricsRead(
   }
 }
 
+/**
+ * SE-6 Step 1 (E) — the FINAL official X read taken by a MANUAL
+ * `/mission close`, before the completion card is rendered.
+ *
+ * Identical guarantees to the launch read: returns void, never throws, at most
+ * ONE official lookup, no retry, no synthetic zeroes, and the close still
+ * completes when X is unavailable.
+ *
+ * Duplicate-read guard: `social_metric_snapshots` is unique on
+ * (mission_id, provider, poll_bucket). If this mission already has a snapshot
+ * in the CURRENT MINUTE bucket — which is exactly what the one-minute runner
+ * writes — no provider call is made at all.
+ */
+async function attemptFinalMetricsRead(
+  admin: ReturnType<typeof createClient>,
+  workspaceId: string,
+  mission: LoadedRow,
+): Promise<void> {
+  try {
+    const bearer = Deno.env.get("X_API_BEARER_TOKEN") ?? "";
+    if (!bearer) return;
+
+    const missionId = mission["id"];
+    if (typeof missionId !== "string") return;
+
+    const bucket = minuteBucket(Date.now());
+    const { data: existing } = await admin
+      .from("social_metric_snapshots")
+      .select("id")
+      .eq("mission_id", missionId)
+      .eq("provider", X_PROVIDER)
+      .eq("poll_bucket", bucket)
+      .maybeSingle();
+    if (existing) return; // Already read this minute: never pay twice.
+
+    const postId = mission["social_post_id"];
+    if (typeof postId !== "string") return;
+    const { data: post } = await admin
+      .from("social_posts")
+      .select("platform, external_post_id")
+      .eq("id", postId)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (!post) return;
+    const row = post as LoadedRow;
+    if (String(row["platform"] ?? "") !== "x") return;
+    const externalId = row["external_post_id"];
+    if (typeof externalId !== "string" || !/^[0-9]{1,32}$/.test(externalId)) return;
+
+    const read = await lookupXPostMetrics(bearer, [externalId]);
+    if (!read.ok) return;
+    const found = read.posts.get(externalId);
+    if (!found) return;
+
+    await admin.rpc("record_social_mission_metric_snapshot", {
+      _mission_id: missionId,
+      _provider: X_PROVIDER,
+      _observed_at: read.observedAt,
+      _poll_bucket: minuteBucket(Date.parse(read.observedAt)),
+      _views: found.metrics.views,
+      _likes: found.metrics.likes,
+      _comments: found.metrics.comments,
+      _shares: found.metrics.shares,
+      _saves: found.metrics.saves,
+      _availability: availabilityOf(found.metrics),
+      _metadata: { phase: "SE-6", source: "mission_close" },
+    });
+  } catch {
+    // Fail-soft: the close must complete even when X is unavailable.
+  }
+}
+
+
 /** Milestone read ONLY from the mission's own immutable config snapshot. */
 function missionMilestone(mission: LoadedRow): MissionMilestone | null {
   const metadata = mission["metadata"];
@@ -582,7 +655,13 @@ Deno.serve(async (request: Request): Promise<Response> => {
     chatId,
     clientRequestId,
     revision,
+    // SE-6 Step 1 (E) — a MANUAL `/mission close` takes a best-effort final
+    // official X reading before the completion card is rendered. The runner's
+    // scheduled completion already refreshed metrics earlier in the same
+    // invocation and never asks for another read here.
+    finalRefresh: internalSource === INTERNAL_SOURCE,
   });
+
 });
 
 // --------------------------------------------------------------------------
@@ -777,8 +856,10 @@ async function handleEdit(args: {
   chatId: number;
   clientRequestId: string;
   revision: number;
+  finalRefresh?: boolean;
 }): Promise<Response> {
   const { admin, botToken, workspaceId, mission, t, chatId, clientRequestId, revision } = args;
+
   const targetId = String(t["id"]);
   const editState = String(t["edit_state"] ?? "IDLE");
   const currentRevision = typeof t["edit_revision"] === "number" ? (t["edit_revision"] as number) : 0;
@@ -822,7 +903,15 @@ async function handleEdit(args: {
   // pre-SE-3.3 messages keep using editMessageText. There is no probing.
   const transportKind: TransportKind = t["transport_kind"] === "PHOTO" ? "PHOTO" : "TEXT";
 
+  // SE-6 Step 1 (E) — best-effort FINAL official X reading for a manual close,
+  // taken BEFORE the completion card is rendered. Skipped entirely when this
+  // mission already has a snapshot in the current minute bucket.
+  if (args.finalRefresh === true && String(mission["status"] ?? "") === "COMPLETED") {
+    await attemptFinalMetricsRead(admin, workspaceId, mission);
+  }
+
   const rendered = await renderAuthoritativeCard(admin, workspaceId, mission, transportKind);
+
   if ("error" in rendered) return fail(rendered.error, 409);
 
   // Compare-and-set on revision + edit state. A zero-row update returns no

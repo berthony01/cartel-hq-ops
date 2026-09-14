@@ -13,18 +13,15 @@
  * `telegram-message-cleanup` worker.
  *
  * Frozen behaviour:
- *   * ZERO X / provider calls in the lifecycle loop.
- *   * PULSE — SUPERSEDED by SE-6. Pulses are METRIC THRESHOLD CROSSINGS only;
- *              activation no longer seeds time-based PULSE rows. A legacy
- *              PENDING row that predates SE-6 is RETIRED to CANCELLED here and
- *              never produces a Telegram message. The crossing pulse itself is
- *              sent from the metrics phase, still as one reply-only
- *              `sendMessage` queued into the EXISTING
- *              `telegram_message_cleanup_jobs` table with
+ *   * ZERO X / provider calls. ZERO metric reads. No usage ledger.
+ *   * PULSE  — exactly one `sendMessage`, replying to the canonical mission
+ *              card, with an OPEN ON X button built from the authoritative
+ *              `social_posts.canonical_url`. Never `sendPhoto`, never a
+ *              resend of the branded card. A confirmed pulse is queued into
+ *              the EXISTING `telegram_message_cleanup_jobs` table with
  *              `cleanup_kind='social_mission_pulse'` and
  *              `delete_after = sent_at + 120 seconds`. The cleanup worker
  *              itself is untouched.
-
  *   * COMPLETE — the mission is ALREADY COMPLETED in the database by the claim
  *              RPC. This worker then makes exactly ONE idempotent
  *              `edit_mission` call against the existing transport using the
@@ -39,29 +36,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import {
   lookupXPostMetrics,
   batchPostIds,
+  minuteBucket,
   availabilityOf,
   metricSignature,
   X_PROVIDER,
   X_BATCH_MAX,
   type XCanonicalMetrics,
 } from "../_shared/x-metrics.ts";
-import {
-  refreshBucket,
-  normalizePulseDeltas,
-  normalizeTierTargets,
-  highestTierMet,
-  isClosingSoon,
-  buildCrossingPulseText,
-  MILESTONE_ACTIVE,
-  MILESTONE_TRENDING,
-  MILESTONE_CLOSING_SOON,
-  MILESTONE_COMPLETED,
-  MILESTONE_COPY,
-  TRENDING_TIER,
-  tierKey,
-  type PulseCrossing,
-} from "../_shared/mission-progress.ts";
-
 
 /**
  * SE-5 metrics refresh, layered ON TOP of the frozen SE-4B behaviour above.
@@ -90,15 +71,8 @@ type MetricsRow = {
   mission_created_by: string | null;
   accomplished_at: string | null;
   last_metric_signature: string | null;
-  ends_at: string | null;
-  x_link_status: string | null;
-  highest_tier: number | null;
-  group_connection_id: string | null;
   effective_config: Record<string, unknown> | null;
-  tier_targets: unknown;
-  pulse_deltas: unknown;
 };
-
 
 const SCHEDULER_HEADER = "x-cartel-social-mission-scheduler-secret";
 const TELEGRAM_API = "https://api.telegram.org";
@@ -167,41 +141,30 @@ export function isCanonicalXStatusUrl(value: unknown): value is string {
   return /^[0-9]{1,32}$/.test(String(segments[2]));
 }
 
-/**
- * Pulse copy. Short, factual, and about natural participation only. No
- * quotas, points, rewards, streaks, counts or mandatory likes/reposts, and no
- * claim about what the post will do.
- */
-export const PULSE_TEXT =
-  "This Social Mission is still active. Read the official post above and join the conversation naturally if you have something to add.";
+// Pulse copy lives in a pure, testable shared module. It performs ZERO network
+// and ZERO database access, so a pulse can never trigger a provider read.
+import {
+  PULSE_TEXT,
+  PULSE_ACCOMPLISHED_TEXT,
+  PULSE_MILESTONE_METRIC,
+  pulseMetricLine,
+  pulseMilestoneLine,
+  pulseRemainingLine,
+  buildPulseText,
+} from "../_shared/mission-pulse-copy.ts";
 
-export const PULSE_ACCOMPLISHED_TEXT =
-  "This Social Mission has hit its milestone and is still open. Read the official post above and join the conversation naturally if you have something to add.";
+export {
+  PULSE_TEXT,
+  PULSE_ACCOMPLISHED_TEXT,
+  PULSE_MILESTONE_METRIC,
+  pulseMetricLine,
+  pulseMilestoneLine,
+  pulseRemainingLine,
+  buildPulseText,
+};
 
-/**
- * SE-5 Pulse 2.0 — the pulse may quote the LATEST STORED snapshot, but it
- * performs ZERO provider reads of its own. Unknown metrics are omitted, never
- * printed as 0, and the line is dropped entirely when nothing is known.
- */
-export function pulseMetricLine(metrics: XCanonicalMetrics | null): string | null {
-  if (!metrics) return null;
-  const parts: string[] = [];
-  if (metrics.views !== null) parts.push(`${metrics.views} views`);
-  if (metrics.likes !== null) parts.push(`${metrics.likes} likes`);
-  if (metrics.comments !== null) parts.push(`${metrics.comments} replies`);
-  if (metrics.shares !== null) parts.push(`${metrics.shares} reposts`);
-  if (parts.length === 0) return null;
-  return `Last observed: ${parts.join(" · ")}.`;
-}
 
-export function buildPulseText(
-  metrics: XCanonicalMetrics | null,
-  accomplished: boolean,
-): string {
-  const head = accomplished ? PULSE_ACCOMPLISHED_TEXT : PULSE_TEXT;
-  const line = pulseMetricLine(metrics);
-  return line ? `${head}\n\n${line}` : head;
-}
+
 
 export function pulseKeyboard(canonicalUrl: unknown) {
   return isCanonicalXStatusUrl(canonicalUrl)
@@ -290,87 +253,20 @@ async function requestCardEdit(args: {
   }
 }
 
-/** SE-6 — one ephemeral group message, replying to the canonical card. */
-async function sendEphemeralMissionMessage(
-  admin: ReturnType<typeof createClient>,
-  botToken: string,
-  row: { workspace_id: string; group_connection_id: string | null; telegram_chat_id: number; telegram_message_id: number | null; canonical_url: string | null },
-  text: string,
-): Promise<boolean> {
-  if (row.telegram_message_id === null) return false;
-  const keyboard = pulseKeyboard(row.canonical_url);
-  const outcome = await callTelegram(botToken, "sendMessage", {
-    chat_id: row.telegram_chat_id,
-    text,
-    reply_to_message_id: row.telegram_message_id,
-    disable_web_page_preview: true,
-    disable_notification: true,
-    ...(keyboard ? { reply_markup: keyboard } : {}),
-  });
-  if (outcome.kind !== "ok" || outcome.messageId === null) return false;
-
-  const deleteAfter = new Date(Date.now() + PULSE_LIFETIME_SECONDS * 1000).toISOString();
-  const { error } = await admin.from("telegram_message_cleanup_jobs").insert({
-    workspace_id: row.workspace_id,
-    group_connection_id: row.group_connection_id,
-    telegram_chat_id: row.telegram_chat_id,
-    telegram_message_id: outcome.messageId,
-    cleanup_kind: "social_mission_pulse",
-    delete_after: deleteAfter,
-    next_attempt_at: deleteAfter,
-  });
-  if (error) {
-    await callTelegram(botToken, "deleteMessage", {
-      chat_id: row.telegram_chat_id,
-      message_id: outcome.messageId,
-    });
-  }
-  return true;
-}
-
 /**
- * SE-6 metrics phase. Never throws, and a failure here must not prevent the
+ * SE-5 metrics phase. Never throws, and a failure here must not prevent the
  * SE-4B pulse/completion phase from running.
- *
- * Requirement 2: the work list already excludes any mission that has a
- * snapshot in the current FIVE-MINUTE bucket, so this is the single
- * centralized reader and a viewer can never cause an extra X call.
- * Requirement 4: pulses come from threshold crossings evaluated atomically in
- * the database, combined into ONE message.
- * Requirement 5: milestones are recorded through an idempotent RPC and only
- * announced the first time they are entered.
- * Requirement 8: a post the official API cannot resolve is marked
- * UNAVAILABLE; the mission keeps running.
  */
 async function runMetricsRefresh(
   admin: ReturnType<typeof createClient>,
   supabaseUrl: string,
   serviceKey: string,
-  botToken: string,
-): Promise<{
-  missions: number;
-  lookups: number;
-  snapshots: number;
-  cardsEdited: number;
-  pulses: number;
-  milestones: number;
-  unavailable: number;
-}> {
-  const stats = {
-    missions: 0,
-    lookups: 0,
-    snapshots: 0,
-    cardsEdited: 0,
-    pulses: 0,
-    milestones: 0,
-    unavailable: 0,
-  };
+): Promise<{ missions: number; lookups: number; snapshots: number; cardsEdited: number }> {
+  const stats = { missions: 0, lookups: 0, snapshots: 0, cardsEdited: 0 };
   const bearer = Deno.env.get("X_API_BEARER_TOKEN") ?? "";
   if (!bearer) return stats;
 
-  const bucket = refreshBucket();
-  const { data, error } = await admin.rpc("list_social_missions_due_for_metrics", {
-    _bucket: bucket,
+  const { data, error } = await admin.rpc("list_active_social_missions_for_metrics", {
     _limit: METRICS_WORKLIST_LIMIT,
   });
   if (error) return stats;
@@ -386,53 +282,32 @@ async function runMetricsRefresh(
     METRICS_MAX_BATCHES,
   );
   const found = new Map<string, { metrics: XCanonicalMetrics; observedAt: string }>();
-  let anyLookupOk = false;
   for (const batch of batches) {
     const read = await lookupXPostMetrics(bearer, batch);
     stats.lookups += 1;
     if (!read.ok) continue; // No snapshot, no synthetic zeroes, no retry.
-    anyLookupOk = true;
     for (const [id, post] of read.posts) {
       found.set(id, { metrics: post.metrics, observedAt: read.observedAt });
     }
   }
-  if (!anyLookupOk) return stats; // Provider outage: link status is left alone.
+  if (found.size === 0) return stats;
 
   for (const row of rows) {
     const hit = found.get(row.external_post_id);
-
-    // Requirement 8 — the lookup worked but this post was not returned: it was
-    // deleted or is no longer visible. The mission lifecycle continues.
-    if (!hit) {
-      if (row.x_link_status !== "UNAVAILABLE") {
-        await admin.rpc("record_social_mission_link_status", {
-          _mission_id: row.mission_id,
-          _status: "UNAVAILABLE",
-        });
-      }
-      stats.unavailable += 1;
-      continue;
-    }
-    if (row.x_link_status !== "OK") {
-      await admin.rpc("record_social_mission_link_status", {
-        _mission_id: row.mission_id,
-        _status: "OK",
-      });
-    }
+    if (!hit) continue;
 
     const recorded = await admin.rpc("record_social_mission_metric_snapshot", {
       _mission_id: row.mission_id,
       _provider: X_PROVIDER,
       _observed_at: hit.observedAt,
-      // Requirement 2/3 — five-minute resolution, one snapshot per window.
-      _poll_bucket: bucket,
+      _poll_bucket: minuteBucket(Date.parse(hit.observedAt)),
       _views: hit.metrics.views,
       _likes: hit.metrics.likes,
       _comments: hit.metrics.comments,
       _shares: hit.metrics.shares,
       _saves: hit.metrics.saves,
       _availability: availabilityOf(hit.metrics),
-      _metadata: { phase: "SE-6", source: "mission_runner", bucket },
+      _metadata: { phase: "SE-5", source: "mission_runner" },
     });
     if (recorded.error) continue;
     stats.snapshots += 1;
@@ -440,60 +315,6 @@ async function runMetricsRefresh(
     const result = (recorded.data ?? {}) as { accomplished_at?: string | null };
     const accomplished =
       typeof result.accomplished_at === "string" || typeof row.accomplished_at === "string";
-
-    // ---- Requirement 5: idempotent milestones -----------------------------
-    const announce: string[] = [];
-    const mark = async (key: string, tier: number | null) => {
-      const { data: first, error: milestoneError } = await admin.rpc(
-        "record_social_mission_milestone",
-        {
-          _mission_id: row.mission_id,
-          _workspace_id: row.workspace_id,
-          _milestone_key: key,
-          _tier: tier,
-          _metadata: { bucket },
-        },
-      );
-      if (milestoneError || first !== true) return;
-      stats.milestones += 1;
-      announce.push(tier === null ? (MILESTONE_COPY[key] ?? key) : `Tier ${tier} reached.`);
-    };
-
-    await mark(MILESTONE_ACTIVE, null);
-
-    const targets = normalizeTierTargets(row.tier_targets);
-    const tier = highestTierMet(hit.metrics, targets);
-    for (let t = Math.max(1, Number(row.highest_tier ?? 0) + 1); t <= tier; t += 1) {
-      await mark(tierKey(t), t);
-    }
-    if (tier >= TRENDING_TIER) await mark(MILESTONE_TRENDING, null);
-    if (isClosingSoon(row.ends_at)) await mark(MILESTONE_CLOSING_SOON, null);
-
-    // ---- Requirement 4: crossing-driven pulse -----------------------------
-    const deltas = normalizePulseDeltas(row.pulse_deltas);
-    const { data: pulse, error: pulseError } = await admin.rpc("evaluate_social_mission_pulse", {
-      _mission_id: row.mission_id,
-      _workspace_id: row.workspace_id,
-      _views: hit.metrics.views,
-      _likes: hit.metrics.likes,
-      _shares: hit.metrics.shares,
-      _comments: hit.metrics.comments,
-      _delta_views: deltas.views,
-      _delta_likes: deltas.likes,
-      _delta_shares: deltas.shares,
-      _delta_comments: deltas.comments,
-    });
-    const crossings = (!pulseError && (pulse as { crossings?: PulseCrossing[] } | null)?.crossings) || [];
-    const crossingLine = buildCrossingPulseText(crossings);
-
-    // ONE combined ephemeral message covering crossings and new milestones.
-    const body = [crossingLine, ...announce].filter(Boolean).join(" ");
-    if (body) {
-      const sent = await sendEphemeralMissionMessage(admin, botToken, row, `${PULSE_TEXT}\n\n${body}`);
-      if (sent) stats.pulses += 1;
-    }
-
-    // ---- Requirement 3: same canonical card, edited in place --------------
     const signature = metricSignature(hit.metrics, { accomplished, missionStatus: "LIVE" });
     if (signature === row.last_metric_signature) continue; // Nothing visible changed.
     if (!row.mission_created_by) continue;
@@ -523,8 +344,6 @@ async function runMetricsRefresh(
   return stats;
 }
 
-
-
 Deno.serve(async (request: Request) => {
   if (request.method !== "POST") {
     return json({ error: "Method not allowed" }, 405);
@@ -551,18 +370,12 @@ Deno.serve(async (request: Request) => {
 
   // SE-5 metrics phase first, so a pulse in this same invocation can quote the
   // freshest STORED snapshot without performing any provider call of its own.
-  const metrics = await runMetricsRefresh(admin, SUPABASE_URL, SERVICE_KEY, BOT_TOKEN).catch(
-    () => ({
-      missions: 0,
-      lookups: 0,
-      snapshots: 0,
-      cardsEdited: 0,
-      pulses: 0,
-      milestones: 0,
-      unavailable: 0,
-    }),
-  );
-
+  const metrics = await runMetricsRefresh(admin, SUPABASE_URL, SERVICE_KEY).catch(() => ({
+    missions: 0,
+    lookups: 0,
+    snapshots: 0,
+    cardsEdited: 0,
+  }));
 
   const { data: claimed, error: claimError } = await admin.rpc(
     "claim_due_social_mission_schedule_events",
@@ -573,42 +386,131 @@ Deno.serve(async (request: Request) => {
   }
 
   const events = (claimed ?? []) as ClaimedEvent[];
-  let legacyPulsesRetired = 0;
+  let pulsesSent = 0;
   let completionsEdited = 0;
   let unresolved = 0;
   let failed = 0;
 
   for (const event of events) {
     if (event.event_type === "PULSE") {
-      // SE-6 correction (A): scheduled, time-based pulses are superseded.
-      // Requirement 4 allows a pulse ONLY on a metric threshold crossing, so a
-      // legacy row that predates this migration must never reach Telegram. It
-      // is retired through the dedicated service-only RPC using the existing
-      // terminal CANCELLED state; no send, no edit, no retry.
-      await admin.rpc("retire_legacy_social_mission_pulse_event", {
-        _event_id: event.event_id,
+      if (event.telegram_message_id === null) {
+        await admin.rpc("finish_social_mission_schedule_event", {
+          _event_id: event.event_id,
+          _state: "FAILED",
+          _telegram_message_id: null,
+          _last_error: "The canonical mission message id is missing.",
+        });
+        failed += 1;
+        continue;
+      }
+
+      const keyboard = pulseKeyboard(event.canonical_url);
+
+      // SE-5 Pulse 2.0: STORED snapshot only. Zero provider calls here.
+      const { data: storedSnapshot } = await admin
+        .from("social_metric_snapshots")
+        .select("views, likes, comments, shares, saves")
+        .eq("mission_id", event.mission_id)
+        .eq("workspace_id", event.workspace_id)
+        .order("observed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const { data: missionRow } = await admin
+        .from("social_missions")
+        .select("accomplished_at, ends_at, metadata")
+        .eq("id", event.mission_id)
+        .maybeSingle();
+      const storedMetrics = storedSnapshot
+        ? ({
+            views: (storedSnapshot as Record<string, number | null>)["views"] ?? null,
+            likes: (storedSnapshot as Record<string, number | null>)["likes"] ?? null,
+            comments: (storedSnapshot as Record<string, number | null>)["comments"] ?? null,
+            shares: (storedSnapshot as Record<string, number | null>)["shares"] ?? null,
+            saves: (storedSnapshot as Record<string, number | null>)["saves"] ?? null,
+          } as XCanonicalMetrics)
+        : null;
+      const missionFields = (missionRow ?? null) as Record<string, unknown> | null;
+      const pulseAccomplished = typeof missionFields?.["accomplished_at"] === "string";
+      // The mission's OWN immutable effective config, snapshotted at launch.
+      const pulseConfig =
+        ((missionFields?.["metadata"] as Record<string, unknown> | null)?.["effective_config"] as
+          | Record<string, unknown>
+          | null) ?? null;
+
+      // Exactly ONE sendMessage. Never sendPhoto, never the branded card.
+      const outcome = await callTelegram(BOT_TOKEN, "sendMessage", {
+        chat_id: event.telegram_chat_id,
+        text: buildPulseText(storedMetrics, pulseAccomplished, {
+          endsAt: missionFields?.["ends_at"] ?? null,
+          config: pulseConfig,
+        }),
+
+        // No allow_sending_without_reply: a pulse is meaningful ONLY as a
+        // reply to the canonical mission card. If that card is gone, Telegram
+        // rejects the send and the event is finalized FAILED rather than
+        // posting an orphan reminder.
+        reply_to_message_id: event.telegram_message_id,
+        disable_web_page_preview: true,
+        disable_notification: true,
+        ...(keyboard ? { reply_markup: keyboard } : {}),
       });
-      legacyPulsesRetired += 1;
+
+      if (outcome.kind === "ok" && outcome.messageId !== null) {
+        const deleteAfter = new Date(Date.now() + PULSE_LIFETIME_SECONDS * 1000).toISOString();
+        const { error: cleanupError } = await admin.from("telegram_message_cleanup_jobs").insert({
+          workspace_id: event.workspace_id,
+          group_connection_id: event.group_connection_id,
+          telegram_chat_id: event.telegram_chat_id,
+          telegram_message_id: outcome.messageId,
+          cleanup_kind: "social_mission_pulse",
+          delete_after: deleteAfter,
+          next_attempt_at: deleteAfter,
+        });
+
+        if (cleanupError) {
+          // A pulse with no durable expiry path is removed immediately. One
+          // attempt only, and never a replacement message.
+          await callTelegram(BOT_TOKEN, "deleteMessage", {
+            chat_id: event.telegram_chat_id,
+            message_id: outcome.messageId,
+          });
+        }
+
+        await admin.rpc("finish_social_mission_schedule_event", {
+          _event_id: event.event_id,
+          _state: "SENT",
+          _telegram_message_id: outcome.messageId,
+          _last_error: cleanupError ? "Pulse cleanup could not be scheduled; the pulse was deleted." : null,
+        });
+        pulsesSent += 1;
+        continue;
+      }
+
+      if (outcome.kind === "rejected") {
+        await admin.rpc("finish_social_mission_schedule_event", {
+          _event_id: event.event_id,
+          _state: "FAILED",
+          _telegram_message_id: null,
+          _last_error: outcome.description.slice(0, 1000),
+        });
+        failed += 1;
+        continue;
+      }
+
+      // Uncertain, or an ok response with no message id: never retried.
+      await admin.rpc("finish_social_mission_schedule_event", {
+        _event_id: event.event_id,
+        _state: "AMBIGUOUS",
+        _telegram_message_id: null,
+        _last_error: (outcome.kind === "uncertain" ? outcome.description : "Telegram confirmed no message id.").slice(0, 1000),
+      });
+      unresolved += 1;
       continue;
     }
 
-
     // COMPLETE. The mission is ALREADY COMPLETED in the database; this is the
     // single same-message edit attempt and it can never revert completion.
-
-    // Requirement 5/7 — both idempotent, and both independent of whether the
-    // Telegram edit below succeeds.
-    await admin.rpc("record_social_mission_milestone", {
-      _mission_id: event.mission_id,
-      _workspace_id: event.workspace_id,
-      _milestone_key: MILESTONE_COMPLETED,
-      _tier: null,
-      _metadata: { source: "schedule_complete" },
-    });
-    await admin.rpc("finalize_social_mission_performance", { _mission_id: event.mission_id });
-
     if (!event.mission_created_by || event.telegram_message_id === null) {
-
       await admin.rpc("finish_social_mission_schedule_event", {
         _event_id: event.event_id,
         _state: "FAILED",
@@ -685,7 +587,7 @@ Deno.serve(async (request: Request) => {
   return json({
     ok: true,
     claimed: events.length,
-    legacyPulsesRetired,
+    pulsesSent,
     completionsEdited,
     unresolved,
     failed,

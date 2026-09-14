@@ -26,6 +26,13 @@ export type MissionMetricSnapshotRow = Tables["social_metric_snapshots"]["Row"];
 /** How many missions the panel reads at once. Bounded, not paginated. */
 export const MISSION_READ_LIMIT = 25;
 
+/**
+ * SE-6 Step 1 (G) — how many stored snapshots per mission the history strip
+ * renders. Bounded for usability; nothing is fabricated to fill the list and
+ * the count of stored readings is reported honestly alongside it.
+ */
+export const MISSION_HISTORY_LIMIT = 12;
+
 export type MissionTargetView = MissionTargetRow & {
   /** Connected community title when the group is still connected, else null. */
   groupTitle: string | null;
@@ -40,7 +47,16 @@ export type MissionView = {
   scheduleEvents: MissionScheduleEventRow[];
   /** Most recent stored snapshot only. Never fetched from a provider here. */
   latestSnapshot: MissionMetricSnapshotRow | null;
+  /**
+   * Bounded newest-first stored metric history for this mission, read from the
+   * SAME already-loaded `social_metric_snapshots` rows. No extra query, no
+   * provider call, no polling.
+   */
+  snapshots: MissionMetricSnapshotRow[];
+  /** Total stored readings held for this mission, even when more than shown. */
+  snapshotCount: number;
 };
+
 
 export const socialMissionKeys = {
   all: ["social-missions"] as const,
@@ -121,9 +137,10 @@ export async function fetchWorkspaceMissionOverview(
         groupTitle: groupTitleByChatId.get(String(t.telegram_chat_id)) ?? null,
       }));
     const scheduleEvents = (eventsRes.data ?? []).filter((e) => e.mission_id === mission.id);
-    // Already ordered newest-first by the query; take the first match.
-    const latestSnapshot =
-      (snapshotsRes.data ?? []).find((s) => s.mission_id === mission.id) ?? null;
+    // Already ordered newest-first by the query; reuse the SAME rows for both
+    // the latest reading and the bounded history strip.
+    const missionSnapshots = (snapshotsRes.data ?? []).filter((s) => s.mission_id === mission.id);
+    const latestSnapshot = missionSnapshots[0] ?? null;
     return {
       mission,
       canonicalUrl: post?.url ?? null,
@@ -131,9 +148,12 @@ export async function fetchWorkspaceMissionOverview(
       targets,
       scheduleEvents,
       latestSnapshot,
+      snapshots: missionSnapshots.slice(0, MISSION_HISTORY_LIMIT),
+      snapshotCount: missionSnapshots.length,
     };
   });
 }
+
 
 /**
  * Read-only mission state for the active workspace. There is deliberately no
@@ -287,4 +307,100 @@ export function rollupMissions(views: MissionView[]): MissionRollup {
     }
   }
   return rollup;
+}
+
+/* -------------------------------------------------------------------------- */
+/* SE-6 Step 1 (G) — completed mission summary. Pure, no I/O.                  */
+/* -------------------------------------------------------------------------- */
+
+export type MissionMetricKey = "views" | "likes" | "comments" | "shares" | "saves";
+
+export const MISSION_METRIC_LABELS: Record<MissionMetricKey, string> = {
+  views: "Views",
+  likes: "Likes",
+  comments: "Replies",
+  shares: "Reposts",
+  saves: "Bookmarks",
+};
+
+export type MissionMetricChange = {
+  key: MissionMetricKey;
+  label: string;
+  /** Value at the mission's first stored reading, null when never observed. */
+  baseline: number | null;
+  /** Value at the most recent stored reading, null when never observed. */
+  final: number | null;
+  /**
+   * final - baseline, and ONLY when BOTH ends are actually known. A missing
+   * end yields null: the change is unknown, never 0 and never invented.
+   */
+  change: number | null;
+};
+
+export type MissionSummary = {
+  status: string;
+  accomplished: boolean;
+  completed: boolean;
+  /** Whole minutes from start to completion/end, null when not derivable. */
+  durationMinutes: number | null;
+  changes: MissionMetricChange[];
+  storedReadings: number;
+};
+
+function metricOf(row: MissionMetricSnapshotRow | null, key: MissionMetricKey): number | null {
+  if (!row) return null;
+  const value = (row as unknown as Record<string, unknown>)[key];
+  return typeof value === "number" ? value : null;
+}
+
+/**
+ * Baseline-to-final change derived from the mission's OWN stored snapshots.
+ * Honest by construction: an unknown end of a comparison makes the change
+ * unknown rather than substituting zero.
+ */
+export function missionSummary(view: MissionView): MissionSummary {
+  const status = view.mission.status.toUpperCase();
+  // `snapshots` is newest-first, so the baseline is the oldest loaded reading.
+  const newest = view.snapshots[0] ?? null;
+  const oldest = view.snapshots.length > 0 ? view.snapshots[view.snapshots.length - 1]! : null;
+
+  const changes: MissionMetricChange[] = (
+    ["views", "likes", "comments", "shares", "saves"] as const
+  ).map((key) => {
+    const baseline = metricOf(oldest, key);
+    const final = metricOf(newest, key);
+    return {
+      key,
+      label: MISSION_METRIC_LABELS[key],
+      baseline,
+      final,
+      change: baseline === null || final === null ? null : final - baseline,
+    };
+  });
+
+  const startedAt = view.mission.started_at ? Date.parse(view.mission.started_at) : NaN;
+  const endedAtRaw = view.mission.completed_at ?? view.mission.ends_at;
+  const endedAt = endedAtRaw ? Date.parse(endedAtRaw) : NaN;
+  const durationMinutes =
+    Number.isFinite(startedAt) && Number.isFinite(endedAt) && endedAt > startedAt
+      ? Math.round((endedAt - startedAt) / 60_000)
+      : null;
+
+  const accomplishedAt = (view.mission as unknown as Record<string, unknown>)["accomplished_at"];
+
+  return {
+    status,
+    accomplished: typeof accomplishedAt === "string",
+    completed: status === "COMPLETED" || !!view.mission.completed_at,
+    durationMinutes,
+    changes,
+    storedReadings: view.snapshotCount,
+  };
+}
+
+/** Signed change for display. Unknown stays an em dash, never 0. */
+export function formatMetricChange(change: number | null): string {
+  if (change === null) return "—";
+  if (change > 0) return `+${change.toLocaleString()}`;
+  return change.toLocaleString();
 }
