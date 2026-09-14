@@ -272,9 +272,11 @@ RETURNS TABLE (
   ends_at timestamptz,
   x_link_status text,
   highest_tier integer,
+  group_connection_id uuid,
   effective_config jsonb,
   tier_targets jsonb,
   pulse_deltas jsonb
+
 )
 LANGUAGE sql
 STABLE
