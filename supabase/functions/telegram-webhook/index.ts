@@ -1772,7 +1772,9 @@ Deno.serve(async (req: Request) => {
         // The prompt is transient in both directions.
         if (typeof decision.prompt_message_id === "number") {
           await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
-            chat_id: callbackChatId,
+            // The candidate's own chat, always. Never the callback chat.
+            chat_id: candidateChatId,
+
             message_id: decision.prompt_message_id,
           }).catch(() => null);
         }
