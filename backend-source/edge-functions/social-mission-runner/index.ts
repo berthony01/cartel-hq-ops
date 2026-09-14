@@ -36,13 +36,29 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import {
   lookupXPostMetrics,
   batchPostIds,
-  minuteBucket,
   availabilityOf,
   metricSignature,
   X_PROVIDER,
   X_BATCH_MAX,
   type XCanonicalMetrics,
 } from "../_shared/x-metrics.ts";
+import {
+  refreshBucket,
+  normalizePulseDeltas,
+  normalizeTierTargets,
+  highestTierMet,
+  isClosingSoon,
+  buildCrossingPulseText,
+  MILESTONE_ACTIVE,
+  MILESTONE_TRENDING,
+  MILESTONE_CLOSING_SOON,
+  MILESTONE_COMPLETED,
+  MILESTONE_COPY,
+  TRENDING_TIER,
+  tierKey,
+  type PulseCrossing,
+} from "../_shared/mission-progress.ts";
+
 
 /**
  * SE-5 metrics refresh, layered ON TOP of the frozen SE-4B behaviour above.
