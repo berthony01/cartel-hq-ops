@@ -93,6 +93,84 @@ async function sendMessageWithOutcome(
 async function answerCallback(token: string, callbackId: string, text: string) {
   try { await telegramJson(token, "answerCallbackQuery", { callback_query_id: callbackId, text, show_alert: false }); } catch { }
 }
+
+/**
+ * SE-8 — LIVE BOT PERMISSION PREFLIGHT.
+ *
+ * The frozen Link Finder lifecycle REQUIRES the bot to delete the source post
+ * and (unless auto-pin is disabled) to pin the canonical card. Those rights are
+ * read live from Telegram BEFORE a mission is created, so a mission that could
+ * never satisfy its own lifecycle is never created in the first place.
+ *
+ * Only non-sensitive facts are produced here: membership status and two
+ * booleans. No token, header, key or raw payload ever leaves this helper.
+ */
+let cachedBotUserId: number | null = null;
+async function resolveBotUserId(token: string): Promise<number | null> {
+  if (cachedBotUserId !== null) return cachedBotUserId;
+  try {
+    const me = await telegramJson(token, "getMe");
+    const id = Number((me as { id?: unknown } | null)?.id ?? NaN);
+    if (Number.isFinite(id) && id > 0) cachedBotUserId = id;
+  } catch {
+    return null;
+  }
+  return cachedBotUserId;
+}
+
+type BotChatPermissions = {
+  /** False whenever Telegram could not be asked; never treated as "allowed". */
+  resolved: boolean;
+  status: string;
+  isAdmin: boolean;
+  canDeleteMessages: boolean;
+  canPinMessages: boolean;
+  checkedAt: string;
+};
+
+async function readBotChatPermissions(
+  token: string,
+  chatId: string | number,
+): Promise<BotChatPermissions> {
+  const checkedAt = new Date().toISOString();
+  const blank: BotChatPermissions = {
+    resolved: false,
+    status: "",
+    isAdmin: false,
+    canDeleteMessages: false,
+    canPinMessages: false,
+    checkedAt,
+  };
+  const botId = await resolveBotUserId(token);
+  if (botId === null) return blank;
+  try {
+    const member = await telegramJson(token, "getChatMember", { chat_id: chatId, user_id: botId });
+    const row = (member ?? {}) as {
+      status?: unknown;
+      can_delete_messages?: unknown;
+      can_pin_messages?: unknown;
+    };
+    const status = String(row.status ?? "");
+    const isAdmin = status === "administrator" || status === "creator";
+    // A creator holds every right implicitly and Telegram omits the flags.
+    const creator = status === "creator";
+    return {
+      resolved: true,
+      status,
+      isAdmin,
+      canDeleteMessages: creator || (isAdmin && row.can_delete_messages === true),
+      canPinMessages: creator || (isAdmin && row.can_pin_messages === true),
+      checkedAt,
+    };
+  } catch {
+    return blank;
+  }
+}
+
+/** Bounded, secret-free diagnostic line for a required lifecycle objective. */
+function boundedReason(value: unknown): string {
+  return String(value ?? "").replace(/\s+/g, " ").slice(0, 200);
+}
 async function editMessage(token: string, chatId: string, messageId: number, text: string, replyMarkup?: unknown) {
   try {
     await telegramJson(token, "editMessageText", {
