@@ -473,7 +473,7 @@ BEGIN
            baseline_comments = _comments,
            baseline_shares = _shares,
            baseline_saves = _saves,
-           baseline_captured_at = COALESCE(baseline_captured_at, COALESCE(_observed_at, now()))
+           baseline_observed_at = COALESCE(baseline_observed_at, COALESCE(_observed_at, now()))
      WHERE id = _mission_id
        AND baseline_views IS NULL
        AND baseline_likes IS NULL
