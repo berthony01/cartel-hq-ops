@@ -927,8 +927,8 @@ const idxActivatedSettle = missionFn.lastIndexOf('kind: "ACTIVATED"');
 check("16.10 cleanup runs after schedule activation", idxActivate > 0 && idxActivate < idxCleanupCall);
 check("16.11 cleanup runs BEFORE the settled callback", idxCleanupCall > 0 && idxCleanupCall < idxActivatedSettle);
 check(
-  "16.12 the settled callback fires only when the source is clean",
-  /if \(sourceClean\) \{\s*\n\s*await args\.onMissionSettled\?\.\(\{\s*\n\s*kind: "ACTIVATED"/.test(missionFn),
+  "16.12 the settled callback fires only when the source is clean (and SE-8 pinned)",
+  /if \(sourceClean && canonicalPinned\) \{\s*\n\s*await args\.onMissionSettled\?\.\(\{\s*\n\s*kind: "ACTIVATED"/.test(missionFn),
 );
 check(
   "16.13 cleanup sits OUTSIDE the best-effort housekeeping try/catch",
