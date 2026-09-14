@@ -33,6 +33,46 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import {
+  lookupXPostMetrics,
+  batchPostIds,
+  minuteBucket,
+  availabilityOf,
+  metricSignature,
+  X_PROVIDER,
+  X_BATCH_MAX,
+  type XCanonicalMetrics,
+} from "../_shared/x-metrics.ts";
+
+/**
+ * SE-5 metrics refresh, layered ON TOP of the frozen SE-4B behaviour above.
+ *
+ * - The ONLY provider contacted is the official X API v2 batch lookup.
+ * - Each minute the worker collects LIVE missions, de-duplicates post ids and
+ *   issues at most `METRICS_MAX_BATCHES` lookups of at most 100 ids each.
+ * - At most ONE snapshot is written per mission per minute bucket.
+ * - A Telegram edit happens ONLY when the visible metric signature changed,
+ *   so an unchanged minute performs zero Telegram calls.
+ * - Pulses still make ZERO provider calls: they read stored snapshots only.
+ */
+const METRICS_WORKLIST_LIMIT = 300;
+const METRICS_MAX_BATCHES = 3;
+
+type MetricsRow = {
+  mission_id: string;
+  workspace_id: string;
+  target_id: string;
+  external_post_id: string;
+  canonical_url: string | null;
+  telegram_chat_id: number;
+  telegram_message_id: number | null;
+  edit_revision: number;
+  edit_state: string;
+  mission_created_by: string | null;
+  accomplished_at: string | null;
+  last_metric_signature: string | null;
+  effective_config: Record<string, unknown> | null;
+};
 
 const SCHEDULER_HEADER = "x-cartel-social-mission-scheduler-secret";
 const TELEGRAM_API = "https://api.telegram.org";
