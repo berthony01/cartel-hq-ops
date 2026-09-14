@@ -488,7 +488,22 @@ Deno.serve(async (req: Request) => {
     argument: string;
     /** SE-5 provenance only. Authorization is identical for every source. */
     source?: "telegram_mission_command" | "telegram_link_finder";
+    /**
+     * SE-7 — invoked ONLY when this community now genuinely holds a delivered
+     * mission card: either this call confirmed the send AND activated the
+     * schedule (`ACTIVATED`), or a retry found the card already sent
+     * (`ALREADY_SENT`) and must not send a second one. Every other path — a
+     * rejection, a failed create, a failed/ambiguous delivery, a failed
+     * activation — leaves it uncalled, so the caller's own state stays
+     * retryable.
+     */
+    onMissionSettled?: (settled: {
+      kind: "ACTIVATED" | "ALREADY_SENT";
+      missionId: string;
+      targetId: string;
+    }) => Promise<void>;
   }) => {
+
     const { chatId, chatType, telegramUserId, argument } = args;
     const reply = (text: string) => sendMessage(TELEGRAM_BOT_TOKEN, chatId, text, { parse_mode: "HTML" });
 
@@ -758,9 +773,17 @@ Deno.serve(async (req: Request) => {
 
     const deliveryState = String(result.delivery_state ?? "");
     if (deliveryState === "SENT") {
+      // A retry. The card already exists, so NO second card is ever sent, but
+      // the caller may still finish its own cleanup/finalization exactly once.
+      await args.onMissionSettled?.({
+        kind: "ALREADY_SENT",
+        missionId: String(result.mission_id ?? ""),
+        targetId: String(result.target_id ?? ""),
+      });
       await reply("This post already has a Social Mission in this community.");
       return;
     }
+
     if (deliveryState === "SENDING" || deliveryState === "AMBIGUOUS") {
       await reply("This mission's delivery is unresolved. Please do not retry immediately.");
       return;
@@ -825,10 +848,12 @@ Deno.serve(async (req: Request) => {
         });
         const cfg = (config ?? {}) as Record<string, unknown>;
 
-        // Delete the raw `/mission <link>` command so the group sees the card,
-        // not the operator's command. Never deletes anything else.
-        // messageId <= 0 means there is no raw command to remove (Link Finder
-        // START): the member's own post must never be deleted.
+        // Remove the message that launched this mission so the group sees the
+        // card, not the trigger: the raw `/mission <link>` command, or — for
+        // Link Finder START — the original X-link post itself, which is the
+        // frozen SE-7 product behaviour. Never deletes anything else, and only
+        // ever after a confirmed send plus an active schedule.
+
         if (cfg["delete_command_after_send"] !== false && messageId > 0) {
           const deleted = await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
             chat_id: chatId,
@@ -870,8 +895,17 @@ Deno.serve(async (req: Request) => {
         // Cosmetic housekeeping only; never surfaced and never retried.
       }
 
+      // Confirmed card + active schedule. Only now may the caller finalize its
+      // own transient state (Link Finder prompt + candidate).
+      await args.onMissionSettled?.({
+        kind: "ACTIVATED",
+        missionId: String(result.mission_id ?? ""),
+        targetId: String(result.target_id ?? ""),
+      });
+
       // The branded card itself is the confirmation. No extra success text.
       return;
+
     }
 
     if (transportState === "FAILED") {
@@ -1736,6 +1770,10 @@ Deno.serve(async (req: Request) => {
           return json({ ok: true });
         }
 
+        // SE-7 — START is AUTHORIZED here but NOT consumed. The candidate only
+        // becomes terminal STARTED after the branded card is confirmed SENT and
+        // the schedule is activated, so a downstream failure leaves a fully
+        // retryable candidate, prompt and source post in place.
         const { data: resolved } = await admin.rpc("resolve_social_mission_link_candidate", {
           _candidate_id: candidateId,
           _telegram_user_id: Number(from.id),
@@ -1769,19 +1807,33 @@ Deno.serve(async (req: Request) => {
           return json({ ok: true });
         }
 
-        // The prompt is transient in both directions.
-        if (typeof decision.prompt_message_id === "number") {
+        const promptMessageId = typeof decision.prompt_message_id === "number"
+          ? decision.prompt_message_id
+          : null;
+        const deleteLinkFinderPrompt = async () => {
+          if (promptMessageId === null) return;
           await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
             // The candidate's own chat, always. Never the callback chat.
             chat_id: candidateChatId,
-
-
-            message_id: decision.prompt_message_id,
+            message_id: promptMessageId,
           }).catch(() => null);
-        }
+        };
 
         if (decision.outcome === "IGNORE") {
+          // IGNORE consumes the candidate and removes ONLY the transient
+          // prompt. The member's original X post is never deleted here.
+          await deleteLinkFinderPrompt();
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Ignored.");
+          return json({ ok: true });
+        }
+
+        // The candidate's REAL original message id is the provenance and
+        // idempotency key. A null/0 id collided on
+        // telegram_inbound_updates (chat_id, message_id) for every second
+        // Link Finder START in the same group.
+        const sourceMessageId = Number(decision.telegram_message_id);
+        if (!Number.isFinite(sourceMessageId) || sourceMessageId <= 0) {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "This suggestion could not be handled.");
           return json({ ok: true });
         }
 
@@ -1789,17 +1841,33 @@ Deno.serve(async (req: Request) => {
         await runMissionCommand({
           // The mission is launched into the candidate's OWN chat, always.
           chatId: String(candidateChatId),
-
-
           chatType: String(callbackChat?.type ?? ""),
           updateId: update?.update_id,
-          // The ORIGINAL post message is never deleted as a "command".
-          messageId: null,
+          // The candidate's own source message. On success it is deleted as
+          // the Link Finder source post — the frozen product behaviour.
+          messageId: sourceMessageId,
           telegramUserId: Number(from.id),
           argument: String(decision.canonical_url ?? ""),
           source: "telegram_link_finder",
+          // Only a mission that actually reached a confirmed card + active
+          // schedule (or a retry finding one already sent) removes the prompt
+          // and finalizes the candidate. Anything else — create failure,
+          // delivery failure, activation failure — never runs this, so the
+          // prompt, the source post and the PENDING candidate all survive for
+          // a clean retry.
+          onMissionSettled: async (settled) => {
+            await deleteLinkFinderPrompt();
+            await admin.rpc("finalize_social_mission_link_candidate_start", {
+              _candidate_id: candidateId,
+              _telegram_user_id: Number(from.id),
+              _verified_chat_id: candidateChatId,
+              _mission_id: settled.missionId,
+            });
+          },
         });
         return json({ ok: true });
+
+
       }
 
 
