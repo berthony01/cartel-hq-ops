@@ -2624,6 +2624,9 @@ Deno.serve(async (req: Request) => {
     const handle = panel["author_handle"] ? `@${String(panel["author_handle"])}` : "Social mission";
     const url = typeof panel["canonical_url"] === "string" ? String(panel["canonical_url"]) : "";
 
+    // Stored results only — no provider read.
+    const results = await mcLatestResults(binding);
+
     const lines = [
       "🛠 <b>MISSION CONTROL</b>",
       "",
@@ -2631,16 +2634,22 @@ Deno.serve(async (req: Request) => {
       `Project: ${escapeHtml(binding.workspaceName)}`,
       "",
       `Status: <b>LIVE</b> · ${escapeHtml(missionControlRemaining(panel["ends_at"], Date.now()))}`,
-      `Target mode: <b>${escapeHtml(mode)}</b>`,
-      `Primary Goal: <b>${escapeHtml(
-        (MISSION_CONTROL_PRIMARY_LABELS as Record<string, string>)[primaryType] ?? "Not set",
-      )}</b>${primaryTarget ? ` · ${primaryTarget}` : ""}`,
       "",
+      "<b>LIVE X RESULTS</b>",
+      ...MISSION_CONTROL_METRICS.map(
+        (metric) => `${MISSION_CONTROL_METRIC_LABELS[metric]}: ${results[metric]}`,
+      ),
+      "",
+      `<b>TARGETS (${escapeHtml(mode)})</b>`,
+      `Primary Goal: ${escapeHtml(
+        (MISSION_CONTROL_PRIMARY_LABELS as Record<string, string>)[primaryType] ?? "Not set",
+      )}${primaryTarget ? ` · ${primaryTarget}` : ""}`,
       ...MISSION_CONTROL_METRICS.map((metric) => {
         const target = mcNumber(targets[metric]);
-        return `${MISSION_CONTROL_METRIC_LABELS[metric]}: ${target ?? "off"}`;
+        return `${MISSION_CONTROL_METRIC_LABELS[metric]} target: ${target ?? "off"}`;
       }),
     ];
+
     if (note) lines.push("", `<i>${escapeHtml(note)}</i>`);
 
     await sendMessage(TELEGRAM_BOT_TOKEN, chatId, lines.join("\n"), {
