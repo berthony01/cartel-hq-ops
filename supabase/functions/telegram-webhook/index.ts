@@ -4501,8 +4501,34 @@ Deno.serve(async (req: Request) => {
 
         const patch: Record<string, number | null> = {};
         if (pendingField === "PRIMARY_TARGET") {
+          // The Primary Goal always needs a number; it can never be turned off.
+          if (parsed.value === null) {
+            await sendMessage(
+              TELEGRAM_BOT_TOKEN,
+              chatId,
+              "The Primary Goal target cannot be turned off. Send a whole number above zero.",
+            );
+            return json({ ok: true });
+          }
           patch["primaryTarget"] = parsed.value;
         } else {
+          // `off` on the metric that IS the current Primary Goal is refused
+          // outright — it must never report a removal the resolver would then
+          // silently reinstate.
+          if (parsed.value === null) {
+            const currentConfig = await mcResolvedConfig(pendingMission);
+            const currentPrimary = primaryGoalMetric(
+              String((currentConfig as any)?.["milestone_type"] ?? "").toUpperCase(),
+            );
+            if (currentPrimary && currentPrimary === pendingField.toLowerCase()) {
+              await sendMessage(
+                TELEGRAM_BOT_TOKEN,
+                chatId,
+                `${MISSION_CONTROL_METRIC_LABELS[currentPrimary]} is the current Primary Goal, so its target cannot be turned off. Change the Primary Goal first or set a new target.`,
+              );
+              return json({ ok: true });
+            }
+          }
           patch[pendingField.toLowerCase()] = parsed.value;
         }
         const applied = await mcApplyTargets({
