@@ -3292,6 +3292,26 @@ Deno.serve(async (req: Request) => {
           return json({ ok: true });
         }
 
+        // Explicit PRIMARY TARGET control: arms the number the Primary Goal has
+        // to reach, without changing which metric the Primary Goal is.
+        if (callbackData === `mc_f_pt_${missionId}`) {
+          await admin.rpc("social_mission_control_set_session", {
+            _telegram_user_id: operatorId,
+            _workspace_id: binding.workspaceId,
+            _mission_id: missionId,
+            _pending_field: "PRIMARY_TARGET",
+            _clear: false,
+          });
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Send the number.");
+          await sendMessage(
+            TELEGRAM_BOT_TOKEN,
+            callbackChatId,
+            "<b>🏆 Primary target</b>\n\nSend a whole number above zero. The Primary Goal keeps its current metric. This target cannot be turned off.",
+            { parse_mode: "HTML" },
+          );
+          return json({ ok: true });
+        }
+
         // A metric button only ARMS a short-lived pending numeric input state.
         const mcField = callbackData.match(/^mc_f_([a-z]+)_([0-9a-f-]{36})$/);
         if (mcField) {
