@@ -171,6 +171,29 @@ async function readBotChatPermissions(
 function boundedReason(value: unknown): string {
   return String(value ?? "").replace(/\s+/g, " ").slice(0, 200);
 }
+
+/**
+ * SE-10 — BOUNDED, SECRET-FREE START LATENCY INSTRUMENTATION.
+ *
+ * Records elapsed milliseconds between named phases of the START path only.
+ * It never touches a token, header, auth payload, Telegram body, user identity
+ * or X bearer: every emitted value is a phase name and an integer duration.
+ */
+function se10Timer() {
+  const slices: string[] = [];
+  let mark = Date.now();
+  return {
+    slice(name: string) {
+      const now = Date.now();
+      slices.push(`${name}=${now - mark}ms`);
+      mark = now;
+    },
+    log(label: string) {
+      if (slices.length === 0) return;
+      console.log(`[SE-10] ${label} ${slices.join(" ")}`);
+    },
+  };
+}
 async function editMessage(token: string, chatId: string, messageId: number, text: string, replyMarkup?: unknown) {
   try {
     await telegramJson(token, "editMessageText", {
