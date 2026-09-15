@@ -82,8 +82,8 @@ export type MissionCardInput = {
   endsAt?: string | null;
   /** Injected clock so the renderer stays deterministic and testable. */
   nowMs?: number;
-  /** SE-5 — optional configured milestone. Omitted entirely when unset. */
-  milestone?: MissionMilestone | null;
+  /** SE-13 — optional configured MISSION GOAL. Omitted entirely when unset. */
+  goal?: MissionGoal | null;
   /**
    * Hard character budget. Defaults to the plain-text limit; the branded photo
    * transport passes TELEGRAM_CAPTION_MAX so a caption can never be rejected.
