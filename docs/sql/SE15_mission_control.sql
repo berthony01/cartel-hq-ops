@@ -623,12 +623,17 @@ AS $$
 DECLARE
   v_auth record;
   v_now timestamptz := now();
+  v_status text;
+  v_old_end timestamptz;
   v_new_end timestamptz;
   v_before jsonb;
   v_claimed integer;
   v_pending integer;
   v_row record;
   v_i integer := 0;
+  v_fraction double precision;
+  v_old_window double precision;
+  v_new_window double precision;
 BEGIN
   IF _idempotency_key IS NULL OR length(_idempotency_key) < 8 THEN
     RETURN jsonb_build_object('outcome', 'denied');
@@ -640,15 +645,18 @@ BEGIN
   SELECT * INTO v_auth
     FROM public.social_mission_control_authorize(_telegram_user_id, _mission_id, _verified_chat_id);
   IF v_auth.outcome <> 'ok' THEN RETURN jsonb_build_object('outcome', v_auth.outcome); END IF;
-  IF v_auth.mission_status <> 'LIVE' THEN
-    RETURN jsonb_build_object('outcome', 'not_live', 'status', v_auth.mission_status);
-  END IF;
+
+  -- LOCK FIRST so a concurrent control action serializes behind us; only then
+  -- are the status and the idempotency key authoritative.
+  SELECT m.status, m.ends_at INTO v_status, v_old_end
+    FROM public.social_missions m WHERE m.id = _mission_id FOR UPDATE;
+
   IF public.social_mission_control_key_used(_mission_id, _idempotency_key) THEN
     RETURN jsonb_build_object('outcome', 'replayed', 'mission_id', _mission_id);
   END IF;
-
-  -- Lock the mission row so a concurrent control action serializes behind us.
-  PERFORM 1 FROM public.social_missions WHERE id = _mission_id FOR UPDATE;
+  IF v_status IS DISTINCT FROM 'LIVE' THEN
+    RETURN jsonb_build_object('outcome', 'not_live', 'status', v_status);
+  END IF;
 
   SELECT count(*)::integer INTO v_claimed
     FROM public.social_mission_schedule_events e
@@ -658,9 +666,7 @@ BEGIN
   END IF;
 
   v_new_end := v_now + make_interval(mins => _minutes_from_now);
-
-  SELECT jsonb_build_object('ends_at', m.ends_at) INTO v_before
-    FROM public.social_missions m WHERE m.id = _mission_id;
+  v_before := jsonb_build_object('ends_at', v_old_end);
 
   UPDATE public.social_missions SET ends_at = v_new_end, updated_at = now()
    WHERE id = _mission_id;
@@ -673,21 +679,36 @@ BEGIN
      AND e.event_type = 'COMPLETE'
      AND e.state = 'PENDING';
 
-  -- Remaining PENDING pulses are redistributed evenly inside the NEW window,
-  -- preserving their sequence_no and never colliding with the new end.
   SELECT count(*)::integer INTO v_pending
     FROM public.social_mission_schedule_events e
    WHERE e.mission_id = _mission_id AND e.event_type = 'PULSE' AND e.state = 'PENDING';
 
+  -- PROPORTIONAL RESCHEDULE. Each still-PENDING pulse keeps its RELATIVE
+  -- position inside the remaining window rather than being spread evenly, so a
+  -- mission that was nearly over does not suddenly bunch its pulses. When the
+  -- old remaining window is degenerate (already past its end, or unknown) we
+  -- fall back to a deterministic even spread. Every result is strictly after
+  -- now and strictly before the new COMPLETE end, and sequence_no is preserved.
+  v_old_window := GREATEST(EXTRACT(EPOCH FROM (coalesce(v_old_end, v_now) - v_now)), 0);
+  v_new_window := EXTRACT(EPOCH FROM (v_new_end - v_now));
+
   IF v_pending > 0 THEN
     FOR v_row IN
-      SELECT e.id FROM public.social_mission_schedule_events e
+      SELECT e.id, e.due_at FROM public.social_mission_schedule_events e
        WHERE e.mission_id = _mission_id AND e.event_type = 'PULSE' AND e.state = 'PENDING'
        ORDER BY e.sequence_no
     LOOP
       v_i := v_i + 1;
+      IF v_old_window > 0 THEN
+        v_fraction := EXTRACT(EPOCH FROM (v_row.due_at - v_now)) / v_old_window;
+      ELSE
+        v_fraction := v_i::double precision / (v_pending + 1)::double precision;
+      END IF;
+      -- Keep it inside the open interval (now, new_end).
+      v_fraction := LEAST(GREATEST(v_fraction, 0.02), 0.98);
+
       UPDATE public.social_mission_schedule_events
-         SET due_at = v_now + ((v_new_end - v_now) * v_i / (v_pending + 1)),
+         SET due_at = v_now + make_interval(secs => v_new_window * v_fraction),
              updated_at = now()
        WHERE id = v_row.id;
     END LOOP;
