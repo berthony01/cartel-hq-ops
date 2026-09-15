@@ -1073,6 +1073,7 @@ Deno.serve(async (req: Request) => {
     // Preflight passed. Acknowledge immediately — the first canonical card
     // still waits for a REAL official-X snapshot, which is never prefetched.
     await args.onStartAccepted?.();
+    timing.slice("start_feedback");
 
 
     // 5. One atomic service-only RPC. It re-authorizes everything above and
