@@ -1962,13 +1962,25 @@ const se12AnonBareBranch = webhookRaw.slice(
   webhookRaw.indexOf("SE-12 — bare `/mission` launcher for anonymous group admins"),
   webhookRaw.indexOf("// SE-11 — anonymous-admin `/mission <X link>`."),
 );
+const se12LauncherHelper = webhookRaw.slice(
+  webhookRaw.indexOf("function sendBareMissionLauncher("),
+  webhookRaw.indexOf("function encodeChatId("),
+);
 
 check("22.1a a shared BARE_MISSION_LAUNCHER_TEXT constant exists", /const BARE_MISSION_LAUNCHER_TEXT = /.test(webhookRaw));
 check("22.1b the launcher copy includes the friendly headline", webhookRaw.includes("🚀 <b>START A SOCIAL MISSION</b>"));
 check("22.1c the launcher asks the user to paste the X link", webhookRaw.includes("<b>Paste the X link below.</b>"));
 check(
-  "22.1d one shared helper sends the launcher from both branches",
-  (webhookRaw.match(/await sendBareMissionLauncher\(chatId\);/g) ?? []).length === 2,
+  "22.1d the shared helper is declared at module scope and receives the bot token explicitly",
+  /function sendBareMissionLauncher\(token: string, chatId: string\)/.test(se12LauncherHelper),
+);
+check(
+  "22.1e the module-scope helper does not reach for the handler-local TELEGRAM_BOT_TOKEN",
+  !/TELEGRAM_BOT_TOKEN/.test(se12LauncherHelper),
+);
+check(
+  "22.1f both call sites pass TELEGRAM_BOT_TOKEN explicitly",
+  (webhookRaw.match(/await sendBareMissionLauncher\(TELEGRAM_BOT_TOKEN, chatId\);/g) ?? []).length === 2,
 );
 
 check(
@@ -1976,8 +1988,8 @@ check(
   /missionMatch && from\?\.is_bot !== true && isGroupChat && !missionMatch\[1\]/.test(se12HumanBareBranch),
 );
 check(
-  "22.2b human bare /mission sends the launcher",
-  /await sendBareMissionLauncher\(chatId\);/.test(se12HumanBareBranch),
+  "22.2b human bare /mission sends the launcher with the explicit bot token",
+  /await sendBareMissionLauncher\(TELEGRAM_BOT_TOKEN, chatId\);/.test(se12HumanBareBranch),
 );
 check(
   "22.2c human bare /mission never calls runMissionCommand",
@@ -1993,8 +2005,8 @@ check(
   /missionMatch && isAnonymousGroupAdminSender && isGroupChat && !missionMatch\[1\]/.test(se12AnonBareBranch),
 );
 check(
-  "22.3b anonymous bare /mission sends the launcher",
-  /await sendBareMissionLauncher\(chatId\);/.test(se12AnonBareBranch),
+  "22.3b anonymous bare /mission sends the launcher with the explicit bot token",
+  /await sendBareMissionLauncher\(TELEGRAM_BOT_TOKEN, chatId\);/.test(se12AnonBareBranch),
 );
 check(
   "22.3c anonymous bare /mission never calls runMissionCommand",

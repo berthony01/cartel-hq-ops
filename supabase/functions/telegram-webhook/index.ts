@@ -264,8 +264,8 @@ async function missionRequestUuid(updateId: number) {
 
 const MISSION_USAGE = "Usage: /mission https://x.com/&lt;official handle&gt;/status/&lt;id&gt;\n\nOnly a public X post link from this project's official X account can start a Social Mission, and only current group admins can run it.";
 const BARE_MISSION_LAUNCHER_TEXT = "🚀 <b>START A SOCIAL MISSION</b>\n\nSend or paste the official X post you want this community to engage with.\n\nOnly posts from this project's verified X account can be used.\n\n<b>Paste the X link below.</b>";
-function sendBareMissionLauncher(chatId: string) {
-  return sendMessage(TELEGRAM_BOT_TOKEN, chatId, BARE_MISSION_LAUNCHER_TEXT, { parse_mode: "HTML" });
+function sendBareMissionLauncher(token: string, chatId: string) {
+  return sendMessage(token, chatId, BARE_MISSION_LAUNCHER_TEXT, { parse_mode: "HTML" });
 }
 function encodeChatId(chatId: string) { return chatId.startsWith("-") ? `n${chatId.slice(1)}` : chatId; }
 function decodeChatId(encoded: string) { return encoded.startsWith("n") ? `-${encoded.slice(1)}` : encoded; }
@@ -3058,7 +3058,7 @@ Deno.serve(async (req: Request) => {
     // SE-12 — bare `/mission` launcher for identifiable humans in groups.
     // The next pasted X URL is still handled by the existing Link Finder path.
     if (missionMatch && from?.is_bot !== true && isGroupChat && !missionMatch[1]) {
-      await sendBareMissionLauncher(chatId);
+      await sendBareMissionLauncher(TELEGRAM_BOT_TOKEN, chatId);
       return json({ ok: true });
     }
 
@@ -3077,7 +3077,7 @@ Deno.serve(async (req: Request) => {
     // SE-12 — bare `/mission` launcher for anonymous group admins.
     // The next pasted X URL is still handled by the existing Link Finder path.
     if (missionMatch && isAnonymousGroupAdminSender && isGroupChat && !missionMatch[1]) {
-      await sendBareMissionLauncher(chatId);
+      await sendBareMissionLauncher(TELEGRAM_BOT_TOKEN, chatId);
       return json({ ok: true });
     }
 
