@@ -69,10 +69,11 @@ export type FirstSnapshot = {
  * supporting target. Unknown inputs are omitted entirely.
  */
 export function computeMetricTargets(
-  first: FirstSnapshot,
+  first: FirstSnapshot | null,
   primaryType: string | null,
   primaryTarget: number | null,
-): MissionMetricTargetSet {
+): MissionMetricTargetSet | null {
+  if (first === null || first === undefined) return null;
   const type = (primaryType ?? "NONE").toUpperCase();
   const explicit =
     Number.isInteger(primaryTarget) && (primaryTarget as number) > 0 ? (primaryTarget as number) : null;
@@ -96,5 +97,7 @@ export function computeMetricTargets(
   const bookmarks = computeSupportTarget(first.saves, SUPPORT_FLOOR_ADD.bookmarks);
   if (bookmarks !== null) out.bookmarks = bookmarks;
 
-  return out;
+  // A fully unknown first snapshot establishes NOTHING: an empty set is null,
+  // never `{}`, matching the SQL helper which returns NULL for an empty object.
+  return Object.keys(out).length === 0 ? null : out;
 }
