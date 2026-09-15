@@ -29,6 +29,8 @@ const PARITY_FILES = [
   "social-mission-runner/deno.json",
   "_shared/x-metrics.ts",
   "_shared/mission-pulse-copy.ts",
+  // SE-15 — the shared resolved-config module both deployable functions import.
+  "_shared/mission-resolved-config.ts",
 ] as const;
 
 function readOrNull(path: string): Buffer | null {
@@ -79,6 +81,14 @@ check("3.1 runner imports shared x-metrics", runnerIndex.includes('from "../_sha
 check("3.2 runner imports shared pulse copy", runnerIndex.includes('from "../_shared/mission-pulse-copy.ts"'));
 check("3.3 telegram imports local card", telegramIndex.includes('from "./card.ts"'));
 check("3.4 telegram imports shared x-metrics", telegramIndex.includes('from "../_shared/x-metrics.ts"'));
+check(
+  "3.5 telegram imports shared resolved config",
+  telegramIndex.includes('from "../_shared/mission-resolved-config.ts"'),
+);
+check(
+  "3.6 runner imports shared resolved config",
+  runnerIndex.includes('from "../_shared/mission-resolved-config.ts"'),
+);
 
 // 4 — this suite must never touch the network or a database.
 const self = readFileSync("scripts/social-mission-deploy-parity-regression.ts", "utf8");

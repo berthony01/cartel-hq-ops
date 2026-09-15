@@ -155,6 +155,10 @@ import {
   buildPulseText,
 } from "../_shared/mission-pulse-copy.ts";
 
+// SE-15 — pure resolver folding an active Mission Control manual override over
+// the immutable launch config. No network, no database, no provider read.
+import { resolveMissionConfig } from "../_shared/mission-resolved-config.ts";
+
 export {
   PULSE_TEXT,
   PULSE_ACCOMPLISHED_TEXT,
@@ -163,6 +167,7 @@ export {
   pulseMilestoneLine,
   pulseRemainingLine,
   buildPulseText,
+  resolveMissionConfig,
 };
 
 
@@ -433,11 +438,11 @@ Deno.serve(async (request: Request) => {
         : null;
       const missionFields = (missionRow ?? null) as Record<string, unknown> | null;
       const pulseAccomplished = typeof missionFields?.["accomplished_at"] === "string";
-      // The mission's OWN immutable effective config, snapshotted at launch.
-      const pulseConfig =
-        ((missionFields?.["metadata"] as Record<string, unknown> | null)?.["effective_config"] as
-          | Record<string, unknown>
-          | null) ?? null;
+      // SE-15 — the mission's RESOLVED config: its immutable launch snapshot,
+      // with an active Mission Control manual override folded over it. A
+      // mission that was never controlled resolves to exactly the same object
+      // as before. Still ZERO provider reads: this is pure local JSON.
+      const pulseConfig = resolveMissionConfig(missionFields?.["metadata"] ?? null);
 
       // Exactly ONE sendMessage. Never sendPhoto, never the branded card.
       const outcome = await callTelegram(BOT_TOKEN, "sendMessage", {

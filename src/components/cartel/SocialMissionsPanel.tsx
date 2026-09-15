@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/cartel/EmptyState";
 import { MissionSettingsCard } from "@/components/cartel/MissionSettingsCard";
 import { Button } from "@/components/ui/button";
 import {
+  MISSION_CONTROL_ACTION_LABELS,
   MISSION_OPERATOR_GUIDANCE,
   deliveryTone,
   eventStateTone,
@@ -12,6 +13,8 @@ import {
   formatMetricChange,
   formatMissionTime,
   isMissionActive,
+  missionControlHistory,
+  missionControlMode,
   missionStatusTone,
   missionSummary,
   missionTimeRemaining,
@@ -77,6 +80,9 @@ function MissionCard({ view }: { view: MissionView }) {
   // column is newer than the committed generated types.
   const accomplishedAt = (mission as unknown as Record<string, unknown>)["accomplished_at"];
   const accomplished = typeof accomplishedAt === "string";
+  // SE-15 read-only evidence. The browser never edits a mission.
+  const controlMode = missionControlMode(mission);
+  const controlHistory = missionControlHistory(mission);
 
   return (
     <article className="min-w-0 rounded-lg border border-border/70 bg-surface-elevated p-3.5 sm:p-4">
@@ -255,6 +261,33 @@ function MissionCard({ view }: { view: MissionView }) {
           </dl>
           <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
             Stored readings only. A dash means the value was never recorded, not zero.
+          </p>
+        </div>
+      ) : null}
+
+      {controlHistory.length > 0 ? (
+        <div className="mt-3 rounded-md border border-border/60 bg-background/30 p-2.5">
+          <p className="type-eyebrow text-muted-foreground">
+            Mission Control · target mode {controlMode === "MANUAL" ? "manual" : "automatic"}
+          </p>
+          <ul className="mt-1.5 space-y-1">
+            {controlHistory.slice(0, 8).map((entry) => (
+              <li
+                key={entry.key ?? `${entry.action}-${entry.at ?? ""}`}
+                className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-[11px]"
+              >
+                <span className="min-w-0 truncate text-foreground">
+                  {MISSION_CONTROL_ACTION_LABELS[entry.action] ?? entry.action}
+                </span>
+                <span className="shrink-0 text-muted-foreground">
+                  {formatMissionTime(entry.at)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+            Changes made by an admin in Telegram Mission Control. The mission's original
+            launch settings are kept unchanged underneath. This view is read-only.
           </p>
         </div>
       ) : null}

@@ -292,6 +292,137 @@ async function sendBareMissionLauncherAndCleanup(
   }
   return sent;
 }
+
+/**
+ * SE-15 — `/mission manage` GROUP LAUNCHER.
+ *
+ * Mission Control is an ADMIN surface, so the group never receives a single
+ * mutating control. The group only ever gets a short admin-oriented notice and
+ * a deep link into the bot's private chat, where a real, identifiable Telegram
+ * user identity exists. This is also what makes the command safe for Telegram
+ * anonymous admins: the anonymous message can open the door, but only the
+ * identifiable private-chat user can actually change anything.
+ *
+ * Cleanup mirrors SE-12.2 exactly: the raw command is deleted ONLY after
+ * Telegram confirms the launcher was posted, only the exact source message id is
+ * touched, and a failed deletion produces a bounded, secret-free log and no
+ * second chat message.
+ */
+const MISSION_MANAGE_DEEP_LINK = `https://t.me/${BOT_USERNAME}?start=mission_manage`;
+const MISSION_MANAGE_GROUP_TEXT =
+  "🛠 <b>MISSION CONTROL</b>\n\nMission targets, timing, ending and cancelling are managed privately by this project's admins.\n\nTap below to open Mission Control in a private chat with the bot.";
+async function sendMissionManageLauncherAndCleanup(
+  token: string,
+  chatId: string,
+  sourceMessageId: number | null | undefined,
+) {
+  const sent = await sendMessage(token, chatId, MISSION_MANAGE_GROUP_TEXT, {
+    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: [[{ text: "🛠 Open Mission Control", url: MISSION_MANAGE_DEEP_LINK }]],
+    },
+  });
+  if (!sent) return null;
+  const messageId = Number(sourceMessageId);
+  if (!Number.isFinite(messageId) || messageId <= 0) return sent;
+  try {
+    await telegramJson(token, "deleteMessage", { chat_id: chatId, message_id: messageId });
+  } catch (error) {
+    console.log(
+      `[SE-15] mission manage command cleanup failed: ${String((error as Error)?.message ?? "unknown").slice(0, 200)}`,
+    );
+  }
+  return sent;
+}
+
+/** SE-15 — the supporting metrics an operator can target, and their labels. */
+const MISSION_CONTROL_METRICS = ["views", "likes", "replies", "reposts", "bookmarks"] as const;
+type MissionControlMetric = (typeof MISSION_CONTROL_METRICS)[number];
+const MISSION_CONTROL_METRIC_LABELS: Record<MissionControlMetric, string> = {
+  views: "👁 Views",
+  likes: "❤️ Likes",
+  replies: "💬 Replies",
+  reposts: "🔁 Reposts",
+  bookmarks: "🔖 Bookmarks",
+};
+/**
+ * BOOKMARKS is deliberately absent: the Primary Goal enum does not support it,
+ * and SE-15 does not widen accomplishment semantics.
+ */
+const MISSION_CONTROL_PRIMARY_TYPES = [
+  "VIEWS",
+  "LIKES",
+  "REPLIES",
+  "REPOSTS",
+  "TOTAL_INTERACTIONS",
+] as const;
+type MissionControlPrimaryType = (typeof MISSION_CONTROL_PRIMARY_TYPES)[number];
+const MISSION_CONTROL_PRIMARY_LABELS: Record<MissionControlPrimaryType, string> = {
+  VIEWS: "Views",
+  LIKES: "Likes",
+  REPLIES: "Replies",
+  REPOSTS: "Reposts",
+  TOTAL_INTERACTIONS: "Total interactions",
+};
+/** The supporting metric a Primary Goal pins, or null for TOTAL_INTERACTIONS. */
+export function primaryGoalMetric(type: string): MissionControlMetric | null {
+  const upper = String(type ?? "").toUpperCase();
+  if (upper === "VIEWS") return "views";
+  if (upper === "LIKES") return "likes";
+  if (upper === "REPLIES") return "replies";
+  if (upper === "REPOSTS") return "reposts";
+  return null;
+}
+
+/**
+ * SE-15 — strict numeric input parsing for the pending-field DM prompt.
+ *
+ * Nothing is mutated on a rejected value. `off` is accepted ONLY for supporting
+ * targets; a Primary Goal target and a duration always require a positive
+ * integer, and duration is additionally bounded to 1..1440 minutes.
+ */
+export type MissionControlInput =
+  | { ok: true; value: number | null }
+  | { ok: false; reason: string };
+export function parseMissionControlInput(
+  field: string,
+  raw: string,
+): MissionControlInput {
+  const text = String(raw ?? "").trim().toLowerCase().replace(/[, ]/g, "");
+  const supporting = (MISSION_CONTROL_METRICS as readonly string[]).includes(
+    String(field ?? "").toLowerCase(),
+  );
+  if (supporting && (text === "off" || text === "none")) return { ok: true, value: null };
+  if (!/^[0-9]{1,9}$/.test(text)) {
+    return {
+      ok: false,
+      reason: supporting
+        ? "Send a whole number above zero, or send off to remove this target."
+        : "Send a whole number above zero.",
+    };
+  }
+  const value = Number(text);
+  if (!Number.isInteger(value) || value <= 0) {
+    return { ok: false, reason: "Send a whole number above zero." };
+  }
+  if (field === "DURATION_MINUTES" && value > 1440) {
+    return { ok: false, reason: "Choose between 1 and 1440 minutes." };
+  }
+  return { ok: true, value };
+}
+
+/** SE-15 — compact "in about N minutes/hours" used by the private panel. */
+export function missionControlRemaining(endsAt: unknown, nowMs: number): string {
+  if (typeof endsAt !== "string") return "no end time recorded";
+  const ms = new Date(endsAt).getTime();
+  if (!Number.isFinite(ms)) return "no end time recorded";
+  const diff = Math.round((ms - nowMs) / 60000);
+  if (diff <= 0) return "ending now";
+  if (diff < 60) return `about ${diff} min left`;
+  const hours = Math.floor(diff / 60);
+  const mins = diff % 60;
+  return mins === 0 ? `about ${hours}h left` : `about ${hours}h ${mins}m left`;
+}
 function encodeChatId(chatId: string) { return chatId.startsWith("-") ? `n${chatId.slice(1)}` : chatId; }
 function decodeChatId(encoded: string) { return encoded.startsWith("n") ? `-${encoded.slice(1)}` : encoded; }
 function shouldSendWelcome(value: string | null | undefined) {
@@ -440,7 +571,7 @@ Launch Watch is opt-in and can be muted or stopped. Deployment verification conf
 }
 function helpText(isGroup: boolean) {
   return isGroup
-    ? `<b>CARTEL HQ BOT • PRIVATE BETA</b>\n\nCurrent group capabilities include community join welcomes with optional auto-delete, Telegram sticker-pack distribution and native sticker delivery. Additional community tools are in development.\n\n<b>Commands</b>\n/roadmap — see what's live and what's coming\n/mission &lt;X link&gt; — start a Social Mission (admins only)\n/mission close — close the active Social Mission (admins only)\n/help — show this guide\n\nAdmins can follow PEPECARTEL and join Early Access through @${BOT_USERNAME}.`
+    ? `<b>CARTEL HQ BOT • PRIVATE BETA</b>\n\nCurrent group capabilities include community join welcomes with optional auto-delete, Telegram sticker-pack distribution and native sticker delivery. Additional community tools are in development.\n\n<b>Commands</b>\n/roadmap — see what's live and what's coming\n/mission &lt;X link&gt; — start a Social Mission (admins only)\n/mission close — close the active Social Mission (admins only)\n/mission manage — open private Mission Control (admins only)\n/help — show this guide\n\nAdmins can follow PEPECARTEL and join Early Access through @${BOT_USERNAME}.`
     : `<b>CARTEL HQ BOT • HELP</b>\n\n/start — open the Cartel HQ menu\n/roadmap — what's live and what's coming\n/help — show this guide\n\nSticker creation and workspace management currently happen through Cartel HQ beta workspaces. Public Cartel HQ web access will be added when ready.`;
 }
 async function ensureCommands(token: string) {
@@ -2097,6 +2228,496 @@ Deno.serve(async (req: Request) => {
     }
   };
 
+  /**
+   * ==========================================================================
+   * SE-15 — TELEGRAM MISSION CONTROL (private DM console)
+   * ==========================================================================
+   *
+   * Every branch below is PRIVATE-CHAT ONLY and every mutation passes three
+   * independent gates, in this order and with no shortcut:
+   *
+   *   1. the Telegram user is linked to a Cartel HQ user
+   *      (enforced inside the service-only RPCs via telegram_connections)
+   *   2. that user is a workspace owner/admin
+   *      (enforced inside the service-only RPCs via is_workspace_operator)
+   *   3. that user is CURRENTLY administrator/creator of the mission's own
+   *      Telegram group, read LIVE from Telegram here and proven to the RPC by
+   *      passing the verified chat id, which the RPC re-binds to the mission's
+   *      own target row.
+   *
+   * Session state (telegram_team_sessions) is convenience only and is NEVER an
+   * authorization source. Callback data, workspace ids, mission ids and chat
+   * ids carried in a button are treated as untrusted input: the pickers below
+   * only ever surface rows the caller can already operate, and every mutation
+   * re-derives and re-verifies the binding from scratch.
+   *
+   * The mission's `metadata.effective_config` is never written here. Overrides
+   * live in `metadata.mission_control` and are folded over the frozen snapshot
+   * by the shared resolver.
+   */
+
+  /** Deterministic RFC-4122-shaped id so a Telegram retry reuses the same edit. */
+  const mcRequestUuid = async (seed: string) => {
+    const hex = await sha256Hex(`se15-mission-control-edit:${seed}`);
+    const chars = hex.slice(0, 32).split("");
+    chars[12] = "5";
+    chars[16] = ["8", "9", "a", "b"][parseInt(hex[16], 16) % 4];
+    const h = chars.join("");
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+  };
+
+  /**
+   * Idempotency key for a mutation. Derived from the Telegram update id and the
+   * action, so a webhook retry of the SAME tap replays instead of mutating
+   * twice or appending a duplicate audit entry.
+   */
+  const mcKey = async (updateId: unknown, action: string) =>
+    (await sha256Hex(`se15-mission-control:${String(updateId ?? "")}:${action}`)).slice(0, 40);
+
+  type MissionControlBinding = {
+    workspaceId: string;
+    workspaceName: string;
+    chatId: string;
+    missionId: string;
+  };
+
+  /**
+   * Resolves a mission id to its workspace and target chat using ONLY
+   * operator-scoped RPCs, so a non-operator can never learn that a mission id
+   * exists. Bounded by the picker's own 20-workspace / 10-mission limits.
+   */
+  const mcResolveMission = async (
+    telegramUserId: number,
+    missionId: string,
+  ): Promise<MissionControlBinding | null> => {
+    const { data: workspaces, error } = await admin.rpc("social_mission_control_workspaces", {
+      _telegram_user_id: telegramUserId,
+    });
+    if (error) return null;
+    for (const workspace of Array.isArray(workspaces) ? workspaces : []) {
+      const workspaceId = String((workspace as any).workspace_id ?? "");
+      if (!workspaceId) continue;
+      const { data: missions } = await admin.rpc("social_mission_control_missions", {
+        _telegram_user_id: telegramUserId,
+        _workspace_id: workspaceId,
+      });
+      const hit = (Array.isArray(missions) ? missions : []).find(
+        (m: any) => String(m.mission_id) === missionId,
+      );
+      if (hit) {
+        return {
+          workspaceId,
+          workspaceName: String((workspace as any).workspace_name ?? "Workspace"),
+          chatId: String((hit as any).telegram_chat_id ?? ""),
+          missionId,
+        };
+      }
+    }
+    return null;
+  };
+
+  /**
+   * GATE 3 — live Telegram administrator/creator check in the mission's OWN
+   * group. Read fresh from Telegram on EVERY mutation; a stale cached role, a
+   * stale button or an anonymous sender can never satisfy it.
+   */
+  const mcVerifyGroupAdmin = async (chatId: string, telegramUserId: number) => {
+    try {
+      const member = await telegramJson(TELEGRAM_BOT_TOKEN, "getChatMember", {
+        chat_id: chatId,
+        user_id: telegramUserId,
+      });
+      const status = String((member as { status?: unknown } | null)?.status ?? "");
+      return status === "administrator" || status === "creator";
+    } catch {
+      return false;
+    }
+  };
+
+  /** Gates 1-3 in order. Returns the verified binding or a typed refusal. */
+  const mcAuthorize = async (
+    telegramUserId: number,
+    missionId: string,
+  ): Promise<{ ok: true; binding: MissionControlBinding } | { ok: false; reason: string }> => {
+    const binding = await mcResolveMission(telegramUserId, missionId);
+    if (!binding || !binding.chatId) {
+      return { ok: false, reason: "That mission is not available to this account." };
+    }
+    const isAdmin = await mcVerifyGroupAdmin(binding.chatId, telegramUserId);
+    if (!isAdmin) {
+      return {
+        ok: false,
+        reason: "You must be a current admin of that community to change its mission.",
+      };
+    }
+    return { ok: true, binding };
+  };
+
+  /** Human wording for the typed RPC outcomes. Never leaks internals. */
+  const MC_OUTCOME_TEXT: Record<string, string> = {
+    denied: "That action was refused.",
+    not_linked: "Connect this Telegram account to Cartel HQ first.",
+    not_found: "That mission is not available to this account.",
+    not_operator: "Only a workspace owner or admin can do that.",
+    chat_mismatch: "That mission does not belong to the community you administer.",
+    not_live: "That mission is no longer live. Nothing was changed.",
+    conflict: "The mission scheduler is mid-send right now. Try again in a moment.",
+    invalid_mode: "That target mode is not valid.",
+    invalid_primary_type: "That Primary Goal is not valid.",
+    invalid_primary_target: "A Primary Goal needs a whole number above zero.",
+    invalid_minutes: "Choose between 1 and 1440 minutes.",
+    replayed: "That change was already applied.",
+  };
+
+  /**
+   * Exactly ONE same-card edit through the existing transport, reusing its
+   * revision + client-request idempotency. A target-only or end-time-only
+   * change never triggers a provider read: the transport performs its final X
+   * snapshot only for a COMPLETED mission.
+   */
+  const mcRefreshCard = async (args: {
+    workspaceId: string;
+    missionId: string;
+    actorUserId: string | null;
+    seed: string;
+  }) => {
+    const { data: target } = await admin
+      .from("social_mission_targets")
+      .select("id, edit_revision")
+      .eq("mission_id", args.missionId)
+      .eq("workspace_id", args.workspaceId)
+      .maybeSingle();
+    if (!target?.id) return null;
+    try {
+      const response = await fetch(
+        `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/social-mission-telegram`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: SERVICE_KEY,
+            Authorization: `Bearer ${SERVICE_KEY}`,
+            "X-Cartel-Internal-Source": "telegram-webhook",
+            ...(args.actorUserId ? { "X-Cartel-Actor-User-Id": args.actorUserId } : {}),
+          },
+          body: JSON.stringify({
+            action: "edit_mission",
+            workspaceId: args.workspaceId,
+            missionId: args.missionId,
+            targetId: String(target.id),
+            clientRequestId: await mcRequestUuid(args.seed),
+            revision: Number((target as any).edit_revision ?? 0) + 1,
+          }),
+          signal: AbortSignal.timeout(30_000),
+        },
+      );
+      return (await response.json().catch(() => null)) as { editState?: string } | null;
+    } catch {
+      return null;
+    }
+  };
+
+  /**
+   * SE-15 — safe unpin. ONLY a pin Cartel HQ itself recorded is ever removed; a
+   * pin the community set by hand is left untouched. Identical ownership guard
+   * to the `/mission close` path.
+   */
+  const mcSafeUnpin = async (missionId: string, workspaceId: string) => {
+    try {
+      const { data: pinned } = await admin
+        .from("social_mission_targets")
+        .select("id, telegram_chat_id, telegram_message_id, pinned_by_hq")
+        .eq("mission_id", missionId)
+        .eq("workspace_id", workspaceId)
+        .maybeSingle();
+      if (!pinned?.pinned_by_hq || !pinned.telegram_message_id) return;
+      const unpinned = await telegramJson(TELEGRAM_BOT_TOKEN, "unpinChatMessage", {
+        chat_id: String(pinned.telegram_chat_id),
+        message_id: Number(pinned.telegram_message_id),
+      }).then(() => true).catch(() => false);
+      if (unpinned) {
+        await admin.rpc("record_social_mission_target_pin", {
+          _target_id: String(pinned.id),
+          _pinned: false,
+        });
+      }
+    } catch {
+      // A pin problem never invalidates a completion or cancellation already
+      // persisted, and never produces a second chat message.
+    }
+  };
+
+  const mcNumber = (value: unknown) => {
+    const n = Number(value);
+    return Number.isInteger(n) && n > 0 ? n : null;
+  };
+
+  /** Reads the CURRENT resolved config so a single-field edit can be re-applied whole. */
+  const mcResolvedConfig = async (missionId: string) => {
+    const { data } = await admin.rpc("social_mission_effective_config_resolved", {
+      _mission_id: missionId,
+    });
+    return (data ?? {}) as Record<string, unknown>;
+  };
+
+  /**
+   * Applies ONE field change by re-sending the complete manual set. There is no
+   * client-side draft to desynchronize: the current resolved config is the
+   * draft, so every tap is atomic, fully validated server-side and audited.
+   */
+  const mcApplyTargets = async (args: {
+    telegramUserId: number;
+    binding: MissionControlBinding;
+    updateId: unknown;
+    patch: { primaryType?: string; primaryTarget?: number | null } & Partial<
+      Record<MissionControlMetric, number | null>
+    >;
+  }) => {
+    const config = await mcResolvedConfig(args.binding.missionId);
+    const targets = (config["metric_targets"] ?? {}) as Record<string, unknown>;
+    const currentType = String(config["milestone_type"] ?? "NONE").toUpperCase();
+    const nextType = String(
+      args.patch.primaryType ??
+        ((MISSION_CONTROL_PRIMARY_TYPES as readonly string[]).includes(currentType)
+          ? currentType
+          : "VIEWS"),
+    ).toUpperCase();
+
+    const pinned = primaryGoalMetric(nextType);
+    let primaryTarget =
+      args.patch.primaryTarget !== undefined
+        ? args.patch.primaryTarget
+        : mcNumber(config["milestone_target"]);
+    if (primaryTarget === null && pinned) primaryTarget = mcNumber(targets[pinned]);
+    if (primaryTarget === null) {
+      return { outcome: "needs_primary_target" as const, type: nextType };
+    }
+
+    const value = (metric: MissionControlMetric) =>
+      args.patch[metric] !== undefined ? args.patch[metric]! : mcNumber(targets[metric]);
+
+    const { data, error } = await admin.rpc("social_mission_apply_target_override", {
+      _telegram_user_id: args.telegramUserId,
+      _mission_id: args.binding.missionId,
+      _verified_chat_id: Number(args.binding.chatId),
+      _mode: "MANUAL",
+      _primary_type: nextType,
+      _primary_target: primaryTarget,
+      _views: value("views"),
+      _likes: value("likes"),
+      _replies: value("replies"),
+      _reposts: value("reposts"),
+      _bookmarks: value("bookmarks"),
+      _idempotency_key: await mcKey(args.updateId, `targets:${JSON.stringify(args.patch)}`),
+    });
+    if (error) return { outcome: "error" as const };
+    return (data ?? {}) as { outcome?: string; target_id?: string };
+  };
+
+  const mcPanelKeyboard = (missionId: string) => ({
+    inline_keyboard: [
+      [{ text: "🎯 Edit targets", callback_data: `mc_t_${missionId}` }],
+      [{ text: "⏱ Change end time", callback_data: `mc_d_${missionId}` }],
+      [
+        { text: "🏁 End mission now", callback_data: `mc_e_${missionId}` },
+        { text: "🛑 Cancel mission", callback_data: `mc_c_${missionId}` },
+      ],
+      [{ text: "✖️ Exit", callback_data: "mc_x" }],
+    ],
+  });
+
+  /** Renders the single-mission control panel. Never shown in a group. */
+  const mcRenderPanel = async (
+    telegramUserId: number,
+    chatId: string,
+    missionId: string,
+    binding: MissionControlBinding,
+    note?: string,
+  ) => {
+    const { data } = await admin.rpc("social_mission_control_panel", {
+      _telegram_user_id: telegramUserId,
+      _mission_id: missionId,
+      _verified_chat_id: Number(binding.chatId),
+    });
+    const panel = (data ?? {}) as Record<string, unknown>;
+    if (String(panel["outcome"] ?? "") !== "ok") {
+      await sendMessage(
+        TELEGRAM_BOT_TOKEN,
+        chatId,
+        MC_OUTCOME_TEXT[String(panel["outcome"] ?? "denied")] ?? "That mission is not available.",
+      );
+      return;
+    }
+    const config = (panel["resolved_config"] ?? {}) as Record<string, unknown>;
+    const targets = (config["metric_targets"] ?? {}) as Record<string, unknown>;
+    const mode = String(panel["control_mode"] ?? "AUTO");
+    const primaryType = String(config["milestone_type"] ?? "NONE").toUpperCase();
+    const primaryTarget = mcNumber(config["milestone_target"]);
+    const handle = panel["author_handle"] ? `@${String(panel["author_handle"])}` : "Social mission";
+    const url = typeof panel["canonical_url"] === "string" ? String(panel["canonical_url"]) : "";
+
+    const lines = [
+      "🛠 <b>MISSION CONTROL</b>",
+      "",
+      `<b>${escapeHtml(handle)}</b>${url ? `\n${escapeHtml(url)}` : ""}`,
+      `Community: ${escapeHtml(binding.workspaceName)}`,
+      "",
+      `Status: <b>LIVE</b> · ${escapeHtml(missionControlRemaining(panel["ends_at"], Date.now()))}`,
+      `Target mode: <b>${escapeHtml(mode)}</b>`,
+      `Primary Goal: <b>${escapeHtml(
+        (MISSION_CONTROL_PRIMARY_LABELS as Record<string, string>)[primaryType] ?? "Not set",
+      )}</b>${primaryTarget ? ` · ${primaryTarget}` : ""}`,
+      "",
+      ...MISSION_CONTROL_METRICS.map((metric) => {
+        const target = mcNumber(targets[metric]);
+        return `${MISSION_CONTROL_METRIC_LABELS[metric]}: ${target ?? "off"}`;
+      }),
+    ];
+    if (note) lines.push("", `<i>${escapeHtml(note)}</i>`);
+
+    await sendMessage(TELEGRAM_BOT_TOKEN, chatId, lines.join("\n"), {
+      parse_mode: "HTML",
+      reply_markup: mcPanelKeyboard(missionId),
+    });
+  };
+
+  /** Mission picker for one workspace. Only LIVE missions the caller operates. */
+  const mcRenderMissionPicker = async (
+    telegramUserId: number,
+    chatId: string,
+    workspaceId: string,
+    workspaceName: string,
+  ) => {
+    const { data, error } = await admin.rpc("social_mission_control_missions", {
+      _telegram_user_id: telegramUserId,
+      _workspace_id: workspaceId,
+    });
+    const rows = Array.isArray(data) ? data : [];
+    if (error) {
+      await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "Mission Control is unavailable right now.");
+      return;
+    }
+    if (rows.length === 0) {
+      await sendMessage(
+        TELEGRAM_BOT_TOKEN,
+        chatId,
+        `<b>🛠 MISSION CONTROL — ${escapeHtml(workspaceName)}</b>\n\nThere is no live mission to manage right now.`,
+        { parse_mode: "HTML" },
+      );
+      return;
+    }
+    if (rows.length === 1) {
+      const only = rows[0] as any;
+      const auth = await mcAuthorize(telegramUserId, String(only.mission_id));
+      if (!auth.ok) {
+        await sendMessage(TELEGRAM_BOT_TOKEN, chatId, auth.reason);
+        return;
+      }
+      await admin.rpc("social_mission_control_set_session", {
+        _telegram_user_id: telegramUserId,
+        _workspace_id: workspaceId,
+        _mission_id: String(only.mission_id),
+        _pending_field: null,
+        _clear: false,
+      });
+      await mcRenderPanel(telegramUserId, chatId, String(only.mission_id), auth.binding);
+      return;
+    }
+    await sendMessage(
+      TELEGRAM_BOT_TOKEN,
+      chatId,
+      `<b>🛠 MISSION CONTROL — ${escapeHtml(workspaceName)}</b>\n\nChoose the live mission to manage.`,
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            ...rows.map((r: any) => [
+              {
+                text: `${r.author_handle ? `@${String(r.author_handle)}` : "Mission"} · ${missionControlRemaining(r.ends_at, Date.now())}`,
+                callback_data: `mc_m_${String(r.mission_id)}`,
+              },
+            ]),
+            [{ text: "✖️ Exit", callback_data: "mc_x" }],
+          ],
+        },
+      },
+    );
+  };
+
+  /** Entry point for `/mission manage` in DM and for `/start mission_manage`. */
+  const mcOpenConsole = async (telegramUserId: number, chatId: string) => {
+    const { data, error } = await admin.rpc("social_mission_control_workspaces", {
+      _telegram_user_id: telegramUserId,
+    });
+    if (error) {
+      await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "Mission Control is unavailable right now.");
+      return;
+    }
+    const workspaces = Array.isArray(data) ? data : [];
+    if (workspaces.length === 0) {
+      await sendMessage(
+        TELEGRAM_BOT_TOKEN,
+        chatId,
+        "<b>🛠 Mission Control</b>\n\nThis Telegram account is not connected to a Cartel HQ workspace you can manage.",
+        { parse_mode: "HTML" },
+      );
+      return;
+    }
+    if (workspaces.length === 1) {
+      const only = workspaces[0] as any;
+      await mcRenderMissionPicker(
+        telegramUserId,
+        chatId,
+        String(only.workspace_id),
+        String(only.workspace_name ?? "Workspace"),
+      );
+      return;
+    }
+    await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "<b>🛠 MISSION CONTROL</b>\n\nChoose a project.", {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          ...workspaces.map((w: any) => [
+            {
+              text: `${String(w.workspace_name ?? "Workspace")} (${Number(w.live_missions ?? 0)} live)`,
+              callback_data: `mc_w_${String(w.workspace_id)}`,
+            },
+          ]),
+          [{ text: "✖️ Exit", callback_data: "mc_x" }],
+        ],
+      },
+    });
+  };
+
+  const mcTargetsKeyboard = (missionId: string) => ({
+    inline_keyboard: [
+      [{ text: "🏆 Primary Goal", callback_data: `mc_f_pg_${missionId}` }],
+      ...MISSION_CONTROL_METRICS.map((metric) => [
+        {
+          text: `${MISSION_CONTROL_METRIC_LABELS[metric]} target`,
+          callback_data: `mc_f_${metric}_${missionId}`,
+        },
+      ]),
+      [{ text: "♻️ Reset to automatic", callback_data: `mc_auto_${missionId}` }],
+      [{ text: "⬅️ Back", callback_data: `mc_p_${missionId}` }],
+    ],
+  });
+
+  const mcDurationKeyboard = (missionId: string) => ({
+    inline_keyboard: [
+      [
+        { text: "+20 min", callback_data: `mc_dq_20_${missionId}` },
+        { text: "+45 min", callback_data: `mc_dq_45_${missionId}` },
+      ],
+      [
+        { text: "+60 min", callback_data: `mc_dq_60_${missionId}` },
+        { text: "+120 min", callback_data: `mc_dq_120_${missionId}` },
+      ],
+      [{ text: "✏️ Custom minutes", callback_data: `mc_dc_${missionId}` }],
+      [{ text: "⬅️ Back", callback_data: `mc_p_${missionId}` }],
+    ],
+  });
+
   try {
 
 
@@ -2454,6 +3075,397 @@ Deno.serve(async (req: Request) => {
         await openInboxConversation(operatorId, callbackChatId, String(piConversation![1]));
         return json({ ok: true });
       }
+
+      /**
+       * SE-15 — Mission Control callbacks. PRIVATE CHAT ONLY. A tap forwarded
+       * into a group can never reach a mutation: the guard below refuses any
+       * `mc_*` data that did not arrive in a private chat, and every mutating
+       * branch additionally re-runs gates 1-3 through `mcAuthorize`.
+       */
+      if (callbackData.startsWith("mc_")) {
+        if (callbackChat?.type !== "private") {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Open Mission Control in a private chat.");
+          return json({ ok: true });
+        }
+        const operatorId = Number(from.id);
+        const updateId = update?.update_id;
+
+        if (callbackData === "mc_x") {
+          await admin.rpc("social_mission_control_set_session", {
+            _telegram_user_id: operatorId,
+            _workspace_id: null,
+            _mission_id: null,
+            _pending_field: null,
+            _clear: true,
+          });
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Mission Control closed.");
+          return json({ ok: true });
+        }
+
+        const mcWorkspace = callbackData.match(/^mc_w_([0-9a-f-]{36})$/i);
+        if (mcWorkspace) {
+          const workspaceId = String(mcWorkspace[1]);
+          const { data: wsData } = await admin.rpc("social_mission_control_workspaces", {
+            _telegram_user_id: operatorId,
+          });
+          const match = (Array.isArray(wsData) ? wsData : []).find(
+            (w: any) => String(w.workspace_id) === workspaceId,
+          );
+          if (!match) {
+            await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "That project is not available.");
+            return json({ ok: true });
+          }
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, String((match as any).workspace_name ?? "Project"));
+          await mcRenderMissionPicker(
+            operatorId,
+            callbackChatId,
+            workspaceId,
+            String((match as any).workspace_name ?? "Workspace"),
+          );
+          return json({ ok: true });
+        }
+
+        // Everything below addresses exactly one mission and is gated.
+        const missionMatchId = callbackData.match(/([0-9a-f-]{36})$/i);
+        if (!missionMatchId) {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "That control is no longer valid.");
+          return json({ ok: true });
+        }
+        const missionId = String(missionMatchId[1]);
+        const auth = await mcAuthorize(operatorId, missionId);
+        if (!auth.ok) {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, auth.reason);
+          return json({ ok: true });
+        }
+        const binding = auth.binding;
+        await admin.rpc("social_mission_control_set_session", {
+          _telegram_user_id: operatorId,
+          _workspace_id: binding.workspaceId,
+          _mission_id: missionId,
+          _pending_field: null,
+          _clear: false,
+        });
+
+        // Open / refresh the panel.
+        if (callbackData === `mc_m_${missionId}` || callbackData === `mc_p_${missionId}`) {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Mission Control");
+          await mcRenderPanel(operatorId, callbackChatId, missionId, binding);
+          return json({ ok: true });
+        }
+
+        // Targets menu.
+        if (callbackData === `mc_t_${missionId}`) {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Edit targets");
+          await sendMessage(
+            TELEGRAM_BOT_TOKEN,
+            callbackChatId,
+            "<b>🎯 EDIT TARGETS</b>\n\nPick what to change. Send a whole number when asked, or send <b>off</b> to remove a supporting target.",
+            { parse_mode: "HTML", reply_markup: mcTargetsKeyboard(missionId) },
+          );
+          return json({ ok: true });
+        }
+
+        // RESET TO AUTO. History is preserved; only the active override drops.
+        if (callbackData === `mc_auto_${missionId}`) {
+          const { data, error } = await admin.rpc("social_mission_apply_target_override", {
+            _telegram_user_id: operatorId,
+            _mission_id: missionId,
+            _verified_chat_id: Number(binding.chatId),
+            _mode: "AUTO",
+            _primary_type: null,
+            _primary_target: null,
+            _views: null,
+            _likes: null,
+            _replies: null,
+            _reposts: null,
+            _bookmarks: null,
+            _idempotency_key: await mcKey(updateId, "reset_auto"),
+          });
+          const outcome = String((data as any)?.outcome ?? (error ? "denied" : "denied"));
+          if (outcome !== "ok" && outcome !== "replayed") {
+            await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, MC_OUTCOME_TEXT[outcome] ?? "That change was refused.");
+            return json({ ok: true });
+          }
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Targets reset to automatic.");
+          if (outcome === "ok") {
+            await mcRefreshCard({
+              workspaceId: binding.workspaceId,
+              missionId,
+              actorUserId: linked?.user_id ? String(linked.user_id) : null,
+              seed: `${updateId}:reset_auto`,
+            });
+          }
+          await mcRenderPanel(operatorId, callbackChatId, missionId, binding, "Targets are automatic again.");
+          return json({ ok: true });
+        }
+
+        // Primary Goal type menu.
+        if (callbackData === `mc_f_pg_${missionId}`) {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Primary Goal");
+          await sendMessage(
+            TELEGRAM_BOT_TOKEN,
+            callbackChatId,
+            "<b>🏆 PRIMARY GOAL</b>\n\nChoose the metric the mission is judged on. Bookmarks cannot be a Primary Goal.",
+            {
+              parse_mode: "HTML",
+              reply_markup: {
+                inline_keyboard: [
+                  ...MISSION_CONTROL_PRIMARY_TYPES.map((type) => [
+                    {
+                      text: MISSION_CONTROL_PRIMARY_LABELS[type],
+                      callback_data: `mc_g_${type}_${missionId}`,
+                    },
+                  ]),
+                  [{ text: "⬅️ Back", callback_data: `mc_t_${missionId}` }],
+                ],
+              },
+            },
+          );
+          return json({ ok: true });
+        }
+
+        const mcGoal = callbackData.match(/^mc_g_([A-Z_]+)_([0-9a-f-]{36})$/);
+        if (mcGoal) {
+          const type = String(mcGoal[1]) as MissionControlPrimaryType;
+          if (!(MISSION_CONTROL_PRIMARY_TYPES as readonly string[]).includes(type)) {
+            await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "That Primary Goal is not valid.");
+            return json({ ok: true });
+          }
+          const applied = await mcApplyTargets({
+            telegramUserId: operatorId,
+            binding,
+            updateId,
+            patch: { primaryType: type },
+          });
+          if ((applied as any).outcome === "needs_primary_target") {
+            await admin.rpc("social_mission_control_set_session", {
+              _telegram_user_id: operatorId,
+              _workspace_id: binding.workspaceId,
+              _mission_id: missionId,
+              _pending_field: "PRIMARY_TARGET",
+              _clear: false,
+            });
+            await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Send the target number.");
+            await sendMessage(
+              TELEGRAM_BOT_TOKEN,
+              callbackChatId,
+              `<b>${escapeHtml(MISSION_CONTROL_PRIMARY_LABELS[type])}</b> needs a target.\n\nSend a whole number above zero.`,
+              { parse_mode: "HTML" },
+            );
+            return json({ ok: true });
+          }
+          const outcome = String((applied as any).outcome ?? "denied");
+          if (outcome !== "ok" && outcome !== "replayed") {
+            await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, MC_OUTCOME_TEXT[outcome] ?? "That change was refused.");
+            return json({ ok: true });
+          }
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Primary Goal updated.");
+          if (outcome === "ok") {
+            await mcRefreshCard({
+              workspaceId: binding.workspaceId,
+              missionId,
+              actorUserId: linked?.user_id ? String(linked.user_id) : null,
+              seed: `${updateId}:goal:${type}`,
+            });
+          }
+          await mcRenderPanel(operatorId, callbackChatId, missionId, binding, "Primary Goal updated.");
+          return json({ ok: true });
+        }
+
+        // A metric button only ARMS a short-lived pending numeric input state.
+        const mcField = callbackData.match(/^mc_f_([a-z]+)_([0-9a-f-]{36})$/);
+        if (mcField) {
+          const metric = String(mcField[1]) as MissionControlMetric;
+          if (!(MISSION_CONTROL_METRICS as readonly string[]).includes(metric)) {
+            await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "That control is no longer valid.");
+            return json({ ok: true });
+          }
+          await admin.rpc("social_mission_control_set_session", {
+            _telegram_user_id: operatorId,
+            _workspace_id: binding.workspaceId,
+            _mission_id: missionId,
+            _pending_field: metric.toUpperCase(),
+            _clear: false,
+          });
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Send the number.");
+          await sendMessage(
+            TELEGRAM_BOT_TOKEN,
+            callbackChatId,
+            `<b>${escapeHtml(MISSION_CONTROL_METRIC_LABELS[metric])}</b>\n\nSend a whole number above zero, or send <b>off</b> to remove this target.`,
+            { parse_mode: "HTML" },
+          );
+          return json({ ok: true });
+        }
+
+        // End time.
+        if (callbackData === `mc_d_${missionId}`) {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Change end time");
+          await sendMessage(
+            TELEGRAM_BOT_TOKEN,
+            callbackChatId,
+            "<b>⏱ CHANGE END TIME</b>\n\nThe mission will end this long from now. Remaining pulses are rescheduled inside the new window; already-sent updates are never changed.",
+            { parse_mode: "HTML", reply_markup: mcDurationKeyboard(missionId) },
+          );
+          return json({ ok: true });
+        }
+        if (callbackData === `mc_dc_${missionId}`) {
+          await admin.rpc("social_mission_control_set_session", {
+            _telegram_user_id: operatorId,
+            _workspace_id: binding.workspaceId,
+            _mission_id: missionId,
+            _pending_field: "DURATION_MINUTES",
+            _clear: false,
+          });
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Send the minutes.");
+          await sendMessage(
+            TELEGRAM_BOT_TOKEN,
+            callbackChatId,
+            "Send how many minutes from now the mission should end (1 to 1440).",
+          );
+          return json({ ok: true });
+        }
+        const mcQuick = callbackData.match(/^mc_dq_([0-9]{1,4})_([0-9a-f-]{36})$/);
+        if (mcQuick) {
+          const minutes = Number(mcQuick[1]);
+          const { data, error } = await admin.rpc("social_mission_apply_duration_override", {
+            _telegram_user_id: operatorId,
+            _mission_id: missionId,
+            _verified_chat_id: Number(binding.chatId),
+            _minutes_from_now: minutes,
+            _idempotency_key: await mcKey(updateId, `duration:${minutes}`),
+          });
+          const outcome = String((data as any)?.outcome ?? (error ? "denied" : "denied"));
+          if (outcome !== "ok" && outcome !== "replayed") {
+            await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, MC_OUTCOME_TEXT[outcome] ?? "That change was refused.");
+            return json({ ok: true });
+          }
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "End time updated.");
+          if (outcome === "ok") {
+            await mcRefreshCard({
+              workspaceId: binding.workspaceId,
+              missionId,
+              actorUserId: linked?.user_id ? String(linked.user_id) : null,
+              seed: `${updateId}:duration:${minutes}`,
+            });
+          }
+          await mcRenderPanel(operatorId, callbackChatId, missionId, binding, "End time updated.");
+          return json({ ok: true });
+        }
+
+        // END MISSION NOW — confirmation first, then the mission-specific RPC.
+        if (callbackData === `mc_e_${missionId}`) {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Confirm?");
+          await sendMessage(
+            TELEGRAM_BOT_TOKEN,
+            callbackChatId,
+            "<b>🏁 END MISSION NOW?</b>\n\nThe mission card is updated in place to COMPLETED with its final stored results. Remaining updates stop. This cannot be undone.",
+            {
+              parse_mode: "HTML",
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: "✅ Yes, end it now", callback_data: `mc_ec_${missionId}` }],
+                  [{ text: "⬅️ Keep it running", callback_data: `mc_p_${missionId}` }],
+                ],
+              },
+            },
+          );
+          return json({ ok: true });
+        }
+        if (callbackData === `mc_ec_${missionId}`) {
+          const { data, error } = await admin.rpc("end_social_mission_from_control", {
+            _telegram_user_id: operatorId,
+            _mission_id: missionId,
+            _verified_chat_id: Number(binding.chatId),
+            _idempotency_key: await mcKey(updateId, "end_now"),
+          });
+          const result = (data ?? {}) as Record<string, unknown>;
+          const outcome = String(result["outcome"] ?? (error ? "denied" : "denied"));
+          if (outcome !== "ok") {
+            await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, MC_OUTCOME_TEXT[outcome] ?? "That mission could not be ended.");
+            return json({ ok: true });
+          }
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Ending the mission…");
+          // The transport performs the existing best-effort FINAL official X
+          // snapshot for a COMPLETED mission, guarded by its own current-minute
+          // duplicate-read guard: at most one read, never retried here.
+          const transport = await mcRefreshCard({
+            workspaceId: binding.workspaceId,
+            missionId,
+            actorUserId: linked?.user_id ? String(linked.user_id) : null,
+            seed: `${updateId}:end_now`,
+          });
+          const editState = String(transport?.editState ?? "");
+          await admin.rpc("finish_social_mission_schedule_event", {
+            _event_id: result["schedule_event_id"],
+            _state: editState === "EDITED" ? "SENT" : editState === "FAILED" ? "FAILED" : "AMBIGUOUS",
+            _telegram_message_id: null,
+            _last_error: editState === "EDITED" ? null : "The manual end edit was not confirmed.",
+          });
+          await mcSafeUnpin(missionId, binding.workspaceId);
+          await sendMessage(
+            TELEGRAM_BOT_TOKEN,
+            callbackChatId,
+            editState === "EDITED"
+              ? "This mission is complete. The mission card in the community has been updated."
+              : "This mission is complete. Its card could not be updated in place; do not resend it.",
+          );
+          return json({ ok: true });
+        }
+
+        // CANCEL MISSION — zero provider reads.
+        if (callbackData === `mc_c_${missionId}`) {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Confirm?");
+          await sendMessage(
+            TELEGRAM_BOT_TOKEN,
+            callbackChatId,
+            "<b>🛑 CANCEL MISSION?</b>\n\nThe mission card is updated in place to CANCELLED. No final results are claimed and remaining updates stop. This cannot be undone.",
+            {
+              parse_mode: "HTML",
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: "✅ Yes, cancel it", callback_data: `mc_cc_${missionId}` }],
+                  [{ text: "⬅️ Keep it running", callback_data: `mc_p_${missionId}` }],
+                ],
+              },
+            },
+          );
+          return json({ ok: true });
+        }
+        if (callbackData === `mc_cc_${missionId}`) {
+          const { data, error } = await admin.rpc("cancel_social_mission_from_control", {
+            _telegram_user_id: operatorId,
+            _mission_id: missionId,
+            _verified_chat_id: Number(binding.chatId),
+            _idempotency_key: await mcKey(updateId, "cancel"),
+          });
+          const result = (data ?? {}) as Record<string, unknown>;
+          const outcome = String(result["outcome"] ?? (error ? "denied" : "denied"));
+          if (outcome !== "ok") {
+            await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, MC_OUTCOME_TEXT[outcome] ?? "That mission could not be cancelled.");
+            return json({ ok: true });
+          }
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Cancelling the mission…");
+          const transport = await mcRefreshCard({
+            workspaceId: binding.workspaceId,
+            missionId,
+            actorUserId: linked?.user_id ? String(linked.user_id) : null,
+            seed: `${updateId}:cancel`,
+          });
+          await mcSafeUnpin(missionId, binding.workspaceId);
+          await sendMessage(
+            TELEGRAM_BOT_TOKEN,
+            callbackChatId,
+            String(transport?.editState ?? "") === "EDITED"
+              ? "This mission is cancelled. The mission card in the community has been updated."
+              : "This mission is cancelled. Its card could not be updated in place; do not resend it.",
+          );
+          return json({ ok: true });
+        }
+
+        await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "That control is no longer valid.");
+        return json({ ok: true });
+      }
+
 
       if (callbackData === "beta_join") {
         if (linked?.user_id) {
@@ -3080,6 +4092,31 @@ Deno.serve(async (req: Request) => {
     // before the unknown-slash-command no-op, and touches no other command.
     const missionMatch = text.match(/^\/mission(?:@\w+)?(?:\s+(\S+))?\s*$/i);
 
+    /**
+     * SE-15 — `/mission manage`. Runs BEFORE every other `/mission` branch so
+     * the word "manage" can never be treated as a post link or as a bare
+     * launcher.
+     *
+     * In a group it only ever posts the admin notice + private deep link, for
+     * an identifiable human AND for a Telegram anonymous admin: neither can
+     * mutate anything from the group. In a private chat it opens the console,
+     * where the three authorization gates apply to every action.
+     */
+    const isManageCommand =
+      !!missionMatch && String(missionMatch[1] ?? "").toLowerCase() === "manage";
+    if (isManageCommand && isGroupChat && (from?.is_bot !== true || isAnonymousGroupAdminSender)) {
+      await sendMissionManageLauncherAndCleanup(
+        TELEGRAM_BOT_TOKEN,
+        chatId,
+        Number(message?.message_id),
+      );
+      return json({ ok: true });
+    }
+    if (isManageCommand && chat?.type === "private" && from?.is_bot !== true) {
+      await mcOpenConsole(Number(from.id), chatId);
+      return json({ ok: true });
+    }
+
     // SE-12 — bare `/mission` launcher for identifiable humans in groups.
     // The next pasted X URL is still handled by the existing Link Finder path.
     if (missionMatch && from?.is_bot !== true && isGroupChat && !missionMatch[1]) {
@@ -3162,6 +4199,13 @@ Deno.serve(async (req: Request) => {
       if (isGroup && isRoadmap) replyMarkup = groupAcquisitionKeyboard(chatId);
       if (!isGroup) replyMarkup = betaKeyboard(!(await getLinkedUser(String(from.id)))?.user_id);
       await sendMessage(TELEGRAM_BOT_TOKEN, chatId, isRoadmap ? roadmapText() : helpText(isGroup), { parse_mode: "HTML", ...(replyMarkup ? { reply_markup: replyMarkup } : {}) });
+      return json({ ok: true });
+    }
+
+    // SE-15 — the deep link posted by the group launcher. Private chat only.
+    if (/^\/start(?:@\w+)?\s+mission_manage$/i.test(text)) {
+      if (chat?.type !== "private" || from?.is_bot === true) return json({ ok: true });
+      await mcOpenConsole(Number(from.id), chatId);
       return json({ ok: true });
     }
 
@@ -3330,6 +4374,114 @@ Deno.serve(async (req: Request) => {
     }
 
     if (text.startsWith("/")) return json({ ok: true });
+
+    /**
+     * SE-15 — pending numeric input for Mission Control.
+     *
+     * Runs BEFORE the Project Inbox reply/capture paths so an armed control
+     * field can never be misread as a project message. The session only says
+     * WHICH field is being edited; it is never an authorization source, so the
+     * three gates are re-run here in full before anything is written, and an
+     * invalid value mutates nothing at all.
+     */
+    if (chat?.type === "private" && from?.is_bot !== true) {
+      const { data: mcSessionData } = await admin.rpc("social_mission_control_active_session", {
+        _telegram_user_id: Number(from.id),
+      });
+      const mcSession = Array.isArray(mcSessionData) ? mcSessionData[0] : null;
+      const pendingField = String(mcSession?.pending_control_field ?? "");
+      const pendingMission = String(mcSession?.mission_id ?? "");
+      if (pendingField && pendingMission) {
+        const parsed = parseMissionControlInput(pendingField, text);
+        if (!parsed.ok) {
+          await sendMessage(TELEGRAM_BOT_TOKEN, chatId, parsed.reason);
+          return json({ ok: true });
+        }
+        const auth = await mcAuthorize(Number(from.id), pendingMission);
+        if (!auth.ok) {
+          await sendMessage(TELEGRAM_BOT_TOKEN, chatId, auth.reason);
+          return json({ ok: true });
+        }
+        const binding = auth.binding;
+        const actorUserId = (await getLinkedUser(String(from.id)))?.user_id ?? null;
+
+        if (pendingField === "DURATION_MINUTES") {
+          const { data, error } = await admin.rpc("social_mission_apply_duration_override", {
+            _telegram_user_id: Number(from.id),
+            _mission_id: pendingMission,
+            _verified_chat_id: Number(binding.chatId),
+            _minutes_from_now: parsed.value,
+            _idempotency_key: await mcKey(update?.update_id, "duration_custom"),
+          });
+          const outcome = String((data as any)?.outcome ?? (error ? "denied" : "denied"));
+          if (outcome !== "ok" && outcome !== "replayed") {
+            await sendMessage(TELEGRAM_BOT_TOKEN, chatId, MC_OUTCOME_TEXT[outcome] ?? "That change was refused.");
+            return json({ ok: true });
+          }
+          if (outcome === "ok") {
+            await mcRefreshCard({
+              workspaceId: binding.workspaceId,
+              missionId: pendingMission,
+              actorUserId: actorUserId ? String(actorUserId) : null,
+              seed: `${update?.update_id}:duration_custom`,
+            });
+          }
+          await admin.rpc("social_mission_control_set_session", {
+            _telegram_user_id: Number(from.id),
+            _workspace_id: binding.workspaceId,
+            _mission_id: pendingMission,
+            _pending_field: null,
+            _clear: false,
+          });
+          await mcRenderPanel(Number(from.id), chatId, pendingMission, binding, "End time updated.");
+          return json({ ok: true });
+        }
+
+        const patch: Record<string, number | null> = {};
+        if (pendingField === "PRIMARY_TARGET") {
+          patch["primaryTarget"] = parsed.value;
+        } else {
+          patch[pendingField.toLowerCase()] = parsed.value;
+        }
+        const applied = await mcApplyTargets({
+          telegramUserId: Number(from.id),
+          binding,
+          updateId: update?.update_id,
+          patch: patch as never,
+        });
+        const outcome = String((applied as any).outcome ?? "denied");
+        if (outcome === "needs_primary_target") {
+          await sendMessage(
+            TELEGRAM_BOT_TOKEN,
+            chatId,
+            "Set a Primary Goal target first, then the supporting targets.",
+          );
+          return json({ ok: true });
+        }
+        if (outcome !== "ok" && outcome !== "replayed") {
+          await sendMessage(TELEGRAM_BOT_TOKEN, chatId, MC_OUTCOME_TEXT[outcome] ?? "That change was refused.");
+          return json({ ok: true });
+        }
+        if (outcome === "ok") {
+          await mcRefreshCard({
+            workspaceId: binding.workspaceId,
+            missionId: pendingMission,
+            actorUserId: actorUserId ? String(actorUserId) : null,
+            seed: `${update?.update_id}:${pendingField}`,
+          });
+        }
+        await admin.rpc("social_mission_control_set_session", {
+          _telegram_user_id: Number(from.id),
+          _workspace_id: binding.workspaceId,
+          _mission_id: pendingMission,
+          _pending_field: null,
+          _clear: false,
+        });
+        await mcRenderPanel(Number(from.id), chatId, pendingMission, binding, "Targets updated.");
+        return json({ ok: true });
+      }
+    }
+
 
     /**
      * C7.3 — TEAM reply from the bot console.

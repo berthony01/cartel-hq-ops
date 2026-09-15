@@ -77,6 +77,12 @@ import {
   X_PROVIDER,
 } from "../_shared/x-metrics.ts";
 
+/**
+ * SE-15 — pure resolver that folds an active Mission Control manual override
+ * over the mission's IMMUTABLE launch config. No network, no database.
+ */
+import { resolveMissionConfig } from "../_shared/mission-resolved-config.ts";
+
 const MILESTONE_TYPES = ["VIEWS", "LIKES", "REPLIES", "REPOSTS", "TOTAL_INTERACTIONS"] as const;
 
 /**
@@ -244,17 +250,25 @@ async function reloadMissionRow(
 
 
 /**
- * SE-13 — the MISSION GOAL, read ONLY from the mission's own immutable config
- * snapshot. `milestone_type` / `milestone_target` remain the stored keys;
+ * SE-15 — the mission's RESOLVED config: its immutable launch snapshot, with an
+ * active Mission Control manual override folded over it. The snapshot itself is
+ * never rewritten, and a mission that was never controlled resolves to exactly
+ * the same object the SE-13/SE-14 readers used before.
+ */
+function missionConfig(mission: LoadedRow): Record<string, unknown> | null {
+  return resolveMissionConfig(mission["metadata"] ?? null);
+}
+
+/**
+ * SE-13 — the MISSION GOAL, read ONLY from the mission's own config (SE-15:
+ * resolved). `milestone_type` / `milestone_target` remain the stored keys;
  * `stretch_goal_target` and `goal_source` are the SE-13 additions and are both
  * optional, so a pre-SE-13 mission still renders its primary goal unchanged.
  */
 function missionGoal(mission: LoadedRow): MissionGoal | null {
-  const metadata = mission["metadata"];
-  if (!metadata || typeof metadata !== "object") return null;
-  const config = (metadata as Record<string, unknown>)["effective_config"];
-  if (!config || typeof config !== "object") return null;
-  const raw = config as Record<string, unknown>;
+  const config = missionConfig(mission);
+  if (!config) return null;
+  const raw = config;
   const type = String(raw["milestone_type"] ?? "NONE").toUpperCase();
   const target = Number(raw["milestone_target"]);
   if (!(MILESTONE_TYPES as readonly string[]).includes(type)) return null;
@@ -268,17 +282,15 @@ function missionGoal(mission: LoadedRow): MissionGoal | null {
 }
 
 /**
- * SE-14 — the immutable supporting target set, read ONLY from the mission's own
- * effective config snapshot. A client can never supply it: nothing in the
- * webhook or transport payload is consulted here. Unknown or invalid entries
- * are dropped rather than coerced.
+ * SE-14 — the supporting target set, read ONLY from the mission's own config
+ * (SE-15: resolved). A client can never supply it: nothing in the webhook or
+ * transport payload is consulted here. Unknown or invalid entries are dropped
+ * rather than coerced.
  */
 function missionMetricTargets(mission: LoadedRow): MissionMetricTargets | null {
-  const metadata = mission["metadata"];
-  if (!metadata || typeof metadata !== "object") return null;
-  const config = (metadata as Record<string, unknown>)["effective_config"];
-  if (!config || typeof config !== "object") return null;
-  const raw = (config as Record<string, unknown>)["metric_targets"];
+  const config = missionConfig(mission);
+  if (!config) return null;
+  const raw = config["metric_targets"];
   if (!raw || typeof raw !== "object") return null;
   const source = raw as Record<string, unknown>;
   const out: MissionMetricTargets = {};

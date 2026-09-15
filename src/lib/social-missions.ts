@@ -434,3 +434,66 @@ export function formatMetricChange(change: number | null): string {
   if (change > 0) return `+${change.toLocaleString()}`;
   return change.toLocaleString();
 }
+
+/**
+ * SE-15 — READ-ONLY Mission Control evidence.
+ *
+ * The browser never edits a mission. These helpers exist only so the existing
+ * Missions panel can show WHAT an admin changed from the Telegram Mission
+ * Control console and WHEN. The mission's immutable `effective_config` is
+ * reported separately from the active override, so the audit trail is visible
+ * rather than rewritten.
+ */
+export type MissionControlMode = "AUTO" | "MANUAL";
+
+export type MissionControlHistoryEntry = {
+  at: string | null;
+  action: string;
+  key: string | null;
+};
+
+function missionMetadata(mission: MissionRow): Record<string, unknown> | null {
+  const metadata = (mission as unknown as Record<string, unknown>)["metadata"];
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  return metadata as Record<string, unknown>;
+}
+
+function missionControlObject(mission: MissionRow): Record<string, unknown> | null {
+  const metadata = missionMetadata(mission);
+  const control = metadata?.["mission_control"];
+  if (!control || typeof control !== "object" || Array.isArray(control)) return null;
+  return control as Record<string, unknown>;
+}
+
+/** `AUTO` unless an admin has applied a manual override from Telegram. */
+export function missionControlMode(mission: MissionRow): MissionControlMode {
+  const control = missionControlObject(mission);
+  if (!control) return "AUTO";
+  return String(control["mode"] ?? "AUTO").toUpperCase() === "MANUAL" ? "MANUAL" : "AUTO";
+}
+
+/** Newest-first audit trail. Actor identities are deliberately NOT surfaced. */
+export function missionControlHistory(mission: MissionRow): MissionControlHistoryEntry[] {
+  const control = missionControlObject(mission);
+  const raw = control?.["history"];
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((entry): entry is Record<string, unknown> =>
+      !!entry && typeof entry === "object" && !Array.isArray(entry),
+    )
+    .map((entry) => ({
+      at: typeof entry["at"] === "string" ? entry["at"] : null,
+      action: String(entry["action"] ?? "CHANGE"),
+      key: typeof entry["key"] === "string" ? entry["key"] : null,
+    }))
+    .reverse();
+}
+
+/** Plain-language labels for the recorded control actions. */
+export const MISSION_CONTROL_ACTION_LABELS: Record<string, string> = {
+  SET_TARGETS: "Targets set manually",
+  RESET_AUTO: "Targets reset to automatic",
+  SET_END_TIME: "End time changed",
+  END_NOW: "Mission ended early",
+  CANCEL: "Mission cancelled",
+};
