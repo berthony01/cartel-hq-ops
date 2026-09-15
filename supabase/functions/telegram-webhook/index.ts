@@ -1148,6 +1148,8 @@ Deno.serve(async (req: Request) => {
       });
       const retryAutoPin = ((retryConfig ?? {}) as Record<string, unknown>)["auto_pin_mission"] !== false;
       const retryPinned = await ensureCanonicalMissionPin(retryTargetId, retryAutoPin, null);
+      timing.slice("recover_pin");
+      timing.log(isLinkFinder ? "link_finder_already_sent" : "mission_command_already_sent");
       if (retryPinned) {
         await args.onMissionSettled?.({
           kind: "ALREADY_SENT",
