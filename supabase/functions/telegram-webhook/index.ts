@@ -2413,8 +2413,8 @@ Deno.serve(async (req: Request) => {
           },
           body: JSON.stringify({
             action: "edit_mission",
-            workspaceId: args.workspaceId,
-            missionId: args.missionId,
+            workspaceId,
+            missionId,
             targetId: String(target.id),
             clientRequestId: await mcRequestUuid(args.seed),
             revision: Number((target as any).edit_revision ?? 0) + 1,
