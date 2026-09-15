@@ -2946,30 +2946,9 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true });
     }
 
-    // SE-4A — `/mission <X link>`. Runs before every generic fallthrough and
-    // before the unknown-slash-command no-op, and touches no other command.
-    const missionMatch = text.match(/^\/mission(?:@\w+)?(?:\s+(\S+))?\s*$/i);
-    if (missionMatch && from?.is_bot !== true) {
-      await runMissionCommand({
-        chatId,
-        chatType: String(chat?.type ?? ""),
-        updateId: update?.update_id,
-        messageId: message?.message_id,
-        telegramUserId: Number(from.id),
-        argument: String(missionMatch[1] ?? ""),
-      });
-      return json({ ok: true });
-    }
-
-    // SE-5 — X Link Finder. A human posting a link to the project's OWN
-    // official X account in a connected group gets a private-to-the-group
-    // START / IGNORE prompt. It NEVER starts a mission by itself, nothing is
-    // deleted at detection time, and the RPC fails closed on every
-    // ownership fact (connected group, link finder enabled, official handle).
-    // SE-7: if an admin later presses START and the mission reaches a
-    // confirmed card plus an active schedule, THAT post is then deleted so the
-    // branded card is what the group is left with. IGNORE never deletes it.
-
+    // SE-5 / SE-9 / SE-10 sender resolution. Hoisted above the `/mission`
+    // command branch so the anonymous-admin command can reuse the EXACT same
+    // strict same-group proof and the EXACT same Link Finder candidate path.
     //
     // Anonymous group admins are delivered by Telegram as a bot-like sender
     // (`GroupAnonymousBot`) with `sender_chat` pointing at the group itself.
@@ -2998,67 +2977,132 @@ Deno.serve(async (req: Request) => {
       }
       return { eligible: false, posterId: null };
     })({ from, sender_chat: senderChat, chat } as any);
-    if (
-      linkFinderSender.eligible &&
-      !text.startsWith("/") &&
-      (chat?.type === "group" || chat?.type === "supergroup")
-    ) {
+    const isAnonymousGroupAdminSender =
+      linkFinderSender.eligible && linkFinderSender.posterId === null;
+    const isGroupChat = chat?.type === "group" || chat?.type === "supergroup";
+
+    /**
+     * SE-11 — the ONE Link Finder candidate + START/IGNORE prompt path. Both
+     * plain official-link detection and the anonymous-admin `/mission <link>`
+     * command funnel through here. It creates NO mission, NO card and NO
+     * schedule: the RPC fails closed on every ownership fact (connected group,
+     * link finder enabled, official handle), and only the identifiable human
+     * who later taps START is authorized to launch.
+     */
+    const offerLinkFinderCandidate = async (
+      parsedLink: ParsedXStatus,
+      sourceMessageId: number,
+      posterId: number | null,
+    ): Promise<boolean> => {
+      const { data: candidate } = await admin.rpc("create_social_mission_link_candidate", {
+        _telegram_chat_id: Number(chatId),
+        _telegram_message_id: Number(sourceMessageId),
+        _telegram_user_id: posterId,
+        _canonical_url: parsedLink.canonicalUrl,
+        _external_post_id: parsedLink.postId,
+        _author_handle: parsedLink.handle,
+        _ttl_minutes: 15,
+      });
+
+      const created = (candidate ?? {}) as { outcome?: string; candidate_id?: string };
+      // EXISTING = a webhook retry or a repost of the same message: silent.
+      if (created.outcome !== "CREATED" || !created.candidate_id) return false;
+
+      const prompt = await telegramJson(TELEGRAM_BOT_TOKEN, "sendMessage", {
+        chat_id: chatId,
+        text: "This is an official project post. Admins can start a Social Mission for it.",
+        reply_to_message_id: Number(sourceMessageId),
+        disable_notification: true,
+        disable_web_page_preview: true,
+        reply_markup: {
+          inline_keyboard: [[
+            { text: "START MISSION", callback_data: `sm_lf_start_${created.candidate_id}` },
+            { text: "IGNORE", callback_data: `sm_lf_ignore_${created.candidate_id}` },
+          ]],
+        },
+      }).catch(() => null);
+      const promptId = (prompt as { message_id?: number } | null)?.message_id;
+      let promptAttached = false;
+      if (typeof promptId === "number") {
+        const { data: attached, error: attachError } = await admin.rpc(
+          "attach_social_mission_link_prompt",
+          { _candidate_id: created.candidate_id, _prompt_message_id: promptId },
+        );
+        promptAttached = !attachError && attached === true;
+      }
+
+      // SE-9 — the ORIGINAL source message is removed here, immediately after
+      // the prompt is CONFIRMED sent AND attached, and never before. A prompt
+      // that failed to send or failed to attach leaves the member's post
+      // completely untouched. A failed deletion records a bounded diagnostic
+      // and leaves the PENDING candidate retryable; the START path re-attempts
+      // it before launching.
+      if (promptAttached) {
+        await ensureLinkFinderSourceDeleted({
+          candidateId: String(created.candidate_id),
+          chatId: String(chatId),
+          sourceMessageId: Number(sourceMessageId),
+        });
+      }
+      return true;
+    };
+
+    // SE-4A — `/mission <X link>`. Runs before every generic fallthrough and
+    // before the unknown-slash-command no-op, and touches no other command.
+    const missionMatch = text.match(/^\/mission(?:@\w+)?(?:\s+(\S+))?\s*$/i);
+    if (missionMatch && from?.is_bot !== true) {
+      await runMissionCommand({
+        chatId,
+        chatType: String(chat?.type ?? ""),
+        updateId: update?.update_id,
+        messageId: message?.message_id,
+        telegramUserId: Number(from.id),
+        argument: String(missionMatch[1] ?? ""),
+      });
+      return json({ ok: true });
+    }
+
+    // SE-11 — anonymous-admin `/mission <X link>`. Telegram never reveals the
+    // human behind an anonymous message, so this command can NEVER call
+    // `runMissionCommand` directly: there is no linked user and no workspace
+    // operator identity to authorize. It is instead routed into the existing
+    // Link Finder candidate + START/IGNORE approval mechanism, where the human
+    // who taps START is identifiable and must still pass the linked-user,
+    // workspace-operator and live Telegram-admin checks. Ordinary bot senders,
+    // channels and foreign `sender_chat` values are rejected: eligibility
+    // requires Telegram to prove `sender_chat` is THIS exact group.
+    if (missionMatch && isAnonymousGroupAdminSender && isGroupChat) {
+      const anonArgument = String(missionMatch[1] ?? "");
+      const anonParsed = anonArgument ? parseXStatusUrl(anonArgument) : null;
+      if (!anonParsed) {
+        // Never fail silently: malformed or missing link gets visible usage.
+        await sendMessage(TELEGRAM_BOT_TOKEN, chatId, MISSION_USAGE, { parse_mode: "HTML" });
+        return json({ ok: true });
+      }
+      await offerLinkFinderCandidate(anonParsed, Number(message?.message_id), null);
+      return json({ ok: true });
+    }
+
+    // SE-5 — X Link Finder. A human posting a link to the project's OWN
+    // official X account in a connected group gets a private-to-the-group
+    // START / IGNORE prompt. It NEVER starts a mission by itself, nothing is
+    // deleted at detection time, and the RPC fails closed on every
+    // ownership fact (connected group, link finder enabled, official handle).
+    // SE-7: if an admin later presses START and the mission reaches a
+    // confirmed card plus an active schedule, THAT post is then deleted so the
+    // branded card is what the group is left with. IGNORE never deletes it.
+    if (linkFinderSender.eligible && !text.startsWith("/") && isGroupChat) {
       const linkMatch = text.match(
         /https:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/[A-Za-z0-9_]{1,15}\/status\/[0-9]{1,32}(?![0-9])/i,
       );
       const parsedLink = linkMatch ? parseXStatusUrl(String(linkMatch[0])) : null;
       if (parsedLink) {
-        const { data: candidate } = await admin.rpc("create_social_mission_link_candidate", {
-          _telegram_chat_id: Number(chatId),
-          _telegram_message_id: Number(message?.message_id),
-          _telegram_user_id: linkFinderSender.posterId,
-          _canonical_url: parsedLink.canonicalUrl,
-          _external_post_id: parsedLink.postId,
-          _author_handle: parsedLink.handle,
-          _ttl_minutes: 15,
-        });
-
-        const created = (candidate ?? {}) as { outcome?: string; candidate_id?: string };
-        // EXISTING = a webhook retry or a repost of the same message: silent.
-        if (created.outcome === "CREATED" && created.candidate_id) {
-          const prompt = await telegramJson(TELEGRAM_BOT_TOKEN, "sendMessage", {
-            chat_id: chatId,
-            text: "This is an official project post. Admins can start a Social Mission for it.",
-            reply_to_message_id: Number(message?.message_id),
-            disable_notification: true,
-            disable_web_page_preview: true,
-            reply_markup: {
-              inline_keyboard: [[
-                { text: "START MISSION", callback_data: `sm_lf_start_${created.candidate_id}` },
-                { text: "IGNORE", callback_data: `sm_lf_ignore_${created.candidate_id}` },
-              ]],
-            },
-          }).catch(() => null);
-          const promptId = (prompt as { message_id?: number } | null)?.message_id;
-          let promptAttached = false;
-          if (typeof promptId === "number") {
-            const { data: attached, error: attachError } = await admin.rpc(
-              "attach_social_mission_link_prompt",
-              { _candidate_id: created.candidate_id, _prompt_message_id: promptId },
-            );
-            promptAttached = !attachError && attached === true;
-          }
-
-          // SE-9 — the ORIGINAL X-link message is removed here, immediately
-          // after the prompt is CONFIRMED sent AND attached, and never before.
-          // A prompt that failed to send or failed to attach leaves the
-          // member's post completely untouched. A failed deletion records a
-          // bounded diagnostic and leaves the PENDING candidate retryable; the
-          // START path re-attempts it before launching.
-          if (promptAttached) {
-            await ensureLinkFinderSourceDeleted({
-              candidateId: String(created.candidate_id),
-              chatId: String(chatId),
-              sourceMessageId: Number(message?.message_id),
-            });
-          }
-          return json({ ok: true });
-        }
+        const handled = await offerLinkFinderCandidate(
+          parsedLink,
+          Number(message?.message_id),
+          linkFinderSender.posterId,
+        );
+        if (handled) return json({ ok: true });
       }
     }
 

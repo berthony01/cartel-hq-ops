@@ -632,13 +632,16 @@ check(
 );
 check(
   "14.10 the candidate RPC receives the derived poster id, never a raw bot id",
-  /_telegram_user_id: linkFinderSender\.posterId/.test(webhookRaw) &&
+  /_telegram_user_id: posterId,/.test(webhookRaw) &&
+    /await offerLinkFinderCandidate\(\s*\n?\s*parsedLink,\s*\n?\s*Number\(message\?\.message_id\),\s*\n?\s*linkFinderSender\.posterId,/
+      .test(webhookRaw) &&
     !/create_social_mission_link_candidate[\s\S]{0,400}_telegram_user_id: Number\(from\.id\)/.test(webhookRaw),
 );
 
 check(
   "14.11 detection still requires a connected group chat and a non-command message",
-  /linkFinderSender\.eligible &&\s*!text\.startsWith\("\/"\) &&\s*\(chat\?\.type === "group" \|\| chat\?\.type === "supergroup"\)/.test(webhookRaw),
+  /linkFinderSender\.eligible && !text\.startsWith\("\/"\) && isGroupChat/.test(webhookRaw) &&
+    /const isGroupChat = chat\?\.type === "group" \|\| chat\?\.type === "supergroup";/.test(webhookRaw),
 );
 check(
   "14.12 the member's own message is still never deleted by the finder",
@@ -1791,6 +1794,152 @@ check(
 check(
   "20.7e no new table, migration or scheduler is required by SE-10",
   !/CREATE TABLE|cron\.schedule/i.test(se10Branch),
+);
+
+// ---------------------------------------------------------------------------
+// 21. SE-11 — anonymous-admin `/mission <X link>`.
+//     Telegram hides the human behind an anonymous message, so the command is
+//     routed into the EXISTING Link Finder candidate + START/IGNORE approval
+//     path instead of direct mission creation. No second authorization system,
+//     no second candidate/card/schedule system, and no silent ignore.
+// ---------------------------------------------------------------------------
+const se11CommandBranch = webhookRaw.slice(
+  webhookRaw.indexOf("const missionMatch = text.match("),
+  webhookRaw.indexOf("// SE-5 — X Link Finder."),
+);
+const se11AnonBranch = se11CommandBranch.slice(
+  se11CommandBranch.indexOf("if (missionMatch && isAnonymousGroupAdminSender"),
+);
+const se11Helper = webhookRaw.slice(
+  webhookRaw.indexOf("const offerLinkFinderCandidate = async ("),
+  webhookRaw.indexOf("// SE-4A — `/mission <X link>`. Runs before every generic fallthrough"),
+);
+
+// 21.1 — identifiable humans are untouched: still direct through the command.
+check(
+  "21.1a an identifiable human /mission still runs the direct command path",
+  /if \(missionMatch && from\?\.is_bot !== true\) \{\s*\n\s*await runMissionCommand\(\{/.test(
+    se11CommandBranch,
+  ),
+);
+check(
+  "21.1b the direct human path still passes the real sender id as the actor",
+  /telegramUserId: Number\(from\.id\),/.test(se11CommandBranch),
+);
+
+// 21.2 — same-group anonymous admins are handled, never silently ignored.
+check(
+  "21.2a an anonymous-admin /mission branch exists",
+  se11AnonBranch.length > 100 &&
+    /if \(missionMatch && isAnonymousGroupAdminSender && isGroupChat\)/.test(se11AnonBranch),
+);
+check(
+  "21.2b anonymity is proven by sender_chat being THIS exact chat",
+  /const isAnonymousGroupAdminSender =\s*\n?\s*linkFinderSender\.eligible && linkFinderSender\.posterId === null;/
+    .test(webhookRaw) &&
+    /String\(senderChatOf\.id\) === String\(chatOf\.id\)/.test(webhookRaw),
+);
+check(
+  "21.2c foreign sender_chat, channels and ordinary bots stay ineligible",
+  /\(t === "group" \|\| t === "supergroup"\)/.test(webhookRaw) &&
+    /return \{ eligible: false, posterId: null \};/.test(webhookRaw),
+);
+
+// 21.3 — an anonymous command can never launch directly.
+check(
+  "21.3a the anonymous branch never calls runMissionCommand",
+  !/runMissionCommand/.test(se11AnonBranch),
+);
+check(
+  "21.3b the anonymous branch creates no mission, card or schedule itself",
+  !/send_mission|activate_social_mission_schedule|create_social_mission_from_telegram_link/.test(
+    se11AnonBranch,
+  ),
+);
+check(
+  "21.3c the anonymous branch routes into the shared candidate path with a NULL poster",
+  /await offerLinkFinderCandidate\(anonParsed, Number\(message\?\.message_id\), null\);/.test(
+    se11AnonBranch,
+  ),
+);
+
+// 21.4 — visible feedback, never silence, for a malformed anonymous command.
+check(
+  "21.4a a malformed or missing anonymous link returns the visible usage message",
+  /if \(!anonParsed\) \{[\s\S]{0,400}?MISSION_USAGE/.test(se11AnonBranch),
+);
+check(
+  "21.4b the usage reply is sent before any candidate work happens",
+  se11AnonBranch.indexOf("MISSION_USAGE") <
+    se11AnonBranch.indexOf("offerLinkFinderCandidate"),
+);
+check(
+  "21.4c an unofficial handle still fails closed inside the RPC, not in the branch",
+  !/project_profiles|x_url/.test(se11AnonBranch) &&
+    /create_social_mission_link_candidate/.test(se11Helper),
+);
+
+// 21.5 — ONE candidate + prompt + cleanup system, reused by both entry points.
+check(
+  "21.5a exactly one candidate creation call site exists",
+  (webhookRaw.match(/rpc\("create_social_mission_link_candidate"/g) ?? []).length === 1,
+);
+check(
+  "21.5b exactly one START/IGNORE prompt keyboard is constructed at detection",
+  (webhookRaw.match(/callback_data: `sm_lf_start_\$\{created\.candidate_id\}`/g) ?? []).length === 1,
+);
+check(
+  "21.5c both entry points call the one shared helper",
+  (webhookRaw.match(/await offerLinkFinderCandidate\(/g) ?? []).length === 2,
+);
+check(
+  "21.5d the shared prompt keeps the canonical official-post text",
+  /text: "This is an official project post\. Admins can start a Social Mission for it\.",/.test(
+    se11Helper,
+  ),
+);
+
+// 21.6 — SE-9 source cleanup semantics survive for both entry points.
+check(
+  "21.6a cleanup runs only after the prompt is confirmed sent AND attached",
+  se11Helper.indexOf("attach_social_mission_link_prompt") <
+    se11Helper.indexOf("ensureLinkFinderSourceDeleted") &&
+    /if \(promptAttached\) \{/.test(se11Helper),
+);
+check(
+  "21.6b cleanup is persisted through the existing idempotent candidate mechanism",
+  /ensureLinkFinderSourceDeleted\(\{\s*\n\s*candidateId: String\(created\.candidate_id\),/.test(
+    se11Helper,
+  ),
+);
+check(
+  "21.6c a webhook retry or repost creates no second candidate or prompt",
+  /if \(created\.outcome !== "CREATED" \|\| !created\.candidate_id\) return false;/.test(se11Helper),
+);
+
+// 21.7 — the callback keeps the full authorization chain.
+check(
+  "21.7a START still resolves the candidate through the authoritative RPC",
+  /resolve_social_mission_link_candidate/.test(se10Branch),
+);
+check(
+  "21.7b START still preflights live Telegram bot rights before creating anything",
+  se10Branch.indexOf("readBotChatPermissions") < se10Branch.indexOf("await runMissionCommand({"),
+);
+check(
+  "21.7c START still launches through the one existing mission command path",
+  (se10Branch.match(/await runMissionCommand\(\{/g) ?? []).length === 1,
+);
+
+// 21.8 — nothing else moved.
+check(
+  "21.8a raw /mission for identifiable humans is still the first command branch",
+  se11CommandBranch.indexOf("from?.is_bot !== true") <
+    se11CommandBranch.indexOf("isAnonymousGroupAdminSender"),
+);
+check(
+  "21.8b no new table, migration or scheduler is required by SE-11",
+  !/CREATE TABLE|cron\.schedule/i.test(se11CommandBranch + se11Helper),
 );
 
 console.log(`Step 1 authoritative regression: ${passed} passed, ${failures.length} failed`);
