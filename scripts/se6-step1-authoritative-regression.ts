@@ -207,7 +207,11 @@ check("6.3 it makes at most one official lookup", (finalFn.match(/lookupXPostMet
 check("6.4 it is fail-soft and cannot block the close", /catch\s*\{/.test(finalFn));
 check("6.5 it reuses the existing snapshot RPC", /record_social_mission_metric_snapshot/.test(finalFn));
 check("6.6 it runs only for a manual close, not the scheduled runner", /finalRefresh === true/.test(transportCode) && /internalSource === INTERNAL_SOURCE/.test(transportCode));
-check("6.7 it runs before the completion card is rendered", transportCode.indexOf("attemptFinalMetricsRead(admin, workspaceId, mission)") < transportCode.lastIndexOf("renderAuthoritativeCard(admin, workspaceId, mission, transportKind)"));
+// SE-13.1 re-pin: the completion card is now rendered from the row RE-READ
+// after the final metrics read, so the ordering invariant is asserted against
+// the reload and the refreshed render target.
+check("6.7 it runs before the completion card is rendered", transportCode.indexOf("attemptFinalMetricsRead(admin, workspaceId, mission)") < transportCode.indexOf("renderAuthoritativeCard(admin, workspaceId, renderMission, transportKind)"));
+check("6.7b the completion card is rendered from the re-read mission row", transportCode.indexOf("attemptFinalMetricsRead(admin, workspaceId, mission)") < transportCode.indexOf("reloadMissionRow(") && transportCode.indexOf("reloadMissionRow(admin, workspaceId, mission[\"id\"])") < transportCode.lastIndexOf("renderAuthoritativeCard(admin, workspaceId, renderMission, transportKind)"));
 check("6.8 close semantics stay deterministic and idempotent", /edit_client_request_id/.test(transportCode));
 check("6.9 no scraper or second provider path was added", !/puppeteer|scrape|nitter|syndication/i.test(transportCode));
 
