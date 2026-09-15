@@ -229,7 +229,9 @@ check("8.8 cancel triggers no provider read path", cancelFnStart > -1 && !/snaps
 check("9.1 quick choices offered", webhook.includes("mc_dq_20_") && webhook.includes("mc_dq_45_") && webhook.includes("mc_dq_60_") && webhook.includes("mc_dq_120_"));
 check("9.2 custom minutes offered", webhook.includes("mc_dc_"));
 check("9.3 duration RPC bounded 1..1440", sql.includes("_minutes_from_now < 1 OR _minutes_from_now > 1440"));
-check("9.4 duration requires LIVE", /social_mission_apply_duration_override[\s\S]{0,2000}mission_status <> 'LIVE'/.test(sql));
+// Re-pinned: status is now re-read from the LOCKED mission row, so the gate
+// reads `v_status`, not the pre-lock authorization snapshot. Still mandatory.
+check("9.4 duration requires LIVE", /social_mission_apply_duration_override[\s\S]{0,2600}v_status IS DISTINCT FROM 'LIVE'/.test(sql));
 check("9.5 ends_at is rewritten", sql.includes("UPDATE public.social_missions SET ends_at = v_new_end"));
 check("9.6 pending COMPLETE is rescheduled", /event_type = 'COMPLETE'\s*\n\s*AND e\.state = 'PENDING'/.test(sql));
 check("9.7 only PENDING pulses are recomputed", /event_type = 'PULSE' AND e\.state = 'PENDING'/.test(sql));
