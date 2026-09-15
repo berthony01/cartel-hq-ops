@@ -498,6 +498,7 @@ SET search_path TO 'public'
 AS $$
 DECLARE
   v_auth record;
+  v_status text;
   v_before jsonb;
   v_targets jsonb := '{}'::jsonb;
   v_override jsonb;
@@ -513,12 +514,17 @@ BEGIN
   IF v_auth.outcome <> 'ok' THEN
     RETURN jsonb_build_object('outcome', v_auth.outcome);
   END IF;
-  IF v_auth.mission_status <> 'LIVE' THEN
-    RETURN jsonb_build_object('outcome', 'not_live', 'status', v_auth.mission_status);
-  END IF;
+
+  -- LOCK FIRST. Status and the idempotency key are only authoritative under the
+  -- row lock, so a concurrent replay cannot append a second history entry.
+  SELECT m.status INTO v_status
+    FROM public.social_missions m WHERE m.id = _mission_id FOR UPDATE;
 
   IF public.social_mission_control_key_used(_mission_id, _idempotency_key) THEN
     RETURN jsonb_build_object('outcome', 'replayed', 'mission_id', _mission_id);
+  END IF;
+  IF v_status IS DISTINCT FROM 'LIVE' THEN
+    RETURN jsonb_build_object('outcome', 'not_live', 'status', v_status);
   END IF;
 
   IF v_mode NOT IN ('AUTO', 'MANUAL') THEN
@@ -532,13 +538,11 @@ BEGIN
     FROM public.social_missions m WHERE m.id = _mission_id;
 
   IF v_mode = 'AUTO' THEN
-    -- RESET TO AUTO. History is preserved; only the active override is dropped.
-    UPDATE public.social_missions m
-       SET metadata = jsonb_set(
-             jsonb_set(coalesce(m.metadata, '{}'::jsonb), '{mission_control,mode}', '"AUTO"'::jsonb, true),
-             '{mission_control,override_config}', 'null'::jsonb, true),
-           updated_at = now()
-     WHERE m.id = _mission_id;
+    -- RESET TO AUTO. Works on a mission that has never been controlled; the
+    -- merge helper creates mission_control and preserves any existing history.
+    PERFORM public.social_mission_control_merge_state(
+      _mission_id,
+      jsonb_build_object('mode', 'AUTO', 'override_config', NULL));
 
     PERFORM public.social_mission_control_append_history(
       _mission_id, 'RESET_AUTO', v_auth.actor_user_id, _telegram_user_id,
@@ -581,12 +585,11 @@ BEGIN
     'metric_targets_source', 'MANUAL'
   );
 
-  UPDATE public.social_missions m
-     SET metadata = jsonb_set(
-           jsonb_set(coalesce(m.metadata, '{}'::jsonb), '{mission_control,mode}', '"MANUAL"'::jsonb, true),
-           '{mission_control,override_config}', v_override, true),
-         updated_at = now()
-   WHERE m.id = _mission_id;
+  -- First-ever MANUAL override on a mission with no mission_control object
+  -- must still work: the merge helper creates it and keeps history intact.
+  PERFORM public.social_mission_control_merge_state(
+    _mission_id,
+    jsonb_build_object('mode', 'MANUAL', 'override_config', v_override));
 
   PERFORM public.social_mission_control_append_history(
     _mission_id, 'SET_TARGETS', v_auth.actor_user_id, _telegram_user_id,
