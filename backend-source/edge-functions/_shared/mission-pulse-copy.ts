@@ -171,6 +171,77 @@ export function pulseRemainingLine(endsAt: unknown, nowMs: number = Date.now()):
   return hours === 1 ? "About 1 hour left." : `About ${hours} hours left.`;
 }
 
+/**
+ * SE-14 — the immutable supporting target set, read ONLY from the mission's own
+ * stored effective config. Zero provider access, zero database access.
+ */
+const PULSE_TARGET_METRIC: Record<string, keyof XCanonicalMetrics> = {
+  views: "views",
+  likes: "likes",
+  replies: "comments",
+  reposts: "shares",
+  bookmarks: "saves",
+};
+
+const PULSE_TARGET_LABELS: Record<string, string> = {
+  views: "views",
+  likes: "likes",
+  replies: "replies",
+  reposts: "reposts",
+  bookmarks: "bookmarks",
+};
+
+type PulseTargetRow = { label: string; progress: number; target: number; percent: number };
+
+function pulseTargetRows(
+  metrics: XCanonicalMetrics | null,
+  config: Record<string, unknown> | null,
+): PulseTargetRow[] {
+  if (!metrics || !config) return [];
+  const raw = config["metric_targets"];
+  if (!raw || typeof raw !== "object") return [];
+  const targets = raw as Record<string, unknown>;
+  const rows: PulseTargetRow[] = [];
+  for (const key of Object.keys(PULSE_TARGET_METRIC)) {
+    const target = Number(targets[key]);
+    if (!Number.isInteger(target) || target <= 0) continue;
+    const progress = metrics[PULSE_TARGET_METRIC[key]];
+    if (progress === null) continue; // unknown is never 0
+    rows.push({
+      label: PULSE_TARGET_LABELS[key],
+      progress,
+      target,
+      percent: pulseGoalPercent(progress, target),
+    });
+  }
+  return rows;
+}
+
+/**
+ * Equal-weight mean of each AVAILABLE metric's capped percent, floored.
+ * Informational only — no quota, no reward, no call for mechanical engagement.
+ */
+export function pulseMomentumLine(
+  metrics: XCanonicalMetrics | null,
+  config: Record<string, unknown> | null,
+): string | null {
+  const rows = pulseTargetRows(metrics, config);
+  if (rows.length === 0) return null;
+  const sum = rows.reduce((acc, row) => acc + row.percent, 0);
+  const momentum = Math.max(0, Math.min(100, Math.floor(sum / rows.length)));
+  return `Mission Momentum: ${momentum}%.`;
+}
+
+/** One concise summary of the known target ratios. */
+export function pulseTargetsLine(
+  metrics: XCanonicalMetrics | null,
+  config: Record<string, unknown> | null,
+): string | null {
+  const rows = pulseTargetRows(metrics, config);
+  if (rows.length === 0) return null;
+  return `Targets: ${rows.map((r) => `${r.progress}/${r.target} ${r.label}`).join(" · ")}.`;
+}
+
 export function buildPulseText(
   metrics: XCanonicalMetrics | null,
   accomplished: boolean,
@@ -182,6 +253,8 @@ export function buildPulseText(
     pulseMetricLine(metrics),
     pulseGoalLine(metrics, config),
     pulseStretchGoalLine(metrics, config),
+    pulseMomentumLine(metrics, config),
+    pulseTargetsLine(metrics, config),
     pulseRemainingLine(options.endsAt, options.nowMs ?? Date.now()),
   ].filter((line): line is string => typeof line === "string" && line.length > 0);
   return lines.length === 0 ? head : `${head}\n\n${lines.join("\n")}`;

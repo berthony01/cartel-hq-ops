@@ -550,6 +550,7 @@ async function renderAuthoritativeCard(
     accomplished: typeof mission["accomplished_at"] === "string",
     endsAt: (mission["ends_at"] as string | null) ?? null,
     goal: missionGoal(mission),
+    metricTargets: missionMetricTargets(mission),
     // A photo caption is hard-limited by Telegram; the renderer refits instead
     // of risking a rejected transport.
     maxLength: transportKind === "PHOTO" ? TELEGRAM_CAPTION_MAX : TELEGRAM_TEXT_LIMIT,
