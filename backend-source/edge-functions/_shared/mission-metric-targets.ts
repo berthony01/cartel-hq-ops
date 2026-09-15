@@ -97,5 +97,7 @@ export function computeMetricTargets(
   const bookmarks = computeSupportTarget(first.saves, SUPPORT_FLOOR_ADD.bookmarks);
   if (bookmarks !== null) out.bookmarks = bookmarks;
 
-  return out;
+  // A fully unknown first snapshot establishes NOTHING: an empty set is null,
+  // never `{}`, matching the SQL helper which returns NULL for an empty object.
+  return Object.keys(out).length === 0 ? null : out;
 }
