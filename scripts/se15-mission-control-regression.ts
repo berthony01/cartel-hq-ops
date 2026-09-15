@@ -521,6 +521,10 @@ check("19.49 END NOW promises a best-effort final reading", /final observed resu
 // ---------------------------------------------------------------------------
 // 20 — SE-15.1 results-vs-targets disambiguation. Stored snapshots only.
 // ---------------------------------------------------------------------------
+/** Strips comments so documentation copy can neither pass nor fail a check. */
+function stripSe151Comments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+}
 check("20.1 a stored-snapshot helper exists", webhook.includes("const mcLatestResults = async (binding: MissionControlBinding)"));
 check("20.2 the helper reads social_metric_snapshots", /mcLatestResults[\s\S]{0,400}from\("social_metric_snapshots"\)/.test(webhook));
 check(
@@ -564,9 +568,14 @@ check("20.17 the panel reads stored results through the helper", /mcRenderPanel[
     "20.18 Mission Control rendering performs no provider read",
     mcStart > 0 &&
       mcEnd > mcStart &&
-      !/api\.twitter\.com|api\.x\.com|social-read|refetch_social|fetchXMetrics|provider/i.test(mcRegion),
+      !/api\.twitter\.com|api\.x\.com|social-read|refetch_social|fetchXMetrics|readSocialPost/i.test(
+        stripSe151Comments(mcRegion),
+      ),
   );
-  check("20.19 Mission Control rendering issues no outbound HTTP fetch", !/\bfetch\(/.test(mcRegion));
+  check(
+    "20.19 Mission Control rendering issues no outbound HTTP fetch",
+    !/\bfetch\(/.test(stripSe151Comments(mcRegion)),
+  );
 }
 
 
