@@ -281,7 +281,9 @@ check("12.3 a replayed key returns the recorded outcome", (sql.match(/'outcome',
 check("12.4 replay never appends duplicate history", sql.includes("social_mission_control_key_used"));
 check("12.5 the key is derived from the Telegram update id", webhook.includes("se15-mission-control:${String(updateId ?? \"\")}"));
 check("12.6 stale buttons after completion return a typed response", sql.includes("'outcome', 'not_live'"));
-check("12.7 every mutating RPC re-checks status inside the RPC", (sql.match(/mission_status <> 'LIVE'/g) ?? []).length >= 3);
+// Re-pinned to the hardened order: all four mutating RPCs re-read status from
+// the locked row. Four, not three — the gate was strengthened, not relaxed.
+check("12.7 every mutating RPC re-checks status inside the RPC", (sql.match(/v_status IS DISTINCT FROM 'LIVE'/g) ?? []).length >= 4);
 check("12.8 history is bounded", sql.includes("jsonb_array_length(v_hist) > 50"));
 
 // ---------------------------------------------------------------------------
