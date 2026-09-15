@@ -441,7 +441,15 @@ for (const [label, body] of [
   check(`19.9 ${label} locks the mission row`, lockAt > -1);
   check(`19.10 ${label} locks before the idempotency check`, lockAt > -1 && keyAt > -1 && lockAt < body.lastIndexOf("key_used"));
   check(`19.11 ${label} validates status under the lock`, lockAt > -1 && statusAt > -1 && lockAt < body.lastIndexOf("v_status"));
-  check(`19.12 ${label} appends history exactly once`, (body.match(/social_mission_control_append_history\(/g) ?? []).length <= 1);
+  // One append per EXECUTION PATH: the target override has two mutually
+  // exclusive branches (RESET_AUTO / MANUAL) and each branch returns
+  // immediately after its single append, so no path can append twice.
+  const appends = body.match(/social_mission_control_append_history\(/g) ?? [];
+  const appendPathsExclusive = appends.every((_, i) => {
+    const at = body.split("social_mission_control_append_history(", i + 2).slice(0, i + 1).join("").length;
+    return /RETURN jsonb_build_object\(\s*\n?\s*'outcome', 'ok'/.test(body.slice(at, at + 900));
+  });
+  check(`19.12 ${label} appends history once per path`, appends.length >= 1 && appendPathsExclusive);
   check(`19.13 ${label} returns a replay outcome`, /'replayed'/.test(body));
 }
 
