@@ -1089,6 +1089,7 @@ Deno.serve(async (req: Request) => {
       // SE-5 provenance only. It never changes authorization or behaviour.
       _source: args.source === "telegram_link_finder" ? "telegram_link_finder" : "telegram_mission_command",
     });
+    timing.slice("create_mission");
     const result = (created ?? null) as
       | {
         outcome?: string;
