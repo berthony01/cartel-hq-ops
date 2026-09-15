@@ -60,6 +60,7 @@ import {
   type MissionCardPlatform,
   type MissionCardStatus,
   type MissionGoal,
+  type MissionMetricTargets,
 } from "./card.ts";
 
 /**
