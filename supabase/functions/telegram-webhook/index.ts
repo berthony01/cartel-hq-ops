@@ -2993,7 +2993,7 @@ Deno.serve(async (req: Request) => {
       parsedLink: ParsedXStatus,
       sourceMessageId: number,
       posterId: number | null,
-    ) => {
+    ): Promise<boolean> => {
       const { data: candidate } = await admin.rpc("create_social_mission_link_candidate", {
         _telegram_chat_id: Number(chatId),
         _telegram_message_id: Number(sourceMessageId),
