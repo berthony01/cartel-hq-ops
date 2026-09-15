@@ -267,6 +267,31 @@ const BARE_MISSION_LAUNCHER_TEXT = "🚀 <b>START A SOCIAL MISSION</b>\n\nSend o
 function sendBareMissionLauncher(token: string, chatId: string) {
   return sendMessage(token, chatId, BARE_MISSION_LAUNCHER_TEXT, { parse_mode: "HTML" });
 }
+/**
+ * SE-12.2 — send the bare `/mission` launcher, then delete ONLY the exact bare
+ * command message, and only after Telegram confirms the launcher was sent.
+ *
+ * Ordering is the safety property: a failed launcher send (null result) leaves
+ * the original command untouched, and a failed deletion never alters the
+ * launcher and never produces a second chat message — only a bounded,
+ * secret-free diagnostic log.
+ */
+async function sendBareMissionLauncherAndCleanup(
+  token: string,
+  chatId: string,
+  sourceMessageId: number | null | undefined,
+) {
+  const sent = await sendBareMissionLauncher(token, chatId);
+  if (!sent) return null;
+  const messageId = Number(sourceMessageId);
+  if (!Number.isFinite(messageId) || messageId <= 0) return sent;
+  try {
+    await telegramJson(token, "deleteMessage", { chat_id: chatId, message_id: messageId });
+  } catch (error) {
+    console.log(`[SE-12.2] bare mission command cleanup failed: ${String((error as Error)?.message ?? "unknown").slice(0, 200)}`);
+  }
+  return sent;
+}
 function encodeChatId(chatId: string) { return chatId.startsWith("-") ? `n${chatId.slice(1)}` : chatId; }
 function decodeChatId(encoded: string) { return encoded.startsWith("n") ? `-${encoded.slice(1)}` : encoded; }
 function shouldSendWelcome(value: string | null | undefined) {
