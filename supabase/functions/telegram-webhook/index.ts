@@ -263,6 +263,10 @@ async function missionRequestUuid(updateId: number) {
 }
 
 const MISSION_USAGE = "Usage: /mission https://x.com/&lt;official handle&gt;/status/&lt;id&gt;\n\nOnly a public X post link from this project's official X account can start a Social Mission, and only current group admins can run it.";
+const BARE_MISSION_LAUNCHER_TEXT = "🚀 <b>START A SOCIAL MISSION</b>\n\nSend or paste the official X post you want this community to engage with.\n\nOnly posts from this project's verified X account can be used.\n\n<b>Paste the X link below.</b>";
+function sendBareMissionLauncher(chatId: string) {
+  return sendMessage(TELEGRAM_BOT_TOKEN, chatId, BARE_MISSION_LAUNCHER_TEXT, { parse_mode: "HTML" });
+}
 function encodeChatId(chatId: string) { return chatId.startsWith("-") ? `n${chatId.slice(1)}` : chatId; }
 function decodeChatId(encoded: string) { return encoded.startsWith("n") ? `-${encoded.slice(1)}` : encoded; }
 function shouldSendWelcome(value: string | null | undefined) {
@@ -3050,6 +3054,14 @@ Deno.serve(async (req: Request) => {
     // SE-4A — `/mission <X link>`. Runs before every generic fallthrough and
     // before the unknown-slash-command no-op, and touches no other command.
     const missionMatch = text.match(/^\/mission(?:@\w+)?(?:\s+(\S+))?\s*$/i);
+
+    // SE-12 — bare `/mission` launcher for identifiable humans in groups.
+    // The next pasted X URL is still handled by the existing Link Finder path.
+    if (missionMatch && from?.is_bot !== true && isGroupChat && !missionMatch[1]) {
+      await sendBareMissionLauncher(chatId);
+      return json({ ok: true });
+    }
+
     if (missionMatch && from?.is_bot !== true) {
       await runMissionCommand({
         chatId,
@@ -3059,6 +3071,13 @@ Deno.serve(async (req: Request) => {
         telegramUserId: Number(from.id),
         argument: String(missionMatch[1] ?? ""),
       });
+      return json({ ok: true });
+    }
+
+    // SE-12 — bare `/mission` launcher for anonymous group admins.
+    // The next pasted X URL is still handled by the existing Link Finder path.
+    if (missionMatch && isAnonymousGroupAdminSender && isGroupChat && !missionMatch[1]) {
+      await sendBareMissionLauncher(chatId);
       return json({ ok: true });
     }
 

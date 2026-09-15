@@ -1808,7 +1808,10 @@ const se11CommandBranch = webhookRaw.slice(
   webhookRaw.indexOf("// SE-5 — X Link Finder."),
 );
 const se11AnonBranch = se11CommandBranch.slice(
-  se11CommandBranch.indexOf("if (missionMatch && isAnonymousGroupAdminSender"),
+  // The anonymous link branch is the one with the strict same-group condition
+  // and no bare-command guard; the SE-11 comment before it contains the word
+  // "runMissionCommand" and must not pollute this slice.
+  se11CommandBranch.indexOf("if (missionMatch && isAnonymousGroupAdminSender && isGroupChat) {"),
 );
 const se11Helper = webhookRaw.slice(
   webhookRaw.indexOf("const offerLinkFinderCandidate = async ("),
@@ -1940,6 +1943,103 @@ check(
 check(
   "21.8b no new table, migration or scheduler is required by SE-11",
   !/CREATE TABLE|cron\.schedule/i.test(se11CommandBranch + se11Helper),
+);
+
+// ---------------------------------------------------------------------------
+// 22. SE-12 — bare `/mission` launcher UX.
+//     A bare `/mission` or `/mission@PepeCartelHQBot` with no argument shows
+//     a friendly launcher instruction in groups, while `/mission <X link>`
+//     keeps its existing direct or Link-Finder behavior and malformed non-empty
+//     arguments still use the existing usage handling.
+// ---------------------------------------------------------------------------
+const se12HumanBareBranch = webhookRaw.slice(
+  webhookRaw.indexOf("SE-12 — bare `/mission` launcher for identifiable humans"),
+  // This exact if line appears only in the non-empty human branch; the bare
+  // branch has extra guards, so this marker cleanly bounds the bare branch.
+  webhookRaw.indexOf("if (missionMatch && from?.is_bot !== true) {"),
+);
+const se12AnonBareBranch = webhookRaw.slice(
+  webhookRaw.indexOf("SE-12 — bare `/mission` launcher for anonymous group admins"),
+  webhookRaw.indexOf("// SE-11 — anonymous-admin `/mission <X link>`."),
+);
+
+check("22.1a a shared BARE_MISSION_LAUNCHER_TEXT constant exists", /const BARE_MISSION_LAUNCHER_TEXT = /.test(webhookRaw));
+check("22.1b the launcher copy includes the friendly headline", webhookRaw.includes("🚀 <b>START A SOCIAL MISSION</b>"));
+check("22.1c the launcher asks the user to paste the X link", webhookRaw.includes("<b>Paste the X link below.</b>"));
+check(
+  "22.1d one shared helper sends the launcher from both branches",
+  (webhookRaw.match(/await sendBareMissionLauncher\(chatId\);/g) ?? []).length === 2,
+);
+
+check(
+  "22.2a human bare /mission is gated on group chat and an empty argument",
+  /missionMatch && from\?\.is_bot !== true && isGroupChat && !missionMatch\[1\]/.test(se12HumanBareBranch),
+);
+check(
+  "22.2b human bare /mission sends the launcher",
+  /await sendBareMissionLauncher\(chatId\);/.test(se12HumanBareBranch),
+);
+check(
+  "22.2c human bare /mission never calls runMissionCommand",
+  !/runMissionCommand/.test(se12HumanBareBranch),
+);
+check(
+  "22.2d human bare /mission never creates a candidate",
+  !/create_social_mission_link_candidate|offerLinkFinderCandidate/.test(se12HumanBareBranch),
+);
+
+check(
+  "22.3a anonymous bare /mission is gated on same-group admin and an empty argument",
+  /missionMatch && isAnonymousGroupAdminSender && isGroupChat && !missionMatch\[1\]/.test(se12AnonBareBranch),
+);
+check(
+  "22.3b anonymous bare /mission sends the launcher",
+  /await sendBareMissionLauncher\(chatId\);/.test(se12AnonBareBranch),
+);
+check(
+  "22.3c anonymous bare /mission never calls runMissionCommand",
+  !/runMissionCommand/.test(se12AnonBareBranch),
+);
+check(
+  "22.3d anonymous bare /mission never creates a candidate",
+  !/create_social_mission_link_candidate|offerLinkFinderCandidate/.test(se12AnonBareBranch),
+);
+
+check(
+  "22.4 non-empty human /mission still enters the direct command path",
+  /if \(missionMatch && from\?\.is_bot !== true\) \{\s*\n\s*await runMissionCommand\(\{/.test(se11CommandBranch),
+);
+check(
+  "22.5 non-empty anonymous /mission still routes into the candidate helper",
+  /await offerLinkFinderCandidate\(anonParsed, Number\(message\?\.message_id\), null\);/.test(se11CommandBranch),
+);
+
+check(
+  "22.6a /mission close is not intercepted by the bare branches",
+  !/!missionMatch\[1\].*close|close.*!missionMatch\[1\]/i.test(se11CommandBranch),
+);
+check(
+  "22.6b runMissionCommand still handles the close keyword",
+  /const isClose = String\(argument \?\? ""\)\.trim\(\)\.toLowerCase\(\) === "close";/.test(webhookRaw),
+);
+
+check(
+  "22.7a malformed human argument still reaches the usage reply",
+  /if \(!isClose && !parsed\) \{\s*\n\s*await reply\(MISSION_USAGE\);/.test(webhookRaw),
+);
+check(
+  "22.7b malformed anonymous argument still returns MISSION_USAGE",
+  /if \(!anonParsed\) \{[\s\S]{0,400}?MISSION_USAGE/.test(se11AnonBranch),
+);
+
+check(
+  "22.8 the bare branches require an identifiable human or a proven same-group admin",
+  /from\?\.is_bot !== true/.test(se12HumanBareBranch) && /isAnonymousGroupAdminSender/.test(se12AnonBareBranch),
+);
+
+check(
+  "22.9 no new table, session table or scheduler is required by SE-12",
+  !/CREATE TABLE|cron\.schedule/i.test(se12HumanBareBranch + se12AnonBareBranch),
 );
 
 console.log(`Step 1 authoritative regression: ${passed} passed, ${failures.length} failed`);
