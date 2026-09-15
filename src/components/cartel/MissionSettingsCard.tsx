@@ -138,7 +138,7 @@ export function MissionSettingsCard({ workspaceId }: { workspaceId: string | nul
             </div>
 
             <div className="min-w-0">
-              <Label className="type-eyebrow text-muted-foreground">Milestone</Label>
+              <Label className="type-eyebrow text-muted-foreground">Primary Goal</Label>
               <Select
                 value={current.milestone_type}
                 disabled={!canEdit}
@@ -167,7 +167,7 @@ export function MissionSettingsCard({ workspaceId }: { workspaceId: string | nul
                   step={1}
                   inputMode="numeric"
                   className="mt-2 min-h-11"
-                  aria-label="Milestone target"
+                  aria-label="Goal target"
                   value={current.milestone_target ?? ""}
                   disabled={!canEdit}
                   onChange={(event) => {

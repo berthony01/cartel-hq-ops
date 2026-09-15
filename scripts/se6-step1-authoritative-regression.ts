@@ -23,7 +23,8 @@ import {
 } from "../backend-source/edge-functions/_shared/mission-pulse-copy";
 import {
   EMPTY_METRICS,
-  milestoneProgressLine,
+  GOAL_HEADING,
+  renderGoalLines,
   renderMissionCard,
   type CanonicalMetrics,
 } from "../backend-source/edge-functions/social-mission-telegram/card";
@@ -137,7 +138,7 @@ check("3.8 a known metric is quoted", (pulseMetricLine({ views: 10, likes: 2, co
 check("3.9 milestone progress is shown when configured and known", (pulseMilestoneLine({ views: 40, likes: null, comments: null, shares: null, saves: null }, { milestone_type: "VIEWS", milestone_target: 100 }) ?? "").includes("40 / 100"));
 check("3.10 a missing milestone prints nothing and is not a failure", pulseMilestoneLine({ views: 40, likes: null, comments: null, shares: null, saves: null }, { milestone_type: "NONE" }) === null);
 check("3.11 an unknown milestone metric prints nothing", pulseMilestoneLine({ views: null, likes: null, comments: null, shares: null, saves: null }, { milestone_type: "VIEWS", milestone_target: 100 }) === null);
-check("3.12 a reached milestone is reported as reached", (pulseMilestoneLine({ views: 120, likes: null, comments: null, shares: null, saves: null }, { milestone_type: "VIEWS", milestone_target: 100 }) ?? "").startsWith("Milestone reached"));
+check("3.12 a reached Primary Goal is reported as reached", (pulseMilestoneLine({ views: 120, likes: null, comments: null, shares: null, saves: null }, { milestone_type: "VIEWS", milestone_target: 100 }) ?? "").startsWith("Primary Goal reached"));
 check("3.13 total interactions exclude views", (pulseMilestoneLine({ views: 999, likes: 1, comments: 1, shares: 1, saves: null }, { milestone_type: "TOTAL_INTERACTIONS", milestone_target: 10 }) ?? "").includes("3 / 10"));
 const nowMs = Date.parse("2026-01-01T10:00:00Z");
 check("3.14 remaining time is approximate and useful", pulseRemainingLine("2026-01-01T10:20:00Z", nowMs) === "About 20 minutes left.");
@@ -386,7 +387,7 @@ check("11.11 all three known components sum correctly", allKnown !== null && /60
 check("11.12 a missing replies count yields no milestone progress", missingReplies === null);
 check("11.13 a missing likes count yields no milestone progress", missingLikes === null);
 check("11.14 a missing reposts count yields no milestone progress", missingShares === null);
-check("11.15 VIEWS milestone behaviour is preserved", (pulseMilestoneLine({ views: 500, likes: null, comments: null, shares: null, saves: null } as never, { milestone_type: "VIEWS", milestone_target: 400 }) ?? "").includes("Milestone reached"));
+check("11.15 VIEWS goal behaviour is preserved", (pulseMilestoneLine({ views: 500, likes: null, comments: null, shares: null, saves: null } as never, { milestone_type: "VIEWS", milestone_target: 400 }) ?? "").includes("Primary Goal reached"));
 check("11.16 an unknown single metric still yields no progress", pulseMilestoneLine({ views: null, likes: null, comments: null, shares: null, saves: null } as never, { milestone_type: "LIKES", milestone_target: 10 }) === null);
 const pulseCopySrc = read("backend-source/edge-functions/_shared/mission-pulse-copy.ts");
 check("11.17 the pulse total never coerces an unknown component to zero", !/\(metrics\.likes \?\? 0\)/.test(pulseCopySrc));
@@ -432,32 +433,37 @@ const cardMetrics = (over: Partial<CanonicalMetrics>): CanonicalMetrics => ({
   ...over,
 });
 
-const totalMilestone = { type: "TOTAL_INTERACTIONS", target: 100 } as const;
+const totalGoal = { type: "TOTAL_INTERACTIONS", target: 100 } as const;
+const goalBlock = (
+  goal: Parameters<typeof renderGoalLines>[0],
+  latest: CanonicalMetrics | null,
+  accomplished = false,
+): string => renderGoalLines(goal, latest, accomplished).join("\n");
 
 check(
   "12.1 card TOTAL_INTERACTIONS sums when all three components are known",
-  milestoneProgressLine(totalMilestone, cardMetrics({ likes: 10, comments: 5, shares: 2 }), false) ===
-    "Milestone: Likes + replies + reposts 17 / 100",
+  goalBlock(totalGoal, cardMetrics({ likes: 10, comments: 5, shares: 2 })).includes(
+    "Likes + replies + reposts: 17 / 100",
+  ),
 );
 check(
-  "12.2 card TOTAL_INTERACTIONS returns null when likes are unknown",
-  milestoneProgressLine(totalMilestone, cardMetrics({ comments: 5, shares: 2 }), false) === null,
+  "12.2 card TOTAL_INTERACTIONS renders nothing when likes are unknown",
+  renderGoalLines(totalGoal, cardMetrics({ comments: 5, shares: 2 }), false).length === 0,
 );
 check(
-  "12.3 card TOTAL_INTERACTIONS returns null when replies are unknown",
-  milestoneProgressLine(totalMilestone, cardMetrics({ likes: 10, shares: 2 }), false) === null,
+  "12.3 card TOTAL_INTERACTIONS renders nothing when replies are unknown",
+  renderGoalLines(totalGoal, cardMetrics({ likes: 10, shares: 2 }), false).length === 0,
 );
 check(
-  "12.4 card TOTAL_INTERACTIONS returns null when reposts are unknown",
-  milestoneProgressLine(totalMilestone, cardMetrics({ likes: 10, comments: 5 }), false) === null,
+  "12.4 card TOTAL_INTERACTIONS renders nothing when reposts are unknown",
+  renderGoalLines(totalGoal, cardMetrics({ likes: 10, comments: 5 }), false).length === 0,
 );
 check(
   "12.5 card TOTAL_INTERACTIONS never coerces a missing component to zero",
-  milestoneProgressLine(totalMilestone, cardMetrics({ likes: 10, comments: 5 }), false) !==
-    "Milestone: Likes + replies + reposts 15 / 100",
+  !goalBlock(totalGoal, cardMetrics({ likes: 10, comments: 5 })).includes("15 / 100"),
 );
 check(
-  "12.6 a LIVE card with a partial interaction set renders no milestone line",
+  "12.6 a LIVE card with a partial interaction set renders no goal block",
   !renderMissionCard({
     missionStatus: "LIVE",
     platform: "x",
@@ -468,12 +474,12 @@ check(
     ticker: "PCART",
     baseline: EMPTY_METRICS,
     latest: cardMetrics({ likes: 10, comments: 5 }),
-    milestone: totalMilestone,
+    goal: totalGoal,
     nowMs: 0,
-  }).text.includes("Milestone:"),
+  }).text.includes(GOAL_HEADING),
 );
 check(
-  "12.7 a LIVE card with all three components renders the milestone line",
+  "12.7 a LIVE card with all three components renders the goal block",
   renderMissionCard({
     missionStatus: "LIVE",
     platform: "x",
@@ -484,42 +490,38 @@ check(
     ticker: "PCART",
     baseline: EMPTY_METRICS,
     latest: cardMetrics({ likes: 10, comments: 5, shares: 2 }),
-    milestone: totalMilestone,
+    goal: totalGoal,
     nowMs: 0,
-  }).text.includes("Milestone: Likes + replies + reposts 17 / 100"),
+  }).text.includes("Likes + replies + reposts: 17 / 100"),
 );
 
-// 12.b — single-metric milestone behavior is preserved exactly.
+// 12.b — single-metric goal behavior is preserved exactly.
 check(
-  "12.8 card VIEWS milestone still reports known views",
-  milestoneProgressLine({ type: "VIEWS", target: 1000 }, cardMetrics({ views: 250 }), false) ===
-    "Milestone: Views 250 / 1000",
+  "12.8 card VIEWS goal still reports known views",
+  goalBlock({ type: "VIEWS", target: 1000 }, cardMetrics({ views: 250 })).includes("Views: 250 / 1000"),
 );
 check(
-  "12.9 card LIKES milestone still reports known likes",
-  milestoneProgressLine({ type: "LIKES", target: 50 }, cardMetrics({ likes: 12 }), false) ===
-    "Milestone: Likes 12 / 50",
+  "12.9 card LIKES goal still reports known likes",
+  goalBlock({ type: "LIKES", target: 50 }, cardMetrics({ likes: 12 })).includes("Likes: 12 / 50"),
 );
 check(
-  "12.10 card REPLIES milestone still reports known replies",
-  milestoneProgressLine({ type: "REPLIES", target: 20 }, cardMetrics({ comments: 4 }), false) ===
-    "Milestone: Replies 4 / 20",
+  "12.10 card REPLIES goal still reports known replies",
+  goalBlock({ type: "REPLIES", target: 20 }, cardMetrics({ comments: 4 })).includes("Replies: 4 / 20"),
 );
 check(
-  "12.11 card REPOSTS milestone still reports known reposts",
-  milestoneProgressLine({ type: "REPOSTS", target: 20 }, cardMetrics({ shares: 6 }), false) ===
-    "Milestone: Reposts 6 / 20",
+  "12.11 card REPOSTS goal still reports known reposts",
+  goalBlock({ type: "REPOSTS", target: 20 }, cardMetrics({ shares: 6 })).includes("Reposts: 6 / 20"),
 );
 check(
-  "12.12 card single-metric milestones stay null when that metric is unknown",
-  milestoneProgressLine({ type: "VIEWS", target: 1000 }, EMPTY_METRICS, false) === null &&
-    milestoneProgressLine({ type: "LIKES", target: 50 }, EMPTY_METRICS, false) === null &&
-    milestoneProgressLine({ type: "REPLIES", target: 20 }, EMPTY_METRICS, false) === null &&
-    milestoneProgressLine({ type: "REPOSTS", target: 20 }, EMPTY_METRICS, false) === null,
+  "12.12 card single-metric goals stay empty when that metric is unknown",
+  renderGoalLines({ type: "VIEWS", target: 1000 }, EMPTY_METRICS, false).length === 0 &&
+    renderGoalLines({ type: "LIKES", target: 50 }, EMPTY_METRICS, false).length === 0 &&
+    renderGoalLines({ type: "REPLIES", target: 20 }, EMPTY_METRICS, false).length === 0 &&
+    renderGoalLines({ type: "REPOSTS", target: 20 }, EMPTY_METRICS, false).length === 0,
 );
 check(
-  "12.13 card milestone reached marker still appears once the target is met",
-  milestoneProgressLine({ type: "LIKES", target: 10 }, cardMetrics({ likes: 10 }), false)?.endsWith("✅") === true,
+  "12.13 the reached marker still appears once the target is met",
+  goalBlock({ type: "LIKES", target: 10 }, cardMetrics({ likes: 10 })).includes("✅ PRIMARY GOAL REACHED"),
 );
 
 // 12.c — source assertion: no partial-sum semantics may return.
