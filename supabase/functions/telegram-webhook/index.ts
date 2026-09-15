@@ -3054,6 +3054,14 @@ Deno.serve(async (req: Request) => {
     // SE-4A — `/mission <X link>`. Runs before every generic fallthrough and
     // before the unknown-slash-command no-op, and touches no other command.
     const missionMatch = text.match(/^\/mission(?:@\w+)?(?:\s+(\S+))?\s*$/i);
+
+    // SE-12 — bare `/mission` launcher for identifiable humans in groups.
+    // The next pasted X URL is still handled by the existing Link Finder path.
+    if (missionMatch && from?.is_bot !== true && isGroupChat && !missionMatch[1]) {
+      await sendBareMissionLauncher(chatId);
+      return json({ ok: true });
+    }
+
     if (missionMatch && from?.is_bot !== true) {
       await runMissionCommand({
         chatId,
