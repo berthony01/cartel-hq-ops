@@ -213,8 +213,14 @@ BEGIN
          AND COALESCE(metadata -> 'effective_config' ->> 'goal_source', '') = '';
       v_config := public.social_mission_effective_config(_mission_id);
     END IF;
-  ELSIF v_goal_source IS NULL AND _views IS NOT NULL AND _views >= 0 THEN
-    -- No goal at launch: derive one ONCE from the first known views value.
+  ELSIF v_goal_source IS NULL
+        AND _provider = 'x-official'
+        AND v_snapshot_inserted
+        AND _views IS NOT NULL AND _views >= 0 THEN
+    -- SE-13.2 — No goal at launch: derive one ONCE from the first DURABLE,
+    -- newly inserted OFFICIAL X snapshot with a known nonnegative views value.
+    -- A non-official provider, or a duplicate call whose snapshot INSERT lost
+    -- the (mission_id, provider, poll_bucket) conflict, can NEVER establish it.
     v_auto_goal := public.social_mission_auto_goal(_views);
     IF v_auto_goal IS NOT NULL THEN
       UPDATE public.social_missions
