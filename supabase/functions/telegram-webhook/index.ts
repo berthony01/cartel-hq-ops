@@ -2433,13 +2433,18 @@ Deno.serve(async (req: Request) => {
    * pin the community set by hand is left untouched. Identical ownership guard
    * to the `/mission close` path.
    */
-  const mcSafeUnpin = async (missionId: string, workspaceId: string) => {
+  const mcSafeUnpin = async (binding: MissionControlBinding) => {
     try {
+      // Same exact binding as the card edit: mission + workspace + the verified
+      // Telegram chat, never a loose mission-wide match.
       const { data: pinned } = await admin
         .from("social_mission_targets")
         .select("id, telegram_chat_id, telegram_message_id, pinned_by_hq")
-        .eq("mission_id", missionId)
-        .eq("workspace_id", workspaceId)
+        .eq("mission_id", binding.missionId)
+        .eq("workspace_id", binding.workspaceId)
+        .eq("telegram_chat_id", Number(binding.chatId))
+        .order("created_at", { ascending: true })
+        .limit(1)
         .maybeSingle();
       if (!pinned?.pinned_by_hq || !pinned.telegram_message_id) return;
       const unpinned = await telegramJson(TELEGRAM_BOT_TOKEN, "unpinChatMessage", {
