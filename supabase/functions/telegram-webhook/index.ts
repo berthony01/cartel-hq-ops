@@ -2576,7 +2576,7 @@ Deno.serve(async (req: Request) => {
       "🛠 <b>MISSION CONTROL</b>",
       "",
       `<b>${escapeHtml(handle)}</b>${url ? `\n${escapeHtml(url)}` : ""}`,
-      `Community: ${escapeHtml(binding.workspaceName)}`,
+      `Project: ${escapeHtml(binding.workspaceName)}`,
       "",
       `Status: <b>LIVE</b> · ${escapeHtml(missionControlRemaining(panel["ends_at"], Date.now()))}`,
       `Target mode: <b>${escapeHtml(mode)}</b>`,
