@@ -9,6 +9,7 @@
 
 import { readFileSync } from "node:fs";
 import { createHmac } from "node:crypto";
+import { execSync } from "node:child_process";
 import {
   buildDataCheckString,
   computeInitDataHash,
@@ -82,7 +83,32 @@ const opts = { now: NOW_MS };
   check("2.1 valid signed initData accepted", ok.ok === true);
   check("2.2 validated user id returned", ok.ok === true && ok.user.id === 777000123);
   check("2.3 result carries no secret", JSON.stringify(ok).includes(FAKE_TOKEN) === false);
-  check("2.4 result never returns raw signed payload", !("hash" in (ok as Record<string, unknown>)) || true);
+  // Exact success envelope: bounded fields only, no signed payload, no secret.
+  const topKeys = Object.keys(ok).sort();
+  check(
+    "2.4a success result exposes exactly ok/authDate/user",
+    JSON.stringify(topKeys) === JSON.stringify(["authDate", "ok", "user"]),
+    topKeys.join(","),
+  );
+  const userKeys = ok.ok === true ? Object.keys(ok.user).sort() : [];
+  check(
+    "2.4b validated user exposes exactly the bounded profile fields",
+    JSON.stringify(userKeys) ===
+      JSON.stringify(["firstName", "id", "isPremium", "languageCode", "lastName", "username"]),
+    userKeys.join(","),
+  );
+  const flat = JSON.stringify(ok);
+  check(
+    "2.4c success result leaks no hash, raw init data, query id or token",
+    !topKeys.includes("hash") &&
+      !topKeys.includes("initData") &&
+      !topKeys.includes("query_id") &&
+      !/[0-9a-f]{64}/.test(flat) &&
+      !flat.includes("query_id") &&
+      !flat.includes("AAF_test") &&
+      !flat.includes(FAKE_TOKEN) &&
+      !flat.includes("FAKE-TEST-TOKEN"),
+  );
 }
 
 {
@@ -468,6 +494,48 @@ const opts = { now: NOW_MS };
   check("12.4 no JSX / UI in the bridge", !/<\/[A-Za-z]|\/>|React|jsx/.test(bridgeSrc));
   check("12.5 no browser globals in the bridge", !/\bwindow\.|document\.|localStorage/.test(bridgeCode));
   check("12.6 auth module has no Deno or Supabase Edge dependency", !/Deno\./.test(authCode) && !/deno\.land/.test(authSrc));
+}
+
+/* ------------- 13. the bridge is the only client-importable boundary */
+
+{
+  // The *.server.ts validator is filename-blocked from client bundles; the bridge
+  // is the single module a future Mini App UI may import.
+  check(
+    "13.1 bridge never re-exports the server-only auth module",
+    !/export\s*\*\s*from\s*"[^"]*telegram-miniapp-auth\.server"/.test(bridgeCode) &&
+      !/export\s*\{[^}]*\}\s*from\s*"[^"]*telegram-miniapp-auth\.server"/.test(bridgeCode),
+  );
+  check(
+    "13.2 bridge never re-exports the service-role client module",
+    !/export[^\n]*from\s*"@\/integrations\/supabase\/client\.server"/.test(bridgeCode),
+  );
+  const exportedNames = [...bridgeCode.matchAll(/^export\s+(?:const|type)\s+(\w+)/gm)].map((m) => m[1]!);
+  check(
+    "13.3 no exported symbol names a token, secret or service-role handle",
+    exportedNames.every((n) => !/token|secret|serviceRole|admin|apiKey/i.test(n)),
+    exportedNames.filter((n) => /token|secret|serviceRole|admin|apiKey/i.test(n)).join(", "),
+  );
+  check(
+    "13.4 bridge exports no raw Telegram or Supabase client value",
+    !/^export\s+(?:const|let)\s+\w+\s*=\s*(createClient|supabaseAdmin)\b/m.test(bridgeCode),
+  );
+  check(
+    "13.5 the bot token stays inside a non-exported helper",
+    /^function botToken\(\)/m.test(bridgeCode) && !/^export\s+(?:async\s+)?function botToken/m.test(bridgeCode),
+  );
+  check(
+    "13.6 no UI module imports the server-only auth validator yet",
+    (() => {
+      const hits = execSync(
+        'rg -l "telegram-miniapp-auth.server" src || true',
+        { encoding: "utf8" },
+      )
+        .split("\n")
+        .filter(Boolean);
+      return hits.length === 1 && hits[0] === "src/lib/telegram-miniapp-bridge.functions.ts";
+    })(),
+  );
 }
 
 if (failures.length > 0) {
