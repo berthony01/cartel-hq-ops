@@ -9,6 +9,7 @@
 
 import { readFileSync } from "node:fs";
 import { createHmac } from "node:crypto";
+import { execSync } from "node:child_process";
 import {
   buildDataCheckString,
   computeInitDataHash,
