@@ -386,6 +386,89 @@ check("18.4 no change to the existing close RPC", !sql.includes("CREATE OR REPLA
 check("18.5 no change to claim_due_social_mission_schedule_events", !sql.includes("CREATE OR REPLACE FUNCTION public.claim_due_social_mission_schedule_events"));
 check("18.6 the migration is prepared only", sql.includes("PREPARED ONLY"));
 
+// ---------------------------------------------------------------------------
+// 19 — SE-15 hardening.
+// ---------------------------------------------------------------------------
+const fnBody = (name: string) => {
+  const start = sql.indexOf(`FUNCTION public.${name}`);
+  return start === -1 ? "" : sql.slice(start, sql.indexOf("$$;", start));
+};
+const overrideFn = fnBody("social_mission_apply_target_override");
+const durationFn = fnBody("social_mission_apply_duration_override");
+const endFn = fnBody("end_social_mission_from_control");
+const cancelFn = fnBody("cancel_social_mission_from_control");
+const mergeFn = fnBody("social_mission_control_merge_state");
+const historyFn = fnBody("social_mission_control_append_history");
+
+// 19.1 — first-use JSONB creation without nested jsonb_set.
+check("19.1 a top-level merge helper exists", mergeFn.length > 0);
+check("19.2 the merge creates mission_control when absent", /coalesce\(m\.metadata\s*->\s*'mission_control'\s*,\s*'\{\}'/i.test(mergeFn));
+check("19.3 the merge preserves every sibling key", /coalesce\(m\.metadata\s*,\s*'\{\}'[^)]*\)\s*\|\|/i.test(mergeFn));
+check("19.4 effective_config is never written", !/jsonb_set[^;]*effective_config/i.test(sql) && !/'effective_config'\s*,/.test(mergeFn));
+check("19.5 MANUAL override uses the merge helper", /social_mission_control_merge_state/.test(overrideFn));
+check("19.6 RESET_AUTO uses the merge helper", /'AUTO'[\s\S]{0,400}social_mission_control_merge_state|social_mission_control_merge_state[\s\S]{0,400}'AUTO'/.test(overrideFn));
+check("19.7 history append uses the merge helper", /social_mission_control_merge_state/.test(historyFn));
+check("19.8 history append never nests jsonb_set", !/jsonb_set/i.test(historyFn));
+for (const [label, body] of [
+  ["target override", overrideFn],
+  ["duration", durationFn],
+  ["end now", endFn],
+  ["cancel", cancelFn],
+] as const) {
+  // 19.9-19.20 — lock BEFORE idempotency and BEFORE trusting status.
+  const lockAt = body.search(/FOR UPDATE/i);
+  const keyAt = body.search(/key_used|_idempotency_key/i);
+  const statusAt = body.search(/v_status|status\s*<>\s*'LIVE'/i);
+  check(`19.9 ${label} locks the mission row`, lockAt > -1);
+  check(`19.10 ${label} locks before the idempotency check`, lockAt > -1 && keyAt > -1 && lockAt < body.lastIndexOf("key_used"));
+  check(`19.11 ${label} validates status under the lock`, lockAt > -1 && statusAt > -1 && lockAt < body.lastIndexOf("v_status"));
+  check(`19.12 ${label} appends history exactly once`, (body.match(/social_mission_control_append_history\(/g) ?? []).length <= 1);
+  check(`19.13 ${label} returns a replay outcome`, /'replayed'/.test(body));
+}
+
+// 19.21 — END_NOW event ownership.
+check("19.21 END_NOW refuses when any event is already CLAIMED", /'CLAIMED'/.test(endFn) && /event_claimed|claimed_conflict|conflict/i.test(endFn));
+check("19.22 END_NOW locks the exact COMPLETE event", /COMPLETE'[\s\S]{0,400}FOR UPDATE/i.test(endFn));
+check("19.23 END_NOW refuses a non-PENDING COMPLETE event", /complete_event_not_pending/.test(endFn));
+check("19.24 END_NOW requires a proven claim before COMPLETED", endFn.indexOf("complete_event_not_claimed") < endFn.indexOf("'COMPLETED'"));
+check("19.25 END_NOW reports the owned event", /event_owned/.test(endFn));
+check("19.26 the webhook finishes only an owned event", webhook.includes('result["event_owned"] === true'));
+check("19.27 an END_NOW replay changes nothing again", /outcome === "replayed"[\s\S]{0,400}already ended/i.test(webhook));
+check("19.28 a CANCEL replay changes nothing again", /outcome === "replayed"[\s\S]{0,400}already cancelled/i.test(webhook));
+
+// 19.29 — primary target editability.
+check("19.29 the targets menu offers a primary target control", webhook.includes("🏆 Primary target"));
+check("19.30 the primary target control arms PRIMARY_TARGET", /mc_f_pt_\$\{missionId\}[\s\S]{0,400}_pending_field: "PRIMARY_TARGET"/.test(webhook));
+check("19.31 the primary target cannot be turned off", webhook.includes("The Primary Goal target cannot be turned off."));
+check("19.32 the primary metric stays pinned to the primary number", webhook.includes("if (pinned && metric === pinned) return primaryTarget;"));
+check("19.33 off on the current Primary Goal is refused", webhook.includes("is the current Primary Goal, so its target cannot be turned off."));
+
+// 19.34 — parser precision.
+check("19.34 commas are stripped but spaces are not", webhook.includes('.replace(/,/g, "")') && !webhook.includes('.replace(/[, ]/g, "")'));
+
+// 19.35 — group admin gate.
+check("19.35 group manage verifies a live administrator", /manageAdmin[\s\S]{0,600}getChatMember/.test(webhook));
+check("19.36 anonymous admin still passes through the existing proof", /let manageAdmin = isAnonymousGroupAdminSender/.test(webhook));
+check("19.37 non-admins get an admin-only reply and no launcher", /if \(!manageAdmin\)[\s\S]{0,400}administrators only/.test(webhook));
+check("19.38 cleanup still happens only for authorized admins", webhook.indexOf("if (!manageAdmin)") < webhook.indexOf("await sendMissionManageLauncherAndCleanup("));
+
+// 19.39 — exact target binding.
+check("19.39 the card refresh binds the verified chat", /mcRefreshCard[\s\S]{0,900}eq\("telegram_chat_id", Number\(args\.binding\.chatId\)\)/.test(webhook));
+check("19.40 the unpin binds the verified chat", /mcSafeUnpin[\s\S]{0,700}eq\("telegram_chat_id", Number\(binding\.chatId\)\)/.test(webhook));
+check("19.41 the unpin still requires HQ ownership", /mcSafeUnpin[\s\S]{0,900}pinned\?\.pinned_by_hq/.test(webhook));
+check("19.42 no loose mission-only card match remains", !/eq\("workspace_id", args\.workspaceId\)\s*\n\s*\.maybeSingle\(\)/.test(webhook));
+
+// 19.43 — proportional pulse rescheduling.
+check("19.43 pulses keep their relative position", /v_fraction/.test(durationFn) && /due_at\s*-\s*v_now/i.test(durationFn));
+check("19.44 a degenerate window falls back deterministically", /v_pending\s*\+\s*1/.test(durationFn));
+check("19.45 rescheduled pulses stay inside the new window", /LEAST\(GREATEST\(v_fraction/i.test(durationFn));
+check("19.46 sequence_no is preserved", !/UPDATE public\.social_mission_schedule_events[\s\S]{0,400}SET[\s\S]{0,200}sequence_no\s*=/i.test(durationFn));
+check("19.47 SENT history is never rescheduled", /state\s*=\s*'PENDING'/i.test(durationFn));
+
+// 19.48 — copy.
+check("19.48 the panel says Project, not Community", webhook.includes("`Project: ${escapeHtml(binding.workspaceName)}`"));
+check("19.49 END NOW promises a best-effort final reading", /final observed results/.test(webhook));
+
 if (failures.length > 0) {
   console.error(`FAIL — ${failures.length} failed, ${passed} passed`);
   for (const failure of failures) console.error(`  - ${failure}`);
