@@ -346,6 +346,25 @@ const MISSION_CONTROL_METRIC_LABELS: Record<MissionControlMetric, string> = {
   bookmarks: "🔖 Bookmarks",
 };
 /**
+ * SE-15.1 — the stored `social_metric_snapshots` column each Mission Control
+ * metric reads from. This map exists ONLY to read durable stored rows; it never
+ * triggers a provider/X read.
+ */
+const MISSION_CONTROL_METRIC_COLUMNS: Record<MissionControlMetric, string> = {
+  views: "views",
+  likes: "likes",
+  replies: "comments",
+  reposts: "shares",
+  bookmarks: "saves",
+};
+/** Null-honest rendering: an unknown stored metric is never coerced to 0. */
+export function missionControlResultText(value: unknown): string {
+  const n = Number(value);
+  return value === null || value === undefined || !Number.isFinite(n)
+    ? "unavailable"
+    : String(Math.trunc(n));
+}
+/**
  * BOOKMARKS is deliberately absent: the Primary Goal enum does not support it,
  * and SE-15 does not widen accomplishment semantics.
  */
