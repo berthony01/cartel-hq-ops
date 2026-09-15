@@ -3460,18 +3460,28 @@ Deno.serve(async (req: Request) => {
           });
           const result = (data ?? {}) as Record<string, unknown>;
           const outcome = String(result["outcome"] ?? (error ? "denied" : "denied"));
+          // A REPLAY is "already applied", not a failure — and not a second
+          // card edit, unpin or audit entry.
+          if (outcome === "replayed") {
+            await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Already cancelled.");
+            await sendMessage(
+              TELEGRAM_BOT_TOKEN,
+              callbackChatId,
+              "This mission was already cancelled. Nothing was changed again.",
+            );
+            return json({ ok: true });
+          }
           if (outcome !== "ok") {
             await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, MC_OUTCOME_TEXT[outcome] ?? "That mission could not be cancelled.");
             return json({ ok: true });
           }
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Cancelling the mission…");
           const transport = await mcRefreshCard({
-            workspaceId: binding.workspaceId,
-            missionId,
+            binding,
             actorUserId: linked?.user_id ? String(linked.user_id) : null,
             seed: `${updateId}:cancel`,
           });
-          await mcSafeUnpin(missionId, binding.workspaceId);
+          await mcSafeUnpin(binding);
           await sendMessage(
             TELEGRAM_BOT_TOKEN,
             callbackChatId,
