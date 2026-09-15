@@ -3074,6 +3074,13 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true });
     }
 
+    // SE-12 — bare `/mission` launcher for anonymous group admins.
+    // The next pasted X URL is still handled by the existing Link Finder path.
+    if (missionMatch && isAnonymousGroupAdminSender && isGroupChat && !missionMatch[1]) {
+      await sendBareMissionLauncher(chatId);
+      return json({ ok: true });
+    }
+
     // SE-11 — anonymous-admin `/mission <X link>`. Telegram never reveals the
     // human behind an anonymous message, so this command can NEVER call
     // `runMissionCommand` directly: there is no linked user and no workspace
