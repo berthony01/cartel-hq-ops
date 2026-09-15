@@ -2707,7 +2707,11 @@ Deno.serve(async (req: Request) => {
 
   const mcTargetsKeyboard = (missionId: string) => ({
     inline_keyboard: [
+      // `pg` picks WHICH metric is the Primary Goal; `pt` sets the NUMBER that
+      // Primary Goal has to reach. Without `pt` the primary number could only
+      // ever be inherited from the launch config.
       [{ text: "🏆 Primary Goal", callback_data: `mc_f_pg_${missionId}` }],
+      [{ text: "🏆 Primary target", callback_data: `mc_f_pt_${missionId}` }],
       ...MISSION_CONTROL_METRICS.map((metric) => [
         {
           text: `${MISSION_CONTROL_METRIC_LABELS[metric]} target`,
