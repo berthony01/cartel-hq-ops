@@ -252,7 +252,13 @@ check("10.1 confirmation is required", webhook.includes("END MISSION NOW?") && w
 check("10.2 selection is by exact mission id", sql.includes("CREATE OR REPLACE FUNCTION public.end_social_mission_from_control(\n  _telegram_user_id bigint,\n  _mission_id uuid,"));
 check("10.3 status becomes COMPLETED", sql.includes("SET status = 'COMPLETED', completed_at = v_now, ends_at = v_now"));
 check("10.4 ends_at is truthful now, not COALESCEd", !/status = 'COMPLETED'[\s\S]{0,120}ends_at = COALESCE/.test(sql));
-check("10.5 pending pulses are cancelled", /event_type = 'PULSE' AND state = 'PENDING'/.test(fnBody("end_social_mission_from_control")));
+check(
+  "10.5 pending pulses are cancelled",
+  /event_type = 'PULSE' AND state = 'PENDING'/.test(
+    sql.slice(sql.indexOf("FUNCTION public.end_social_mission_from_control")).split("\n$$;")[0] ?? "",
+  ),
+);
+
 check("10.6 the COMPLETE event is claimed idempotently", sql.includes("SET state = 'CLAIMED', claimed_at = v_now"));
 check("10.7 exactly one final edit is attempted", (webhook.match(/seed: `\$\{updateId\}:end_now`/g) ?? []).length === 1);
 check("10.8 the completion event is finalized once", /mc_ec_[\s\S]{0,3200}finish_social_mission_schedule_event/.test(webhook));
