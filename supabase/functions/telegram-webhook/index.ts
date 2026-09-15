@@ -3362,12 +3362,29 @@ Deno.serve(async (req: Request) => {
             _clear: false,
           });
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Send the number.");
+          // Stored evidence only: resolved target + latest durable snapshot.
+          const ptConfig = await mcResolvedConfig(missionId);
+          const ptResults = await mcLatestResults(binding);
+          const ptType = String(ptConfig["milestone_type"] ?? "NONE").toUpperCase();
+          const ptMetric = primaryGoalMetric(ptType);
+          const ptTarget = mcNumber(ptConfig["milestone_target"]);
           await sendMessage(
             TELEGRAM_BOT_TOKEN,
             callbackChatId,
-            "<b>🏆 Primary target</b>\n\nSend a whole number above zero. The Primary Goal keeps its current metric. This target cannot be turned off.",
+            [
+              "<b>🏆 Primary target</b>",
+              "",
+              `Primary Goal: ${escapeHtml(
+                (MISSION_CONTROL_PRIMARY_LABELS as Record<string, string>)[ptType] ?? "Not set",
+              )}`,
+              `Latest X result: ${ptMetric ? ptResults[ptMetric] : "unavailable"}`,
+              `Current target: ${ptTarget ?? "off"}`,
+              "",
+              "Send the new target as a whole number above zero. The Primary Goal keeps its current metric. This target cannot be turned off.",
+            ].join("\n"),
             { parse_mode: "HTML" },
           );
+
           return json({ ok: true });
         }
 
