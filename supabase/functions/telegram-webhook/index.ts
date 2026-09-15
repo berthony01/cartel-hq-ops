@@ -3400,6 +3400,17 @@ Deno.serve(async (req: Request) => {
           });
           const result = (data ?? {}) as Record<string, unknown>;
           const outcome = String(result["outcome"] ?? (error ? "denied" : "denied"));
+          // A REPLAY is harmless and final: no second edit, no second finish,
+          // no second X read, no second unpin, no second audit entry.
+          if (outcome === "replayed") {
+            await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Already ended.");
+            await sendMessage(
+              TELEGRAM_BOT_TOKEN,
+              callbackChatId,
+              "This mission was already ended. Nothing was changed again.",
+            );
+            return json({ ok: true });
+          }
           if (outcome !== "ok") {
             await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, MC_OUTCOME_TEXT[outcome] ?? "That mission could not be ended.");
             return json({ ok: true });
@@ -3409,19 +3420,23 @@ Deno.serve(async (req: Request) => {
           // snapshot for a COMPLETED mission, guarded by its own current-minute
           // duplicate-read guard: at most one read, never retried here.
           const transport = await mcRefreshCard({
-            workspaceId: binding.workspaceId,
-            missionId,
+            binding,
             actorUserId: linked?.user_id ? String(linked.user_id) : null,
             seed: `${updateId}:end_now`,
           });
           const editState = String(transport?.editState ?? "");
-          await admin.rpc("finish_social_mission_schedule_event", {
-            _event_id: result["schedule_event_id"],
-            _state: editState === "EDITED" ? "SENT" : editState === "FAILED" ? "FAILED" : "AMBIGUOUS",
-            _telegram_message_id: null,
-            _last_error: editState === "EDITED" ? null : "The manual end edit was not confirmed.",
-          });
-          await mcSafeUnpin(missionId, binding.workspaceId);
+          // Finish ONLY the completion event this RPC explicitly reports it
+          // claimed. Without proven ownership we never touch a schedule row.
+          const ownedEventId = result["event_owned"] === true ? result["schedule_event_id"] : null;
+          if (ownedEventId) {
+            await admin.rpc("finish_social_mission_schedule_event", {
+              _event_id: ownedEventId,
+              _state: editState === "EDITED" ? "SENT" : editState === "FAILED" ? "FAILED" : "AMBIGUOUS",
+              _telegram_message_id: null,
+              _last_error: editState === "EDITED" ? null : "The manual end edit was not confirmed.",
+            });
+          }
+          await mcSafeUnpin(binding);
           await sendMessage(
             TELEGRAM_BOT_TOKEN,
             callbackChatId,
