@@ -1291,8 +1291,11 @@ check(
     missionFn.indexOf("await args.onStartAccepted?.();") < idxCreateRpc,
 );
 check(
+  // SE-10 RE-PIN, NOT RELAXED: the callback is still answered with the exact
+  // same precise reason text. The handler now also receives the structured
+  // `detail` so the SAME prompt can render the missing right visibly first.
   "17.44 a blocked preflight answers the callback with the precise reason",
-  /onPermissionBlocked: async \(text\) => \{\s*\n\s*await answerCallback\(TELEGRAM_BOT_TOKEN, callback\.id, text\);/.test(startBranch),
+  /onPermissionBlocked: async \(text, detail\) => \{[\s\S]{0,300}await answerCallback\(TELEGRAM_BOT_TOKEN, callback\.id, text\);/.test(startBranch),
 );
 check(
   "17.45 feedback stays in the callback — no extra group message is posted",
