@@ -3077,7 +3077,7 @@ Deno.serve(async (req: Request) => {
     // SE-12 — bare `/mission` launcher for anonymous group admins.
     // The next pasted X URL is still handled by the existing Link Finder path.
     if (missionMatch && isAnonymousGroupAdminSender && isGroupChat && !missionMatch[1]) {
-      await sendBareMissionLauncher(chatId);
+      await sendBareMissionLauncher(TELEGRAM_BOT_TOKEN, chatId);
       return json({ ok: true });
     }
 
