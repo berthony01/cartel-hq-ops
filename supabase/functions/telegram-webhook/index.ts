@@ -672,7 +672,14 @@ Deno.serve(async (req: Request) => {
      * created or recovered. Nothing was mutated: the caller's candidate, its
      * prompt and the source post all stay exactly as they were.
      */
-    onPermissionBlocked?: (text: string) => Promise<void>;
+    onPermissionBlocked?: (
+      text: string,
+      /**
+       * SE-10 — the exact, dynamic reason, so the caller can render a visible
+       * ACTION REQUIRED state naming the precise missing right(s).
+       */
+      detail?: { kind: "UNRESOLVED" | "NOT_ADMIN" | "MISSING_RIGHTS"; missing: string[] },
+    ) => Promise<void>;
     /**
      * SE-8 — preflight passed and the mission launch is now starting. Used for
      * immediate START feedback while the first real X snapshot is fetched. It
