@@ -495,6 +495,48 @@ const opts = { now: NOW_MS };
   check("12.6 auth module has no Deno or Supabase Edge dependency", !/Deno\./.test(authCode) && !/deno\.land/.test(authSrc));
 }
 
+/* ------------- 13. the bridge is the only client-importable boundary */
+
+{
+  // The *.server.ts validator is filename-blocked from client bundles; the bridge
+  // is the single module a future Mini App UI may import.
+  check(
+    "13.1 bridge never re-exports the server-only auth module",
+    !/export\s*\*\s*from\s*"[^"]*telegram-miniapp-auth\.server"/.test(bridgeCode) &&
+      !/export\s*\{[^}]*\}\s*from\s*"[^"]*telegram-miniapp-auth\.server"/.test(bridgeCode),
+  );
+  check(
+    "13.2 bridge never re-exports the service-role client module",
+    !/export[^\n]*from\s*"@\/integrations\/supabase\/client\.server"/.test(bridgeCode),
+  );
+  const exportedNames = [...bridgeCode.matchAll(/^export\s+(?:const|type)\s+(\w+)/gm)].map((m) => m[1]!);
+  check(
+    "13.3 no exported symbol names a token, secret or service-role handle",
+    exportedNames.every((n) => !/token|secret|serviceRole|admin|apiKey/i.test(n)),
+    exportedNames.filter((n) => /token|secret|serviceRole|admin|apiKey/i.test(n)).join(", "),
+  );
+  check(
+    "13.4 bridge exports no raw Telegram or Supabase client value",
+    !/^export\s+(?:const|let)\s+\w+\s*=\s*(createClient|supabaseAdmin)\b/m.test(bridgeCode),
+  );
+  check(
+    "13.5 the bot token stays inside a non-exported helper",
+    /^function botToken\(\)/m.test(bridgeCode) && !/^export\s+(?:async\s+)?function botToken/m.test(bridgeCode),
+  );
+  check(
+    "13.6 no UI module imports the server-only auth validator yet",
+    (() => {
+      const hits = execSync(
+        'rg -l "telegram-miniapp-auth.server" src || true',
+        { encoding: "utf8" },
+      )
+        .split("\n")
+        .filter(Boolean);
+      return hits.length === 1 && hits[0] === "src/lib/telegram-miniapp-bridge.functions.ts";
+    })(),
+  );
+}
+
 if (failures.length > 0) {
   console.error(`FAIL — ${failures.length} failed, ${passed} passed`);
   for (const failure of failures) console.error(`  - ${failure}`);
