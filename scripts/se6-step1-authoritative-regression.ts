@@ -1952,12 +1952,12 @@ check(
 //     keeps its existing direct or Link-Finder behavior and malformed non-empty
 //     arguments still use the existing usage handling.
 // ---------------------------------------------------------------------------
-const se12HumanBareStart = webhookRaw.indexOf("SE-12 — bare `/mission` launcher for identifiable humans");
-const se12HumanBareEnd = webhookRaw.indexOf(
-  "if (missionMatch && from?.is_bot !== true) {",
-  webhookRaw.indexOf("if (missionMatch && from?.is_bot !== true) {") + 1,
+const se12HumanBareBranch = webhookRaw.slice(
+  webhookRaw.indexOf("SE-12 — bare `/mission` launcher for identifiable humans"),
+  // This exact if line appears only in the non-empty human branch; the bare
+  // branch has extra guards, so this marker cleanly bounds the bare branch.
+  webhookRaw.indexOf("if (missionMatch && from?.is_bot !== true) {"),
 );
-const se12HumanBareBranch = webhookRaw.slice(se12HumanBareStart, se12HumanBareEnd);
 const se12AnonBareBranch = webhookRaw.slice(
   webhookRaw.indexOf("SE-12 — bare `/mission` launcher for anonymous group admins"),
   webhookRaw.indexOf("// SE-11 — anonymous-admin `/mission <X link>`."),
