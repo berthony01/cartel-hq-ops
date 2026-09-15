@@ -1600,6 +1600,196 @@ check(
   /'chat_mismatch'/.test(se9Raw) && /_verified_chat_id/.test(se9Raw),
 );
 
+// ---------------------------------------------------------------------------
+// 20. SE-10 — START FEEDBACK + PERMISSION UX.
+//
+//     Every new visible state EDITS the one existing transient prompt. No new
+//     group message is created, no state claims success, the candidate stays
+//     PENDING while a required right is missing, and the settled launch still
+//     deletes the prompt exactly as SE-9 does.
+// ---------------------------------------------------------------------------
+const se10Branch = webhookRaw.slice(
+  webhookRaw.indexOf("const smStart = callbackData.match"),
+  webhookRaw.indexOf("// C7.3 — Project Inbox console callbacks"),
+);
+const se10StartCall = se10Branch.slice(se10Branch.indexOf("await runMissionCommand({"));
+
+// 20.1 — the starting state is an in-place edit of the SAME prompt.
+check(
+  "20.1a a starting state is shown when the launch actually begins",
+  /onStartAccepted: async \(\) => \{[\s\S]{0,200}showStartingPrompt\(\)/.test(se10StartCall),
+);
+check(
+  "20.1b the starting state names permissions and live X metrics honestly",
+  /Starting Social Mission…[\s\S]{0,160}Checking bot permissions and fetching live X metrics/.test(se10Branch),
+);
+check(
+  "20.1c every prompt state is an edit of the existing prompt message",
+  /const editLinkFinderPrompt = async \(text: string, startLabel: string\) => \{[\s\S]{0,400}editMessage\(/.test(se10Branch) &&
+    /if \(promptMessageId === null\) return;/.test(se10Branch),
+);
+check(
+  "20.1d no new group message is created for any SE-10 state",
+  !/showStartingPrompt[\s\S]{0,400}sendMessage\(/.test(se10Branch) &&
+    (se10Branch.match(/sendMessage/g) ?? []).length === 0,
+);
+check(
+  "20.1e the starting state keeps inline controls with the same callback route",
+  /callback_data: `sm_lf_start_\$\{candidateId\}`/.test(se10Branch) &&
+    /callback_data: `sm_lf_ignore_\$\{candidateId\}`/.test(se10Branch),
+);
+check(
+  "20.1f the starting state never claims the mission succeeded",
+  !/started successfully|mission is live/i.test(se10Branch),
+);
+
+// 20.2 — the permission warning is visible, exact and retryable.
+check(
+  "20.2a a blocked preflight edits the same prompt before answering the tap",
+  se10StartCall.indexOf("showPermissionPrompt(text, detail)") <
+    se10StartCall.indexOf("await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, text)"),
+);
+check(
+  "20.2b the warning states the exact missing permission(s) dynamically",
+  /Missing: \$\{escapeHtml\(missing\.join\(", "\)\)\}/.test(se10Branch),
+);
+check(
+  "20.2c both missing rights are rendered when both are missing",
+  /enable \$\{escapeHtml\(missing\.join\(" and "\)\)\}/.test(se10Branch),
+);
+check(
+  "20.2d the missing rights are computed live from the real preflight",
+  /missingRights\.push\("Delete Messages"\)/.test(missionFn) &&
+    /missingRights\.push\("Pin Messages"\)/.test(missionFn) &&
+    /\{ kind: "MISSING_RIGHTS", missing: missingRights \}/.test(missionFn),
+);
+check(
+  "20.2e the warning carries a RETRY START control on the same prompt",
+  (se10Branch.match(/"RETRY START"/g) ?? []).length >= 3,
+);
+check("20.2f IGNORE remains available in every state", /text: "IGNORE"/.test(se10Branch));
+check(
+  "20.2g the warning is never auto-deleted on a timer",
+  !/setTimeout|sleep\(/.test(se10Branch),
+);
+check(
+  "20.2h a blocked preflight creates no mission, card or schedule",
+  missionFn.indexOf("await blockLaunch(") <
+    missionFn.indexOf('admin.rpc("create_social_mission_from_telegram_link"') &&
+    /await blockLaunch\([\s\S]{0,400}?\);\s*\n\s*return;/.test(missionFn),
+);
+check(
+  "20.2i the candidate is never finalized on a blocked preflight",
+  !/finalize_social_mission_link_candidate_start/.test(
+    se10StartCall.slice(0, se10StartCall.indexOf("onMissionSettled")),
+  ),
+);
+check(
+  "20.2j a failed source cleanup also renders the missing right in place",
+  /showPermissionPrompt\("", \{ kind: "MISSING_RIGHTS", missing: \["Delete Messages"\] \}\)/.test(se10Branch),
+);
+
+// 20.3 — a retry after the fix uses the SAME candidate and the normal path.
+check(
+  "20.3a RETRY START reuses the existing candidate id, not a new link post",
+  /sm_lf_start_\$\{candidateId\}/.test(se10Branch),
+);
+check(
+  "20.3b the retry still runs the single shared mission pipeline",
+  (se10Branch.match(/await runMissionCommand\(\{/g) ?? []).length === 1,
+);
+check(
+  "20.3c the retry still re-authorizes live admin rights before launching",
+  se10Branch.indexOf('lfStatus !== "administrator"') < se10Branch.indexOf("await runMissionCommand({"),
+);
+check(
+  "20.3d a settled retry finalizes exactly once through the bound mission",
+  /_mission_id: settled\.missionId/.test(se10StartCall) &&
+    /String\(finalization\.mission_id \?\? ""\) === settled\.missionId/.test(se10StartCall),
+);
+
+// 20.4 — success cleanup is unchanged.
+check(
+  "20.4a a settled launch still deletes the transient prompt",
+  /missionSettled = true;[\s\S]{0,200}await deleteLinkFinderPrompt\(\);/.test(se10StartCall),
+);
+check(
+  "20.4b the prompt is deleted only after a successful finalization",
+  se10StartCall.indexOf("if (finalizeError || !sameMission) return;") <
+    se10StartCall.indexOf("await deleteLinkFinderPrompt();"),
+);
+
+// 20.5 — a started-but-unsettled launch is never left stuck.
+check(
+  "20.5a an unsettled launch restores a retryable prompt state",
+  /if \(startingShown && !missionSettled && !promptResolved\) \{\s*\n\s*await showRetryablePrompt\(/.test(se10Branch),
+);
+check(
+  "20.5b the restore never fires after a settled launch",
+  /let missionSettled = false;/.test(se10Branch) && /missionSettled = true;/.test(se10StartCall),
+);
+check(
+  "20.5c the restore never fires after a permission state was already shown",
+  /let promptResolved = false;/.test(se10Branch) &&
+    /promptResolved = true;\s*\n\s*await showPermissionPrompt/.test(se10StartCall),
+);
+check(
+  "20.5d the restore adds no chat message and creates nothing",
+  /const showRetryablePrompt = \(note: string\) => editLinkFinderPrompt\(/.test(se10Branch),
+);
+
+// 20.6 — instrumentation is bounded, secret-free and non-behavioural.
+const se10TimerHelper = webhookRaw.slice(
+  webhookRaw.indexOf("function se10Timer()"),
+  webhookRaw.indexOf("async function editMessage("),
+);
+check("20.6a a timing helper exists", se10TimerHelper.length > 100);
+check(
+  "20.6b it emits only a phase name and an integer duration",
+  /slices\.push\(`\$\{name\}=\$\{now - mark\}ms`\)/.test(se10TimerHelper),
+);
+check(
+  "20.6c the required START phases are each measured",
+  /timing\.slice\("preflight"\)/.test(missionFn) &&
+    /timing\.slice\("create_mission"\)/.test(missionFn) &&
+    /timing\.slice\("transport_card"\)/.test(missionFn) &&
+    /timing\.slice\("schedule_pin_finalize"\)/.test(missionFn),
+);
+check(
+  "20.6d no secret, token, header, payload or identity is logged",
+  !/TELEGRAM_BOT_TOKEN|SERVICE_KEY|Authorization|apikey|bearer/i.test(se10TimerHelper) &&
+    !/timing\.log\([^)]*(token|key|user|chat)/i.test(webhookRaw),
+);
+check(
+  "20.6e instrumentation never changes a decision or a return value",
+  !/if \(timing|return timing/.test(webhookRaw),
+);
+
+// 20.7 — nothing else moved.
+check(
+  "20.7a SE-9 immediate source cleanup at detection is unchanged",
+  detectionBranch.indexOf("attach_social_mission_link_prompt") <
+    detectionBranch.indexOf("ensureLinkFinderSourceDeleted"),
+);
+check(
+  "20.7b anonymous-admin Link Finder handling is untouched",
+  /linkFinderSender/.test(webhookRaw) && /from\?\.is_bot !== true/.test(webhookCode),
+);
+check(
+  "20.7c raw /mission keeps its reply-based feedback and no prompt states",
+  !/showStartingPrompt|showPermissionPrompt|showRetryablePrompt/.test(missionFn) &&
+    /if \(args\.onPermissionBlocked\) await args\.onPermissionBlocked\(text, detail\);\s*\n\s*else await reply\(text\);/.test(missionFn),
+);
+check(
+  "20.7d no duplicate card, schedule or pulse path was introduced",
+  (missionFn.match(/action: "send_mission"/g) ?? []).length === 1 &&
+    (missionFn.match(/activate_social_mission_schedule/g) ?? []).length === 1,
+);
+check(
+  "20.7e no new table, migration or scheduler is required by SE-10",
+  !/CREATE TABLE|cron\.schedule/i.test(se10Branch),
+);
+
 console.log(`Step 1 authoritative regression: ${passed} passed, ${failures.length} failed`);
 
 
