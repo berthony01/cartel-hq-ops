@@ -3097,12 +3097,12 @@ Deno.serve(async (req: Request) => {
       );
       const parsedLink = linkMatch ? parseXStatusUrl(String(linkMatch[0])) : null;
       if (parsedLink) {
-        await offerLinkFinderCandidate(
+        const handled = await offerLinkFinderCandidate(
           parsedLink,
           Number(message?.message_id),
           linkFinderSender.posterId,
         );
-        return json({ ok: true });
+        if (handled) return json({ ok: true });
       }
     }
 
