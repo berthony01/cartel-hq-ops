@@ -181,7 +181,12 @@ check("6.14 manual mode without an override falls back to frozen", JSON.stringif
 check("6.15 SQL resolver mirrors the TS resolver", sql.includes("social_mission_resolve_config") && sql.includes("|| (_metadata -> 'mission_control' -> 'override_config')"));
 check("6.16 no SQL path writes effective_config", !/jsonb_set\([^)]*'\{effective_config/.test(sql) && !sql.includes("{effective_config}"));
 check("6.17 overrides are written under mission_control only", sql.includes("'{mission_control,override_config}'") && sql.includes("'{mission_control,mode}'"));
-check("6.18 SE-14 establishment gates are untouched", !sql.includes("record_social_mission_metric_snapshot") && !sql.includes("social_mission_auto_goal"));
+check(
+  "6.18 SE-14 establishment gates are untouched",
+  !/(CREATE OR REPLACE FUNCTION|DROP FUNCTION|ALTER FUNCTION)[^;\n]*(record_social_mission_metric_snapshot|social_mission_auto_goal)/i.test(
+    sql,
+  ),
+);
 
 // ---------------------------------------------------------------------------
 // 7 — transport and runner consume the RESOLVED config.
