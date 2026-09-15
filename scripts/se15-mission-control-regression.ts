@@ -256,7 +256,7 @@ check("11.3 completed_at is not claimed", !/status = 'CANCELLED'[\s\S]{0,160}com
 check("11.4 all pending events are cancelled", /cancel_social_mission_from_control[\s\S]{0,2600}WHERE mission_id = _mission_id AND state = 'PENDING'/.test(sql));
 check("11.5 a CLAIMED event blocks cancellation", /cancel_social_mission_from_control[\s\S]{0,1800}'event_claimed'/.test(sql));
 check("11.6 audit action CANCEL recorded", sql.includes("'CANCEL',"));
-check("11.7 safe unpin is reused", /mc_cc_[\s\S]{0,1400}mcSafeUnpin/.test(webhook));
+check("11.7 safe unpin is reused", /mc_cc_[\s\S]{0,2400}mcSafeUnpin\(binding\)/.test(webhook));
 check("11.8 the same card is edited, never replaced", /mc_cc_[\s\S]{0,1400}mcRefreshCard/.test(webhook));
 
 // ---------------------------------------------------------------------------
