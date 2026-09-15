@@ -171,6 +171,29 @@ async function readBotChatPermissions(
 function boundedReason(value: unknown): string {
   return String(value ?? "").replace(/\s+/g, " ").slice(0, 200);
 }
+
+/**
+ * SE-10 — BOUNDED, SECRET-FREE START LATENCY INSTRUMENTATION.
+ *
+ * Records elapsed milliseconds between named phases of the START path only.
+ * It never touches a token, header, auth payload, Telegram body, user identity
+ * or X bearer: every emitted value is a phase name and an integer duration.
+ */
+function se10Timer() {
+  const slices: string[] = [];
+  let mark = Date.now();
+  return {
+    slice(name: string) {
+      const now = Date.now();
+      slices.push(`${name}=${now - mark}ms`);
+      mark = now;
+    },
+    log(label: string) {
+      if (slices.length === 0) return;
+      console.log(`[SE-10] ${label} ${slices.join(" ")}`);
+    },
+  };
+}
 async function editMessage(token: string, chatId: string, messageId: number, text: string, replyMarkup?: unknown) {
   try {
     await telegramJson(token, "editMessageText", {
@@ -649,7 +672,14 @@ Deno.serve(async (req: Request) => {
      * created or recovered. Nothing was mutated: the caller's candidate, its
      * prompt and the source post all stay exactly as they were.
      */
-    onPermissionBlocked?: (text: string) => Promise<void>;
+    onPermissionBlocked?: (
+      text: string,
+      /**
+       * SE-10 — the exact, dynamic reason, so the caller can render a visible
+       * ACTION REQUIRED state naming the precise missing right(s).
+       */
+      detail?: { kind: "UNRESOLVED" | "NOT_ADMIN" | "MISSING_RIGHTS"; missing: string[] },
+    ) => Promise<void>;
     /**
      * SE-8 — preflight passed and the mission launch is now starting. Used for
      * immediate START feedback while the first real X snapshot is fetched. It
@@ -973,7 +1003,12 @@ Deno.serve(async (req: Request) => {
       ? true
       : workspaceSettings?.delete_command_after_send !== false;
 
+    // SE-10 — phase timing only. Started here so the preflight, the create
+    // RPC, the real-metrics card send and the schedule/pin phase are each
+    // attributable. No secret, payload or identity is ever recorded.
+    const timing = se10Timer();
     const botPermissions = await readBotChatPermissions(TELEGRAM_BOT_TOKEN, chatId);
+    timing.slice("preflight");
     // Non-sensitive diagnostics only: status, two booleans and a timestamp.
     try {
       const { data: metaRow } = await admin
@@ -1000,17 +1035,27 @@ Deno.serve(async (req: Request) => {
       // Diagnostics are never allowed to block or alter the decision below.
     }
 
-    const blockLaunch = async (text: string) => {
-      if (args.onPermissionBlocked) await args.onPermissionBlocked(text);
+    const blockLaunch = async (
+      text: string,
+      detail: { kind: "UNRESOLVED" | "NOT_ADMIN" | "MISSING_RIGHTS"; missing: string[] },
+    ) => {
+      timing.log(isLinkFinder ? "link_finder_start_blocked" : "mission_command_blocked");
+      if (args.onPermissionBlocked) await args.onPermissionBlocked(text, detail);
       else await reply(text);
     };
 
     if (!botPermissions.resolved) {
-      await blockLaunch(`Telegram could not confirm @${BOT_USERNAME}'s permissions in this group right now. Try again shortly.`);
+      await blockLaunch(
+        `Telegram could not confirm @${BOT_USERNAME}'s permissions in this group right now. Try again shortly.`,
+        { kind: "UNRESOLVED", missing: [] },
+      );
       return;
     }
     if (!botPermissions.isAdmin) {
-      await blockLaunch(`CARTEL HQ needs @${BOT_USERNAME} to be an administrator of this group before a Social Mission can start.`);
+      await blockLaunch(
+        `CARTEL HQ needs @${BOT_USERNAME} to be an administrator of this group before a Social Mission can start.`,
+        { kind: "NOT_ADMIN", missing: [] },
+      );
       return;
     }
     const missingRights: string[] = [];
@@ -1020,6 +1065,7 @@ Deno.serve(async (req: Request) => {
       console.warn(`[SE-8] mission launch blocked: missing ${boundedReason(missingRights.join(", "))}`);
       await blockLaunch(
         `CARTEL HQ needs ${missingRights.join(" and ")} enabled for @${BOT_USERNAME} in this group before a Social Mission can start.`,
+        { kind: "MISSING_RIGHTS", missing: missingRights },
       );
       return;
     }
@@ -1027,6 +1073,7 @@ Deno.serve(async (req: Request) => {
     // Preflight passed. Acknowledge immediately — the first canonical card
     // still waits for a REAL official-X snapshot, which is never prefetched.
     await args.onStartAccepted?.();
+    timing.slice("start_feedback");
 
 
     // 5. One atomic service-only RPC. It re-authorizes everything above and
@@ -1042,6 +1089,7 @@ Deno.serve(async (req: Request) => {
       // SE-5 provenance only. It never changes authorization or behaviour.
       _source: args.source === "telegram_link_finder" ? "telegram_link_finder" : "telegram_mission_command",
     });
+    timing.slice("create_mission");
     const result = (created ?? null) as
       | {
         outcome?: string;
@@ -1100,6 +1148,8 @@ Deno.serve(async (req: Request) => {
       });
       const retryAutoPin = ((retryConfig ?? {}) as Record<string, unknown>)["auto_pin_mission"] !== false;
       const retryPinned = await ensureCanonicalMissionPin(retryTargetId, retryAutoPin, null);
+      timing.slice("recover_pin");
+      timing.log(isLinkFinder ? "link_finder_already_sent" : "mission_command_already_sent");
       if (retryPinned) {
         await args.onMissionSettled?.({
           kind: "ALREADY_SENT",
@@ -1160,6 +1210,7 @@ Deno.serve(async (req: Request) => {
     } catch {
       transport = null;
     }
+    timing.slice("transport_card");
 
     const transportState = String(transport?.deliveryState ?? "");
     if (transportState === "SENT") {
@@ -1234,6 +1285,8 @@ Deno.serve(async (req: Request) => {
           `[SE-9] canonical lifecycle incomplete: pin=${canonicalPinned}`,
         );
       }
+      timing.slice("schedule_pin_finalize");
+      timing.log(isLinkFinder ? "link_finder_start" : "mission_command_start");
 
 
 
@@ -2154,6 +2207,62 @@ Deno.serve(async (req: Request) => {
           }).catch(() => null);
         };
 
+        /**
+         * SE-10 — VISIBLE IN-PLACE PROMPT STATES.
+         *
+         * Every state below EDITS the one existing transient prompt message in
+         * the candidate's own chat. No additional group message is ever created
+         * and no state ever claims success: the branded canonical card remains
+         * the only success signal. The inline controls stay attached in every
+         * non-terminal state, with the SAME `sm_lf_start_` / `sm_lf_ignore_`
+         * callback data, so a crash or a downstream failure can never leave an
+         * invisible or unrecoverable PENDING candidate.
+         */
+        const linkFinderKeyboard = (startLabel: string) => ({
+          inline_keyboard: [[
+            { text: startLabel, callback_data: `sm_lf_start_${candidateId}` },
+            { text: "IGNORE", callback_data: `sm_lf_ignore_${candidateId}` },
+          ]],
+        });
+        const editLinkFinderPrompt = async (text: string, startLabel: string) => {
+          if (promptMessageId === null) return;
+          await editMessage(
+            TELEGRAM_BOT_TOKEN,
+            String(candidateChatId),
+            promptMessageId,
+            text,
+            linkFinderKeyboard(startLabel),
+          );
+        };
+        const LF_IDLE_TEXT = "This is an official project post. Admins can start a Social Mission for it.";
+        const showStartingPrompt = () => editLinkFinderPrompt(
+          "⏳ <b>Starting Social Mission…</b>\nChecking bot permissions and fetching live X metrics.\nThis usually takes a few seconds.",
+          "RETRY START",
+        );
+        /** Names the EXACT missing right(s); both are shown when both are missing. */
+        const showPermissionPrompt = async (
+          text: string,
+          detail?: { kind: "UNRESOLVED" | "NOT_ADMIN" | "MISSING_RIGHTS"; missing: string[] },
+        ) => {
+          const missing = detail?.missing ?? [];
+          if (detail?.kind === "MISSING_RIGHTS" && missing.length > 0) {
+            await editLinkFinderPrompt(
+              `⚠️ <b>CARTEL HQ NEEDS ONE MORE PERMISSION</b>\nThe Social Mission has not started yet.\n\nMissing: ${escapeHtml(missing.join(", "))}\n\nFix it:\nGroup Settings → Administrators → @${escapeHtml(BOT_USERNAME)} → enable ${escapeHtml(missing.join(" and "))}\n\nThen tap RETRY START.`,
+              "RETRY START",
+            );
+            return;
+          }
+          await editLinkFinderPrompt(
+            `⚠️ <b>ACTION REQUIRED</b>\nThe Social Mission has not started yet.\n\n${escapeHtml(text)}\n\nThen tap RETRY START.`,
+            "RETRY START",
+          );
+        };
+        /** A recoverable downstream failure: never left stuck on "Starting…". */
+        const showRetryablePrompt = (note: string) => editLinkFinderPrompt(
+          `${LF_IDLE_TEXT}\n\n${escapeHtml(note)}`,
+          "RETRY START",
+        );
+
         if (decision.outcome === "IGNORE") {
           // IGNORE consumes the candidate and removes ONLY the transient
           // prompt. The member's original X post is never deleted here.
@@ -2185,10 +2294,14 @@ Deno.serve(async (req: Request) => {
           alreadyDeletedAt: decision.source_deleted_at ?? null,
         });
         if (!sourceReady) {
+          // SE-10 — the same missing right is also rendered IN PLACE on the
+          // prompt, so it cannot be missed once the toast disappears. Nothing
+          // was created and the candidate stays PENDING and retryable.
+          await showPermissionPrompt("", { kind: "MISSING_RIGHTS", missing: ["Delete Messages"] });
           await answerCallback(
             TELEGRAM_BOT_TOKEN,
             callback.id,
-            "I could not remove the original link post. Give @PepeCartelHQBot the Delete Messages admin right, then tap START MISSION again.",
+            "I could not remove the original link post. Give @PepeCartelHQBot the Delete Messages admin right, then tap RETRY START.",
           );
           return json({ ok: true });
         }
@@ -2198,6 +2311,12 @@ Deno.serve(async (req: Request) => {
         // nothing is created, while a passed preflight acknowledges the real
         // latency source (the first live official-X snapshot) without ever
         // claiming success. Exactly one answer is sent either way.
+        // SE-10 — the transient prompt is the single visible surface for this
+        // launch: it shows the starting state, any ACTION REQUIRED state and
+        // any retryable failure, and it is deleted only on a settled launch.
+        let startingShown = false;
+        let promptResolved = false;
+        let missionSettled = false;
         await runMissionCommand({
           // The mission is launched into the candidate's OWN chat, always.
           chatId: String(candidateChatId),
@@ -2211,12 +2330,20 @@ Deno.serve(async (req: Request) => {
           source: "telegram_link_finder",
           // SE-8 — refused BEFORE anything was created. The candidate stays
           // PENDING, the prompt stays, the source post stays.
-          onPermissionBlocked: async (text) => {
+          // SE-10 — the exact missing right is ALSO rendered in place on that
+          // same prompt, with a RETRY START control, so it survives the toast.
+          onPermissionBlocked: async (text, detail) => {
+            promptResolved = true;
+            await showPermissionPrompt(text, detail);
             await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, text);
           },
           // SE-8 — honest immediate feedback. No group message, no clutter, no
           // prefetched X read and no weakened first real snapshot.
+          // SE-10 — the same existing prompt is edited in place to a visible
+          // starting state; the inline controls remain attached.
           onStartAccepted: async () => {
+            startingShown = true;
+            await showStartingPrompt();
             await answerCallback(
               TELEGRAM_BOT_TOKEN,
               callback.id,
@@ -2251,10 +2378,19 @@ Deno.serve(async (req: Request) => {
                 && String(finalization.mission_id ?? "") === settled.missionId);
             if (finalizeError || !sameMission) return;
 
+            missionSettled = true;
+            promptResolved = true;
             await deleteLinkFinderPrompt();
           },
 
         });
+        // SE-10 — a launch that began but did not settle must never leave the
+        // prompt stuck on "Starting…". The prompt is restored to a retryable
+        // state in place; nothing is created, deleted or finalized here and no
+        // new chat message is sent.
+        if (startingShown && !missionSettled && !promptResolved) {
+          await showRetryablePrompt("The mission did not start. Tap RETRY START to try again.");
+        }
         return json({ ok: true });
 
 
