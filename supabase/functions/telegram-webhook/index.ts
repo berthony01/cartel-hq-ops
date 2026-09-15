@@ -3378,7 +3378,7 @@ Deno.serve(async (req: Request) => {
           await sendMessage(
             TELEGRAM_BOT_TOKEN,
             callbackChatId,
-            "<b>🏁 END MISSION NOW?</b>\n\nThe mission card is updated in place to COMPLETED with its final stored results. Remaining updates stop. This cannot be undone.",
+            "<b>🏁 END MISSION NOW?</b>\n\nThe mission card is updated in place to COMPLETED using the final observed results — one best-effort final reading is taken from X first. Remaining updates stop. This cannot be undone.",
             {
               parse_mode: "HTML",
               reply_markup: {
