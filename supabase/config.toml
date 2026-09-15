@@ -13,6 +13,10 @@ verify_jwt = false
 [functions.social-mission-runner]
 verify_jwt = false
 
+[functions.social-mission-telegram]
+verify_jwt = true
+
+
 [functions.cartel-network-logo]
 verify_jwt = false
 
