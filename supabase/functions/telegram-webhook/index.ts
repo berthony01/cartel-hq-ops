@@ -3362,8 +3362,7 @@ Deno.serve(async (req: Request) => {
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "End time updated.");
           if (outcome === "ok") {
             await mcRefreshCard({
-              workspaceId: binding.workspaceId,
-              missionId,
+              binding,
               actorUserId: linked?.user_id ? String(linked.user_id) : null,
               seed: `${updateId}:duration:${minutes}`,
             });
