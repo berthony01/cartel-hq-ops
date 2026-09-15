@@ -2207,6 +2207,62 @@ Deno.serve(async (req: Request) => {
           }).catch(() => null);
         };
 
+        /**
+         * SE-10 — VISIBLE IN-PLACE PROMPT STATES.
+         *
+         * Every state below EDITS the one existing transient prompt message in
+         * the candidate's own chat. No additional group message is ever created
+         * and no state ever claims success: the branded canonical card remains
+         * the only success signal. The inline controls stay attached in every
+         * non-terminal state, with the SAME `sm_lf_start_` / `sm_lf_ignore_`
+         * callback data, so a crash or a downstream failure can never leave an
+         * invisible or unrecoverable PENDING candidate.
+         */
+        const linkFinderKeyboard = (startLabel: string) => ({
+          inline_keyboard: [[
+            { text: startLabel, callback_data: `sm_lf_start_${candidateId}` },
+            { text: "IGNORE", callback_data: `sm_lf_ignore_${candidateId}` },
+          ]],
+        });
+        const editLinkFinderPrompt = async (text: string, startLabel: string) => {
+          if (promptMessageId === null) return;
+          await editMessage(
+            TELEGRAM_BOT_TOKEN,
+            String(candidateChatId),
+            promptMessageId,
+            text,
+            linkFinderKeyboard(startLabel),
+          );
+        };
+        const LF_IDLE_TEXT = "This is an official project post. Admins can start a Social Mission for it.";
+        const showStartingPrompt = () => editLinkFinderPrompt(
+          "⏳ <b>Starting Social Mission…</b>\nChecking bot permissions and fetching live X metrics.\nThis usually takes a few seconds.",
+          "RETRY START",
+        );
+        /** Names the EXACT missing right(s); both are shown when both are missing. */
+        const showPermissionPrompt = async (
+          text: string,
+          detail?: { kind: "UNRESOLVED" | "NOT_ADMIN" | "MISSING_RIGHTS"; missing: string[] },
+        ) => {
+          const missing = detail?.missing ?? [];
+          if (detail?.kind === "MISSING_RIGHTS" && missing.length > 0) {
+            await editLinkFinderPrompt(
+              `⚠️ <b>CARTEL HQ NEEDS ONE MORE PERMISSION</b>\nThe Social Mission has not started yet.\n\nMissing: ${escapeHtml(missing.join(", "))}\n\nFix it:\nGroup Settings → Administrators → @${escapeHtml(BOT_USERNAME)} → enable ${escapeHtml(missing.join(" and "))}\n\nThen tap RETRY START.`,
+              "RETRY START",
+            );
+            return;
+          }
+          await editLinkFinderPrompt(
+            `⚠️ <b>ACTION REQUIRED</b>\nThe Social Mission has not started yet.\n\n${escapeHtml(text)}\n\nThen tap RETRY START.`,
+            "RETRY START",
+          );
+        };
+        /** A recoverable downstream failure: never left stuck on "Starting…". */
+        const showRetryablePrompt = (note: string) => editLinkFinderPrompt(
+          `${LF_IDLE_TEXT}\n\n${escapeHtml(note)}`,
+          "RETRY START",
+        );
+
         if (decision.outcome === "IGNORE") {
           // IGNORE consumes the candidate and removes ONLY the transient
           // prompt. The member's original X post is never deleted here.
