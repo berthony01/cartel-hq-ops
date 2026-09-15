@@ -4526,8 +4526,7 @@ Deno.serve(async (req: Request) => {
         }
         if (outcome === "ok") {
           await mcRefreshCard({
-            workspaceId: binding.workspaceId,
-            missionId: pendingMission,
+            binding,
             actorUserId: actorUserId ? String(actorUserId) : null,
             seed: `${update?.update_id}:${pendingField}`,
           });
