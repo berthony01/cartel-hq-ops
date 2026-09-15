@@ -44,14 +44,25 @@ export const EMPTY_METRICS: CanonicalMetrics = {
 export type MissionCardStatus = "LIVE" | "COMPLETED" | "CANCELLED" | "FAILED";
 
 /**
- * SE-5 — optional milestone display. A milestone is a PROJECT-level public
- * metric target. It is never a requirement placed on an individual member and
- * it never carries a reward, point, badge or payout.
+ * SE-13 — optional MISSION GOAL display (the SE-5 milestone, renamed in copy
+ * only; the stored keys stay `milestone_type` / `milestone_target`). A goal is
+ * a PROJECT-level aggregate public metric target. It is never a requirement
+ * placed on an individual member and it never carries a reward, point, badge,
+ * quota or payout, and no per-member engagement is ever tracked.
  */
-export type MissionMilestone = {
-  type: "VIEWS" | "LIKES" | "REPLIES" | "REPOSTS" | "TOTAL_INTERACTIONS";
+export type MissionGoalType = "VIEWS" | "LIKES" | "REPLIES" | "REPOSTS" | "TOTAL_INTERACTIONS";
+
+export type MissionGoal = {
+  type: MissionGoalType;
   target: number;
+  /** SE-13 — optional Stretch Goal. ALWAYS the same metric as the primary. */
+  stretchTarget?: number | null;
+  /** Provenance only. Display is identical for EXPLICIT and AUTO goals. */
+  source?: "EXPLICIT" | "AUTO" | null;
 };
+
+/** DB-compatibility alias for the pre-SE-13 name. */
+export type MissionMilestone = MissionGoal;
 
 export type MissionCardInput = {
   missionStatus: MissionCardStatus;
