@@ -1285,6 +1285,8 @@ Deno.serve(async (req: Request) => {
           `[SE-9] canonical lifecycle incomplete: pin=${canonicalPinned}`,
         );
       }
+      timing.slice("schedule_pin_finalize");
+      timing.log(isLinkFinder ? "link_finder_start" : "mission_command_start");
 
 
 
