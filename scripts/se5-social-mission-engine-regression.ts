@@ -154,7 +154,7 @@ check("7.3 the canonical URL button is preserved", /reply_markup/.test(transport
 check("7.4 pending metrics are stated, not zeroed", /LIVE_METRICS_PENDING/.test(cardCode));
 check("7.5 remaining time is approximate, never a live countdown", /approximateRemaining/.test(cardCode) && /~/.test(cardCode));
 check("7.6 ACCOMPLISHED is a card state, not a database status", /MISSION_STATE_ACCOMPLISHED/.test(cardCode) && !/'ACCOMPLISHED'/.test(sqlCode.replace(/accomplished_at/g, "")));
-check("7.7 the milestone line renders progress against the target", /milestoneProgressLine/.test(cardCode));
+check("7.7 the goal line renders progress against the target (SE-13 re-pin)", /renderGoalLines/.test(cardCode));
 
 // ---------------------------------------------------------------------------
 // 8. Command cleanup and pin safety
