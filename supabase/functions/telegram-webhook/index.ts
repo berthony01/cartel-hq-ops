@@ -2311,6 +2311,12 @@ Deno.serve(async (req: Request) => {
         // nothing is created, while a passed preflight acknowledges the real
         // latency source (the first live official-X snapshot) without ever
         // claiming success. Exactly one answer is sent either way.
+        // SE-10 — the transient prompt is the single visible surface for this
+        // launch: it shows the starting state, any ACTION REQUIRED state and
+        // any retryable failure, and it is deleted only on a settled launch.
+        let startingShown = false;
+        let promptResolved = false;
+        let missionSettled = false;
         await runMissionCommand({
           // The mission is launched into the candidate's OWN chat, always.
           chatId: String(candidateChatId),
@@ -2324,12 +2330,20 @@ Deno.serve(async (req: Request) => {
           source: "telegram_link_finder",
           // SE-8 — refused BEFORE anything was created. The candidate stays
           // PENDING, the prompt stays, the source post stays.
-          onPermissionBlocked: async (text) => {
+          // SE-10 — the exact missing right is ALSO rendered in place on that
+          // same prompt, with a RETRY START control, so it survives the toast.
+          onPermissionBlocked: async (text, detail) => {
+            promptResolved = true;
+            await showPermissionPrompt(text, detail);
             await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, text);
           },
           // SE-8 — honest immediate feedback. No group message, no clutter, no
           // prefetched X read and no weakened first real snapshot.
+          // SE-10 — the same existing prompt is edited in place to a visible
+          // starting state; the inline controls remain attached.
           onStartAccepted: async () => {
+            startingShown = true;
+            await showStartingPrompt();
             await answerCallback(
               TELEGRAM_BOT_TOKEN,
               callback.id,
@@ -2364,10 +2378,19 @@ Deno.serve(async (req: Request) => {
                 && String(finalization.mission_id ?? "") === settled.missionId);
             if (finalizeError || !sameMission) return;
 
+            missionSettled = true;
+            promptResolved = true;
             await deleteLinkFinderPrompt();
           },
 
         });
+        // SE-10 — a launch that began but did not settle must never leave the
+        // prompt stuck on "Starting…". The prompt is restored to a retryable
+        // state in place; nothing is created, deleted or finalized here and no
+        // new chat message is sent.
+        if (startingShown && !missionSettled && !promptResolved) {
+          await showRetryablePrompt("The mission did not start. Tap RETRY START to try again.");
+        }
         return json({ ok: true });
 
 
