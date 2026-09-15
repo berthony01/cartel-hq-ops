@@ -1980,7 +1980,7 @@ check(
 );
 check(
   "22.1f both call sites pass TELEGRAM_BOT_TOKEN explicitly",
-  (webhookRaw.match(/await sendBareMissionLauncher\(TELEGRAM_BOT_TOKEN, chatId\);/g) ?? []).length === 2,
+  (webhookRaw.match(/await sendBareMissionLauncherAndCleanup\(TELEGRAM_BOT_TOKEN, chatId, Number\(message\?\.message_id\)\);/g) ?? []).length === 2,
 );
 
 check(
@@ -1989,7 +1989,7 @@ check(
 );
 check(
   "22.2b human bare /mission sends the launcher with the explicit bot token",
-  /await sendBareMissionLauncher\(TELEGRAM_BOT_TOKEN, chatId\);/.test(se12HumanBareBranch),
+  /await sendBareMissionLauncherAndCleanup\(TELEGRAM_BOT_TOKEN, chatId, Number\(message\?\.message_id\)\);/.test(se12HumanBareBranch),
 );
 check(
   "22.2c human bare /mission never calls runMissionCommand",
@@ -2006,7 +2006,7 @@ check(
 );
 check(
   "22.3b anonymous bare /mission sends the launcher with the explicit bot token",
-  /await sendBareMissionLauncher\(TELEGRAM_BOT_TOKEN, chatId\);/.test(se12AnonBareBranch),
+  /await sendBareMissionLauncherAndCleanup\(TELEGRAM_BOT_TOKEN, chatId, Number\(message\?\.message_id\)\);/.test(se12AnonBareBranch),
 );
 check(
   "22.3c anonymous bare /mission never calls runMissionCommand",
@@ -2053,6 +2053,80 @@ check(
   "22.9 no new table, session table or scheduler is required by SE-12",
   !/CREATE TABLE|cron\.schedule/i.test(se12HumanBareBranch + se12AnonBareBranch),
 );
+
+// ---------------------------------------------------------------------------
+// 23. SE-12.2 — delete the bare `/mission` command only after Telegram
+//     confirms the launcher message was delivered.
+// ---------------------------------------------------------------------------
+const se122Cleanup = webhookRaw.slice(
+  webhookRaw.indexOf("async function sendBareMissionLauncherAndCleanup("),
+  webhookRaw.indexOf("function encodeChatId("),
+);
+
+check("23.1a the shared cleanup helper exists", se122Cleanup.length > 0);
+check(
+  "23.1b the cleanup helper receives the bot token explicitly",
+  /async function sendBareMissionLauncherAndCleanup\(\s*token: string,\s*chatId: string,\s*sourceMessageId: number \| null \| undefined,\s*\)/.test(se122Cleanup),
+);
+check(
+  "23.1c the module-scope cleanup helper never reaches for the handler-local token",
+  !/TELEGRAM_BOT_TOKEN/.test(se122Cleanup),
+);
+check(
+  "23.2a the launcher is sent before anything is deleted",
+  se122Cleanup.indexOf("await sendBareMissionLauncher(token, chatId)") <
+    se122Cleanup.indexOf('"deleteMessage"'),
+);
+check(
+  "23.2b a failed launcher send returns early and deletes nothing",
+  /const sent = await sendBareMissionLauncher\(token, chatId\);\s*\n\s*if \(!sent\) return null;/.test(se122Cleanup),
+);
+check(
+  "23.3a deletion targets the exact source message id in the same chat",
+  /"deleteMessage", \{ chat_id: chatId, message_id: messageId \}/.test(se122Cleanup),
+);
+check(
+  "23.3b the source message id is validated before deletion is attempted",
+  /if \(!Number\.isFinite\(messageId\) \|\| messageId <= 0\) return sent;/.test(se122Cleanup),
+);
+check(
+  "23.4a a failed deletion is swallowed into a bounded diagnostic log",
+  /catch \(error\) \{[\s\S]{0,300}?console\.log\(`\[SE-12\.2\][\s\S]{0,200}?\.slice\(0, 200\)/.test(se122Cleanup),
+);
+check(
+  "23.4b a failed deletion never sends a second chat message",
+  !/sendMessage\(|telegramJson\(token, "sendMessage"/.test(se122Cleanup.slice(se122Cleanup.indexOf("catch (error)"))),
+);
+check(
+  "23.4c the launcher message itself is never edited or deleted",
+  !/editMessageText|deleteMessage", \{ chat_id: chatId, message_id: sent/.test(se122Cleanup),
+);
+check(
+  "23.5a the human bare branch uses the shared cleanup path",
+  /await sendBareMissionLauncherAndCleanup\(/.test(se12HumanBareBranch),
+);
+check(
+  "23.5b the anonymous bare branch uses the same shared cleanup path",
+  /await sendBareMissionLauncherAndCleanup\(/.test(se12AnonBareBranch),
+);
+check(
+  "23.5c neither bare branch deletes messages inline",
+  !/deleteMessage/.test(se12HumanBareBranch + se12AnonBareBranch),
+);
+check(
+  "23.6a /mission <X link> for humans still never triggers bare cleanup",
+  !/sendBareMissionLauncherAndCleanup/.test(se11AnonBranch),
+);
+check(
+  "23.6b /mission close handling is untouched by SE-12.2",
+  /const isClose = String\(argument \?\? ""\)\.trim\(\)\.toLowerCase\(\) === "close";/.test(webhookRaw)
+    && !/isClose/.test(se122Cleanup),
+);
+check(
+  "23.7 SE-12.2 introduces no table, session state or scheduler",
+  !/CREATE TABLE|cron\.schedule|from\("/.test(se122Cleanup),
+);
+
 
 console.log(`Step 1 authoritative regression: ${passed} passed, ${failures.length} failed`);
 
