@@ -4171,6 +4171,33 @@ Deno.serve(async (req: Request) => {
     const isManageCommand =
       !!missionMatch && String(missionMatch[1] ?? "").toLowerCase() === "manage";
     if (isManageCommand && isGroupChat && (from?.is_bot !== true || isAnonymousGroupAdminSender)) {
+      // An ordinary member must not be able to make the bot post an admin
+      // launcher on demand. An anonymous admin is already proven by the
+      // existing same-group `sender_chat` check; an identifiable human has to
+      // be a CURRENT administrator/creator, verified live with Telegram.
+      let manageAdmin = isAnonymousGroupAdminSender;
+      if (!manageAdmin) {
+        try {
+          const member = await telegramJson(TELEGRAM_BOT_TOKEN, "getChatMember", {
+            chat_id: chatId,
+            user_id: Number(from.id),
+          });
+          const status = String((member as { status?: unknown })?.status ?? "");
+          manageAdmin = status === "administrator" || status === "creator";
+        } catch {
+          manageAdmin = false;
+        }
+      }
+      if (!manageAdmin) {
+        // No controls, no deep link, and the member's own message is left
+        // alone: nothing here is a mutation surface.
+        await sendMessage(
+          TELEGRAM_BOT_TOKEN,
+          chatId,
+          "Mission Control is available to this group's administrators only.",
+        );
+        return json({ ok: true });
+      }
       await sendMissionManageLauncherAndCleanup(
         TELEGRAM_BOT_TOKEN,
         chatId,
