@@ -2006,7 +2006,7 @@ check(
 );
 check(
   "22.3b anonymous bare /mission sends the launcher with the explicit bot token",
-  /await sendBareMissionLauncher\(TELEGRAM_BOT_TOKEN, chatId\);/.test(se12AnonBareBranch),
+  /await sendBareMissionLauncherAndCleanup\(TELEGRAM_BOT_TOKEN, chatId, Number\(message\?\.message_id\)\);/.test(se12AnonBareBranch),
 );
 check(
   "22.3c anonymous bare /mission never calls runMissionCommand",
