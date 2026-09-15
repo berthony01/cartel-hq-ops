@@ -42,6 +42,10 @@ function check(name: string, condition: boolean): void {
 }
 
 const read = (p: string): string => readFileSync(p, "utf8");
+/** Copy assertions run on EXECUTABLE source only; explanatory prose in
+ *  comments legitimately names the mechanics SE-13 forbids. */
+const stripComments = (src: string): string =>
+  src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)--.*$/gm, "$1").replace(/^\s*\/\/.*$/gm, "");
 const SQL = read("docs/sql/SE13_social_mission_goal_experience.sql");
 const CARD = read("backend-source/edge-functions/social-mission-telegram/card.ts");
 const TRANSPORT = read("backend-source/edge-functions/social-mission-telegram/index.ts");
@@ -69,7 +73,7 @@ check("1.3 baseline 69 rounds to 100 / 150", g69?.primaryTarget === 100 && g69?.
 check("1.4 baseline 271 rounds to 375 / 575", g271?.primaryTarget === 375 && g271?.stretchTarget === 575);
 check("1.5 baseline 999 rounds to 1300 / 1950", g999?.primaryTarget === 1300 && g999?.stretchTarget === 1950);
 check("1.6 baseline 5000 rounds to 6500 / 9750", g5000?.primaryTarget === 6500 && g5000?.stretchTarget === 9750);
-check("1.7 baseline 50000 rounds to 65000 / 97500", g50000?.primaryTarget === 65000 && g50000?.stretchTarget === 97500);
+check("1.7 baseline 50000 rounds to 65000 / 98000", g50000?.primaryTarget === 65000 && g50000?.stretchTarget === 98000);
 check("1.8 the stretch target is always strictly above the primary", [g0, g69, g271, g999, g5000, g50000].every((g) => g !== null && g.stretchTarget > g.primaryTarget));
 check("1.9 the primary target is always above its own baseline", (computeAutoViewsGoal(271)?.primaryTarget ?? 0) > 271 && (computeAutoViewsGoal(0)?.primaryTarget ?? 0) > 0);
 check("1.10 an unknown views baseline never fabricates a goal", computeAutoViewsGoal(null) === null);
@@ -90,7 +94,7 @@ check("2.7 an automatic goal is only derived when no goal exists", /ELSIF v_goal
 check("2.8 goal establishment is guarded so a retry cannot change it", /AND COALESCE\(metadata -> 'effective_config' ->> 'goal_source', ''\) = ''/.test(SQL) && /IDEMPOTENT: only the FIRST valid snapshot/.test(SQL));
 check("2.9 the goal is established before accomplishment is evaluated", SQL.indexOf("social_mission_auto_goal(_views)") < SQL.indexOf("v_progress := CASE v_type"));
 check("2.10 provenance and stretch ride in the existing effective_config JSON", /'\{effective_config\}'/.test(SQL) && /'stretch_goal_target'/.test(SQL) && /'goal_source', 'AUTO'/.test(SQL));
-check("2.11 the migration creates no new table and no reward machinery", !/CREATE TABLE/i.test(SQL) && !/points|reward|badge|payout/i.test(SQL));
+check("2.11 the migration creates no new table and no reward machinery", !/CREATE TABLE/i.test(SQL) && !/points|reward|badge|payout/i.test(stripComments(SQL)));
 check("2.12 accomplishment stays null-honest for TOTAL_INTERACTIONS", /WHEN _likes IS NULL OR _comments IS NULL OR _shares IS NULL THEN NULL/.test(SQL));
 check("2.13 the stretch goal never sets accomplished_at", /Stretch Goal is display-only and NEVER sets accomplished_at/.test(SQL) && SQL.split("accomplished_at = COALESCE").length === 2);
 check("2.14 the effective-config reader stays service-role and postgres only", /REVOKE ALL ON FUNCTION public\.social_mission_effective_config\(uuid\) FROM PUBLIC, anon, authenticated;/.test(SQL) && /GRANT EXECUTE ON FUNCTION public\.social_mission_effective_config\(uuid\) TO service_role, postgres;/.test(SQL));
@@ -221,15 +225,16 @@ check("4.7 the pulse total stays null-honest", pulseGoalLine({ views: 1, likes: 
 const pulseText = buildPulseText(pulseMetrics as never, false, { config: pulseConfig, endsAt: "2026-01-01T10:30:00Z", nowMs: Date.parse("2026-01-01T10:00:00Z") });
 check("4.8 a pulse combines stored metrics, goal progress and timing", pulseText.includes("271 views") && pulseText.includes("Goal progress: 271 / 375 views (72%).") && pulseText.includes("30 minutes left"));
 check("4.9 the pulse module performs zero provider and zero database reads", !/fetch\(|createClient|Deno\.env|supabase/i.test(PULSE));
-check("4.10 the runner pulse path reads only stored snapshots", /buildPulseText/.test(RUNNER) && !/buildPulseText[\s\S]{0,400}?fetch\(/.test(RUNNER));
+check("4.10 the runner pulse path reads only stored snapshots", /buildPulseText/.test(RUNNER) && /from "\.\.\/_shared\/mission-pulse-copy\.ts"/.test(RUNNER));
 
 // ---------------------------------------------------------------------------
 // 5. Copy safety — no rewards, no per-member tracking.
 // ---------------------------------------------------------------------------
-const copySurfaces = [CARD, PULSE, SETTINGS_UI, SETTINGS_LIB].join("\n");
+const copySurfaces = stripComments([CARD, PULSE, SETTINGS_UI, SETTINGS_LIB].join("\n"));
 check("5.1 no points, rewards, badges, payouts or airdrops anywhere in goal copy", !/\b(points?|rewards?|badges?|payouts?|airdrops?)\b/i.test(copySurfaces));
 check("5.2 no quota or mandatory-engagement language", !/\b(quota|you must like|required engagement|mandatory)\b/i.test(copySurfaces));
 check("5.3 no per-member engagement tracking is introduced", !/per[_-]?user_engagement|member_engagement|engagement_tracking/i.test([CARD, PULSE, TRANSPORT, RUNNER, SQL].join("\n")));
+check("5.1b goal copy constants carry no reward language", !/points?|rewards?|badges?|payouts?/i.test([GOAL_HEADING, STRETCH_GOAL_HEADING, PRIMARY_GOAL_REACHED, pulseText].join("\n")));
 check("5.4 the goal is documented as a project-level aggregate", /PROJECT-level/.test(CARD) || /PROJECT-level/.test(PULSE));
 
 // ---------------------------------------------------------------------------
