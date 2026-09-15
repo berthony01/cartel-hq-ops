@@ -455,6 +455,12 @@ for (const [label, body] of [
 
 // 19.21 — END_NOW event ownership.
 check("19.21 END_NOW refuses when any event is already CLAIMED", /'CLAIMED'/.test(endFn) && /event_claimed|claimed_conflict|conflict/i.test(endFn));
+check(
+  "19.21b END_NOW reports a claimed COMPLETE event with its own typed reason",
+  /complete_event_claimed/.test(endFn) &&
+    endFn.indexOf("complete_event_claimed") < endFn.indexOf("'COMPLETED'"),
+);
+
 check("19.22 END_NOW locks the exact COMPLETE event", /COMPLETE'[\s\S]{0,400}FOR UPDATE/i.test(endFn));
 check("19.23 END_NOW refuses a non-PENDING COMPLETE event", /complete_event_not_pending/.test(endFn));
 check("19.24 END_NOW requires a proven claim before COMPLETED", endFn.indexOf("complete_event_not_claimed") < endFn.indexOf("'COMPLETED'"));
