@@ -53,8 +53,9 @@ export const MISSION_PRESET_SHAPE: Record<
   LAUNCH: { label: "Launch", durationMinutes: 60, pulseOffsets: [3, 8, 15, 30, 45] },
 };
 
+/** SE-13 — user-facing Primary Goal labels. The stored keys are unchanged. */
 export const MILESTONE_LABELS: Record<MissionMilestoneType, string> = {
-  NONE: "No milestone",
+  NONE: "No goal",
   VIEWS: "Views",
   LIKES: "Likes",
   REPLIES: "Replies",
@@ -115,14 +116,14 @@ export function validateMissionSettings(settings: MissionSettings): string | nul
     return "Choose a valid mission preset.";
   }
   if (settings.milestone_type === "NONE") {
-    return settings.milestone_target === null ? null : "Turn the milestone on to set a target.";
+    return settings.milestone_target === null ? null : "Turn the Primary Goal on to set a target.";
   }
   if (
     settings.milestone_target === null ||
     !Number.isInteger(settings.milestone_target) ||
     settings.milestone_target <= 0
   ) {
-    return "A milestone needs a whole target number above zero.";
+    return "A Primary Goal needs a whole target number above zero.";
   }
   return null;
 }
