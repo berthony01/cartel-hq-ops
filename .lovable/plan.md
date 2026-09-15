@@ -1,143 +1,81 @@
-# SE-15 Telegram Mission Control — read-only audit and proposed architecture
+# SE-16 — Telegram Mini App Foundation: Read-Only Architecture Audit + Recommended Plan
 
-Audit start HEAD `004f41acf1d52197df3706f7aab349983133122a`, working tree clean. No file
-was edited, nothing deployed, no SQL applied.
+Audited at HEAD `728bbfecc369803f41904a891fdd038af183cb72`. No code edited, no SQL applied, nothing deployed or published.
 
-## 1. Where today's mission commands live
+## What the repo actually shows
 
-All of it is in one handler, `supabase/functions/telegram-webhook/index.ts` (3472 lines,
-authoritative; `backend-source/edge-functions/telegram-webhook` is stale). Dispatch order
-inside the handler: `callback_query` (2103) -> `my_chat_member` (2649) -> `message` (2782).
+- The whole operator app sits behind one gate: `src/routes/_authenticated/route.tsx` (`ssr: false`, `beforeLoad` reads `supabase.auth.getSession()` and redirects to `/auth`). `/auth` is sign-in only — no self-registration path (`src/routes/auth.tsx:45-53`). There is no `src/routes/api` directory today.
+- Router context carries only `queryClient` (`src/router.tsx:5-14`, `src/routes/__root.tsx:99-101`). Auth is read per-gate, not injected — so a new top-level route can have entirely different auth without touching the existing gate.
+- Roles: workspace owner/admin resolved through `workspace_members` and RPC `is_workspace_operator`; platform owner through the `platform-admin` Edge Function / `is_platform_owner`, failing closed (`src/hooks/usePlatformAccess.ts:25-72`).
+- Shell/nav: `AppShell.tsx` + `SidebarNav` + `MobileTabBar` are mounted only inside `_authenticated`, driven by `src/lib/nav.ts`. A Mini App route can opt out of this shell entirely.
+- Telegram identity: the browser never writes `telegram_connections`; the webhook is the authoritative writer (`src/lib/telegram-link.ts:6-11`). Group state lives in `telegram_group_connections` / `telegram_community_settings`.
+- **The decisive finding — SE-15 is already Mini-App-shaped.** Every Mission Control RPC in `docs/sql/SE15_mission_control.sql` is keyed on `(_telegram_user_id bigint, _mission_id uuid, _verified_chat_id bigint)`, is `SECURITY DEFINER` with `search_path` pinned, and is `REVOKE`d from `PUBLIC/anon/authenticated`, granted only to `service_role, postgres` (lines 111-114, 183-184, 420-425, …). `social_mission_control_authorize` (line 124) does the full chain itself: telegram user → `telegram_connections` → HQ user → `is_workspace_operator(workspace)` → mission target chat must equal the caller-proven `_verified_chat_id`. The live Telegram-admin proof is supplied by the caller (today: the webhook's `getChatMember`).
 
-- `/mission <X link>`: `runMissionCommand` (~684-1331). Chain: group -> workspace via
-  `telegram_group_connections`; Telegram user -> HQ user via `telegram_connections`;
-  `is_workspace_operator` RPC; live `getChatMember` requiring administrator/creator;
-  live bot-permission preflight `readBotChatPermissions`; then
-  `create_social_mission_from_telegram_link`, transport call to `social-mission-telegram`,
-  `activate_social_mission_schedule`, optional command cleanup, canonical pin.
-- Bare `/mission`: `sendBareMissionLauncherAndCleanup(token, chatId, sourceMessageId)` (271).
-- `/mission close`: same auth chain, then `close_social_mission_from_telegram`,
-  same-card edit through the transport, `finish_social_mission_schedule_event`, and a
-  safe unpin gated on `social_mission_targets.pinned_by_hq`.
-- Anonymous admins: `linkFinderSender` (2988) accepts `sender_chat` only when
-  type is group/supergroup AND `sender_chat.id === chat.id`; `posterId` is null, so the
-  command is routed into `offerLinkFinderCandidate`, never a direct launch.
-- Link Finder buttons: `sm_lf_start_<uuid>` / `sm_lf_ignore_<uuid>` (2120-2426).
-  Authorization at tap time is the strong pattern: read-only `peek_...` -> chat binding
-  check (`candidateChatId === callbackChatId`) -> live `getChatMember` -> mutating
-  `resolve_social_mission_link_candidate` with `_verified_chat_id`. Idempotency lives in
-  the candidate row (`ALREADY_RESOLVED`) plus `missionRequestUuid(update_id)`.
-- Pin/unpin: `ensureCanonicalMissionPin` (765) and the close-path unpin (973), both
-  persisted through `record_social_mission_target_pin`.
+Consequence: a Mini App needs **no new business logic and no new tables**. It needs one trusted-caller bridge that produces the same two proven inputs the webhook produces.
 
-## 2. Existing DM control pattern (reuse it)
+## Answers
 
-Yes — the Project Inbox team console is exactly the pattern SE-15 needs:
-`/inbox` (3318) -> `openInboxCommand` (1992) -> `bot_inbox_operator_workspaces` ->
-workspace picker `pi_w_<uuid>` -> list -> `pi_c_<uuid>` -> `pi_x` to exit, plus
-`bot_inbox_set_session` for convenience state. Every callback is private-chat-gated and
-re-authorizes inside a service-only RPC; `telegram_team_sessions` is explicitly never an
-authorization source. Identity mapping: `telegram_connections` (telegram_user_id -> user_id),
-`workspace_members`, `is_workspace_operator`. `platform_user_roles` is not used by the bot.
+**1) Same codebase, dedicated route — not a separate project.** The Mini App needs the same design tokens, the same Supabase project, and eventually the same panels (Inbox, Launch Watch). A second frontend duplicates build, deploy, schema types, and auth surface for zero gain. Put it at a top-level `/tg/*` route tree that is *outside* `_authenticated` — no Supabase session, no `AppShell`, its own Telegram-session gate. One role-aware Mini App, as preferred.
 
-## 3. Existing HQ surfaces to extend, not duplicate
+**2) HTTPS reachability without publishing.** Telegram requires a public HTTPS URL. Options: (a) publish the whole app — rejected, exposes the operator app; (b) a second hosted deployment — duplicate architecture; (c) **recommended: publish nothing, and serve the Mini App from the stable preview host `project--469fb83c-0f27-4aa7-bb99-c4125279c565-dev.lovable.app`, which is already HTTPS and already used for the Telegram webhook contract.** Safety comes from the route itself, not from obscurity: `/tg/*` renders nothing without valid `initData`, and every mutation re-authorizes server-side. `/` and `/_authenticated/*` stay exactly as they are — unpublished, session-gated. Decision on the eventual production host is a later, explicitly authorized step.
 
-- `src/components/cartel/MissionSettingsCard.tsx` + `src/lib/social-mission-settings.ts`
-  (workspace defaults: preset, milestone_type/target, auto_pin, link_finder, cleanup).
-- `src/components/cartel/SocialMissionsPanel.tsx` + `src/lib/social-missions.ts` — the
-  read-only Missions tab in Community Command Center, already renders status, timeline,
-  snapshots and final results. SE-15 overrides/history belong here as extra read-only rows.
+**3) The auth bridge.** One new TanStack server route, `POST /api/public/tg/session` plus `POST /api/public/tg/mission/*`, each doing:
+- Read raw `Telegram.WebApp.initData`, verify the HMAC-SHA256 against a key derived from the bot token (`HMAC(key="WebAppData", botToken)`), server-side only — bot token never leaves the server.
+- Reject `auth_date` older than a short window (e.g. 15 min) and store the exact `hash` in a short-TTL replay set so a captured `initData` cannot be reused for a mutation.
+- Never trust `initDataUnsafe`, never trust any client-sent workspace/mission/chat id for authorization — ids are inputs to re-authorization, not evidence.
+- Take `user.id` from the *verified* payload, then do exactly what the webhook does: live `getChatMember` on the mission's own target chat, require `administrator|creator`, and pass that chat id as `_verified_chat_id` into the existing RPCs. Anonymous-admin cases keep bot-side semantics; no Mini App bypass.
+- Mini App requests are stateless per call — no long-lived cookie that outlives the admin check.
 
-## 4. Lifecycle facts that constrain editing a LIVE mission
+**4) Reuse unchanged.** All of `social_mission_control_workspaces`, `_missions`, `_panel`, `social_mission_effective_config_resolved`, `social_mission_apply_target_override`, `social_mission_apply_duration_override`, `end_social_mission_from_control`, `cancel_social_mission_from_control`, plus the merge/history/idempotency helpers. **Zero new RPCs.** The only new layer is thin HTTP: initData verification + `getChatMember` + service-role RPC call + JSON out. `telegram_team_sessions` stays bot-only; the Mini App is stateless and does not need it.
 
-- `ends_at` is set once via `COALESCE` in `activate_social_mission_schedule`; completion is
-  NOT driven by `ends_at`. All PULSE and the single COMPLETE `due_at` are precomputed as
-  absolute timestamps at activation from `sent_at + offsets`. Changing `ends_at` alone
-  desynchronizes the displayed end from the real completion trigger.
-- Completion happens by *claiming* the COMPLETE event in
-  `claim_due_social_mission_schedule_events`, which atomically flips LIVE->COMPLETED and
-  cancels sibling PENDING pulses. A stale CLAIMED pulse is retired to AMBIGUOUS, never resent.
-- `effective_config` (milestone_type/target, stretch, metric_targets, goal_source) is
-  establish-once, guarded by `WHERE <field unset>`. `metric_targets` today is AUTO-only,
-  derived from the first durable `x-official` snapshot.
-- `CANCELLED` exists in the `social_missions` status enum and the card renders it, but no
-  RPC anywhere writes it. There is no cancel path and no config-history table.
+**5) Scope: admin-only Mission Control, single screen.** Smallest safe scope; `social_mission_control_workspaces` already restricts to `owner/admin`. Build it *role-aware in shape* (the bridge returns the caller's role/workspaces) but ship only Mission Control screens in V1.
 
-## 5. Smallest safe SE-15 architecture
+**6) Bot vs Mini App, long term.**
+- Permanently bot: notifications, Launch Watch join/mute/stop, Pulse and launch alerts, welcome CTA, group posts, Project Inbox conversation. These are conversational, push-shaped, and must work for non-operators.
+- Move to Mini App over time: Mission Control (V1), Launch Control lifecycle, broadcast composition, community settings, analytics. These are form-shaped and currently suffer as chat flows.
+- The bot keeps a working fallback for everything it does today — no removal in SE-16.
 
-**Surface.** New `/mission manage` command, private-DM console modelled byte-for-byte on
-the `/inbox` pattern. In a group, `/mission manage` replies with a deep link to the bot DM
-(this also solves the anonymous-admin problem: the DM forces a real, identifiable user).
+**7) Entry points.** `/mission manage` keeps its current bot panel and gains a Mini App button beside it — fallback preserved. Add the bot Menu button and `?startapp=mission_<missionId>` deep links, parsed into the same `/tg/mission/$missionId` route. Existing `start` payloads (`lw_`, `mission_manage`) are untouched.
 
-**Authorization (three gates, all inside one new service-only RPC family).**
-1. `telegram_connections` -> HQ user.
-2. `is_workspace_operator(workspace_id, user_id)`.
-3. live `getChatMember` administrator/creator in the mission's own target chat, verified at
-   the moment of each mutating tap, passing `_verified_chat_id` exactly as the Link Finder does.
+**8) SE-16 build sequence (each a stop gate).**
+1. **SE-16.0** — repo-only auth bridge: initData verification + replay window + `getChatMember`, with regression coverage. No UI. STOP.
+2. **SE-16.1** — repo-only read-only Mini App: `/tg/*` route tree, Telegram theme/safe areas, mission picker + read-only panel. STOP.
+3. **SE-16.2** — repo-only mutations wired to the existing four RPCs, idempotency keys derived per request. Full gate. STOP.
+4. **SE-16.3** — authorized production step: deploy the bridge, register the Mini App URL/menu button with BotFather, add the button to `/mission manage`. STOP.
+5. **SE-16.4** — live QA in real Telegram, bot fallback verified intact. STOP.
+No schema change, no new table, no second scheduler at any step.
 
-**Flow.** `mm_ws_<uuid>` workspace picker (only if >1) -> `mm_m_<uuid>` mission picker
-(LIVE first) -> panel with `mm_mode_auto|mm_mode_manual`, `mm_t_<metric>_<missionId>`
-prompts, `mm_dur_<mins>`, `mm_end_<id>` (End Now), `mm_cancel_<id>`, `mm_x`. Manual target
-entry reuses the existing reply-session mechanism (`bot_inbox_set_session` equivalent) so
-the next plain DM message is read as the number — no second conversation-state system.
+**9) Blockers and risks.**
+- Telegram WebView needs frame-ancestors/CSP that permit Telegram embedding; `/tg/*` must not inherit any anti-embedding header the operator app wants.
+- `/api/public/*` bypasses site auth by design — the handler is the only security boundary, so signature + freshness + live admin check are mandatory, not optional.
+- The preview host is stable but not a production domain; a host change later invalidates the registered Mini App URL.
+- Supabase session assumptions: `/tg/*` must not run `supabase.auth.getSession()` or mount `AppShell`; a Telegram user is not an HQ session.
+- Replay: `initData` is bearer-like; short freshness window plus hash replay cache required.
+- Bot token must exist only in server env, never in the client bundle.
+- Role confusion: platform-owner ≠ workspace-admin ≠ Telegram group admin. Mission mutations need all three relevant checks, exactly as `social_mission_control_authorize` plus `getChatMember` already enforce.
+- Mobile: Telegram theme params, dark-first brand palette, `safe-area-inset` bottom, and no reliance on browser chrome. A plain browser hit on `/tg/*` must show a neutral "open from Telegram" state.
 
-**Config changes without rewriting history.** Keep `effective_config` immutable. Add an
-`overrides` array (or a `config_version` counter plus `override_history`) inside
-`social_missions.metadata`, appended never rewritten, each entry recording actor user id,
-telegram user id, timestamp, field, previous value, new value. The *effective* value is read
-as "latest override, else effective_config". This avoids a new table.
+**10) V1 Mission Control screen structure.**
+```text
+[ Mission header ]  @author · LIVE · ends in 41m
+------------------------------------------------
+LIVE X RESULTS            (stored snapshot only)
+  Views 1,204   Likes 88   Replies 12
+  Reposts 9     Bookmarks unavailable
+------------------------------------------------
+TARGETS                            [AUTO|MANUAL]
+  Primary goal   Views       70
+  Views 70 · Likes 20 · Replies off · Reposts off
+------------------------------------------------
+[ Edit targets ] [ Change end time ]
+[ End now ]      [ Cancel mission ]
+------------------------------------------------
+History (read-only, last 5 changes)
+```
+Editing is a numeric form sheet, not a chat prompt: tap a metric, type a number, save — the same values the bot writes, without the conversational back-and-forth. Results and targets are always in separate labelled blocks so "Likes 20" can never read as a live result.
 
-**Duration change.** Must be an RPC that rewrites `ends_at` AND reschedules the pending
-schedule events in the same transaction: shift the COMPLETE `due_at`, cancel PENDING pulses
-whose new `due_at` is in the past, never touch CLAIMED/SENT rows. Do not expose a raw
-`ends_at` setter.
+## Limitations of this audit
 
-**End Mission Now.** Reuse `close_social_mission_from_telegram`'s body via a new
-`end_social_mission_from_control(mission_id, ...)` RPC (same COMPLETED + cancel-pulses +
-COMPLETE-event claim), then the webhook performs one final metrics read through the existing
-`social-mission-telegram` `edit_mission` with `finalRefresh: true`, then the existing safe
-unpin gated on `pinned_by_hq`.
+Everything above is from static reads of the repo at HEAD. The deployed state of `docs/sql/SE15_mission_control.sql` in `ocoinbnjgstkmnwwvnhi` was not queried, and no live Telegram or browser behaviour was observed. `platform-admin`, `telegram-link`, and `telegram-group` Edge Function sources are not in this repo.
 
-**Cancel Mission.** New `cancel_social_mission_from_control` — sets the currently-dead
-`CANCELLED` status, cancels all PENDING/CLAIMED-stale schedule events, no final X read,
-same-card edit to CANCELLED (card already supports it), safe unpin.
-
-**Not in scope, explicitly:** points, rewards, badges, per-user engagement tracking, a second
-scheduler, a second settings system, widening the Primary Goal enum.
-
-## 6. Files and SQL likely touched
-
-Repo: `supabase/functions/telegram-webhook/index.ts` (+ backend-source parity copy),
-`supabase/functions/social-mission-telegram/{index.ts,card.ts}` (render override/manual
-provenance and CANCELLED), `supabase/functions/_shared/mission-pulse-copy.ts` (targets read
-from effective-with-overrides), `src/lib/social-missions.ts` +
-`src/components/cartel/SocialMissionsPanel.tsx` (read-only override history),
-`docs/sql/SE15_mission_control.sql` (prepared only).
-
-New SQL: `social_mission_control_workspaces`, `social_mission_control_missions`,
-`social_mission_apply_target_override`, `social_mission_apply_duration_override`,
-`end_social_mission_from_control`, `cancel_social_mission_from_control`, and a
-`social_mission_effective_config_resolved` reader that folds overrides over the frozen
-config. All SECURITY DEFINER, REVOKE PUBLIC/anon/authenticated, GRANT service_role+postgres.
-**No new table is necessary** — overrides ride in `social_missions.metadata`.
-
-## 7. Hazards and required regressions
-
-Hazards: anonymous-admin identity (solved by DM-only mutation); stale inline keyboards
-re-tapped after a mission completes (every RPC must re-check status and return a typed
-outcome, never assume); double-tap racing (idempotency key derived from callback/update id,
-plus `WHERE status = 'LIVE'` guards); duration change racing the runner's claim (do the
-reschedule in the same transaction, skip CLAIMED rows); a manual Primary Goal target of zero
-or a non-integer; overriding a target on a COMPLETED/CANCELLED mission; unpinning a pin HQ
-never set; leaking a workspace id to a non-operator through the picker.
-
-Regressions to add (`scripts/se15-mission-control-regression.ts`) plus the full existing
-stack (SE-14, SE-13, Step 1, SE-5, SE-4B, SE-4A, SE-3, SE-3.1, SE-3.3L, Community, parity,
-`tsgo`, build): DM-only gating of every `mm_*` callback; three-gate authorization; anonymous
-tap refused; override append never rewrites `effective_config`; resolved-config precedence;
-Primary Goal must be positive while supporting targets stay optional; duration change
-reschedules COMPLETE and leaves CLAIMED untouched; End Now = one final X read, one same-card
-edit, pulses cancelled, unpin only when `pinned_by_hq`; Cancel = zero X reads, CANCELLED
-status, all pending events cancelled; caption stays under 1024; no points/rewards strings.
-
-Stopping after this report as instructed. No code, SQL, deployment or production change.
+Nothing here is implemented. Approving this plan approves SE-16.0 only (repo-only auth bridge), which then stops for review.
