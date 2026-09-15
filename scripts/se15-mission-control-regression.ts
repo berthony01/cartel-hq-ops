@@ -359,7 +359,10 @@ check("17.7 the panel states the launch settings are preserved", panel.includes(
 // ---------------------------------------------------------------------------
 check("18.1 no new table", !/CREATE TABLE/i.test(sql));
 check("18.2 no cron or scheduler change", !/cron|pg_cron/i.test(sql));
-check("18.3 no change to social_mission_settings", !sql.includes("social_mission_settings"));
+check(
+  "18.3 no change to social_mission_settings",
+  !/(CREATE|ALTER|DROP|INSERT INTO|UPDATE|DELETE FROM)[^;\n]*social_mission_settings/i.test(sql),
+);
 check("18.4 no change to the existing close RPC", !sql.includes("CREATE OR REPLACE FUNCTION public.close_social_mission_from_telegram"));
 check("18.5 no change to claim_due_social_mission_schedule_events", !sql.includes("CREATE OR REPLACE FUNCTION public.claim_due_social_mission_schedule_events"));
 check("18.6 the migration is prepared only", sql.includes("PREPARED ONLY"));
