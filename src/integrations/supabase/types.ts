@@ -6151,10 +6151,26 @@ export type Database = {
         Args: { _mission_id: string }
         Returns: Json
       }
+      social_mission_metric_targets: {
+        Args: {
+          _comments: number
+          _likes: number
+          _primary_target: number
+          _primary_type: string
+          _saves: number
+          _shares: number
+          _views: number
+        }
+        Returns: Json
+      }
       social_mission_preset_config: { Args: { _preset: string }; Returns: Json }
       social_mission_scheduler_secret_matches: {
         Args: { p_secret: string }
         Returns: boolean
+      }
+      social_mission_support_target: {
+        Args: { _baseline: number; _floor_add: number }
+        Returns: number
       }
       sticker_drop_scheduler_secret_matches: {
         Args: { p_secret: string }
