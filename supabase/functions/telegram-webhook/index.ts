@@ -3209,8 +3209,7 @@ Deno.serve(async (req: Request) => {
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Targets reset to automatic.");
           if (outcome === "ok") {
             await mcRefreshCard({
-              workspaceId: binding.workspaceId,
-              missionId,
+              binding,
               actorUserId: linked?.user_id ? String(linked.user_id) : null,
               seed: `${updateId}:reset_auto`,
             });
