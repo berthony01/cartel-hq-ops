@@ -3044,6 +3044,7 @@ Deno.serve(async (req: Request) => {
           sourceMessageId: Number(sourceMessageId),
         });
       }
+      return true;
     };
 
     // SE-4A — `/mission <X link>`. Runs before every generic fallthrough and
