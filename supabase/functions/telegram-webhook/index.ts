@@ -1003,7 +1003,12 @@ Deno.serve(async (req: Request) => {
       ? true
       : workspaceSettings?.delete_command_after_send !== false;
 
+    // SE-10 — phase timing only. Started here so the preflight, the create
+    // RPC, the real-metrics card send and the schedule/pin phase are each
+    // attributable. No secret, payload or identity is ever recorded.
+    const timing = se10Timer();
     const botPermissions = await readBotChatPermissions(TELEGRAM_BOT_TOKEN, chatId);
+    timing.slice("preflight");
     // Non-sensitive diagnostics only: status, two booleans and a timestamp.
     try {
       const { data: metaRow } = await admin
