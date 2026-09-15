@@ -184,9 +184,39 @@ REVOKE ALL ON FUNCTION public.social_mission_control_authorize(bigint, uuid, big
 GRANT EXECUTE ON FUNCTION public.social_mission_control_authorize(bigint, uuid, bigint) TO service_role, postgres;
 
 -- ----------------------------------------------------------------------------
--- 4. AUDIT APPEND HELPER
---    History is APPEND ONLY and bounded. `effective_config` is never touched.
+-- 4. MISSION CONTROL STATE MERGE + AUDIT APPEND HELPER
+--
+--    NESTED-PATH HAZARD. `jsonb_set(metadata, '{mission_control,history}', ...)`
+--    is NOT safe on a mission that has never been controlled: with a missing
+--    intermediate `mission_control` object the write silently does nothing.
+--    Every first-use write therefore goes through this merge helper, which
+--    concatenates at the top level and re-creates the object when absent while
+--    preserving every sibling key — including, always, `effective_config`.
 -- ----------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.social_mission_control_merge_state(
+  _mission_id uuid,
+  _patch jsonb
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+BEGIN
+  UPDATE public.social_missions m
+     SET metadata = coalesce(m.metadata, '{}'::jsonb)
+                    || jsonb_build_object(
+                         'mission_control',
+                         coalesce(m.metadata -> 'mission_control', '{}'::jsonb)
+                         || coalesce(_patch, '{}'::jsonb)
+                       ),
+         updated_at = now()
+   WHERE m.id = _mission_id;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.social_mission_control_merge_state(uuid, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.social_mission_control_merge_state(uuid, jsonb) TO service_role, postgres;
 
 CREATE OR REPLACE FUNCTION public.social_mission_control_append_history(
   _mission_id uuid,
@@ -219,7 +249,7 @@ BEGIN
     INTO v_hist
     FROM public.social_missions m WHERE m.id = _mission_id;
 
-  v_hist := v_hist || jsonb_build_array(v_entry);
+  v_hist := coalesce(v_hist, '[]'::jsonb) || jsonb_build_array(v_entry);
   -- Bound the stored history so the mission row cannot grow without limit.
   IF jsonb_array_length(v_hist) > 50 THEN
     v_hist := (
@@ -231,15 +261,10 @@ BEGIN
     );
   END IF;
 
-  UPDATE public.social_missions m
-     SET metadata = jsonb_set(
-           coalesce(m.metadata, '{}'::jsonb),
-           '{mission_control,history}',
-           v_hist,
-           true
-         ),
-         updated_at = now()
-   WHERE m.id = _mission_id;
+  -- Merge, never jsonb_set on a nested path: this is frequently the FIRST ever
+  -- write to mission_control (duration-only change, END_NOW, CANCEL).
+  PERFORM public.social_mission_control_merge_state(
+    _mission_id, jsonb_build_object('history', v_hist));
 END;
 $$;
 
