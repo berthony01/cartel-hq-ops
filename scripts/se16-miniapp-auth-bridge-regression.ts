@@ -82,7 +82,32 @@ const opts = { now: NOW_MS };
   check("2.1 valid signed initData accepted", ok.ok === true);
   check("2.2 validated user id returned", ok.ok === true && ok.user.id === 777000123);
   check("2.3 result carries no secret", JSON.stringify(ok).includes(FAKE_TOKEN) === false);
-  check("2.4 result never returns raw signed payload", !("hash" in (ok as Record<string, unknown>)) || true);
+  // Exact success envelope: bounded fields only, no signed payload, no secret.
+  const topKeys = Object.keys(ok).sort();
+  check(
+    "2.4a success result exposes exactly ok/authDate/user",
+    JSON.stringify(topKeys) === JSON.stringify(["authDate", "ok", "user"]),
+    topKeys.join(","),
+  );
+  const userKeys = ok.ok === true ? Object.keys(ok.user).sort() : [];
+  check(
+    "2.4b validated user exposes exactly the bounded profile fields",
+    JSON.stringify(userKeys) ===
+      JSON.stringify(["firstName", "id", "isPremium", "languageCode", "lastName", "username"]),
+    userKeys.join(","),
+  );
+  const flat = JSON.stringify(ok);
+  check(
+    "2.4c success result leaks no hash, raw init data, query id or token",
+    !topKeys.includes("hash") &&
+      !topKeys.includes("initData") &&
+      !topKeys.includes("query_id") &&
+      !/[0-9a-f]{64}/.test(flat) &&
+      !flat.includes("query_id") &&
+      !flat.includes("AAF_test") &&
+      !flat.includes(FAKE_TOKEN) &&
+      !flat.includes("FAKE-TEST-TOKEN"),
+  );
 }
 
 {
