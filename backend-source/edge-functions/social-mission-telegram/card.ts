@@ -226,7 +226,7 @@ export function approximateRemaining(endsAt: unknown, nowMs: number): string | n
   return `~${minutes}m remaining`;
 }
 
-const MILESTONE_LABELS: Record<MissionMilestone["type"], string> = {
+export const GOAL_LABELS: Record<MissionGoalType, string> = {
   VIEWS: "Views",
   LIKES: "Likes",
   REPLIES: "Replies",
@@ -234,36 +234,80 @@ const MILESTONE_LABELS: Record<MissionMilestone["type"], string> = {
   TOTAL_INTERACTIONS: "Likes + replies + reposts",
 };
 
+export const GOAL_HEADING = "🎯 MISSION GOAL";
+export const STRETCH_GOAL_HEADING = "⭐ STRETCH GOAL";
+export const PRIMARY_GOAL_REACHED = "✅ PRIMARY GOAL REACHED";
+/** Compact, fixed-width visual bar. Plain text only — no Markdown, no HTML. */
+export const GOAL_BAR_CELLS = 10;
+const GOAL_BAR_FILLED = "█";
+const GOAL_BAR_EMPTY = "░";
+
 /**
- * Milestone progress against ABSOLUTE public metrics. `TOTAL_INTERACTIONS`
- * deliberately excludes views and bookmarks. Returns null when the milestone is
- * unset or the metrics needed for it are unknown; unknown never becomes 0.
+ * SE-13 — the ABSOLUTE public metric behind a goal. `TOTAL_INTERACTIONS`
+ * deliberately excludes views and bookmarks and is computable ONLY when likes,
+ * replies AND reposts are all known. Unknown is returned as null and is never
+ * coerced to 0.
  */
-export function milestoneProgressLine(
-  milestone: MissionMilestone | null | undefined,
+export function goalProgressValue(
+  type: MissionGoalType,
+  latest: CanonicalMetrics | null,
+): number | null {
+  if (!latest) return null;
+  if (type === "VIEWS") return isCount(latest.views) ? latest.views : null;
+  if (type === "LIKES") return isCount(latest.likes) ? latest.likes : null;
+  if (type === "REPLIES") return isCount(latest.comments) ? latest.comments : null;
+  if (type === "REPOSTS") return isCount(latest.shares) ? latest.shares : null;
+  return isCount(latest.likes) && isCount(latest.comments) && isCount(latest.shares)
+    ? latest.likes + latest.comments + latest.shares
+    : null;
+}
+
+/** Integer percentage, floored and visually capped at 100. */
+export function goalPercent(progress: number, target: number): number {
+  if (!isCount(target) || target <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.floor((progress / target) * 100)));
+}
+
+/** `███████░░░ 72%` — ten cells, deterministic, capped at full. */
+export function goalBar(progress: number, target: number): string {
+  const percent = goalPercent(progress, target);
+  const filled = Math.max(0, Math.min(GOAL_BAR_CELLS, Math.floor(percent / 10)));
+  return `${GOAL_BAR_FILLED.repeat(filled)}${GOAL_BAR_EMPTY.repeat(GOAL_BAR_CELLS - filled)} ${percent}%`;
+}
+
+/**
+ * The MISSION GOAL block. Returns an empty array when no goal is configured or
+ * the metric it needs is unknown — an unknown metric never renders as 0.
+ *
+ * The Stretch Goal is motivational display only, always uses the SAME metric as
+ * the primary, and stays hidden until the primary goal is reached.
+ */
+export function renderGoalLines(
+  goal: MissionGoal | null | undefined,
   latest: CanonicalMetrics | null,
   accomplished: boolean,
-): string | null {
-  if (!milestone || !isCount(milestone.target) || milestone.target <= 0) return null;
-  if (!latest) return null;
-  let progress: number | null = null;
-  if (milestone.type === "VIEWS") progress = isCount(latest.views) ? latest.views : null;
-  else if (milestone.type === "LIKES") progress = isCount(latest.likes) ? latest.likes : null;
-  else if (milestone.type === "REPLIES") progress = isCount(latest.comments) ? latest.comments : null;
-  else if (milestone.type === "REPOSTS") progress = isCount(latest.shares) ? latest.shares : null;
-  else {
-    // NULL-HONEST: TOTAL_INTERACTIONS is computable ONLY when ALL THREE
-    // components are known. A single unknown component makes the total
-    // unknown — it is never treated as 0 and partial subsets are never summed.
-    progress =
-      isCount(latest.likes) && isCount(latest.comments) && isCount(latest.shares)
-        ? latest.likes + latest.comments + latest.shares
-        : null;
-  }
+): string[] {
+  if (!goal || !isCount(goal.target) || goal.target <= 0) return [];
+  const progress = goalProgressValue(goal.type, latest);
+  if (progress === null) return [];
 
-  if (progress === null) return null;
-  const suffix = accomplished || progress >= milestone.target ? " ✅" : "";
-  return `Milestone: ${MILESTONE_LABELS[milestone.type]} ${progress} / ${milestone.target}${suffix}`;
+  const label = GOAL_LABELS[goal.type];
+  const reached = accomplished || progress >= goal.target;
+  const lines = [
+    GOAL_HEADING,
+    `${label}: ${progress} / ${goal.target}`,
+    goalBar(progress, goal.target),
+  ];
+  if (reached) lines.push(PRIMARY_GOAL_REACHED);
+
+  const stretch = goal.stretchTarget;
+  if (reached && isCount(stretch) && stretch > goal.target) {
+    lines.push("");
+    lines.push(STRETCH_GOAL_HEADING);
+    lines.push(`${label}: ${progress} / ${stretch}`);
+    lines.push(goalBar(progress, stretch));
+  }
+  return lines;
 }
 
 function composeLines(input: MissionCardInput, excerptBudget: number | null): string[] {
