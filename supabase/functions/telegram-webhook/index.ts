@@ -380,6 +380,10 @@ export function primaryGoalMetric(type: string): MissionControlMetric | null {
  * Nothing is mutated on a rejected value. `off` is accepted ONLY for supporting
  * targets; a Primary Goal target and a duration always require a positive
  * integer, and duration is additionally bounded to 1..1440 minutes.
+ *
+ * PRECISION: outer whitespace is trimmed and thousands COMMAS are removed, so
+ * `12,500` is honoured. Internal SPACES are NOT removed — `1 2` is two numbers
+ * and is rejected rather than silently read as `12`.
  */
 export type MissionControlInput =
   | { ok: true; value: number | null }
@@ -388,7 +392,7 @@ export function parseMissionControlInput(
   field: string,
   raw: string,
 ): MissionControlInput {
-  const text = String(raw ?? "").trim().toLowerCase().replace(/[, ]/g, "");
+  const text = String(raw ?? "").trim().toLowerCase().replace(/,/g, "");
   const supporting = (MISSION_CONTROL_METRICS as readonly string[]).includes(
     String(field ?? "").toLowerCase(),
   );
