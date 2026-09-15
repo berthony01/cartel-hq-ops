@@ -205,8 +205,13 @@ async function attemptFinalMetricsRead(
 }
 
 
-/** Milestone read ONLY from the mission's own immutable config snapshot. */
-function missionMilestone(mission: LoadedRow): MissionMilestone | null {
+/**
+ * SE-13 — the MISSION GOAL, read ONLY from the mission's own immutable config
+ * snapshot. `milestone_type` / `milestone_target` remain the stored keys;
+ * `stretch_goal_target` and `goal_source` are the SE-13 additions and are both
+ * optional, so a pre-SE-13 mission still renders its primary goal unchanged.
+ */
+function missionGoal(mission: LoadedRow): MissionGoal | null {
   const metadata = mission["metadata"];
   if (!metadata || typeof metadata !== "object") return null;
   const config = (metadata as Record<string, unknown>)["effective_config"];
@@ -216,7 +221,12 @@ function missionMilestone(mission: LoadedRow): MissionMilestone | null {
   const target = Number(raw["milestone_target"]);
   if (!(MILESTONE_TYPES as readonly string[]).includes(type)) return null;
   if (!Number.isInteger(target) || target <= 0) return null;
-  return { type: type as MissionMilestone["type"], target };
+  const stretchRaw = Number(raw["stretch_goal_target"]);
+  const stretchTarget =
+    Number.isInteger(stretchRaw) && stretchRaw > target ? stretchRaw : null;
+  const sourceRaw = String(raw["goal_source"] ?? "").toUpperCase();
+  const source = sourceRaw === "AUTO" ? "AUTO" : sourceRaw === "EXPLICIT" ? "EXPLICIT" : null;
+  return { type: type as MissionGoal["type"], target, stretchTarget, source };
 }
 
 const CORS = {
