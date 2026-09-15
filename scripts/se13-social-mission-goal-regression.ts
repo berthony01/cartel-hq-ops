@@ -90,7 +90,7 @@ check("2.3 the SQL primary formula matches the frozen formula", /GREATEST\(_base
 check("2.4 the SQL stretch formula matches the frozen formula", /ceil\(\(v_primary \* 1\.50\) \/ v_step\)/.test(SQL) && /v_stretch <= v_primary/.test(SQL));
 check("2.5 a NULL or negative baseline returns NULL in SQL too", /IF _baseline IS NULL OR _baseline < 0 THEN\s*\n\s*RETURN NULL;/.test(SQL));
 check("2.6 an explicit goal always wins and is never rewritten", /EXPLICIT workspace goal ALWAYS wins/.test(SQL) && /jsonb_build_object\('goal_source', 'EXPLICIT'\)/.test(SQL));
-check("2.7 an automatic goal is only derived when no goal exists", /ELSIF v_goal_source IS NULL AND _views IS NOT NULL AND _views >= 0 THEN/.test(SQL));
+check("2.7 an automatic goal is only derived when no goal exists", /ELSIF v_goal_source IS NULL\s*\n\s*AND _provider = 'x-official'\s*\n\s*AND v_snapshot_inserted\s*\n\s*AND _views IS NOT NULL AND _views >= 0 THEN/.test(SQL));
 check("2.8 goal establishment is guarded so a retry cannot change it", /AND COALESCE\(metadata -> 'effective_config' ->> 'goal_source', ''\) = ''/.test(SQL) && /IDEMPOTENT: only the FIRST valid snapshot/.test(SQL));
 check("2.9 the goal is established before accomplishment is evaluated", SQL.indexOf("social_mission_auto_goal(_views)") < SQL.indexOf("v_progress := CASE v_type"));
 check("2.10 provenance and stretch ride in the existing effective_config JSON", /'\{effective_config\}'/.test(SQL) && /'stretch_goal_target'/.test(SQL) && /'goal_source', 'AUTO'/.test(SQL));
@@ -279,6 +279,25 @@ check("7.17 the reload only runs when a metric refresh ran", /let renderMission 
 check("7.18 the reload is confined to the refresh branch", editBody.indexOf("reloadMissionRow(") > editBody.indexOf("args.finalRefresh === true"));
 check("7.19 no new Telegram call is introduced by the reload", TRANSPORT.split("telegramCall(").length === read("backend-source/edge-functions/social-mission-telegram/index.ts").split("telegramCall(").length);
 check("7.20 the auto-goal formula is untouched by this hardening", /GREATEST\(_baseline \+ 25, ceil\(_baseline \* 1\.30\)::bigint\)/.test(SQL));
+
+// ---------------------------------------------------------------------------
+// 8. SE-13.2 — the AUTO goal needs a DURABLE, newly inserted OFFICIAL X snapshot.
+// ---------------------------------------------------------------------------
+const autoGate = SQL.slice(SQL.indexOf("ELSIF v_goal_source IS NULL"), SQL.indexOf("social_mission_auto_goal(_views)"));
+check("8.1 the auto-goal gate requires the official X provider", /AND _provider = 'x-official'/.test(autoGate));
+check("8.2 the auto-goal gate requires a newly inserted snapshot", /AND v_snapshot_inserted/.test(autoGate));
+check("8.3 the auto-goal gate still requires a known nonnegative views value", /AND _views IS NOT NULL AND _views >= 0 THEN/.test(autoGate));
+check("8.4 the auto-goal gate still requires that no goal already exists", /ELSIF v_goal_source IS NULL/.test(autoGate));
+check("8.5 a non-official provider can never establish the goal", !/ELSIF v_goal_source IS NULL AND _views IS NOT NULL/.test(SQL));
+check("8.6 durability comes from the snapshot INSERT row count", /v_snapshot_inserted := v_rows = 1;/.test(SQL) && SQL.indexOf("v_snapshot_inserted := v_rows = 1;") < SQL.indexOf("ELSIF v_goal_source IS NULL"));
+check("8.7 a duplicate snapshot losing the conflict leaves snapshot_inserted false", /v_snapshot_inserted boolean := false;/.test(SQL) && /ON CONFLICT \(mission_id, provider, poll_bucket\)/.test(SQL));
+check("8.8 NULL views still cannot fabricate a goal", /AND _views IS NOT NULL/.test(autoGate) && /IF _baseline IS NULL OR _baseline < 0 THEN/.test(SQL));
+check("8.9 explicit goals still win ahead of the hardened auto gate", SQL.indexOf("EXPLICIT workspace goal ALWAYS wins") < SQL.indexOf("ELSIF v_goal_source IS NULL"));
+check("8.10 the explicit branch stamps provenance without rewriting type or target", /jsonb_build_object\('goal_source', 'EXPLICIT'\)/.test(SQL) && !/milestone_target', to_jsonb\(v_target_value\)/.test(SQL));
+check("8.11 the hardening changed no rounding behaviour", /GREATEST\(_baseline \+ 25, ceil\(_baseline \* 1\.30\)::bigint\)/.test(SQL) && /ceil\(\(v_primary \* 1\.50\) \/ v_step\)/.test(SQL));
+check("8.12 the hardening changed no helper ACL", /GRANT EXECUTE ON FUNCTION public\.social_mission_effective_config\(uuid\) TO service_role, postgres;/.test(SQL));
+check("8.13 the hardening is documented in the migration itself", /SE-13\.2/.test(SQL) && /DURABLE/.test(SQL));
+check("8.14 no Edge Function code changed for SE-13.2", /reloadMissionRow\(/.test(TRANSPORT) && !/SE-13\.2/.test(TRANSPORT));
 
 // ---------------------------------------------------------------------------
 if (failures.length > 0) {
