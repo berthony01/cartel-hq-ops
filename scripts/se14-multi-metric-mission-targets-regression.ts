@@ -185,7 +185,17 @@ check("6.10 no pulse copy demands mechanical engagement", !/(go like|need \d+ mo
 // 7. Transport — config-only, client can never supply a target set.
 // ---------------------------------------------------------------------------
 check("7.1 the transport parses the target set from the mission config", /function missionMetricTargets\(/.test(TRANSPORT));
-check("7.2 the target set is read from the immutable effective config", /missionMetricTargets[\s\S]{0,900}effective_config/.test(TRANSPORT));
+// Re-pinned for SE-15: the transport now reads the RESOLVED config, which is
+// the immutable `effective_config` with an optional Mission Control override
+// folded over it. The immutable base is still the only stored launch config
+// and is never rewritten.
+check(
+  "7.2 the target set is read from the immutable effective config",
+  /function missionConfig[\s\S]{0,200}resolveMissionConfig\(mission\["metadata"\]/.test(TRANSPORT) &&
+    /function missionMetricTargets[\s\S]{0,200}missionConfig\(mission\)/.test(TRANSPORT) &&
+    /effective_config/.test(TRANSPORT) &&
+    !/effective_config['"]\]\s*=/.test(TRANSPORT),
+);
 check("7.3 the target set is passed to the card renderer", /metricTargets: missionMetricTargets\(mission\)/.test(TRANSPORT));
 check("7.4 only positive integer targets are accepted", /Number\.isInteger\(value\) && value > 0/.test(TRANSPORT));
 check("7.5 the SE-13 authoritative reload still precedes the first render", TRANSPORT.indexOf("reloadMissionRow(") < TRANSPORT.indexOf("metricTargets: missionMetricTargets(mission)"));

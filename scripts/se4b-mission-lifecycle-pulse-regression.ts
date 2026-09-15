@@ -246,7 +246,20 @@ check("11.6 close reads no X link", /const parsed = isClose \? null : parseXStat
 check("11.7 close runs after the same connected-group, linked-account and operator checks", webhookCode.indexOf("if (isClose) {") > webhookCode.indexOf('admin.rpc("is_workspace_operator"'));
 check("11.8 close runs after the live Telegram administrator check", webhookCode.indexOf("if (isClose) {") > webhookCode.indexOf('memberStatus !== "administrator"'));
 check("11.9 close calls the close RPC", /admin\.rpc\("close_social_mission_from_telegram"/.test(webhookCode));
-check("11.10 close makes exactly one edit_mission transport call", (webhookCode.match(/action: "edit_mission"/g) ?? []).length === 1);
+// SE-15 added a separate Mission Control transport caller (`mcRefreshCard`),
+// so the file-wide count is 2. The CLOSE path itself still makes exactly one
+// call, which is what this check has always been about.
+const closeSlice = webhookCode.slice(
+  webhookCode.indexOf("if (isClose) {"),
+  webhookCode.indexOf("const mcRefreshCard") > -1
+    ? webhookCode.indexOf("const mcRefreshCard")
+    : undefined,
+);
+check(
+  "11.10 close makes exactly one edit_mission transport call",
+  (closeSlice.match(/action: "edit_mission"/g) ?? []).length === 1 &&
+    (webhookCode.match(/action: "edit_mission"/g) ?? []).length === 2,
+);
 check("11.11 close uses the deterministic request id returned by the RPC", /clientRequestId: closeResult\.client_request_id/.test(webhookCode));
 check("11.12 close bumps the revision by exactly one", /revision: Number\(closeResult\.edit_revision \?\? 0\) \+ 1/.test(webhookCode));
 check("11.13 a failed close edit never sends a replacement message", /could not be updated in place; do not resend/.test(webhookSrc));
@@ -310,9 +323,21 @@ check("13.16 the runner fails closed when created_by is missing", /!event\.missi
 // 13.17-13.22 manual-close finalizer
 check("13.17 close returns the event id", /'event_id', v_event\.id/.test(sqlCode));
 check("13.18 the webhook close result carries event_id", /event_id\?: string;/.test(webhookCode));
-check("13.19 the webhook finalizes its own completion event exactly once", (webhookCode.match(/finish_social_mission_schedule_event/g) ?? []).length === 1);
+// Re-pinned for SE-15: Mission Control's END_NOW adds a SECOND, separate
+// finalizer call site, so the count is 2 — the close path still finalizes
+// exactly once, and the SE-15 call site is gated on proven event ownership.
+check(
+  "13.19 the webhook finalizes its own completion event exactly once",
+  (webhookCode.match(/finish_social_mission_schedule_event/g) ?? []).length === 2 &&
+    (closeSlice.match(/finish_social_mission_schedule_event/g) ?? []).length === 1 &&
+    webhookCode.includes('result["event_owned"] === true'),
+);
 check("13.20 EDITED maps to SENT, FAILED to FAILED, everything else to AMBIGUOUS", /closeEditState === "EDITED" \? "SENT" : closeEditState === "FAILED" \? "FAILED" : "AMBIGUOUS"/.test(webhookCode));
-check("13.21 a finalizer failure never triggers a second Telegram attempt", (webhookCode.match(/action: "edit_mission"/g) ?? []).length === 1 && /finalizedOk[\s\S]{0,400}delivery record could not be saved/.test(webhookCode));
+check(
+  "13.21 a finalizer failure never triggers a second Telegram attempt",
+  (closeSlice.match(/action: "edit_mission"/g) ?? []).length === 1 &&
+    /finalizedOk[\s\S]{0,400}delivery record could not be saved/.test(webhookCode),
+);
 check("13.22 the webhook handles UNRESOLVED and COMPLETED_UNSYNCED without retrying", webhookCode.includes('closeResult.outcome === "UNRESOLVED"') && webhookCode.includes('closeResult.outcome === "COMPLETED_UNSYNCED"'));
 
 // 13.23-13.28 pulse hardening

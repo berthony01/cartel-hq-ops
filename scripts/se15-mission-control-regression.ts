@@ -180,8 +180,20 @@ check("6.13 array metadata is rejected", resolveMissionConfig([1, 2, 3]) === nul
 check("6.14 manual mode without an override falls back to frozen", JSON.stringify(resolveMissionConfig({ effective_config: frozen, mission_control: { mode: "MANUAL" } })) === JSON.stringify(frozen));
 check("6.15 SQL resolver mirrors the TS resolver", sql.includes("social_mission_resolve_config") && sql.includes("|| (_metadata -> 'mission_control' -> 'override_config')"));
 check("6.16 no SQL path writes effective_config", !/jsonb_set\([^)]*'\{effective_config/.test(sql) && !sql.includes("{effective_config}"));
-check("6.17 overrides are written under mission_control only", sql.includes("'{mission_control,override_config}'") && sql.includes("'{mission_control,mode}'"));
-check("6.18 SE-14 establishment gates are untouched", !sql.includes("record_social_mission_metric_snapshot") && !sql.includes("social_mission_auto_goal"));
+// Re-pinned to the hardened merge write: overrides land under `mission_control`
+// through the top-level merge helper (nested jsonb_set was unsafe on first use).
+check(
+  "6.17 overrides are written under mission_control only",
+  /jsonb_build_object\(\s*'mission_control',/.test(sql) &&
+    /'override_config',/.test(sql) &&
+    /'mode',\s*'(MANUAL|AUTO)'/.test(sql),
+);
+check(
+  "6.18 SE-14 establishment gates are untouched",
+  !/(CREATE OR REPLACE FUNCTION|DROP FUNCTION|ALTER FUNCTION)[^;\n]*(record_social_mission_metric_snapshot|social_mission_auto_goal)/i.test(
+    sql,
+  ),
+);
 
 // ---------------------------------------------------------------------------
 // 7 — transport and runner consume the RESOLVED config.
@@ -206,8 +218,14 @@ check("8.3 the refresh reuses the transport revision contract", webhook.includes
 check("8.4 the refresh id is deterministic per update", webhook.includes("const mcRequestUuid = async (seed: string)"));
 check("8.5 the webhook never calls an X provider", !webhook.includes("lookupXPostMetrics") && !webhook.includes("api.twitter.com"));
 check("8.6 the transport reads X only for a COMPLETED mission", transport.includes('args.finalRefresh === true && String(mission["status"] ?? "") === "COMPLETED"'));
-check("8.7 target-only changes leave the mission LIVE", sql.includes("IF v_auth.mission_status <> 'LIVE' THEN") );
-check("8.8 cancel triggers no provider read path", /cancel_social_mission_from_control[\s\S]{0,2600}COMMIT/.test(sql) && !/cancel_social_mission_from_control[\s\S]{0,2600}snapshot/i.test(sql));
+check(
+  "8.7 target-only changes leave the mission LIVE",
+  /social_mission_apply_target_override[\s\S]{0,2600}v_status IS DISTINCT FROM 'LIVE'/.test(sql) &&
+    !/social_mission_apply_target_override[\s\S]{0,2600}SET status =/.test(sql),
+);
+const cancelFnStart = sql.indexOf("FUNCTION public.cancel_social_mission_from_control");
+const cancelFnBody = sql.slice(cancelFnStart, sql.indexOf("$$;", cancelFnStart));
+check("8.8 cancel triggers no provider read path", cancelFnStart > -1 && !/snapshot|refresh_metrics|x_api/i.test(cancelFnBody));
 
 // ---------------------------------------------------------------------------
 // 9 — end time / rescheduling.
@@ -215,7 +233,9 @@ check("8.8 cancel triggers no provider read path", /cancel_social_mission_from_c
 check("9.1 quick choices offered", webhook.includes("mc_dq_20_") && webhook.includes("mc_dq_45_") && webhook.includes("mc_dq_60_") && webhook.includes("mc_dq_120_"));
 check("9.2 custom minutes offered", webhook.includes("mc_dc_"));
 check("9.3 duration RPC bounded 1..1440", sql.includes("_minutes_from_now < 1 OR _minutes_from_now > 1440"));
-check("9.4 duration requires LIVE", /social_mission_apply_duration_override[\s\S]{0,2000}mission_status <> 'LIVE'/.test(sql));
+// Re-pinned: status is now re-read from the LOCKED mission row, so the gate
+// reads `v_status`, not the pre-lock authorization snapshot. Still mandatory.
+check("9.4 duration requires LIVE", /social_mission_apply_duration_override[\s\S]{0,2600}v_status IS DISTINCT FROM 'LIVE'/.test(sql));
 check("9.5 ends_at is rewritten", sql.includes("UPDATE public.social_missions SET ends_at = v_new_end"));
 check("9.6 pending COMPLETE is rescheduled", /event_type = 'COMPLETE'\s*\n\s*AND e\.state = 'PENDING'/.test(sql));
 check("9.7 only PENDING pulses are recomputed", /event_type = 'PULSE' AND e\.state = 'PENDING'/.test(sql));
@@ -232,10 +252,10 @@ check("10.1 confirmation is required", webhook.includes("END MISSION NOW?") && w
 check("10.2 selection is by exact mission id", sql.includes("CREATE OR REPLACE FUNCTION public.end_social_mission_from_control(\n  _telegram_user_id bigint,\n  _mission_id uuid,"));
 check("10.3 status becomes COMPLETED", sql.includes("SET status = 'COMPLETED', completed_at = v_now, ends_at = v_now"));
 check("10.4 ends_at is truthful now, not COALESCEd", !/status = 'COMPLETED'[\s\S]{0,120}ends_at = COALESCE/.test(sql));
-check("10.5 pending pulses are cancelled", /end_social_mission_from_control[\s\S]{0,2600}event_type = 'PULSE' AND state = 'PENDING'/.test(sql));
+check("10.5 pending pulses are cancelled", /end_social_mission_from_control[\s\S]{0,4200}event_type = 'PULSE' AND state = 'PENDING'/.test(sql));
 check("10.6 the COMPLETE event is claimed idempotently", sql.includes("SET state = 'CLAIMED', claimed_at = v_now"));
 check("10.7 exactly one final edit is attempted", (webhook.match(/seed: `\$\{updateId\}:end_now`/g) ?? []).length === 1);
-check("10.8 the completion event is finalized once", /mc_ec_[\s\S]{0,2000}finish_social_mission_schedule_event/.test(webhook));
+check("10.8 the completion event is finalized once", /mc_ec_[\s\S]{0,3200}finish_social_mission_schedule_event/.test(webhook));
 check("10.9 unpin is ownership guarded", webhook.includes("if (!pinned?.pinned_by_hq || !pinned.telegram_message_id) return;"));
 check("10.10 audit action END_NOW recorded", sql.includes("'END_NOW'"));
 check("10.11 no replacement message is sent to the group", !/mc_ec_[\s\S]{0,2200}"send_mission"/.test(webhook));
@@ -249,7 +269,7 @@ check("11.3 completed_at is not claimed", !/status = 'CANCELLED'[\s\S]{0,160}com
 check("11.4 all pending events are cancelled", /cancel_social_mission_from_control[\s\S]{0,2600}WHERE mission_id = _mission_id AND state = 'PENDING'/.test(sql));
 check("11.5 a CLAIMED event blocks cancellation", /cancel_social_mission_from_control[\s\S]{0,1800}'event_claimed'/.test(sql));
 check("11.6 audit action CANCEL recorded", sql.includes("'CANCEL',"));
-check("11.7 safe unpin is reused", /mc_cc_[\s\S]{0,1400}mcSafeUnpin/.test(webhook));
+check("11.7 safe unpin is reused", /mc_cc_[\s\S]{0,2400}mcSafeUnpin\(binding\)/.test(webhook));
 check("11.8 the same card is edited, never replaced", /mc_cc_[\s\S]{0,1400}mcRefreshCard/.test(webhook));
 
 // ---------------------------------------------------------------------------
@@ -261,7 +281,9 @@ check("12.3 a replayed key returns the recorded outcome", (sql.match(/'outcome',
 check("12.4 replay never appends duplicate history", sql.includes("social_mission_control_key_used"));
 check("12.5 the key is derived from the Telegram update id", webhook.includes("se15-mission-control:${String(updateId ?? \"\")}"));
 check("12.6 stale buttons after completion return a typed response", sql.includes("'outcome', 'not_live'"));
-check("12.7 every mutating RPC re-checks status inside the RPC", (sql.match(/mission_status <> 'LIVE'/g) ?? []).length >= 3);
+// Re-pinned to the hardened order: all four mutating RPCs re-read status from
+// the locked row. Four, not three — the gate was strengthened, not relaxed.
+check("12.7 every mutating RPC re-checks status inside the RPC", (sql.match(/v_status IS DISTINCT FROM 'LIVE'/g) ?? []).length >= 4);
 check("12.8 history is bounded", sql.includes("jsonb_array_length(v_hist) > 50"));
 
 // ---------------------------------------------------------------------------
@@ -295,10 +317,22 @@ check("13.6 no secret is rendered in the panel", !/mcRenderPanel[\s\S]{0,2500}(S
 // 14 — product-safety wording.
 // ---------------------------------------------------------------------------
 const controlSlice = webhook.slice(webhook.indexOf("SE-15 — TELEGRAM MISSION CONTROL"));
+/**
+ * Safety is judged on what an operator or community can actually SEE and on
+ * real reward machinery — never on the words used inside source comments,
+ * where "no reward" is a safety statement, not a violation.
+ */
+const controlCopy = (controlSlice.match(/"(?:[^"\\\n]|\\.){4,}"/g) ?? [])
+  .filter((literal) => /[a-z] [a-z]/i.test(literal))
+  .join("\n");
 for (const banned of ["reward", "points", "badge", "payout", "quota", "airdrop", "leaderboard"]) {
-  check(`14.a no ${banned} semantics`, !new RegExp(banned, "i").test(controlSlice));
+  check(`14.a no ${banned} in user-visible Mission Control copy`, !new RegExp(banned, "i").test(controlCopy));
+  check(
+    `14.b no ${banned} machinery in Mission Control SQL`,
+    !new RegExp(`(CREATE|ALTER|INSERT INTO|UPDATE)[^;\\n]*${banned}`, "i").test(sql),
+  );
 }
-check("14.1 no mechanical engagement instruction", !/everyone (like|repost|reply)/i.test(controlSlice));
+check("14.1 no mechanical engagement instruction", !/everyone (like|repost|reply)/i.test(controlCopy));
 check("14.2 bookmarks is not a Primary Goal", !webhook.includes('"BOOKMARKS",\n] as const') && webhook.includes("Bookmarks cannot be a Primary Goal"));
 check("14.3 primary goal enum is unchanged", sql.includes("'VIEWS', 'LIKES', 'REPLIES', 'REPOSTS', 'TOTAL_INTERACTIONS'"));
 
@@ -359,10 +393,108 @@ check("17.7 the panel states the launch settings are preserved", panel.includes(
 // ---------------------------------------------------------------------------
 check("18.1 no new table", !/CREATE TABLE/i.test(sql));
 check("18.2 no cron or scheduler change", !/cron|pg_cron/i.test(sql));
-check("18.3 no change to social_mission_settings", !sql.includes("social_mission_settings"));
+check(
+  "18.3 no change to social_mission_settings",
+  !/(CREATE|ALTER|DROP|INSERT INTO|UPDATE|DELETE FROM)[^;\n]*social_mission_settings/i.test(sql),
+);
 check("18.4 no change to the existing close RPC", !sql.includes("CREATE OR REPLACE FUNCTION public.close_social_mission_from_telegram"));
 check("18.5 no change to claim_due_social_mission_schedule_events", !sql.includes("CREATE OR REPLACE FUNCTION public.claim_due_social_mission_schedule_events"));
 check("18.6 the migration is prepared only", sql.includes("PREPARED ONLY"));
+
+// ---------------------------------------------------------------------------
+// 19 — SE-15 hardening.
+// ---------------------------------------------------------------------------
+// Executable SQL only: explanatory `--` comments are documentation, and must
+// never be able to pass OR fail a behavioural assertion.
+const stripSqlComments = (text: string) => text.replace(/--[^\n]*/g, "");
+const fnBody = (name: string) => {
+  const start = sql.indexOf(`FUNCTION public.${name}`);
+  return start === -1 ? "" : stripSqlComments(sql.slice(start, sql.indexOf("$$;", start)));
+};
+const sqlCode = stripSqlComments(sql);
+const overrideFn = fnBody("social_mission_apply_target_override");
+const durationFn = fnBody("social_mission_apply_duration_override");
+const endFn = fnBody("end_social_mission_from_control");
+const cancelFn = fnBody("cancel_social_mission_from_control");
+const mergeFn = fnBody("social_mission_control_merge_state");
+const historyFn = fnBody("social_mission_control_append_history");
+
+// 19.1 — first-use JSONB creation without nested jsonb_set.
+check("19.1 a top-level merge helper exists", mergeFn.length > 0);
+check("19.2 the merge creates mission_control when absent", /coalesce\(m\.metadata\s*->\s*'mission_control'\s*,\s*'\{\}'/i.test(mergeFn));
+check("19.3 the merge preserves every sibling key", /coalesce\(m\.metadata\s*,\s*'\{\}'[^)]*\)\s*\|\|/i.test(mergeFn));
+check("19.4 effective_config is never written", !/jsonb_set[^;]*effective_config/i.test(sqlCode) && !/'effective_config'\s*,/.test(mergeFn));
+check("19.5 MANUAL override uses the merge helper", /social_mission_control_merge_state/.test(overrideFn));
+check("19.6 RESET_AUTO uses the merge helper", /'AUTO'[\s\S]{0,400}social_mission_control_merge_state|social_mission_control_merge_state[\s\S]{0,400}'AUTO'/.test(overrideFn));
+check("19.7 history append uses the merge helper", /social_mission_control_merge_state/.test(historyFn));
+check("19.8 history append never nests jsonb_set", !/jsonb_set/i.test(historyFn));
+for (const [label, body] of [
+  ["target override", overrideFn],
+  ["duration", durationFn],
+  ["end now", endFn],
+  ["cancel", cancelFn],
+] as const) {
+  // 19.9-19.20 — lock BEFORE idempotency and BEFORE trusting status.
+  const lockAt = body.search(/FOR UPDATE/i);
+  const keyAt = body.search(/key_used|_idempotency_key/i);
+  const statusAt = body.search(/v_status|status\s*<>\s*'LIVE'/i);
+  check(`19.9 ${label} locks the mission row`, lockAt > -1);
+  check(`19.10 ${label} locks before the idempotency check`, lockAt > -1 && keyAt > -1 && lockAt < body.lastIndexOf("key_used"));
+  check(`19.11 ${label} validates status under the lock`, lockAt > -1 && statusAt > -1 && lockAt < body.lastIndexOf("v_status"));
+  // One append per EXECUTION PATH: the target override has two mutually
+  // exclusive branches (RESET_AUTO / MANUAL) and each branch returns
+  // immediately after its single append, so no path can append twice.
+  const appends = body.match(/social_mission_control_append_history\(/g) ?? [];
+  const appendPathsExclusive = appends.every((_, i) => {
+    const at = body.split("social_mission_control_append_history(", i + 2).slice(0, i + 1).join("").length;
+    return /RETURN jsonb_build_object\(\s*\n?\s*'outcome', 'ok'/.test(body.slice(at, at + 900));
+  });
+  check(`19.12 ${label} appends history once per path`, appends.length >= 1 && appendPathsExclusive);
+  check(`19.13 ${label} returns a replay outcome`, /'replayed'/.test(body));
+}
+
+// 19.21 — END_NOW event ownership.
+check("19.21 END_NOW refuses when any event is already CLAIMED", /'CLAIMED'/.test(endFn) && /event_claimed|claimed_conflict|conflict/i.test(endFn));
+check("19.22 END_NOW locks the exact COMPLETE event", /COMPLETE'[\s\S]{0,400}FOR UPDATE/i.test(endFn));
+check("19.23 END_NOW refuses a non-PENDING COMPLETE event", /complete_event_not_pending/.test(endFn));
+check("19.24 END_NOW requires a proven claim before COMPLETED", endFn.indexOf("complete_event_not_claimed") < endFn.indexOf("'COMPLETED'"));
+check("19.25 END_NOW reports the owned event", /event_owned/.test(endFn));
+check("19.26 the webhook finishes only an owned event", webhook.includes('result["event_owned"] === true'));
+check("19.27 an END_NOW replay changes nothing again", /outcome === "replayed"[\s\S]{0,400}already ended/i.test(webhook));
+check("19.28 a CANCEL replay changes nothing again", /outcome === "replayed"[\s\S]{0,400}already cancelled/i.test(webhook));
+
+// 19.29 — primary target editability.
+check("19.29 the targets menu offers a primary target control", webhook.includes("🏆 Primary target"));
+check("19.30 the primary target control arms PRIMARY_TARGET", /mc_f_pt_\$\{missionId\}[\s\S]{0,400}_pending_field: "PRIMARY_TARGET"/.test(webhook));
+check("19.31 the primary target cannot be turned off", webhook.includes("The Primary Goal target cannot be turned off."));
+check("19.32 the primary metric stays pinned to the primary number", webhook.includes("if (pinned && metric === pinned) return primaryTarget;"));
+check("19.33 off on the current Primary Goal is refused", webhook.includes("is the current Primary Goal, so its target cannot be turned off."));
+
+// 19.34 — parser precision.
+check("19.34 commas are stripped but spaces are not", webhook.includes('.replace(/,/g, "")') && !webhook.includes('.replace(/[, ]/g, "")'));
+
+// 19.35 — group admin gate.
+check("19.35 group manage verifies a live administrator", /manageAdmin[\s\S]{0,600}getChatMember/.test(webhook));
+check("19.36 anonymous admin still passes through the existing proof", /let manageAdmin = isAnonymousGroupAdminSender/.test(webhook));
+check("19.37 non-admins get an admin-only reply and no launcher", /if \(!manageAdmin\)[\s\S]{0,400}administrators only/.test(webhook));
+check("19.38 cleanup still happens only for authorized admins", webhook.indexOf("if (!manageAdmin)") < webhook.indexOf("await sendMissionManageLauncherAndCleanup("));
+
+// 19.39 — exact target binding.
+check("19.39 the card refresh binds the verified chat", /mcRefreshCard[\s\S]{0,900}eq\("telegram_chat_id", Number\(args\.binding\.chatId\)\)/.test(webhook));
+check("19.40 the unpin binds the verified chat", /mcSafeUnpin[\s\S]{0,700}eq\("telegram_chat_id", Number\(binding\.chatId\)\)/.test(webhook));
+check("19.41 the unpin still requires HQ ownership", /mcSafeUnpin[\s\S]{0,900}pinned\?\.pinned_by_hq/.test(webhook));
+check("19.42 no loose mission-only card match remains", !/eq\("workspace_id", args\.workspaceId\)\s*\n\s*\.maybeSingle\(\)/.test(webhook));
+
+// 19.43 — proportional pulse rescheduling.
+check("19.43 pulses keep their relative position", /v_fraction/.test(durationFn) && /due_at\s*-\s*v_now/i.test(durationFn));
+check("19.44 a degenerate window falls back deterministically", /v_pending\s*\+\s*1/.test(durationFn));
+check("19.45 rescheduled pulses stay inside the new window", /LEAST\(GREATEST\(v_fraction/i.test(durationFn));
+check("19.46 sequence_no is preserved", !/UPDATE public\.social_mission_schedule_events[\s\S]{0,400}SET[\s\S]{0,200}sequence_no\s*=/i.test(durationFn));
+check("19.47 SENT history is never rescheduled", /state\s*=\s*'PENDING'/i.test(durationFn));
+
+// 19.48 — copy.
+check("19.48 the panel says Project, not Community", webhook.includes("`Project: ${escapeHtml(binding.workspaceName)}`"));
+check("19.49 END NOW promises a best-effort final reading", /final observed results/.test(webhook));
 
 if (failures.length > 0) {
   console.error(`FAIL — ${failures.length} failed, ${passed} passed`);
