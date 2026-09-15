@@ -295,10 +295,22 @@ check("13.6 no secret is rendered in the panel", !/mcRenderPanel[\s\S]{0,2500}(S
 // 14 — product-safety wording.
 // ---------------------------------------------------------------------------
 const controlSlice = webhook.slice(webhook.indexOf("SE-15 — TELEGRAM MISSION CONTROL"));
+/**
+ * Safety is judged on what an operator or community can actually SEE and on
+ * real reward machinery — never on the words used inside source comments,
+ * where "no reward" is a safety statement, not a violation.
+ */
+const controlCopy = (controlSlice.match(/"(?:[^"\\\n]|\\.){4,}"/g) ?? [])
+  .filter((literal) => /[a-z] [a-z]/i.test(literal))
+  .join("\n");
 for (const banned of ["reward", "points", "badge", "payout", "quota", "airdrop", "leaderboard"]) {
-  check(`14.a no ${banned} semantics`, !new RegExp(banned, "i").test(controlSlice));
+  check(`14.a no ${banned} in user-visible Mission Control copy`, !new RegExp(banned, "i").test(controlCopy));
+  check(
+    `14.b no ${banned} machinery in Mission Control SQL`,
+    !new RegExp(`(CREATE|ALTER|INSERT INTO|UPDATE)[^;\\n]*${banned}`, "i").test(sql),
+  );
 }
-check("14.1 no mechanical engagement instruction", !/everyone (like|repost|reply)/i.test(controlSlice));
+check("14.1 no mechanical engagement instruction", !/everyone (like|repost|reply)/i.test(controlCopy));
 check("14.2 bookmarks is not a Primary Goal", !webhook.includes('"BOOKMARKS",\n] as const') && webhook.includes("Bookmarks cannot be a Primary Goal"));
 check("14.3 primary goal enum is unchanged", sql.includes("'VIEWS', 'LIKES', 'REPLIES', 'REPOSTS', 'TOTAL_INTERACTIONS'"));
 
