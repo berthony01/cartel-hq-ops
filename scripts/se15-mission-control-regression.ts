@@ -518,6 +518,67 @@ check("19.47 SENT history is never rescheduled", /state\s*=\s*'PENDING'/i.test(d
 check("19.48 the panel says Project, not Community", webhook.includes("`Project: ${escapeHtml(binding.workspaceName)}`"));
 check("19.49 END NOW promises a best-effort final reading", /final observed results/.test(webhook));
 
+// ---------------------------------------------------------------------------
+// 20 — SE-15.1 results-vs-targets disambiguation. Stored snapshots only.
+// ---------------------------------------------------------------------------
+/** Strips comments so documentation copy can neither pass nor fail a check. */
+function stripSe151Comments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+}
+check("20.1 a stored-snapshot helper exists", webhook.includes("const mcLatestResults = async (binding: MissionControlBinding)"));
+check("20.2 the helper reads social_metric_snapshots", /mcLatestResults[\s\S]{0,400}from\("social_metric_snapshots"\)/.test(webhook));
+check(
+  "20.3 the helper reads the latest row for the exact mission",
+  /mcLatestResults[\s\S]{0,900}eq\("mission_id", binding\.missionId\)[\s\S]{0,300}eq\("workspace_id", binding\.workspaceId\)[\s\S]{0,400}order\("observed_at", \{ ascending: false \}\)[\s\S]{0,200}order\("created_at", \{ ascending: false \}\)[\s\S]{0,120}limit\(1\)/.test(
+    webhook,
+  ),
+);
+check(
+  "20.4 the metric column map is exact",
+  /MISSION_CONTROL_METRIC_COLUMNS[\s\S]{0,300}views: "views"[\s\S]{0,40}likes: "likes"[\s\S]{0,60}replies: "comments"[\s\S]{0,60}reposts: "shares"[\s\S]{0,60}bookmarks: "saves"/.test(
+    webhook,
+  ),
+);
+check("20.5 an unknown metric is never coerced to zero", webhook.includes('? "unavailable"') && /export function missionControlResultText/.test(webhook));
+check("20.6 the supporting prompt shows the latest stored result", webhook.includes("`Latest X result: ${fieldResults[metric]}`"));
+check("20.7 the supporting prompt shows the current resolved target", webhook.includes("`Current target: ${mcNumber(fieldTargets[metric]) ?? \"off\"}`"));
+check(
+  "20.8 the supporting prompt target comes from the resolved config",
+  /const fieldConfig = await mcResolvedConfig\(missionId\);/.test(webhook) &&
+    webhook.includes('social_mission_effective_config_resolved'),
+);
+check("20.9 the supporting prompt keeps the off instruction", webhook.includes("or send <b>off</b> to remove this supporting target."));
+check("20.10 the primary prompt shows the goal metric", webhook.includes("`Primary Goal: ${escapeHtml(") && /ptType/.test(webhook));
+check("20.11 the primary prompt shows the latest stored result", webhook.includes('`Latest X result: ${ptMetric ? ptResults[ptMetric] : "unavailable"}`'));
+check("20.12 the primary prompt shows the current target", webhook.includes("`Current target: ${ptTarget ?? \"off\"}`"));
+check("20.13 the panel separates stored results", webhook.includes('"<b>LIVE X RESULTS</b>"'));
+check("20.14 the panel labels the target block with the mode", webhook.includes("`<b>TARGETS (${escapeHtml(mode)})</b>`"));
+check("20.15 panel target numbers are unambiguous", webhook.includes("${MISSION_CONTROL_METRIC_LABELS[metric]} target: ${target ?? \"off\"}"));
+check(
+  "20.16 the panel result lines are not labelled as targets",
+  webhook.includes("`${MISSION_CONTROL_METRIC_LABELS[metric]}: ${results[metric]}`"),
+);
+check("20.17 the panel reads stored results through the helper", /mcRenderPanel[\s\S]{0,1600}await mcLatestResults\(binding\)/.test(webhook));
+{
+  // No provider / X API read may exist anywhere in Mission Control rendering.
+  const mcStart = webhook.indexOf("const mcLatestResults");
+  const mcEnd = webhook.indexOf("const mcRenderMissionPicker");
+  const mcRegion = webhook.slice(mcStart, mcEnd);
+  check(
+    "20.18 Mission Control rendering performs no provider read",
+    mcStart > 0 &&
+      mcEnd > mcStart &&
+      !/api\.twitter\.com|api\.x\.com|social-read|refetch_social|fetchXMetrics|readSocialPost/i.test(
+        stripSe151Comments(mcRegion),
+      ),
+  );
+  check(
+    "20.19 Mission Control rendering issues no outbound HTTP fetch",
+    !/\bfetch\(/.test(stripSe151Comments(mcRegion)),
+  );
+}
+
+
 if (failures.length > 0) {
   console.error(`FAIL — ${failures.length} failed, ${passed} passed`);
   for (const failure of failures) console.error(`  - ${failure}`);

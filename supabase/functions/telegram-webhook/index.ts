@@ -346,6 +346,25 @@ const MISSION_CONTROL_METRIC_LABELS: Record<MissionControlMetric, string> = {
   bookmarks: "🔖 Bookmarks",
 };
 /**
+ * SE-15.1 — the stored `social_metric_snapshots` column each Mission Control
+ * metric reads from. This map exists ONLY to read durable stored rows; it never
+ * triggers a provider/X read.
+ */
+const MISSION_CONTROL_METRIC_COLUMNS: Record<MissionControlMetric, string> = {
+  views: "views",
+  likes: "likes",
+  replies: "comments",
+  reposts: "shares",
+  bookmarks: "saves",
+};
+/** Null-honest rendering: an unknown stored metric is never coerced to 0. */
+export function missionControlResultText(value: unknown): string {
+  const n = Number(value);
+  return value === null || value === undefined || !Number.isFinite(n)
+    ? "unavailable"
+    : String(Math.trunc(n));
+}
+/**
  * BOOKMARKS is deliberately absent: the Primary Goal enum does not support it,
  * and SE-15 does not widen accomplishment semantics.
  */
@@ -2477,6 +2496,35 @@ Deno.serve(async (req: Request) => {
   };
 
   /**
+   * SE-15.1 — latest DURABLE stored snapshot for this exact mission.
+   *
+   * Reads `social_metric_snapshots` only. There is ZERO provider / X API read
+   * anywhere in Mission Control rendering; a missing row or a null column is
+   * reported as `unavailable`, never as 0.
+   */
+  const mcLatestResults = async (binding: MissionControlBinding) => {
+    const { data } = await admin
+      .from("social_metric_snapshots")
+      .select("views, likes, comments, shares, saves, observed_at, created_at")
+      .eq("mission_id", binding.missionId)
+      .eq("workspace_id", binding.workspaceId)
+      .order("observed_at", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const row = (data ?? null) as Record<string, unknown> | null;
+    const out = {} as Record<MissionControlMetric, string>;
+    for (const metric of MISSION_CONTROL_METRICS) {
+      out[metric] = missionControlResultText(
+        row ? row[MISSION_CONTROL_METRIC_COLUMNS[metric]] : null,
+      );
+    }
+    return out;
+  };
+
+
+
+  /**
    * Applies ONE field change by re-sending the complete manual set. There is no
    * client-side draft to desynchronize: the current resolved config is the
    * draft, so every tap is atomic, fully validated server-side and audited.
@@ -2576,6 +2624,9 @@ Deno.serve(async (req: Request) => {
     const handle = panel["author_handle"] ? `@${String(panel["author_handle"])}` : "Social mission";
     const url = typeof panel["canonical_url"] === "string" ? String(panel["canonical_url"]) : "";
 
+    // Stored results only — no provider read.
+    const results = await mcLatestResults(binding);
+
     const lines = [
       "🛠 <b>MISSION CONTROL</b>",
       "",
@@ -2583,16 +2634,22 @@ Deno.serve(async (req: Request) => {
       `Project: ${escapeHtml(binding.workspaceName)}`,
       "",
       `Status: <b>LIVE</b> · ${escapeHtml(missionControlRemaining(panel["ends_at"], Date.now()))}`,
-      `Target mode: <b>${escapeHtml(mode)}</b>`,
-      `Primary Goal: <b>${escapeHtml(
-        (MISSION_CONTROL_PRIMARY_LABELS as Record<string, string>)[primaryType] ?? "Not set",
-      )}</b>${primaryTarget ? ` · ${primaryTarget}` : ""}`,
       "",
+      "<b>LIVE X RESULTS</b>",
+      ...MISSION_CONTROL_METRICS.map(
+        (metric) => `${MISSION_CONTROL_METRIC_LABELS[metric]}: ${results[metric]}`,
+      ),
+      "",
+      `<b>TARGETS (${escapeHtml(mode)})</b>`,
+      `Primary Goal: ${escapeHtml(
+        (MISSION_CONTROL_PRIMARY_LABELS as Record<string, string>)[primaryType] ?? "Not set",
+      )}${primaryTarget ? ` · ${primaryTarget}` : ""}`,
       ...MISSION_CONTROL_METRICS.map((metric) => {
         const target = mcNumber(targets[metric]);
-        return `${MISSION_CONTROL_METRIC_LABELS[metric]}: ${target ?? "off"}`;
+        return `${MISSION_CONTROL_METRIC_LABELS[metric]} target: ${target ?? "off"}`;
       }),
     ];
+
     if (note) lines.push("", `<i>${escapeHtml(note)}</i>`);
 
     await sendMessage(TELEGRAM_BOT_TOKEN, chatId, lines.join("\n"), {
@@ -3305,12 +3362,29 @@ Deno.serve(async (req: Request) => {
             _clear: false,
           });
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Send the number.");
+          // Stored evidence only: resolved target + latest durable snapshot.
+          const ptConfig = await mcResolvedConfig(missionId);
+          const ptResults = await mcLatestResults(binding);
+          const ptType = String(ptConfig["milestone_type"] ?? "NONE").toUpperCase();
+          const ptMetric = primaryGoalMetric(ptType);
+          const ptTarget = mcNumber(ptConfig["milestone_target"]);
           await sendMessage(
             TELEGRAM_BOT_TOKEN,
             callbackChatId,
-            "<b>🏆 Primary target</b>\n\nSend a whole number above zero. The Primary Goal keeps its current metric. This target cannot be turned off.",
+            [
+              "<b>🏆 Primary target</b>",
+              "",
+              `Primary Goal: ${escapeHtml(
+                (MISSION_CONTROL_PRIMARY_LABELS as Record<string, string>)[ptType] ?? "Not set",
+              )}`,
+              `Latest X result: ${ptMetric ? ptResults[ptMetric] : "unavailable"}`,
+              `Current target: ${ptTarget ?? "off"}`,
+              "",
+              "Send the new target as a whole number above zero. The Primary Goal keeps its current metric. This target cannot be turned off.",
+            ].join("\n"),
             { parse_mode: "HTML" },
           );
+
           return json({ ok: true });
         }
 
@@ -3330,12 +3404,24 @@ Deno.serve(async (req: Request) => {
             _clear: false,
           });
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Send the number.");
+          // Stored evidence only: resolved target + latest durable snapshot.
+          const fieldConfig = await mcResolvedConfig(missionId);
+          const fieldTargets = (fieldConfig["metric_targets"] ?? {}) as Record<string, unknown>;
+          const fieldResults = await mcLatestResults(binding);
           await sendMessage(
             TELEGRAM_BOT_TOKEN,
             callbackChatId,
-            `<b>${escapeHtml(MISSION_CONTROL_METRIC_LABELS[metric])}</b>\n\nSend a whole number above zero, or send <b>off</b> to remove this target.`,
+            [
+              `<b>${escapeHtml(MISSION_CONTROL_METRIC_LABELS[metric])}</b>`,
+              "",
+              `Latest X result: ${fieldResults[metric]}`,
+              `Current target: ${mcNumber(fieldTargets[metric]) ?? "off"}`,
+              "",
+              "Send the new target as a whole number above zero, or send <b>off</b> to remove this supporting target.",
+            ].join("\n"),
             { parse_mode: "HTML" },
           );
+
           return json({ ok: true });
         }
 
