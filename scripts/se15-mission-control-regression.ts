@@ -218,7 +218,11 @@ check("8.3 the refresh reuses the transport revision contract", webhook.includes
 check("8.4 the refresh id is deterministic per update", webhook.includes("const mcRequestUuid = async (seed: string)"));
 check("8.5 the webhook never calls an X provider", !webhook.includes("lookupXPostMetrics") && !webhook.includes("api.twitter.com"));
 check("8.6 the transport reads X only for a COMPLETED mission", transport.includes('args.finalRefresh === true && String(mission["status"] ?? "") === "COMPLETED"'));
-check("8.7 target-only changes leave the mission LIVE", sql.includes("IF v_auth.mission_status <> 'LIVE' THEN") );
+check(
+  "8.7 target-only changes leave the mission LIVE",
+  /social_mission_apply_target_override[\s\S]{0,2600}v_status IS DISTINCT FROM 'LIVE'/.test(sql) &&
+    !/social_mission_apply_target_override[\s\S]{0,2600}SET status =/.test(sql),
+);
 const cancelFnStart = sql.indexOf("FUNCTION public.cancel_social_mission_from_control");
 const cancelFnBody = sql.slice(cancelFnStart, sql.indexOf("$$;", cancelFnStart));
 check("8.8 cancel triggers no provider read path", cancelFnStart > -1 && !/snapshot|refresh_metrics|x_api/i.test(cancelFnBody));
