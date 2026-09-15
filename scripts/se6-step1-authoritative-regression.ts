@@ -1980,7 +1980,7 @@ check(
 );
 check(
   "22.1f both call sites pass TELEGRAM_BOT_TOKEN explicitly",
-  (webhookRaw.match(/await sendBareMissionLauncher\(TELEGRAM_BOT_TOKEN, chatId\);/g) ?? []).length === 2,
+  (webhookRaw.match(/await sendBareMissionLauncherAndCleanup\(TELEGRAM_BOT_TOKEN, chatId, Number\(message\?\.message_id\)\);/g) ?? []).length === 2,
 );
 
 check(
