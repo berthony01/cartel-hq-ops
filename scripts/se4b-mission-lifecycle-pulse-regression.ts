@@ -246,7 +246,20 @@ check("11.6 close reads no X link", /const parsed = isClose \? null : parseXStat
 check("11.7 close runs after the same connected-group, linked-account and operator checks", webhookCode.indexOf("if (isClose) {") > webhookCode.indexOf('admin.rpc("is_workspace_operator"'));
 check("11.8 close runs after the live Telegram administrator check", webhookCode.indexOf("if (isClose) {") > webhookCode.indexOf('memberStatus !== "administrator"'));
 check("11.9 close calls the close RPC", /admin\.rpc\("close_social_mission_from_telegram"/.test(webhookCode));
-check("11.10 close makes exactly one edit_mission transport call", (webhookCode.match(/action: "edit_mission"/g) ?? []).length === 1);
+// SE-15 added a separate Mission Control transport caller (`mcRefreshCard`),
+// so the file-wide count is 2. The CLOSE path itself still makes exactly one
+// call, which is what this check has always been about.
+const closeSlice = webhookCode.slice(
+  webhookCode.indexOf("if (isClose) {"),
+  webhookCode.indexOf("const mcRefreshCard") > -1
+    ? webhookCode.indexOf("const mcRefreshCard")
+    : undefined,
+);
+check(
+  "11.10 close makes exactly one edit_mission transport call",
+  (closeSlice.match(/action: "edit_mission"/g) ?? []).length === 1 &&
+    (webhookCode.match(/action: "edit_mission"/g) ?? []).length === 2,
+);
 check("11.11 close uses the deterministic request id returned by the RPC", /clientRequestId: closeResult\.client_request_id/.test(webhookCode));
 check("11.12 close bumps the revision by exactly one", /revision: Number\(closeResult\.edit_revision \?\? 0\) \+ 1/.test(webhookCode));
 check("11.13 a failed close edit never sends a replacement message", /could not be updated in place; do not resend/.test(webhookSrc));
