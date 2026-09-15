@@ -1035,17 +1035,27 @@ Deno.serve(async (req: Request) => {
       // Diagnostics are never allowed to block or alter the decision below.
     }
 
-    const blockLaunch = async (text: string) => {
-      if (args.onPermissionBlocked) await args.onPermissionBlocked(text);
+    const blockLaunch = async (
+      text: string,
+      detail: { kind: "UNRESOLVED" | "NOT_ADMIN" | "MISSING_RIGHTS"; missing: string[] },
+    ) => {
+      timing.log(isLinkFinder ? "link_finder_start_blocked" : "mission_command_blocked");
+      if (args.onPermissionBlocked) await args.onPermissionBlocked(text, detail);
       else await reply(text);
     };
 
     if (!botPermissions.resolved) {
-      await blockLaunch(`Telegram could not confirm @${BOT_USERNAME}'s permissions in this group right now. Try again shortly.`);
+      await blockLaunch(
+        `Telegram could not confirm @${BOT_USERNAME}'s permissions in this group right now. Try again shortly.`,
+        { kind: "UNRESOLVED", missing: [] },
+      );
       return;
     }
     if (!botPermissions.isAdmin) {
-      await blockLaunch(`CARTEL HQ needs @${BOT_USERNAME} to be an administrator of this group before a Social Mission can start.`);
+      await blockLaunch(
+        `CARTEL HQ needs @${BOT_USERNAME} to be an administrator of this group before a Social Mission can start.`,
+        { kind: "NOT_ADMIN", missing: [] },
+      );
       return;
     }
     const missingRights: string[] = [];
@@ -1055,6 +1065,7 @@ Deno.serve(async (req: Request) => {
       console.warn(`[SE-8] mission launch blocked: missing ${boundedReason(missingRights.join(", "))}`);
       await blockLaunch(
         `CARTEL HQ needs ${missingRights.join(" and ")} enabled for @${BOT_USERNAME} in this group before a Social Mission can start.`,
+        { kind: "MISSING_RIGHTS", missing: missingRights },
       );
       return;
     }
