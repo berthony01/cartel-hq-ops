@@ -467,7 +467,11 @@ function composeLines(input: MissionCardInput, excerptBudget: number | null): st
   for (const line of statusBody(input.missionStatus)) lines.push(line);
 
   const metricLines = renderMetricLines(input.platform, input.baseline, input.latest);
-  const goalLines = renderGoalLines(input.goal, input.latest, accomplished);
+  // SE-14 — the scorecard supersedes the single-goal block whenever the
+  // immutable target set yields at least one truthful target/metric pair.
+  const targetLines = renderTargetLines(input.metricTargets, input.latest, input.goal, accomplished);
+  const goalLines =
+    targetLines.length > 0 ? targetLines : renderGoalLines(input.goal, input.latest, accomplished);
   if (input.missionStatus === "LIVE") {
     // A LIVE card ALWAYS carries the results block. With no snapshot yet it
     // says so honestly instead of rendering zeroes.

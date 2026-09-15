@@ -266,6 +266,32 @@ function missionGoal(mission: LoadedRow): MissionGoal | null {
   return { type: type as MissionGoal["type"], target, stretchTarget, source };
 }
 
+/**
+ * SE-14 — the immutable supporting target set, read ONLY from the mission's own
+ * effective config snapshot. A client can never supply it: nothing in the
+ * webhook or transport payload is consulted here. Unknown or invalid entries
+ * are dropped rather than coerced.
+ */
+function missionMetricTargets(mission: LoadedRow): MissionMetricTargets | null {
+  const metadata = mission["metadata"];
+  if (!metadata || typeof metadata !== "object") return null;
+  const config = (metadata as Record<string, unknown>)["effective_config"];
+  if (!config || typeof config !== "object") return null;
+  const raw = (config as Record<string, unknown>)["metric_targets"];
+  if (!raw || typeof raw !== "object") return null;
+  const source = raw as Record<string, unknown>;
+  const out: MissionMetricTargets = {};
+  let known = false;
+  for (const key of ["views", "likes", "replies", "reposts", "bookmarks"] as const) {
+    const value = Number(source[key]);
+    if (Number.isInteger(value) && value > 0) {
+      out[key] = value;
+      known = true;
+    }
+  }
+  return known ? out : null;
+}
+
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
