@@ -2380,16 +2380,23 @@ Deno.serve(async (req: Request) => {
    * snapshot only for a COMPLETED mission.
    */
   const mcRefreshCard = async (args: {
-    workspaceId: string;
-    missionId: string;
+    binding: MissionControlBinding;
     actorUserId: string | null;
     seed: string;
   }) => {
+    const workspaceId = args.binding.workspaceId;
+    const missionId = args.binding.missionId;
+    // The EXACT verified target. Filtering on mission+workspace alone would
+    // break (or edit the wrong card) the moment a mission has more than one
+    // delivered target, so the verified Telegram chat is part of the binding.
     const { data: target } = await admin
       .from("social_mission_targets")
       .select("id, edit_revision")
-      .eq("mission_id", args.missionId)
-      .eq("workspace_id", args.workspaceId)
+      .eq("mission_id", missionId)
+      .eq("workspace_id", workspaceId)
+      .eq("telegram_chat_id", Number(args.binding.chatId))
+      .order("created_at", { ascending: true })
+      .limit(1)
       .maybeSingle();
     if (!target?.id) return null;
     try {
