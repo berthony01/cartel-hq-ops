@@ -6146,6 +6146,7 @@ export type Database = {
         Args: { _sticker_id: string; _version_id: string }
         Returns: Json
       }
+      social_mission_auto_goal: { Args: { _baseline: number }; Returns: Json }
       social_mission_effective_config: {
         Args: { _mission_id: string }
         Returns: Json
