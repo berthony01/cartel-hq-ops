@@ -1808,7 +1808,10 @@ const se11CommandBranch = webhookRaw.slice(
   webhookRaw.indexOf("// SE-5 — X Link Finder."),
 );
 const se11AnonBranch = se11CommandBranch.slice(
-  se11CommandBranch.indexOf("if (missionMatch && isAnonymousGroupAdminSender"),
+  // The anonymous link branch is the one with the strict same-group condition
+  // and no bare-command guard; the SE-11 comment before it contains the word
+  // "runMissionCommand" and must not pollute this slice.
+  se11CommandBranch.indexOf("if (missionMatch && isAnonymousGroupAdminSender && isGroupChat) {"),
 );
 const se11Helper = webhookRaw.slice(
   webhookRaw.indexOf("const offerLinkFinderCandidate = async ("),
