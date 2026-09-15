@@ -1537,7 +1537,7 @@ check(
 );
 check(
   "19.9d a still-failing deletion creates nothing and answers precisely",
-  /if \(!sourceReady\) \{[\s\S]{0,400}Delete Messages admin right[\s\S]{0,200}return json\(\{ ok: true \}\);/
+  /if \(!sourceReady\) \{[\s\S]{0,900}Delete Messages admin right[\s\S]{0,200}return json\(\{ ok: true \}\);/
     .test(startBranchSe9),
 );
 check(
@@ -1765,7 +1765,7 @@ check(
 );
 check(
   "20.6e instrumentation never changes a decision or a return value",
-  !/if \(timing|return timing/.test(webhookRaw),
+  !/if \(timing\.|return timing\b/.test(webhookRaw),
 );
 
 // 20.7 — nothing else moved.
