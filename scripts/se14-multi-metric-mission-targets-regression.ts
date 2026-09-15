@@ -211,7 +211,14 @@ check("8.12 supporting targets never set accomplished_at", !/metric_targets[\s\S
 check("8.13 accomplishment is still driven only by the primary goal", /v_progress >= v_target_value/.test(SQL));
 check("8.14 the explicit primary goal still wins", /EXPLICIT workspace goal ALWAYS wins/.test(SQL) && SQL.indexOf("EXPLICIT workspace goal ALWAYS wins") < SQL.indexOf("ELSIF v_goal_source IS NULL"));
 check("8.15 the SE-13.2 auto-goal gate is preserved verbatim", /ELSIF v_goal_source IS NULL\n        AND _provider = 'x-official'\n        AND v_snapshot_inserted\n        AND _views IS NOT NULL AND _views >= 0 THEN/.test(SQL));
-check("8.16 the SE-13 rounding is untouched", /GREATEST\(_baseline \+ 25, ceil\(_baseline \* 1\.30\)::bigint\)/.test(SQL));
+// SE-14 REUSES the SE-13 primary-goal helper and never redefines it, so the
+// SE-13 rounding authority is asserted in its own prepared migration.
+check(
+  "8.16 the SE-13 primary-goal rounding is untouched and never redefined by SE-14",
+  /GREATEST\(_baseline \+ 25, ceil\(_baseline \* 1\.30\)::bigint\)/.test(
+    read("docs/sql/SE13_social_mission_goal_experience.sql"),
+  ) && !/FUNCTION public\.social_mission_auto_goal/.test(SQL),
+);
 check("8.17 the supporting formula matches the frozen multiplier", /GREATEST\(_baseline \+ _floor_add, ceil\(_baseline \* 1\.50\)::bigint\)/.test(SQL));
 check("8.18 the rounding steps are frozen in SQL", /WHEN _baseline < 20 THEN 1/.test(SQL) && /WHEN _baseline < 100 THEN 5/.test(SQL) && /WHEN _baseline < 500 THEN 10/.test(SQL) && /ELSE 25/.test(SQL));
 check("8.19 a NULL baseline yields no SQL target", /IF _baseline IS NULL OR _baseline < 0 OR _floor_add IS NULL THEN\n    RETURN NULL;/.test(SQL));
