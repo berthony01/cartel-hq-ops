@@ -2065,9 +2065,13 @@ check(
 // 23. SE-12.2 — delete the bare `/mission` command only after Telegram
 //     confirms the launcher message was delivered.
 // ---------------------------------------------------------------------------
+// Bounded to the bare-launcher helper ITSELF. SE-15 added a sibling launcher
+// helper between this function and `encodeChatId`, so the old open-ended slice
+// would have graded unrelated code. The assertions below are unchanged.
+const se122CleanupStart = webhookRaw.indexOf("async function sendBareMissionLauncherAndCleanup(");
 const se122Cleanup = webhookRaw.slice(
-  webhookRaw.indexOf("async function sendBareMissionLauncherAndCleanup("),
-  webhookRaw.indexOf("function encodeChatId("),
+  se122CleanupStart,
+  webhookRaw.indexOf("\nasync function ", se122CleanupStart + 1),
 );
 
 check("23.1a the shared cleanup helper exists", se122Cleanup.length > 0);
