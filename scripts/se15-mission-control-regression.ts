@@ -180,7 +180,14 @@ check("6.13 array metadata is rejected", resolveMissionConfig([1, 2, 3]) === nul
 check("6.14 manual mode without an override falls back to frozen", JSON.stringify(resolveMissionConfig({ effective_config: frozen, mission_control: { mode: "MANUAL" } })) === JSON.stringify(frozen));
 check("6.15 SQL resolver mirrors the TS resolver", sql.includes("social_mission_resolve_config") && sql.includes("|| (_metadata -> 'mission_control' -> 'override_config')"));
 check("6.16 no SQL path writes effective_config", !/jsonb_set\([^)]*'\{effective_config/.test(sql) && !sql.includes("{effective_config}"));
-check("6.17 overrides are written under mission_control only", sql.includes("'{mission_control,override_config}'") && sql.includes("'{mission_control,mode}'"));
+// Re-pinned to the hardened merge write: overrides land under `mission_control`
+// through the top-level merge helper (nested jsonb_set was unsafe on first use).
+check(
+  "6.17 overrides are written under mission_control only",
+  /jsonb_build_object\(\s*'mission_control',/.test(sql) &&
+    /'override_config',/.test(sql) &&
+    /'mode',\s*'(MANUAL|AUTO)'/.test(sql),
+);
 check(
   "6.18 SE-14 establishment gates are untouched",
   !/(CREATE OR REPLACE FUNCTION|DROP FUNCTION|ALTER FUNCTION)[^;\n]*(record_social_mission_metric_snapshot|social_mission_auto_goal)/i.test(
