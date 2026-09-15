@@ -3404,12 +3404,24 @@ Deno.serve(async (req: Request) => {
             _clear: false,
           });
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Send the number.");
+          // Stored evidence only: resolved target + latest durable snapshot.
+          const fieldConfig = await mcResolvedConfig(missionId);
+          const fieldTargets = (fieldConfig["metric_targets"] ?? {}) as Record<string, unknown>;
+          const fieldResults = await mcLatestResults(binding);
           await sendMessage(
             TELEGRAM_BOT_TOKEN,
             callbackChatId,
-            `<b>${escapeHtml(MISSION_CONTROL_METRIC_LABELS[metric])}</b>\n\nSend a whole number above zero, or send <b>off</b> to remove this target.`,
+            [
+              `<b>${escapeHtml(MISSION_CONTROL_METRIC_LABELS[metric])}</b>`,
+              "",
+              `Latest X result: ${fieldResults[metric]}`,
+              `Current target: ${mcNumber(fieldTargets[metric]) ?? "off"}`,
+              "",
+              "Send the new target as a whole number above zero, or send <b>off</b> to remove this supporting target.",
+            ].join("\n"),
             { parse_mode: "HTML" },
           );
+
           return json({ ok: true });
         }
 
