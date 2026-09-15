@@ -248,6 +248,39 @@ check("6.5 the stored settings keys are unchanged for DB compatibility", /milest
 check("6.6 the settings validation speaks goal language", /A Primary Goal needs a whole target number above zero/.test(SETTINGS_LIB));
 
 // ---------------------------------------------------------------------------
+// 7. SE-13.1 — no card may be rendered from a pre-refresh mission row.
+// ---------------------------------------------------------------------------
+const sendBody = TRANSPORT.slice(TRANSPORT.indexOf("async function handleSend("), TRANSPORT.indexOf("async function handleEdit("));
+const editBody = TRANSPORT.slice(TRANSPORT.indexOf("async function handleEdit("));
+const reloadBody = TRANSPORT.slice(
+  TRANSPORT.indexOf("async function reloadMissionRow("),
+  TRANSPORT.indexOf("function missionGoal("),
+);
+
+check("7.1 an authoritative mission reload helper exists", /async function reloadMissionRow\(/.test(TRANSPORT));
+check("7.2 the reload is scoped to the exact mission id AND workspace id", /\.from\("social_missions"\)[\s\S]*?\.eq\("id", missionId\)[\s\S]*?\.eq\("workspace_id", workspaceId\)/.test(reloadBody));
+check("7.3 the reload performs zero provider calls", !/fetch\(|lookupXPostMetrics|X_API_BEARER_TOKEN/.test(reloadBody));
+check("7.4 the reload performs zero Telegram calls", !/telegramCall|sendMessage|sendPhoto|editMessage/i.test(reloadBody));
+check("7.5 the reload writes nothing", !/\.insert\(|\.update\(|\.upsert\(|\.rpc\(/.test(reloadBody));
+check("7.6 the reload returns null instead of guessing", /return null;/.test(reloadBody));
+
+check("7.7 send reloads the mission after the launch metrics read", sendBody.indexOf("attemptLaunchMetricsRead(") < sendBody.indexOf("reloadMissionRow("));
+check("7.8 send reloads the mission before the card is rendered", sendBody.indexOf("reloadMissionRow(") < sendBody.indexOf("renderAuthoritativeCard("));
+check("7.9 send renders from the refreshed row", /renderAuthoritativeCard\(\s*admin,\s*workspaceId,\s*refreshedMission,/.test(sendBody));
+check("7.10 a failed reload refuses to send a stale first card", /could not be re-read after its metrics refresh; nothing was sent/.test(sendBody));
+check("7.11 send still performs at most one launch metrics read", sendBody.split("attemptLaunchMetricsRead(").length === 2);
+check("7.12 send adds no second X lookup", !/lookupXPostMetrics/.test(sendBody));
+
+check("7.13 a manual final refresh reloads after the final metrics read", editBody.indexOf("attemptFinalMetricsRead(") < editBody.indexOf("reloadMissionRow("));
+check("7.14 the completion card is rendered after that reload", editBody.indexOf("reloadMissionRow(") < editBody.indexOf("renderAuthoritativeCard("));
+check("7.15 edit still performs at most one final metrics read", editBody.split("attemptFinalMetricsRead(").length === 2);
+check("7.16 a failed final reload refuses to edit with stale state", /could not be re-read after its final metrics refresh; nothing was edited/.test(editBody));
+check("7.17 the reload only runs when a metric refresh ran", /let renderMission = mission;/.test(editBody) && /renderAuthoritativeCard\(admin, workspaceId, renderMission, transportKind\)/.test(editBody));
+check("7.18 the reload is confined to the refresh branch", editBody.indexOf("reloadMissionRow(") > editBody.indexOf("args.finalRefresh === true"));
+check("7.19 no new Telegram call is introduced by the reload", TRANSPORT.split("telegramCall(").length === read("backend-source/edge-functions/social-mission-telegram/index.ts").split("telegramCall(").length);
+check("7.20 the auto-goal formula is untouched by this hardening", /GREATEST\(_baseline \+ 25, ceil\(_baseline \* 1\.30\)::bigint\)/.test(SQL));
+
+// ---------------------------------------------------------------------------
 if (failures.length > 0) {
   console.error(`SE-13 FAILURES (${failures.length}):`);
   for (const f of failures) console.error(` - ${f}`);

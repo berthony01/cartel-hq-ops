@@ -204,6 +204,43 @@ async function attemptFinalMetricsRead(
   }
 }
 
+/**
+ * SE-13.1 — authoritative re-read of ONE mission row.
+ *
+ * `record_social_mission_metric_snapshot` can mutate the mission inside a
+ * metric read: it writes the durable baseline, it can establish the AUTO
+ * MISSION GOAL in `metadata.effective_config`, and it can set
+ * `accomplished_at`. Any card rendered from the row loaded BEFORE that read is
+ * therefore potentially stale. Callers that performed a metric read MUST
+ * reload through this helper before rendering.
+ *
+ * Boundaries: ONE scoped database read by exact mission id AND workspace id.
+ * ZERO provider calls, ZERO Telegram calls, ZERO writes. Returns null when the
+ * row cannot be re-read, so the caller can fail safely instead of knowingly
+ * sending a stale card.
+ */
+async function reloadMissionRow(
+  admin: ReturnType<typeof createClient>,
+  workspaceId: string,
+  missionId: unknown,
+): Promise<LoadedRow | null> {
+  if (typeof missionId !== "string" || !missionId) return null;
+  try {
+    const { data, error } = await admin
+      .from("social_missions")
+      .select("*")
+      .eq("id", missionId)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (error || !data) return null;
+    return data as LoadedRow;
+  } catch {
+    return null;
+  }
+}
+
+
+
 
 /**
  * SE-13 — the MISSION GOAL, read ONLY from the mission's own immutable config
@@ -726,8 +763,25 @@ async function handleSend(args: {
   // the mission and NEVER writes a snapshot.
   await attemptLaunchMetricsRead(admin, workspaceId, mission);
 
+  // SE-13.1. That read may have established the AUTO MISSION GOAL, the durable
+  // baseline or accomplishment state ON THIS MISSION ROW. Re-read the row once
+  // — no second X lookup, no extra Telegram call — so the FIRST card cannot be
+  // rendered from pre-refresh state. A failed re-read is refused rather than
+  // silently sending a card that would omit a goal the database now holds.
+  const refreshedMission = await reloadMissionRow(admin, workspaceId, mission["id"]);
+  if (!refreshedMission) {
+    return fail("The mission could not be re-read after its metrics refresh; nothing was sent.", 409, {
+      deliveryState: state,
+    });
+  }
+
   // 3c. Render authoritatively, then durably claim the intent BEFORE transport.
-  const rendered = await renderAuthoritativeCard(admin, workspaceId, mission, desiredTransportKind);
+  const rendered = await renderAuthoritativeCard(
+    admin,
+    workspaceId,
+    refreshedMission,
+    desiredTransportKind,
+  );
   if ("error" in rendered) return fail(rendered.error, 409);
 
   // Compare-and-set. The claim must return exactly one row: a zero-row update
@@ -916,11 +970,24 @@ async function handleEdit(args: {
   // SE-6 Step 1 (E) — best-effort FINAL official X reading for a manual close,
   // taken BEFORE the completion card is rendered. Skipped entirely when this
   // mission already has a snapshot in the current minute bucket.
+  let renderMission = mission;
   if (args.finalRefresh === true && String(mission["status"] ?? "") === "COMPLETED") {
     await attemptFinalMetricsRead(admin, workspaceId, mission);
+
+    // SE-13.1. The final read can move goal / accomplishment state, so the
+    // completion card is rendered from the re-read row. No metric refresh ran
+    // on any other path, so those paths keep the already-loaded row unchanged.
+    const refreshedMission = await reloadMissionRow(admin, workspaceId, mission["id"]);
+    if (!refreshedMission) {
+      return fail("The mission could not be re-read after its final metrics refresh; nothing was edited.", 409, {
+        editState,
+        editRevision: currentRevision,
+      });
+    }
+    renderMission = refreshedMission;
   }
 
-  const rendered = await renderAuthoritativeCard(admin, workspaceId, mission, transportKind);
+  const rendered = await renderAuthoritativeCard(admin, workspaceId, renderMission, transportKind);
 
   if ("error" in rendered) return fail(rendered.error, 409);
 
