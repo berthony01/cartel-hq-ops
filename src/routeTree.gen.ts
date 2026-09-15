@@ -35,6 +35,7 @@ import { Route as NetworkIndexRouteImport } from './routes/network.index'
 import { Route as NetworkLaunchesRouteImport } from './routes/network.launches'
 import { Route as NetworkProjectsRouteImport } from './routes/network.projects'
 import { Route as NetworkSignalsRouteImport } from './routes/network.signals'
+import { Route as TgIndexRouteImport } from './routes/tg.index'
 import { Route as AuthenticatedStickerLabIndexRouteImport } from './routes/_authenticated/sticker-lab.index'
 import { Route as AuthenticatedStickerLabPackIdRouteImport } from './routes/_authenticated/sticker-lab.$packId'
 import { Route as AuthenticatedStickerLabNewRouteImport } from './routes/_authenticated/sticker-lab.new'
@@ -176,6 +177,11 @@ const NetworkSignalsRoute = NetworkSignalsRouteImport.update({
   path: '/signals',
   getParentRoute: () => NetworkRoute,
 } as any)
+const TgIndexRoute = TgIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => TgRoute,
+} as any)
 const AuthenticatedStickerLabIndexRoute =
   AuthenticatedStickerLabIndexRouteImport.update({
     id: '/',
@@ -210,7 +216,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
   '/network': typeof NetworkRouteWithChildren
-  '/tg': typeof TgRoute
+  '/tg': typeof TgRouteWithChildren
   '/admin': typeof AuthenticatedAdminRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/assets': typeof AuthenticatedAssetsRoute
@@ -232,6 +238,7 @@ export interface FileRoutesByFullPath {
   '/network/projects': typeof NetworkProjectsRoute
   '/network/signals': typeof NetworkSignalsRoute
   '/network/': typeof NetworkIndexRoute
+  '/tg/': typeof TgIndexRoute
   '/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
   '/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
   '/network/launch/$launchSlug': typeof NetworkLaunchLaunchSlugRoute
@@ -240,7 +247,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
-  '/tg': typeof TgRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/assets': typeof AuthenticatedAssetsRoute
@@ -262,6 +268,7 @@ export interface FileRoutesByTo {
   '/network/signals': typeof NetworkSignalsRoute
   '/': typeof AuthenticatedIndexRoute
   '/network': typeof NetworkIndexRoute
+  '/tg': typeof TgIndexRoute
   '/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
   '/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
   '/network/launch/$launchSlug': typeof NetworkLaunchLaunchSlugRoute
@@ -273,7 +280,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/network': typeof NetworkRouteWithChildren
-  '/tg': typeof TgRoute
+  '/tg': typeof TgRouteWithChildren
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/assets': typeof AuthenticatedAssetsRoute
@@ -296,6 +303,7 @@ export interface FileRoutesById {
   '/network/signals': typeof NetworkSignalsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/network/': typeof NetworkIndexRoute
+  '/tg/': typeof TgIndexRoute
   '/_authenticated/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
   '/_authenticated/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
   '/network/launch/$launchSlug': typeof NetworkLaunchLaunchSlugRoute
@@ -330,6 +338,7 @@ export interface FileRouteTypes {
     | '/network/projects'
     | '/network/signals'
     | '/network/'
+    | '/tg/'
     | '/sticker-lab/$packId'
     | '/sticker-lab/new'
     | '/network/launch/$launchSlug'
@@ -338,7 +347,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
-    | '/tg'
     | '/admin'
     | '/analytics'
     | '/assets'
@@ -360,6 +368,7 @@ export interface FileRouteTypes {
     | '/network/signals'
     | '/'
     | '/network'
+    | '/tg'
     | '/sticker-lab/$packId'
     | '/sticker-lab/new'
     | '/network/launch/$launchSlug'
@@ -393,6 +402,7 @@ export interface FileRouteTypes {
     | '/network/signals'
     | '/_authenticated/'
     | '/network/'
+    | '/tg/'
     | '/_authenticated/sticker-lab/$packId'
     | '/_authenticated/sticker-lab/new'
     | '/network/launch/$launchSlug'
@@ -404,7 +414,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   NetworkRoute: typeof NetworkRouteWithChildren
-  TgRoute: typeof TgRoute
+  TgRoute: typeof TgRouteWithChildren
   AuthCallbackRoute: typeof AuthCallbackRoute
 }
 
@@ -592,6 +602,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NetworkSignalsRouteImport
       parentRoute: typeof NetworkRoute
     }
+    '/tg/': {
+      id: '/tg/'
+      path: '/'
+      fullPath: '/tg/'
+      preLoaderRoute: typeof TgIndexRouteImport
+      parentRoute: typeof TgRoute
+    }
     '/_authenticated/sticker-lab/': {
       id: '/_authenticated/sticker-lab/'
       path: '/'
@@ -712,11 +729,21 @@ const NetworkRouteChildren: NetworkRouteChildren = {
 const NetworkRouteWithChildren =
   NetworkRoute._addFileChildren(NetworkRouteChildren)
 
+interface TgRouteChildren {
+  TgIndexRoute: typeof TgIndexRoute
+}
+
+const TgRouteChildren: TgRouteChildren = {
+  TgIndexRoute: TgIndexRoute,
+}
+
+const TgRouteWithChildren = TgRoute._addFileChildren(TgRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   NetworkRoute: NetworkRouteWithChildren,
-  TgRoute: TgRoute,
+  TgRoute: TgRouteWithChildren,
   AuthCallbackRoute: AuthCallbackRoute,
 }
 export const routeTree = rootRouteImport
