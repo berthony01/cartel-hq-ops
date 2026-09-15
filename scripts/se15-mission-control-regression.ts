@@ -497,6 +497,16 @@ check("19.40 the unpin binds the verified chat", /mcSafeUnpin[\s\S]{0,700}eq\("t
 check("19.41 the unpin still requires HQ ownership", /mcSafeUnpin[\s\S]{0,900}pinned\?\.pinned_by_hq/.test(webhook));
 check("19.42 no loose mission-only card match remains", !/eq\("workspace_id", args\.workspaceId\)\s*\n\s*\.maybeSingle\(\)/.test(webhook));
 
+// 19.42b — every Mission Control card refresh uses the binding-based shape.
+{
+  const callArgs = [...webhook.matchAll(/await mcRefreshCard\(\{([\s\S]{0,300}?)\}\)/g)].map((m) => m[1]);
+  check("19.42b every mcRefreshCard call passes binding", callArgs.length >= 7 && callArgs.every((a) => /(^|\s)binding,/.test(a)));
+  check(
+    "19.42c no stale workspaceId/missionId call shape remains",
+    callArgs.every((a) => !/\bworkspaceId\s*:/.test(a) && !/\bmissionId\s*:/.test(a)),
+  );
+}
+
 // 19.43 — proportional pulse rescheduling.
 check("19.43 pulses keep their relative position", /v_fraction/.test(durationFn) && /due_at\s*-\s*v_now/i.test(durationFn));
 check("19.44 a degenerate window falls back deterministically", /v_pending\s*\+\s*1/.test(durationFn));

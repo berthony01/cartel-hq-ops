@@ -3833,24 +3833,30 @@ export type Database = {
       telegram_team_sessions: {
         Row: {
           active_conversation_id: string | null
+          active_mission_id: string | null
           expires_at: string
           mode: string
+          pending_control_field: string | null
           selected_workspace_id: string | null
           telegram_user_id: number
           updated_at: string
         }
         Insert: {
           active_conversation_id?: string | null
+          active_mission_id?: string | null
           expires_at: string
           mode?: string
+          pending_control_field?: string | null
           selected_workspace_id?: string | null
           telegram_user_id: number
           updated_at?: string
         }
         Update: {
           active_conversation_id?: string | null
+          active_mission_id?: string | null
           expires_at?: string
           mode?: string
+          pending_control_field?: string | null
           selected_workspace_id?: string | null
           telegram_user_id?: number
           updated_at?: string
@@ -3861,6 +3867,13 @@ export type Database = {
             columns: ["active_conversation_id"]
             isOneToOne: false
             referencedRelation: "project_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_team_sessions_active_mission_id_fkey"
+            columns: ["active_mission_id"]
+            isOneToOne: false
+            referencedRelation: "social_missions"
             referencedColumns: ["id"]
           },
           {
@@ -4585,6 +4598,15 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      cancel_social_mission_from_control: {
+        Args: {
+          _idempotency_key: string
+          _mission_id: string
+          _telegram_user_id: number
+          _verified_chat_id: number
+        }
+        Returns: Json
+      }
       capture_project_inbox_launch_reply: {
         Args: {
           _body: string
@@ -5016,6 +5038,15 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      end_social_mission_from_control: {
+        Args: {
+          _idempotency_key: string
+          _mission_id: string
+          _telegram_user_id: number
+          _verified_chat_id: number
+        }
+        Returns: Json
       }
       engage_launch_chain_production_emergency_stop: {
         Args: { _operator_user_id: string; _reason: string }
@@ -6146,8 +6177,119 @@ export type Database = {
         Args: { _sticker_id: string; _version_id: string }
         Returns: Json
       }
+      social_mission_apply_duration_override: {
+        Args: {
+          _idempotency_key: string
+          _minutes_from_now: number
+          _mission_id: string
+          _telegram_user_id: number
+          _verified_chat_id: number
+        }
+        Returns: Json
+      }
+      social_mission_apply_target_override: {
+        Args: {
+          _bookmarks: number
+          _idempotency_key: string
+          _likes: number
+          _mission_id: string
+          _mode: string
+          _primary_target: number
+          _primary_type: string
+          _replies: number
+          _reposts: number
+          _telegram_user_id: number
+          _verified_chat_id: number
+          _views: number
+        }
+        Returns: Json
+      }
       social_mission_auto_goal: { Args: { _baseline: number }; Returns: Json }
+      social_mission_control_active_session: {
+        Args: { _telegram_user_id: number }
+        Returns: {
+          mission_id: string
+          pending_control_field: string
+          workspace_id: string
+        }[]
+      }
+      social_mission_control_append_history: {
+        Args: {
+          _action: string
+          _actor_user_id: string
+          _after: Json
+          _before: Json
+          _idempotency_key: string
+          _mission_id: string
+          _telegram_user_id: number
+        }
+        Returns: undefined
+      }
+      social_mission_control_authorize: {
+        Args: {
+          _mission_id: string
+          _telegram_user_id: number
+          _verified_chat_id: number
+        }
+        Returns: {
+          actor_user_id: string
+          mission_status: string
+          outcome: string
+          target_id: string
+          workspace_id: string
+        }[]
+      }
+      social_mission_control_key_used: {
+        Args: { _idempotency_key: string; _mission_id: string }
+        Returns: boolean
+      }
+      social_mission_control_merge_state: {
+        Args: { _mission_id: string; _patch: Json }
+        Returns: undefined
+      }
+      social_mission_control_missions: {
+        Args: { _telegram_user_id: number; _workspace_id: string }
+        Returns: {
+          author_handle: string
+          canonical_url: string
+          control_mode: string
+          ends_at: string
+          mission_id: string
+          started_at: string
+          telegram_chat_id: number
+        }[]
+      }
+      social_mission_control_panel: {
+        Args: {
+          _mission_id: string
+          _telegram_user_id: number
+          _verified_chat_id: number
+        }
+        Returns: Json
+      }
+      social_mission_control_set_session: {
+        Args: {
+          _clear?: boolean
+          _mission_id?: string
+          _pending_field?: string
+          _telegram_user_id: number
+          _workspace_id?: string
+        }
+        Returns: string
+      }
+      social_mission_control_workspaces: {
+        Args: { _telegram_user_id: number }
+        Returns: {
+          live_missions: number
+          workspace_id: string
+          workspace_name: string
+        }[]
+      }
       social_mission_effective_config: {
+        Args: { _mission_id: string }
+        Returns: Json
+      }
+      social_mission_effective_config_resolved: {
         Args: { _mission_id: string }
         Returns: Json
       }
@@ -6164,6 +6306,10 @@ export type Database = {
         Returns: Json
       }
       social_mission_preset_config: { Args: { _preset: string }; Returns: Json }
+      social_mission_resolve_config: {
+        Args: { _metadata: Json }
+        Returns: Json
+      }
       social_mission_scheduler_secret_matches: {
         Args: { p_secret: string }
         Returns: boolean
