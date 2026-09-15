@@ -423,7 +423,7 @@ const historyFn = fnBody("social_mission_control_append_history");
 check("19.1 a top-level merge helper exists", mergeFn.length > 0);
 check("19.2 the merge creates mission_control when absent", /coalesce\(m\.metadata\s*->\s*'mission_control'\s*,\s*'\{\}'/i.test(mergeFn));
 check("19.3 the merge preserves every sibling key", /coalesce\(m\.metadata\s*,\s*'\{\}'[^)]*\)\s*\|\|/i.test(mergeFn));
-check("19.4 effective_config is never written", !/jsonb_set[^;]*effective_config/i.test(sql) && !/'effective_config'\s*,/.test(mergeFn));
+check("19.4 effective_config is never written", !/jsonb_set[^;]*effective_config/i.test(sqlCode) && !/'effective_config'\s*,/.test(mergeFn));
 check("19.5 MANUAL override uses the merge helper", /social_mission_control_merge_state/.test(overrideFn));
 check("19.6 RESET_AUTO uses the merge helper", /'AUTO'[\s\S]{0,400}social_mission_control_merge_state|social_mission_control_merge_state[\s\S]{0,400}'AUTO'/.test(overrideFn));
 check("19.7 history append uses the merge helper", /social_mission_control_merge_state/.test(historyFn));
