@@ -1988,8 +1988,8 @@ check(
   /missionMatch && from\?\.is_bot !== true && isGroupChat && !missionMatch\[1\]/.test(se12HumanBareBranch),
 );
 check(
-  "22.2b human bare /mission sends the launcher",
-  /await sendBareMissionLauncher\(chatId\);/.test(se12HumanBareBranch),
+  "22.2b human bare /mission sends the launcher with the explicit bot token",
+  /await sendBareMissionLauncher\(TELEGRAM_BOT_TOKEN, chatId\);/.test(se12HumanBareBranch),
 );
 check(
   "22.2c human bare /mission never calls runMissionCommand",
@@ -2005,8 +2005,8 @@ check(
   /missionMatch && isAnonymousGroupAdminSender && isGroupChat && !missionMatch\[1\]/.test(se12AnonBareBranch),
 );
 check(
-  "22.3b anonymous bare /mission sends the launcher",
-  /await sendBareMissionLauncher\(chatId\);/.test(se12AnonBareBranch),
+  "22.3b anonymous bare /mission sends the launcher with the explicit bot token",
+  /await sendBareMissionLauncher\(TELEGRAM_BOT_TOKEN, chatId\);/.test(se12AnonBareBranch),
 );
 check(
   "22.3c anonymous bare /mission never calls runMissionCommand",
