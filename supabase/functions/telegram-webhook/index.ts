@@ -2496,6 +2496,35 @@ Deno.serve(async (req: Request) => {
   };
 
   /**
+   * SE-15.1 — latest DURABLE stored snapshot for this exact mission.
+   *
+   * Reads `social_metric_snapshots` only. There is ZERO provider / X API read
+   * anywhere in Mission Control rendering; a missing row or a null column is
+   * reported as `unavailable`, never as 0.
+   */
+  const mcLatestResults = async (binding: MissionControlBinding) => {
+    const { data } = await admin
+      .from("social_metric_snapshots")
+      .select("views, likes, comments, shares, saves, observed_at, created_at")
+      .eq("mission_id", binding.missionId)
+      .eq("workspace_id", binding.workspaceId)
+      .order("observed_at", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const row = (data ?? null) as Record<string, unknown> | null;
+    const out = {} as Record<MissionControlMetric, string>;
+    for (const metric of MISSION_CONTROL_METRICS) {
+      out[metric] = missionControlResultText(
+        row ? row[MISSION_CONTROL_METRIC_COLUMNS[metric]] : null,
+      );
+    }
+    return out;
+  };
+
+
+
+  /**
    * Applies ONE field change by re-sending the complete manual set. There is no
    * client-side draft to desynchronize: the current resolved config is the
    * draft, so every tap is atomic, fully validated server-side and audited.
