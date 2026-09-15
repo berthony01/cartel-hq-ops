@@ -333,7 +333,11 @@ check(
     webhookCode.includes('result["event_owned"] === true'),
 );
 check("13.20 EDITED maps to SENT, FAILED to FAILED, everything else to AMBIGUOUS", /closeEditState === "EDITED" \? "SENT" : closeEditState === "FAILED" \? "FAILED" : "AMBIGUOUS"/.test(webhookCode));
-check("13.21 a finalizer failure never triggers a second Telegram attempt", (webhookCode.match(/action: "edit_mission"/g) ?? []).length === 1 && /finalizedOk[\s\S]{0,400}delivery record could not be saved/.test(webhookCode));
+check(
+  "13.21 a finalizer failure never triggers a second Telegram attempt",
+  (closeSlice.match(/action: "edit_mission"/g) ?? []).length === 1 &&
+    /finalizedOk[\s\S]{0,400}delivery record could not be saved/.test(webhookCode),
+);
 check("13.22 the webhook handles UNRESOLVED and COMPLETED_UNSYNCED without retrying", webhookCode.includes('closeResult.outcome === "UNRESOLVED"') && webhookCode.includes('closeResult.outcome === "COMPLETED_UNSYNCED"'));
 
 // 13.23-13.28 pulse hardening
