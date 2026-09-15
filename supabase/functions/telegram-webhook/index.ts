@@ -2294,10 +2294,14 @@ Deno.serve(async (req: Request) => {
           alreadyDeletedAt: decision.source_deleted_at ?? null,
         });
         if (!sourceReady) {
+          // SE-10 — the same missing right is also rendered IN PLACE on the
+          // prompt, so it cannot be missed once the toast disappears. Nothing
+          // was created and the candidate stays PENDING and retryable.
+          await showPermissionPrompt("", { kind: "MISSING_RIGHTS", missing: ["Delete Messages"] });
           await answerCallback(
             TELEGRAM_BOT_TOKEN,
             callback.id,
-            "I could not remove the original link post. Give @PepeCartelHQBot the Delete Messages admin right, then tap START MISSION again.",
+            "I could not remove the original link post. Give @PepeCartelHQBot the Delete Messages admin right, then tap RETRY START.",
           );
           return json({ ok: true });
         }
