@@ -69,10 +69,11 @@ export type FirstSnapshot = {
  * supporting target. Unknown inputs are omitted entirely.
  */
 export function computeMetricTargets(
-  first: FirstSnapshot,
+  first: FirstSnapshot | null,
   primaryType: string | null,
   primaryTarget: number | null,
-): MissionMetricTargetSet {
+): MissionMetricTargetSet | null {
+  if (first === null || first === undefined) return null;
   const type = (primaryType ?? "NONE").toUpperCase();
   const explicit =
     Number.isInteger(primaryTarget) && (primaryTarget as number) > 0 ? (primaryTarget as number) : null;
