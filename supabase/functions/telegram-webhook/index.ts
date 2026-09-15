@@ -2509,8 +2509,12 @@ Deno.serve(async (req: Request) => {
       return { outcome: "needs_primary_target" as const, type: nextType };
     }
 
-    const value = (metric: MissionControlMetric) =>
-      args.patch[metric] !== undefined ? args.patch[metric]! : mcNumber(targets[metric]);
+    // The metric that IS the Primary Goal stays pinned to the primary number
+    // (TOTAL_INTERACTIONS has no single pinned metric, so it stays separate).
+    const value = (metric: MissionControlMetric) => {
+      if (pinned && metric === pinned) return primaryTarget;
+      return args.patch[metric] !== undefined ? args.patch[metric]! : mcNumber(targets[metric]);
+    };
 
     const { data, error } = await admin.rpc("social_mission_apply_target_override", {
       _telegram_user_id: args.telegramUserId,
