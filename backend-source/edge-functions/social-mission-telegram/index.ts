@@ -60,6 +60,7 @@ import {
   type MissionCardPlatform,
   type MissionCardStatus,
   type MissionGoal,
+  type MissionMetricTargets,
 } from "./card.ts";
 
 /**
@@ -264,6 +265,32 @@ function missionGoal(mission: LoadedRow): MissionGoal | null {
   const sourceRaw = String(raw["goal_source"] ?? "").toUpperCase();
   const source = sourceRaw === "AUTO" ? "AUTO" : sourceRaw === "EXPLICIT" ? "EXPLICIT" : null;
   return { type: type as MissionGoal["type"], target, stretchTarget, source };
+}
+
+/**
+ * SE-14 — the immutable supporting target set, read ONLY from the mission's own
+ * effective config snapshot. A client can never supply it: nothing in the
+ * webhook or transport payload is consulted here. Unknown or invalid entries
+ * are dropped rather than coerced.
+ */
+function missionMetricTargets(mission: LoadedRow): MissionMetricTargets | null {
+  const metadata = mission["metadata"];
+  if (!metadata || typeof metadata !== "object") return null;
+  const config = (metadata as Record<string, unknown>)["effective_config"];
+  if (!config || typeof config !== "object") return null;
+  const raw = (config as Record<string, unknown>)["metric_targets"];
+  if (!raw || typeof raw !== "object") return null;
+  const source = raw as Record<string, unknown>;
+  const out: MissionMetricTargets = {};
+  let known = false;
+  for (const key of ["views", "likes", "replies", "reposts", "bookmarks"] as const) {
+    const value = Number(source[key]);
+    if (Number.isInteger(value) && value > 0) {
+      out[key] = value;
+      known = true;
+    }
+  }
+  return known ? out : null;
 }
 
 const CORS = {
@@ -523,6 +550,7 @@ async function renderAuthoritativeCard(
     accomplished: typeof mission["accomplished_at"] === "string",
     endsAt: (mission["ends_at"] as string | null) ?? null,
     goal: missionGoal(mission),
+    metricTargets: missionMetricTargets(mission),
     // A photo caption is hard-limited by Telegram; the renderer refits instead
     // of risking a rejected transport.
     maxLength: transportKind === "PHOTO" ? TELEGRAM_CAPTION_MAX : TELEGRAM_TEXT_LIMIT,

@@ -85,6 +85,12 @@ export type MissionCardInput = {
   /** SE-13 — optional configured MISSION GOAL. Omitted entirely when unset. */
   goal?: MissionGoal | null;
   /**
+   * SE-14 — optional immutable supporting target set. When present and at
+   * least one target/metric pair is known, the card renders the MISSION
+   * TARGETS scorecard instead of the single-goal block.
+   */
+  metricTargets?: MissionMetricTargets | null;
+  /**
    * Hard character budget. Defaults to the plain-text limit; the branded photo
    * transport passes TELEGRAM_CAPTION_MAX so a caption can never be rejected.
    */
@@ -310,6 +316,135 @@ export function renderGoalLines(
   return lines;
 }
 
+/**
+ * SE-14 — the immutable SUPPORTING METRIC TARGET set. Project-level aggregate
+ * public-metric targets only. These are informational: they never accomplish a
+ * mission, never carry a reward, and never place a requirement on a member.
+ */
+export type MissionMetricTargets = {
+  views?: number | null;
+  likes?: number | null;
+  replies?: number | null;
+  reposts?: number | null;
+  bookmarks?: number | null;
+};
+
+export const TARGETS_HEADING = "🎯 MISSION TARGETS";
+export const MOMENTUM_LABEL = "Overall Momentum";
+export const PRIMARY_GOAL_LABEL = "Primary Goal";
+
+type TargetKey = keyof MissionMetricTargets;
+
+/** Frozen display order, icon and backing canonical metric for each target. */
+const TARGET_ROWS: ReadonlyArray<{ key: TargetKey; icon: string; label: string; metric: MetricKey }> = [
+  { key: "views", icon: "👁", label: "Views", metric: "views" },
+  { key: "likes", icon: "❤️", label: "Likes", metric: "likes" },
+  { key: "replies", icon: "💬", label: "Replies", metric: "comments" },
+  { key: "reposts", icon: "🔁", label: "Reposts", metric: "shares" },
+  { key: "bookmarks", icon: "🔖", label: "Bookmarks", metric: "saves" },
+];
+
+export type TargetProgress = {
+  key: TargetKey;
+  icon: string;
+  label: string;
+  current: number;
+  target: number;
+  percent: number;
+};
+
+/**
+ * One entry per metric whose target AND current value are both known. An
+ * unknown target or an unknown metric is OMITTED — never rendered as 0.
+ */
+export function targetProgress(
+  targets: MissionMetricTargets | null | undefined,
+  latest: CanonicalMetrics | null,
+): TargetProgress[] {
+  if (!targets || !latest) return [];
+  const rows: TargetProgress[] = [];
+  for (const row of TARGET_ROWS) {
+    const target = targets[row.key];
+    const current = latest[row.metric];
+    if (!isCount(target) || target <= 0) continue;
+    if (!isCount(current)) continue;
+    rows.push({
+      key: row.key,
+      icon: row.icon,
+      label: row.label,
+      current,
+      target,
+      percent: goalPercent(current, target),
+    });
+  }
+  return rows;
+}
+
+/**
+ * Equal-weight arithmetic mean of every AVAILABLE metric's capped percent,
+ * floored. Views are never weighted more heavily and unavailable metrics are
+ * excluded from the denominator. Returns null when nothing is computable.
+ */
+export function overallMomentum(
+  targets: MissionMetricTargets | null | undefined,
+  latest: CanonicalMetrics | null,
+): number | null {
+  const rows = targetProgress(targets, latest);
+  if (rows.length === 0) return null;
+  const sum = rows.reduce((acc, row) => acc + row.percent, 0);
+  return Math.max(0, Math.min(100, Math.floor(sum / rows.length)));
+}
+
+/** Ten plain-text cells, no trailing percentage. */
+export function momentumBar(percent: number): string {
+  const safe = Math.max(0, Math.min(100, Math.floor(percent)));
+  const filled = Math.max(0, Math.min(GOAL_BAR_CELLS, Math.floor(safe / 10)));
+  return `${GOAL_BAR_FILLED.repeat(filled)}${GOAL_BAR_EMPTY.repeat(GOAL_BAR_CELLS - filled)}`;
+}
+
+/**
+ * The SE-14 MISSION TARGETS scorecard. Returns an empty array when no target
+ * and metric pair is computable, so the caller can fall back to the SE-13
+ * single-goal block. Primary Goal semantics are unchanged and still driven only
+ * by the primary goal itself; supporting targets never reach a mission.
+ */
+export function renderTargetLines(
+  targets: MissionMetricTargets | null | undefined,
+  latest: CanonicalMetrics | null,
+  goal: MissionGoal | null | undefined,
+  accomplished: boolean,
+): string[] {
+  const rows = targetProgress(targets, latest);
+  if (rows.length === 0) return [];
+
+  const lines: string[] = [TARGETS_HEADING];
+  for (const row of rows) {
+    lines.push(`${row.icon} ${row.label}: ${row.current} / ${row.target} · ${row.percent}%`);
+  }
+
+  const momentum = overallMomentum(targets, latest);
+  if (momentum !== null) {
+    lines.push(`${MOMENTUM_LABEL}: ${momentum}%`);
+    lines.push(momentumBar(momentum));
+  }
+
+  if (goal && isCount(goal.target) && goal.target > 0) {
+    lines.push(`${PRIMARY_GOAL_LABEL}: ${GOAL_LABELS[goal.type]}`);
+    const progress = goalProgressValue(goal.type, latest);
+    const reached = accomplished || (progress !== null && progress >= goal.target);
+    if (reached) lines.push(PRIMARY_GOAL_REACHED);
+    const stretch = goal.stretchTarget;
+    if (reached && progress !== null && isCount(stretch) && stretch > goal.target) {
+      lines.push("");
+      lines.push(STRETCH_GOAL_HEADING);
+      lines.push(`${GOAL_LABELS[goal.type]}: ${progress} / ${stretch}`);
+      lines.push(goalBar(progress, stretch));
+    }
+  }
+
+  return lines;
+}
+
 function composeLines(input: MissionCardInput, excerptBudget: number | null): string[] {
   const lines: string[] = [];
   const nowMs = typeof input.nowMs === "number" && Number.isFinite(input.nowMs) ? input.nowMs : Date.now();
@@ -332,7 +467,11 @@ function composeLines(input: MissionCardInput, excerptBudget: number | null): st
   for (const line of statusBody(input.missionStatus)) lines.push(line);
 
   const metricLines = renderMetricLines(input.platform, input.baseline, input.latest);
-  const goalLines = renderGoalLines(input.goal, input.latest, accomplished);
+  // SE-14 — the scorecard supersedes the single-goal block whenever the
+  // immutable target set yields at least one truthful target/metric pair.
+  const targetLines = renderTargetLines(input.metricTargets, input.latest, input.goal, accomplished);
+  const goalLines =
+    targetLines.length > 0 ? targetLines : renderGoalLines(input.goal, input.latest, accomplished);
   if (input.missionStatus === "LIVE") {
     // A LIVE card ALWAYS carries the results block. With no snapshot yet it
     // says so honestly instead of rendering zeroes.

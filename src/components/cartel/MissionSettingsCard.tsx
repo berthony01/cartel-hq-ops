@@ -176,6 +176,10 @@ export function MissionSettingsCard({ workspaceId }: { workspaceId: string | nul
                   }}
                 />
               ) : null}
+              <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                Supporting Targets are generated automatically from the mission's first official X
+                snapshot.
+              </p>
             </div>
           </div>
 
