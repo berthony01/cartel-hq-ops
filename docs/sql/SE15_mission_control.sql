@@ -814,13 +814,23 @@ BEGIN
   END IF;
 
   -- Any CLAIMED event anywhere on this mission means the runner/transport is
-  -- mid-flight. Refuse and mutate nothing.
+  -- mid-flight. Refuse and mutate nothing. The COMPLETE event is reported with
+  -- its own typed reason so the caller can tell completion ownership apart from
+  -- an in-flight pulse.
   SELECT count(*)::integer INTO v_other_claimed
     FROM public.social_mission_schedule_events e
    WHERE e.mission_id = _mission_id AND e.state = 'CLAIMED';
   IF v_other_claimed > 0 THEN
+    IF EXISTS (
+      SELECT 1 FROM public.social_mission_schedule_events e
+       WHERE e.mission_id = _mission_id AND e.target_id = v_auth.target_id
+         AND e.event_type = 'COMPLETE' AND e.state = 'CLAIMED'
+    ) THEN
+      RETURN jsonb_build_object('outcome', 'conflict', 'reason', 'complete_event_claimed');
+    END IF;
     RETURN jsonb_build_object('outcome', 'conflict', 'reason', 'event_claimed');
   END IF;
+
 
   -- The exact COMPLETE event for THIS target, locked. A SENT/FAILED/AMBIGUOUS/
   -- CANCELLED completion is never reused.
