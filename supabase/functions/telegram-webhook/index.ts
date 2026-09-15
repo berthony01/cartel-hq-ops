@@ -3006,7 +3006,7 @@ Deno.serve(async (req: Request) => {
 
       const created = (candidate ?? {}) as { outcome?: string; candidate_id?: string };
       // EXISTING = a webhook retry or a repost of the same message: silent.
-      if (created.outcome !== "CREATED" || !created.candidate_id) return;
+      if (created.outcome !== "CREATED" || !created.candidate_id) return false;
 
       const prompt = await telegramJson(TELEGRAM_BOT_TOKEN, "sendMessage", {
         chat_id: chatId,
