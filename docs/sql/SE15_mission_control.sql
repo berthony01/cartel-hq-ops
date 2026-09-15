@@ -713,6 +713,12 @@ GRANT EXECUTE ON FUNCTION public.social_mission_apply_duration_override(bigint, 
 --    Mirrors close_social_mission_from_telegram semantics but selects by exact
 --    mission id and truthfully sets ends_at = now() instead of COALESCEing an
 --    old future end.
+--
+--    OWNERSHIP ORDER IS THE WHOLE POINT. The mission is only marked COMPLETED
+--    AFTER this call has provably claimed the exact PENDING COMPLETE event for
+--    this target. We never hand the webhook an event we did not claim, and we
+--    never leave a COMPLETED mission whose completion edit belongs to someone
+--    else. Any conflict returns BEFORE the first mutation.
 -- ----------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION public.end_social_mission_from_control(
@@ -728,10 +734,14 @@ AS $$
 DECLARE
   v_auth record;
   v_now timestamptz := now();
+  v_status text;
   v_event_id uuid;
+  v_event_state text;
+  v_claimed_id uuid;
   v_request text;
   v_pinned boolean;
   v_message_id bigint;
+  v_other_claimed integer;
 BEGIN
   IF _idempotency_key IS NULL OR length(_idempotency_key) < 8 THEN
     RETURN jsonb_build_object('outcome', 'denied');
@@ -740,34 +750,45 @@ BEGIN
   SELECT * INTO v_auth
     FROM public.social_mission_control_authorize(_telegram_user_id, _mission_id, _verified_chat_id);
   IF v_auth.outcome <> 'ok' THEN RETURN jsonb_build_object('outcome', v_auth.outcome); END IF;
+
+  -- LOCK FIRST. Status and the idempotency key are only trustworthy under the
+  -- row lock; a concurrent replay serializes behind this and then observes the
+  -- key already recorded.
+  SELECT m.status INTO v_status
+    FROM public.social_missions m WHERE m.id = _mission_id FOR UPDATE;
+
   IF public.social_mission_control_key_used(_mission_id, _idempotency_key) THEN
     RETURN jsonb_build_object('outcome', 'replayed', 'mission_id', _mission_id);
   END IF;
-  IF v_auth.mission_status <> 'LIVE' THEN
-    RETURN jsonb_build_object('outcome', 'not_live', 'status', v_auth.mission_status);
+  IF v_status IS DISTINCT FROM 'LIVE' THEN
+    RETURN jsonb_build_object('outcome', 'not_live', 'status', v_status);
   END IF;
 
-  PERFORM 1 FROM public.social_missions WHERE id = _mission_id FOR UPDATE;
-
-  UPDATE public.social_missions
-     SET status = 'COMPLETED', completed_at = v_now, ends_at = v_now, updated_at = now()
-   WHERE id = _mission_id AND status = 'LIVE';
-  IF NOT FOUND THEN
-    RETURN jsonb_build_object('outcome', 'not_live');
+  -- Any CLAIMED event anywhere on this mission means the runner/transport is
+  -- mid-flight. Refuse and mutate nothing.
+  SELECT count(*)::integer INTO v_other_claimed
+    FROM public.social_mission_schedule_events e
+   WHERE e.mission_id = _mission_id AND e.state = 'CLAIMED';
+  IF v_other_claimed > 0 THEN
+    RETURN jsonb_build_object('outcome', 'conflict', 'reason', 'event_claimed');
   END IF;
 
-  -- Pending pulses stop. SENT history is untouched.
-  UPDATE public.social_mission_schedule_events
-     SET state = 'CANCELLED', finished_at = v_now, updated_at = now()
-   WHERE mission_id = _mission_id AND event_type = 'PULSE' AND state = 'PENDING';
-
-  -- Get-or-create the single COMPLETE event, then claim it for this caller so
-  -- the same-card completion edit happens exactly once.
-  SELECT e.id, e.client_request_id INTO v_event_id, v_request
+  -- The exact COMPLETE event for THIS target, locked. A SENT/FAILED/AMBIGUOUS/
+  -- CANCELLED completion is never reused.
+  SELECT e.id, e.state, e.client_request_id
+    INTO v_event_id, v_event_state, v_request
     FROM public.social_mission_schedule_events e
    WHERE e.mission_id = _mission_id AND e.target_id = v_auth.target_id
      AND e.event_type = 'COMPLETE'
-   LIMIT 1;
+   ORDER BY e.created_at
+   LIMIT 1
+     FOR UPDATE;
+
+  IF v_event_id IS NOT NULL AND v_event_state IS DISTINCT FROM 'PENDING' THEN
+    RETURN jsonb_build_object(
+      'outcome', 'conflict', 'reason', 'complete_event_not_pending',
+      'event_state', v_event_state);
+  END IF;
 
   IF v_event_id IS NULL THEN
     INSERT INTO public.social_mission_schedule_events
@@ -778,9 +799,30 @@ BEGIN
     RETURNING id, client_request_id INTO v_event_id, v_request;
   END IF;
 
+  -- Prove ownership BEFORE the mission status changes.
   UPDATE public.social_mission_schedule_events
      SET state = 'CLAIMED', claimed_at = v_now, due_at = least(due_at, v_now), updated_at = now()
-   WHERE id = v_event_id AND state = 'PENDING';
+   WHERE id = v_event_id AND state = 'PENDING'
+   RETURNING id, client_request_id INTO v_claimed_id, v_request;
+
+  IF v_claimed_id IS NULL THEN
+    RETURN jsonb_build_object('outcome', 'conflict', 'reason', 'complete_event_not_claimed');
+  END IF;
+
+  -- Ownership proven. Only now does the mission itself change.
+  UPDATE public.social_missions
+     SET status = 'COMPLETED', completed_at = v_now, ends_at = v_now, updated_at = now()
+   WHERE id = _mission_id AND status = 'LIVE';
+  IF NOT FOUND THEN
+    -- Cannot normally happen under the lock. Fail loudly so the transaction
+    -- rolls back rather than leaving a claimed event on a LIVE mission.
+    RAISE EXCEPTION 'SE-15 end_now lost the LIVE mission under lock: %', _mission_id;
+  END IF;
+
+  -- Pending pulses stop. SENT history is untouched.
+  UPDATE public.social_mission_schedule_events
+     SET state = 'CANCELLED', finished_at = v_now, updated_at = now()
+   WHERE mission_id = _mission_id AND event_type = 'PULSE' AND state = 'PENDING';
 
   SELECT t.pinned_by_hq, t.telegram_message_id INTO v_pinned, v_message_id
     FROM public.social_mission_targets t WHERE t.id = v_auth.target_id;
@@ -793,7 +835,8 @@ BEGIN
 
   RETURN jsonb_build_object(
     'outcome', 'ok', 'mission_id', _mission_id, 'target_id', v_auth.target_id,
-    'workspace_id', v_auth.workspace_id, 'schedule_event_id', v_event_id,
+    'workspace_id', v_auth.workspace_id, 'schedule_event_id', v_claimed_id,
+    'event_owned', true,
     'client_request_id', v_request, 'pinned_by_hq', coalesce(v_pinned, false),
     'telegram_message_id', v_message_id);
 END;
@@ -804,6 +847,7 @@ GRANT EXECUTE ON FUNCTION public.end_social_mission_from_control(bigint, uuid, b
 
 -- ----------------------------------------------------------------------------
 -- 10. CANCEL MISSION — no completion claim, no provider read.
+--     A replay is "already applied", never an error and never a second edit.
 -- ----------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION public.cancel_social_mission_from_control(
@@ -819,6 +863,7 @@ AS $$
 DECLARE
   v_auth record;
   v_now timestamptz := now();
+  v_status text;
   v_claimed integer;
   v_pinned boolean;
   v_message_id bigint;
@@ -831,14 +876,17 @@ BEGIN
   SELECT * INTO v_auth
     FROM public.social_mission_control_authorize(_telegram_user_id, _mission_id, _verified_chat_id);
   IF v_auth.outcome <> 'ok' THEN RETURN jsonb_build_object('outcome', v_auth.outcome); END IF;
+
+  -- LOCK FIRST, then key, then status.
+  SELECT m.status, m.started_at INTO v_status, v_started
+    FROM public.social_missions m WHERE m.id = _mission_id FOR UPDATE;
+
   IF public.social_mission_control_key_used(_mission_id, _idempotency_key) THEN
     RETURN jsonb_build_object('outcome', 'replayed', 'mission_id', _mission_id);
   END IF;
-  IF v_auth.mission_status <> 'LIVE' THEN
-    RETURN jsonb_build_object('outcome', 'not_live', 'status', v_auth.mission_status);
+  IF v_status IS DISTINCT FROM 'LIVE' THEN
+    RETURN jsonb_build_object('outcome', 'not_live', 'status', v_status);
   END IF;
-
-  PERFORM 1 FROM public.social_missions WHERE id = _mission_id FOR UPDATE;
 
   SELECT count(*)::integer INTO v_claimed
     FROM public.social_mission_schedule_events e
@@ -846,8 +894,6 @@ BEGIN
   IF v_claimed > 0 THEN
     RETURN jsonb_build_object('outcome', 'conflict', 'reason', 'event_claimed');
   END IF;
-
-  SELECT started_at INTO v_started FROM public.social_missions WHERE id = _mission_id;
 
   UPDATE public.social_missions
      SET status = 'CANCELLED',
