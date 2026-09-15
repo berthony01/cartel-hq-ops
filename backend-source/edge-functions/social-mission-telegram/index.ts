@@ -59,7 +59,7 @@ import {
   type CanonicalMetrics,
   type MissionCardPlatform,
   type MissionCardStatus,
-  type MissionMilestone,
+  type MissionGoal,
 } from "./card.ts";
 
 /**
@@ -485,7 +485,7 @@ async function renderAuthoritativeCard(
     latest: snapshot ? metricsFrom(snapshot as LoadedRow, "") : null,
     accomplished: typeof mission["accomplished_at"] === "string",
     endsAt: (mission["ends_at"] as string | null) ?? null,
-    milestone: missionMilestone(mission),
+    goal: missionGoal(mission),
     // A photo caption is hard-limited by Telegram; the renderer refits instead
     // of risking a rejected transport.
     maxLength: transportKind === "PHOTO" ? TELEGRAM_CAPTION_MAX : TELEGRAM_TEXT_LIMIT,
