@@ -204,6 +204,43 @@ async function attemptFinalMetricsRead(
   }
 }
 
+/**
+ * SE-13.1 — authoritative re-read of ONE mission row.
+ *
+ * `record_social_mission_metric_snapshot` can mutate the mission inside a
+ * metric read: it writes the durable baseline, it can establish the AUTO
+ * MISSION GOAL in `metadata.effective_config`, and it can set
+ * `accomplished_at`. Any card rendered from the row loaded BEFORE that read is
+ * therefore potentially stale. Callers that performed a metric read MUST
+ * reload through this helper before rendering.
+ *
+ * Boundaries: ONE scoped database read by exact mission id AND workspace id.
+ * ZERO provider calls, ZERO Telegram calls, ZERO writes. Returns null when the
+ * row cannot be re-read, so the caller can fail safely instead of knowingly
+ * sending a stale card.
+ */
+async function reloadMissionRow(
+  admin: ReturnType<typeof createClient>,
+  workspaceId: string,
+  missionId: unknown,
+): Promise<LoadedRow | null> {
+  if (typeof missionId !== "string" || !missionId) return null;
+  try {
+    const { data, error } = await admin
+      .from("social_missions")
+      .select("*")
+      .eq("id", missionId)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (error || !data) return null;
+    return data as LoadedRow;
+  } catch {
+    return null;
+  }
+}
+
+
+
 
 /**
  * SE-13 — the MISSION GOAL, read ONLY from the mission's own immutable config
