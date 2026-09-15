@@ -21,7 +21,7 @@ export const PULSE_TEXT =
   "This Social Mission is still active. Read the official post above and join the conversation naturally if you have something to add.";
 
 export const PULSE_ACCOMPLISHED_TEXT =
-  "This Social Mission has hit its milestone and is still open. Read the official post above and join the conversation naturally if you have something to add.";
+  "This Social Mission has reached its Primary Goal and is still open. Read the official post above and join the conversation naturally if you have something to add.";
 
 /**
  * SE-5 / SE-6 Step 1 Pulse 2.0 — the pulse may quote the LATEST STORED
