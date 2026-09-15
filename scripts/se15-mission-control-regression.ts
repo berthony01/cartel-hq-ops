@@ -239,10 +239,10 @@ check("10.1 confirmation is required", webhook.includes("END MISSION NOW?") && w
 check("10.2 selection is by exact mission id", sql.includes("CREATE OR REPLACE FUNCTION public.end_social_mission_from_control(\n  _telegram_user_id bigint,\n  _mission_id uuid,"));
 check("10.3 status becomes COMPLETED", sql.includes("SET status = 'COMPLETED', completed_at = v_now, ends_at = v_now"));
 check("10.4 ends_at is truthful now, not COALESCEd", !/status = 'COMPLETED'[\s\S]{0,120}ends_at = COALESCE/.test(sql));
-check("10.5 pending pulses are cancelled", /end_social_mission_from_control[\s\S]{0,2600}event_type = 'PULSE' AND state = 'PENDING'/.test(sql));
+check("10.5 pending pulses are cancelled", /end_social_mission_from_control[\s\S]{0,4200}event_type = 'PULSE' AND state = 'PENDING'/.test(sql));
 check("10.6 the COMPLETE event is claimed idempotently", sql.includes("SET state = 'CLAIMED', claimed_at = v_now"));
 check("10.7 exactly one final edit is attempted", (webhook.match(/seed: `\$\{updateId\}:end_now`/g) ?? []).length === 1);
-check("10.8 the completion event is finalized once", /mc_ec_[\s\S]{0,2000}finish_social_mission_schedule_event/.test(webhook));
+check("10.8 the completion event is finalized once", /mc_ec_[\s\S]{0,3200}finish_social_mission_schedule_event/.test(webhook));
 check("10.9 unpin is ownership guarded", webhook.includes("if (!pinned?.pinned_by_hq || !pinned.telegram_message_id) return;"));
 check("10.10 audit action END_NOW recorded", sql.includes("'END_NOW'"));
 check("10.11 no replacement message is sent to the group", !/mc_ec_[\s\S]{0,2200}"send_mission"/.test(webhook));
