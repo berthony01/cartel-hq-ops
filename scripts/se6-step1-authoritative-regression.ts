@@ -2029,7 +2029,7 @@ check(
 );
 check(
   "22.7b malformed anonymous argument still returns MISSION_USAGE",
-  /if \(!anonParsed\) \{\[\s\S\]{0,400}?MISSION_USAGE/.test(se11AnonBranch),
+  /if \(!anonParsed\) \{[\s\S]{0,400}?MISSION_USAGE/.test(se11AnonBranch),
 );
 
 check(
