@@ -1954,11 +1954,11 @@ check(
 // ---------------------------------------------------------------------------
 const se12HumanBareBranch = webhookRaw.slice(
   webhookRaw.indexOf("SE-12 — bare `/mission` launcher for identifiable humans"),
-  webhookRaw.indexOf("await runMissionCommand"),
+  webhookRaw.indexOf("// SE-4A — `/mission <X link>`."),
 );
 const se12AnonBareBranch = webhookRaw.slice(
   webhookRaw.indexOf("SE-12 — bare `/mission` launcher for anonymous group admins"),
-  webhookRaw.indexOf("await offerLinkFinderCandidate"),
+  webhookRaw.indexOf("// SE-11 — anonymous-admin `/mission <X link>`."),
 );
 
 check("22.1a a shared BARE_MISSION_LAUNCHER_TEXT constant exists", /const BARE_MISSION_LAUNCHER_TEXT = /.test(webhookRaw));
