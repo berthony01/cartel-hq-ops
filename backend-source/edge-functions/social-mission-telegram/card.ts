@@ -332,6 +332,7 @@ function composeLines(input: MissionCardInput, excerptBudget: number | null): st
   for (const line of statusBody(input.missionStatus)) lines.push(line);
 
   const metricLines = renderMetricLines(input.platform, input.baseline, input.latest);
+  const goalLines = renderGoalLines(input.goal, input.latest, accomplished);
   if (input.missionStatus === "LIVE") {
     // A LIVE card ALWAYS carries the results block. With no snapshot yet it
     // says so honestly instead of rendering zeroes.
@@ -340,8 +341,10 @@ function composeLines(input: MissionCardInput, excerptBudget: number | null): st
     if (metricLines.length > 0) for (const line of metricLines) lines.push(line);
     else lines.push(LIVE_METRICS_PENDING);
 
-    const milestoneLine = milestoneProgressLine(input.milestone, input.latest, accomplished);
-    if (milestoneLine) lines.push(milestoneLine);
+    if (goalLines.length > 0) {
+      lines.push("");
+      for (const line of goalLines) lines.push(line);
+    }
 
     const remaining = approximateRemaining(input.endsAt, nowMs);
     const state = accomplished ? MISSION_STATE_ACCOMPLISHED : MISSION_STATE_LIVE;
@@ -350,8 +353,10 @@ function composeLines(input: MissionCardInput, excerptBudget: number | null): st
     lines.push("");
     lines.push(metricsHeading(input.missionStatus));
     for (const line of metricLines) lines.push(line);
-    const milestoneLine = milestoneProgressLine(input.milestone, input.latest, accomplished);
-    if (milestoneLine) lines.push(milestoneLine);
+    if (goalLines.length > 0) {
+      lines.push("");
+      for (const line of goalLines) lines.push(line);
+    }
   }
 
   if (input.missionStatus !== "LIVE") {
