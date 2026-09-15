@@ -632,13 +632,16 @@ check(
 );
 check(
   "14.10 the candidate RPC receives the derived poster id, never a raw bot id",
-  /_telegram_user_id: linkFinderSender\.posterId/.test(webhookRaw) &&
+  /_telegram_user_id: posterId,/.test(webhookRaw) &&
+    /await offerLinkFinderCandidate\(\s*\n?\s*parsedLink,\s*\n?\s*Number\(message\?\.message_id\),\s*\n?\s*linkFinderSender\.posterId,/
+      .test(webhookRaw) &&
     !/create_social_mission_link_candidate[\s\S]{0,400}_telegram_user_id: Number\(from\.id\)/.test(webhookRaw),
 );
 
 check(
   "14.11 detection still requires a connected group chat and a non-command message",
-  /linkFinderSender\.eligible &&\s*!text\.startsWith\("\/"\) &&\s*\(chat\?\.type === "group" \|\| chat\?\.type === "supergroup"\)/.test(webhookRaw),
+  /linkFinderSender\.eligible && !text\.startsWith\("\/"\) && isGroupChat/.test(webhookRaw) &&
+    /const isGroupChat = chat\?\.type === "group" \|\| chat\?\.type === "supergroup";/.test(webhookRaw),
 );
 check(
   "14.12 the member's own message is still never deleted by the finder",
