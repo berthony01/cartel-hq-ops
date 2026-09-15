@@ -1210,6 +1210,7 @@ Deno.serve(async (req: Request) => {
     } catch {
       transport = null;
     }
+    timing.slice("transport_card");
 
     const transportState = String(transport?.deliveryState ?? "");
     if (transportState === "SENT") {
