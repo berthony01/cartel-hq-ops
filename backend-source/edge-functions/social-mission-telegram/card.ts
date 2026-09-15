@@ -85,6 +85,12 @@ export type MissionCardInput = {
   /** SE-13 — optional configured MISSION GOAL. Omitted entirely when unset. */
   goal?: MissionGoal | null;
   /**
+   * SE-14 — optional immutable supporting target set. When present and at
+   * least one target/metric pair is known, the card renders the MISSION
+   * TARGETS scorecard instead of the single-goal block.
+   */
+  metricTargets?: MissionMetricTargets | null;
+  /**
    * Hard character budget. Defaults to the plain-text limit; the branded photo
    * transport passes TELEGRAM_CAPTION_MAX so a caption can never be rejected.
    */
