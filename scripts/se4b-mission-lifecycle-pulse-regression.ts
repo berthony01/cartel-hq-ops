@@ -310,7 +310,15 @@ check("13.16 the runner fails closed when created_by is missing", /!event\.missi
 // 13.17-13.22 manual-close finalizer
 check("13.17 close returns the event id", /'event_id', v_event\.id/.test(sqlCode));
 check("13.18 the webhook close result carries event_id", /event_id\?: string;/.test(webhookCode));
-check("13.19 the webhook finalizes its own completion event exactly once", (webhookCode.match(/finish_social_mission_schedule_event/g) ?? []).length === 1);
+// Re-pinned for SE-15: Mission Control's END_NOW adds a SECOND, separate
+// finalizer call site, so the count is 2 — the close path still finalizes
+// exactly once, and the SE-15 call site is gated on proven event ownership.
+check(
+  "13.19 the webhook finalizes its own completion event exactly once",
+  (webhookCode.match(/finish_social_mission_schedule_event/g) ?? []).length === 2 &&
+    (closeSlice.match(/finish_social_mission_schedule_event/g) ?? []).length === 1 &&
+    webhookCode.includes('result["event_owned"] === true'),
+);
 check("13.20 EDITED maps to SENT, FAILED to FAILED, everything else to AMBIGUOUS", /closeEditState === "EDITED" \? "SENT" : closeEditState === "FAILED" \? "FAILED" : "AMBIGUOUS"/.test(webhookCode));
 check("13.21 a finalizer failure never triggers a second Telegram attempt", (webhookCode.match(/action: "edit_mission"/g) ?? []).length === 1 && /finalizedOk[\s\S]{0,400}delivery record could not be saved/.test(webhookCode));
 check("13.22 the webhook handles UNRESOLVED and COMPLETED_UNSYNCED without retrying", webhookCode.includes('closeResult.outcome === "UNRESOLVED"') && webhookCode.includes('closeResult.outcome === "COMPLETED_UNSYNCED"'));
