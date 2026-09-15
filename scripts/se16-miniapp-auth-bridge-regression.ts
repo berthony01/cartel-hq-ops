@@ -465,7 +465,7 @@ const opts = { now: NOW_MS };
     (bridgeCode.match(/createServerFn\(/g) ?? []).length ===
       (bridgeCode.match(/\.inputValidator\(/g) ?? []).length,
   );
-  check("12.4 no JSX / UI in the bridge", !/<[A-Z]/.test(bridgeSrc));
+  check("12.4 no JSX / UI in the bridge", !/<\/[A-Za-z]|\/>|React|jsx/.test(bridgeSrc));
   check("12.5 no browser globals in the bridge", !/\bwindow\.|document\.|localStorage/.test(bridgeCode));
   check("12.6 auth module has no Deno or Supabase Edge dependency", !/Deno\./.test(authCode) && !/deno\.land/.test(authSrc));
 }
