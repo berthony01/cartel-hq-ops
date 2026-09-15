@@ -3083,7 +3083,7 @@ Deno.serve(async (req: Request) => {
     // SE-12 — bare `/mission` launcher for identifiable humans in groups.
     // The next pasted X URL is still handled by the existing Link Finder path.
     if (missionMatch && from?.is_bot !== true && isGroupChat && !missionMatch[1]) {
-      await sendBareMissionLauncher(TELEGRAM_BOT_TOKEN, chatId);
+      await sendBareMissionLauncherAndCleanup(TELEGRAM_BOT_TOKEN, chatId, Number(message?.message_id));
       return json({ ok: true });
     }
 
