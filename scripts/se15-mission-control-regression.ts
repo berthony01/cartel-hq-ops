@@ -404,10 +404,14 @@ check("18.6 the migration is prepared only", sql.includes("PREPARED ONLY"));
 // ---------------------------------------------------------------------------
 // 19 — SE-15 hardening.
 // ---------------------------------------------------------------------------
+// Executable SQL only: explanatory `--` comments are documentation, and must
+// never be able to pass OR fail a behavioural assertion.
+const stripSqlComments = (text: string) => text.replace(/--[^\n]*/g, "");
 const fnBody = (name: string) => {
   const start = sql.indexOf(`FUNCTION public.${name}`);
-  return start === -1 ? "" : sql.slice(start, sql.indexOf("$$;", start));
+  return start === -1 ? "" : stripSqlComments(sql.slice(start, sql.indexOf("$$;", start)));
 };
+const sqlCode = stripSqlComments(sql);
 const overrideFn = fnBody("social_mission_apply_target_override");
 const durationFn = fnBody("social_mission_apply_duration_override");
 const endFn = fnBody("end_social_mission_from_control");
