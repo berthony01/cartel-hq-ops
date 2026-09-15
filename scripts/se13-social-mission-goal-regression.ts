@@ -90,7 +90,7 @@ check("2.3 the SQL primary formula matches the frozen formula", /GREATEST\(_base
 check("2.4 the SQL stretch formula matches the frozen formula", /ceil\(\(v_primary \* 1\.50\) \/ v_step\)/.test(SQL) && /v_stretch <= v_primary/.test(SQL));
 check("2.5 a NULL or negative baseline returns NULL in SQL too", /IF _baseline IS NULL OR _baseline < 0 THEN\s*\n\s*RETURN NULL;/.test(SQL));
 check("2.6 an explicit goal always wins and is never rewritten", /EXPLICIT workspace goal ALWAYS wins/.test(SQL) && /jsonb_build_object\('goal_source', 'EXPLICIT'\)/.test(SQL));
-check("2.7 an automatic goal is only derived when no goal exists", /ELSIF v_goal_source IS NULL AND _views IS NOT NULL AND _views >= 0 THEN/.test(SQL));
+check("2.7 an automatic goal is only derived when no goal exists", /ELSIF v_goal_source IS NULL\s*\n\s*AND _provider = 'x-official'\s*\n\s*AND v_snapshot_inserted\s*\n\s*AND _views IS NOT NULL AND _views >= 0 THEN/.test(SQL));
 check("2.8 goal establishment is guarded so a retry cannot change it", /AND COALESCE\(metadata -> 'effective_config' ->> 'goal_source', ''\) = ''/.test(SQL) && /IDEMPOTENT: only the FIRST valid snapshot/.test(SQL));
 check("2.9 the goal is established before accomplishment is evaluated", SQL.indexOf("social_mission_auto_goal(_views)") < SQL.indexOf("v_progress := CASE v_type"));
 check("2.10 provenance and stretch ride in the existing effective_config JSON", /'\{effective_config\}'/.test(SQL) && /'stretch_goal_target'/.test(SQL) && /'goal_source', 'AUTO'/.test(SQL));
