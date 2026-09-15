@@ -146,16 +146,21 @@ check("4.22 the scorecard is plain text with no markup", !/[*_`<>]/.test(lines.j
 // 5. Caption budget in the worst useful case.
 // ---------------------------------------------------------------------------
 const worstCard = renderMissionCard({
-  platform: "X",
-  status: "LIVE",
+  platform: "x",
+  missionStatus: "LIVE",
   projectName: "PEPECARTEL COMMAND NETWORK OPERATIONS",
+  ticker: "PCART",
   authorHandle: "pepecartelofficial",
+  contentText:
+    "PEPECARTEL COMMAND NETWORK is live on X with the longest realistic official post body we would ever attach to a branded mission card, repeated to push the caption budget as far as it can plausibly go in production.",
   canonicalUrl: "https://x.com/pepecartelofficial/status/1234567890123456789",
+  baseline: m({ views: 56, likes: 4, comments: 0, shares: 1, saves: 0 }),
   latest: m({ views: 123456, likes: 12345, comments: 1234, shares: 1234, saves: 1234 }),
   goal: { type: "VIEWS", target: 200000, stretchTarget: 300000, source: "AUTO" },
   metricTargets: { views: 200000, likes: 20000, replies: 2000, reposts: 2000, bookmarks: 2000 },
+  maxLength: TELEGRAM_CAPTION_MAX,
 });
-check("5.1 the worst useful caption stays inside the Telegram limit", worstCard.caption.length <= TELEGRAM_CAPTION_MAX);
+check("5.1 the worst useful caption stays inside the Telegram limit", worstCard.text.length <= TELEGRAM_CAPTION_MAX);
 check("5.2 the caption budget constant is unchanged", TELEGRAM_CAPTION_MAX === 1024);
 check("5.3 the card still carries the OPEN ON X action", /OPEN ON X/.test(JSON.stringify(worstCard)));
 check("5.4 no parse mode is introduced", !/parse_mode/.test(stripComments(CARD)));
