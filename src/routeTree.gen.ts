@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as NetworkRouteImport } from './routes/network'
+import { Route as TgRouteImport } from './routes/tg'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
@@ -52,6 +53,11 @@ const AuthRoute = AuthRouteImport.update({
 const NetworkRoute = NetworkRouteImport.update({
   id: '/network',
   path: '/network',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TgRoute = TgRouteImport.update({
+  id: '/tg',
+  path: '/tg',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
@@ -204,6 +210,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
   '/network': typeof NetworkRouteWithChildren
+  '/tg': typeof TgRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/assets': typeof AuthenticatedAssetsRoute
@@ -233,6 +240,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
+  '/tg': typeof TgRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/assets': typeof AuthenticatedAssetsRoute
@@ -265,6 +273,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/network': typeof NetworkRouteWithChildren
+  '/tg': typeof TgRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/assets': typeof AuthenticatedAssetsRoute
@@ -299,6 +308,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/network'
+    | '/tg'
     | '/admin'
     | '/analytics'
     | '/assets'
@@ -328,6 +338,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
+    | '/tg'
     | '/admin'
     | '/analytics'
     | '/assets'
@@ -359,6 +370,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/network'
+    | '/tg'
     | '/_authenticated/admin'
     | '/_authenticated/analytics'
     | '/_authenticated/assets'
@@ -392,6 +404,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   NetworkRoute: typeof NetworkRouteWithChildren
+  TgRoute: typeof TgRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
 }
 
@@ -416,6 +429,13 @@ declare module '@tanstack/react-router' {
       path: '/network'
       fullPath: '/network'
       preLoaderRoute: typeof NetworkRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tg': {
+      id: '/tg'
+      path: '/tg'
+      fullPath: '/tg'
+      preLoaderRoute: typeof TgRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/': {
@@ -696,6 +716,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   NetworkRoute: NetworkRouteWithChildren,
+  TgRoute: TgRoute,
   AuthCallbackRoute: AuthCallbackRoute,
 }
 export const routeTree = rootRouteImport
