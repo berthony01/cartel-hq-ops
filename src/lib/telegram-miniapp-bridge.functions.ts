@@ -115,6 +115,18 @@ function snapshotValue(row: Record<string, unknown> | null, column: string): num
   return Number.isFinite(n) ? Math.trunc(n) : null;
 }
 
+/**
+ * SE-16.1H2 — Mission status fidelity. The panel status comes from the RPC
+ * result (public.social_mission_control_panel returns v_m.status) and is
+ * passed through unchanged. A missing/unusable value falls back to a neutral
+ * "UNKNOWN" — LIVE is never fabricated here. The mission-LIST mapping keeps
+ * its "LIVE" fallback because that RPC is filtered to m.status = 'LIVE'.
+ */
+function panelStatus(raw: unknown): string {
+  const value = String(raw ?? "").trim().toUpperCase();
+  return value.length > 0 ? value : "UNKNOWN";
+}
+
 /** Bot token is read per-request from server env only, never at module scope. */
 function botToken(): string {
   return process.env["TELEGRAM_BOT_TOKEN"] ?? "";
