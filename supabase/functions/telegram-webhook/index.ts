@@ -309,6 +309,8 @@ async function sendBareMissionLauncherAndCleanup(
  * second chat message.
  */
 const MISSION_MANAGE_DEEP_LINK = `https://t.me/${BOT_USERNAME}?start=mission_manage`;
+/** SE-16.3 — already-published Mini App reachability. Private-chat panel button only. */
+const MISSION_CONTROL_WEBAPP_URL = "https://cartel-hq-ops.lovable.app/tg";
 const MISSION_MANAGE_GROUP_TEXT =
   "🛠 <b>MISSION CONTROL</b>\n\nMission targets, timing, ending and cancelling are managed privately by this project's admins.\n\nTap below to open Mission Control in a private chat with the bot.";
 async function sendMissionManageLauncherAndCleanup(
@@ -2584,6 +2586,10 @@ Deno.serve(async (req: Request) => {
 
   const mcPanelKeyboard = (missionId: string) => ({
     inline_keyboard: [
+      // SE-16.3 — Mini App reachability. Private-chat only (Telegram permits
+      // web_app buttons exclusively in private chats); all bot fallback
+      // controls below stay unchanged and remain the mutating authority.
+      [{ text: "📲 Open Mission Control", web_app: { url: MISSION_CONTROL_WEBAPP_URL } }],
       [{ text: "🎯 Edit targets", callback_data: `mc_t_${missionId}` }],
       [{ text: "⏱ Change end time", callback_data: `mc_d_${missionId}` }],
       [
