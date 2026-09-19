@@ -309,7 +309,7 @@ export const miniAppMissionPanel = createServerFn({ method: "POST" })
       workspaceName: binding.workspaceName,
       authorHandle: panel["author_handle"] ? String(panel["author_handle"]) : null,
       canonicalUrl: typeof panel["canonical_url"] === "string" ? panel["canonical_url"] : null,
-      status: "LIVE",
+      status: panelStatus(panel["status"]),
       endsAt: panel["ends_at"] ? String(panel["ends_at"]) : null,
       controlMode: String(panel["control_mode"] ?? "AUTO"),
       primaryType: String(config["milestone_type"] ?? "NONE").toUpperCase(),
