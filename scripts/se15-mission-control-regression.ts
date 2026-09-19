@@ -73,8 +73,9 @@ if (panelKbMatch) {
   check("1A.5 panel web_app row text and placement", panelKb.includes('[{ text: "📲 Open Mission Control", web_app: { url: MISSION_CONTROL_WEBAPP_URL } }],'));
   check("1A.6 web_app row is the FIRST panel row", /^\[\{ text: "📲 Open Mission Control"/.test(panelKb.slice(panelKb.indexOf("inline_keyboard: [") + "inline_keyboard: [".length)));
   check("1A.7 existing panel callbacks preserved", ["mc_t_", "mc_d_", "mc_e_", "mc_c_", "mc_x"].every((cb) => panelKb.includes(`callback_data: \`${cb}`) || panelKb.includes(`callback_data: "${cb}`)));
-  check("1A.8 no web_app in the workspace/mission picker keyboards", !panelKbMatch[0].includes("web_app") ? true : (webAppRows.length === 1));
 }
+const missionPickerMatch = webhook.match(/const mcRenderMissionPicker = async \([\s\S]{0,4500}?exit/i) ?? webhook.match(/const mcRenderMissionPicker = async \([\s\S]{0,4500}?mc_x/);
+check("1A.8 mission picker keyboard has no web_app", missionPickerMatch === null || !(missionPickerMatch[0].includes("web_app")));
 const groupLauncherMatch = webhook.match(/const MISSION_MANAGE_GROUP_TEXT =[\s\S]{0,700}?return sent;/);
 check("1A.9 group launcher section exists for scoping", groupLauncherMatch !== null);
 if (groupLauncherMatch) {
