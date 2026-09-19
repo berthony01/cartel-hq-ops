@@ -442,7 +442,65 @@ check(
     /case "CANCELLED":/.test(code.client),
 );
 
+/* -------------------------------- 18. SE-16.1H4 route-scoped response headers */
+
+const headerBlock = (code.layout.match(/headers:\s*\(\)\s*=>\s*\(\{[\s\S]*?\}\),/) ?? [""])[0];
+const cspBlock = (code.layout.match(/CONTENT_SECURITY_POLICY = \[[\s\S]*?\]\.join/) ?? [""])[0];
+const permBlock = (code.layout.match(/PERMISSIONS_POLICY = \[[\s\S]*?\]\.join/) ?? [""])[0];
+
+check("18.1 /tg defines route-scoped headers", headerBlock.length > 0);
+check("18.2 Cache-Control is no-store", /"Cache-Control":\s*"no-store"/.test(headerBlock));
+check("18.3 Referrer-Policy is no-referrer", /"Referrer-Policy":\s*"no-referrer"/.test(headerBlock));
+check(
+  "18.4 X-Content-Type-Options is nosniff",
+  /"X-Content-Type-Options":\s*"nosniff"/.test(headerBlock),
+);
+check(
+  "18.5 CSP header is wired to the policy constant",
+  /"Content-Security-Policy":\s*CONTENT_SECURITY_POLICY/.test(headerBlock) && cspBlock.length > 0,
+);
+check(
+  "18.6 CSP pins default-src, object-src, base-uri and form-action",
+  /"default-src 'self'"/.test(cspBlock) &&
+    /"object-src 'none'"/.test(cspBlock) &&
+    /"base-uri 'self'"/.test(cspBlock) &&
+    /"form-action 'self'"/.test(cspBlock),
+);
+check(
+  "18.7 CSP permits the official Telegram WebApp script origin",
+  /script-src[^"]*https:\/\/telegram\.org/.test(cspBlock),
+);
+check(
+  "18.8 CSP permits Telegram Web framing",
+  /frame-ancestors[^"]*https:\/\/web\.telegram\.org/.test(cspBlock),
+);
+check(
+  "18.9 framing is not blocked by X-Frame-Options",
+  !/X-Frame-Options/i.test(code.layout),
+);
+check(
+  "18.10 Permissions-Policy disables camera, microphone, geolocation, payment and usb",
+  /"Permissions-Policy":\s*PERMISSIONS_POLICY/.test(headerBlock) &&
+    /"camera=\(\)"/.test(permBlock) &&
+    /"microphone=\(\)"/.test(permBlock) &&
+    /"geolocation=\(\)"/.test(permBlock) &&
+    /"payment=\(\)"/.test(permBlock) &&
+    /"usb=\(\)"/.test(permBlock),
+);
+check("18.11 no wildcard source appears in the CSP", !/\*/.test(cspBlock.replace(/\*\.telegram\.org/g, "")));
+check(
+  "18.12 connect-src is bounded to same-origin plus the known Supabase project",
+  /connect-src 'self' \$\{SUPABASE_ORIGIN\} \$\{SUPABASE_WS_ORIGIN\}/.test(cspBlock) &&
+    /SUPABASE_ORIGIN = "https:\/\/[a-z0-9]+\.supabase\.co"/.test(code.layout),
+);
+check(
+  "18.13 the official Telegram script tag is unchanged",
+  /https:\/\/telegram\.org\/js\/telegram-web-app\.js/.test(code.layout),
+);
+check("18.14 /tg stays noindex", /"robots", content: "noindex"/.test(code.layout));
+
 if (failures.length > 0) {
+
   console.error(`FAIL — ${failures.length} failed, ${passed} passed`);
   for (const failure of failures) console.error(`  - ${failure}`);
   process.exit(1);

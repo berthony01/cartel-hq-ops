@@ -9,7 +9,49 @@
 
 import { createFileRoute, Outlet } from "@tanstack/react-router";
 
+/**
+ * SE-16.1H4 — route-scoped response hardening for the Mini App tree only.
+ *
+ * Bounded sources only (no `*`). Telegram Web must be able to frame this
+ * surface, so framing is controlled by `frame-ancestors`, never by
+ * `X-Frame-Options`. COOP/CORP are deliberately omitted: they are unproven
+ * against the Telegram WebView and are not required here.
+ */
+const SUPABASE_ORIGIN = "https://ocoinbnjgstkmnwwvnhi.supabase.co";
+const SUPABASE_WS_ORIGIN = "wss://ocoinbnjgstkmnwwvnhi.supabase.co";
+
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "form-action 'self'",
+  // Telegram Web clients embed the Mini App in an iframe.
+  "frame-ancestors https://web.telegram.org https://telegram.org https://*.telegram.org",
+  // 'unsafe-inline' is required by the inline bootstrap TanStack Start emits.
+  "script-src 'self' 'unsafe-inline' https://telegram.org",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  `connect-src 'self' ${SUPABASE_ORIGIN} ${SUPABASE_WS_ORIGIN}`,
+  "img-src 'self' data: blob:",
+].join("; ");
+
+const PERMISSIONS_POLICY = [
+  "camera=()",
+  "microphone=()",
+  "geolocation=()",
+  "payment=()",
+  "usb=()",
+].join(", ");
+
 export const Route = createFileRoute("/tg")({
+  headers: () => ({
+    "Cache-Control": "no-store",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+    "Permissions-Policy": PERMISSIONS_POLICY,
+    "Content-Security-Policy": CONTENT_SECURITY_POLICY,
+  }),
+
   head: () => ({
     meta: [
       { title: "Mission Control — CARTEL HQ" },
