@@ -26,7 +26,7 @@ const CONTENT_SECURITY_POLICY = [
   "object-src 'none'",
   "form-action 'self'",
   // Telegram Web clients embed the Mini App in an iframe.
-  "frame-ancestors https://web.telegram.org https://telegram.org https://*.telegram.org",
+  "frame-ancestors https://web.telegram.org https://telegram.org",
   // 'unsafe-inline' is required by the inline bootstrap TanStack Start emits.
   "script-src 'self' 'unsafe-inline' https://telegram.org",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
