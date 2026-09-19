@@ -487,7 +487,7 @@ check(
     /"payment=\(\)"/.test(permBlock) &&
     /"usb=\(\)"/.test(permBlock),
 );
-check("18.11 no wildcard source appears in the CSP", !/\*/.test(cspBlock.replace(/\*\.telegram\.org/g, "")));
+check("18.11 no wildcard source appears anywhere in the CSP", !/\*/.test(cspBlock));
 check(
   "18.12 connect-src is bounded to same-origin plus the known Supabase project",
   /connect-src 'self' \$\{SUPABASE_ORIGIN\} \$\{SUPABASE_WS_ORIGIN\}/.test(cspBlock) &&
