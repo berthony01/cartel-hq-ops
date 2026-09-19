@@ -115,6 +115,18 @@ function snapshotValue(row: Record<string, unknown> | null, column: string): num
   return Number.isFinite(n) ? Math.trunc(n) : null;
 }
 
+/**
+ * SE-16.1H2 — Mission status fidelity. The panel status comes from the RPC
+ * result (public.social_mission_control_panel returns v_m.status) and is
+ * passed through unchanged. A missing/unusable value falls back to a neutral
+ * "UNKNOWN" — LIVE is never fabricated here. The mission-LIST mapping keeps
+ * its "LIVE" fallback because that RPC is filtered to m.status = 'LIVE'.
+ */
+function panelStatus(raw: unknown): string {
+  const value = String(raw ?? "").trim().toUpperCase();
+  return value.length > 0 ? value : "UNKNOWN";
+}
+
 /** Bot token is read per-request from server env only, never at module scope. */
 function botToken(): string {
   return process.env["TELEGRAM_BOT_TOKEN"] ?? "";
@@ -297,7 +309,7 @@ export const miniAppMissionPanel = createServerFn({ method: "POST" })
       workspaceName: binding.workspaceName,
       authorHandle: panel["author_handle"] ? String(panel["author_handle"]) : null,
       canonicalUrl: typeof panel["canonical_url"] === "string" ? panel["canonical_url"] : null,
-      status: "LIVE",
+      status: panelStatus(panel["status"]),
       endsAt: panel["ends_at"] ? String(panel["ends_at"]) : null,
       controlMode: String(panel["control_mode"] ?? "AUTO"),
       primaryType: String(config["milestone_type"] ?? "NONE").toUpperCase(),
