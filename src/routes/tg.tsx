@@ -18,7 +18,7 @@ import { createFileRoute, Outlet } from "@tanstack/react-router";
  * against the Telegram WebView and are not required here.
  */
 const SUPABASE_ORIGIN = "https://ocoinbnjgstkmnwwvnhi.supabase.co";
-const SUPABASE_REALTIME_ORIGIN = "wss://ocoinbnjgstkmnwwvnhi.supabase.co";
+const SUPABASE_WS_ORIGIN = "wss://ocoinbnjgstkmnwwvnhi.supabase.co";
 
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
@@ -31,7 +31,7 @@ const CONTENT_SECURITY_POLICY = [
   "script-src 'self' 'unsafe-inline' https://telegram.org",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
-  `connect-src 'self' ${SUPABASE_ORIGIN} ${SUPABASE_REALTIME_ORIGIN}`,
+  `connect-src 'self' ${SUPABASE_ORIGIN} ${SUPABASE_WS_ORIGIN}`,
   "img-src 'self' data: blob:",
 ].join("; ");
 
