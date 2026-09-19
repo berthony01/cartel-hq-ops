@@ -1,9 +1,11 @@
 /**
- * SE-16.1 — Mission Control picker (read-only).
+ * SE-16.1H — Mission Control picker (read-only).
  *
  * Reads only the raw `Telegram.WebApp.initData` credential and hands it to the
  * SE-16.0 bridge. No chat id is ever sent or rendered, and no mutation server
- * function is referenced from this screen.
+ * function is referenced from this screen. The credential is obtained through
+ * a bounded readiness wait, never a one-shot read of a possibly-unloaded
+ * bridge, and `initDataUnsafe` is never consulted.
  */
 
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -20,14 +22,15 @@ import {
   MiniAppIdentity,
   MiniAppMessage,
   MiniAppPanel,
+  MiniAppRetryButton,
   MiniAppSkeleton,
 } from "@/components/telegram-miniapp/MiniAppPieces";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import {
   formatTimeRemaining,
   miniAppFailureMessage,
-  readRawInitData,
-  telegramBoot,
+  missionStatusTone,
+  resolveTelegramSession,
 } from "@/lib/telegram-miniapp-client";
 
 export const Route = createFileRoute("/tg/")({
@@ -41,9 +44,15 @@ function MiniAppHome() {
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
 
   useEffect(() => {
-    telegramBoot();
-    setInitData(readRawInitData());
-    setBooting(false);
+    let cancelled = false;
+    void resolveTelegramSession().then((credential) => {
+      if (cancelled) return;
+      setInitData(credential);
+      setBooting(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const listWorkspaces = useServerFn(miniAppListMissionWorkspaces);
@@ -60,9 +69,23 @@ function MiniAppHome() {
     [workspacesQuery.data],
   );
 
+  /**
+   * Deterministic selection contract: none authorized -> nothing selected;
+   * exactly one -> auto-selected; two or more -> nothing selected until the
+   * operator chooses. An existing valid selection survives a refetch.
+   */
   useEffect(() => {
-    if (!workspaceId && workspaces.length > 0) setWorkspaceId(workspaces[0].workspaceId);
-  }, [workspaces, workspaceId]);
+    setWorkspaceId((current) => {
+      if (current && workspaces.some((workspace) => workspace.workspaceId === current)) {
+        return current;
+      }
+      if (workspaces.length === 1) {
+        const only = workspaces[0];
+        return only ? only.workspaceId : null;
+      }
+      return null;
+    });
+  }, [workspaces]);
 
   const missionsQuery = useQuery({
     queryKey: ["tg", "missions", workspaceId],
@@ -94,7 +117,9 @@ function MiniAppHome() {
 
   const workspaceFailure =
     workspacesQuery.data && !workspacesQuery.data.ok ? workspacesQuery.data.reason : null;
-  const activeWorkspace = workspaces.find((w) => w.workspaceId === workspaceId) ?? null;
+  const activeWorkspace = workspaces.find((w) => w.workspaceId === workspaceId);
+  const missionsFailure =
+    missionsQuery.data && !missionsQuery.data.ok ? missionsQuery.data.reason : null;
 
   return (
     <MiniAppFrame>
@@ -106,6 +131,12 @@ function MiniAppHome() {
         <MiniAppMessage
           title="Could not load your projects"
           description={miniAppFailureMessage(workspaceFailure ?? "unavailable")}
+          action={
+            <MiniAppRetryButton
+              onRetry={() => void workspacesQuery.refetch()}
+              pending={workspacesQuery.isFetching}
+            />
+          }
         />
       ) : null}
 
@@ -117,7 +148,10 @@ function MiniAppHome() {
       ) : null}
 
       {workspaces.length > 1 ? (
-        <MiniAppPanel heading="Project">
+        <MiniAppPanel
+          heading="Project"
+          note={workspaceId ? undefined : "Choose a project to see its live missions."}
+        >
           <div className="flex flex-wrap gap-2">
             {workspaces.map((workspace) => {
               const active = workspace.workspaceId === workspaceId;
@@ -145,12 +179,16 @@ function MiniAppHome() {
         <MiniAppPanel heading="Live missions" note="Select a mission to view its latest results.">
           {missionsQuery.isPending ? (
             <MiniAppSkeleton label="Loading missions…" />
-          ) : missionsQuery.isError || (missionsQuery.data && !missionsQuery.data.ok) ? (
+          ) : missionsQuery.isError || missionsFailure ? (
             <MiniAppMessage
               title="Could not load missions"
-              description={miniAppFailureMessage(
-                missionsQuery.data && !missionsQuery.data.ok ? missionsQuery.data.reason : "unavailable",
-              )}
+              description={miniAppFailureMessage(missionsFailure ?? "unavailable")}
+              action={
+                <MiniAppRetryButton
+                  onRetry={() => void missionsQuery.refetch()}
+                  pending={missionsQuery.isFetching}
+                />
+              }
             />
           ) : missionsQuery.data?.ok && missionsQuery.data.missions.length === 0 ? (
             <MiniAppMessage
@@ -174,7 +212,7 @@ function MiniAppHome() {
                         {formatTimeRemaining(mission.endsAt)}
                       </span>
                     </span>
-                    <StatusBadge tone={mission.status === "LIVE" ? "green" : "muted"}>
+                    <StatusBadge tone={missionStatusTone(mission.status)}>
                       {mission.status}
                     </StatusBadge>
                     <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />

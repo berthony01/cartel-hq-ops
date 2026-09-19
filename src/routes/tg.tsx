@@ -26,7 +26,10 @@ export const Route = createFileRoute("/tg")({
       { name: "twitter:card", content: "summary" },
       { name: "robots", content: "noindex" },
     ],
-    scripts: [{ src: "https://telegram.org/js/telegram-web-app.js", async: true }],
+    // NOT async: the Mini App screens need the bridge as early as possible.
+    // Client code still waits for readiness with a bounded poll, so a slow or
+    // absent bridge degrades safely instead of racing the first effect.
+    scripts: [{ src: "https://telegram.org/js/telegram-web-app.js" }],
   }),
   component: () => <Outlet />,
 });
