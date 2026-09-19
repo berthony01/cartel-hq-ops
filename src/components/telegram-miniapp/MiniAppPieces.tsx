@@ -60,7 +60,7 @@ export function MiniAppPanel({
   className,
 }: {
   heading: string;
-  note?: string;
+  note?: string | undefined;
   children: ReactNode;
   className?: string;
 }) {
