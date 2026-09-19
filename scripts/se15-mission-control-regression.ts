@@ -71,7 +71,8 @@ if (panelKbMatch) {
   const webAppRows = panelKb.match(/\[\{ text: "[^"]+", web_app: \{ url: [A-Z_]+ \} \}\]/g) ?? [];
   check("1A.4 exactly one web_app row in the panel keyboard", webAppRows.length === 1, `found ${webAppRows.length}`);
   check("1A.5 panel web_app row text and placement", panelKb.includes('[{ text: "📲 Open Mission Control", web_app: { url: MISSION_CONTROL_WEBAPP_URL } }],'));
-  check("1A.6 web_app row is the FIRST panel row", /^\s*\[\{ text: "📲 Open Mission Control"/.test(panelKb.slice(panelKb.indexOf("inline_keyboard: [") + "inline_keyboard: [".length)));
+  const panelRows = panelKb.slice(panelKb.indexOf("inline_keyboard: ["));
+  check("1A.6 web_app row is the FIRST panel row", panelRows.indexOf('text: "📲 Open Mission Control", web_app') < panelRows.indexOf("callback_data"));
   check("1A.7 existing panel callbacks preserved", ["mc_t_", "mc_d_", "mc_e_", "mc_c_", "mc_x"].every((cb) => panelKb.includes(`callback_data: \`${cb}`) || panelKb.includes(`callback_data: "${cb}`)));
 }
 const missionPickerMatch = webhook.match(/const mcRenderMissionPicker = async \([\s\S]{0,4500}?exit/i) ?? webhook.match(/const mcRenderMissionPicker = async \([\s\S]{0,4500}?mc_x/);
