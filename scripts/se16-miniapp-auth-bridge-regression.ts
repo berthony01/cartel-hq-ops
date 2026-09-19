@@ -415,6 +415,35 @@ const opts = { now: NOW_MS };
     /if \(raw === null \|\| raw === undefined\) return null;/.test(bridgeCode) &&
       /if \(!row\) return null;/.test(bridgeCode),
   );
+
+  // SE-16.1H2 — mission status fidelity: the panel status is sourced from the
+  // RPC result, never fabricated as LIVE.
+  check(
+    "9.8 panel status is sourced from the RPC result (panel[\"status\"])",
+    /status: panelStatus\(panel\["status"\]\)/.test(region),
+  );
+  check(
+    "9.9 panel never hardcodes or fabricates a LIVE status",
+    !/"LIVE"|'LIVE'/.test(region),
+  );
+  {
+    const helperStart = bridgeCode.indexOf("function panelStatus(");
+    const helper = helperStart > 0 ? bridgeCode.slice(helperStart, helperStart + 400) : "";
+    check(
+      "9.10 non-LIVE statuses (e.g. COMPLETED, CANCELLED) pass through unchanged",
+      helperStart > 0 &&
+        /const value = String\(raw \?\? ""\)\.trim\(\)\.toUpperCase\(\);/.test(helper) &&
+        /return value\.length > 0 \? value : "UNKNOWN";/.test(helper),
+    );
+    check(
+      "9.11 status fallback is the neutral UNKNOWN, never LIVE",
+      helperStart > 0 && !/LIVE/.test(helper),
+    );
+  }
+  check(
+    "9.12 mission-LIST LIVE fallback is unchanged (list RPC filters to LIVE)",
+    /status: String\(r\["status"\] \?\? "LIVE"\)/.test(bridgeCode),
+  );
 }
 
 /* ------------------------- 10. request id + deterministic idempotency */
