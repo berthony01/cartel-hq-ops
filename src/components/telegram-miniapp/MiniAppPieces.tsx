@@ -1,23 +1,33 @@
 /**
- * SE-16.1 — Telegram Mini App presentation primitives (read-only).
+ * SE-16.1H — Telegram Mini App presentation primitives (read-only).
  *
  * Pure presentation. No server call, no credential handling, no mutation
  * control. Results and targets are always rendered as two separate, labelled
  * sections so a target can never be mistaken for an observed result.
+ *
+ * Padding prefers Telegram's own content-safe-area variables, falls back to
+ * Telegram's safe-area variables, then to the browser `env()` insets, so the
+ * frame stays clear of the Telegram header and controls on every edge.
  */
 
 import type { ReactNode } from "react";
+import { RotateCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/** Telegram content-safe area -> Telegram safe area -> browser env() -> minimum. */
+function inset(edge: "top" | "right" | "bottom" | "left", minimum: string): string {
+  return `max(var(--tg-content-safe-area-inset-${edge}, var(--tg-safe-area-inset-${edge}, env(safe-area-inset-${edge}, 0px))), ${minimum})`;
+}
 
 export function MiniAppFrame({ children }: { children: ReactNode }) {
   return (
     <div
       className="min-h-screen w-full bg-background text-foreground"
       style={{
-        paddingTop: "max(env(safe-area-inset-top, 0px), 0.75rem)",
-        paddingBottom: "max(env(safe-area-inset-bottom, 0px), 1.25rem)",
-        paddingLeft: "max(env(safe-area-inset-left, 0px), 0.875rem)",
-        paddingRight: "max(env(safe-area-inset-right, 0px), 0.875rem)",
+        paddingTop: inset("top", "0.75rem"),
+        paddingBottom: inset("bottom", "1.25rem"),
+        paddingLeft: inset("left", "0.875rem"),
+        paddingRight: inset("right", "0.875rem"),
       }}
     >
       <div className="mx-auto flex w-full min-w-0 max-w-md flex-col gap-4">{children}</div>
@@ -25,7 +35,7 @@ export function MiniAppFrame({ children }: { children: ReactNode }) {
   );
 }
 
-export function MiniAppIdentity({ subtitle }: { subtitle?: string }) {
+export function MiniAppIdentity({ subtitle }: { subtitle?: string | undefined }) {
   return (
     <div className="flex min-w-0 items-center justify-between gap-3 border-b border-border-subtle pb-3">
       <div className="min-w-0">
@@ -50,7 +60,7 @@ export function MiniAppPanel({
   className,
 }: {
   heading: string;
-  note?: string;
+  note?: string | undefined;
   children: ReactNode;
   className?: string;
 }) {
@@ -90,6 +100,32 @@ export function MiniAppStatLine({
         {value}
       </span>
     </div>
+  );
+}
+
+/**
+ * Recovery affordance for a recoverable read failure. It only re-runs the same
+ * validated read; it never carries a mutation or weakens authorization.
+ */
+export function MiniAppRetryButton({
+  onRetry,
+  pending,
+  label = "Try again",
+}: {
+  onRetry: () => void;
+  pending?: boolean;
+  label?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onRetry}
+      disabled={pending}
+      className="mt-1 inline-flex min-h-9 items-center gap-2 rounded-md border border-gold/40 bg-gold/10 px-3 py-2 text-xs font-semibold text-gold transition-colors hover:bg-gold/15 disabled:opacity-60"
+    >
+      <RotateCw className={cn("size-3.5", pending ? "animate-spin" : null)} aria-hidden="true" />
+      {pending ? "Retrying…" : label}
+    </button>
   );
 }
 

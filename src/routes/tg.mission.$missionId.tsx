@@ -1,10 +1,14 @@
 /**
- * SE-16.1 — Mission detail (read-only).
+ * SE-16.1H — Mission detail (read-only).
  *
  * The route `missionId` is an untrusted routing hint only: the SE-16.0 bridge
  * re-resolves the mission through operator-scoped RPCs and re-verifies live
  * Telegram group admin status before returning anything. No chat id is sent or
  * displayed, and no target/duration/end/cancel control exists in this phase.
+ *
+ * The credential comes from a bounded Telegram readiness wait; the status
+ * badge renders the authoritative server-returned status rather than a
+ * synthesized one.
  */
 
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -18,6 +22,7 @@ import {
   MiniAppIdentity,
   MiniAppMessage,
   MiniAppPanel,
+  MiniAppRetryButton,
   MiniAppSkeleton,
   MiniAppStatLine,
 } from "@/components/telegram-miniapp/MiniAppPieces";
@@ -28,8 +33,8 @@ import {
   formatTargetValue,
   formatTimeRemaining,
   miniAppFailureMessage,
-  readRawInitData,
-  telegramBoot,
+  missionStatusTone,
+  resolveTelegramSession,
 } from "@/lib/telegram-miniapp-client";
 
 const METRIC_ORDER = ["views", "likes", "replies", "reposts", "bookmarks"] as const;
@@ -57,9 +62,15 @@ function MiniAppMission() {
   const [booting, setBooting] = useState(true);
 
   useEffect(() => {
-    telegramBoot();
-    setInitData(readRawInitData());
-    setBooting(false);
+    let cancelled = false;
+    void resolveTelegramSession().then((credential) => {
+      if (cancelled) return;
+      setInitData(credential);
+      setBooting(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const loadPanel = useServerFn(miniAppMissionPanel);
@@ -107,7 +118,16 @@ function MiniAppMission() {
       <MiniAppFrame>
         <MiniAppIdentity />
         <BackLink />
-        <MiniAppMessage title="Mission unavailable" description={miniAppFailureMessage(reason)} />
+        <MiniAppMessage
+          title="Mission unavailable"
+          description={miniAppFailureMessage(reason)}
+          action={
+            <MiniAppRetryButton
+              onRetry={() => void panelQuery.refetch()}
+              pending={panelQuery.isFetching}
+            />
+          }
+        />
       </MiniAppFrame>
     );
   }
@@ -122,7 +142,7 @@ function MiniAppMission() {
           <h1 className="min-w-0 flex-1 truncate font-display text-xl uppercase leading-none text-foreground">
             {panel.authorHandle ? `@${panel.authorHandle}` : "Mission"}
           </h1>
-          <StatusBadge tone="green">{panel.status}</StatusBadge>
+          <StatusBadge tone={missionStatusTone(panel.status)}>{panel.status}</StatusBadge>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">{formatTimeRemaining(panel.endsAt)}</p>
       </section>

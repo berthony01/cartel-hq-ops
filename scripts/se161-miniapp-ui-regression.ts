@@ -197,11 +197,15 @@ check(
 /* ----------------------------------------------------- 9. mobile/safe area */
 
 check(
-  "9.1 safe-area insets are applied on all four edges",
-  /safe-area-inset-top/.test(code.pieces) &&
-    /safe-area-inset-bottom/.test(code.pieces) &&
-    /safe-area-inset-left/.test(code.pieces) &&
-    /safe-area-inset-right/.test(code.pieces),
+  "9.1 padding is applied on all four edges",
+  /paddingTop:/.test(code.pieces) &&
+    /paddingBottom:/.test(code.pieces) &&
+    /paddingLeft:/.test(code.pieces) &&
+    /paddingRight:/.test(code.pieces) &&
+    /"top"/.test(code.pieces) &&
+    /"bottom"/.test(code.pieces) &&
+    /"left"/.test(code.pieces) &&
+    /"right"/.test(code.pieces),
 );
 check("9.2 mobile-first bounded width container", /max-w-md/.test(code.pieces));
 check(
@@ -246,6 +250,196 @@ check(
 check(
   "11.2 no SQL, supabase config or env file is modified",
   !/docs\/sql\/|supabase\/|\.env|package\.json/.test(gitStatus),
+);
+
+/* ----------------------------- 12. SE-16.1H bounded Telegram bridge readiness */
+
+check(
+  "12.1 a bounded readiness wait exists for the Telegram bridge",
+  /export async function waitForTelegramWebApp/.test(code.client) &&
+    /TELEGRAM_BRIDGE_TIMEOUT_MS/.test(code.client) &&
+    /TELEGRAM_BRIDGE_POLL_MS/.test(code.client),
+);
+check(
+  "12.2 the readiness wait is deadline-bounded, never unbounded",
+  /const deadline = Date\.now\(\) \+ Math\.max\(0, timeoutMs\)/.test(code.client) &&
+    /if \(Date\.now\(\) >= deadline\) return/.test(code.client),
+);
+check(
+  "12.3 an already-present bridge is recognised immediately",
+  /const app = webApp\(\);[\s\S]{0,200}?if \(app && typeof app\.initData === "string"/.test(
+    code.client,
+  ),
+);
+check(
+  "12.4 a single session resolver awaits readiness, boots, then reads the credential",
+  /export async function resolveTelegramSession[\s\S]*?await waitForTelegramWebApp\(timeoutMs\);[\s\S]*?telegramBoot\(\);[\s\S]*?return readRawInitData\(\);/.test(
+    code.client,
+  ),
+);
+check(
+  "12.5 neither screen performs a one-shot synchronous credential read",
+  !/setInitData\(readRawInitData\(\)\)/.test(code.home + code.mission) &&
+    /resolveTelegramSession\(\)/.test(code.home) &&
+    /resolveTelegramSession\(\)/.test(code.mission),
+);
+check(
+  "12.6 the Telegram script is not deferred behind async loading",
+  /telegram-web-app\.js/.test(code.layout) && !/async: true/.test(code.layout),
+);
+check(
+  "12.7 boot effects are cancellation-safe",
+  /cancelled = true/.test(code.home) && /cancelled = true/.test(code.mission),
+);
+
+/* ------------------------- 13. Telegram safe area with browser fallback */
+
+for (const edge of ["top", "right", "bottom", "left"] as const) {
+  check(
+    `13.${edge} Telegram content-safe, Telegram safe and browser env fallback chain`,
+    new RegExp(
+      `--tg-content-safe-area-inset-\\$\\{edge\\}[\\s\\S]*?--tg-safe-area-inset-\\$\\{edge\\}[\\s\\S]*?env\\(safe-area-inset-\\$\\{edge\\}`,
+    ).test(code.pieces) &&
+      new RegExp(`"${edge}", "[0-9.]+rem"`).test(code.pieces),
+  );
+}
+check(
+  "13.5 a usable minimum padding is preserved on every edge",
+  (code.pieces.match(/inset\("(top|right|bottom|left)", "[0-9.]+rem"\)/g) ?? []).length === 4,
+);
+check(
+  "13.6 the frame still uses max() so insets never shrink below the minimum",
+  /max\(var\(--tg-content-safe-area-inset-/.test(code.pieces),
+);
+
+/* --------------------------- 14. deterministic workspace selection contract */
+
+check(
+  "14.1 exactly one authorized workspace is auto-selected",
+  /workspaces\.length === 1/.test(code.home),
+);
+check(
+  "14.2 two or more workspaces select none until the operator chooses",
+  !/workspaces\.length > 0\)\s*setWorkspaceId/.test(code.home) &&
+    !/setWorkspaceId\(workspaces\[0\]\.workspaceId\)/.test(code.home) &&
+    /return null;/.test(code.home),
+);
+check(
+  "14.3 an existing valid selection survives a refetch",
+  /workspaces\.some\(\(workspace\) => workspace\.workspaceId === current\)/.test(code.home),
+);
+check(
+  "14.4 the multi-workspace selector is still rendered with explicit guidance",
+  /workspaces\.length > 1/.test(code.home) && /Choose a project/.test(code.home),
+);
+check(
+  "14.5 no unsafe non-null assertion is used for workspace selection",
+  !/workspaces\[0\]!/.test(code.home) && !/\bas any\b/.test(code.home),
+);
+
+/* ------------------------- 15. failure contract matches the real SE-16.0 */
+
+const VALIDATOR_REASONS = [
+  "missing_bot_token",
+  "missing_init_data",
+  "init_data_too_large",
+  "malformed_init_data",
+  "duplicate_field",
+  "missing_hash",
+  "missing_auth_date",
+  "invalid_auth_date",
+  "missing_user",
+  "malformed_user",
+  "invalid_user_id",
+  "stale_auth_date",
+  "future_auth_date",
+  "bad_signature",
+];
+const BRIDGE_REASONS = [
+  "invalid_mission_id",
+  "invalid_workspace_id",
+  "not_found",
+  "not_group_admin",
+  "unavailable",
+];
+for (const reason of [...VALIDATOR_REASONS, ...BRIDGE_REASONS]) {
+  check(`15.${reason} has explicit user-safe copy`, code.client.includes(`case "${reason}":`));
+}
+check(
+  "15.a obsolete reason names are removed",
+  !/expired_init_data|future_init_data|invalid_hash/.test(code.client),
+);
+check(
+  "15.b the declared validator reasons are exactly the ones the UI maps",
+  VALIDATOR_REASONS.every((reason) =>
+    stripComments(readFileSync("src/lib/telegram-miniapp-auth.server.ts", "utf8")).includes(
+      `"${reason}"`,
+    ),
+  ),
+);
+check(
+  "15.c signed-session failures route to reopen-from-bot guidance",
+  /case "bad_signature":\s*\n?\s*return "Your Telegram session expired\./.test(code.client),
+);
+check(
+  "15.d infrastructure failures route to temporary-unavailable guidance",
+  /case "missing_bot_token":[\s\S]{0,80}?case "unavailable":\s*\n?\s*return "Mission Control is temporarily unavailable\./.test(
+    code.client,
+  ),
+);
+check(
+  "15.e permission failure copy stays specific and safe",
+  /case "not_group_admin":\s*\n?\s*return "You are not currently an admin/.test(code.client),
+);
+check(
+  "15.f no internal reason name is ever rendered in a screen",
+  !VALIDATOR_REASONS.some((reason) => code.home.includes(reason) || code.mission.includes(reason)),
+);
+
+/* --------------------------------------------- 16. retry / recovery UX */
+
+check(
+  "16.1 a retry affordance primitive exists",
+  /export function MiniAppRetryButton/.test(code.pieces) && /onRetry/.test(code.pieces),
+);
+check(
+  "16.2 workspace and mission-list failures offer retry",
+  (code.home.match(/MiniAppRetryButton/g) ?? []).length >= 2 &&
+    /workspacesQuery\.refetch\(\)/.test(code.home) &&
+    /missionsQuery\.refetch\(\)/.test(code.home),
+);
+check(
+  "16.3 mission panel failure offers retry",
+  /MiniAppRetryButton/.test(code.mission) && /panelQuery\.refetch\(\)/.test(code.mission),
+);
+check(
+  "16.4 retry reuses the same validated read, never a mutation",
+  !/miniAppApply|useMutation/.test(code.home + code.mission + code.pieces),
+);
+check(
+  "16.5 retry surfaces pending state instead of silently re-firing",
+  /pending=\{workspacesQuery\.isFetching\}/.test(code.home) &&
+    /pending=\{panelQuery\.isFetching\}/.test(code.mission),
+);
+
+/* --------------------------------- 17. authoritative status presentation */
+
+check(
+  "17.1 the mission screen renders the server-returned status, not a constant",
+  /<StatusBadge tone=\{missionStatusTone\(panel\.status\)\}>\{panel\.status\}<\/StatusBadge>/.test(
+    code.mission,
+  ) && !/tone="green">\{panel\.status\}/.test(code.mission),
+);
+check(
+  "17.2 the picker derives its badge tone from the returned status",
+  /missionStatusTone\(mission\.status\)/.test(code.home) &&
+    !/mission\.status === "LIVE" \? "green" : "muted"/.test(code.home),
+);
+check(
+  "17.3 the status tone helper covers live, completed and cancelled",
+  /case "LIVE":/.test(code.client) &&
+    /case "COMPLETED":/.test(code.client) &&
+    /case "CANCELLED":/.test(code.client),
 );
 
 if (failures.length > 0) {
