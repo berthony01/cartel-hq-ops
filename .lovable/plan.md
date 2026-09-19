@@ -1,143 +1,90 @@
-# SE-15 Telegram Mission Control — read-only audit and proposed architecture
+# SE-16.1 Recovery Audit (read-only) and proposed SE-16.1H hardening phase
 
-Audit start HEAD `004f41acf1d52197df3706f7aab349983133122a`, working tree clean. No file
-was edited, nothing deployed, no SQL applied.
+No files were changed, nothing deployed, published, or written to Supabase/Telegram.
 
-## 1. Where today's mission commands live
+## 1. Authoritative state
 
-All of it is in one handler, `supabase/functions/telegram-webhook/index.ts` (3472 lines,
-authoritative; `backend-source/edge-functions/telegram-webhook` is stale). Dispatch order
-inside the handler: `callback_query` (2103) -> `my_chat_member` (2649) -> `message` (2782).
+- HEAD: `5ad273bd72392c92bcaeb4cf1347cf9a7f270181` ("Added SE-16.1 MiniApp UI"), working tree **clean** (`git status --porcelain` empty). Matches the stated project HEAD.
+- Project remains unpublished; no HTTPS Mini App URL exists.
+- Active workspace skills present: `controlled-surgical-build`, `release-verification`, `cartel-ui-system`, `read-only-audit`, `supabase-change-safety`, `onchain-mainnet-safety`.
 
-- `/mission <X link>`: `runMissionCommand` (~684-1331). Chain: group -> workspace via
-  `telegram_group_connections`; Telegram user -> HQ user via `telegram_connections`;
-  `is_workspace_operator` RPC; live `getChatMember` requiring administrator/creator;
-  live bot-permission preflight `readBotChatPermissions`; then
-  `create_social_mission_from_telegram_link`, transport call to `social-mission-telegram`,
-  `activate_social_mission_schedule`, optional command cleanup, canonical pin.
-- Bare `/mission`: `sendBareMissionLauncherAndCleanup(token, chatId, sourceMessageId)` (271).
-- `/mission close`: same auth chain, then `close_social_mission_from_telegram`,
-  same-card edit through the transport, `finish_social_mission_schedule_event`, and a
-  safe unpin gated on `social_mission_targets.pinned_by_hq`.
-- Anonymous admins: `linkFinderSender` (2988) accepts `sender_chat` only when
-  type is group/supergroup AND `sender_chat.id === chat.id`; `posterId` is null, so the
-  command is routed into `offerLinkFinderCandidate`, never a direct launch.
-- Link Finder buttons: `sm_lf_start_<uuid>` / `sm_lf_ignore_<uuid>` (2120-2426).
-  Authorization at tap time is the strong pattern: read-only `peek_...` -> chat binding
-  check (`candidateChatId === callbackChatId`) -> live `getChatMember` -> mutating
-  `resolve_social_mission_link_candidate` with `_verified_chat_id`. Idempotency lives in
-  the candidate row (`ALREADY_RESOLVED`) plus `missionRequestUuid(update_id)`.
-- Pin/unpin: `ensureCanonicalMissionPin` (765) and the close-path unpin (973), both
-  persisted through `record_social_mission_target_pin`.
+## 2. What exists
 
-## 2. Existing DM control pattern (reuse it)
+- SE-15 Mission Control: `supabase/functions/telegram-webhook/index.ts` (bot panel, targets, duration, end/cancel, card edit, safe unpin), `social-mission-telegram`, `social-mission-runner`, shared `_shared/mission-resolved-config.ts`, prepared SQL `docs/sql/SE15_mission_control.sql`.
+- SE-16.0 bridge: `src/lib/telegram-miniapp-auth.server.ts` (initData HMAC validator, bounded `getChatMember`), `src/lib/telegram-miniapp-bridge.functions.ts` (reads + `apply_targets` / `apply_duration`; end/cancel exposed only as `bot_finalize_required` / `not_enabled_in_bridge_v1`).
+- SE-16.1 UI: `src/routes/tg.tsx`, `src/routes/tg.index.tsx`, `src/routes/tg.mission.$missionId.tsx`, `src/components/telegram-miniapp/MiniAppPieces.tsx`, `src/lib/telegram-miniapp-client.ts`, `scripts/se161-miniapp-ui-regression.ts`.
+- No TODO/FIXME/phase markers anywhere in `src`, `scripts`, `docs`.
 
-Yes — the Project Inbox team console is exactly the pattern SE-15 needs:
-`/inbox` (3318) -> `openInboxCommand` (1992) -> `bot_inbox_operator_workspaces` ->
-workspace picker `pi_w_<uuid>` -> list -> `pi_c_<uuid>` -> `pi_x` to exit, plus
-`bot_inbox_set_session` for convenience state. Every callback is private-chat-gated and
-re-authorizes inside a service-only RPC; `telegram_team_sessions` is explicitly never an
-authorization source. Identity mapping: `telegram_connections` (telegram_user_id -> user_id),
-`workspace_members`, `is_workspace_operator`. `platform_user_roles` is not used by the bot.
+## 3. Verification of the five reported issues
 
-## 3. Existing HQ surfaces to extend, not duplicate
+| # | Claim | Verdict | Evidence |
+|---|---|---|---|
+| 1 | Telegram script `async` races the first effect | **CONFIRMED** | `src/routes/tg.tsx:29` loads the script with `async: true`; `tg.index.tsx:43-47` and `tg.mission.$missionId.tsx:59-63` read `readRawInitData()` once in a mount effect with no retry/poll. If the script has not executed, `window.Telegram` is undefined and the screen sticks permanently on the "Open Mission Control from Telegram" fallback. |
+| 2 | Only browser safe-area, no Telegram insets | **CONFIRMED** | `MiniAppPieces.tsx:17-20` uses only `env(safe-area-inset-*)`. No `--tg-safe-area-inset-*`, `--tg-content-safe-area-inset-*`, `--tg-viewport-stable-height`, or `themeParams` usage anywhere in the Mini App files. |
+| 3 | Auto-selects first workspace for any nonempty list | **CONFIRMED** | `tg.index.tsx:63-65`: `if (!workspaceId && workspaces.length > 0) setWorkspaceId(workspaces[0].workspaceId)`. Spec required auto-select only when exactly one workspace exists; with several, the first is silently chosen (the selector is still rendered, so impact is UX/spec, not security). |
+| 4 | Failure-reason mapping mismatched | **CONFIRMED** | `telegram-miniapp-client.ts:42-62` maps `expired_init_data`, `future_init_data`, `invalid_hash` — none of which the validator can emit. Real reasons (`telegram-miniapp-auth.server.ts:49-63`) are `stale_auth_date`, `future_auth_date`, `bad_signature`, plus `missing_bot_token`, `init_data_too_large`, `duplicate_field`, `missing_hash`, `missing_auth_date`, `invalid_auth_date`, `missing_user`, `malformed_user`, `invalid_user_id`. Every expired/tampered session therefore falls to the generic "could not load this right now" copy instead of "reopen from the bot". |
+| 5 | Full gate never run | **PARTIALLY WRONG — worse than reported** | Suites pass: SE-16.1 50/50, SE-16.0 117/117, SE-15 275/275, deploy-parity 43/43. But `bunx tsgo --noEmit` **FAILS**: `src/routes/tg.index.tsx(64,63) TS2532 Object is possibly 'undefined'` and `src/routes/tg.index.tsx(101,8) TS2375 exactOptionalPropertyTypes` on `subtitle`. HEAD does not currently typecheck, so `bun run build` is expected to fail too (not run in this read-only audit). |
 
-- `src/components/cartel/MissionSettingsCard.tsx` + `src/lib/social-mission-settings.ts`
-  (workspace defaults: preset, milestone_type/target, auto_pin, link_finder, cleanup).
-- `src/components/cartel/SocialMissionsPanel.tsx` + `src/lib/social-missions.ts` — the
-  read-only Missions tab in Community Command Center, already renders status, timeline,
-  snapshots and final results. SE-15 overrides/history belong here as extra read-only rows.
+## 4. Additional findings beyond the five
 
-## 4. Lifecycle facts that constrain editing a LIVE mission
+- **Synthesized mission status.** `social_mission_control_missions` (SQL line 333-341) returns `mission_id, telegram_chat_id, author_handle, canonical_url, started_at, ends_at, control_mode` — no `status` column. The bridge defaults `status: "LIVE"` (`bridge.functions.ts:249`) and the panel hardcodes `status: "LIVE"` (line 300). Semantically safe (the RPC filters `m.status = 'LIVE'`), but the badge is a constant, not observed state. Should be documented or derived honestly.
+- **No error/retry affordance.** Every Mini App failure state is terminal — no "Try again" action and no `refetch`, which matters inside a Telegram WebView where the user cannot easily reload.
+- **No reachability path.** Nothing registers the Mini App: no menu button, no `?startapp=` handling, no "Open Mission Control" WebApp button in `/mission manage`. The UI is currently unreachable from Telegram even if published.
+- **No origin/CSP boundary decision.** Server functions are same-origin, so no CORS gap exists today, but no `frame-ancestors` / embedding review has been done for Telegram WebView.
+- **Parity scope unchanged and correct.** Deploy-parity covers `_shared/mission-resolved-config.ts`, `social-mission-runner`, `social-mission-telegram` — all byte-identical (43/43). It does **not** cover `telegram-webhook`; the legacy `backend-source/edge-functions/telegram-webhook/index.ts` mirror still contains no Mission Control code. Repo-side parity for deployed functions cannot be proven beyond the last authorized deploys (SE-15 batch, then SE-15.1 `telegram-webhook`); no repo edits to those functions have happened since, so repo and production are consistent by absence of change, not by queried version evidence.
+- **Mutation deferral is intentional and intact.** `apply_targets` / `apply_duration` exist in the bridge but are referenced nowhere in the UI (SE-16.1 regression section 5 enforces this). End/Cancel remain bot-only by design.
+- **Knowledge/plan drift.** `.lovable/plan.md` currently holds the old SE-15 plan; project knowledge documents Phases 0–5.5 and lists "6 Public Cartel Network NEXT" with no SE-15/SE-16 entries at all. Not harmful, but knowledge is stale relative to shipped SE-15/SE-16 work.
 
-- `ends_at` is set once via `COALESCE` in `activate_social_mission_schedule`; completion is
-  NOT driven by `ends_at`. All PULSE and the single COMPLETE `due_at` are precomputed as
-  absolute timestamps at activation from `sent_at + offsets`. Changing `ends_at` alone
-  desynchronizes the displayed end from the real completion trigger.
-- Completion happens by *claiming* the COMPLETE event in
-  `claim_due_social_mission_schedule_events`, which atomically flips LIVE->COMPLETED and
-  cancels sibling PENDING pulses. A stale CLAIMED pulse is retired to AMBIGUOUS, never resent.
-- `effective_config` (milestone_type/target, stretch, metric_targets, goal_source) is
-  establish-once, guarded by `WHERE <field unset>`. `metric_targets` today is AUTO-only,
-  derived from the first durable `x-official` snapshot.
-- `CANCELLED` exists in the `social_missions` status enum and the card renders it, but no
-  RPC anywhere writes it. There is no cancel path and no config-history table.
+## 5. Blockers before deploy / publish / Telegram registration / live test
 
-## 5. Smallest safe SE-15 architecture
+1. Typecheck (and therefore build) fails at HEAD — hard blocker.
+2. initData boot race — Mini App can fail closed for real users.
+3. Telegram safe-area/viewport variables unused — layout may clip under the Telegram header/controls.
+4. Failure-copy mismatch — expired-session users get unhelpful generic copy.
+5. Workspace auto-select deviates from spec.
+6. No HTTPS surface: app unpublished, no decision recorded on serving `/tg/*` from the stable preview host vs publishing.
+7. No BotFather/menu/`startapp`/`/mission manage` button wiring (deliberately later phase).
+8. No live proof: no real Telegram render, no real bot-token signature path exercised, deployed SQL state in `ocoinbnjgstkmnwwvnhi` never queried.
 
-**Surface.** New `/mission manage` command, private-DM console modelled byte-for-byte on
-the `/inbox` pattern. In a group, `/mission manage` replies with a deep link to the bot DM
-(this also solves the anonymous-admin problem: the DM forces a real, identifiable user).
+## 6. Release gate that should be used
 
-**Authorization (three gates, all inside one new service-only RPC family).**
-1. `telegram_connections` -> HQ user.
-2. `is_workspace_operator(workspace_id, user_id)`.
-3. live `getChatMember` administrator/creator in the mission's own target chat, verified at
-   the moment of each mutating tap, passing `_verified_chat_id` exactly as the Link Finder does.
+```text
+bun run scripts/se161-miniapp-ui-regression.ts
+bun run scripts/se16-miniapp-auth-bridge-regression.ts
+bun run scripts/se15-mission-control-regression.ts
+bun run scripts/se14-multi-metric-mission-targets-regression.ts
+bun run scripts/se13-social-mission-goal-regression.ts
+bun run scripts/se6-step1-authoritative-regression.ts
+bun run scripts/se5-social-mission-engine-regression.ts
+bun run scripts/se4b-mission-lifecycle-pulse-regression.ts
+bun run scripts/se4a-mission-command-regression.ts
+bun run scripts/se3-social-mission-telegram-regression.ts
+bun run scripts/se31-owner-social-mission-test-control-regression.ts
+bun run scripts/se33l-branded-social-mission-test-control-regression.ts
+bun run scripts/community-command-center-unification-regression.ts
+bun run scripts/social-mission-deploy-parity-regression.ts
+bunx tsgo --noEmit
+bun run build
+```
 
-**Flow.** `mm_ws_<uuid>` workspace picker (only if >1) -> `mm_m_<uuid>` mission picker
-(LIVE first) -> panel with `mm_mode_auto|mm_mode_manual`, `mm_t_<metric>_<missionId>`
-prompts, `mm_dur_<mins>`, `mm_end_<id>` (End Now), `mm_cancel_<id>`, `mm_x`. Manual target
-entry reuses the existing reply-session mechanism (`bot_inbox_set_session` equivalent) so
-the next plain DM message is read as the number — no second conversation-state system.
+## 7. Recommended next controlled phase — SE-16.1H (repo-only)
 
-**Config changes without rewriting history.** Keep `effective_config` immutable. Add an
-`overrides` array (or a `config_version` counter plus `override_history`) inside
-`social_missions.metadata`, appended never rewritten, each entry recording actor user id,
-telegram user id, timestamp, field, previous value, new value. The *effective* value is read
-as "latest override, else effective_config". This avoids a new table.
+Smallest safe unit, no production mutation.
 
-**Duration change.** Must be an RPC that rewrites `ends_at` AND reschedules the pending
-schedule events in the same transaction: shift the COMPLETE `due_at`, cancel PENDING pulses
-whose new `due_at` is in the past, never touch CLAIMED/SENT rows. Do not expose a raw
-`ends_at` setter.
+Allowlist: `src/routes/tg.tsx`, `src/routes/tg.index.tsx`, `src/routes/tg.mission.$missionId.tsx`, `src/components/telegram-miniapp/MiniAppPieces.tsx`, `src/lib/telegram-miniapp-client.ts`, `scripts/se161-miniapp-ui-regression.ts`.
+Prohibited: bridge/auth modules, SE-15 webhook/runner, SQL, `.env`, `supabase/config.toml`, packages, deploys, publish, BotFather.
 
-**End Mission Now.** Reuse `close_social_mission_from_telegram`'s body via a new
-`end_social_mission_from_control(mission_id, ...)` RPC (same COMPLETED + cancel-pulses +
-COMPLETE-event claim), then the webhook performs one final metrics read through the existing
-`social-mission-telegram` `edit_mission` with `finalRefresh: true`, then the existing safe
-unpin gated on `pinned_by_hq`.
+1. Fix the two typecheck errors (safe indexing of `workspaces[0]`, `subtitle` optional-prop under `exactOptionalPropertyTypes`).
+2. Replace the one-shot initData read with a bounded readiness wait (poll until `window.Telegram.WebApp` exists, short ceiling, then fall back) so the async script cannot strand the screen; keep `ready()`/`expand()` non-destructive.
+3. Add Telegram `--tg-safe-area-inset-*` / content-safe-area variables with `env()` fallback in `MiniAppFrame`.
+4. Re-pin `miniAppFailureMessage` to the validator's actual reason strings; add a regression assertion that every exported `InitDataFailureReason` plus the bridge's bounded reasons has non-default copy.
+5. Auto-select a workspace only when exactly one is authorized.
+6. Add a retry affordance on terminal failure states.
+7. Extend the SE-16.1 regression for each of the above; loosen nothing.
+8. Run the full gate in section 6 and report exact counts + resulting SHA. STOP.
 
-**Cancel Mission.** New `cancel_social_mission_from_control` — sets the currently-dead
-`CANCELLED` status, cancels all PENDING/CLAIMED-stale schedule events, no final X read,
-same-card edit to CANCELLED (card already supports it), safe unpin.
+## Then, only on separate authorization
 
-**Not in scope, explicitly:** points, rewards, badges, per-user engagement tracking, a second
-scheduler, a second settings system, widening the Primary Goal enum.
-
-## 6. Files and SQL likely touched
-
-Repo: `supabase/functions/telegram-webhook/index.ts` (+ backend-source parity copy),
-`supabase/functions/social-mission-telegram/{index.ts,card.ts}` (render override/manual
-provenance and CANCELLED), `supabase/functions/_shared/mission-pulse-copy.ts` (targets read
-from effective-with-overrides), `src/lib/social-missions.ts` +
-`src/components/cartel/SocialMissionsPanel.tsx` (read-only override history),
-`docs/sql/SE15_mission_control.sql` (prepared only).
-
-New SQL: `social_mission_control_workspaces`, `social_mission_control_missions`,
-`social_mission_apply_target_override`, `social_mission_apply_duration_override`,
-`end_social_mission_from_control`, `cancel_social_mission_from_control`, and a
-`social_mission_effective_config_resolved` reader that folds overrides over the frozen
-config. All SECURITY DEFINER, REVOKE PUBLIC/anon/authenticated, GRANT service_role+postgres.
-**No new table is necessary** — overrides ride in `social_missions.metadata`.
-
-## 7. Hazards and required regressions
-
-Hazards: anonymous-admin identity (solved by DM-only mutation); stale inline keyboards
-re-tapped after a mission completes (every RPC must re-check status and return a typed
-outcome, never assume); double-tap racing (idempotency key derived from callback/update id,
-plus `WHERE status = 'LIVE'` guards); duration change racing the runner's claim (do the
-reschedule in the same transaction, skip CLAIMED rows); a manual Primary Goal target of zero
-or a non-integer; overriding a target on a COMPLETED/CANCELLED mission; unpinning a pin HQ
-never set; leaking a workspace id to a non-operator through the picker.
-
-Regressions to add (`scripts/se15-mission-control-regression.ts`) plus the full existing
-stack (SE-14, SE-13, Step 1, SE-5, SE-4B, SE-4A, SE-3, SE-3.1, SE-3.3L, Community, parity,
-`tsgo`, build): DM-only gating of every `mm_*` callback; three-gate authorization; anonymous
-tap refused; override append never rewrites `effective_config`; resolved-config precedence;
-Primary Goal must be positive while supporting targets stay optional; duration change
-reschedules COMPLETE and leaves CLAIMED untouched; End Now = one final X read, one same-card
-edit, pulses cancelled, unpin only when `pinned_by_hq`; Cancel = zero X reads, CANCELLED
-status, all pending events cancelled; caption stays under 1024; no points/rewards strings.
-
-Stopping after this report as instructed. No code, SQL, deployment or production change.
+- **SE-16.2** — mutation UX for targets/duration wired to the existing bridge functions (end/cancel stay bot-only). STOP.
+- **SE-16.3** — production: publish/host decision for the HTTPS Mini App URL, BotFather menu button, `?startapp=` deep-link handling, and the "Open Mission Control" WebApp button in `/mission manage` (requires a `telegram-webhook` edit + deploy). STOP.
+- **SE-16.4** — live QA inside real Telegram, with bot fallback verified. STOP.
