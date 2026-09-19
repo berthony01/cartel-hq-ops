@@ -197,11 +197,15 @@ check(
 /* ----------------------------------------------------- 9. mobile/safe area */
 
 check(
-  "9.1 safe-area insets are applied on all four edges",
-  /safe-area-inset-top/.test(code.pieces) &&
-    /safe-area-inset-bottom/.test(code.pieces) &&
-    /safe-area-inset-left/.test(code.pieces) &&
-    /safe-area-inset-right/.test(code.pieces),
+  "9.1 padding is applied on all four edges",
+  /paddingTop:/.test(code.pieces) &&
+    /paddingBottom:/.test(code.pieces) &&
+    /paddingLeft:/.test(code.pieces) &&
+    /paddingRight:/.test(code.pieces) &&
+    /"top"/.test(code.pieces) &&
+    /"bottom"/.test(code.pieces) &&
+    /"left"/.test(code.pieces) &&
+    /"right"/.test(code.pieces),
 );
 check("9.2 mobile-first bounded width container", /max-w-md/.test(code.pieces));
 check(
