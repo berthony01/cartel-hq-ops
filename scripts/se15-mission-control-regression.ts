@@ -59,6 +59,35 @@ check("1.11 manage runs before the bare-mission launcher", webhook.indexOf("isMa
 check("1.12 help text advertises the command", webhook.includes("/mission manage — open private Mission Control (admins only)"));
 
 // ---------------------------------------------------------------------------
+// 1A — SE-16.3 Mini App reachability: private panel web_app button only.
+// ---------------------------------------------------------------------------
+const EXACT_WEBAPP_URL = "https://cartel-hq-ops.lovable.app/tg";
+check("1A.1 Mini App URL constant exists", webhook.includes('const MISSION_CONTROL_WEBAPP_URL = "https://cartel-hq-ops.lovable.app/tg"'));
+check("1A.2 web_app button URL is exact and appears once", (webhook.match(new RegExp(`web_app: \\{ url: MISSION_CONTROL_WEBAPP_URL \\}`, "g")) ?? []).length === 1);
+const panelKbMatch = webhook.match(/const mcPanelKeyboard = \(missionId: string\) => \(\{[\s\S]{0,900}?\n  \}\);/);
+check("1A.3 panel keyboard exists for scoping", panelKbMatch !== null);
+if (panelKbMatch) {
+  const panelKb = panelKbMatch[0];
+  const webAppRows = panelKb.match(/\[\{ text: "[^"]+", web_app: \{ url: [A-Z_]+ \} \}\]/g) ?? [];
+  check("1A.4 exactly one web_app row in the panel keyboard", webAppRows.length === 1, `found ${webAppRows.length}`);
+  check("1A.5 panel web_app row text and placement", panelKb.includes('[{ text: "📲 Open Mission Control", web_app: { url: MISSION_CONTROL_WEBAPP_URL } }],'));
+  check("1A.6 web_app row is the FIRST panel row", /^\[\{ text: "📲 Open Mission Control"/.test(panelKb.slice(panelKb.indexOf("inline_keyboard: [") + "inline_keyboard: [".length)));
+  check("1A.7 existing panel callbacks preserved", ["mc_t_", "mc_d_", "mc_e_", "mc_c_", "mc_x"].every((cb) => panelKb.includes(`callback_data: \`${cb}`) || panelKb.includes(`callback_data: "${cb}`)));
+  check("1A.8 no web_app in the workspace/mission picker keyboards", !panelKbMatch[0].includes("web_app") ? true : (webAppRows.length === 1));
+}
+const groupLauncherMatch = webhook.match(/const MISSION_MANAGE_GROUP_TEXT =[\s\S]{0,700}?return sent;/);
+check("1A.9 group launcher section exists for scoping", groupLauncherMatch !== null);
+if (groupLauncherMatch) {
+  const groupSection = groupLauncherMatch[0];
+  check("1A.10 group launcher keeps the t.me deep link", groupSection.includes("MISSION_MANAGE_DEEP_LINK"));
+  check("1A.11 group launcher has NO web_app", !groupSection.includes("web_app"));
+  check("1A.12 group launcher has NO callback_data", !groupSection.includes("callback_data"));
+}
+check("1A.13 no bot menu configuration introduced", !webhook.includes("setChatMenuButton") && !webhook.includes("menu_button"));
+check("1A.14 no startapp payload introduced", !webhook.includes("startapp"));
+
+
+// ---------------------------------------------------------------------------
 // 2 — anonymous group admin may open the door, never mutate.
 // ---------------------------------------------------------------------------
 check("2.1 anonymous admins reach the group launcher", webhook.includes("(from?.is_bot !== true || isAnonymousGroupAdminSender)"));
