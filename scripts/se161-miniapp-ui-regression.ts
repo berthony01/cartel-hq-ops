@@ -675,9 +675,10 @@ check(
   "19.23 target and duration mutations stay independent",
   /const targetsMutation = useMutation\(/.test(code.mission) &&
     /const durationMutation = useMutation\(/.test(code.mission) &&
-    /pendingTargets/.test(code.mission) &&
-    /pendingDuration/.test(code.mission),
+    /kind: "targets"/.test(code.mission) &&
+    /kind: "duration"/.test(code.mission),
 );
+
 check(
   "19.24 pending state is visible to the user",
   /pendingLabel="Saving…"/.test(code.mission) && /pendingLabel="Updating…"/.test(code.mission),
