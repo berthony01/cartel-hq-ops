@@ -589,7 +589,14 @@ export const miniAppApplyTargets = createServerFn({ method: "POST" })
       ),
     });
     if (error) return fail("unavailable");
-    return { ok: true, outcome: String((result as Record<string, unknown> | null)?.["outcome"] ?? "denied") };
+    const outcome = String((result as Record<string, unknown> | null)?.["outcome"] ?? "denied");
+    return await withCardRefresh(outcome, {
+      admin,
+      telegramUserId,
+      binding,
+      action: "apply_targets",
+      requestId: data.requestId,
+    });
   });
 
 export const miniAppApplyDuration = createServerFn({ method: "POST" })
