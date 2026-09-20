@@ -1148,3 +1148,423 @@ async function handleEdit(args: {
   });
   return json({ editState: "AMBIGUOUS", message: persisted ? outcome.description : UNRESOLVED_EDIT }, 202);
 }
+
+// --------------------------------------------------------------------------
+// resurface_mission — SE-16.3R-2 rolling canonical replacement
+//
+// One live mission target owns exactly ONE visible branded card. When the card
+// has scrolled away, this action publishes a NEW authoritative card, carries an
+// HQ-owned pin across to it, makes the new Telegram message id canonical inside
+// a single database transaction, and only THEN retires the old card.
+//
+// Ordering is the whole safety argument:
+//   claim -> live permission preflight -> re-read LIVE -> render -> ONE send
+//   -> (pin new, only when HQ already owned the pin) -> atomic DB finalize
+//   -> best-effort delete of the OLD card.
+//
+// The old card is never deleted before the swap commits, a newly sent card is
+// cleaned up rather than left orphaned when a later step fails, and no step is
+// ever retried automatically after an uncertain Telegram outcome.
+// --------------------------------------------------------------------------
+
+const UNRESOLVED_RESURFACE =
+  "The replacement could not be resolved; this target is left unresolved and will not be retried.";
+
+/** Telegram's way of saying the pin is already exactly what we asked for. */
+function isPinAlreadySet(description: string): boolean {
+  const text = description.toLowerCase();
+  return text.includes("message is not modified") || text.includes("chat_not_modified");
+}
+
+/** Telegram's way of saying the message we wanted to delete is already gone. */
+function isMessageAlreadyGone(description: string): boolean {
+  const text = description.toLowerCase();
+  return (
+    text.includes("message to delete not found") ||
+    text.includes("message_id_invalid") ||
+    text.includes("message identifier is not specified")
+  );
+}
+
+/**
+ * Marks the CURRENT claim — and only the current claim — as FAILED or
+ * AMBIGUOUS. It is bound to the exact target, workspace, the CLAIMED state and
+ * this request id, so a stale attempt can never overwrite a newer claim. It
+ * touches no canonical id and no send, edit or pin field.
+ */
+async function markResurfaceClaim(
+  admin: ReturnType<typeof createClient>,
+  targetId: string,
+  workspaceId: string,
+  clientRequestId: string,
+  nextState: "FAILED" | "AMBIGUOUS",
+  reason: string,
+): Promise<boolean> {
+  const { data, error } = await admin
+    .from("social_mission_targets")
+    .update({
+      resurface_state: nextState,
+      resurface_last_error: reason.slice(0, 1000),
+    })
+    .eq("id", targetId)
+    .eq("workspace_id", workspaceId)
+    .eq("resurface_state", "CLAIMED")
+    .eq("resurface_client_request_id", clientRequestId)
+    .select("id")
+    .maybeSingle();
+  return !error && !!data;
+}
+
+/**
+ * Resurface-specific live verification. Deliberately a separate helper: the
+ * existing `verifyGroup` contract is used unchanged by send and edit, and must
+ * not be widened. Every resurface needs Delete Messages, because a replacement
+ * that cannot retire its predecessor would leave two cards. Pin Messages is
+ * required ONLY when HQ already owns this target's pin.
+ */
+async function verifyResurfacePermissions(
+  token: string,
+  chatId: number,
+  requirePin: boolean,
+): Promise<{ ok: true } | { ok: false; definite: boolean; message: string }> {
+  const me = await callTelegram(token, "getMe", {});
+  if (me.kind === "uncertain") return { ok: false, definite: false, message: me.description };
+  if (me.kind === "rejected") return { ok: false, definite: true, message: "Bot credentials rejected." };
+  const botId = (me.result as { id?: unknown }).id;
+  if (typeof botId !== "number") {
+    return { ok: false, definite: false, message: "Bot identity unavailable." };
+  }
+
+  const chat = await callTelegram(token, "getChat", { chat_id: chatId });
+  if (chat.kind === "uncertain") return { ok: false, definite: false, message: chat.description };
+  if (chat.kind === "rejected") {
+    return { ok: false, definite: true, message: "The Telegram community is not reachable." };
+  }
+  const chatType = (chat.result as { type?: unknown }).type;
+  if (chatType !== "group" && chatType !== "supergroup") {
+    return { ok: false, definite: true, message: "The target chat is not a group or supergroup." };
+  }
+
+  const member = await callTelegram(token, "getChatMember", { chat_id: chatId, user_id: botId });
+  if (member.kind === "uncertain") return { ok: false, definite: false, message: member.description };
+  if (member.kind === "rejected") {
+    return { ok: false, definite: true, message: "The bot is no longer in this community." };
+  }
+  const result = member.result as { status?: unknown; can_delete_messages?: unknown; can_pin_messages?: unknown };
+  const status = result.status;
+  if (status !== "administrator" && status !== "creator") {
+    return { ok: false, definite: true, message: "The bot must be an administrator of this community." };
+  }
+
+  // A creator holds every right implicitly and reports no per-right flags.
+  if (status === "creator") return { ok: true };
+
+  const canDelete = result.can_delete_messages;
+  if (canDelete === false) {
+    return {
+      ok: false,
+      definite: true,
+      message: "The bot needs the Delete Messages permission to replace the mission card.",
+    };
+  }
+  if (typeof canDelete !== "boolean") {
+    return { ok: false, definite: false, message: "Delete permission could not be confirmed." };
+  }
+
+  if (requirePin) {
+    const canPin = result.can_pin_messages;
+    if (canPin === false) {
+      return {
+        ok: false,
+        definite: true,
+        message: "The bot needs the Pin Messages permission to carry the pinned mission card across.",
+      };
+    }
+    if (typeof canPin !== "boolean") {
+      return { ok: false, definite: false, message: "Pin permission could not be confirmed." };
+    }
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Best-effort retirement of a single Telegram message. Exactly ONE call, never
+ * retried. "Already gone" counts as retired, because the desired end state is
+ * simply that the message is no longer visible.
+ */
+async function deleteOneMessage(
+  token: string,
+  chatId: number,
+  messageId: number,
+): Promise<{ retired: boolean; definite: boolean; message: string }> {
+  const outcome = await callTelegram(token, "deleteMessage", { chat_id: chatId, message_id: messageId });
+  if (outcome.kind === "ok") return { retired: true, definite: true, message: "Message removed." };
+  if (outcome.kind === "rejected") {
+    if (isMessageAlreadyGone(outcome.description)) {
+      return { retired: true, definite: true, message: "Message was already gone." };
+    }
+    return { retired: false, definite: true, message: outcome.description };
+  }
+  return { retired: false, definite: false, message: outcome.description };
+}
+
+async function handleResurface(args: {
+  admin: ReturnType<typeof createClient>;
+  botToken: string;
+  workspaceId: string;
+  mission: LoadedRow;
+  t: LoadedRow;
+  chatId: number;
+  clientRequestId: string;
+}): Promise<Response> {
+  const { admin, botToken, workspaceId, mission, t, chatId, clientRequestId } = args;
+
+  const targetId = String(t["id"]);
+  const resurfaceState = String(t["resurface_state"] ?? "IDLE");
+  const currentRevision =
+    typeof t["resurface_revision"] === "number" ? (t["resurface_revision"] as number) : 0;
+  const oldMessageId =
+    typeof t["telegram_message_id"] === "number" ? (t["telegram_message_id"] as number) : null;
+  const pinnedByHq = t["pinned_by_hq"] === true;
+
+  // 1. Only a LIVE mission with a confirmed canonical card can be replaced.
+  if (String(mission["status"] ?? "") !== "LIVE") {
+    return fail("Only a live mission card can be replaced.", 409, { resurfaceState });
+  }
+  if (String(t["delivery_state"] ?? "") !== "SENT" || oldMessageId === null || oldMessageId <= 0) {
+    return fail("Only a confirmed sent card can be replaced.", 409, { resurfaceState });
+  }
+
+  // 2. Idempotency resolved BEFORE any Telegram call. A replayed request id
+  //    reports the recorded state and sends nothing.
+  if (t["resurface_client_request_id"] === clientRequestId) {
+    return json({
+      resurfaceState,
+      resurfaceRevision: currentRevision,
+      duplicate: true,
+      telegramMessageId: resurfaceState === "RESURFACED" ? oldMessageId : null,
+      cleanupPending: false,
+      message: "This replacement request was already recorded.",
+    });
+  }
+
+  // 3. A fresh claim may only start from a settled lane. CLAIMED means another
+  //    attempt owns the target; AMBIGUOUS means a previous attempt's real-world
+  //    effect is unknown and must never be guessed at with a second card.
+  if (resurfaceState !== "IDLE" && resurfaceState !== "RESURFACED" && resurfaceState !== "FAILED") {
+    return fail("A previous replacement is unresolved; this card cannot be replaced again.", 409, {
+      resurfaceState,
+      resurfaceRevision: currentRevision,
+    });
+  }
+
+  // 4. Compare-and-set on state, revision AND the canonical message id, so a
+  //    concurrent replacement that already swapped the card cannot be raced.
+  const { data: claimedRow, error: claimError } = await admin
+    .from("social_mission_targets")
+    .update({
+      resurface_state: "CLAIMED",
+      resurface_client_request_id: clientRequestId,
+      resurface_revision: currentRevision + 1,
+      last_resurface_attempt_at: new Date().toISOString(),
+      resurface_last_error: null,
+    })
+    .eq("id", targetId)
+    .eq("workspace_id", workspaceId)
+    .eq("resurface_state", resurfaceState)
+    .eq("resurface_revision", currentRevision)
+    .eq("telegram_message_id", oldMessageId)
+    .select("id")
+    .maybeSingle();
+  if (claimError || !claimedRow) {
+    // Not claimed: stop BEFORE Telegram. Nothing was sent, nothing to undo.
+    return fail("Could not claim this card for replacement.", 409, { resurfaceState });
+  }
+
+  const revision = currentRevision + 1;
+
+  const settle = async (
+    nextState: "FAILED" | "AMBIGUOUS",
+    reason: string,
+    status: number,
+  ): Promise<Response> => {
+    const persisted = await markResurfaceClaim(
+      admin,
+      targetId,
+      workspaceId,
+      clientRequestId,
+      nextState,
+      reason,
+    );
+    return json(
+      {
+        resurfaceState: persisted ? nextState : "CLAIMED",
+        resurfaceRevision: revision,
+        duplicate: false,
+        cleanupPending: false,
+        message: persisted ? reason : UNRESOLVED_RESURFACE,
+      },
+      persisted ? status : 202,
+    );
+  };
+
+  // 5. Live permission preflight AFTER the claim and BEFORE any send.
+  const permitted = await verifyResurfacePermissions(botToken, chatId, pinnedByHq);
+  if (!permitted.ok) {
+    return await settle(
+      permitted.definite ? "FAILED" : "AMBIGUOUS",
+      permitted.message,
+      permitted.definite ? 409 : 202,
+    );
+  }
+
+  // 6. Re-read the mission: it may have completed or been cancelled between the
+  //    claim and this point. Nothing has been sent yet, so this is a clean stop.
+  const refreshedMission = await reloadMissionRow(admin, workspaceId, mission["id"]);
+  if (!refreshedMission) {
+    return await settle("FAILED", "The mission could not be re-read; nothing was sent.", 409);
+  }
+  if (String(refreshedMission["status"] ?? "") !== "LIVE") {
+    return await settle("FAILED", "This mission is no longer live; nothing was sent.", 409);
+  }
+
+  // 7. The replacement uses the target's DURABLE transport kind. A branded card
+  //    stays branded: if the logo can no longer be resolved the claim fails
+  //    before Telegram rather than silently degrading the card to plain text.
+  const transportKind: TransportKind = t["transport_kind"] === "PHOTO" ? "PHOTO" : "TEXT";
+  let logo: { bytes: Uint8Array; mimeType: string; fileName: string } | null = null;
+  if (transportKind === "PHOTO") {
+    logo = await resolveProjectLogo(admin, workspaceId);
+    if (!logo) {
+      return await settle(
+        "FAILED",
+        "The project logo for this branded card could not be resolved; nothing was sent.",
+        409,
+      );
+    }
+  }
+
+  // 8. Authoritative render. ZERO social provider reads happen on this path.
+  const rendered = await renderAuthoritativeCard(admin, workspaceId, refreshedMission, transportKind);
+  if ("error" in rendered) {
+    return await settle("FAILED", rendered.error, 409);
+  }
+
+  // 9. Exactly ONE new send. No companion message, no probe, no resend.
+  let outcome: TelegramOutcome;
+  if (logo) {
+    const form = new FormData();
+    form.append("chat_id", String(chatId));
+    form.append("caption", rendered.text);
+    if (rendered.replyMarkup) form.append("reply_markup", JSON.stringify(rendered.replyMarkup));
+    form.append("photo", new Blob([logo.bytes as BlobPart], { type: logo.mimeType }), logo.fileName);
+    outcome = await callTelegram(botToken, "sendPhoto", form, TELEGRAM_UPLOAD_TIMEOUT_MS);
+  } else {
+    outcome = await callTelegram(botToken, "sendMessage", {
+      chat_id: chatId,
+      text: rendered.text,
+      disable_web_page_preview: true,
+      ...(rendered.replyMarkup ? { reply_markup: rendered.replyMarkup } : {}),
+    });
+  }
+
+  if (outcome.kind === "rejected") {
+    // Definitely not sent. The old card remains the canonical card, untouched.
+    return await settle("FAILED", outcome.description, 409);
+  }
+  if (outcome.kind === "uncertain") {
+    // The card may or may not exist. Never retried, never resent.
+    return await settle("AMBIGUOUS", outcome.description, 202);
+  }
+
+  const newMessageIdRaw = (outcome.result as { message_id?: unknown }).message_id;
+  if (typeof newMessageIdRaw !== "number" || !Number.isInteger(newMessageIdRaw) || newMessageIdRaw <= 0) {
+    return await settle("AMBIGUOUS", "Telegram did not confirm a message id.", 202);
+  }
+  const newMessageId = newMessageIdRaw;
+
+  /**
+   * One best-effort cleanup of the card we just created, used when a LATER step
+   * fails. The OLD card is never touched here: it is still the authoritative
+   * canonical card until the database says otherwise.
+   */
+  const abandonNewCard = async (reason: string): Promise<Response> => {
+    const removal = await deleteOneMessage(botToken, chatId, newMessageId);
+    if (removal.retired) {
+      return await settle("FAILED", reason, 409);
+    }
+    return await settle(
+      "AMBIGUOUS",
+      `${reason} The replacement card could not be removed.`.slice(0, 1000),
+      202,
+    );
+  };
+
+  // 10. Pin preservation — ONLY when HQ already owned this target's pin. A
+  //     target that HQ never pinned never reaches a Telegram pin API here.
+  if (pinnedByHq) {
+    const pinned = await callTelegram(botToken, "pinChatMessage", {
+      chat_id: chatId,
+      message_id: newMessageId,
+      disable_notification: true,
+    });
+    const pinConfirmed =
+      pinned.kind === "ok" || (pinned.kind === "rejected" && isPinAlreadySet(pinned.description));
+    if (!pinConfirmed) {
+      return await abandonNewCard("The replacement card could not be pinned, so it was withdrawn.");
+    }
+  }
+
+  // 11. Atomic canonical finalization. The RPC queues the OLD id for the
+  //     existing cleanup worker and swaps the canonical id in one transaction.
+  let finalizeOutcome = "";
+  let previousMessageId: number | null = null;
+  try {
+    const { data: finalizeData, error: finalizeError } = await admin.rpc(
+      "social_mission_finalize_resurface",
+      {
+        _target_id: targetId,
+        _client_request_id: clientRequestId,
+        _new_message_id: newMessageId,
+        _message_text: rendered.text,
+      },
+    );
+    if (finalizeError || !finalizeData || typeof finalizeData !== "object") {
+      return await abandonNewCard("The replacement could not be recorded, so it was withdrawn.");
+    }
+    const payload = finalizeData as LoadedRow;
+    finalizeOutcome = String(payload["outcome"] ?? "");
+    const old = payload["old_message_id"];
+    previousMessageId = typeof old === "number" && old > 0 ? old : null;
+  } catch {
+    return await abandonNewCard("The replacement could not be recorded, so it was withdrawn.");
+  }
+
+  if (finalizeOutcome !== "finalized" && finalizeOutcome !== "replayed") {
+    // The old card is still the authoritative canonical card. Withdraw the new
+    // one rather than leaving two visible cards.
+    return await abandonNewCard("The replacement was not accepted, so it was withdrawn.");
+  }
+
+  // 12. Only now — after the swap has committed — may the OLD card be retired.
+  //     Exactly one attempt. A failure is NOT rolled back and NOT resent: the
+  //     cleanup job the finalizer already queued is the durable retry path.
+  let cleanupPending = true;
+  if (previousMessageId !== null) {
+    const retired = await deleteOneMessage(botToken, chatId, previousMessageId);
+    cleanupPending = !retired.retired;
+  }
+
+  return json({
+    resurfaceState: "RESURFACED",
+    resurfaceRevision: revision,
+    duplicate: finalizeOutcome === "replayed",
+    telegramMessageId: newMessageId,
+    previousMessageId,
+    cleanupPending,
+    message: cleanupPending
+      ? "The mission card was replaced; the previous card is queued for removal."
+      : "The mission card was replaced.",
+  });
+}
