@@ -196,7 +196,7 @@ check(
 // -------------------------------------------------------------- 5. migration
 check(
   "TS-5a",
-  migrationFiles.length === 83 && migrationFiles.includes(MIGRATION_FILE),
+  migrationFiles.length === 84 && migrationFiles.includes(MIGRATION_FILE),
   `exactly one new migration is added (${migrationFiles.length} files)`,
 );
 check(
