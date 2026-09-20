@@ -736,6 +736,21 @@ Deno.serve(async (request: Request): Promise<Response> => {
     return await handleSend({ admin, botToken, workspaceId, mission: mission as LoadedRow, t, chatId, clientRequestId });
   }
 
+  // SE-16.3R-2. The rolling replacement owns its own durable revision lane, so
+  // no caller-supplied `revision` is read or required on this path.
+  if (action === "resurface_mission") {
+    return await handleResurface({
+      admin,
+      botToken,
+      workspaceId,
+      mission: mission as LoadedRow,
+      t,
+      chatId,
+      clientRequestId,
+    });
+  }
+
+
   const revision = body["revision"];
   if (typeof revision !== "number" || !Number.isInteger(revision) || revision < 1) {
     return fail("Invalid revision.", 400);
