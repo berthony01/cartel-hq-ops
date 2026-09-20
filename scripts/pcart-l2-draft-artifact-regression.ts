@@ -207,10 +207,13 @@ check(
 );
 check(
   "L2D-I7",
-  migrationFiles.length === 82 &&
+  migrationFiles.length === 83 &&
+    migrationFiles.some((f) =>
+      f.endsWith("20260920053000_pcart_treasury_signer_config.sql"),
+    ) &&
     migrationFiles.every((f) => !/PepeCartelToken/.test(readFileSync(f, "utf8"))) &&
     !migrationFiles.some((f) => /pepecartel[-_]?token|pcart[-_]?artifact/i.test(f)),
-  "migration set unchanged (82 files), none reference the draft PCART token artifact",
+  "migration set re-pinned (83 files), none reference the draft PCART token artifact",
 );
 check(
   "L2D-I8",
