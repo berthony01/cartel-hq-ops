@@ -209,7 +209,7 @@ check(
   "L2D-I7",
   migrationFiles.length === 83 &&
     migrationFiles.some((f) =>
-      f.endsWith("20260920053000_pcart_treasury_signer_config.sql"),
+      f.endsWith("20260920053942_42259f41-35d1-4b5c-9e6a-78127867cddd.sql"),
     ) &&
     migrationFiles.every((f) => !/PepeCartelToken/.test(readFileSync(f, "utf8"))) &&
     !migrationFiles.some((f) => /pepecartel[-_]?token|pcart[-_]?artifact/i.test(f)),

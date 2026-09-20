@@ -30,7 +30,7 @@ const VERIFIER = "src/lib/treasury-safe-verify.ts";
 const VERIFIER_FN = "src/lib/treasury-safe-verify.functions.ts";
 const REGISTRY = "src/lib/chain-mainnet-registry.ts";
 const MIGRATIONS = "supabase/migrations";
-const MIGRATION_FILE = "20260920053000_pcart_treasury_signer_config.sql";
+const MIGRATION_FILE = "20260920053942_42259f41-35d1-4b5c-9e6a-78127867cddd.sql";
 
 const read = (p: string) => readFileSync(p, "utf8");
 
