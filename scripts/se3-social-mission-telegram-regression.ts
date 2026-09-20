@@ -690,7 +690,7 @@ check(
 check("14.35 no companion message accompanies a branded card", !sendBlock33.includes("sendMediaGroup") && !sendBlock33.includes("copyMessage"));
 
 // 14e. Edit path
-const editBlock33 = indexSrc.slice(indexSrc.indexOf("async function handleEdit"));
+const editBlock33 = indexSrc.slice(indexSrc.indexOf("async function handleEdit"), EDIT_LANE_END);
 check(
   "14.36 edit method comes from the durable persisted transport kind",
   editBlock33.includes('t["transport_kind"] === "PHOTO" ? "PHOTO" : "TEXT"'),
