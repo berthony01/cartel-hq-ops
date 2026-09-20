@@ -3502,14 +3502,18 @@ Deno.serve(async (req: Request) => {
             return json({ ok: true });
           }
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Primary Goal updated.");
-          if (outcome === "ok") {
-            await mcRefreshCard({
-              binding,
-              actorUserId: linked?.user_id ? String(linked.user_id) : null,
-              seed: `${updateId}:goal:${type}`,
-            });
-          }
-          await mcRenderPanel(operatorId, callbackChatId, missionId, binding, "Primary Goal updated.");
+          const goalResurface = await mcResurfaceLiveCard({
+            binding,
+            actorUserId: linked?.user_id ? String(linked.user_id) : null,
+            seed: `${updateId}:goal:${type}`,
+          });
+          await mcRenderPanel(
+            operatorId,
+            callbackChatId,
+            missionId,
+            binding,
+            mcResurfaceNote("Primary Goal updated.", goalResurface),
+          );
           return json({ ok: true });
         }
 
