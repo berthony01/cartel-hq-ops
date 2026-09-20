@@ -530,13 +530,22 @@ check("19.40 the unpin binds the verified chat", /mcSafeUnpin[\s\S]{0,700}eq\("t
 check("19.41 the unpin still requires HQ ownership", /mcSafeUnpin[\s\S]{0,900}pinned\?\.pinned_by_hq/.test(webhook));
 check("19.42 no loose mission-only card match remains", !/eq\("workspace_id", args\.workspaceId\)\s*\n\s*\.maybeSingle\(\)/.test(webhook));
 
-// 19.42b — every Mission Control card refresh uses the binding-based shape.
+// 19.42b — every Mission Control card call uses the binding-based shape.
+// SE-16.3R-3 re-pin: the seven former call sites split into two explicit lanes
+// (2 final-state in-place edits + 5 LIVE rolling replacements). Both lanes are
+// counted here, so the total binding coverage is NOT weakened.
 {
-  const callArgs = [...webhook.matchAll(/await mcRefreshCard\(\{([\s\S]{0,300}?)\}\)/g)].map((m) => m[1]);
-  check("19.42b every mcRefreshCard call passes binding", callArgs.length >= 7 && callArgs.every((a) => /(^|\s)binding,/.test(a)));
+  const finalArgs = [...webhook.matchAll(/await mcRefreshCard\(\{([\s\S]{0,300}?)\}\)/g)].map((m) => m[1]);
+  const liveArgs = [...webhook.matchAll(/await mcResurfaceLiveCard\(\{([\s\S]{0,300}?)\}\)/g)].map((m) => m[1]);
+  const callArgs = [...finalArgs, ...liveArgs];
+  check("19.42b every Mission Control card call passes binding", finalArgs.length === 2 && liveArgs.length >= 5 && callArgs.length >= 7 && callArgs.every((a) => /(^|\s)binding,/.test(a)));
   check(
     "19.42c no stale workspaceId/missionId call shape remains",
     callArgs.every((a) => !/\bworkspaceId\s*:/.test(a) && !/\bmissionId\s*:/.test(a)),
+  );
+  check(
+    "19.42d no LIVE resurface call sends a caller revision",
+    liveArgs.every((a) => !/\brevision\s*:/.test(a)),
   );
 }
 
