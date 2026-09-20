@@ -776,7 +776,38 @@ check(
     !/not_live[\s\S]{0,120}committed: true/.test(code.client),
 );
 
-
+// ---------------------------------------------------------------------------
+// SE-16.3R-3 — rolling canonical card, truthful UI surface.
+// ---------------------------------------------------------------------------
+check(
+  "20.1 the mission controls describe the rolling card, not a pinned refresh",
+  /move the current Telegram card to the bottom of the chat/.test(code.mission) &&
+    !/refresh the pinned Telegram card/.test(uiCode),
+);
+check(
+  "20.2 a committed cleanup_pending result is a warning, never a claimed full success",
+  /result\.refresh === "cleanup_pending"[\s\S]{0,320}tone: "warning"/.test(code.client),
+);
+check(
+  "20.3 cleanup_pending states the new card is posted and the old one is queued",
+  /Saved and the new Telegram card was posted\. The previous card is queued for removal\./.test(
+    code.client,
+  ),
+);
+check(
+  "20.4 cleanup_pending never invites a retry and never denies the commit",
+  /result\.refresh === "cleanup_pending"[\s\S]{0,320}committed: true,\s*retry: false/.test(
+    code.client,
+  ),
+);
+check(
+  "20.5 no raw transport reason or resurface state is rendered",
+  !/RESURFACED|resurfaceState|cleanupPending/.test(uiCode),
+);
+check(
+  "20.6 END and CANCEL remain bot-owned in the Mini App",
+  !/action: "end_now"|action: "cancel"/.test(uiCode),
+);
 
 
 if (failures.length > 0) {
