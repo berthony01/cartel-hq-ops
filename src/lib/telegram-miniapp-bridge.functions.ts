@@ -504,7 +504,31 @@ export const miniAppMissionPanel = createServerFn({ method: "POST" })
 
 /* -------------------------------------------------------------- MUTATIONS */
 
-export type MiniAppMutationResult = { ok: true; outcome: string } | MiniAppFailure;
+/**
+ * Mutation truthfulness: the DB outcome and the Telegram card refresh are two
+ * separate facts. `refresh` is present only when a refresh was attempted (that
+ * is, for a committed `ok` / `replayed` outcome) so future UI can say "saved,
+ * card refresh needs retry" instead of claiming total success.
+ */
+export type MiniAppMutationResult =
+  | { ok: true; outcome: string; refresh?: MiniAppRefreshState }
+  | MiniAppFailure;
+
+/**
+ * A committed mutation ALWAYS attempts exactly one card refresh — including on
+ * `replayed`, so a client retry self-heals when the DB write landed but the
+ * first refresh result was lost. Refused/unchanged outcomes (denied, not_live,
+ * conflict, invalid_*) never touch the card.
+ */
+async function withCardRefresh(
+  outcome: string,
+  args: { admin: AdminClient; telegramUserId: number; binding: Binding; action: string; requestId: string },
+): Promise<MiniAppMutationResult> {
+  if (!(MINIAPP_REFRESHABLE_OUTCOMES as readonly string[]).includes(outcome)) {
+    return { ok: true, outcome };
+  }
+  return { ok: true, outcome, refresh: await miniAppRefreshCard(args) };
+}
 
 export const miniAppApplyTargets = createServerFn({ method: "POST" })
   .inputValidator(
