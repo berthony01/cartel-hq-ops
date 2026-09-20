@@ -299,9 +299,9 @@ At the start of every future phase:
 
 ## 11. Immediate next phase
 
-PCART-L1A economics are now OWNER-APPROVED AND FROZEN. L1 remains open only for genuinely unresolved implementation gates: exact operational ETH reserve for gas, exact multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility confirmation, fork/testnet simulation, and exact on-chain encoding derived from frozen policy.
+PCART-L1A economics are OWNER-APPROVED AND FROZEN, and PCART-L1 is now **POLICY CLOSED / EXECUTION PREREQUISITES PENDING** per section 14. What remains is execution work, not policy: the actual Safe, its signers and address, stronger Safe verification, a funded execution wallet, Phase 2 compilation, the L1-e2 exact-artifact testnet rehearsal, pre-L5 on-chain revalidation, and exact on-chain encoding derived from frozen policy.
 
-**Immediate next phase:** read-only Treasury/Multisig Implementation + Live Robinhood/Uniswap CCA Compatibility Audit. Do not authorize Solidity or value movement merely by this documentation freeze. Do not finalize Solidity or initiate a production deployment until L1 fully closes. (Narrow owner-authorized exception for a DRAFT, non-compiled, non-frozen, non-allowlisted source file only: see section 13.)
+**Immediate next phase:** PCART-L2 Phase 2 — reproducible compilation and freezing of `pepecartel-token-v1` — which requires **separate explicit authorization** and has not been started. Do not authorize Solidity compilation, Safe creation or value movement merely by this documentation closure. (Narrow owner-authorized exception for a DRAFT, non-compiled, non-frozen, non-allowlisted source file only: see section 13.)
 
 ## 12. PCART-L1B — Safe Treasury Verification Foundation (BUILT, QA-PASSED)
 
