@@ -270,18 +270,20 @@ check(
   "generic testnet contract source untouched",
 );
 
-// ----------------------------------------------------- J. Phase 2 gate wording
+// --------------------------------------------- J. Phase 3 gate / spec wording
 check(
   "L2D-J1",
-  /Phase 2 is blocked until PCART-L1 is explicitly closed/.test(specSrc),
-  "specification states Phase 2 is blocked until L1 closure",
+  /Phase 3 — exact-artifact testnet rehearsal — is mandatory next/.test(specSrc) &&
+    !/Phase 2 is blocked until PCART-L1 is explicitly closed/.test(specSrc),
+  "specification states Phase 3 exact-artifact testnet rehearsal is mandatory next",
 );
 check(
   "L2D-J2",
-  /NOT created and NOT allowlisted/.test(specSrc) &&
-    /pepecartel-token-v1/.test(specSrc),
-  "specification names the intended artifact id while declaring it uncreated and unallowlisted",
+  /\*\*`pepecartel-token-v1`\*\*/.test(specSrc) &&
+    /NOT production-allowlisted, NOT deployed/.test(specSrc),
+  "specification names the frozen artifact id while declaring it not allowlisted and not deployed",
 );
+
 check(
   "L2D-J3",
   /solc \| `0\.8\.36\+commit\.8a079791`/.test(specSrc) &&
