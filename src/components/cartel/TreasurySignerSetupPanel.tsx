@@ -131,6 +131,10 @@ export function TreasurySignerSetupPanel({
             <CheckCircle2 className="size-4" aria-hidden="true" />
             Signers ready
           </p>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            The Safe has not been created yet. These are the wallets you intend to use as its
+            signers.
+          </p>
           <ul className="min-w-0 space-y-0.5 font-mono text-xs text-foreground [overflow-wrap:anywhere]">
             {config.signers.map((signer) => (
               <li key={signer}>{displaySigner(signer)}</li>
