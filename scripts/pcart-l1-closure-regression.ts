@@ -84,7 +84,8 @@ check(
 // ------------------------------------------------- 2. operational ETH policy
 check(
   "L1C-2a",
-  /0\.10 ETH/.test(packSrc) && /separate\*\* from liquidity \/ CCA auction funding/.test(packSrc),
+  /Frozen operational gas reserve: 0\.10 ETH/.test(packSrc) &&
+    /\*\*separate from liquidity \/ CCA auction funding\*\*/.test(packSrc),
   "0.10 ETH operational gas reserve is frozen and separate from liquidity/CCA funding",
 );
 check(
@@ -341,7 +342,8 @@ check(
 );
 
 // ----------------------------- 15. no invented treasury / Safe / recipient
-const ADDRESS_RE = /0x[0-9a-fA-F]{40}/g;
+/** 20-byte address only: a 32-byte code hash must not match a 40-hex prefix. */
+const ADDRESS_RE = /(?<![0-9a-fA-F])0x[0-9a-fA-F]{40}(?![0-9a-fA-F])/g;
 const KNOWN_DOC_ADDRESSES = new Set(
   [SAFE_SINGLETON, SAFE_FACTORY, ...EXTERNAL_ADDRESSES].map((a) => a.toLowerCase()),
 );
