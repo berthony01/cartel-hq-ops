@@ -303,6 +303,8 @@ PCART-L1A economics are OWNER-APPROVED AND FROZEN, and PCART-L1 is now **POLICY 
 
 **Immediate next phase:** PCART-L2 Phase 2 — reproducible compilation and freezing of `pepecartel-token-v1` — which requires **separate explicit authorization** and has not been started. Do not authorize Solidity compilation, Safe creation or value movement merely by this documentation closure. (Narrow owner-authorized exception for a DRAFT, non-compiled, non-frozen, non-allowlisted source file only: see section 13.)
 
+*Superseded by section 15: PCART-L2 Phase 2 was subsequently authorized and is now COMPLETE (compiled + frozen repository artifact only). The immediate next phase is now PCART-L2 Phase 3 — exact-artifact testnet rehearsal.*
+
 ## 12. PCART-L1B — Safe Treasury Verification Foundation (BUILT, QA-PASSED)
 
 **Status: BUILT AND QA-PASSED.** A read-only Safe treasury verifier exists in CARTEL HQ for Robinhood Chain mainnet (4663). An authenticated workspace owner can check the production-recipient address already entered in Launch Control and see whether it is a Safe-compatible 2-of-3 multisig.
