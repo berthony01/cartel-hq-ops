@@ -1,11 +1,3 @@
--- PCART Treasury Signer Setup Foundation — Phase A
---
--- Records the THREE INTENDED public signer wallet addresses for a launch's
--- future 2-of-3 Safe treasury. Public addresses only: no private key, no seed
--- phrase, no label, no secret, no Safe address, no on-chain status. Row
--- existence means "signers ready". Creating the Safe, signing and moving value
--- are separate, later, explicitly authorized steps. Nothing here touches chain.
-
 CREATE TABLE public.launch_treasury_signer_configs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   workspace_id uuid NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE,
@@ -44,7 +36,6 @@ CREATE TABLE public.launch_treasury_signer_configs (
 CREATE INDEX idx_launch_treasury_signer_configs_workspace
   ON public.launch_treasury_signer_configs(workspace_id);
 
--- No anon grant and no DELETE grant anywhere. Owner-only by policy.
 GRANT SELECT, INSERT, UPDATE ON public.launch_treasury_signer_configs TO authenticated;
 GRANT ALL ON public.launch_treasury_signer_configs TO service_role;
 
@@ -66,15 +57,10 @@ CREATE POLICY "Workspace owner updates its treasury signer config"
   USING (public.is_workspace_owner(workspace_id, auth.uid()))
   WITH CHECK (public.is_workspace_owner(workspace_id, auth.uid()));
 
--- No DELETE policy: this configuration is not removable through the Data API.
-
 CREATE TRIGGER update_launch_treasury_signer_configs_updated_at
   BEFORE UPDATE ON public.launch_treasury_signer_configs
-  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
--- ---------------------------------------------------------------- save RPC
--- Owner-only upsert. The workspace is resolved FROM THE LAUNCH ROW and is
--- never accepted from the client. Threshold is the server-side literal 2.
 CREATE OR REPLACE FUNCTION public.save_launch_treasury_signers(
   _launch_id uuid,
   _signer_1 text,

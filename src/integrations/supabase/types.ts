@@ -1057,6 +1057,63 @@ export type Database = {
           },
         ]
       }
+      launch_treasury_signer_configs: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          launch_id: string
+          signer_1: string
+          signer_2: string
+          signer_3: string
+          threshold: number
+          updated_at: string
+          updated_by: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          launch_id: string
+          signer_1: string
+          signer_2: string
+          signer_3: string
+          threshold?: number
+          updated_at?: string
+          updated_by: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          launch_id?: string
+          signer_1?: string
+          signer_2?: string
+          signer_3?: string
+          threshold?: number
+          updated_at?: string
+          updated_by?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launch_treasury_signer_configs_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: true
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_treasury_signer_configs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       launch_watch_subscriptions: {
         Row: {
           confirmation_attempt_count: number
@@ -6022,6 +6079,33 @@ export type Database = {
           verification_status: string
           verified_at: string
         }[]
+      }
+      save_launch_treasury_signers: {
+        Args: {
+          _launch_id: string
+          _signer_1: string
+          _signer_2: string
+          _signer_3: string
+        }
+        Returns: {
+          created_at: string
+          created_by: string
+          id: string
+          launch_id: string
+          signer_1: string
+          signer_2: string
+          signer_3: string
+          threshold: number
+          updated_at: string
+          updated_by: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_treasury_signer_configs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       send_launch_schedule_communication: {
         Args: {
