@@ -134,9 +134,13 @@ function MiniAppMission() {
     useState<Record<MiniAppSupportingMetric, string>>(BLANK_SUPPORT);
   const [minutesDraft, setMinutesDraft] = useState("");
 
-  // Retained ONLY so a retry resends the identical payload + request id.
-  const [pendingTargets, setPendingTargets] = useState<TargetsPayload | null>(null);
-  const [pendingDuration, setPendingDuration] = useState<DurationPayload | null>(null);
+  /**
+   * A SINGLE discriminated retry slot. Retained only so a retry resends the
+   * identical payload and request id. Because there is exactly one slot, the
+   * visible Retry can never fire the other mutation's stale payload.
+   */
+  const [pendingRetry, setPendingRetry] = useState<PendingRetry | null>(null);
+
 
   useEffect(() => {
     let cancelled = false;
