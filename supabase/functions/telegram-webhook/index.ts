@@ -4291,6 +4291,203 @@ Deno.serve(async (req: Request) => {
 
     }
 
+    /**
+     * SE-16.3R-3 — QUALIFYING HUMAN GROUP ACTIVITY.
+     *
+     * Runs AFTER join / welcome handling and BEFORE the text-only early return,
+     * so ordinary human MEDIA counts too. `social_mission_note_chat_activity`
+     * is the ONLY counter: this webhook never writes an activity column itself,
+     * and the RPC alone owns the exactly-one-LIVE-target match, the message-id
+     * dedupe, the 6-message threshold and the 3-minute cooldown.
+     *
+     * Everything here is fail-soft: an activity problem never turns a delivered
+     * Telegram update into a webhook error, and never touches the command,
+     * Link Finder or Project Inbox branches that follow.
+     */
+    const noteMissionChatActivity = async (): Promise<void> => {
+      const activityChatType = chat?.type;
+      if (activityChatType !== "group" && activityChatType !== "supergroup") return;
+      const messageId = Number((message as any)?.message_id ?? 0);
+      if (!chatId || !Number.isFinite(messageId) || messageId <= 0) return;
+
+      const msg = (message ?? {}) as Record<string, unknown>;
+
+      // A genuine human author, proven by Telegram. An anonymous admin, a
+      // channel-on-behalf post or any bot is never counted, and no human
+      // identity is ever guessed for them.
+      if (msg["sender_chat"]) return;
+      const author = msg["from"] as { id?: unknown; is_bot?: unknown } | undefined;
+      if (!author || author.id == null || author.is_bot === true) return;
+
+      // Service messages are chat events, not member conversation.
+      const SERVICE_KEYS = [
+        "new_chat_members", "left_chat_member", "new_chat_title", "new_chat_photo",
+        "delete_chat_photo", "group_chat_created", "supergroup_chat_created",
+        "channel_chat_created", "message_auto_delete_timer_changed", "migrate_to_chat_id",
+        "migrate_from_chat_id", "pinned_message", "successful_payment", "users_shared",
+        "chat_shared", "write_access_allowed", "proximity_alert_triggered",
+        "forum_topic_created", "forum_topic_edited", "forum_topic_closed",
+        "forum_topic_reopened", "general_forum_topic_hidden", "general_forum_topic_unhidden",
+        "video_chat_scheduled", "video_chat_started", "video_chat_ended",
+        "video_chat_participants_invited", "web_app_data", "boost_added",
+        "giveaway_created", "giveaway", "giveaway_winners", "giveaway_completed",
+      ];
+      for (const key of SERVICE_KEYS) if (msg[key] != null) return;
+
+      // Bot commands are control input, not conversation. The declared
+      // `bot_command` entity at offset 0 is authoritative; the leading-slash
+      // check is only a defensive fallback.
+      const body =
+        typeof msg["text"] === "string"
+          ? (msg["text"] as string)
+          : typeof msg["caption"] === "string"
+            ? (msg["caption"] as string)
+            : "";
+      const entities = (Array.isArray(msg["entities"]) ? msg["entities"] : msg["caption_entities"]) as
+        | Array<{ type?: unknown; offset?: unknown }>
+        | undefined;
+      const declaredCommand =
+        Array.isArray(entities) &&
+        entities.some((e) => e?.type === "bot_command" && Number(e?.offset ?? -1) === 0);
+      if (declaredCommand || body.trimStart().startsWith("/")) return;
+
+      // Ordinary content-bearing member messages: text, captions and normal
+      // media. An empty non-media message counts as nothing.
+      const MEDIA_KEYS = [
+        "photo", "video", "animation", "document", "audio", "voice", "sticker",
+        "video_note", "poll", "dice", "contact", "location", "venue",
+      ];
+      const hasMedia = MEDIA_KEYS.some((key) => msg[key] != null);
+      if (body.trim().length === 0 && !hasMedia) return;
+
+      const { data: noted, error: noteError } = await admin.rpc(
+        "social_mission_note_chat_activity",
+        { _telegram_chat_id: Number(chatId), _telegram_message_id: messageId },
+      );
+      if (noteError || !noted || typeof noted !== "object") return;
+      const signal = noted as Record<string, unknown>;
+      if (String(signal["outcome"] ?? "") !== "counted") return;
+      if (signal["should_resurface"] !== true) return;
+
+      // Every binding value is re-validated, including that the RPC is talking
+      // about the SAME chat this update arrived in.
+      const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const activityWorkspaceId = String(signal["workspace_id"] ?? "");
+      const activityMissionId = String(signal["mission_id"] ?? "");
+      const activityTargetId = String(signal["target_id"] ?? "");
+      if (
+        !UUID_SHAPE.test(activityWorkspaceId) ||
+        !UUID_SHAPE.test(activityMissionId) ||
+        !UUID_SHAPE.test(activityTargetId)
+      ) return;
+      if (String(signal["telegram_chat_id"] ?? "") !== String(Number(chatId))) return;
+
+      // The transport actor is resolved SERVER-SIDE from workspace membership.
+      // No chat member, sender or callback identity authorizes this send.
+      const { data: members } = await admin
+        .from("workspace_members")
+        .select("user_id, role")
+        .eq("workspace_id", activityWorkspaceId)
+        .in("role", ["owner", "admin"]);
+      const memberRows = Array.isArray(members) ? (members as Array<Record<string, unknown>>) : [];
+      const actorRow =
+        memberRows.find((m) => String(m["role"] ?? "") === "owner") ??
+        memberRows.find((m) => String(m["role"] ?? "") === "admin") ??
+        null;
+      const activityActorId = String(actorRow?.["user_id"] ?? "");
+      if (!UUID_SHAPE.test(activityActorId)) return;
+
+      // Previous bounded error, read BEFORE the attempt, so the SAME permission
+      // warning is never posted twice. A later successful resurface clears it.
+      const { data: beforeRow } = await admin
+        .from("social_mission_targets")
+        .select("resurface_last_error")
+        .eq("id", activityTargetId)
+        .maybeSingle();
+      const previousError = String((beforeRow as any)?.resurface_last_error ?? "");
+
+      // Deterministic in the exact target + the triggering message id, so a
+      // Telegram redelivery can never produce a second card.
+      const activityRequestId = await mcUuidFromSeed(
+        `se163r-activity-resurface:${activityTargetId}:${messageId}`,
+      );
+
+      let resurfaceState = "";
+      let resurfaceMessage = "";
+      try {
+        const response = await fetch(
+          `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/social-mission-telegram`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: SERVICE_KEY,
+              Authorization: `Bearer ${SERVICE_KEY}`,
+              "X-Cartel-Internal-Source": "telegram-webhook",
+              "X-Cartel-Actor-User-Id": activityActorId,
+            },
+            body: JSON.stringify({
+              action: "resurface_mission",
+              workspaceId: activityWorkspaceId,
+              missionId: activityMissionId,
+              targetId: activityTargetId,
+              clientRequestId: activityRequestId,
+            }),
+            signal: AbortSignal.timeout(30_000),
+          },
+        );
+        const payload = (await response.json().catch(() => null)) as
+          | { resurfaceState?: string; message?: string; error?: string }
+          | null;
+        resurfaceState = String(payload?.resurfaceState ?? "").toUpperCase();
+        resurfaceMessage = String(payload?.message ?? payload?.error ?? "");
+      } catch {
+        // Unknown outcome. Never warn, never resend.
+        return;
+      }
+
+      // ONE admin-facing repair notice, and only for a bounded, definite
+      // permission failure that was not already reported for this target.
+      if (resurfaceState !== "FAILED") return;
+      const hint = mcPermissionHint(resurfaceMessage);
+      if (!hint) return;
+      if (previousError && previousError === resurfaceMessage) return;
+
+      const warned = await sendMessage(
+        TELEGRAM_BOT_TOKEN,
+        chatId,
+        `<b>⚠️ Mission card could not be refreshed</b>\n\nCartel HQ needs the <b>${escapeHtml(hint)}</b> permission in this community to move the live mission card to the bottom of the chat.\n\nA group admin can fix this in <i>Manage group → Administrators → @${BOT_USERNAME}</i>. Member messages are never deleted.`,
+        { parse_mode: "HTML" },
+      );
+      const warnedId = (warned as any)?.message_id;
+      if (!warnedId) return;
+      const cleanup = (async () => {
+        await new Promise((resolve) => setTimeout(resolve, 12_000));
+        try {
+          await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
+            chat_id: chatId,
+            message_id: Number(warnedId),
+          });
+        } catch (e) {
+          // Leaving the notice visible is safer than sending it again.
+          console.error(
+            "[telegram-webhook] resurface permission notice cleanup",
+            e instanceof Error ? e.message : "unknown",
+          );
+        }
+      })();
+      try { (globalThis as any).EdgeRuntime?.waitUntil?.(cleanup); } catch { }
+    };
+
+    try {
+      await noteMissionChatActivity();
+    } catch (e) {
+      console.error(
+        "[telegram-webhook] mission chat activity",
+        e instanceof Error ? e.message : "unknown",
+      );
+    }
+
     if (!text || !from?.id || !chatId) return json({ ok: true });
 
     if ((chat?.type === "group" || chat?.type === "supergroup") && /^\/(?:cartelhq|connect)(?:@\w+)?$/i.test(text)) {
