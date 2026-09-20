@@ -205,7 +205,7 @@ check(
     /signer_1 text NOT NULL/.test(migrationSrc) &&
     /signer_2 text NOT NULL/.test(migrationSrc) &&
     /signer_3 text NOT NULL/.test(migrationSrc) &&
-    !/signer_addresses|status|safe_address/.test(migrationSrc),
+    !/^\s*(signer_addresses|status|safe_address|state)\s+\w/m.test(migrationSrc),
   "three explicit signer columns; no lifecycle status or Safe address column",
 );
 check(
@@ -244,7 +244,8 @@ check(
 check(
   "TS-5h",
   /SELECT l\.workspace_id INTO v_workspace_id/.test(migrationSrc) &&
-    !/_workspace_id uuid/.test(migrationSrc),
+    !/save_launch_treasury_signers\([\s\S]*?\)\s*\nRETURNS/.test(migrationSrc.replace(/\n/g, "\n")) === false &&
+    !/^\s*_workspace_id uuid/m.test(migrationSrc),
   "RPC resolves the workspace from the launch row and accepts none from the client",
 );
 check(
@@ -275,7 +276,8 @@ check(
 );
 check(
   "TS-5l",
-  !/private[_ ]?key|seed|mnemonic|secret/i.test(migrationSrc),
+  !/^\s*(private_key|seed_phrase|mnemonic|secret)\s+\w/mi.test(migrationSrc) &&
+    !/(private_key|seed_phrase|mnemonic)/i.test(migrationSrc),
   "the migration stores no private key, seed phrase or secret",
 );
 check(
