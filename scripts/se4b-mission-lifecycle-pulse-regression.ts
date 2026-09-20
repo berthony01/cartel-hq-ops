@@ -32,7 +32,7 @@ const sql = readFileSync(SQL_PATH, "utf8");
 const runnerSrc = readFileSync(RUNNER_PATH, "utf8");
 const transportSrc = readFileSync(TRANSPORT_PATH, "utf8");
 const webhookSrc = readFileSync(WEBHOOK_PATH, "utf8");
-const staleWebhookSrc = readFileSync(STALE_WEBHOOK_PATH, "utf8");
+const mirrorWebhookSrc = readFileSync(MIRROR_WEBHOOK_PATH, "utf8");
 const cleanupWorkerSrc = readFileSync(CLEANUP_WORKER_PATH, "utf8");
 const docSrc = readFileSync(DOC_PATH, "utf8");
 
