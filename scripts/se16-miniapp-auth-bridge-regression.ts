@@ -305,7 +305,7 @@ const opts = { now: NOW_MS };
       const hits = (bridgeCode.match(/SUPABASE_SERVICE_ROLE_KEY/g) ?? []).length;
       const helper = bridgeCode.slice(
         bridgeCode.indexOf("async function miniAppRefreshCard"),
-        bridgeCode.indexOf("/* ------------------------------------------------------------------ READS */"),
+        bridgeCode.indexOf("export const miniAppListMissionWorkspaces"),
       );
       return (
         hits === 1 &&
@@ -612,7 +612,7 @@ const opts = { now: NOW_MS };
   const refreshFn =
     bridgeCode.slice(
       bridgeCode.indexOf("async function miniAppRefreshCard"),
-      bridgeCode.indexOf("/* ------------------------------------------------------------------ READS */"),
+      bridgeCode.indexOf("export const miniAppListMissionWorkspaces"),
     ) || "";
 
   check("14.1 a card-refresh helper exists", refreshFn.length > 0);
