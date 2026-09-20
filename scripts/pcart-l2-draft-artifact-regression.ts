@@ -60,29 +60,45 @@ function check(id: string, ok: boolean, detail: string) {
 }
 
 // ------------------------------------------- A. existence and status markers
-check("L2D-A1", draftRaw.length > 0, "draft PepeCartelToken.sol exists");
+check("L2D-A1", draftRaw.length > 0, "frozen PepeCartelToken.sol exists");
 check("L2D-A2", specSrc.length > 0, "PCART-L2 token specification exists");
 check(
   "L2D-A3",
-  /DRAFT PCART-L2 CANDIDATE/.test(draftRaw) &&
-    /NOT COMPILED/.test(draftRaw) &&
-    /NOT FROZEN/.test(draftRaw) &&
-    /NOT ALLOWLISTED/.test(draftRaw) &&
-    /NOT DEPLOYABLE WHILE PCART-L1 IS OPEN/.test(draftRaw),
-  "draft header carries DRAFT / NOT COMPILED / NOT FROZEN / NOT ALLOWLISTED / NOT DEPLOYABLE markers",
+  /PCART-L2 FROZEN SOURCE/.test(draftRaw) &&
+    /COMPILED AND FROZEN AS/.test(draftRaw) &&
+    /NOT YET PRODUCTION-ALLOWLISTED/.test(draftRaw) &&
+    /NOT YET DEPLOYED/.test(draftRaw) &&
+    /PCART-L2 Phase 3/.test(draftRaw) &&
+    !/NOT COMPILED/.test(draftRaw) &&
+    !/NOT DEPLOYABLE WHILE PCART-L1 IS OPEN/.test(draftRaw),
+  "frozen header carries FROZEN / COMPILED / NOT ALLOWLISTED / NOT DEPLOYED / Phase 3 markers and no stale DRAFT-open wording",
 );
 check(
   "L2D-A4",
-  /DRAFT/.test(specSrc) && /NON-DEPLOYABLE/.test(specSrc) && /PCART-L1 OPEN/.test(specSrc),
-  "specification declares DRAFT / PCART-L1 OPEN / NON-DEPLOYABLE",
+  /COMPILED \+ FROZEN REPOSITORY ARTIFACT/.test(specSrc) &&
+    /NOT PRODUCTION-ALLOWLISTED/.test(specSrc) &&
+    /NOT DEPLOYED/.test(specSrc) &&
+    /PCART-L1 is \*\*POLICY CLOSED\*\*/.test(specSrc) &&
+    !/PCART-L1 OPEN/.test(specSrc),
+  "specification declares COMPILED + FROZEN / NOT ALLOWLISTED / NOT DEPLOYED with L1 policy closed",
 );
 check(
   "L2D-A5",
-  /\*\*PCART-L1 remains OPEN\.\*\*/.test(planSrc) &&
-    /NON-COMPILED, NON-FROZEN, NON-ALLOWLISTED/.test(planSrc) &&
-    /PCART-L2 may not begin until PCART-L1 is explicitly closed/.test(planSrc),
-  "master plan records the narrow DRAFT exception with L1 still OPEN and L2 still gated",
+  /POLICY CLOSED \/ EXECUTION PREREQUISITES PENDING/.test(planSrc) &&
+    /PCART-L2 Phase 2 — reproducible compile \+ frozen artifact \(COMPLETE, repo-only\)/.test(
+      planSrc,
+    ) &&
+    /PCART-L2 Phase 3 — exact-artifact testnet rehearsal/.test(planSrc),
+  "master plan records L1 policy closed, L2 Phase 2 complete and Phase 3 rehearsal next",
 );
+check(
+  "L2D-A6",
+  read(FROZEN_TS).length > 0 &&
+    read(FROZEN_INPUT).length > 0 &&
+    read(FROZEN_MANIFEST).length > 0,
+  "frozen artifact, canonical compiler input and manifest all exist",
+);
+
 
 // --------------------------------------------- B/C. pragma, imports, base
 check("L2D-B1", /^pragma solidity 0\.8\.36;$/m.test(draft), "exact pragma solidity 0.8.36");
