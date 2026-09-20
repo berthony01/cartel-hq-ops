@@ -360,6 +360,8 @@ function MiniAppMission() {
       return;
     }
     setFormError(null);
+    // A new duration submit invalidates any earlier retry payload of either kind.
+    setPendingRetry(null);
     durationMutation.mutate({ initData, missionId, requestId, minutes });
   }
 
@@ -374,11 +376,16 @@ function MiniAppMission() {
     submitDuration(parsed.value);
   }
 
-  /** Retry resends the SAME payload and request id: never a new one. */
+  /**
+   * Retry replays the single active pending payload with its ORIGINAL request
+   * id, dispatched by its own kind. No new id is ever minted here.
+   */
   function retryPending() {
-    if (pendingTargets) targetsMutation.mutate(pendingTargets);
-    else if (pendingDuration) durationMutation.mutate(pendingDuration);
+    if (!pendingRetry) return;
+    if (pendingRetry.kind === "targets") targetsMutation.mutate(pendingRetry.payload);
+    else durationMutation.mutate(pendingRetry.payload);
   }
+
 
   const pinned = MINI_APP_PINNED_SUPPORT[primaryType];
 
