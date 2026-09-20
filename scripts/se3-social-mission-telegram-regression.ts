@@ -736,7 +736,7 @@ check(
   "14.55 no scheduler, poller or auto-detection was introduced",
   !indexCode.includes("Deno.cron") && !indexCode.includes("setInterval") && !indexCode.includes("setTimeout(poll"),
 );
-check("14.56 still exactly two actions after SE-3.3", (indexSrc.match(/action !== "send_mission" && action !== "edit_mission"/g) ?? []).length === 1);
+check("14.56 still exactly one closed action allowlist after SE-3.3 / SE-16.3R-2", (indexSrc.match(/action !== "send_mission" && action !== "edit_mission" && action !== "resurface_mission"/g) ?? []).length === 1);
 
 // ---------------------------------------------------------------------------
 
