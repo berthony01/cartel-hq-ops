@@ -707,7 +707,7 @@ check("12.110 the replacement lane adds no new network host", (lane.match(/https
 // ---------------------------------------------------------------------------
 
 const webhookSrc = readFileSync("supabase/functions/telegram-webhook/index.ts", "utf8");
-const staleWebhookSrc = readFileSync("backend-source/edge-functions/telegram-webhook/index.ts", "utf8");
+const mirrorWebhookSrc = readFileSync("backend-source/edge-functions/telegram-webhook/index.ts", "utf8");
 const bridgeSrc = readFileSync("src/lib/telegram-miniapp-bridge.functions.ts", "utf8");
 const miniClientSrc = readFileSync("src/lib/telegram-miniapp-client.ts", "utf8");
 const miniRouteSrc = readFileSync("src/routes/tg.mission.$missionId.tsx", "utf8");
