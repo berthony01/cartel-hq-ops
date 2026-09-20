@@ -311,7 +311,9 @@ check(
 );
 check(
   "L1C-11",
-  /const APPROVED_OFFICIAL_ARTIFACT_ID = "cartel-fixed-erc20-v1"/.test(evidenceSrc),
+  /export const APPROVED_OFFICIAL_ARTIFACT_ID = "cartel-fixed-erc20-v1" as const;/.test(
+    evidenceSrc,
+  ),
   "APPROVED_OFFICIAL_ARTIFACT_ID remains exactly cartel-fixed-erc20-v1",
 );
 check(
