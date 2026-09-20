@@ -295,7 +295,28 @@ const opts = { now: NOW_MS };
     /await import\("@\/integrations\/supabase\/client\.server"\)/.test(bridgeCode) &&
       !/^import[\s\S]{0,80}client\.server/m.test(bridgeCode),
   );
-  check("6.4 bridge never reads the service role key directly", !/SUPABASE_SERVICE_ROLE_KEY/.test(bridgeCode));
+  check(
+    // SE-16.2P — the service-role key is now read for exactly ONE purpose: the
+    // internal transport headers of the card refresh. It is read per-request
+    // inside that helper, is never module-scope, never exported, never
+    // returned and never logged.
+    "6.4 service role key appears only as a per-request transport credential",
+    (() => {
+      const hits = (bridgeCode.match(/SUPABASE_SERVICE_ROLE_KEY/g) ?? []).length;
+      const helper = bridgeCode.slice(
+        bridgeCode.indexOf("async function miniAppRefreshCard"),
+        bridgeCode.indexOf("/* ------------------------------------------------------------------ READS */"),
+      );
+      return (
+        hits === 1 &&
+        /const serviceKey = process\.env\["SUPABASE_SERVICE_ROLE_KEY"\] \?\? "";/.test(helper) &&
+        !/^const\s+\w+\s*=\s*process\.env\["SUPABASE_SERVICE_ROLE_KEY"\]/m.test(bridgeCode) &&
+        !/export[^\n]*serviceKey/.test(bridgeCode) &&
+        !/return[^\n]*serviceKey/.test(bridgeCode) &&
+        !/console\.[a-z]+\([^)]*serviceKey/.test(bridgeCode)
+      );
+    })(),
+  );
   check("6.5 no console logging in the bridge", !/console\./.test(bridgeCode));
   check("6.6 no console logging in the auth module", !/console\./.test(authCode));
   check("6.7 token never returned by the validator", !/return[^\n]*botToken/.test(authCode));
