@@ -1,98 +1,113 @@
-# PCART-L1/L2 Dedicated Production Artifact Foundation — Phased Plan (PLAN/AUDIT ONLY)
+# PCART-L1 Closure — Phased Plan (PLAN/AUDIT ONLY)
 
-HEAD inspected: `ab21611c951de5405165e1e4189ff636336c7b7c`, working tree clean. No file was edited, no SQL run, nothing deployed.
+HEAD inspected: `476211c31d6646d7650c6ba1aab4ea9a9be3a6d8`, working tree clean. No file edited, no SQL, nothing deployed, no chain action.
 
-## 1. Where `cartel-fixed-erc20-v1` is hard-coded today
+## 1. Exact remaining L1 items after Phase 1
 
-**Single source of truth**
-- `src/lib/cartel-fixed-erc20.artifact.ts:22` — `CARTEL_FIXED_ERC20_ARTIFACT_ID`; also creation/runtime bytecode + both keccak hashes (lines 150–162).
+From `docs/PCART_MASTER_LAUNCH_PLAN.md` lines 133, 204, 302, 317 — five open items, unchanged by Phase 1:
 
-**Application code that assumes exactly this artifact (TypeScript)**
-- `src/lib/launch-evidence-checks.ts:21` — `APPROVED_OFFICIAL_ARTIFACT_ID` (the official-registration allowlist, a literal, not an array).
-- `src/lib/launch-verified-eligibility.ts:2,54,238,245`
-- `src/lib/chain-mainnet-presign.functions.ts:136`; `chain-mainnet-presign.helpers.ts:184,185,209`
-- `src/lib/chain-mainnet-handoff.functions.ts:311,312,336,415`
-- `src/lib/chain-mainnet-reconciliation.helpers.ts:203,204,228,290`
-- `src/lib/chain-mainnet-verify.functions.ts:150,338`; `chain-mainnet-verify-shape.ts:85`
-- `src/lib/chain-mainnet-simulation.ts:63,223,224,239,240`
-- `src/lib/chain-simulation.ts:48,184,185,198,199`; `chain-launcher.ts:317`; `chain-verify.functions.ts:103,244,343`
-- `src/lib/launch-receipt.ts`, `src/routes/_authenticated/chain-launcher.tsx:61,978` (display only)
+| # | Open L1 item | Closable by repo-only work? |
+|---|---|---|
+| L1-a | Exact operational ETH gas reserve | YES — policy freeze |
+| L1-b | Exact multisig implementation AND address | PARTIAL — implementation choice closable; the address requires a real Safe deployment (out of scope) |
+| L1-c | Legal/comms review | PARTIAL — internal comms rules closable; external legal sign-off is an owner-side prerequisite, never fabricated |
+| L1-d | Live Robinhood/Uniswap compatibility confirmation | YES as a dated, versioned, fail-closed manifest of researched addresses |
+| L1-e | Fork/testnet simulation | NO as written — see section 7 (circularity) |
 
-**Database (live, already applied — treated as read-only here)**
-- `launch_chain_deployments` CHECK: `artifact_id IS NULL OR artifact_id = 'cartel-fixed-erc20-v1'` (`supabase/migrations/20260904125451_…sql:23`) — a hard single-artifact constraint.
-- `assert_launch_contract_evidence` (`20260907045317_…sql:39`), attempt-intent RPC (`20260906133800_…sql:130,156,167`), handoff request/claim RPCs (`20260911213957_…sql:195`, `20260911222451_…sql:235,299,332`), canary runtime control (`docs/sql/20260909_…sql:157`).
+Frozen items (sections 2, 3, 4, 4.1, 5) are untouched by this plan.
 
-**Regressions that pin it**: `scripts/hardening-b-regression.ts:63`, `scripts/p1a-project-journey-regression.ts:620`.
+## 2. Safe v1.4.1 L2 architecture vs current code
 
-Conclusion: a second artifact id is a **Phase 3** change touching both the TS allowlist and at least one DB CHECK + several SECURITY DEFINER RPCs. Nothing in Phase 1 or 2 may touch them.
+Consistent. `src/lib/treasury-safe-verify.ts` already pins Robinhood 4663 (`ROBINHOOD_MAINNET_CHAIN_ID`), requires exactly 3 unique non-zero owners and threshold 2, and the L1B fixtures use `VERSION` `"1.4.1"`. Choosing the v1.4.1 SafeL2 singleton + SafeProxyFactory therefore adds no new assumption.
 
-## 2. Phase 1 — exact minimum files (non-operational foundation)
+Its own header states it is **not** cryptographic proof of a specific proxy or singleton version — that is the real gap. Stronger verification to add **before** any Safe is used (a later phase, not the repo-only pack):
 
-Add only:
-1. `contracts/PepeCartelToken.sol` — DRAFT, header-marked NOT DEPLOYABLE, not compiled anywhere (repo has no solc/hardhat/foundry tooling; confirmed in `package.json`).
-2. `docs/PCART_L2_TOKEN_SPECIFICATION.md` — the frozen behavioural spec, intended future artifact id `pepecartel-token-v1`, compiler settings to be used in Phase 2, and the explicit statement that no artifact file, allowlist entry, request, or migration exists yet.
-3. `scripts/pcart-l2-draft-artifact-regression.ts` — source-level invariants (section 5).
+1. Read the proxy's singleton/masterCopy storage slot 0 and require it to equal the canonical v1.4.1 SafeL2 singleton for 4663.
+2. Compare the proxy's runtime code hash against a pinned expected SafeProxy code hash.
+3. Require `VERSION()` to be readable and exactly `1.4.1` (today an unreadable VERSION still passes — check `L1B-11`).
+4. Read `getModulesPaginated` and require an empty module list, and require the guard slot to be zero — a module or guard can move funds outside the 2-of-3 rule.
+5. Require `nonce()` to be readable; treat every unreadable read as fail-closed.
+6. Keep all of it advisory-to-the-eye but make it a hard gate for the PCART treasury recipient specifically (see section 8 PENDING list).
 
-Change only:
-4. `docs/PCART_MASTER_LAUNCH_PLAN.md` — one narrow amendment recording owner authorization for a DRAFT, non-deployable source file while L1 stays OPEN (see section 9 — without this the plan text forbids Phase 1).
-5. `package.json` — only if a `scripts` entry is wanted for the new regression; otherwise untouched (preferred: untouched, run via `bun run scripts/...`).
+Only items 1–6 as an **expected-values manifest** belong in the repo-only pack now; wiring them into the verifier is a separate authorized unit.
 
-No changes to any `src/**` file, any migration, any Supabase object, any flag.
+## 3. 0.10 ETH reserve / 0.05 ETH floor policy
 
-## 3. DRAFT `PepeCartelToken.sol` design
+Reasonable as a budget guardrail, with three conditions:
 
-Mirrors the audited behaviour of `CartelFixedSupplyToken.sol` with identity hard-coded instead of constructor-supplied:
+- It is a **budget** figure, not a gas prediction, and must never be read as permission to spend. State that explicitly in the doc.
+- It must remain strictly separate from CCA/LBP funding ETH and from the 10 ETH graduation-minimum planning gate already frozen in L1A.
+- It must not replace live `eth_estimateGas` × current fee data plus a margin at execution time. The floor is necessary, never sufficient.
 
-- `// SPDX-License-Identifier: MIT`, `pragma solidity 0.8.36;`
-- imports only `@openzeppelin/contracts/token/ERC20/ERC20.sol` (OZ 5.6.1)
-- `contract PepeCartelToken is ERC20`
-- `ERC20("PEPECARTEL", "PCART")`; `decimals()` NOT overridden → 18
-- `uint256 public constant INITIAL_SUPPLY = 1_000_000_000 * 10 ** 18;` (constant, not immutable, so runtime bytecode stays argument-independent and hashable)
-- constructor: `constructor(address treasury_)`; `if (treasury_ == address(0)) revert ZeroTreasury();` then `_mint(treasury_, INITIAL_SUPPLY);`
-- `error ZeroTreasury();` only
-- Explicitly absent: Ownable/AccessControl/roles, any mint/burn path after construction, pausable, capped, permit, tax/fee-on-transfer, blacklist/whitelist/freeze/cooldown, trading toggle, max-wallet/max-tx, overridden hooks, proxy/initializer/upgrade path, `selfdestruct`, `delegatecall`, `immutable` state, and any constructor argument other than `treasury_`.
-- Header comment states: DRAFT, PCART-L2 candidate, NOT COMPILED, NOT FROZEN, NOT ALLOWLISTED, not deployable while PCART-L1 is open.
+Repository implications now: **documentation constants only**. Do not add an ETH-balance gate to any submission or execution path in this pack — that would change runtime behavior of the frozen launcher. A later authorized unit may add a read-only advisory balance display.
 
-## 4. Is Phase 1 safe now?
+## 4. Repo-only L1 Closure Pack — exact files
 
-Technically yes — a `.sol` file alone cannot make PCART deployable: deployment reads only the frozen `src/lib/cartel-fixed-erc20.artifact.ts` bytecode, the DB CHECK rejects any other `artifact_id`, `MAINNET_DEPLOYMENT` is `execution_enabled=false` / `emergency_stop_engaged=true` at revision 5, and no PCART production request row exists.
+Add:
+1. `docs/PCART_L1_CLOSURE_PACK.md` — the closure record: per-item CLOSED/PENDING status, operational reserve policy, treasury architecture decision, internal comms rules, and the simulation-sequencing resolution.
+2. `docs/PCART_L1_CHAIN_COMPATIBILITY_MANIFEST.md` — dated `2026-09-20`, versioned `v1`, listing chain 4663 / testnet 46630 / native ETH, the Safe v1.4.1 SafeL2 singleton and SafeProxyFactory addresses, Uniswap Liquidity Launcher v3.2.0, LBPStrategy pointer, CCA factory, TokenSplitter, Permit2, UniversalRouterStrategy pointer — each marked RESEARCHED, NOT ON-CHAIN VERIFIED, with an explicit **MUST BE REVALIDATED IMMEDIATELY BEFORE L5 EXECUTION** clause and a fail-closed rule: any mismatch at revalidation blocks execution.
+3. `docs/PCART_L1_COMMS_RULES.md` — internal communications rules only (may be folded into file 1 if you prefer three files becoming two).
+4. `scripts/pcart-l1-closure-regression.ts` — static guardrails (section 5).
 
-Procedurally it needs the section 9 amendment first, because the master plan currently forbids writing Solidity before L1 closes.
+Change:
+5. `docs/PCART_MASTER_LAUNCH_PLAN.md` — new section 14 recording L1 closure status per item, amending lines 133 / 204 / 302 / 317 pointers only. No frozen economic value altered.
 
-## 5. Phase 1 regression tests
+Nothing under `src/**`, `supabase/**`, `docs/sql/**`, `contracts/**`, `package.json`, or `.lovable/plan.md`.
 
-`scripts/pcart-l2-draft-artifact-regression.ts`, in the existing dependency-free `node:assert` + `node:fs` style, asserting:
-1. The draft source exists and carries the DRAFT / NOT DEPLOYABLE / PCART-L1-open markers.
-2. Exact pragma `0.8.36`, sole import is the OZ ERC20, base is `ERC20` only.
-3. Name `PEPECARTEL`, symbol `PCART`, supply literal `1_000_000_000 * 10 ** 18`, no `decimals()` override.
-4. Exactly one constructor parameter, an `address`; zero-address revert present.
-5. Forbidden-token-scan: no `Ownable`, `AccessControl`, `onlyOwner`, `_mint(` outside the constructor, `mint`, `burn`, `pause`, `blacklist`, `maxWallet`, `maxTx`, `fee`, `tax`, `_update` override, `initializer`, `upgrade`, `delegatecall`, `selfdestruct`, `immutable`.
-6. **Non-activation tripwires (the important ones):** `pepecartel-token-v1` appears in NO file under `src/`, `supabase/migrations/`; `APPROVED_OFFICIAL_ARTIFACT_ID` is still exactly `cartel-fixed-erc20-v1`; `src/lib/cartel-fixed-erc20.artifact.ts` is byte-identical to HEAD (hash-pinned); no new file under `supabase/migrations/`; no `PepeCartelToken` reference from any `src/**` file.
-7. The spec doc states L1-open and non-deployable status.
+## 5. Regression tests to add
 
-Also re-run unchanged: `hardening-b`, `p1a-project-journey`, `p2c2-launch-isolation`, `p3c-f`/`f1`/`f2`, `launcher-b`/`b3`, `verifier-state-write-activation`, `pcart-l1b-treasury-safe-verify`, `wallet-connector`, plus `bunx tsgo --noEmit` and `bun run build`.
+`scripts/pcart-l1-closure-regression.ts`, dependency-free `node:fs` + `node:assert`, asserting:
 
-## 6. DB migration in Phase 1?
+1. Closure pack and manifest exist and carry their status markers.
+2. Manifest is dated and version-tagged, contains the revalidation-before-L5 clause and a fail-closed statement.
+3. Every address in the manifest is a well-formed checksum-shaped `0x` + 40 hex string, and each is labelled RESEARCHED / NOT ON-CHAIN VERIFIED.
+4. Manifest addresses appear in **no** file under `src/**`, `supabase/**` or `contracts/**` — documentation only; no router, factory, Permit2 or Safe address leaks into runtime code.
+5. Reserve policy states 0.10 ETH reserve and 0.05 ETH wallet floor, and states it is a budget guardrail requiring live gas estimation.
+6. Comms rules contain the prohibitions: no guaranteed return/profit/price claim, no Robinhood endorsement/listing implication, no "no sale" framing, no LIVE announcement before verified deployment + source verification + registration + liquidity evidence.
+7. No legal-approval claim: the pack must not assert legal counsel or compliance approval; it must name external sign-off as an owner-side prerequisite.
+8. Safe architecture section names v1.4.1 SafeL2 + SafeProxyFactory and lists the six stronger verification requirements as PENDING.
+9. Non-activation tripwires, unchanged in spirit from `pcart-l2-draft-artifact-regression.ts`: `pepecartel-token-v1` still absent from `src/**` and `supabase/migrations/**`; `APPROVED_OFFICIAL_ARTIFACT_ID` still exactly `cartel-fixed-erc20-v1`; `src/lib/cartel-fixed-erc20.artifact.ts` hashes unchanged; `MAINNET_LIQUIDITY_TX_ENABLED` still `false`; migration count still 82; no PCART treasury address is written anywhere in the repo.
+10. The closure pack explicitly states Phase 2 compilation still requires separate authorization.
 
-**None. Zero SQL.** No table, column, CHECK, RPC, policy, grant or data change. The `artifact_id` CHECK widening and PCART-specific fail-closed request/execution invariants belong to Phase 3, after Phase 2 freezes real hashes. Attempting the CHECK change earlier would widen the accepted artifact space before any artifact exists to accept.
+Re-run unchanged: `pcart-l2-draft-artifact`, `pcart-l1b-treasury-safe-verify`, `hardening-b`, `p1a-project-journey`, `p2c2-launch-isolation`, `p3c-f`/`f1`/`f2`, `launcher-b`/`b3`, `verifier-state-write-activation`, `wallet-connector`, plus `bunx tsgo --noEmit` and `bun run build`.
 
-## 7. Prohibited in Phase 1
+## 6. DB migration needed now?
 
-Editing `src/lib/cartel-fixed-erc20.artifact.ts` or its id/hashes; adding `pepecartel-token-v1` anywhere outside the draft spec doc; touching any `src/**` runtime file; any migration or SQL; any change to `MAINNET_DEPLOYMENT_TX_ENABLED`, `MAINNET_LIQUIDITY_TX_ENABLED`, `MAINNET_VERIFICATION_STATE_WRITES_ENABLED`, or runtime execution control; creating a PCART production deployment request; arming, claiming, or issuing a send window; any wallet, RPC-write, or blockchain transaction on any chain; deploy, publish, secret change, Telegram send; weakening or deleting any existing assertion in any regression suite; installing solc/hardhat/foundry or any compile step.
+**None. Zero SQL.** No table, column, CHECK, RPC, policy, grant or data change. The artifact-allowlist widening and PCART-specific invariants remain Phase 3 (post-compile). The migration-count tripwire stays pinned at 82.
 
-## 8. Stop point and acceptance criteria
+## 7. Resolving the L1-vs-L3 simulation circularity
 
-Stop immediately after Phase 1 verification. Acceptance:
-- Diff vs `ab21611c` is exactly the files in section 2 (3 added, 1–2 docs/config changed), nothing else.
-- `src/`, `supabase/`, `docs/sql/`, generated types, `.lovable/plan.md`: zero diff.
-- New regression passes; all listed existing suites pass at their current counts; `tsgo` clean; `bun run build` succeeds.
-- Live state unchanged: PCART launch still WATCHLIST_OPEN, `official_contract_address` NULL, no production request rows, control still `execution_enabled=false` / `emergency_stop_engaged=true` revision 5.
-- Report SHA, diffstat, per-suite counts, and residual uncertainty. Do not start Phase 2.
+The current wording is genuinely circular: L1 demands fork/testnet simulation, but the exact artifact is intentionally uncompiled until Phase 2, after L1 closes. Resolution, without weakening safety — **split item L1-e into two distinct obligations**:
 
-## 9. Doc/implementation inconsistencies that affect Phase 1 safety
+- **L1-e1 — Infrastructure/protocol compatibility evidence (closes L1).** Satisfied by: the already-finalized mainnet canary (a real 4663 deployment of `cartel-fixed-erc20-v1` proving the chain, RPC, gas, evidence and finality path work end to end), plus the dated compatibility manifest, plus static/read-only checks. This proves the *rails*, which is all L1 ever needed to freeze policy.
+- **L1-e2 — Exact-artifact rehearsal (does NOT close L1; stays Phase 3).** A real testnet 46630 deployment of the compiled `pepecartel-token-v1`, separately authorized. It remains a hard prerequisite for mainnet PCART deployment.
 
-1. **Blocking:** `docs/PCART_MASTER_LAUNCH_PLAN.md:18` and `:304` say do not write Solidity until L1 fully closes, and `:220` puts `PepeCartelToken.sol` under L2 ("only after L1 fully closes"). Phase 1 as requested contradicts the plan unless the plan is amended in the same commit to permit a DRAFT, non-compiled, non-allowlisted source. Recommendation: make that amendment the first hunk of Phase 1.
-2. **Non-blocking, affects Phase 3 sizing:** the DB allowlist is a single-value CHECK plus the literal baked into ~6 SECURITY DEFINER RPCs, not a lookup table. Phase 3 is therefore a multi-RPC migration, not a one-line change — budget it accordingly.
-3. **Non-blocking:** the TS allowlist `APPROVED_OFFICIAL_ARTIFACT_ID` is a single literal, not a set; Phase 3 must convert it to an explicit two-entry allowlist without changing the canary's evaluation result.
-4. **Unresolved L1 inputs that gate Phase 2, not Phase 1:** no PEPECARTEL Safe exists, no treasury recipient address is fixed (`docs/PCART_MASTER_LAUNCH_PLAN.md:317`), plus operational ETH reserve, legal/comms review, Robinhood/Uniswap compatibility, fork/testnet simulation. Since the draft constructor takes the treasury as an argument, the unknown address does not block Phase 1.
-5. **Note:** `TreasurySafeVerificationPanel` is advisory/optional and no treasury/artifact DB table exists — consistent with the docs; no conflict for Phase 1.
+Safety is unchanged because nothing that L1 closure unlocks is an on-chain action: closure unlocks only Phase 2 compilation, itself a separately authorized repo-only step. Record this split in the master-plan amendment so the prerequisite is relocated, not deleted.
+
+## 8. CLOSED vs PENDING after the repo-only pack
+
+**Can be marked CLOSED:**
+- L1-a operational ETH reserve policy (0.10 / 0.05, budget guardrail).
+- L1-b (implementation half only) — Safe v1.4.1 SafeL2 + SafeProxyFactory on 4663 chosen as the frozen treasury architecture.
+- L1-c (internal half only) — PEPECARTEL communications rules.
+- L1-d — dated, versioned, fail-closed compatibility manifest, with mandatory L5 revalidation.
+- L1-e1 — infrastructure/protocol compatibility evidence.
+
+**Must remain PENDING (and L1 cannot be declared fully closed for execution purposes until each is met):**
+- Actual PEPECARTEL Safe deployment; the Safe address and 3 signer addresses.
+- The six stronger Safe verifications (singleton slot, proxy code hash, strict VERSION, empty modules, zero guard, readable nonce) implemented in the verifier and passing against the real Safe.
+- PCART initial treasury recipient address.
+- External legal sign-off, if the owner requires it.
+- L1-e2 exact-artifact testnet rehearsal (Phase 3).
+- On-chain revalidation of every manifest address immediately before L5.
+- Funded deployer wallet meeting the 0.05 ETH floor.
+
+Recommended framing: **L1 POLICY CLOSED / L1 EXECUTION PREREQUISITES PENDING.** Phase 2 compilation may be authorized on POLICY CLOSED alone.
+
+## 9. Exact stop point
+
+Stop immediately after the repo-only pack is committed and all gates pass. Specifically, stop **before**: creating or deploying any Safe; funding any wallet; compiling anything; producing `pepecartel-token-v1`; any testnet or mainnet transaction; any ARM/CLAIM/send-window action; any PCART production request; any SQL. Report SHA, diffstat, per-suite counts, CLOSED/PENDING table, residual uncertainty. Do not start Phase 2.
+
+## 10. Prohibited changes
+
+Any `src/**`, `supabase/**`, `docs/sql/**` or generated-types edit; any migration or SQL; editing `contracts/PepeCartelToken.sol` or `src/lib/cartel-fixed-erc20.artifact.ts`; widening the artifact allowlist; adding `pepecartel-token-v1` outside documentation; placing any Safe, router, factory, Permit2 or treasury address into runtime code; any compile step or solc/hardhat/foundry install; any package/config change; changing `MAINNET_DEPLOYMENT_TX_ENABLED`, `MAINNET_LIQUIDITY_TX_ENABLED`, `MAINNET_VERIFICATION_STATE_WRITES_ENABLED` or runtime execution control; creating a PCART production request; Safe creation; wallet signing, broadcasting or value movement on any chain; deploy, publish, secret change or Telegram send; weakening or deleting any existing regression assertion; asserting legal approval anywhere in the pack.
