@@ -571,8 +571,8 @@ check(
 check(
   "19.6 retry resends the SAME stored payload and request id",
   /function retryPending\(\)/.test(code.mission) &&
-    /targetsMutation\.mutate\(pendingTargets\)/.test(code.mission) &&
-    /durationMutation\.mutate\(pendingDuration\)/.test(code.mission) &&
+    /targetsMutation\.mutate\(pendingRetry\.payload\)/.test(code.mission) &&
+    /durationMutation\.mutate\(pendingRetry\.payload\)/.test(code.mission) &&
     !/retryPending[\s\S]{0,240}newRequestId\(\)/.test(code.mission),
 );
 check(
@@ -634,7 +634,7 @@ check(
 );
 check(
   "19.17 committed outcomes refetch the authoritative panel and close the editor",
-  /if \(classified\.committed\) \{[\s\S]{0,200}setEditor\(null\);[\s\S]{0,200}panelQuery\.refetch\(\)/.test(
+  /if \(classified\.committed \|\| noLongerLive\) \{[\s\S]{0,260}setEditor\(null\);[\s\S]{0,260}panelQuery\.refetch\(\)/.test(
     code.mission,
   ),
 );
@@ -716,13 +716,13 @@ check(
 );
 check(
   "20.2 opening a target edit clears any stale duration retry payload",
-  /Opening a target edit discards any stale duration retry payload\.\s*setPendingRetry\(null\);\s*setEditor\("targets"\);/.test(
+  /setSupportDraft\(seeded\);[\s\S]{0,160}setPendingRetry\(null\);\s*setEditor\("targets"\);/.test(
     code.mission,
   ),
 );
 check(
   "20.3 opening a duration edit clears any stale target retry payload",
-  /Opening a duration edit discards any stale target retry payload\.\s*setPendingRetry\(null\);\s*setEditor\("duration"\);/.test(
+  /setMinutesDraft\(""\);[\s\S]{0,160}setPendingRetry\(null\);\s*setEditor\("duration"\);/.test(
     code.mission,
   ),
 );
