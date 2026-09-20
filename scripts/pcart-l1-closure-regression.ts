@@ -143,29 +143,42 @@ check(
 );
 check(
   "L1C-3d",
-  /It is not modified in this unit/.test(packSrc),
-  "existing treasury verifier explicitly unmodified by this unit",
+  /the verifier was not modified in that earlier closure unit/.test(packSrc) &&
+    /### 2\.2 Hardening status update/.test(packSrc),
+  "historical closure snapshot preserved alongside the later hardening status update",
 );
 
-// ---------------------------------- 4. stronger Safe verification is PENDING
-const pendingSafeChecks: Array<[string, RegExp]> = [
-  ["singleton", /\*\*PENDING\*\* — singleton \/ masterCopy must equal the canonical SafeL2/],
-  ["proxy code hash", /\*\*PENDING\*\* — proxy runtime code hash must match/],
-  ["strict VERSION", /\*\*PENDING\*\* — `VERSION\(\)` must be readable and exactly `1\.4\.1`/],
-  ["no modules", /\*\*PENDING\*\* — modules must be empty/],
-  ["zero guard", /\*\*PENDING\*\* — guard must be zero \/ unset/],
-  ["readable nonce", /\*\*PENDING\*\* — `nonce\(\)` must be readable/],
-  ["exact owners", /\*\*PENDING\*\* — owners must exactly match the selected 3 signer addresses/],
-  ["threshold 2", /\*\*PENDING\*\* — threshold must be exactly 2/],
+// -------------------- 4. stronger Safe verification: BUILT vs still PENDING
+const builtSafeChecks: Array<[string, RegExp]> = [
+  ["singleton", /\*\*BUILT\*\* — singleton \/ masterCopy must equal the canonical SafeL2/],
+  ["proxy code hash", /\*\*BUILT\*\* — proxy runtime code hash must match/],
+  ["strict VERSION", /\*\*BUILT\*\* — `VERSION\(\)` must be readable and exactly `1\.4\.1`/],
+  ["no modules", /\*\*BUILT\*\* — modules must be empty/],
+  ["zero guard", /\*\*BUILT\*\* — guard must be zero \/ unset/],
+  ["readable nonce", /\*\*BUILT\*\* — `nonce\(\)` must be readable/],
+  ["threshold 2", /\*\*BUILT\*\* — threshold must be exactly 2/],
 ];
-for (const [label, re] of pendingSafeChecks) {
-  check(`L1C-4 ${label}`, re.test(packSrc), `stronger Safe verification item is PENDING: ${label}`);
+for (const [label, re] of builtSafeChecks) {
+  check(`L1C-4 ${label}`, re.test(packSrc), `stronger Safe verification item is BUILT: ${label}`);
 }
+check(
+  "L1C-4 exact owners",
+  /\*\*PENDING\*\* — owners must exactly match the selected 3 signer addresses/.test(packSrc),
+  "exact selected owner-address match remains PENDING",
+);
+check(
+  "L1C-4y",
+  /Still PENDING:\*\* live validation against the future actual PEPECARTEL Safe/.test(packSrc) &&
+    /remains non-gating/.test(packSrc) &&
+    /not\*\* a PEPECARTEL treasury approval/.test(packSrc),
+  "live validation stays PENDING and the hardened verifier stays non-gating and non-approving",
+);
 check(
   "L1C-4z",
   /Fail closed on any ambiguity, unreadable read, or mismatch/.test(packSrc),
   "stronger Safe verification fails closed on ambiguity",
 );
+
 
 // ------------------------------------------------- 5. compatibility manifest
 const EXTERNAL_ADDRESSES = [
