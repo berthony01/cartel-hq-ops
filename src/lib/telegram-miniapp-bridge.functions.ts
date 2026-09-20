@@ -43,23 +43,22 @@ export const MINIAPP_RPC = {
   authorize: "social_mission_control_authorize",
 } as const;
 
-/* ------------------------------------------- SE-16.2P CARD-REFRESH PARITY */
+/* --------------------------------------- SE-16.3R-3 ROLLING-CARD PARITY */
 
 /**
- * SE-16.2P — the bot refreshes the canonical Telegram mission card after every
- * successful Mission Control mutation (`mcRefreshCard`). Without that, a Mini
- * App edit would commit to the database while the pinned card kept showing the
- * old targets / end time, with no metric-independent path that corrects it.
+ * SE-16.3R-3 — a committed LIVE target / end-time change now REPLACES the
+ * canonical community card at the bottom of the chat instead of editing it in
+ * place far above the current conversation. The Mini App uses exactly the same
+ * service-only transport and the same `resurface_mission` action as the bot
+ * console, so there is one rolling-card path and no second finalization path.
  *
- * This bridge therefore performs the SAME single same-card edit through the
- * SAME existing service-only transport (`social-mission-telegram`,
- * `action: "edit_mission"`). It never renders a card and never calls the
- * Telegram Bot API to edit or send a message. A LIVE target/duration edit is
- * card-edit only; the transport's provider/X snapshot path belongs to mission
- * completion, not to this call.
+ * END NOW / CANCEL and every other final-state update remain the bot's
+ * in-place `edit_mission` lane; `resurface_mission` requires a LIVE mission.
+ *
+ * This bridge never renders a card and never calls the Telegram Bot API.
  */
 export const MINIAPP_TRANSPORT_FUNCTION = "social-mission-telegram";
-export const MINIAPP_TRANSPORT_ACTION = "edit_mission";
+export const MINIAPP_TRANSPORT_ACTION = "resurface_mission";
 /** Existing accepted internal-source value; no new transport source is added. */
 export const MINIAPP_TRANSPORT_INTERNAL_SOURCE = "telegram-webhook";
 export const MINIAPP_TRANSPORT_TIMEOUT_MS = 15_000;
@@ -67,12 +66,19 @@ export const MINIAPP_TRANSPORT_TIMEOUT_MS = 15_000;
 /**
  * Bounded, non-secret refresh states. Raw transport payloads, headers, status
  * codes and errors never reach the client.
- *  - `edited`    the card was edited now
- *  - `replayed`  the transport recognised this exact refresh request already
- *  - `ambiguous` outcome unknown (timeout / unresolved edit) — safe to retry
- *  - `failed`    refresh did not happen; the DB mutation still stands
+ *  - `edited`           a new canonical card is live and the old one is gone
+ *  - `replayed`         the transport recognised this exact request already
+ *  - `cleanup_pending`  the new card is live; the old one is queued for removal
+ *  - `ambiguous`        outcome unknown (timeout / unresolved) — never resent
+ *  - `failed`           the card did not change; the DB mutation still stands
  */
-export const MINIAPP_REFRESH_STATES = ["edited", "replayed", "ambiguous", "failed"] as const;
+export const MINIAPP_REFRESH_STATES = [
+  "edited",
+  "replayed",
+  "cleanup_pending",
+  "ambiguous",
+  "failed",
+] as const;
 export type MiniAppRefreshState = (typeof MINIAPP_REFRESH_STATES)[number];
 
 /** Mutation outcomes that are committed and therefore warrant a card refresh. */
