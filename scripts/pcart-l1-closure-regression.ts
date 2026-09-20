@@ -376,8 +376,11 @@ check(
 );
 check(
   "L1C-14",
-  migrationFiles.length === 82,
-  `migration set unchanged (${migrationFiles.length} files, expected 82)`,
+  migrationFiles.length === 83 &&
+    migrationFiles.some((f) =>
+      f.endsWith("20260920053000_pcart_treasury_signer_config.sql"),
+    ),
+  `migration set re-pinned for the treasury signer config (${migrationFiles.length} files, expected 83)`,
 );
 
 // ----------------------------- 15. no invented treasury / Safe / recipient

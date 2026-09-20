@@ -99,6 +99,7 @@ The old single "fork/testnet simulation" prerequisite was circular: it demanded 
 |---|---|
 | Actual PCART Safe deployment | PENDING |
 | Exact 3 signer addresses | PENDING |
+| Owner-entered signer-address capture foundation | BUILT (capture only; no Safe created, nothing signed, no value moved) |
 | Actual Safe address and PCART treasury recipient | PENDING |
 | Stronger Safe verification implementation | BUILT / HARDENED (see 2.2) |
 | Live stronger-verification pass against the actual Safe + exact owner-address match | PENDING |
