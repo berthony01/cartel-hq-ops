@@ -26,7 +26,7 @@ const MIRROR_WEBHOOK_PATH = "backend-source/edge-functions/telegram-webhook/inde
 const webhookSrc = readFileSync(WEBHOOK_PATH, "utf8");
 const transportSrc = readFileSync(TRANSPORT_PATH, "utf8");
 const sql = readFileSync(SQL_PATH, "utf8");
-const staleWebhookSrc = readFileSync(STALE_WEBHOOK_PATH, "utf8");
+const mirrorWebhookSrc = readFileSync(MIRROR_WEBHOOK_PATH, "utf8");
 
 /** Behavioural assertions read CODE, not the comments that legitimately name
  *  the things this phase excludes. */
