@@ -15,7 +15,7 @@ Launch the official PEPECARTEL token, ticker PCART, on Robinhood Chain mainnet (
 - **Frozen total supply: exactly 1,000,000,000 PCART, 18 decimals, permanently fixed supply.**
 - Dedicated production artifact for PEPECARTEL, separate from generic launchpad templates. Working artifact name: `pepecartel-token-v1`; working source name: `PepeCartelToken.sol`.
 - **Frozen V1 token behavior: standard ERC-20; 0% fee-on-transfer / transfer tax; name/symbol/supply fixed; mint once at deployment to the deliberately chosen initial treasury; no post-deployment minting; no owner/admin; no blacklist/freeze; no pause; no max-wallet/max-tx; no proxy/upgradeability; no hidden transfer controls.**
-- DO NOT finalize or deploy the Solidity until all remaining L1 inputs close and L1 is explicitly approved.
+- DO NOT finalize or deploy the Solidity until all remaining L1 inputs close and L1 is explicitly approved. (Narrow owner-authorized exception for a DRAFT, non-compiled, non-frozen, non-allowlisted source file only: see section 13.)
 
 ## 3. Tokenomics, allocation and custody freeze
 
@@ -301,7 +301,7 @@ At the start of every future phase:
 
 PCART-L1A economics are now OWNER-APPROVED AND FROZEN. L1 remains open only for genuinely unresolved implementation gates: exact operational ETH reserve for gas, exact multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility confirmation, fork/testnet simulation, and exact on-chain encoding derived from frozen policy.
 
-**Immediate next phase:** read-only Treasury/Multisig Implementation + Live Robinhood/Uniswap CCA Compatibility Audit. Do not authorize Solidity or value movement merely by this documentation freeze. Do not write Solidity or initiate a production deployment until L1 fully closes.
+**Immediate next phase:** read-only Treasury/Multisig Implementation + Live Robinhood/Uniswap CCA Compatibility Audit. Do not authorize Solidity or value movement merely by this documentation freeze. Do not finalize Solidity or initiate a production deployment until L1 fully closes. (Narrow owner-authorized exception for a DRAFT, non-compiled, non-frozen, non-allowlisted source file only: see section 13.)
 
 ## 12. PCART-L1B — Safe Treasury Verification Foundation (BUILT, QA-PASSED)
 
@@ -315,4 +315,15 @@ Scope and limits of what was built:
 - No production-request submission gating was added. Generic launchpad users are NOT forced into a 2-of-3 Safe.
 
 **Still unresolved:** the actual PEPECARTEL Safe has NOT been created. The Safe address and the 3 signer addresses remain undetermined, and no PCART initial recipient is fixed. PCART-L1 remains OPEN.
+
+## 13. PCART-L1/L2 Phase 1 — narrow owner-authorized DRAFT Solidity exception
+
+**PCART-L1 remains OPEN.** Every open L1 item in sections 4.1.7, 8 (L1) and 12 stands unchanged, and every frozen economic/tokenomic decision in sections 2, 3, 4 and 5 stands unchanged. This section adds no authorization beyond the single exception below.
+
+**Exception (owner-authorized):** a DRAFT, NON-COMPILED, NON-FROZEN, NON-ALLOWLISTED `contracts/PepeCartelToken.sol` may exist in the repository during PCART-L1, solely for source-level review and static regression testing. Its specification is `docs/PCART_L2_TOKEN_SPECIFICATION.md`; its static guardrails are `scripts/pcart-l2-draft-artifact-regression.ts`.
+
+**This exception does NOT authorize:** compilation or any build tooling; creation of a frozen artifact or `pepecartel-token-v1` artifact id; pinning of creation/runtime bytecode hashes; production artifact allowlisting or verifier support; any database, schema, RPC, policy or migration change; any PCART production deployment request; testnet deployment; mainnet deployment; mainnet ARM/CLAIM/send-window action; Safe deployment; liquidity, CCA or LBP work; or any value movement.
+
+**PCART-L2 may not begin until PCART-L1 is explicitly closed** and L2 is separately authorized. The only production-allowlisted artifact remains `cartel-fixed-erc20-v1`, unchanged in identity, bytecode and hashes.
+
 

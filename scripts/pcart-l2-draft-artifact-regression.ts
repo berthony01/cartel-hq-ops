@@ -1,0 +1,263 @@
+/**
+ * PCART-L1/L2 Phase 1 — DRAFT artifact foundation regression.
+ *
+ * PURE SOURCE/STATIC assertions only. No network, no RPC, no wallet, no
+ * database, no Solidity compilation, no environment value is read. This suite
+ * proves two things:
+ *   1. the DRAFT PepeCartelToken source and its specification match the frozen
+ *      PCART token behavior exactly; and
+ *   2. Phase 1 activated nothing — the generic `cartel-fixed-erc20-v1` artifact
+ *      and every production allowlist/runtime safety value are untouched.
+ */
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+
+const DRAFT = "contracts/PepeCartelToken.sol";
+const GENERIC_SOL = "contracts/CartelFixedSupplyToken.sol";
+const SPEC = "docs/PCART_L2_TOKEN_SPECIFICATION.md";
+const PLAN = "docs/PCART_MASTER_LAUNCH_PLAN.md";
+const EVIDENCE = "src/lib/launch-evidence-checks.ts";
+const ARTIFACT = "src/lib/cartel-fixed-erc20.artifact.ts";
+const REGISTRY = "src/lib/chain-mainnet-registry.ts";
+const MIGRATIONS = "supabase/migrations";
+const SRC = "src";
+
+const read = (p: string) => readFileSync(p, "utf8");
+const stripSolComments = (s: string) =>
+  s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+const draftRaw = read(DRAFT);
+const draft = stripSolComments(draftRaw);
+const specSrc = read(SPEC);
+const planSrc = read(PLAN);
+const evidenceSrc = read(EVIDENCE);
+const artifactSrc = read(ARTIFACT);
+const registrySrc = read(REGISTRY);
+
+function walk(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) out.push(...walk(full));
+    else out.push(full);
+  }
+  return out;
+}
+
+let failures = 0;
+function check(id: string, ok: boolean, detail: string) {
+  if (ok) console.log(`PASS ${id} — ${detail}`);
+  else {
+    failures += 1;
+    console.error(`FAIL ${id} — ${detail}`);
+  }
+}
+
+// ------------------------------------------- A. existence and status markers
+check("L2D-A1", draftRaw.length > 0, "draft PepeCartelToken.sol exists");
+check("L2D-A2", specSrc.length > 0, "PCART-L2 token specification exists");
+check(
+  "L2D-A3",
+  /DRAFT PCART-L2 CANDIDATE/.test(draftRaw) &&
+    /NOT COMPILED/.test(draftRaw) &&
+    /NOT FROZEN/.test(draftRaw) &&
+    /NOT ALLOWLISTED/.test(draftRaw) &&
+    /NOT DEPLOYABLE WHILE PCART-L1 IS OPEN/.test(draftRaw),
+  "draft header carries DRAFT / NOT COMPILED / NOT FROZEN / NOT ALLOWLISTED / NOT DEPLOYABLE markers",
+);
+check(
+  "L2D-A4",
+  /DRAFT/.test(specSrc) && /NON-DEPLOYABLE/.test(specSrc) && /PCART-L1 OPEN/.test(specSrc),
+  "specification declares DRAFT / PCART-L1 OPEN / NON-DEPLOYABLE",
+);
+check(
+  "L2D-A5",
+  /\*\*PCART-L1 remains OPEN\.\*\*/.test(planSrc) &&
+    /NON-COMPILED, NON-FROZEN, NON-ALLOWLISTED/.test(planSrc) &&
+    /PCART-L2 may not begin until PCART-L1 is explicitly closed/.test(planSrc),
+  "master plan records the narrow DRAFT exception with L1 still OPEN and L2 still gated",
+);
+
+// --------------------------------------------- B/C. pragma, imports, base
+check("L2D-B1", /^pragma solidity 0\.8\.36;$/m.test(draft), "exact pragma solidity 0.8.36");
+const imports = draft.match(/^\s*import .*$/gm) ?? [];
+check(
+  "L2D-B2",
+  imports.length === 1 &&
+    /@openzeppelin\/contracts\/token\/ERC20\/ERC20\.sol/.test(imports[0]!),
+  "sole import is the OpenZeppelin ERC20 reference implementation",
+);
+check("L2D-B3", /^\/\/ SPDX-License-Identifier: MIT$/m.test(draftRaw), "SPDX MIT header present");
+check(
+  "L2D-C1",
+  /contract PepeCartelToken is ERC20 \{/.test(draft) &&
+    (draft.match(/\bis\s+[A-Za-z0-9_,\s]+\{/g) ?? []).length === 1,
+  "contract PepeCartelToken extends ERC20 and nothing else",
+);
+
+// --------------------------------------------------- D/E/F. identity & supply
+check(
+  "L2D-D1",
+  /ERC20\("PEPECARTEL", "PCART"\)/.test(draft),
+  'name/symbol hard-coded as "PEPECARTEL" / "PCART"',
+);
+check(
+  "L2D-D2",
+  !/string memory name_|string memory symbol_/.test(draft),
+  "name and symbol are not constructor-supplied",
+);
+check(
+  "L2D-E1",
+  /uint256 public constant INITIAL_SUPPLY = 1_000_000_000 \* 10 \*\* 18;/.test(draft),
+  "INITIAL_SUPPLY is exactly 1_000_000_000 * 10 ** 18",
+);
+check(
+  "L2D-F1",
+  !/function decimals\s*\(/.test(draft),
+  "decimals() is not overridden — inherited ERC20 default of 18",
+);
+
+// ------------------------------------------------------- G. constructor shape
+const ctor = draft.match(/constructor\s*\(([^)]*)\)([\s\S]*?)\n\}/);
+check("L2D-G1", ctor !== null, "constructor is present and parseable");
+check(
+  "L2D-G2",
+  (ctor?.[1] ?? "").trim() === "address treasury_",
+  "constructor takes exactly one argument: address treasury_",
+);
+check(
+  "L2D-G3",
+  /error ZeroTreasury\(\);/.test(draft) &&
+    /if \(treasury_ == address\(0\)\) revert ZeroTreasury\(\);/.test(draft),
+  "zero-address treasury reverts with ZeroTreasury()",
+);
+const mints = draft.match(/_mint\s*\(/g) ?? [];
+check(
+  "L2D-G4",
+  mints.length === 1 && /_mint\(treasury_, INITIAL_SUPPLY\);/.test(ctor?.[2] ?? ""),
+  "exactly one _mint call, inside the constructor, to treasury_ for INITIAL_SUPPLY",
+);
+const fns = draft.match(/^\s*function\s+/gm) ?? [];
+check("L2D-G5", fns.length === 0, "no functions beyond inherited standard ERC-20 behavior");
+
+// ------------------------------------------------ H. forbidden capability scan
+const FORBIDDEN: Array<[string, RegExp]> = [
+  ["Ownable", /\bOwnable\b/],
+  ["AccessControl", /\bAccessControl\b/],
+  ["onlyOwner", /\bonlyOwner\b/],
+  ["roles/admin", /\b(_?grantRole|hasRole|DEFAULT_ADMIN_ROLE|owner\(\)|transferOwnership)\b/],
+  ["post-construction mint API", /\bfunction\s+\w*[Mm]int\w*\s*\(/],
+  ["custom burn path", /\b(_burn|function\s+\w*[Bb]urn\w*\s*\()/],
+  ["pause", /\b(Pausable|_pause|whenNotPaused|paused\(\))\b/],
+  ["tax/fee", /\b(tax|fee|Fee|Tax)\w*\b/],
+  ["blacklist/freeze/whitelist", /\b(blacklist|blackList|whitelist|whiteList|freeze|frozen)\w*\b/i],
+  ["trading toggle/cooldown", /\b(tradingEnabled|enableTrading|cooldown)\w*\b/i],
+  ["maxWallet/maxTx", /\b(maxWallet|maxTx|maxTransaction)\w*\b/i],
+  ["permit", /\b(ERC20Permit|permit\s*\()/],
+  ["initializer/upgrade/proxy", /\b(initializer|initialize\s*\(|UUPS|Upgradeable|Proxy|_authorizeUpgrade)\b/],
+  ["delegatecall", /\bdelegatecall\b/],
+  ["selfdestruct", /\bselfdestruct\b/],
+  ["immutable state", /\bimmutable\b/],
+  ["transfer-hook override", /\bfunction\s+(_update|_beforeTokenTransfer|_afterTokenTransfer)\s*\(/],
+];
+for (const [label, re] of FORBIDDEN) {
+  check(`L2D-H:${label}`, !re.test(draft), `draft contains no ${label}`);
+}
+
+// ------------------------------------------------- I. non-activation tripwires
+const srcFiles = walk(SRC);
+const migrationFiles = walk(MIGRATIONS);
+const srcHits = srcFiles.filter((f) => /pepecartel-token-v1/.test(readFileSync(f, "utf8")));
+const migHits = migrationFiles.filter((f) => /pepecartel-token-v1/.test(readFileSync(f, "utf8")));
+check(
+  "L2D-I1",
+  srcHits.length === 0,
+  `pepecartel-token-v1 appears in no src/** file (${srcFiles.length} scanned)`,
+);
+check(
+  "L2D-I2",
+  migHits.length === 0,
+  `pepecartel-token-v1 appears in no supabase/migrations/** file (${migrationFiles.length} scanned)`,
+);
+const nameHits = srcFiles.filter((f) => /PepeCartelToken/.test(readFileSync(f, "utf8")));
+check("L2D-I3", nameHits.length === 0, "no src/** file references PepeCartelToken");
+check(
+  "L2D-I4",
+  /export const APPROVED_OFFICIAL_ARTIFACT_ID = "cartel-fixed-erc20-v1" as const;/.test(
+    evidenceSrc,
+  ) && !/pepecartel/i.test(evidenceSrc),
+  "official artifact allowlist still approves exactly cartel-fixed-erc20-v1",
+);
+check(
+  "L2D-I5",
+  /export const CARTEL_FIXED_ERC20_ARTIFACT_ID = "cartel-fixed-erc20-v1" as const;/.test(
+    artifactSrc,
+  ),
+  "generic artifact id constant unchanged",
+);
+check(
+  "L2D-I6",
+  artifactSrc.includes(
+    '"0xa51f9b78b76d822256b9c3ca3028e508ea61a8630d54c889e4d638fae33e8337" as const',
+  ) &&
+    artifactSrc.includes(
+      '"0xcac530c4300d48804d9707b87f0ab52e91ba7b2ced97bc84e5a377ae702c10c0" as const',
+    ),
+  "generic creation and runtime bytecode hashes unchanged",
+);
+check(
+  "L2D-I7",
+  migrationFiles.length === 82 &&
+    migrationFiles.every((f) => !/PepeCartelToken/.test(readFileSync(f, "utf8"))) &&
+    !migrationFiles.some((f) => /pepecartel[-_]?token|pcart[-_]?artifact/i.test(f)),
+  "migration set unchanged (82 files), none reference the draft PCART token artifact",
+);
+check(
+  "L2D-I8",
+  /MAINNET_LIQUIDITY_TX_ENABLED = false as const/.test(registrySrc),
+  "MAINNET_LIQUIDITY_TX_ENABLED remains false",
+);
+check(
+  "L2D-I9",
+  read("src/lib/chain-mainnet-simulation.ts").includes("CARTEL_FIXED_ERC20_ARTIFACT_ID") &&
+    read("src/lib/chain-mainnet-presign.helpers.ts").includes("CARTEL_FIXED_ERC20_ARTIFACT_ID") &&
+    read("src/lib/chain-mainnet-handoff.functions.ts").includes("CARTEL_FIXED_ERC20_ARTIFACT_ID"),
+  "mainnet deployment path still binds the cartel-fixed-erc20-v1 artifact",
+);
+check(
+  "L2D-I10",
+  read(GENERIC_SOL).includes("contract CartelFixedSupplyToken is ERC20"),
+  "generic testnet contract source untouched",
+);
+
+// ----------------------------------------------------- J. Phase 2 gate wording
+check(
+  "L2D-J1",
+  /Phase 2 is blocked until PCART-L1 is explicitly closed/.test(specSrc),
+  "specification states Phase 2 is blocked until L1 closure",
+);
+check(
+  "L2D-J2",
+  /NOT created and NOT allowlisted/.test(specSrc) &&
+    /pepecartel-token-v1/.test(specSrc),
+  "specification names the intended artifact id while declaring it uncreated and unallowlisted",
+);
+check(
+  "L2D-J3",
+  /solc \| `0\.8\.36\+commit\.8a079791`/.test(specSrc) &&
+    /`5\.6\.1`/.test(specSrc) &&
+    /runs 200/.test(specSrc) &&
+    /viaIR \| false/.test(specSrc) &&
+    /`paris`/.test(specSrc) &&
+    /bytecodeHash \| `none`/.test(specSrc) &&
+    /appendCBOR \| false/.test(specSrc),
+  "specification pins the intended Phase 2 reproducible compiler settings",
+);
+check(
+  "L2D-J4",
+  /deliberately undetermined/.test(specSrc) && /2-of-3 Safe/.test(specSrc),
+  "specification records the treasury recipient as intentionally unresolved",
+);
+
+console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
+process.exit(failures === 0 ? 0 : 1);
