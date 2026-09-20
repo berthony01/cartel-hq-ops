@@ -10,7 +10,14 @@
  * 10s timeout, SENT / FAILED / AMBIGUOUS honesty) without touching any existing
  * Telegram behaviour, connection metadata, bot or ledger.
  *
- * Exactly two actions: `send_mission`, `edit_mission`.
+ * Exactly three actions: `send_mission`, `edit_mission`, `resurface_mission`.
+ *
+ * SE-16.3R-2 adds `resurface_mission`: a rolling canonical replacement that
+ * sends ONE new authoritative card, preserves an HQ-owned pin, swaps the
+ * canonical message id through the service-only
+ * `social_mission_finalize_resurface` RPC, and only then retires the old card.
+ * It never reads a social provider, never resends after an uncertain outcome
+ * and never deletes the old card before the database swap has committed.
  *
  * Hard boundaries:
  * - no X / social provider / Refetcher call
