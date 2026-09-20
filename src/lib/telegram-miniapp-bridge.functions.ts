@@ -263,25 +263,31 @@ function hexDigest(buffer: ArrayBuffer): string {
 }
 
 /**
- * SE-16.2P — deterministic UUID for the refresh request.
+ * SE-16.3R-3 — deterministic UUID for the card-replacement request.
  *
  * The transport requires a UUID-shaped `clientRequestId` (a 40-char hash would
- * be rejected), and binds it to the target's edit revision. Deriving it from
- * the VALIDATED Telegram user id + the mutation action + the client request id
- * means: a retry of the same mutation re-uses the same refresh id (so the
- * transport replays instead of double-editing), while a target edit and a
- * duration edit can never collide on one request id.
+ * be rejected). Deriving it from the VALIDATED Telegram user id + the mutation
+ * action + the client request id means a retry of the SAME mutation re-uses the
+ * SAME transport id, so the transport duplicate short-circuits instead of
+ * posting a second card, while a target edit and a duration edit can never
+ * collide on one id.
+ *
+ * `recoveryRevision` is supplied ONLY after a durable FAILED lane, which proves
+ * the previous replacement card did not remain. It is stable for that one
+ * resurface revision, so even the recovery attempt cannot duplicate a card.
  */
 export async function miniAppRefreshRequestUuid(
   telegramUserId: number,
   action: string,
   requestId: string,
+  recoveryRevision?: number | null,
 ): Promise<string> {
+  const seed =
+    recoveryRevision === undefined || recoveryRevision === null
+      ? `se16-miniapp-refresh:${telegramUserId}:${action}:${requestId}`
+      : `se16-miniapp-refresh-recovery:${telegramUserId}:${action}:${requestId}:${recoveryRevision}`;
   const hex = hexDigest(
-    await crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(`se16-miniapp-refresh:${telegramUserId}:${action}:${requestId}`),
-    ),
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(seed)),
   );
   const chars = hex.slice(0, 32).split("");
   chars[12] = "5";
@@ -292,11 +298,15 @@ export async function miniAppRefreshRequestUuid(
 
 /** Maps the transport's bounded reply to an allowlisted, non-secret state. */
 function refreshStateFrom(status: number, payload: Record<string, unknown> | null): MiniAppRefreshState {
-  const editState = String(payload?.["editState"] ?? "").toUpperCase();
-  if (payload?.["duplicate"] === true) return "replayed";
-  if (editState === "AMBIGUOUS") return "ambiguous";
-  if (status >= 200 && status < 300 && editState === "EDITED") return "edited";
-  return "failed";
+  const state = String(payload?.["resurfaceState"] ?? "").toUpperCase();
+  if (state === "RESURFACED") {
+    if (payload?.["duplicate"] === true) return "replayed";
+    return payload?.["cleanupPending"] === true ? "cleanup_pending" : "edited";
+  }
+  if (payload?.["duplicate"] === true) return "ambiguous";
+  if (state === "AMBIGUOUS" || state === "CLAIMED") return "ambiguous";
+  if (state === "FAILED") return "failed";
+  return status >= 200 && status < 300 ? "ambiguous" : "failed";
 }
 
 /**
