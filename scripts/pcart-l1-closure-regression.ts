@@ -383,8 +383,12 @@ check(
 // ----------------------------- 15. no invented treasury / Safe / recipient
 /** 20-byte address only: a 32-byte code hash must not match a 40-hex prefix. */
 const ADDRESS_RE = /(?<![0-9a-fA-F])0x[0-9a-fA-F]{40}(?![0-9a-fA-F])/g;
+/** SENTINEL_MODULES is a Safe protocol constant, never a treasury address. */
+const SAFE_SENTINEL_MODULES_DOC = "0x0000000000000000000000000000000000000001";
 const KNOWN_DOC_ADDRESSES = new Set(
-  [SAFE_SINGLETON, SAFE_FACTORY, ...EXTERNAL_ADDRESSES].map((a) => a.toLowerCase()),
+  [SAFE_SINGLETON, SAFE_FACTORY, SAFE_SENTINEL_MODULES_DOC, ...EXTERNAL_ADDRESSES].map((a) =>
+    a.toLowerCase(),
+  ),
 );
 const unexpected = [...docsSrc.matchAll(ADDRESS_RE)]
   .map((m) => m[0].toLowerCase())
