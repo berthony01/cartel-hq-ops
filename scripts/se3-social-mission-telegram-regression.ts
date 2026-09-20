@@ -95,9 +95,17 @@ check(
   !/action\s*===?\s*"(resend|delete_mission|broadcast|status)"/.test(indexCode),
 );
 check("2.6 resurface_mission action exists", indexSrc.includes('"resurface_mission"'));
+const actionGuard =
+  indexSrc.match(/if \(action !== "[a-z_]+"(?: && action !== "[a-z_]+")*\) \{/)?.[0] ?? "";
+const guardedActions = [...actionGuard.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
 check(
-  "2.7 exactly three approved actions are dispatched",
-  new Set(actionLiterals).size === APPROVED_ACTIONS.length,
+  "2.7 the dispatch allowlist names exactly the three approved actions",
+  guardedActions.length === APPROVED_ACTIONS.length &&
+    APPROVED_ACTIONS.every((a) => guardedActions.includes(a)),
+);
+check(
+  "2.8 an unsupported fourth action is rejected before any transport",
+  indexSrc.indexOf("Unsupported action.") < indexSrc.indexOf('from("workspace_members")'),
 );
 
 // ---------------------------------------------------------------------------
