@@ -5,29 +5,35 @@ import {
   ROBINHOOD_MAINNET_MANAGED_RPC_ENV,
 } from "./chain-mainnet-registry";
 import {
+  encodeGetModulesPaginatedCall,
   evaluateSafeTreasury,
   isCandidateTreasuryAddress,
   normalizeTreasuryAddress,
   SAFE_GET_OWNERS_SELECTOR,
   SAFE_GET_THRESHOLD_SELECTOR,
+  SAFE_GUARD_STORAGE_SLOT,
+  SAFE_MASTER_COPY_SELECTOR,
+  SAFE_NONCE_SELECTOR,
   SAFE_VERSION_SELECTOR,
   treasurySafeReadFailure,
   type TreasurySafeVerification,
 } from "./treasury-safe-verify";
 
 /**
- * PCART-L1B — authenticated, READ-ONLY Safe treasury verification.
+ * PCART-L1B — authenticated, READ-ONLY canonical Safe v1.4.1 verification.
  *
  * Allowed JSON-RPC methods, and nothing else: `eth_chainId`, `eth_getCode`,
- * and `eth_call` for the three Safe READ selectors. There is no signing, no
- * `eth_sendTransaction`, no `eth_sendRawTransaction`, no wallet use, no
- * database read or write, no Supabase RPC, no lifecycle change and no
- * persistence of any kind. The result is ephemeral.
+ * `eth_getStorageAt` (guard slot) and `eth_call` for the Safe READ selectors
+ * masterCopy(), getOwners(), getThreshold(), VERSION(), nonce() and
+ * getModulesPaginated(). There is no signing, no `eth_sendTransaction`, no
+ * `eth_sendRawTransaction`, no wallet use, no database read or write, no
+ * Supabase RPC, no lifecycle change and no persistence of any kind. The
+ * result is ephemeral.
  *
  * The managed Robinhood mainnet RPC URL is read from process.env inside the
  * handler only. It is never returned, logged, or included in an error, and
  * there is NO fallback to the public diagnostic endpoint — an unverifiable
- * check stays unverified.
+ * check stays unverified. Every failed or malformed read fails CLOSED.
  */
 
 const REQUEST_TIMEOUT_MS = 8_000;
@@ -107,20 +113,31 @@ export const verifyTreasurySafe = createServerFn({ method: "POST" })
       );
     }
 
-    const [code, owners, threshold, version] = await Promise.all([
+    const [code, masterCopy, owners, threshold, version, nonce, modules, guard] = await Promise.all([
       rpcCall(endpoint, "eth_getCode", [address, "latest"]),
+      rpcCall(endpoint, "eth_call", [{ to: address, data: SAFE_MASTER_COPY_SELECTOR }, "latest"]),
       rpcCall(endpoint, "eth_call", [{ to: address, data: SAFE_GET_OWNERS_SELECTOR }, "latest"]),
       rpcCall(endpoint, "eth_call", [{ to: address, data: SAFE_GET_THRESHOLD_SELECTOR }, "latest"]),
       rpcCall(endpoint, "eth_call", [{ to: address, data: SAFE_VERSION_SELECTOR }, "latest"]),
+      rpcCall(endpoint, "eth_call", [{ to: address, data: SAFE_NONCE_SELECTOR }, "latest"]),
+      rpcCall(endpoint, "eth_call", [
+        { to: address, data: encodeGetModulesPaginatedCall() },
+        "latest",
+      ]),
+      rpcCall(endpoint, "eth_getStorageAt", [address, SAFE_GUARD_STORAGE_SLOT, "latest"]),
     ]);
 
+    // Any failed read is passed through as null and fails closed downstream.
     return evaluateSafeTreasury({
       address,
       observedChainId,
       codeHex: code.ok ? code.value : null,
+      masterCopyData: masterCopy.ok ? masterCopy.value : null,
       ownersData: owners.ok ? owners.value : null,
       thresholdData: threshold.ok ? threshold.value : null,
-      // A failed or reverted VERSION() read must never fail a valid 2-of-3.
-      versionData: version.ok ? version.value : undefined,
+      versionData: version.ok ? version.value : null,
+      nonceData: nonce.ok ? nonce.value : null,
+      modulesData: modules.ok ? modules.value : null,
+      guardStorageData: guard.ok ? guard.value : null,
     });
   });

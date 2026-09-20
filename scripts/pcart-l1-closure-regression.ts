@@ -143,29 +143,42 @@ check(
 );
 check(
   "L1C-3d",
-  /It is not modified in this unit/.test(packSrc),
-  "existing treasury verifier explicitly unmodified by this unit",
+  /the verifier was not modified in that earlier closure unit/.test(packSrc) &&
+    /### 2\.2 Hardening status update/.test(packSrc),
+  "historical closure snapshot preserved alongside the later hardening status update",
 );
 
-// ---------------------------------- 4. stronger Safe verification is PENDING
-const pendingSafeChecks: Array<[string, RegExp]> = [
-  ["singleton", /\*\*PENDING\*\* — singleton \/ masterCopy must equal the canonical SafeL2/],
-  ["proxy code hash", /\*\*PENDING\*\* — proxy runtime code hash must match/],
-  ["strict VERSION", /\*\*PENDING\*\* — `VERSION\(\)` must be readable and exactly `1\.4\.1`/],
-  ["no modules", /\*\*PENDING\*\* — modules must be empty/],
-  ["zero guard", /\*\*PENDING\*\* — guard must be zero \/ unset/],
-  ["readable nonce", /\*\*PENDING\*\* — `nonce\(\)` must be readable/],
-  ["exact owners", /\*\*PENDING\*\* — owners must exactly match the selected 3 signer addresses/],
-  ["threshold 2", /\*\*PENDING\*\* — threshold must be exactly 2/],
+// -------------------- 4. stronger Safe verification: BUILT vs still PENDING
+const builtSafeChecks: Array<[string, RegExp]> = [
+  ["singleton", /\*\*BUILT\*\* — singleton \/ masterCopy must equal the canonical SafeL2/],
+  ["proxy code hash", /\*\*BUILT\*\* — proxy runtime code hash must match/],
+  ["strict VERSION", /\*\*BUILT\*\* — `VERSION\(\)` must be readable and exactly `1\.4\.1`/],
+  ["no modules", /\*\*BUILT\*\* — modules must be empty/],
+  ["zero guard", /\*\*BUILT\*\* — guard must be zero \/ unset/],
+  ["readable nonce", /\*\*BUILT\*\* — `nonce\(\)` must be readable/],
+  ["threshold 2", /\*\*BUILT\*\* — threshold must be exactly 2/],
 ];
-for (const [label, re] of pendingSafeChecks) {
-  check(`L1C-4 ${label}`, re.test(packSrc), `stronger Safe verification item is PENDING: ${label}`);
+for (const [label, re] of builtSafeChecks) {
+  check(`L1C-4 ${label}`, re.test(packSrc), `stronger Safe verification item is BUILT: ${label}`);
 }
+check(
+  "L1C-4 exact owners",
+  /\*\*PENDING\*\* — owners must exactly match the selected 3 signer addresses/.test(packSrc),
+  "exact selected owner-address match remains PENDING",
+);
+check(
+  "L1C-4y",
+  /Still PENDING:\*\* live validation against the future actual PEPECARTEL Safe/.test(packSrc) &&
+    /remains non-gating/.test(packSrc) &&
+    /not\*\* a PEPECARTEL treasury approval/.test(packSrc),
+  "live validation stays PENDING and the hardened verifier stays non-gating and non-approving",
+);
 check(
   "L1C-4z",
   /Fail closed on any ambiguity, unreadable read, or mismatch/.test(packSrc),
   "stronger Safe verification fails closed on ambiguity",
 );
+
 
 // ------------------------------------------------- 5. compatibility manifest
 const EXTERNAL_ADDRESSES = [
@@ -222,19 +235,45 @@ const LEAK_CANDIDATES = [
   SAFE_FACTORY_CODEHASH,
   ...EXTERNAL_ADDRESSES,
 ];
+/**
+ * NARROW, EXPLICITLY AUTHORIZED EXCEPTION. The read-only canonical Safe v1.4.1
+ * verifier must pin Safe identity constants to compare against. Exactly ONE
+ * runtime file may carry exactly these values. Every other candidate value,
+ * and every other file, stays forbidden.
+ */
+const SAFE_PIN_EXCEPTION_FILE = "src/lib/treasury-safe-verify.ts";
+const SAFE_PIN_EXCEPTION_VALUES = new Set(
+  [SAFE_SINGLETON, SAFE_SINGLETON_CODEHASH].map((v) => v.toLowerCase()),
+);
 const protectedFiles = PROTECTED_ROOTS.flatMap((root) => walk(root));
 const leaks: string[] = [];
 for (const file of protectedFiles) {
   const body = readFileSync(file, "utf8").toLowerCase();
+  const normalized = file.replace(/\\/g, "/");
   for (const value of LEAK_CANDIDATES) {
-    if (body.includes(value.toLowerCase())) leaks.push(`${file}:${value}`);
+    if (!body.includes(value.toLowerCase())) continue;
+    const excepted =
+      normalized === SAFE_PIN_EXCEPTION_FILE && SAFE_PIN_EXCEPTION_VALUES.has(value.toLowerCase());
+    if (!excepted) leaks.push(`${file}:${value}`);
   }
 }
 check(
   "L1C-6",
   leaks.length === 0,
-  `no Safe/Uniswap manifest address appears under src/**, supabase/**, contracts/** or docs/sql/** (${leaks.join(", ") || "none"})`,
+  `no Safe/Uniswap manifest address appears under src/**, supabase/**, contracts/** or docs/sql/** outside the single verifier pin exception (${leaks.join(", ") || "none"})`,
 );
+const verifierSrc = readFileSync(SAFE_PIN_EXCEPTION_FILE, "utf8");
+check(
+  "L1C-6b",
+  verifierSrc.includes(SAFE_SINGLETON) &&
+    verifierSrc.includes(
+      "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+    ) &&
+    !verifierSrc.toLowerCase().includes(SAFE_FACTORY.toLowerCase()) &&
+    !EXTERNAL_ADDRESSES.some((a) => verifierSrc.toLowerCase().includes(a.toLowerCase())),
+  "the single excepted verifier pins the canonical singleton and SafeProxy code hash and nothing else",
+);
+
 
 // -------------------------------------------------- 7. internal comms policy
 check(
@@ -344,8 +383,12 @@ check(
 // ----------------------------- 15. no invented treasury / Safe / recipient
 /** 20-byte address only: a 32-byte code hash must not match a 40-hex prefix. */
 const ADDRESS_RE = /(?<![0-9a-fA-F])0x[0-9a-fA-F]{40}(?![0-9a-fA-F])/g;
+/** SENTINEL_MODULES is a Safe protocol constant, never a treasury address. */
+const SAFE_SENTINEL_MODULES_DOC = "0x0000000000000000000000000000000000000001";
 const KNOWN_DOC_ADDRESSES = new Set(
-  [SAFE_SINGLETON, SAFE_FACTORY, ...EXTERNAL_ADDRESSES].map((a) => a.toLowerCase()),
+  [SAFE_SINGLETON, SAFE_FACTORY, SAFE_SENTINEL_MODULES_DOC, ...EXTERNAL_ADDRESSES].map((a) =>
+    a.toLowerCase(),
+  ),
 );
 const unexpected = [...docsSrc.matchAll(ADDRESS_RE)]
   .map((m) => m[0].toLowerCase())

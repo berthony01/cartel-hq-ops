@@ -316,6 +316,12 @@ Scope and limits of what was built:
 
 **Still unresolved:** the actual PEPECARTEL Safe has NOT been created. The Safe address and the 3 signer addresses remain undetermined, and no PCART initial recipient is fixed. PCART-L1 remains OPEN.
 
+### 12.1 Canonical Safe v1.4.1 hardening (BUILT / LIVE VALIDATION PENDING)
+
+A later, separately authorized read-only, repo-only unit replaced the ABI-only suitability check with a **canonical Safe v1.4.1 profile check**: exact SafeProxy runtime code-hash match, `masterCopy()` equal to the canonical SafeL2 v1.4.1 singleton, strict `VERSION()` exactly `1.4.1` (no longer optional), readable `nonce()`, empty modules with the sentinel `next`, zero/unset transaction guard, plus the existing 3 unique non-zero owners and threshold 2. Reads use the managed server RPC only (`eth_chainId`, `eth_getCode`, `eth_getStorageAt`, and read-only `eth_call`), are authenticated, and fail closed on any failed, reverted or malformed read. See `docs/PCART_L1_CLOSURE_PACK.md` section 2.2.
+
+**Still PENDING:** a live pass against the future actual PEPECARTEL Safe, and the exact selected owner-address match. No Safe was created, no signers were selected, and the verifier remains **non-gating** for production request submission. A canonical pass is not a PEPECARTEL treasury approval.
+
 ## 13. PCART-L1/L2 Phase 1 — narrow owner-authorized DRAFT Solidity exception
 
 **PCART-L1 remains OPEN.** Every open L1 item in sections 4.1.7, 8 (L1) and 12 stands unchanged, and every frozen economic/tokenomic decision in sections 2, 3, 4 and 5 stands unchanged. This section adds no authorization beyond the single exception below.

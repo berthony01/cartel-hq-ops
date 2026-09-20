@@ -30,7 +30,10 @@ The Safe official deployment registry maps Robinhood chain `4663` and testnet `4
 | SafeL2 v1.4.1 singleton | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` | `0xb1f926978a0f44a2c0ec8fe822418ae969bd8c3f18d61e5103100339894f81ff` |
 | SafeProxyFactory v1.4.1 | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` | `0x50c3cdc4074750a7a974204a716c999edd37482f907608d960b2b025ee0b3317` |
 
-RESEARCHED / NOT ON-CHAIN VERIFIED BY CARTEL HQ IN THIS UNIT.
+Canonical **SafeProxy v1.4.x runtime code hash** (the code deployed at every Safe proxy, used by the read-only verifier as an exact-match pin): `0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c`. The v1.4.1 proxy exposes `masterCopy()` via selector `0xa619486e` (storage slot 0), the GuardManager transaction-guard storage slot is `0x4a204f620c8c5ccdca3fd54d003badd85ba500436a431f0cbda4f558c93c34c8`, and `getModulesPaginated` uses `SENTINEL_MODULES` `0x0000000000000000000000000000000000000001`.
+
+RESEARCHED / NOT ON-CHAIN VERIFIED BY CARTEL HQ IN THIS UNIT. Mandatory pre-L5 revalidation applies to these values exactly as it does to every address above; any mismatch fails closed.
+
 
 **No PEPECARTEL Safe exists.** No Safe address, no signer address and no PCART treasury recipient is recorded here or anywhere in this repository.
 

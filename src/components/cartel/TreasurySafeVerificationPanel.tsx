@@ -15,6 +15,9 @@ import {
  * owner already entered above. It reads the chain and nothing else: it never
  * creates a Safe, never signs, never sends a transaction, never moves ETH or
  * tokens, never records a request and never changes any launch state.
+ *
+ * Success now requires the FULL canonical Safe v1.4.1 profile, not just an
+ * ABI-compatible 2-of-3 answer. It still does not gate request submission.
  */
 
 export type TreasurySafeVerificationPanelProps = {
@@ -26,6 +29,34 @@ export type TreasurySafeVerificationPanelProps = {
 
 function shorten(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
+
+function failureLabel(result: TreasurySafeVerification): string {
+  switch (result.failureCode) {
+    case "NOT_A_CONTRACT":
+      return "Not a contract";
+    case "PROXY_BYTECODE_MISMATCH":
+    case "SINGLETON_MISMATCH":
+    case "MASTERCOPY_UNREADABLE":
+      return "Not official Safe code";
+    case "VERSION_MISMATCH":
+    case "VERSION_UNREADABLE":
+      return "Wrong Safe version";
+    case "MODULES_PRESENT":
+    case "MODULES_UNREADABLE":
+      return "Extra modules";
+    case "GUARD_PRESENT":
+    case "GUARD_UNREADABLE":
+      return "Guard installed";
+    case "NONCE_UNREADABLE":
+      return "Unreadable wallet";
+    case "OWNER_COUNT_NOT_THREE":
+    case "THRESHOLD_NOT_TWO":
+    case "OWNER_SET_INVALID":
+      return "Wrong configuration";
+    default:
+      return "Not verified";
+  }
 }
 
 export function TreasurySafeVerificationPanel({
@@ -63,7 +94,7 @@ export function TreasurySafeVerificationPanel({
     }
   }, [normalized, runVerify]);
 
-  const verified = result?.isTwoOfThreeSafeCompatible === true;
+  const verified = result?.isCanonicalSafeV141 === true;
 
   return (
     <div className="min-w-0 space-y-2.5 rounded-lg border border-border-subtle bg-surface-raised/40 p-3.5">
@@ -77,27 +108,20 @@ export function TreasurySafeVerificationPanel({
           </StatusBadge>
         ) : verified ? (
           <StatusBadge tone="green">
-            <span>Verified 2-of-3</span>
+            <span>Canonical Safe v1.4.1</span>
           </StatusBadge>
         ) : result ? (
           <StatusBadge tone="red">
-            <span>
-              {result.failureCode === "NOT_A_CONTRACT"
-                ? "Not a contract"
-                : result.failureCode === "OWNER_COUNT_NOT_THREE" ||
-                    result.failureCode === "THRESHOLD_NOT_TWO" ||
-                    result.failureCode === "OWNER_SET_INVALID"
-                  ? "Wrong configuration"
-                  : "Not verified"}
-            </span>
+            <span>{failureLabel(result)}</span>
           </StatusBadge>
         ) : null}
       </div>
 
       <p className="text-xs leading-relaxed text-muted-foreground">
-        Optional check. This reads Robinhood Chain to see whether the receiving address above is a
-        Safe-compatible multisig that needs 2 of 3 owners to approve anything. It only looks — it
-        does not create a wallet, sign anything or move any funds.
+        Optional check. This reads Robinhood Chain to confirm the receiving address above is a
+        genuine, unmodified Safe wallet of the official 1.4.1 version, with no add-ons, needing 2 of
+        3 owners to approve anything. It only looks — it does not create a wallet, sign anything or
+        move any funds.
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -133,14 +157,18 @@ export function TreasurySafeVerificationPanel({
         <div className="min-w-0 space-y-1.5 rounded-md border border-pepe/35 bg-pepe/5 px-3 py-2.5">
           <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
             <CheckCircle2 className="size-4" aria-hidden="true" />
-            Safe-compatible treasury: verified
+            Canonical Safe v1.4.1 profile verified
           </p>
           <ul className="space-y-0.5 text-xs leading-relaxed text-muted-foreground">
             <li>Robinhood Chain {result.chainId} verified</li>
-            <li>Contract detected at this address</li>
+            <li>Official Safe wallet code matched exactly</li>
+            <li>Official Safe 1.4.1 implementation matched</li>
+            <li>Reported version: {result.version}</li>
             <li>Owners: {result.ownerCount}</li>
             <li>Required signatures: {result.threshold}</li>
-            {result.version ? <li>Safe version: {result.version}</li> : null}
+            <li>Add-on modules: none</li>
+            <li>Transaction guard: none</li>
+            <li>Transaction counter readable</li>
           </ul>
           <button
             type="button"
@@ -157,8 +185,9 @@ export function TreasurySafeVerificationPanel({
             </ul>
           ) : null}
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            This is a live read of the multisig settings. It does not prove any particular Safe
-            version, and this check did not create the wallet or move anything.
+            This confirms the wallet shape only. The exact PEPECARTEL signer addresses have not been
+            chosen or pinned yet, so this is not a PEPECARTEL treasury approval. This check did not
+            create the wallet, did not approve it and did not move anything.
           </p>
         </div>
       ) : null}
