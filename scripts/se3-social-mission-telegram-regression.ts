@@ -539,9 +539,13 @@ check(
 );
 check(
   "13.16 unresolved persistence never triggers a second Telegram call",
-  (indexSrc.match(/"sendMessage"/g) ?? []).length === 1 &&
+  (sendBlock.match(/"sendMessage"/g) ?? []).length === 1 &&
     (indexSrc.match(/"editMessageText"/g) ?? []).length === 1 &&
-    (indexSrc.match(/callTelegram\(botToken, "sendMessage"/g) ?? []).length === 1,
+    (sendBlock.match(/callTelegram\(botToken, "sendMessage"/g) ?? []).length === 1 &&
+    // The send lane never gained a second transport call, and the edit lane
+    // still contains no send call of any kind.
+    !editBlock.includes("sendMessage") &&
+    !editBlock.includes("sendPhoto"),
 );
 check(
   "13.17 pre-transport verification persistence failure returns AMBIGUOUS",
