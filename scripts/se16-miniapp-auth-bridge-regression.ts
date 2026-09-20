@@ -336,23 +336,41 @@ const opts = { now: NOW_MS };
     "social_mission_control_panel",
     "social_mission_apply_target_override",
     "social_mission_apply_duration_override",
+    // SE-16.2P — reused (never newly defined) service-only authorization RPC.
+    "social_mission_control_authorize",
   ];
   for (const name of expected) {
     check(`7.1 reuses existing RPC ${name}`, bridgeCode.includes(name));
   }
-  const rpcNames = [...bridgeCode.matchAll(/"(social_mission_[a-z_]+|end_social_mission_[a-z_]+|cancel_social_mission_[a-z_]+)"/g)].map(
-    (m) => m[1]!,
-  );
+  /** Exactly the tables this bridge may read. Both are read-only lookups. */
+  const expectedTables = ["social_metric_snapshots", "social_mission_targets"];
+  const rpcNames = [
+    ...bridgeCode.matchAll(
+      /"(social_mission_[a-z_]+|end_social_mission_[a-z_]+|cancel_social_mission_[a-z_]+|social_metric_[a-z_]+)"/g,
+    ),
+  ].map((m) => m[1]!);
+  const allowed = [...expected, ...expectedTables];
   check(
-    "7.2 no RPC outside the approved SE-15 set",
-    rpcNames.every((n) => expected.includes(n)),
-    rpcNames.filter((n) => !expected.includes(n)).join(", "),
+    "7.2 no RPC or table outside the approved SE-15 / SE-16.2P set",
+    rpcNames.every((n) => allowed.includes(n)),
+    rpcNames.filter((n) => !allowed.includes(n)).join(", "),
   );
   check(
     "7.3 bridge defines no SQL/schema change",
     !/CREATE TABLE|ALTER TABLE|CREATE FUNCTION|CREATE POLICY|GRANT /i.test(bridgeSrc),
   );
-  check("7.4 only the one snapshots table is read", (bridgeCode.match(/\.from\("/g) ?? []).length === 1);
+  check(
+    "7.4 exactly the two approved tables are read, and only for reads",
+    (() => {
+      const froms = [...bridgeCode.matchAll(/\.from\("([a-z_]+)"\)/g)].map((m) => m[1]!);
+      return (
+        froms.length === 2 &&
+        froms.every((t) => expectedTables.includes(t)) &&
+        new Set(froms).size === 2 &&
+        !/\.from\("[a-z_]+"\)\s*\n?\s*\.(insert|update|upsert|delete)\(/.test(bridgeCode)
+      );
+    })(),
+  );
   check("7.5 the table read is social_metric_snapshots", bridgeCode.includes('.from("social_metric_snapshots")'));
 }
 
