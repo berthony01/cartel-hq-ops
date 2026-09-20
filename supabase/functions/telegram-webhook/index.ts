@@ -3634,14 +3634,18 @@ Deno.serve(async (req: Request) => {
             return json({ ok: true });
           }
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "End time updated.");
-          if (outcome === "ok") {
-            await mcRefreshCard({
-              binding,
-              actorUserId: linked?.user_id ? String(linked.user_id) : null,
-              seed: `${updateId}:duration:${minutes}`,
-            });
-          }
-          await mcRenderPanel(operatorId, callbackChatId, missionId, binding, "End time updated.");
+          const durationResurface = await mcResurfaceLiveCard({
+            binding,
+            actorUserId: linked?.user_id ? String(linked.user_id) : null,
+            seed: `${updateId}:duration:${minutes}`,
+          });
+          await mcRenderPanel(
+            operatorId,
+            callbackChatId,
+            missionId,
+            binding,
+            mcResurfaceNote("End time updated.", durationResurface),
+          );
           return json({ ok: true });
         }
 
