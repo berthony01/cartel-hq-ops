@@ -286,6 +286,8 @@ function MiniAppMission() {
     setSupportDraft(seeded);
     setFormError(null);
     setNotice(null);
+    // Opening a target edit discards any stale duration retry payload.
+    setPendingRetry(null);
     setEditor("targets");
   }
 
@@ -293,8 +295,11 @@ function MiniAppMission() {
     setMinutesDraft("");
     setFormError(null);
     setNotice(null);
+    // Opening a duration edit discards any stale target retry payload.
+    setPendingRetry(null);
     setEditor("duration");
   }
+
 
   function submitTargets() {
     if (!initData) return;
