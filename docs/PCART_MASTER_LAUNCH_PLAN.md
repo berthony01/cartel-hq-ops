@@ -326,4 +326,33 @@ Scope and limits of what was built:
 
 **PCART-L2 may not begin until PCART-L1 is explicitly closed** and L2 is separately authorized. The only production-allowlisted artifact remains `cartel-fixed-erc20-v1`, unchanged in identity, bytecode and hashes.
 
+*Status note (section 14): PCART-L1 is now POLICY CLOSED. Section 13's DRAFT exception and its list of non-authorizations stand unchanged, and PCART-L2 still requires separate explicit authorization.*
+
+## 14. PCART-L1 Closure — POLICY CLOSED / EXECUTION PREREQUISITES PENDING
+
+Date: 2026-09-20. Authoritative record: `docs/PCART_L1_CLOSURE_PACK.md`, with `docs/PCART_L1_CHAIN_COMPATIBILITY_MANIFEST.md` (v1) and `docs/PCART_L1_COMMS_RULES.md` (v1). Static guardrails: `scripts/pcart-l1-closure-regression.ts`.
+
+Every frozen tokenomics, allocation, vesting, utility and CCA-economics value in sections 2, 3, 4, 4.1 and 5 stands **unchanged**. This section changes status only.
+
+**POLICY CLOSED does not mean launch-ready, execution-ready or mainnet-ready.** It authorizes no Safe creation, no compilation, no artifact, no SQL, no production request, no testnet or mainnet transaction, no wallet funding, no ARM/CLAIM/send window, no liquidity execution, no deploy/publish and no value movement.
+
+### 14.1 Closed policy items
+
+1. **Operational ETH policy.** 0.10 ETH frozen as the operational gas reserve budget, separate from liquidity/CCA funding; at least 0.05 ETH must be immediately available in the designated execution wallet before any mainnet PCART deployment/launch execution action. These are budget guardrails, not gas predictions and not authorization to spend; live gas estimation plus a substantial safety margin remains mandatory at execution time. Documentation only — no runtime balance gate was added.
+2. **Treasury implementation choice.** Safe v1.4.1 SafeL2 + SafeProxyFactory on Robinhood Chain 4663, exactly 3 unique non-zero owners, threshold 2. **The actual PEPECARTEL Safe does not exist**; signers, Safe address and PCART treasury recipient remain unresolved and are not invented anywhere.
+3. **Internal communications policy.** Recorded in `docs/PCART_L1_COMMS_RULES.md`. This is an internal policy only; **no legal counsel review and no legal/compliance approval is claimed**, and external legal review, if the owner requires it, remains a separate owner-side prerequisite.
+4. **Robinhood/Uniswap compatibility manifest.** Dated 2026-09-20, version v1, every external address marked RESEARCHED / NOT ON-CHAIN VERIFIED, with mandatory independent on-chain revalidation immediately before L5 and a fail-closed mismatch rule.
+5. **L1-e1 infrastructure/protocol compatibility evidence.** The already-finalized separate generic mainnet canary (protected chain / RPC / gas / evidence / finality rails), plus the dated manifest, plus static/read-only checks.
+
+### 14.2 L1-e1 / L1-e2 sequencing
+
+The former single "fork/testnet simulation" prerequisite was circular — it required exact-artifact simulation before L1 closure, while the exact PCART artifact is deliberately uncompiled until Phase 2, which only begins after closure. It is **split, not waived**:
+
+- **L1-e1** — infrastructure/protocol compatibility evidence. **Closes L1 policy.**
+- **L1-e2** — exact-artifact rehearsal. **Remains mandatory Phase 3**, after Phase 2 compiles and freezes `pepecartel-token-v1`. It **MUST pass on Robinhood testnet 46630 before any PCART mainnet deployment.** Relocated, not waived.
+
+### 14.3 Pending execution prerequisites
+
+Actual PCART Safe deployment; exact 3 signer addresses; actual Safe address and PCART treasury recipient; stronger Safe verification (singleton/masterCopy equals canonical SafeL2, proxy runtime code hash match, strict readable `VERSION()` = 1.4.1, empty modules, zero/unset guard, readable `nonce()`, owners exactly the selected 3 signers, threshold exactly 2 — fail closed on ambiguity) implemented and passing against the real Safe; funded execution wallet satisfying the 0.05 ETH floor at execution time; external legal review if the owner requires it; Phase 2 compilation and frozen artifact, separately authorized; Phase 3 exact-artifact testnet rehearsal; independent on-chain revalidation of the compatibility manifest immediately before L5; and every existing deployment/liquidity safety gate, unchanged.
+
 
