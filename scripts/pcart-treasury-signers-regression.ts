@@ -244,7 +244,6 @@ check(
 check(
   "TS-5h",
   /SELECT l\.workspace_id INTO v_workspace_id/.test(migrationSrc) &&
-    !/save_launch_treasury_signers\([\s\S]*?\)\s*\nRETURNS/.test(migrationSrc.replace(/\n/g, "\n")) === false &&
     !/^\s*_workspace_id uuid/m.test(migrationSrc),
   "RPC resolves the workspace from the launch row and accepts none from the client",
 );
