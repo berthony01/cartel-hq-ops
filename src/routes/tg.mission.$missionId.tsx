@@ -164,10 +164,8 @@ function MiniAppMission() {
   const applyTargetsFn = useServerFn(miniAppApplyTargets);
   const applyDurationFn = useServerFn(miniAppApplyDuration);
 
-  /** Committed mutations always re-read authoritative state from the server. */
-  function settle(result: unknown, keepPayload: () => void, dropPayload: () => void) {
-    const classified = classifyMutationResult(result as BoundedResult);
   /**
+
    * Committed mutations re-read authoritative state. `not_live` is not
    * committed and is never reported as success, but it still refetches so the
    * stale LIVE controls disappear when the mission ended after page load.
