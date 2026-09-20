@@ -288,7 +288,16 @@ check("8.18 no retry loop around transport", !/for\s*\(|while\s*\(/.test(sendBlo
 // 9. edit_mission state machine
 // ---------------------------------------------------------------------------
 
-const editBlock = indexSrc.slice(indexSrc.indexOf("async function handleEdit"));
+/**
+ * The edit lane ends where the SE-16.3R-2 replacement lane begins. Pinning the
+ * boundary keeps every edit assertion below scoped to `handleEdit` exactly, as
+ * it always was — a later appended lane can never silently widen the slice and
+ * satisfy or defeat an edit assertion with unrelated code.
+ */
+const RESURFACE_MARKER = "// resurface_mission — SE-16.3R-2 rolling canonical replacement";
+check("9.0 the replacement lane boundary marker exists", indexSrc.includes(RESURFACE_MARKER));
+const EDIT_LANE_END = indexSrc.indexOf(RESURFACE_MARKER);
+const editBlock = indexSrc.slice(indexSrc.indexOf("async function handleEdit"), EDIT_LANE_END);
 
 check("9.1 edit requires SENT with message id", editBlock.includes("Only a confirmed sent target can be edited."));
 check("9.2 duplicate edit request id short-circuits", editBlock.includes('t["edit_client_request_id"] === clientRequestId'));
