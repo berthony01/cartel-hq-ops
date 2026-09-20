@@ -167,7 +167,10 @@ BEGIN
   -- Exactly one LIVE, SENT, canonical target must be bound to this chat.
   -- Zero means nothing to do. More than one is genuinely ambiguous and we
   -- never guess which card is canonical.
-  SELECT count(*), min(t.id)
+  -- PostgreSQL has no min(uuid) aggregate (SQLSTATE 42883), so the sole
+  -- candidate id is resolved through a text aggregate and cast back; this is
+  -- only consumed when v_matches = 1 (exactly one), so the cast is safe.
+  SELECT count(*), min(t.id::text)::uuid
     INTO v_matches, v_target_id
     FROM public.social_mission_targets t
     JOIN public.social_missions m

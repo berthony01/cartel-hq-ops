@@ -224,6 +224,14 @@ check("8.4 requires mission status LIVE", /m\.status = 'LIVE'/.test(activityFn))
 check("8.5 joins mission on workspace as well as id", /m\.workspace_id = t\.workspace_id/.test(activityFn));
 check("8.6 zero matches is a bounded no_live ignore", /v_matches = 0[\s\S]{0,140}'no_live'/.test(activityFn));
 check("8.7 more than one match refuses instead of guessing", /v_matches > 1[\s\S]{0,180}'ambiguous_live_targets'/.test(activityFn));
+check(
+  "8.7a candidate id resolves through a UUID-safe aggregate",
+  /min\(t\.id::text\)::uuid/.test(activityFn),
+);
+check(
+  "8.7b bare min(id) on UUID is forbidden (no min(uuid) aggregate exists)",
+  !/min\(\s*t?\.?\s*id\s*\)/.test(activityFn),
+);
 check("8.8 locks the target row", /FOR UPDATE/.test(activityFn));
 check("8.9 re-checks LIVE under the lock", /v_status IS DISTINCT FROM 'LIVE'/.test(activityFn));
 check("8.10 never counts the card itself or anything before it", /_telegram_message_id <= coalesce\(v_row\.telegram_message_id, 0\)/.test(activityFn));
