@@ -247,7 +247,7 @@ check("12.5 no OAuth, billing or contributor mechanic appears in the UI", !/oaut
 // ---------------------------------------------------------------------------
 // 13. Repository parity and blast radius
 // ---------------------------------------------------------------------------
-check("13.1 the stale backend webhook copy is still untouched by SE-5", !/social_mission_link_candidates|record_social_mission_target_pin/.test(staleWebhookSrc));
+check("13.1 the backend-source webhook mirror is byte-for-byte identical to the deployable webhook", mirrorWebhookSrc.length > 0 && read(WEBHOOK_PATH).length > 0 && mirrorWebhookSrc === read(WEBHOOK_PATH));
 check("13.2 no second scheduler is introduced", !/cron\.schedule/.test(sqlCode) || (sqlCode.match(/cron\.schedule/g) ?? []).length === 0);
 check("13.3 the existing cleanup worker contract is reused", /social_mission_pulse/.test(runnerCode));
 check("13.4 the migration is prepared only and is transactional", /^BEGIN;/m.test(sqlCode) && /COMMIT;/.test(sqlCode));
