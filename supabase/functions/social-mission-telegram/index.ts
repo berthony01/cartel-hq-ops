@@ -667,7 +667,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
   }
 
   const action = typeof body["action"] === "string" ? body["action"] : "";
-  if (action !== "send_mission" && action !== "edit_mission") {
+  if (action !== "send_mission" && action !== "edit_mission" && action !== "resurface_mission") {
     return fail("Unsupported action.", 400);
   }
 
