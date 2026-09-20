@@ -80,10 +80,15 @@ export function TreasurySignerSetupPanel({
   return (
     <div className="min-w-0 space-y-3 rounded-lg border border-border-subtle bg-surface-raised/40 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="flex items-center gap-2 text-sm font-semibold leading-snug text-foreground">
-          <KeyRound className="size-4" aria-hidden="true" />
-          PEPECARTEL Treasury Setup
-        </p>
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Step 1 · Before deployment
+          </p>
+          <p className="flex items-center gap-2 text-sm font-semibold leading-snug text-foreground">
+            <KeyRound className="size-4" aria-hidden="true" />
+            Treasury signer setup
+          </p>
+        </div>
         {configQuery.isLoading ? (
           <StatusBadge tone="gold">
             <span>Loading</span>
@@ -125,6 +130,10 @@ export function TreasurySignerSetupPanel({
           <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
             <CheckCircle2 className="size-4" aria-hidden="true" />
             Signers ready
+          </p>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            The Safe has not been created yet. These are the wallets you intend to use as its
+            signers.
           </p>
           <ul className="min-w-0 space-y-0.5 font-mono text-xs text-foreground [overflow-wrap:anywhere]">
             {config.signers.map((signer) => (

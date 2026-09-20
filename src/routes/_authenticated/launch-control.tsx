@@ -134,7 +134,7 @@ const LAUNCH_SECTIONS: SectionNavItem[] = [
   { id: "lc-schedule", label: "Schedule" },
   { id: "lc-watch", label: "Launch Watch" },
   { id: "lc-comms", label: "Communications" },
-  { id: "lc-contract", label: "Contract" },
+  { id: "lc-contract", label: "Deploy & Contract" },
 ];
 
 type LaunchControlSearch = { launch?: string; section?: LaunchSectionId };
@@ -2872,6 +2872,39 @@ function LaunchControlPage() {
                     separate, explicit actions. Registering never messages anyone on its own.
                   </p>
                 </Section>
+
+                {/* Deployment path — plain-English ordering for this working
+                    view. Guidance only: it changes no eligibility or state. */}
+                {selected && selectedIsProjectLaunch ? (
+                  <div className="min-w-0 space-y-2 rounded-lg border border-border-subtle bg-surface-raised/30 p-4">
+                    <p className="text-sm font-semibold leading-snug text-foreground">
+                      Deployment path — before deployment
+                    </p>
+                    <ol className="min-w-0 space-y-1.5 text-xs leading-relaxed text-muted-foreground">
+                      <li>
+                        <span className="font-semibold text-foreground">Now — </span>
+                        Save the three treasury signer wallets below.
+                      </li>
+                      <li>
+                        <span className="font-semibold text-foreground/80">Later — </span>
+                        Create and verify the 2-of-3 Safe. That is a separate, explicitly
+                        authorized step.
+                      </li>
+                      <li>
+                        <span className="font-semibold text-foreground/80">Then — </span>
+                        Request the production deployment, using the verified Safe address as the
+                        token recipient.
+                      </li>
+                      <li>
+                        <span className="font-semibold text-foreground/80">Finally — </span>
+                        Verify the deployment evidence and register the official contract.
+                      </li>
+                    </ol>
+                    <p className="min-w-0 border-t border-border-subtle pt-2 text-[11px] leading-relaxed text-muted-foreground">
+                      Saving signer wallets does not create the Safe.
+                    </p>
+                  </div>
+                ) : null}
 
                 {/* PCART Treasury Signer Setup — records the three intended
                     public signer wallets only. It creates no Safe, signs

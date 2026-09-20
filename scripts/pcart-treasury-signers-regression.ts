@@ -197,6 +197,50 @@ check(
   "production request submission does not depend on the signer table",
 );
 
+// ------------------------------------------------ 4bis. UX placement (UX pass)
+check(
+  "TS-4d",
+  /\{ id: "lc-contract", label: "Deploy & Contract" \}/.test(routeSrc) &&
+    routeSrc.includes('"lc-contract"'),
+  'lc-contract keeps its section id and renders the visible label "Deploy & Contract"',
+);
+check(
+  "TS-4e",
+  routeSrc.includes("Deployment path — before deployment") &&
+    routeSrc.indexOf("Deployment path — before deployment") <
+      routeSrc.indexOf("<TreasurySignerSetupPanel"),
+  "the deployment-path guidance block sits above the treasury signer panel",
+);
+check(
+  "TS-4f",
+  routeSrc.includes("Save the three treasury signer wallets below.") &&
+    routeSrc.includes("Create and verify the 2-of-3 Safe.") &&
+    routeSrc.includes("Request the production deployment") &&
+    routeSrc.includes("register the official contract."),
+  "guidance states signer save -> Safe create/verify later -> production deployment -> official registration",
+);
+check(
+  "TS-4g",
+  routeSrc.includes("Saving signer wallets does not create the Safe."),
+  "guidance explicitly says saving signers does not create the Safe",
+);
+check(
+  "TS-4h",
+  panelSrc.includes("Step 1 · Before deployment") &&
+    panelSrc.includes("Treasury signer setup"),
+  "panel carries the Step 1 / before-deployment cue and step title",
+);
+check(
+  "TS-4i",
+  panelSrc.includes("The Safe has not been created yet."),
+  "the ready state states plainly that the Safe has not been created yet",
+);
+check(
+  "TS-4j",
+  !/Create Safe/.test(panelSrc) && !/Create Safe/.test(routeSrc),
+  'no "Create Safe" control exists in the panel or the route',
+);
+
 // -------------------------------------------------------------- 5. migration
 check(
   "TS-5a",
