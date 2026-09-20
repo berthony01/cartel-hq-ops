@@ -303,6 +303,8 @@ PCART-L1A economics are OWNER-APPROVED AND FROZEN, and PCART-L1 is now **POLICY 
 
 **Immediate next phase:** PCART-L2 Phase 2 — reproducible compilation and freezing of `pepecartel-token-v1` — which requires **separate explicit authorization** and has not been started. Do not authorize Solidity compilation, Safe creation or value movement merely by this documentation closure. (Narrow owner-authorized exception for a DRAFT, non-compiled, non-frozen, non-allowlisted source file only: see section 13.)
 
+*Superseded by section 15: PCART-L2 Phase 2 was subsequently authorized and is now COMPLETE (compiled + frozen repository artifact only). The immediate next phase is now PCART-L2 Phase 3 — exact-artifact testnet rehearsal.*
+
 ## 12. PCART-L1B — Safe Treasury Verification Foundation (BUILT, QA-PASSED)
 
 **Status: BUILT AND QA-PASSED.** A read-only Safe treasury verifier exists in CARTEL HQ for Robinhood Chain mainnet (4663). An authenticated workspace owner can check the production-recipient address already entered in Launch Control and see whether it is a Safe-compatible 2-of-3 multisig.
@@ -362,3 +364,19 @@ The former single "fork/testnet simulation" prerequisite was circular — it req
 Actual PCART Safe deployment; exact 3 signer addresses; actual Safe address and PCART treasury recipient; stronger Safe verification (singleton/masterCopy equals canonical SafeL2, proxy runtime code hash match, strict readable `VERSION()` = 1.4.1, empty modules, zero/unset guard, readable `nonce()`, owners exactly the selected 3 signers, threshold exactly 2 — fail closed on ambiguity) implemented and passing against the real Safe; funded execution wallet satisfying the 0.05 ETH floor at execution time; external legal review if the owner requires it; Phase 2 compilation and frozen artifact, separately authorized; Phase 3 exact-artifact testnet rehearsal; independent on-chain revalidation of the compatibility manifest immediately before L5; and every existing deployment/liquidity safety gate, unchanged.
 
 
+
+## 15. PCART-L2 Phase 2 — reproducible compile + frozen artifact (COMPLETE, repo-only)
+
+Date: 2026-09-20. Status update only. Every frozen tokenomics, allocation, vesting, utility, CCA-economics, treasury and comms decision in sections 2, 3, 4, 4.1, 5, 13 and 14 stands **unchanged**.
+
+`contracts/PepeCartelToken.sol` has been reproducibly compiled out of band and frozen in the repository as artifact id `pepecartel-token-v1`:
+
+- `artifacts/pepecartel-token-v1.compiler-input.json` — canonical, self-contained standard-JSON compiler input
+- `artifacts/pepecartel-token-v1.manifest.json` — frozen manifest
+- `src/lib/pepecartel-token.artifact.ts` — ABI, creation + runtime bytecode and keccak hashes
+
+solc `0.8.36+commit.8a079791.Emscripten.clang`, OpenZeppelin Contracts `5.6.1`, optimizer enabled runs 200, viaIR false, evmVersion `paris`, metadata bytecodeHash `none`, appendCBOR false. Creation bytecode keccak256 `0x2edebe9de5877c0775dc87644ca9051a54034f4eee8bd9662c7657d0fd3c2196`; deployed runtime bytecode keccak256 `0x69ef7ad36b6c4b900d390bc4977eb61a518e9d35e506a6f83712192c7e7d03e4`.
+
+**This phase authorized nothing operational.** The artifact is NOT production-allowlisted (the only allowlisted artifact remains `cartel-fixed-erc20-v1`), NOT deployed, and has passed NO testnet rehearsal. No SQL, no Safe, no wallet, no signature, no testnet or mainnet transaction, no deployment request, no liquidity action. The `treasury_` recipient remains unresolved.
+
+**Immediate next phase:** PCART-L2 Phase 3 — exact-artifact testnet rehearsal of the frozen `pepecartel-token-v1` artifact — which requires separate explicit authorization. Production allowlist integration is a distinct later phase. Static guardrails: `scripts/pcart-l2-draft-artifact-regression.ts` and `scripts/pcart-l2-frozen-artifact-regression.ts`.

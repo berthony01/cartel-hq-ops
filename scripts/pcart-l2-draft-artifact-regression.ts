@@ -1,13 +1,15 @@
 /**
- * PCART-L1/L2 Phase 1 — DRAFT artifact foundation regression.
+ * PCART-L2 Phase 2 — frozen source status + non-activation regression.
  *
  * PURE SOURCE/STATIC assertions only. No network, no RPC, no wallet, no
  * database, no Solidity compilation, no environment value is read. This suite
  * proves two things:
- *   1. the DRAFT PepeCartelToken source and its specification match the frozen
- *      PCART token behavior exactly; and
- *   2. Phase 1 activated nothing — the generic `cartel-fixed-erc20-v1` artifact
- *      and every production allowlist/runtime safety value are untouched.
+ *   1. the frozen PepeCartelToken source and its specification match the
+ *      frozen PCART token behavior exactly; and
+ *   2. freezing activated nothing — the generic `cartel-fixed-erc20-v1`
+ *      artifact and every production allowlist/runtime safety value are
+ *      untouched, and `pepecartel-token-v1` appears only in its dedicated
+ *      artifact file, artifacts/**, docs and regression scripts.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -18,6 +20,9 @@ const SPEC = "docs/PCART_L2_TOKEN_SPECIFICATION.md";
 const PLAN = "docs/PCART_MASTER_LAUNCH_PLAN.md";
 const EVIDENCE = "src/lib/launch-evidence-checks.ts";
 const ARTIFACT = "src/lib/cartel-fixed-erc20.artifact.ts";
+const FROZEN_TS = "src/lib/pepecartel-token.artifact.ts";
+const FROZEN_INPUT = "artifacts/pepecartel-token-v1.compiler-input.json";
+const FROZEN_MANIFEST = "artifacts/pepecartel-token-v1.manifest.json";
 const REGISTRY = "src/lib/chain-mainnet-registry.ts";
 const MIGRATIONS = "supabase/migrations";
 const SRC = "src";
@@ -33,6 +38,7 @@ const planSrc = read(PLAN);
 const evidenceSrc = read(EVIDENCE);
 const artifactSrc = read(ARTIFACT);
 const registrySrc = read(REGISTRY);
+
 
 function walk(dir: string): string[] {
   const out: string[] = [];
@@ -54,29 +60,45 @@ function check(id: string, ok: boolean, detail: string) {
 }
 
 // ------------------------------------------- A. existence and status markers
-check("L2D-A1", draftRaw.length > 0, "draft PepeCartelToken.sol exists");
+check("L2D-A1", draftRaw.length > 0, "frozen PepeCartelToken.sol exists");
 check("L2D-A2", specSrc.length > 0, "PCART-L2 token specification exists");
 check(
   "L2D-A3",
-  /DRAFT PCART-L2 CANDIDATE/.test(draftRaw) &&
-    /NOT COMPILED/.test(draftRaw) &&
-    /NOT FROZEN/.test(draftRaw) &&
-    /NOT ALLOWLISTED/.test(draftRaw) &&
-    /NOT DEPLOYABLE WHILE PCART-L1 IS OPEN/.test(draftRaw),
-  "draft header carries DRAFT / NOT COMPILED / NOT FROZEN / NOT ALLOWLISTED / NOT DEPLOYABLE markers",
+  /PCART-L2 FROZEN SOURCE/.test(draftRaw) &&
+    /COMPILED AND FROZEN AS/.test(draftRaw) &&
+    /NOT YET PRODUCTION-ALLOWLISTED/.test(draftRaw) &&
+    /NOT YET DEPLOYED/.test(draftRaw) &&
+    /PCART-L2 Phase 3/.test(draftRaw) &&
+    !/NOT COMPILED/.test(draftRaw) &&
+    !/NOT DEPLOYABLE WHILE PCART-L1 IS OPEN/.test(draftRaw),
+  "frozen header carries FROZEN / COMPILED / NOT ALLOWLISTED / NOT DEPLOYED / Phase 3 markers and no stale DRAFT-open wording",
 );
 check(
   "L2D-A4",
-  /DRAFT/.test(specSrc) && /NON-DEPLOYABLE/.test(specSrc) && /PCART-L1 OPEN/.test(specSrc),
-  "specification declares DRAFT / PCART-L1 OPEN / NON-DEPLOYABLE",
+  /COMPILED \+ FROZEN REPOSITORY ARTIFACT/.test(specSrc) &&
+    /NOT PRODUCTION-ALLOWLISTED/.test(specSrc) &&
+    /NOT DEPLOYED/.test(specSrc) &&
+    /PCART-L1 is \*\*POLICY CLOSED\*\*/.test(specSrc) &&
+    !/PCART-L1 OPEN/.test(specSrc),
+  "specification declares COMPILED + FROZEN / NOT ALLOWLISTED / NOT DEPLOYED with L1 policy closed",
 );
 check(
   "L2D-A5",
-  /\*\*PCART-L1 remains OPEN\.\*\*/.test(planSrc) &&
-    /NON-COMPILED, NON-FROZEN, NON-ALLOWLISTED/.test(planSrc) &&
-    /PCART-L2 may not begin until PCART-L1 is explicitly closed/.test(planSrc),
-  "master plan records the narrow DRAFT exception with L1 still OPEN and L2 still gated",
+  /POLICY CLOSED \/ EXECUTION PREREQUISITES PENDING/.test(planSrc) &&
+    /PCART-L2 Phase 2 — reproducible compile \+ frozen artifact \(COMPLETE, repo-only\)/.test(
+      planSrc,
+    ) &&
+    /PCART-L2 Phase 3 — exact-artifact testnet rehearsal/.test(planSrc),
+  "master plan records L1 policy closed, L2 Phase 2 complete and Phase 3 rehearsal next",
 );
+check(
+  "L2D-A6",
+  read(FROZEN_TS).length > 0 &&
+    read(FROZEN_INPUT).length > 0 &&
+    read(FROZEN_MANIFEST).length > 0,
+  "frozen artifact, canonical compiler input and manifest all exist",
+);
+
 
 // --------------------------------------------- B/C. pragma, imports, base
 check("L2D-B1", /^pragma solidity 0\.8\.36;$/m.test(draft), "exact pragma solidity 0.8.36");
@@ -171,16 +193,31 @@ const srcHits = srcFiles.filter((f) => /pepecartel-token-v1/.test(readFileSync(f
 const migHits = migrationFiles.filter((f) => /pepecartel-token-v1/.test(readFileSync(f, "utf8")));
 check(
   "L2D-I1",
-  srcHits.length === 0,
-  `pepecartel-token-v1 appears in no src/** file (${srcFiles.length} scanned)`,
+  srcHits.length === 1 && srcHits[0] === FROZEN_TS,
+  `pepecartel-token-v1 appears in exactly one src/** file, the dedicated frozen artifact (${srcFiles.length} scanned, hits: ${srcHits.join(", ") || "none"})`,
 );
 check(
   "L2D-I2",
   migHits.length === 0,
   `pepecartel-token-v1 appears in no supabase/migrations/** file (${migrationFiles.length} scanned)`,
 );
-const nameHits = srcFiles.filter((f) => /PepeCartelToken/.test(readFileSync(f, "utf8")));
-check("L2D-I3", nameHits.length === 0, "no src/** file references PepeCartelToken");
+const nameHits = srcFiles.filter(
+  (f) => f !== FROZEN_TS && /PepeCartelToken/.test(readFileSync(f, "utf8")),
+);
+check(
+  "L2D-I3",
+  nameHits.length === 0,
+  "no src/** file outside the frozen artifact references PepeCartelToken",
+);
+
+check(
+  "L2D-I3b",
+  srcFiles
+    .filter((f) => f !== FROZEN_TS)
+    .every((f) => !/pepecartel[-_]token|PEPECARTEL_TOKEN_/i.test(readFileSync(f, "utf8"))),
+  "no production runtime file imports or references the frozen PCART artifact",
+);
+
 check(
   "L2D-I4",
   /export const APPROVED_OFFICIAL_ARTIFACT_ID = "cartel-fixed-erc20-v1" as const;/.test(
@@ -233,18 +270,20 @@ check(
   "generic testnet contract source untouched",
 );
 
-// ----------------------------------------------------- J. Phase 2 gate wording
+// --------------------------------------------- J. Phase 3 gate / spec wording
 check(
   "L2D-J1",
-  /Phase 2 is blocked until PCART-L1 is explicitly closed/.test(specSrc),
-  "specification states Phase 2 is blocked until L1 closure",
+  /Phase 3 — exact-artifact testnet rehearsal — is mandatory next/.test(specSrc) &&
+    !/Phase 2 is blocked until PCART-L1 is explicitly closed/.test(specSrc),
+  "specification states Phase 3 exact-artifact testnet rehearsal is mandatory next",
 );
 check(
   "L2D-J2",
-  /NOT created and NOT allowlisted/.test(specSrc) &&
-    /pepecartel-token-v1/.test(specSrc),
-  "specification names the intended artifact id while declaring it uncreated and unallowlisted",
+  /\*\*`pepecartel-token-v1`\*\*/.test(specSrc) &&
+    /NOT production-allowlisted, NOT deployed/.test(specSrc),
+  "specification names the frozen artifact id while declaring it not allowlisted and not deployed",
 );
+
 check(
   "L2D-J3",
   /solc \| `0\.8\.36\+commit\.8a079791`/.test(specSrc) &&

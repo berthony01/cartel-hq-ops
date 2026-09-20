@@ -1,15 +1,16 @@
-# PCART-L2 Token Specification — DRAFT
+# PCART-L2 Token Specification — FROZEN ARTIFACT
 
-Status: **DRAFT / PCART-L1 OPEN / NON-DEPLOYABLE**
+Status: **COMPILED + FROZEN REPOSITORY ARTIFACT / NOT PRODUCTION-ALLOWLISTED / NOT DEPLOYED**
 Date: 2026-09-20
-Scope of this document: source-level specification only. Phase 1 is a non-operational repository foundation.
+Scope of this document: source-level specification plus the frozen Phase 2 compile outputs. No runtime integration, no chain action.
 
 ## 1. Status and gate
 
-- PCART-L1 remains **OPEN**. See `docs/PCART_MASTER_LAUNCH_PLAN.md` section 13.
-- A DRAFT, non-compiled, non-frozen, non-allowlisted `contracts/PepeCartelToken.sol` exists for source-level review and static regression testing only.
-- **Phase 2 is blocked until PCART-L1 is explicitly closed.** No compilation, no frozen artifact, no hashes, no allowlisting, no database change, no production request, no testnet or mainnet transaction may occur before that closure and a separate authorization.
-- The intended future artifact id is `pepecartel-token-v1`. It is **NOT created and NOT allowlisted** in this phase. The only production-allowlisted artifact remains `cartel-fixed-erc20-v1`.
+- PCART-L1 is **POLICY CLOSED** (execution prerequisites still pending). See `docs/PCART_MASTER_LAUNCH_PLAN.md` sections 13 and 14.
+- `contracts/PepeCartelToken.sol` is now the **frozen PCART-L2 source**. It has been reproducibly compiled out of band and frozen as artifact id **`pepecartel-token-v1`**.
+- The frozen artifact is **NOT production-allowlisted, NOT deployed, and has NOT passed any testnet rehearsal.** The only production-allowlisted artifact remains `cartel-fixed-erc20-v1`; `src/lib/launch-evidence-checks.ts` is unchanged.
+- **Phase 3 — exact-artifact testnet rehearsal — is mandatory next** and requires separate explicit authorization. Production allowlist integration is a separate phase after that.
+- Phase 2 is complete only after the frozen-artifact regression, the draft/status regression, the full historical suite, `bunx tsgo --noEmit` and `bun run build` all pass.
 
 ## 2. Token identity and supply
 
@@ -35,13 +36,12 @@ Ownable, AccessControl, roles or admin of any kind; any post-construction mint A
 
 Behavior beyond the above is exactly the OpenZeppelin ERC20 reference implementation.
 
-## 5. Intended Phase 2 compiler settings
-
-Inherited from the generic frozen build unless explicitly re-approved at L1 closure:
+## 5. Frozen reproducible compiler settings
 
 | Setting | Value |
 |---|---|
 | solc | `0.8.36+commit.8a079791` |
+| solc full version | `0.8.36+commit.8a079791.Emscripten.clang` |
 | OpenZeppelin Contracts | `5.6.1` |
 | optimizer | enabled, runs 200 |
 | viaIR | false |
@@ -49,30 +49,37 @@ Inherited from the generic frozen build unless explicitly re-approved at L1 clos
 | metadata.bytecodeHash | `none` |
 | metadata.appendCBOR | false |
 
-## 6. Phase 2 required outputs (blocked until L1 closure)
+The compile was performed out of band in a temporary directory. Nothing in this repository compiles Solidity at build time or at runtime, and no package manifest or lockfile was touched.
 
-Only after PCART-L1 is explicitly closed and PCART-L2 is separately authorized may Phase 2 produce, from a reproducible out-of-band compile:
+## 6. Phase 2 outputs — frozen
 
-1. the ABI;
-2. the creation bytecode;
-3. the deployed runtime bytecode;
-4. the keccak256 hash of the creation bytecode;
-5. the keccak256 hash of the runtime bytecode;
-6. the canonical compiler standard-JSON input used;
-7. a frozen artifact manifest under the id `pepecartel-token-v1`.
+| Output | Path |
+|---|---|
+| Canonical standard-JSON compiler input (self-contained, 6 source units) | `artifacts/pepecartel-token-v1.compiler-input.json` |
+| Frozen artifact manifest | `artifacts/pepecartel-token-v1.manifest.json` |
+| Frozen TypeScript artifact (ABI, creation + runtime bytecode, hashes) | `src/lib/pepecartel-token.artifact.ts` |
 
-Because the contract declares no `immutable` state, the runtime bytecode is independent of the constructor argument and can be pinned by hash.
+Actual hashes (keccak256):
 
-## 7. Treasury recipient — intentionally unresolved
+| Value | Hash |
+|---|---|
+| Creation bytecode | `0x2edebe9de5877c0775dc87644ca9051a54034f4eee8bd9662c7657d0fd3c2196` |
+| Deployed runtime bytecode | `0x69ef7ad36b6c4b900d390bc4977eb61a518e9d35e506a6f83712192c7e7d03e4` |
+| Canonical compiler input | `0xfd46fdfcf75e84e9ae691d16f8329fde27a2dea0d3bff2d460a2afa2df3ed72c` |
+| `contracts/PepeCartelToken.sol` source | `0x395ca82da40deca324e67ecf3563b2b31aeaa896b582222599f536e5ae3577f8` |
 
-The `treasury_` address is **deliberately undetermined** in this phase. It will be the PEPECARTEL 2-of-3 Safe, which has not yet been selected, deployed or verified. No PCART initial recipient is fixed. This does not block Phase 1 because the address is a constructor argument, not contract state.
+Because the contract declares no `immutable` state, the runtime bytecode is independent of the constructor argument and is pinned by hash. The frozen creation bytecode is the constructor-independent creation prefix; ABI-encoded constructor arguments are appended only at deployment time and are not part of the artifact.
+
+## 7. Treasury recipient — still unresolved
+
+The `treasury_` address remains **deliberately undetermined**. It will be the PEPECARTEL 2-of-3 Safe, which has not yet been selected, deployed or verified. No PCART initial recipient is fixed, and no wallet, signer or Safe address appears in the source, the compiler input, the manifest or the TypeScript artifact.
 
 ## 8. Integration status
 
-- No database, schema, RPC, policy, grant or migration change in Phase 1.
-- No `src/**` reference to `PepeCartelToken` or `pepecartel-token-v1` in Phase 1.
+- No database, schema, RPC, policy, grant or migration change in Phase 2.
+- No production runtime file references `pepecartel-token-v1`; the id appears only in the dedicated artifact file, `artifacts/**`, this documentation and the regression scripts.
 - No artifact allowlist widening; `src/lib/launch-evidence-checks.ts` still approves exactly `cartel-fixed-erc20-v1`.
 - `MAINNET_LIQUIDITY_TX_ENABLED` remains `false`; runtime mainnet execution control untouched.
-- No mainnet or testnet action of any kind in Phase 1.
+- No mainnet or testnet action of any kind; no wallet connection, signature, deployment request or liquidity action.
 
-Static enforcement of the above lives in `scripts/pcart-l2-draft-artifact-regression.ts`.
+Static enforcement lives in `scripts/pcart-l2-draft-artifact-regression.ts` (source behavior and non-activation) and `scripts/pcart-l2-frozen-artifact-regression.ts` (frozen artifact integrity).
