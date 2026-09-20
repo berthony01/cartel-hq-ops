@@ -130,7 +130,7 @@ This is a **hard PCART-L5 reverification gate**. If existing-token beneficiary r
 - **PCART-L1A ECONOMICS:** **OWNER-APPROVED AND FROZEN**.
 - **Balanced 150M / 200M / 150M split:** **FROZEN**.
 - **24h window / 50 ETH floor-FDV / 10 ETH graduation minimum / tiered 100-90-80 LP schedule / 0.25% fee:** **FROZEN PLANNING INPUTS**, not execution authorization.
-- **Still OPEN before PCART-L1 can fully close:** exact operational ETH reserve for gas, exact multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility confirmation, and fork/testnet simulation. Exact on-chain encoding is derived from these frozen policies in PCART-L5.
+- **Formerly open before PCART-L1 could close:** exact operational ETH reserve for gas, exact multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility confirmation, and fork/testnet simulation. These are now dispositioned in section 14 as **POLICY CLOSED / EXECUTION PREREQUISITES PENDING** (fork/testnet simulation split into L1-e1 policy evidence and L1-e2 mandatory Phase 3 exact-artifact rehearsal). Exact on-chain encoding is derived from these frozen policies in PCART-L5.
 - **No Solidity or value-moving action until those gates close.**
 
 ## 5. Utility model
@@ -201,7 +201,7 @@ Freeze exact tokenomics allocation, custody/treasury architecture, utility launc
 
 ### PCART-L1 — Utility + tokenomics + treasury specification freeze
 
-Status: **Strategic tokenomics, utility, custody, trading-revenue and launch-distribution direction substantially approved; PCART-L1A CCA auction economics are now OWNER-APPROVED AND FROZEN (Balanced 150M/200M/150M split, 24h window, 50 ETH floor-FDV planning guardrail, 10 ETH graduation-minimum planning gate, tiered 100-90-80 LP allocation, 0.25% static LP fee planning input). L1 is NOT fully closed until exact operational ETH reserve for gas, exact multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility, and fork/testnet simulation inputs are resolved.**
+Status: **POLICY CLOSED / EXECUTION PREREQUISITES PENDING.** Strategic tokenomics, utility, custody, trading-revenue and launch-distribution direction approved; PCART-L1A CCA auction economics OWNER-APPROVED AND FROZEN (Balanced 150M/200M/150M split, 24h window, 50 ETH floor-FDV planning guardrail, 10 ETH graduation-minimum planning gate, tiered 100-90-80 LP allocation, 0.25% static LP fee planning input). The formerly open inputs — operational ETH reserve, multisig implementation, internal comms policy, live Robinhood/Uniswap compatibility, and fork/testnet simulation sequencing — are dispositioned in **section 14**. POLICY CLOSED does **not** mean launch-ready, execution-ready or mainnet-ready; every execution prerequisite in section 14 remains PENDING.
 
 No deployment.
 Required outputs:
@@ -211,9 +211,9 @@ Required outputs:
 - explicit non-security-style utility/comms guardrails; ✅ FROZEN: no passive revenue, no dividends, no guaranteed yield, treasury revenue for operations;
 - final decision: 0% transfer tax plus liquidity-layer fee revenue versus separate taxed-token architecture; ✅ FROZEN: 0% transfer tax, liquidity-layer creator/LP fee revenue preferred;
 - launch-distribution and price-discovery method: ✅ FROZEN: public onchain CCA/LBP launch auction (Option A), because the project does not expect to supply all required launch liquidity ETH itself. CCA/LBP is a public onchain token sale/auction economically, not a private fixed-price presale. Choosing CCA/LBP can reduce required project ETH for initial liquidity but does NOT mean zero ETH; ETH is still required for deployment/gas and may be required for additional auction/liquidity/operational configuration.
-- liquidity budget and intended launch pricing/strategy inputs, without sending value. ✅ FROZEN: 500M public-launch/liquidity bucket split as 150M CCA auction / 200M reserved token-side LP budget / 150M future liquidity/market reserve; 24h window; 50 ETH floor-FDV planning guardrail; 10 ETH graduation-minimum planning gate; tiered 100-90-80 LP allocation; 0.25% static LP fee planning input. ⏳ STILL OPEN: exact operational ETH reserve for gas, multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility, and fork/testnet simulation. These remain for PCART-L5/L6.
+- liquidity budget and intended launch pricing/strategy inputs, without sending value. ✅ FROZEN: 500M public-launch/liquidity bucket split as 150M CCA auction / 200M reserved token-side LP budget / 150M future liquidity/market reserve; 24h window; 50 ETH floor-FDV planning guardrail; 10 ETH graduation-minimum planning gate; tiered 100-90-80 LP allocation; 0.25% static LP fee planning input. ✅ POLICY CLOSED in section 14: operational ETH reserve policy (0.10 ETH reserve / 0.05 ETH execution-wallet floor), multisig implementation choice (Safe v1.4.1 SafeL2 + SafeProxyFactory, 2-of-3), internal comms policy, dated Robinhood/Uniswap compatibility manifest, and L1-e1 infrastructure/protocol compatibility evidence. ⏳ STILL PENDING AS EXECUTION PREREQUISITES: actual Safe deployment, signer addresses, Safe/treasury recipient address, stronger Safe verification, funded execution wallet, external legal review if required, Phase 2 compilation, L1-e2 exact-artifact testnet rehearsal, and pre-L5 on-chain revalidation.
 
-STOP for approval before proceeding to L2. L1 is not closed while the open items above remain unresolved.
+STOP for approval before proceeding to L2. L1 POLICY is closed; PCART-L2 still requires separate explicit authorization, and no execution prerequisite in section 14 may be assumed satisfied.
 
 ### PCART-L2 — Dedicated production contract artifact
 
@@ -299,9 +299,9 @@ At the start of every future phase:
 
 ## 11. Immediate next phase
 
-PCART-L1A economics are now OWNER-APPROVED AND FROZEN. L1 remains open only for genuinely unresolved implementation gates: exact operational ETH reserve for gas, exact multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility confirmation, fork/testnet simulation, and exact on-chain encoding derived from frozen policy.
+PCART-L1A economics are OWNER-APPROVED AND FROZEN, and PCART-L1 is now **POLICY CLOSED / EXECUTION PREREQUISITES PENDING** per section 14. What remains is execution work, not policy: the actual Safe, its signers and address, stronger Safe verification, a funded execution wallet, Phase 2 compilation, the L1-e2 exact-artifact testnet rehearsal, pre-L5 on-chain revalidation, and exact on-chain encoding derived from frozen policy.
 
-**Immediate next phase:** read-only Treasury/Multisig Implementation + Live Robinhood/Uniswap CCA Compatibility Audit. Do not authorize Solidity or value movement merely by this documentation freeze. Do not finalize Solidity or initiate a production deployment until L1 fully closes. (Narrow owner-authorized exception for a DRAFT, non-compiled, non-frozen, non-allowlisted source file only: see section 13.)
+**Immediate next phase:** PCART-L2 Phase 2 — reproducible compilation and freezing of `pepecartel-token-v1` — which requires **separate explicit authorization** and has not been started. Do not authorize Solidity compilation, Safe creation or value movement merely by this documentation closure. (Narrow owner-authorized exception for a DRAFT, non-compiled, non-frozen, non-allowlisted source file only: see section 13.)
 
 ## 12. PCART-L1B — Safe Treasury Verification Foundation (BUILT, QA-PASSED)
 
@@ -325,5 +325,34 @@ Scope and limits of what was built:
 **This exception does NOT authorize:** compilation or any build tooling; creation of a frozen artifact or `pepecartel-token-v1` artifact id; pinning of creation/runtime bytecode hashes; production artifact allowlisting or verifier support; any database, schema, RPC, policy or migration change; any PCART production deployment request; testnet deployment; mainnet deployment; mainnet ARM/CLAIM/send-window action; Safe deployment; liquidity, CCA or LBP work; or any value movement.
 
 **PCART-L2 may not begin until PCART-L1 is explicitly closed** and L2 is separately authorized. The only production-allowlisted artifact remains `cartel-fixed-erc20-v1`, unchanged in identity, bytecode and hashes.
+
+*Status note (section 14): PCART-L1 is now POLICY CLOSED. Section 13's DRAFT exception and its list of non-authorizations stand unchanged, and PCART-L2 still requires separate explicit authorization.*
+
+## 14. PCART-L1 Closure — POLICY CLOSED / EXECUTION PREREQUISITES PENDING
+
+Date: 2026-09-20. Authoritative record: `docs/PCART_L1_CLOSURE_PACK.md`, with `docs/PCART_L1_CHAIN_COMPATIBILITY_MANIFEST.md` (v1) and `docs/PCART_L1_COMMS_RULES.md` (v1). Static guardrails: `scripts/pcart-l1-closure-regression.ts`.
+
+Every frozen tokenomics, allocation, vesting, utility and CCA-economics value in sections 2, 3, 4, 4.1 and 5 stands **unchanged**. This section changes status only.
+
+**POLICY CLOSED does not mean launch-ready, execution-ready or mainnet-ready.** It authorizes no Safe creation, no compilation, no artifact, no SQL, no production request, no testnet or mainnet transaction, no wallet funding, no ARM/CLAIM/send window, no liquidity execution, no deploy/publish and no value movement.
+
+### 14.1 Closed policy items
+
+1. **Operational ETH policy.** 0.10 ETH frozen as the operational gas reserve budget, separate from liquidity/CCA funding; at least 0.05 ETH must be immediately available in the designated execution wallet before any mainnet PCART deployment/launch execution action. These are budget guardrails, not gas predictions and not authorization to spend; live gas estimation plus a substantial safety margin remains mandatory at execution time. Documentation only — no runtime balance gate was added.
+2. **Treasury implementation choice.** Safe v1.4.1 SafeL2 + SafeProxyFactory on Robinhood Chain 4663, exactly 3 unique non-zero owners, threshold 2. **The actual PEPECARTEL Safe does not exist**; signers, Safe address and PCART treasury recipient remain unresolved and are not invented anywhere.
+3. **Internal communications policy.** Recorded in `docs/PCART_L1_COMMS_RULES.md`. This is an internal policy only; **no legal counsel review and no legal/compliance approval is claimed**, and external legal review, if the owner requires it, remains a separate owner-side prerequisite.
+4. **Robinhood/Uniswap compatibility manifest.** Dated 2026-09-20, version v1, every external address marked RESEARCHED / NOT ON-CHAIN VERIFIED, with mandatory independent on-chain revalidation immediately before L5 and a fail-closed mismatch rule.
+5. **L1-e1 infrastructure/protocol compatibility evidence.** The already-finalized separate generic mainnet canary (protected chain / RPC / gas / evidence / finality rails), plus the dated manifest, plus static/read-only checks.
+
+### 14.2 L1-e1 / L1-e2 sequencing
+
+The former single "fork/testnet simulation" prerequisite was circular — it required exact-artifact simulation before L1 closure, while the exact PCART artifact is deliberately uncompiled until Phase 2, which only begins after closure. It is **split, not waived**:
+
+- **L1-e1** — infrastructure/protocol compatibility evidence. **Closes L1 policy.**
+- **L1-e2** — exact-artifact rehearsal. **Remains mandatory Phase 3**, after Phase 2 compiles and freezes `pepecartel-token-v1`. It **MUST pass on Robinhood testnet 46630 before any PCART mainnet deployment.** Relocated, not waived.
+
+### 14.3 Pending execution prerequisites
+
+Actual PCART Safe deployment; exact 3 signer addresses; actual Safe address and PCART treasury recipient; stronger Safe verification (singleton/masterCopy equals canonical SafeL2, proxy runtime code hash match, strict readable `VERSION()` = 1.4.1, empty modules, zero/unset guard, readable `nonce()`, owners exactly the selected 3 signers, threshold exactly 2 — fail closed on ambiguity) implemented and passing against the real Safe; funded execution wallet satisfying the 0.05 ETH floor at execution time; external legal review if the owner requires it; Phase 2 compilation and frozen artifact, separately authorized; Phase 3 exact-artifact testnet rehearsal; independent on-chain revalidation of the compatibility manifest immediately before L5; and every existing deployment/liquidity safety gate, unchanged.
 
 
