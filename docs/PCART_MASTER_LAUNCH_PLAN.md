@@ -130,7 +130,7 @@ This is a **hard PCART-L5 reverification gate**. If existing-token beneficiary r
 - **PCART-L1A ECONOMICS:** **OWNER-APPROVED AND FROZEN**.
 - **Balanced 150M / 200M / 150M split:** **FROZEN**.
 - **24h window / 50 ETH floor-FDV / 10 ETH graduation minimum / tiered 100-90-80 LP schedule / 0.25% fee:** **FROZEN PLANNING INPUTS**, not execution authorization.
-- **Still OPEN before PCART-L1 can fully close:** exact operational ETH reserve for gas, exact multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility confirmation, and fork/testnet simulation. Exact on-chain encoding is derived from these frozen policies in PCART-L5.
+- **Formerly open before PCART-L1 could close:** exact operational ETH reserve for gas, exact multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility confirmation, and fork/testnet simulation. These are now dispositioned in section 14 as **POLICY CLOSED / EXECUTION PREREQUISITES PENDING** (fork/testnet simulation split into L1-e1 policy evidence and L1-e2 mandatory Phase 3 exact-artifact rehearsal). Exact on-chain encoding is derived from these frozen policies in PCART-L5.
 - **No Solidity or value-moving action until those gates close.**
 
 ## 5. Utility model
