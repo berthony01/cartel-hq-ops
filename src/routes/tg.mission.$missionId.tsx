@@ -94,6 +94,15 @@ type DurationPayload = {
 
 type BoundedResult = { ok?: boolean; outcome?: string; refresh?: string; reason?: string };
 
+/**
+ * Exactly one retry can be pending at a time, and it carries its own kind, so
+ * the visible Retry always replays the mutation the notice is about.
+ */
+type PendingRetry =
+  | { kind: "targets"; payload: TargetsPayload }
+  | { kind: "duration"; payload: DurationPayload };
+
+
 const BLANK_SUPPORT: Record<MiniAppSupportingMetric, string> = {
   views: "",
   likes: "",
