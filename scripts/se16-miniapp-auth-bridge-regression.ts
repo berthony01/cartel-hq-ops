@@ -621,10 +621,17 @@ const opts = { now: NOW_MS };
     /MINIAPP_TRANSPORT_FUNCTION\s*=\s*"social-mission-telegram"/.test(bridgeCode) &&
       /\/functions\/v1\/\$\{MINIAPP_TRANSPORT_FUNCTION\}/.test(refreshFn),
   );
+  // SE-16.3R-3 — re-pinned, not loosened: the Mini App's LIVE edit lane now
+  // replaces the card instead of editing it in place. END/CANCEL remain
+  // bot-owned and are asserted absent from the Mini App elsewhere.
   check(
-    "14.3 transport action is edit_mission",
-    /MINIAPP_TRANSPORT_ACTION\s*=\s*"edit_mission"/.test(bridgeCode) &&
+    "14.3 transport action is resurface_mission",
+    /MINIAPP_TRANSPORT_ACTION\s*=\s*"resurface_mission"/.test(bridgeCode) &&
       /action:\s*MINIAPP_TRANSPORT_ACTION/.test(refreshFn),
+  );
+  check(
+    "14.3b the Mini App never sends edit_mission or send_mission",
+    !/"edit_mission"/.test(bridgeCode) && !/"send_mission"/.test(bridgeCode),
   );
   check(
     "14.4 internal-source header reuses an already accepted transport source",
