@@ -15,7 +15,7 @@ Launch the official PEPECARTEL token, ticker PCART, on Robinhood Chain mainnet (
 - **Frozen total supply: exactly 1,000,000,000 PCART, 18 decimals, permanently fixed supply.**
 - Dedicated production artifact for PEPECARTEL, separate from generic launchpad templates. Working artifact name: `pepecartel-token-v1`; working source name: `PepeCartelToken.sol`.
 - **Frozen V1 token behavior: standard ERC-20; 0% fee-on-transfer / transfer tax; name/symbol/supply fixed; mint once at deployment to the deliberately chosen initial treasury; no post-deployment minting; no owner/admin; no blacklist/freeze; no pause; no max-wallet/max-tx; no proxy/upgradeability; no hidden transfer controls.**
-- DO NOT finalize or deploy the Solidity until all remaining L1 inputs close and L1 is explicitly approved.
+- DO NOT finalize or deploy the Solidity until all remaining L1 inputs close and L1 is explicitly approved. (Narrow owner-authorized exception for a DRAFT, non-compiled, non-frozen, non-allowlisted source file only: see section 13.)
 
 ## 3. Tokenomics, allocation and custody freeze
 
@@ -301,7 +301,7 @@ At the start of every future phase:
 
 PCART-L1A economics are now OWNER-APPROVED AND FROZEN. L1 remains open only for genuinely unresolved implementation gates: exact operational ETH reserve for gas, exact multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility confirmation, fork/testnet simulation, and exact on-chain encoding derived from frozen policy.
 
-**Immediate next phase:** read-only Treasury/Multisig Implementation + Live Robinhood/Uniswap CCA Compatibility Audit. Do not authorize Solidity or value movement merely by this documentation freeze. Do not write Solidity or initiate a production deployment until L1 fully closes.
+**Immediate next phase:** read-only Treasury/Multisig Implementation + Live Robinhood/Uniswap CCA Compatibility Audit. Do not authorize Solidity or value movement merely by this documentation freeze. Do not finalize Solidity or initiate a production deployment until L1 fully closes. (Narrow owner-authorized exception for a DRAFT, non-compiled, non-frozen, non-allowlisted source file only: see section 13.)
 
 ## 12. PCART-L1B — Safe Treasury Verification Foundation (BUILT, QA-PASSED)
 
