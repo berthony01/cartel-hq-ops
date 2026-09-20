@@ -268,7 +268,7 @@ check("11.15 no active mission is reported plainly", webhookSrc.includes("There 
 check("11.16 group help documents /mission close", webhookSrc.includes("/mission close — close the active Social Mission (admins only)"));
 check("11.17 the original /mission help line is preserved", webhookSrc.includes("/mission &lt;X link&gt; — start a Social Mission (admins only)"));
 check("11.18 the webhook still makes zero X API calls", !/api\.twitter\.com|api\.x\.com/i.test(webhookSrc));
-check("11.19 the stale backend-source webhook copy was NOT modified", !staleWebhookSrc.includes("close_social_mission_from_telegram") && !staleWebhookSrc.includes("activate_social_mission_schedule"));
+check("11.19 the backend-source webhook mirror is byte-for-byte identical to the deployable webhook", webhookSrc.length > 0 && mirrorWebhookSrc.length > 0 && mirrorWebhookSrc === webhookSrc);
 
 // ---------------------------------------------------------------------------
 // 12. Phase boundary
