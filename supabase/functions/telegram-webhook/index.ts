@@ -2434,7 +2434,7 @@ Deno.serve(async (req: Request) => {
    * the existing transport, reusing its revision + client-request idempotency.
    * A completion never rolls the card to the bottom of the chat.
    */
-  const mcFinalizeCardEdit = async (args: {
+  const mcRefreshCard = async (args: {
     binding: MissionControlBinding;
     actorUserId: string | null;
     seed: string;
@@ -3696,7 +3696,7 @@ Deno.serve(async (req: Request) => {
           // The transport performs the existing best-effort FINAL official X
           // snapshot for a COMPLETED mission, guarded by its own current-minute
           // duplicate-read guard: at most one read, never retried here.
-          const transport = await mcFinalizeCardEdit({
+          const transport = await mcRefreshCard({
             binding,
             actorUserId: linked?.user_id ? String(linked.user_id) : null,
             seed: `${updateId}:end_now`,
@@ -3768,7 +3768,7 @@ Deno.serve(async (req: Request) => {
             return json({ ok: true });
           }
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Cancelling the mission…");
-          const transport = await mcFinalizeCardEdit({
+          const transport = await mcRefreshCard({
             binding,
             actorUserId: linked?.user_id ? String(linked.user_id) : null,
             seed: `${updateId}:cancel`,
