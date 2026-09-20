@@ -601,7 +601,7 @@ check(
 check(
   "19.11 a pinned supporting metric is disclosed, not silently overridden",
   /MINI_APP_PINNED_SUPPORT/.test(code.client) &&
-    /pinned to the primary target by the server/.test(code.mission),
+    /pinned to the\s+primary target by the server/.test(code.mission),
 );
 check(
   "19.12 AUTO missions are told that saving switches to MANUAL control",
