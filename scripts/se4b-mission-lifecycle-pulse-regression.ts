@@ -24,7 +24,7 @@ const PULSE_COPY_PATH = "backend-source/edge-functions/_shared/mission-pulse-cop
 
 const TRANSPORT_PATH = "backend-source/edge-functions/social-mission-telegram/index.ts";
 const WEBHOOK_PATH = "supabase/functions/telegram-webhook/index.ts";
-const STALE_WEBHOOK_PATH = "backend-source/edge-functions/telegram-webhook/index.ts";
+const MIRROR_WEBHOOK_PATH = "backend-source/edge-functions/telegram-webhook/index.ts";
 const CLEANUP_WORKER_PATH = "backend-source/edge-functions/telegram-message-cleanup/index.ts";
 const DOC_PATH = "docs/SE4B_MISSION_LIFECYCLE_PULSE.md";
 
@@ -32,7 +32,7 @@ const sql = readFileSync(SQL_PATH, "utf8");
 const runnerSrc = readFileSync(RUNNER_PATH, "utf8");
 const transportSrc = readFileSync(TRANSPORT_PATH, "utf8");
 const webhookSrc = readFileSync(WEBHOOK_PATH, "utf8");
-const staleWebhookSrc = readFileSync(STALE_WEBHOOK_PATH, "utf8");
+const mirrorWebhookSrc = readFileSync(MIRROR_WEBHOOK_PATH, "utf8");
 const cleanupWorkerSrc = readFileSync(CLEANUP_WORKER_PATH, "utf8");
 const docSrc = readFileSync(DOC_PATH, "utf8");
 
@@ -268,7 +268,7 @@ check("11.15 no active mission is reported plainly", webhookSrc.includes("There 
 check("11.16 group help documents /mission close", webhookSrc.includes("/mission close — close the active Social Mission (admins only)"));
 check("11.17 the original /mission help line is preserved", webhookSrc.includes("/mission &lt;X link&gt; — start a Social Mission (admins only)"));
 check("11.18 the webhook still makes zero X API calls", !/api\.twitter\.com|api\.x\.com/i.test(webhookSrc));
-check("11.19 the stale backend-source webhook copy was NOT modified", !staleWebhookSrc.includes("close_social_mission_from_telegram") && !staleWebhookSrc.includes("activate_social_mission_schedule"));
+check("11.19 the backend-source webhook mirror is byte-for-byte identical to the deployable webhook", webhookSrc.length > 0 && mirrorWebhookSrc.length > 0 && mirrorWebhookSrc === webhookSrc);
 
 // ---------------------------------------------------------------------------
 // 12. Phase boundary

@@ -707,7 +707,7 @@ check("12.110 the replacement lane adds no new network host", (lane.match(/https
 // ---------------------------------------------------------------------------
 
 const webhookSrc = readFileSync("supabase/functions/telegram-webhook/index.ts", "utf8");
-const staleWebhookSrc = readFileSync("backend-source/edge-functions/telegram-webhook/index.ts", "utf8");
+const mirrorWebhookSrc = readFileSync("backend-source/edge-functions/telegram-webhook/index.ts", "utf8");
 const bridgeSrc = readFileSync("src/lib/telegram-miniapp-bridge.functions.ts", "utf8");
 const miniClientSrc = readFileSync("src/lib/telegram-miniapp-client.ts", "utf8");
 const miniRouteSrc = readFileSync("src/routes/tg.mission.$missionId.tsx", "utf8");
@@ -787,7 +787,7 @@ check("13.40 only the bot's own warning is ever deleted", /message_id: Number\(w
 // 13g — untouched boundaries.
 check("13.41 activation wiring makes no pin or unpin call", !/pinChatMessage|unpinChatMessage/.test(activityHook) && !/pinChatMessage|unpinChatMessage/.test(resurfaceHelper));
 check("13.42 activation wiring reads no X provider", !/api\.twitter\.com|api\.x\.com|lookupXPostMetrics/.test(activityHook + resurfaceHelper));
-check("13.43 the stale backend-source webhook copy is untouched", !staleWebhookSrc.includes("noteMissionChatActivity") && !staleWebhookSrc.includes("mcResurfaceLiveCard"));
+check("13.43 the backend-source webhook mirror is byte-for-byte identical to the deployable webhook", mirrorWebhookSrc.length > 0 && webhookSrc.length > 0 && mirrorWebhookSrc === webhookSrc);
 check("13.44 the v17 transport source is unchanged by this unit", transportSrc.includes("async function handleResurface(") && !transportSrc.includes("noteMissionChatActivity"));
 
 // 13h — Mini App activation.

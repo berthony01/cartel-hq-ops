@@ -40,7 +40,7 @@ const RUNNER_PATH = "backend-source/edge-functions/social-mission-runner/index.t
 const TRANSPORT_PATH = "backend-source/edge-functions/social-mission-telegram/index.ts";
 const CARD_PATH = "backend-source/edge-functions/social-mission-telegram/card.ts";
 const WEBHOOK_PATH = "supabase/functions/telegram-webhook/index.ts";
-const STALE_WEBHOOK_PATH = "backend-source/edge-functions/telegram-webhook/index.ts";
+const MIRROR_WEBHOOK_PATH = "backend-source/edge-functions/telegram-webhook/index.ts";
 const MISSIONS_LIB_PATH = "src/lib/social-missions.ts";
 const SETTINGS_LIB_PATH = "src/lib/social-mission-settings.ts";
 const SETTINGS_UI_PATH = "src/components/cartel/MissionSettingsCard.tsx";
@@ -55,7 +55,7 @@ const runnerCode = stripTs(read(RUNNER_PATH));
 const transportCode = stripTs(read(TRANSPORT_PATH));
 const cardCode = stripTs(read(CARD_PATH));
 const webhookCode = stripTs(read(WEBHOOK_PATH));
-const staleWebhookSrc = read(STALE_WEBHOOK_PATH);
+const mirrorWebhookSrc = read(MIRROR_WEBHOOK_PATH);
 const missionsLibCode = stripTs(read(MISSIONS_LIB_PATH));
 const settingsLibCode = stripTs(read(SETTINGS_LIB_PATH));
 const settingsUiCode = stripTs(read(SETTINGS_UI_PATH));
@@ -247,7 +247,7 @@ check("12.5 no OAuth, billing or contributor mechanic appears in the UI", !/oaut
 // ---------------------------------------------------------------------------
 // 13. Repository parity and blast radius
 // ---------------------------------------------------------------------------
-check("13.1 the stale backend webhook copy is still untouched by SE-5", !/social_mission_link_candidates|record_social_mission_target_pin/.test(staleWebhookSrc));
+check("13.1 the backend-source webhook mirror is byte-for-byte identical to the deployable webhook", mirrorWebhookSrc.length > 0 && read(WEBHOOK_PATH).length > 0 && mirrorWebhookSrc === read(WEBHOOK_PATH));
 check("13.2 no second scheduler is introduced", !/cron\.schedule/.test(sqlCode) || (sqlCode.match(/cron\.schedule/g) ?? []).length === 0);
 check("13.3 the existing cleanup worker contract is reused", /social_mission_pulse/.test(runnerCode));
 check("13.4 the migration is prepared only and is transactional", /^BEGIN;/m.test(sqlCode) && /COMMIT;/.test(sqlCode));
