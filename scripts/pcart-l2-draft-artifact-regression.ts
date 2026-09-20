@@ -193,8 +193,8 @@ const srcHits = srcFiles.filter((f) => /pepecartel-token-v1/.test(readFileSync(f
 const migHits = migrationFiles.filter((f) => /pepecartel-token-v1/.test(readFileSync(f, "utf8")));
 check(
   "L2D-I1",
-  srcHits.length === 0,
-  `pepecartel-token-v1 appears in no src/** file (${srcFiles.length} scanned)`,
+  srcHits.length === 1 && srcHits[0] === FROZEN_TS.replace("/", "/"),
+  `pepecartel-token-v1 appears in exactly one src/** file, the dedicated frozen artifact (${srcFiles.length} scanned, hits: ${srcHits.join(", ") || "none"})`,
 );
 check(
   "L2D-I2",
@@ -202,7 +202,19 @@ check(
   `pepecartel-token-v1 appears in no supabase/migrations/** file (${migrationFiles.length} scanned)`,
 );
 const nameHits = srcFiles.filter((f) => /PepeCartelToken/.test(readFileSync(f, "utf8")));
-check("L2D-I3", nameHits.length === 0, "no src/** file references PepeCartelToken");
+check(
+  "L2D-I3",
+  nameHits.length === 0,
+  "no src/** file references the PepeCartelToken contract symbol",
+);
+check(
+  "L2D-I3b",
+  srcFiles
+    .filter((f) => f !== FROZEN_TS)
+    .every((f) => !/pepecartel[-_]token|PEPECARTEL_TOKEN_/i.test(readFileSync(f, "utf8"))),
+  "no production runtime file imports or references the frozen PCART artifact",
+);
+
 check(
   "L2D-I4",
   /export const APPROVED_OFFICIAL_ARTIFACT_ID = "cartel-fixed-erc20-v1" as const;/.test(
