@@ -100,7 +100,8 @@ The old single "fork/testnet simulation" prerequisite was circular: it demanded 
 | Actual PCART Safe deployment | PENDING |
 | Exact 3 signer addresses | PENDING |
 | Actual Safe address and PCART treasury recipient | PENDING |
-| Stronger Safe verification implementation + pass against the actual Safe | PENDING |
+| Stronger Safe verification implementation | BUILT / HARDENED (see 2.2) |
+| Live stronger-verification pass against the actual Safe + exact owner-address match | PENDING |
 | Funded execution wallet satisfying the 0.05 ETH floor at execution time | PENDING |
 | External legal review, if the owner requires it | PENDING |
 | Phase 2 compilation / frozen artifact (separately authorized) | PENDING |
