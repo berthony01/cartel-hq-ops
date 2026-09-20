@@ -68,24 +68,36 @@ check("1.3 telegram-group still defines its own transport", telegramGroupSrc.inc
 check("1.4 new function is a separate module, not an extension", indexSrc.includes("Deno.serve"));
 
 // ---------------------------------------------------------------------------
-// 2. Exactly two actions
+// 2. Exactly three approved actions
+//
+// SE-16.3R-2 widened the dispatch from two actions to exactly three. The
+// invariant is unchanged in kind — a closed allowlist, with every other action
+// rejected — only the approved set grew by the one audited entry.
 // ---------------------------------------------------------------------------
+
+const APPROVED_ACTIONS = ["send_mission", "edit_mission", "resurface_mission"] as const;
 
 check("2.1 send_mission action exists", indexSrc.includes('"send_mission"'));
 check("2.2 edit_mission action exists", indexSrc.includes('"edit_mission"'));
 check(
   "2.3 unsupported actions rejected",
-  indexSrc.includes('action !== "send_mission" && action !== "edit_mission"') &&
-    indexSrc.includes("Unsupported action."),
+  indexSrc.includes(
+    'action !== "send_mission" && action !== "edit_mission" && action !== "resurface_mission"',
+  ) && indexSrc.includes("Unsupported action."),
 );
 const actionLiterals = [...indexSrc.matchAll(/action\s*===?\s*"([a-z_]+)"/g)].map((m) => m[1]);
 check(
-  "2.4 no third action literal",
-  actionLiterals.every((a) => a === "send_mission" || a === "edit_mission"),
+  "2.4 no action literal outside the approved three",
+  actionLiterals.every((a) => (APPROVED_ACTIONS as readonly string[]).includes(a ?? "")),
 );
 check(
   "2.5 no resend/broadcast/delete action dispatch",
   !/action\s*===?\s*"(resend|delete_mission|broadcast|status)"/.test(indexCode),
+);
+check("2.6 resurface_mission action exists", indexSrc.includes('"resurface_mission"'));
+check(
+  "2.7 exactly three approved actions are dispatched",
+  new Set(actionLiterals).size === APPROVED_ACTIONS.length,
 );
 
 // ---------------------------------------------------------------------------
