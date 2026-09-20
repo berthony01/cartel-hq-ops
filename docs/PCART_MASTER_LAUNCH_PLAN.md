@@ -201,7 +201,7 @@ Freeze exact tokenomics allocation, custody/treasury architecture, utility launc
 
 ### PCART-L1 — Utility + tokenomics + treasury specification freeze
 
-Status: **Strategic tokenomics, utility, custody, trading-revenue and launch-distribution direction substantially approved; PCART-L1A CCA auction economics are now OWNER-APPROVED AND FROZEN (Balanced 150M/200M/150M split, 24h window, 50 ETH floor-FDV planning guardrail, 10 ETH graduation-minimum planning gate, tiered 100-90-80 LP allocation, 0.25% static LP fee planning input). L1 is NOT fully closed until exact operational ETH reserve for gas, exact multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility, and fork/testnet simulation inputs are resolved.**
+Status: **POLICY CLOSED / EXECUTION PREREQUISITES PENDING.** Strategic tokenomics, utility, custody, trading-revenue and launch-distribution direction approved; PCART-L1A CCA auction economics OWNER-APPROVED AND FROZEN (Balanced 150M/200M/150M split, 24h window, 50 ETH floor-FDV planning guardrail, 10 ETH graduation-minimum planning gate, tiered 100-90-80 LP allocation, 0.25% static LP fee planning input). The formerly open inputs — operational ETH reserve, multisig implementation, internal comms policy, live Robinhood/Uniswap compatibility, and fork/testnet simulation sequencing — are dispositioned in **section 14**. POLICY CLOSED does **not** mean launch-ready, execution-ready or mainnet-ready; every execution prerequisite in section 14 remains PENDING.
 
 No deployment.
 Required outputs:
