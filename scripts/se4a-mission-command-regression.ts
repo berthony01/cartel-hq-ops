@@ -257,7 +257,7 @@ check("8.10 welcome/member-join handling preserved", webhookCode.includes("last_
 check("8.11 group linking preserved", webhookCode.includes("bindGroup("));
 check("8.12 unknown slash commands remain a no-op", webhookCode.includes('if (text.startsWith("/")) return json({ ok: true });'));
 check("8.13 webhook secret verification preserved", webhookCode.includes("X-Telegram-Bot-Api-Secret-Token"));
-check("8.14 the stale backend-source webhook copy was NOT modified", !staleWebhookSrc.includes("runMissionCommand") && !staleWebhookSrc.includes("create_social_mission_from_telegram_link"));
+check("8.14 the backend-source webhook mirror is byte-for-byte identical to the deployable webhook", webhookSrc.length > 0 && mirrorWebhookSrc.length > 0 && mirrorWebhookSrc === webhookSrc);
 
 // ---------------------------------------------------------------------------
 
