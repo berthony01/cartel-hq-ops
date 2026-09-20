@@ -329,7 +329,10 @@ function MiniAppMission() {
       return;
     }
     setFormError(null);
+    // A new target submit invalidates any earlier retry payload of either kind.
+    setPendingRetry(null);
     targetsMutation.mutate({
+
       initData,
       missionId,
       requestId,
