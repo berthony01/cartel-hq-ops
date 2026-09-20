@@ -68,24 +68,44 @@ check("1.3 telegram-group still defines its own transport", telegramGroupSrc.inc
 check("1.4 new function is a separate module, not an extension", indexSrc.includes("Deno.serve"));
 
 // ---------------------------------------------------------------------------
-// 2. Exactly two actions
+// 2. Exactly three approved actions
+//
+// SE-16.3R-2 widened the dispatch from two actions to exactly three. The
+// invariant is unchanged in kind — a closed allowlist, with every other action
+// rejected — only the approved set grew by the one audited entry.
 // ---------------------------------------------------------------------------
+
+const APPROVED_ACTIONS = ["send_mission", "edit_mission", "resurface_mission"] as const;
 
 check("2.1 send_mission action exists", indexSrc.includes('"send_mission"'));
 check("2.2 edit_mission action exists", indexSrc.includes('"edit_mission"'));
 check(
   "2.3 unsupported actions rejected",
-  indexSrc.includes('action !== "send_mission" && action !== "edit_mission"') &&
-    indexSrc.includes("Unsupported action."),
+  indexSrc.includes(
+    'action !== "send_mission" && action !== "edit_mission" && action !== "resurface_mission"',
+  ) && indexSrc.includes("Unsupported action."),
 );
 const actionLiterals = [...indexSrc.matchAll(/action\s*===?\s*"([a-z_]+)"/g)].map((m) => m[1]);
 check(
-  "2.4 no third action literal",
-  actionLiterals.every((a) => a === "send_mission" || a === "edit_mission"),
+  "2.4 no action literal outside the approved three",
+  actionLiterals.every((a) => (APPROVED_ACTIONS as readonly string[]).includes(a ?? "")),
 );
 check(
   "2.5 no resend/broadcast/delete action dispatch",
   !/action\s*===?\s*"(resend|delete_mission|broadcast|status)"/.test(indexCode),
+);
+check("2.6 resurface_mission action exists", indexSrc.includes('"resurface_mission"'));
+const actionGuard =
+  indexSrc.match(/if \(action !== "[a-z_]+"(?: && action !== "[a-z_]+")*\) \{/)?.[0] ?? "";
+const guardedActions = [...actionGuard.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+check(
+  "2.7 the dispatch allowlist names exactly the three approved actions",
+  guardedActions.length === APPROVED_ACTIONS.length &&
+    APPROVED_ACTIONS.every((a) => guardedActions.includes(a)),
+);
+check(
+  "2.8 an unsupported fourth action is rejected before any transport",
+  indexSrc.indexOf("Unsupported action.") < indexSrc.indexOf('from("workspace_members")'),
 );
 
 // ---------------------------------------------------------------------------
@@ -260,7 +280,7 @@ check("8.7 claim records the exact intent text", sendBlock.includes("send_text_i
 check("8.8 claim clears confirmed fields", sendBlock.includes("message_text_snapshot: null"));
 check("8.9 claim is state-guarded (compare-and-set)", sendBlock.includes('.eq("delivery_state", state)'));
 check("8.10 live verification after claim", sendBlock.indexOf("verifyGroup") > sendBlock.indexOf('delivery_state: "SENDING"'));
-check("8.11 exactly one sendMessage call path", (indexSrc.match(/"sendMessage"/g) ?? []).length === 1);
+check("8.11 exactly one sendMessage call path in the send lane", (sendBlock.match(/"sendMessage"/g) ?? []).length === 1);
 check("8.12 preview disabled", sendBlock.includes("disable_web_page_preview: true"));
 check("8.13 SENT requires numeric message id", sendBlock.includes('typeof messageId !== "number"'));
 check("8.14 SENT persists confirmed snapshot", sendBlock.includes("message_text_snapshot: rendered.text"));
@@ -276,7 +296,16 @@ check("8.18 no retry loop around transport", !/for\s*\(|while\s*\(/.test(sendBlo
 // 9. edit_mission state machine
 // ---------------------------------------------------------------------------
 
-const editBlock = indexSrc.slice(indexSrc.indexOf("async function handleEdit"));
+/**
+ * The edit lane ends where the SE-16.3R-2 replacement lane begins. Pinning the
+ * boundary keeps every edit assertion below scoped to `handleEdit` exactly, as
+ * it always was — a later appended lane can never silently widen the slice and
+ * satisfy or defeat an edit assertion with unrelated code.
+ */
+const RESURFACE_MARKER = "// resurface_mission — SE-16.3R-2 rolling canonical replacement";
+check("9.0 the replacement lane boundary marker exists", indexSrc.includes(RESURFACE_MARKER));
+const EDIT_LANE_END = indexSrc.indexOf(RESURFACE_MARKER);
+const editBlock = indexSrc.slice(indexSrc.indexOf("async function handleEdit"), EDIT_LANE_END);
 
 check("9.1 edit requires SENT with message id", editBlock.includes("Only a confirmed sent target can be edited."));
 check("9.2 duplicate edit request id short-circuits", editBlock.includes('t["edit_client_request_id"] === clientRequestId'));
@@ -518,9 +547,13 @@ check(
 );
 check(
   "13.16 unresolved persistence never triggers a second Telegram call",
-  (indexSrc.match(/"sendMessage"/g) ?? []).length === 1 &&
+  (sendBlock.match(/"sendMessage"/g) ?? []).length === 1 &&
     (indexSrc.match(/"editMessageText"/g) ?? []).length === 1 &&
-    (indexSrc.match(/callTelegram\(botToken, "sendMessage"/g) ?? []).length === 1,
+    (sendBlock.match(/callTelegram\(botToken, "sendMessage"/g) ?? []).length === 1 &&
+    // The send lane never gained a second transport call, and the edit lane
+    // still contains no send call of any kind.
+    !editBlock.includes("sendMessage") &&
+    !editBlock.includes("sendPhoto"),
 );
 check(
   "13.17 pre-transport verification persistence failure returns AMBIGUOUS",
@@ -641,12 +674,12 @@ check(
   sendBlock33.includes("transport_kind: desiredTransportKind") &&
     sendBlock33.indexOf("transport_kind: desiredTransportKind") < sendBlock33.indexOf('"sendPhoto"'),
 );
-check("14.26 exactly one sendPhoto call path", (indexSrc.match(/"sendPhoto"/g) ?? []).length === 1);
+check("14.26 exactly one sendPhoto call path in the send lane", (sendBlock33.match(/"sendPhoto"/g) ?? []).length === 1);
 check("14.27 sendPhoto is multipart with binary bytes", sendBlock33.includes("new FormData()") && sendBlock33.includes('form.append("photo"'));
 check("14.28 caption carries the rendered card", sendBlock33.includes('form.append("caption", rendered.text)'));
 check("14.29 branded send reuses the existing inline keyboard", sendBlock33.includes('form.append("reply_markup", JSON.stringify(rendered.replyMarkup))'));
 check("14.30 photo upload gets its own bounded timeout", sendBlock33.includes("TELEGRAM_UPLOAD_TIMEOUT_MS") && indexSrc.includes("TELEGRAM_UPLOAD_TIMEOUT_MS = 20_000"));
-check("14.31 sendMessage remains exactly one path", (indexSrc.match(/"sendMessage"/g) ?? []).length === 1);
+check("14.31 sendMessage remains exactly one path in the send lane", (sendBlock33.match(/"sendMessage"/g) ?? []).length === 1);
 check(
   "14.32 photo and text transports are mutually exclusive branches",
   /if \(logo\) \{[\s\S]{0,800}"sendPhoto"[\s\S]{0,200}\} else \{[\s\S]{0,400}"sendMessage"/.test(sendBlock33),
@@ -665,7 +698,7 @@ check(
 check("14.35 no companion message accompanies a branded card", !sendBlock33.includes("sendMediaGroup") && !sendBlock33.includes("copyMessage"));
 
 // 14e. Edit path
-const editBlock33 = indexSrc.slice(indexSrc.indexOf("async function handleEdit"));
+const editBlock33 = indexSrc.slice(indexSrc.indexOf("async function handleEdit"), EDIT_LANE_END);
 check(
   "14.36 edit method comes from the durable persisted transport kind",
   editBlock33.includes('t["transport_kind"] === "PHOTO" ? "PHOTO" : "TEXT"'),
@@ -711,7 +744,7 @@ check(
   "14.55 no scheduler, poller or auto-detection was introduced",
   !indexCode.includes("Deno.cron") && !indexCode.includes("setInterval") && !indexCode.includes("setTimeout(poll"),
 );
-check("14.56 still exactly two actions after SE-3.3", (indexSrc.match(/action !== "send_mission" && action !== "edit_mission"/g) ?? []).length === 1);
+check("14.56 still exactly one closed action allowlist after SE-3.3 / SE-16.3R-2", (indexSrc.match(/action !== "send_mission" && action !== "edit_mission" && action !== "resurface_mission"/g) ?? []).length === 1);
 
 // ---------------------------------------------------------------------------
 
