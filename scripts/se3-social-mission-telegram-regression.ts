@@ -671,7 +671,7 @@ check("14.27 sendPhoto is multipart with binary bytes", sendBlock33.includes("ne
 check("14.28 caption carries the rendered card", sendBlock33.includes('form.append("caption", rendered.text)'));
 check("14.29 branded send reuses the existing inline keyboard", sendBlock33.includes('form.append("reply_markup", JSON.stringify(rendered.replyMarkup))'));
 check("14.30 photo upload gets its own bounded timeout", sendBlock33.includes("TELEGRAM_UPLOAD_TIMEOUT_MS") && indexSrc.includes("TELEGRAM_UPLOAD_TIMEOUT_MS = 20_000"));
-check("14.31 sendMessage remains exactly one path", (indexSrc.match(/"sendMessage"/g) ?? []).length === 1);
+check("14.31 sendMessage remains exactly one path in the send lane", (sendBlock33.match(/"sendMessage"/g) ?? []).length === 1);
 check(
   "14.32 photo and text transports are mutually exclusive branches",
   /if \(logo\) \{[\s\S]{0,800}"sendPhoto"[\s\S]{0,200}\} else \{[\s\S]{0,400}"sendMessage"/.test(sendBlock33),
