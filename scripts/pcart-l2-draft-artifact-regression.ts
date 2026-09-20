@@ -207,8 +207,10 @@ check(
 );
 check(
   "L2D-I7",
-  migrationFiles.every((f) => !/pepecartel|pcart/i.test(f)),
-  "no PCART-specific migration file exists in this unit",
+  migrationFiles.length === 82 &&
+    migrationFiles.every((f) => !/PepeCartelToken/.test(readFileSync(f, "utf8"))) &&
+    !migrationFiles.some((f) => /pepecartel[-_]?token|pcart[-_]?artifact/i.test(f)),
+  "migration set unchanged (82 files), none reference the draft PCART token artifact",
 );
 check(
   "L2D-I8",
