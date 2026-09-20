@@ -346,11 +346,6 @@ check("11.12 both functions pin an explicit search_path", (sql.match(/SET search
 
 // ---------------------------------------------------------------------------
 
-console.log(`SE-16.3R-1 regression: ${passed} passed, ${failures.length} failed`);
-if (failures.length > 0) {
-  for (const failure of failures) console.log(`  FAIL ${failure}`);
-  process.exit(1);
-}
 
 // ---------------------------------------------------------------------------
 // 12. SE-16.3R-2 — replacement transport (`resurface_mission`)
