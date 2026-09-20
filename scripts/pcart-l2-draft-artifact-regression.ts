@@ -193,7 +193,7 @@ const srcHits = srcFiles.filter((f) => /pepecartel-token-v1/.test(readFileSync(f
 const migHits = migrationFiles.filter((f) => /pepecartel-token-v1/.test(readFileSync(f, "utf8")));
 check(
   "L2D-I1",
-  srcHits.length === 1 && srcHits[0] === FROZEN_TS.replace("/", "/"),
+  srcHits.length === 1 && srcHits[0] === FROZEN_TS,
   `pepecartel-token-v1 appears in exactly one src/** file, the dedicated frozen artifact (${srcFiles.length} scanned, hits: ${srcHits.join(", ") || "none"})`,
 );
 check(
@@ -201,12 +201,15 @@ check(
   migHits.length === 0,
   `pepecartel-token-v1 appears in no supabase/migrations/** file (${migrationFiles.length} scanned)`,
 );
-const nameHits = srcFiles.filter((f) => /PepeCartelToken/.test(readFileSync(f, "utf8")));
+const nameHits = srcFiles.filter(
+  (f) => f !== FROZEN_TS && /PepeCartelToken/.test(readFileSync(f, "utf8")),
+);
 check(
   "L2D-I3",
   nameHits.length === 0,
-  "no src/** file references the PepeCartelToken contract symbol",
+  "no src/** file outside the frozen artifact references PepeCartelToken",
 );
+
 check(
   "L2D-I3b",
   srcFiles
