@@ -2429,12 +2429,12 @@ Deno.serve(async (req: Request) => {
   };
 
   /**
-   * Exactly ONE same-card edit through the existing transport, reusing its
-   * revision + client-request idempotency. A target-only or end-time-only
-   * change never triggers a provider read: the transport performs its final X
-   * snapshot only for a COMPLETED mission.
+   * FINAL-STATE in-place card edit. END MISSION NOW, CANCEL and any other
+   * final-state update keep this exact lane: exactly ONE same-card edit through
+   * the existing transport, reusing its revision + client-request idempotency.
+   * A completion never rolls the card to the bottom of the chat.
    */
-  const mcRefreshCard = async (args: {
+  const mcFinalizeCardEdit = async (args: {
     binding: MissionControlBinding;
     actorUserId: string | null;
     seed: string;
@@ -2481,6 +2481,122 @@ Deno.serve(async (req: Request) => {
     } catch {
       return null;
     }
+  };
+
+  /**
+   * SE-16.3R-3 — LIVE rolling card. A committed target / Primary Goal /
+   * supporting-target / end-time change on a still-LIVE mission REPLACES the
+   * community card at the bottom of the chat instead of editing it silently
+   * far above the current conversation.
+   *
+   * The transport owns the claim, the single send, the pin preservation and
+   * the old-card cleanup. This helper owns only correlation:
+   *   - a BASE id deterministic in the mutation seed, so a Telegram retry of
+   *     the same tap short-circuits instead of posting a second card;
+   *   - exactly one RECOVERY id per durable FAILED revision, because a FAILED
+   *     lane proves the replacement card did not remain;
+   *   - never a new id after CLAIMED or AMBIGUOUS, whose real-world effect is
+   *     unknown and must never be guessed at with another card.
+   * No value here is ever taken from a client.
+   */
+  const mcResurfaceLiveCard = async (args: {
+    binding: MissionControlBinding;
+    actorUserId: string | null;
+    seed: string;
+  }): Promise<MissionResurfaceOutcome> => {
+    const workspaceId = args.binding.workspaceId;
+    const missionId = args.binding.missionId;
+    const { data: target } = await admin
+      .from("social_mission_targets")
+      .select("id, resurface_state, resurface_client_request_id, resurface_revision")
+      .eq("mission_id", missionId)
+      .eq("workspace_id", workspaceId)
+      .eq("telegram_chat_id", Number(args.binding.chatId))
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (!target?.id) return { kind: "UNAVAILABLE", message: null };
+
+    const baseId = await mcResurfaceUuid(args.seed);
+    const state = String((target as any).resurface_state ?? "IDLE").toUpperCase();
+    const recorded = String((target as any).resurface_client_request_id ?? "");
+    const revision = Number((target as any).resurface_revision ?? 0);
+
+    let clientRequestId = baseId;
+    if (recorded && recorded === baseId) {
+      // The transport already recorded THIS exact request. It duplicate
+      // short-circuits every state, so the truthful answer is local.
+      if (state === "RESURFACED") return { kind: "REPLAYED", message: null };
+      if (state === "CLAIMED" || state === "AMBIGUOUS") {
+        return { kind: "AMBIGUOUS", message: null };
+      }
+      if (state === "FAILED") {
+        clientRequestId = await mcResurfaceRecoveryUuid(args.seed, revision);
+      }
+    }
+
+    try {
+      const response = await fetch(
+        `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/social-mission-telegram`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: SERVICE_KEY,
+            Authorization: `Bearer ${SERVICE_KEY}`,
+            "X-Cartel-Internal-Source": "telegram-webhook",
+            ...(args.actorUserId ? { "X-Cartel-Actor-User-Id": args.actorUserId } : {}),
+          },
+          body: JSON.stringify({
+            action: "resurface_mission",
+            workspaceId,
+            missionId,
+            targetId: String(target.id),
+            clientRequestId,
+          }),
+          signal: AbortSignal.timeout(30_000),
+        },
+      );
+      const payload = (await response.json().catch(() => null)) as
+        | { resurfaceState?: string; duplicate?: boolean; message?: string; error?: string }
+        | null;
+      const message =
+        typeof payload?.message === "string"
+          ? payload.message
+          : typeof payload?.error === "string"
+            ? payload.error
+            : null;
+      const nextState = String(payload?.resurfaceState ?? "").toUpperCase();
+      if (nextState === "RESURFACED") {
+        return { kind: payload?.duplicate === true ? "REPLAYED" : "RESURFACED", message };
+      }
+      if (nextState === "CLAIMED" || nextState === "AMBIGUOUS") {
+        return { kind: "AMBIGUOUS", message };
+      }
+      if (nextState === "FAILED") return { kind: "FAILED", message };
+      return { kind: response.ok ? "AMBIGUOUS" : "FAILED", message };
+    } catch {
+      // Timeout or transport error: the replacement may or may not have landed.
+      return { kind: "AMBIGUOUS", message: null };
+    }
+  };
+
+  /**
+   * Truthful private Mission Control note. The database change is committed in
+   * every one of these branches; only the community card differs.
+   */
+  const mcResurfaceNote = (base: string, outcome: MissionResurfaceOutcome | null) => {
+    if (!outcome || outcome.kind === "UNAVAILABLE") return base;
+    if (outcome.kind === "RESURFACED" || outcome.kind === "REPLAYED") {
+      return `${base} The community mission card was moved to the bottom of the chat.`;
+    }
+    if (outcome.kind === "FAILED") {
+      const hint = mcPermissionHint(outcome.message);
+      return hint
+        ? `${base} Saved, but the community card could not be reposted: the bot needs ${hint} in that community.`
+        : `${base} Saved, but the community card could not be reposted.`;
+    }
+    return `${base} Saved, but the card replacement could not be confirmed. Do not resend it.`;
   };
 
   /**
