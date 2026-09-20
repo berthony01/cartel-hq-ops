@@ -243,10 +243,12 @@ check("7.10 CANCELLED is renderable by the transport", transport.includes('if (m
 // ---------------------------------------------------------------------------
 // 8 — same-card edit, zero X read for target-only changes.
 // ---------------------------------------------------------------------------
-check("8.1 a control change edits the same card", webhook.includes("const mcRefreshCard = async ("));
-check("8.2 the refresh uses edit_mission, never a resend", /mcRefreshCard[\s\S]{0,1400}action: "edit_mission"/.test(webhook) && !/mcRefreshCard[\s\S]{0,1400}"send_mission"/.test(webhook));
+check("8.1 a final-state control change edits the same card", webhook.includes("const mcRefreshCard = async ("));
+check("8.2 the final-state refresh uses edit_mission, never a resend", /mcRefreshCard[\s\S]{0,1400}action: "edit_mission"/.test(webhook) && !/mcRefreshCard[\s\S]{0,1400}"send_mission"/.test(webhook));
 check("8.3 the refresh reuses the transport revision contract", webhook.includes('revision: Number((target as any).edit_revision ?? 0) + 1'));
-check("8.4 the refresh id is deterministic per update", webhook.includes("const mcRequestUuid = async (seed: string)"));
+// SE-16.3R-3 — re-pinned: the deterministic id builder was generalised into a
+// namespaced seed helper shared by the final-edit and resurface lanes.
+check("8.4 the refresh id is deterministic per update", webhook.includes("const mcUuidFromSeed = async (namespacedSeed: string)") && webhook.includes('mcUuidFromSeed(`se15-mission-control-edit:${seed}`)'));
 check("8.5 the webhook never calls an X provider", !webhook.includes("lookupXPostMetrics") && !webhook.includes("api.twitter.com"));
 check("8.6 the transport reads X only for a COMPLETED mission", transport.includes('args.finalRefresh === true && String(mission["status"] ?? "") === "COMPLETED"'));
 check(
