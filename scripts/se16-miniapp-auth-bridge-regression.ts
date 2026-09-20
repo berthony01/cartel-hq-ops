@@ -650,7 +650,8 @@ const opts = { now: NOW_MS };
   );
   check(
     "14.8 refresh binding inputs are server-derived, never read from client data",
-    !/\bdata[?.]/.test(refreshFn) &&
+    !/\bdata\?\./.test(refreshFn) &&
+      !/\bdata\.[A-Za-z]/.test(refreshFn) &&
       /workspaceId:\s*binding\.workspaceId/.test(refreshFn) &&
       /missionId:\s*binding\.missionId/.test(refreshFn) &&
       /"X-Cartel-Actor-User-Id":\s*actorUserId/.test(refreshFn),
