@@ -103,6 +103,7 @@ import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
 import { VerifiedDeploymentEvidencePanel } from "@/components/cartel/VerifiedDeploymentEvidencePanel";
 import { VerifiedContractRegistrationPanel } from "@/components/cartel/VerifiedContractRegistrationPanel";
 import { ProductionDeploymentRequestPanel } from "@/components/cartel/ProductionDeploymentRequestPanel";
+import { TreasurySignerSetupPanel } from "@/components/cartel/TreasurySignerSetupPanel";
 import {
   getLaunchProductionDeploymentRequest,
   hasRegistrationRecord,
@@ -2871,6 +2872,17 @@ function LaunchControlPage() {
                     separate, explicit actions. Registering never messages anyone on its own.
                   </p>
                 </Section>
+
+                {/* PCART Treasury Signer Setup — records the three intended
+                    public signer wallets only. It creates no Safe, signs
+                    nothing, moves nothing and does not gate the request below. */}
+                {selected && selectedIsProjectLaunch ? (
+                  <TreasurySignerSetupPanel
+                    launchId={selected.id}
+                    isWorkspaceOwner={isWorkspaceOwner}
+                    disabled={readOnly}
+                  />
+                ) : null}
 
                 {/* Launcher-B2 — guided handoff request, before the technical
                     deployment evidence details. PROJECT launches only. */}
