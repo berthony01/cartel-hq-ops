@@ -1,113 +1,82 @@
-# PCART-L1 Closure — Phased Plan (PLAN/AUDIT ONLY)
+# PCART Safe Verification Hardening — Audit and Residual Build Plan
 
-HEAD inspected: `476211c31d6646d7650c6ba1aab4ea9a9be3a6d8`, working tree clean. No file edited, no SQL, nothing deployed, no chain action.
+## Start-gate finding (read this first)
 
-## 1. Exact remaining L1 items after Phase 1
+The authorised gate names HEAD `34f76a6d…`. Current HEAD is `9939c37e2e725b06b04286753f66ae667c7578d8`, working tree clean. The Option A hardening unit was already executed and verified in the preceding turns (committed at `38f17928…`, platform auto-commits since). **No duplicate build is proposed.**
 
-From `docs/PCART_MASTER_LAUNCH_PLAN.md` lines 133, 204, 302, 317 — five open items, unchanged by Phase 1:
+Verified by direct inspection of `src/lib/treasury-safe-verify.ts`, `src/lib/treasury-safe-verify.functions.ts` and `scripts/pcart-l1b-treasury-safe-verify-regression.ts` at current HEAD.
 
-| # | Open L1 item | Closable by repo-only work? |
+### Requirements already BUILT
+
+| # | Requirement | State |
 |---|---|---|
-| L1-a | Exact operational ETH gas reserve | YES — policy freeze |
-| L1-b | Exact multisig implementation AND address | PARTIAL — implementation choice closable; the address requires a real Safe deployment (out of scope) |
-| L1-c | Legal/comms review | PARTIAL — internal comms rules closable; external legal sign-off is an owner-side prerequisite, never fabricated |
-| L1-d | Live Robinhood/Uniswap compatibility confirmation | YES as a dated, versioned, fail-closed manifest of researched addresses |
-| L1-e | Fork/testnet simulation | NO as written — see section 7 (circularity) |
+| 1 | chain exactly 4663 | BUILT |
+| 2 | candidate has contract code | BUILT |
+| 3 | masterCopy() equals canonical SafeL2 v1.4.1 singleton | BUILT (via `masterCopy()` only) |
+| 4 | proxy runtime code-hash match | BUILT, pin provenance weaker than this spec demands (see below) |
+| 5 | VERSION() readable and exactly 1.4.1 | BUILT, no longer optional |
+| 6 | 3 unique non-zero owners | BUILT |
+| 7 | threshold exactly 2 | BUILT |
+| 8 | nonce() readable | BUILT |
+| 9 | getModulesPaginated(0x1, 1) proves no modules | BUILT (empty array AND next === sentinel) |
+| 10 | guard storage slot zero/unset | BUILT |
+| 11 | all malformed/reverted/ambiguous reads fail closed | BUILT, distinct failure codes |
 
-Frozen items (sections 2, 3, 4, 4.1, 5) are untouched by this plan.
+Transport already restricted to `eth_chainId`, `eth_getCode`, `eth_getStorageAt`, read-only `eth_call`; managed server RPC only; authenticated; no persistence; non-gating for production submission.
 
-## 2. Safe v1.4.1 L2 architecture vs current code
+### Residual gaps vs this specification
 
-Consistent. `src/lib/treasury-safe-verify.ts` already pins Robinhood 4663 (`ROBINHOOD_MAINNET_CHAIN_ID`), requires exactly 3 unique non-zero owners and threshold 2, and the L1B fixtures use `VERSION` `"1.4.1"`. Choosing the v1.4.1 SafeL2 singleton + SafeProxyFactory therefore adds no new assumption.
+- **G1 — proxy hash provenance.** The pinned hash `0xd7d408eb…fb4c` was taken from the official `@safe-global/safe-contracts@1.4.1` package artifact and asserted by `keccak256` in the regression, but it was not derived by compiling `SafeProxy.sol` with solc 0.7.6, optimizer disabled, and the derivation command/provenance is not recorded in the docs.
+- **G2 — singleton proven one way only.** Storage slot 0 is not read; only `masterCopy()` is. A malicious fallback could answer `masterCopy()` while slot 0 says otherwise.
+- **G3 — fallback handler not checked.** Open question 5.
+- **G4 — wording.** Panel says "Canonical Safe v1.4.1 profile verified", not the "HARDENED VERIFIED" label this spec uses.
 
-Its own header states it is **not** cryptographic proof of a specific proxy or singleton version — that is the real gap. Stronger verification to add **before** any Safe is used (a later phase, not the repo-only pack):
+## Answers to the design questions
 
-1. Read the proxy's singleton/masterCopy storage slot 0 and require it to equal the canonical v1.4.1 SafeL2 singleton for 4663.
-2. Compare the proxy's runtime code hash against a pinned expected SafeProxy code hash.
-3. Require `VERSION()` to be readable and exactly `1.4.1` (today an unreadable VERSION still passes — check `L1B-11`).
-4. Read `getModulesPaginated` and require an empty module list, and require the guard slot to be zero — a module or guard can move funds outside the 2-of-3 rule.
-5. Require `nonce()` to be readable; treat every unreadable read as fail-closed.
-6. Keep all of it advisory-to-the-eye but make it a hard gate for the PCART treasury recipient specifically (see section 8 PENDING list).
+1. **Files/functions.** Only `treasury-safe-verify.ts` (constants + `evaluateTreasurySafe`), `treasury-safe-verify.functions.ts` (one extra `eth_getStorageAt` read, optionally two), the panel (label + one evidence line), the L1B regression, and three docs.
+2. **Reads.** Add `eth_getStorageAt(candidate, 0x0)` for the singleton slot. No new methods beyond the four already allowed.
+3. **Both, and fail on disagreement.** Yes — recommended. Require slot 0 and `masterCopy()` to each equal the canonical singleton and to equal each other; a mismatch is its own failure code `SINGLETON_SLOT_DISAGREEMENT`. This closes the spoofing gap that a code-hash check alone only narrows.
+4. **Decoding.** Storage words: exactly 32 bytes / 66 hex chars, else unreadable; address = low 20 bytes with the high 12 bytes required zero. `nonce()`: exactly one 32-byte word, any value. Modules: strict `(address[],address)` ABI decode, pass only if the array is empty and next is `0x…01`. `VERSION()`: strict dynamic-string decode, exact `1.4.1`.
+5. **Fallback handler — recommend NOT adding as a hard requirement in this unit.** The canonical Safe deployment flow sets `CompatibilityFallbackHandler`, so a correct PCART Safe will normally have a non-zero handler; requiring zero would fail a legitimate treasury. Recommendation: read the fallback-handler slot, surface it as informational evidence only, and keep it entirely separate from the guard and module gates. Making it a gate requires first pinning the canonical handler address for chain 4663, which this unit is not authorised to source.
+6. **Failure model.** Unchanged pattern: single ordered evaluation, first failure wins, `isCanonicalSafeV141` true only when every check is true; add `SINGLETON_SLOT_UNREADABLE` and `SINGLETON_SLOT_DISAGREEMENT`.
+7. **Wording.** Keep success gated on the full profile (already true). Change the success label to "Hardened verified — canonical Safe v1.4.1 profile", keep the existing disclaimers that signer identities are not pinned and nothing was created, approved or moved.
+8. **Stay advisory.** No production-request gate in this unit. `ProductionDeploymentRequestPanel.tsx` remains untouched and unchanged in the diff.
+9. **Regression.** Add to `pcart-l1b-…`: slot-0 happy path; slot-0 unreadable; slot-0 wrong singleton; slot-0 vs masterCopy disagreement; slot-0 dirty high bytes; fallback-handler informational field does not affect the verdict; provenance comment present.
+10. **Allowlist / prohibited.** Below.
 
-Only items 1–6 as an **expected-values manifest** belong in the repo-only pack now; wiring them into the verifier is a separate authorized unit.
+## Proposed residual unit (smallest safe delta)
 
-## 3. 0.10 ETH reserve / 0.05 ETH floor policy
+**Step 0 — proxy hash derivation (blocking gate).** In `/tmp` only: fetch `@safe-global/safe-contracts@1.4.1`, compile `SafeProxy.sol` with solc 0.7.6, optimizer disabled, evm target as per the package config, keccak256 the deployed runtime. If it equals `0xd7d408eb…fb4c`, record the exact command and provenance in the compatibility manifest and a regression comment. If it does not reproduce unambiguously, **STOP and return PLAN BLOCKED ON PROXY HASH** — no weakening, no re-pinning.
 
-Reasonable as a budget guardrail, with three conditions:
+**Step 1 — slot-0 singleton proof (G2).** Constants `SAFE_SINGLETON_STORAGE_SLOT = 0x0…0`; read it; require canonical value and agreement with `masterCopy()`.
 
-- It is a **budget** figure, not a gas prediction, and must never be read as permission to spend. State that explicitly in the doc.
-- It must remain strictly separate from CCA/LBP funding ETH and from the 10 ETH graduation-minimum planning gate already frozen in L1A.
-- It must not replace live `eth_estimateGas` × current fee data plus a margin at execution time. The floor is necessary, never sufficient.
+**Step 2 — fallback handler informational read (G3).** Read the slot, display it, never gate on it.
 
-Repository implications now: **documentation constants only**. Do not add an ETH-balance gate to any submission or execution path in this pack — that would change runtime behavior of the frozen launcher. A later authorized unit may add a read-only advisory balance display.
+**Step 3 — label (G4)** and doc status update.
 
-## 4. Repo-only L1 Closure Pack — exact files
+### Allowlist (8 files, no other file may change)
 
-Add:
-1. `docs/PCART_L1_CLOSURE_PACK.md` — the closure record: per-item CLOSED/PENDING status, operational reserve policy, treasury architecture decision, internal comms rules, and the simulation-sequencing resolution.
-2. `docs/PCART_L1_CHAIN_COMPATIBILITY_MANIFEST.md` — dated `2026-09-20`, versioned `v1`, listing chain 4663 / testnet 46630 / native ETH, the Safe v1.4.1 SafeL2 singleton and SafeProxyFactory addresses, Uniswap Liquidity Launcher v3.2.0, LBPStrategy pointer, CCA factory, TokenSplitter, Permit2, UniversalRouterStrategy pointer — each marked RESEARCHED, NOT ON-CHAIN VERIFIED, with an explicit **MUST BE REVALIDATED IMMEDIATELY BEFORE L5 EXECUTION** clause and a fail-closed rule: any mismatch at revalidation blocks execution.
-3. `docs/PCART_L1_COMMS_RULES.md` — internal communications rules only (may be folded into file 1 if you prefer three files becoming two).
-4. `scripts/pcart-l1-closure-regression.ts` — static guardrails (section 5).
+1. `src/lib/treasury-safe-verify.ts`
+2. `src/lib/treasury-safe-verify.functions.ts`
+3. `src/components/cartel/TreasurySafeVerificationPanel.tsx`
+4. `scripts/pcart-l1b-treasury-safe-verify-regression.ts`
+5. `scripts/pcart-l1-closure-regression.ts` (only if a new pinned status string requires re-pinning)
+6. `docs/PCART_L1_CHAIN_COMPATIBILITY_MANIFEST.md`
+7. `docs/PCART_L1_CLOSURE_PACK.md`
+8. `docs/PCART_MASTER_LAUNCH_PLAN.md`
 
-Change:
-5. `docs/PCART_MASTER_LAUNCH_PLAN.md` — new section 14 recording L1 closure status per item, amending lines 133 / 204 / 302 / 317 pointers only. No frozen economic value altered.
+### Prohibited
 
-Nothing under `src/**`, `supabase/**`, `docs/sql/**`, `contracts/**`, `package.json`, or `.lovable/plan.md`.
+No Supabase/SQL/migration; no production-request eligibility change; no artifact allowlist change; no PCART compilation or artifact; no Safe deployment or signer selection; no write RPC, signing, transaction or value movement; no ARM/CLAIM/send-window/runtime-control change; no liquidity work; no generic launcher behaviour change; no package.json or lockfile change; no deploy/publish/secret/Telegram action; no edit to `ProductionDeploymentRequestPanel.tsx` or `.lovable/plan.md` beyond this plan.
 
-## 5. Regression tests to add
+### Verification
 
-`scripts/pcart-l1-closure-regression.ts`, dependency-free `node:fs` + `node:assert`, asserting:
+Updated L1B regression; then closure, l2-draft, hardening-b, p1a, p2c2, p3c-f, p3c-f1, p3c-f2, launcher-b, launcher-b3, verifier-state, wallet-connector; `bunx tsgo --noEmit`; `bun run build`; exact-file diff confirmation and zero diff on all protected paths.
 
-1. Closure pack and manifest exist and carry their status markers.
-2. Manifest is dated and version-tagged, contains the revalidation-before-L5 clause and a fail-closed statement.
-3. Every address in the manifest is a well-formed checksum-shaped `0x` + 40 hex string, and each is labelled RESEARCHED / NOT ON-CHAIN VERIFIED.
-4. Manifest addresses appear in **no** file under `src/**`, `supabase/**` or `contracts/**` — documentation only; no router, factory, Permit2 or Safe address leaks into runtime code.
-5. Reserve policy states 0.10 ETH reserve and 0.05 ETH wallet floor, and states it is a budget guardrail requiring live gas estimation.
-6. Comms rules contain the prohibitions: no guaranteed return/profit/price claim, no Robinhood endorsement/listing implication, no "no sale" framing, no LIVE announcement before verified deployment + source verification + registration + liquidity evidence.
-7. No legal-approval claim: the pack must not assert legal counsel or compliance approval; it must name external sign-off as an owner-side prerequisite.
-8. Safe architecture section names v1.4.1 SafeL2 + SafeProxyFactory and lists the six stronger verification requirements as PENDING.
-9. Non-activation tripwires, unchanged in spirit from `pcart-l2-draft-artifact-regression.ts`: `pepecartel-token-v1` still absent from `src/**` and `supabase/migrations/**`; `APPROVED_OFFICIAL_ARTIFACT_ID` still exactly `cartel-fixed-erc20-v1`; `src/lib/cartel-fixed-erc20.artifact.ts` hashes unchanged; `MAINNET_LIQUIDITY_TX_ENABLED` still `false`; migration count still 82; no PCART treasury address is written anywhere in the repo.
-10. The closure pack explicitly states Phase 2 compilation still requires separate authorization.
+### Stop point
 
-Re-run unchanged: `pcart-l2-draft-artifact`, `pcart-l1b-treasury-safe-verify`, `hardening-b`, `p1a-project-journey`, `p2c2-launch-isolation`, `p3c-f`/`f1`/`f2`, `launcher-b`/`b3`, `verifier-state-write-activation`, `wallet-connector`, plus `bunx tsgo --noEmit` and `bun run build`.
+STOP after the residual hardening is committed and verified. No Safe creation, no signer selection, no PCART-L2.
 
-## 6. DB migration needed now?
+### Remains PENDING regardless
 
-**None. Zero SQL.** No table, column, CHECK, RPC, policy, grant or data change. The artifact-allowlist widening and PCART-specific invariants remain Phase 3 (post-compile). The migration-count tripwire stays pinned at 82.
-
-## 7. Resolving the L1-vs-L3 simulation circularity
-
-The current wording is genuinely circular: L1 demands fork/testnet simulation, but the exact artifact is intentionally uncompiled until Phase 2, after L1 closes. Resolution, without weakening safety — **split item L1-e into two distinct obligations**:
-
-- **L1-e1 — Infrastructure/protocol compatibility evidence (closes L1).** Satisfied by: the already-finalized mainnet canary (a real 4663 deployment of `cartel-fixed-erc20-v1` proving the chain, RPC, gas, evidence and finality path work end to end), plus the dated compatibility manifest, plus static/read-only checks. This proves the *rails*, which is all L1 ever needed to freeze policy.
-- **L1-e2 — Exact-artifact rehearsal (does NOT close L1; stays Phase 3).** A real testnet 46630 deployment of the compiled `pepecartel-token-v1`, separately authorized. It remains a hard prerequisite for mainnet PCART deployment.
-
-Safety is unchanged because nothing that L1 closure unlocks is an on-chain action: closure unlocks only Phase 2 compilation, itself a separately authorized repo-only step. Record this split in the master-plan amendment so the prerequisite is relocated, not deleted.
-
-## 8. CLOSED vs PENDING after the repo-only pack
-
-**Can be marked CLOSED:**
-- L1-a operational ETH reserve policy (0.10 / 0.05, budget guardrail).
-- L1-b (implementation half only) — Safe v1.4.1 SafeL2 + SafeProxyFactory on 4663 chosen as the frozen treasury architecture.
-- L1-c (internal half only) — PEPECARTEL communications rules.
-- L1-d — dated, versioned, fail-closed compatibility manifest, with mandatory L5 revalidation.
-- L1-e1 — infrastructure/protocol compatibility evidence.
-
-**Must remain PENDING (and L1 cannot be declared fully closed for execution purposes until each is met):**
-- Actual PEPECARTEL Safe deployment; the Safe address and 3 signer addresses.
-- The six stronger Safe verifications (singleton slot, proxy code hash, strict VERSION, empty modules, zero guard, readable nonce) implemented in the verifier and passing against the real Safe.
-- PCART initial treasury recipient address.
-- External legal sign-off, if the owner requires it.
-- L1-e2 exact-artifact testnet rehearsal (Phase 3).
-- On-chain revalidation of every manifest address immediately before L5.
-- Funded deployer wallet meeting the 0.05 ETH floor.
-
-Recommended framing: **L1 POLICY CLOSED / L1 EXECUTION PREREQUISITES PENDING.** Phase 2 compilation may be authorized on POLICY CLOSED alone.
-
-## 9. Exact stop point
-
-Stop immediately after the repo-only pack is committed and all gates pass. Specifically, stop **before**: creating or deploying any Safe; funding any wallet; compiling anything; producing `pepecartel-token-v1`; any testnet or mainnet transaction; any ARM/CLAIM/send-window action; any PCART production request; any SQL. Report SHA, diffstat, per-suite counts, CLOSED/PENDING table, residual uncertainty. Do not start Phase 2.
-
-## 10. Prohibited changes
-
-Any `src/**`, `supabase/**`, `docs/sql/**` or generated-types edit; any migration or SQL; editing `contracts/PepeCartelToken.sol` or `src/lib/cartel-fixed-erc20.artifact.ts`; widening the artifact allowlist; adding `pepecartel-token-v1` outside documentation; placing any Safe, router, factory, Permit2 or treasury address into runtime code; any compile step or solc/hardhat/foundry install; any package/config change; changing `MAINNET_DEPLOYMENT_TX_ENABLED`, `MAINNET_LIQUIDITY_TX_ENABLED`, `MAINNET_VERIFICATION_STATE_WRITES_ENABLED` or runtime execution control; creating a PCART production request; Safe creation; wallet signing, broadcasting or value movement on any chain; deploy, publish, secret change or Telegram send; weakening or deleting any existing regression assertion; asserting legal approval anywhere in the pack.
+Actual Safe deployment; the three signer addresses; live canonical pass against the real Safe; exact owner-address match; funded execution wallet; external legal review; Phase 2 compilation; L1-e2 testnet rehearsal; pre-L5 on-chain revalidation.
