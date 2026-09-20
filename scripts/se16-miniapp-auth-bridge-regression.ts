@@ -727,7 +727,14 @@ const opts = { now: NOW_MS };
   );
   check(
     "14.16 refresh state is a bounded non-secret allowlist",
-    /MINIAPP_REFRESH_STATES = \["edited", "replayed", "ambiguous", "failed"\]/.test(bridgeCode),
+    /MINIAPP_REFRESH_STATES = \["edited", "replayed", "ambiguous", "failed", "cleanup_pending"\]/.test(
+      bridgeCode,
+    ),
+  );
+  check(
+    "14.16b cleanup_pending is reported only for a confirmed new card",
+    /cleanupPending[\s\S]{0,200}"cleanup_pending"/.test(bridgeCode) &&
+      /RESURFACED/.test(bridgeCode),
   );
   check(
     "14.17 refresh outcome is reported separately from the mutation outcome",
