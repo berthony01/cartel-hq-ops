@@ -1,113 +1,153 @@
-# PCART-L1 Closure — Phased Plan (PLAN/AUDIT ONLY)
+# PCART Treasury Signer Setup Foundation — PLAN / AUDIT ONLY
 
-HEAD inspected: `476211c31d6646d7650c6ba1aab4ea9a9be3a6d8`, working tree clean. No file edited, no SQL, nothing deployed, no chain action.
+Inspected at HEAD `3c1d479d12f413bed9198a1fb5d33a28128a8bc2`, working tree clean. No file edited, no SQL run, no chain call, no Safe touched.
 
-## 1. Exact remaining L1 items after Phase 1
+Goal: the project owner types three public wallet addresses into CARTEL HQ, they are saved, and nothing on-chain happens. No address is ever written into source, config, env or a migration.
 
-From `docs/PCART_MASTER_LAUNCH_PLAN.md` lines 133, 204, 302, 317 — five open items, unchanged by Phase 1:
+## 1. Current files, components and routes involved
 
-| # | Open L1 item | Closable by repo-only work? |
-|---|---|---|
-| L1-a | Exact operational ETH gas reserve | YES — policy freeze |
-| L1-b | Exact multisig implementation AND address | PARTIAL — implementation choice closable; the address requires a real Safe deployment (out of scope) |
-| L1-c | Legal/comms review | PARTIAL — internal comms rules closable; external legal sign-off is an owner-side prerequisite, never fabricated |
-| L1-d | Live Robinhood/Uniswap compatibility confirmation | YES as a dated, versioned, fail-closed manifest of researched addresses |
-| L1-e | Fork/testnet simulation | NO as written — see section 7 (circularity) |
+Confirmed by reading HEAD:
 
-Frozen items (sections 2, 3, 4, 4.1, 5) are untouched by this plan.
+- `src/routes/_authenticated/launch-control.tsx` — the owner's launch surface; renders `ProductionDeploymentRequestPanel` at line 2878.
+- `src/components/cartel/ProductionDeploymentRequestPanel.tsx` — the production request form; renders `TreasurySafeVerificationPanel` at line 490.
+- `src/components/cartel/TreasurySafeVerificationPanel.tsx` — hardened read-only canonical Safe v1.4.1 check. Its success copy already states the exact PEPECARTEL signer addresses are not pinned — this phase supplies the missing half.
+- `src/lib/treasury-safe-verify.ts` — owns `normalizeTreasuryAddress` (lowercase), `isCandidateTreasuryAddress` (EVM shape + nonzero), `ZERO_ADDRESS`. Reused as-is; **not modified**.
+- `src/lib/launch-production-request.ts` — existing address helpers and query-key conventions to mirror.
+- `src/lib/workspace-context.tsx` — `workspaceId` / `workspace.owner_id` for the current workspace.
+- DB ownership primitive: `public.is_workspace_owner(uuid, uuid)`, already `SECURITY DEFINER` and revoked from `PUBLIC/anon/authenticated`, used by every existing owner-gated RPC (e.g. the launcher-B1 handoff migration).
 
-## 2. Safe v1.4.1 L2 architecture vs current code
+No checksum utility exists in the repo today; `viem` (present) exports `getAddress` for display-only checksumming.
 
-Consistent. `src/lib/treasury-safe-verify.ts` already pins Robinhood 4663 (`ROBINHOOD_MAINNET_CHAIN_ID`), requires exactly 3 unique non-zero owners and threshold 2, and the L1B fixtures use `VERSION` `"1.4.1"`. Choosing the v1.4.1 SafeL2 singleton + SafeProxyFactory therefore adds no new assumption.
+## 2. Table and RLS proposal
 
-Its own header states it is **not** cryptographic proof of a specific proxy or singleton version — that is the real gap. Stronger verification to add **before** any Safe is used (a later phase, not the repo-only pack):
+One new table, one new owner-gated RPC. Nothing is bolted onto `launches` or `project_profiles`.
 
-1. Read the proxy's singleton/masterCopy storage slot 0 and require it to equal the canonical v1.4.1 SafeL2 singleton for 4663.
-2. Compare the proxy's runtime code hash against a pinned expected SafeProxy code hash.
-3. Require `VERSION()` to be readable and exactly `1.4.1` (today an unreadable VERSION still passes — check `L1B-11`).
-4. Read `getModulesPaginated` and require an empty module list, and require the guard slot to be zero — a module or guard can move funds outside the 2-of-3 rule.
-5. Require `nonce()` to be readable; treat every unreadable read as fail-closed.
-6. Keep all of it advisory-to-the-eye but make it a hard gate for the PCART treasury recipient specifically (see section 8 PENDING list).
+```sql
+create table public.launch_treasury_signer_configs (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  launch_id uuid not null references public.launches(id) on delete cascade,
+  signer_addresses text[] not null,
+  threshold smallint not null default 2,
+  status text not null default 'DRAFT',
+  created_by uuid not null,
+  updated_by uuid not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint launch_treasury_signer_configs_launch_unique unique (launch_id),
+  constraint launch_treasury_signer_configs_threshold_fixed check (threshold = 2),
+  constraint launch_treasury_signer_configs_status_allowed
+    check (status in ('DRAFT','SIGNERS_READY')),
+  constraint launch_treasury_signer_configs_addresses_shape check (
+    array_length(signer_addresses, 1) = 3
+    and signer_addresses <@ array(select unnest(signer_addresses))  -- placeholder, see note
+  )
+);
+```
 
-Only items 1–6 as an **expected-values manifest** belong in the repo-only pack now; wiring them into the verifier is a separate authorized unit.
+Address validity is enforced by a **validation trigger**, not a CHECK, per project rules: exactly 3 entries, each matching `^0x[0-9a-f]{40}$`, each not the zero address, all three distinct, and `threshold = 2`. Fail-closed: the trigger raises on any violation for insert and update.
 
-## 3. 0.10 ETH reserve / 0.05 ETH floor policy
+`SAFE_CREATED` / `VERIFIED` are deliberately **absent from the allowed-status CHECK** in this phase, so no row can ever claim on-chain state that does not exist. Adding them is a later authorized migration.
 
-Reasonable as a budget guardrail, with three conditions:
+Grants and RLS (exact order: create → grant → enable RLS → policies):
 
-- It is a **budget** figure, not a gas prediction, and must never be read as permission to spend. State that explicitly in the doc.
-- It must remain strictly separate from CCA/LBP funding ETH and from the 10 ETH graduation-minimum planning gate already frozen in L1A.
-- It must not replace live `eth_estimateGas` × current fee data plus a margin at execution time. The floor is necessary, never sufficient.
+```sql
+grant select, insert, update on public.launch_treasury_signer_configs to authenticated;
+grant all on public.launch_treasury_signer_configs to service_role;
+-- no anon grant: no public or anonymous access at all
+alter table public.launch_treasury_signer_configs enable row level security;
 
-Repository implications now: **documentation constants only**. Do not add an ETH-balance gate to any submission or execution path in this pack — that would change runtime behavior of the frozen launcher. A later authorized unit may add a read-only advisory balance display.
+create policy "owner reads own treasury signer config"
+  on public.launch_treasury_signer_configs for select to authenticated
+  using (public.is_workspace_owner(workspace_id, auth.uid()));
 
-## 4. Repo-only L1 Closure Pack — exact files
+create policy "owner writes own treasury signer config"
+  on public.launch_treasury_signer_configs for insert to authenticated
+  with check (public.is_workspace_owner(workspace_id, auth.uid()));
 
-Add:
-1. `docs/PCART_L1_CLOSURE_PACK.md` — the closure record: per-item CLOSED/PENDING status, operational reserve policy, treasury architecture decision, internal comms rules, and the simulation-sequencing resolution.
-2. `docs/PCART_L1_CHAIN_COMPATIBILITY_MANIFEST.md` — dated `2026-09-20`, versioned `v1`, listing chain 4663 / testnet 46630 / native ETH, the Safe v1.4.1 SafeL2 singleton and SafeProxyFactory addresses, Uniswap Liquidity Launcher v3.2.0, LBPStrategy pointer, CCA factory, TokenSplitter, Permit2, UniversalRouterStrategy pointer — each marked RESEARCHED, NOT ON-CHAIN VERIFIED, with an explicit **MUST BE REVALIDATED IMMEDIATELY BEFORE L5 EXECUTION** clause and a fail-closed rule: any mismatch at revalidation blocks execution.
-3. `docs/PCART_L1_COMMS_RULES.md` — internal communications rules only (may be folded into file 1 if you prefer three files becoming two).
-4. `scripts/pcart-l1-closure-regression.ts` — static guardrails (section 5).
+create policy "owner updates own treasury signer config"
+  on public.launch_treasury_signer_configs for update to authenticated
+  using (public.is_workspace_owner(workspace_id, auth.uid()))
+  with check (public.is_workspace_owner(workspace_id, auth.uid()));
+```
 
-Change:
-5. `docs/PCART_MASTER_LAUNCH_PLAN.md` — new section 14 recording L1 closure status per item, amending lines 133 / 204 / 302 / 317 pointers only. No frozen economic value altered.
+No DELETE policy and no DELETE grant — a non-owner member can neither read, write nor remove; a workspace member who is not the owner gets zero rows and a denied write. Cascade delete still works through the FK at service level.
 
-Nothing under `src/**`, `supabase/**`, `docs/sql/**`, `contracts/**`, `package.json`, or `.lovable/plan.md`.
+**RPC: yes, one is needed** — `public.save_launch_treasury_signers(_launch_id uuid, _signers text[])`, `SECURITY DEFINER`, `set search_path = public`, revoked from `PUBLIC/anon` and granted to `authenticated`. It resolves `workspace_id` from the launch itself (never from the client), re-asserts `is_workspace_owner(l.workspace_id, auth.uid())`, lowercases and validates the three addresses server-side, upserts on `launch_id`, sets `status = 'SIGNERS_READY'`, stamps `updated_by`/`updated_at`, and returns the stored row. This matches the existing launcher-B1 pattern and stops a client from claiming another workspace's launch. Reads go through plain RLS-protected `select`.
 
-## 5. Regression tests to add
+Also added: the standard `update_updated_at_column` trigger.
 
-`scripts/pcart-l1-closure-regression.ts`, dependency-free `node:fs` + `node:assert`, asserting:
+## 3. UI placement and fields
 
-1. Closure pack and manifest exist and carry their status markers.
-2. Manifest is dated and version-tagged, contains the revalidation-before-L5 clause and a fail-closed statement.
-3. Every address in the manifest is a well-formed checksum-shaped `0x` + 40 hex string, and each is labelled RESEARCHED / NOT ON-CHAIN VERIFIED.
-4. Manifest addresses appear in **no** file under `src/**`, `supabase/**` or `contracts/**` — documentation only; no router, factory, Permit2 or Safe address leaks into runtime code.
-5. Reserve policy states 0.10 ETH reserve and 0.05 ETH wallet floor, and states it is a budget guardrail requiring live gas estimation.
-6. Comms rules contain the prohibitions: no guaranteed return/profit/price claim, no Robinhood endorsement/listing implication, no "no sale" framing, no LIVE announcement before verified deployment + source verification + registration + liquidity evidence.
-7. No legal-approval claim: the pack must not assert legal counsel or compliance approval; it must name external sign-off as an owner-side prerequisite.
-8. Safe architecture section names v1.4.1 SafeL2 + SafeProxyFactory and lists the six stronger verification requirements as PENDING.
-9. Non-activation tripwires, unchanged in spirit from `pcart-l2-draft-artifact-regression.ts`: `pepecartel-token-v1` still absent from `src/**` and `supabase/migrations/**`; `APPROVED_OFFICIAL_ARTIFACT_ID` still exactly `cartel-fixed-erc20-v1`; `src/lib/cartel-fixed-erc20.artifact.ts` hashes unchanged; `MAINNET_LIQUIDITY_TX_ENABLED` still `false`; migration count still 82; no PCART treasury address is written anywhere in the repo.
-10. The closure pack explicitly states Phase 2 compilation still requires separate authorization.
+A new distinct card, **PEPECARTEL Treasury Setup**, rendered in `src/routes/_authenticated/launch-control.tsx` immediately **before** the production deployment request panel. `ProductionDeploymentRequestPanel.tsx` is **not** edited.
 
-Re-run unchanged: `pcart-l2-draft-artifact`, `pcart-l1b-treasury-safe-verify`, `hardening-b`, `p1a-project-journey`, `p2c2-launch-isolation`, `p3c-f`/`f1`/`f2`, `launcher-b`/`b3`, `verifier-state-write-activation`, `wallet-connector`, plus `bunx tsgo --noEmit` and `bun run build`.
+New component `src/components/cartel/TreasurySignerSetupPanel.tsx`:
 
-## 6. DB migration needed now?
+- Heading + plain-English explainer covering, verbatim in spirit: three keys controlling one treasury, not three wallets receiving tokens; the eventual Safe is 2-of-3 so any two approve; never enter a seed phrase or private key; addresses must be three different, real, non-empty EVM addresses; they can be edited freely until the Safe is created, after which changing them needs a separate explicit process; this step only records the intended addresses — it creates nothing, signs nothing, moves nothing and authorises no launch.
+- Three labelled inputs: `Signer wallet 1 / 2 / 3`, monospace, `spellCheck=false`, `autoComplete="off"`, placeholder `0x…`, each with inline per-field validation text.
+- A read-only line: **Signatures required: 2 of 3 (fixed for PEPECARTEL)** — no control can change it.
+- Primary button labelled exactly **Save signer wallets**. No "Create Safe" anywhere.
+- Status badge: `Not set` (no row) / `Draft` / `Signers ready`. No badge implies an existing Safe.
+- After save: the three addresses displayed in checksummed form via `viem`'s `getAddress`, with an Edit control returning to the inputs.
+- Read-only for non-owners with an explanatory line, mirroring existing owner-gated panels.
 
-**None. Zero SQL.** No table, column, CHECK, RPC, policy, grant or data change. The artifact-allowlist widening and PCART-specific invariants remain Phase 3 (post-compile). The migration-count tripwire stays pinned at 82.
+The guided-journey model (`src/lib/project-journey.ts` / `launch-readiness.ts`) is **not** touched in this phase — adding a step there would change the global NEXT STEP for every non-PCART workspace. Called out as a separate later unit.
 
-## 7. Resolving the L1-vs-L3 simulation circularity
+## 4. Validation rules (identical client and server)
 
-The current wording is genuinely circular: L1 demands fork/testnet simulation, but the exact artifact is intentionally uncompiled until Phase 2, after L1 closes. Resolution, without weakening safety — **split item L1-e into two distinct obligations**:
+1. Trim, strip nothing else; reject empty.
+2. Must match `^0x[0-9a-fA-F]{40}$` — reuse `isCandidateTreasuryAddress`.
+3. Must not be the zero address.
+4. Normalise to lowercase for storage via `normalizeTreasuryAddress`.
+5. Exactly three addresses; all three distinct after normalisation (duplicate → named error on the offending field).
+6. Threshold is the literal `2`; never read from client input.
+7. Any failure → nothing is written; the trigger and the RPC both raise. Client validation is convenience only.
+8. No ENS, no name resolution, no address generation, no private-key or seed input of any kind anywhere in the component.
 
-- **L1-e1 — Infrastructure/protocol compatibility evidence (closes L1).** Satisfied by: the already-finalized mainnet canary (a real 4663 deployment of `cartel-fixed-erc20-v1` proving the chain, RPC, gas, evidence and finality path work end to end), plus the dated compatibility manifest, plus static/read-only checks. This proves the *rails*, which is all L1 ever needed to freeze policy.
-- **L1-e2 — Exact-artifact rehearsal (does NOT close L1; stays Phase 3).** A real testnet 46630 deployment of the compiled `pepecartel-token-v1`, separately authorized. It remains a hard prerequisite for mainnet PCART deployment.
+## 5. File and migration allowlist
 
-Safety is unchanged because nothing that L1 closure unlocks is an on-chain action: closure unlocks only Phase 2 compilation, itself a separately authorized repo-only step. Record this split in the master-plan amendment so the prerequisite is relocated, not deleted.
+New:
+1. `supabase/migrations/<generated>_pcart_treasury_signer_config.sql` (via the migration tool)
+2. `src/lib/treasury-signers.ts` — types, validation, query keys, read/save client calls
+3. `src/components/cartel/TreasurySignerSetupPanel.tsx`
+4. `scripts/pcart-treasury-signers-regression.ts`
 
-## 8. CLOSED vs PENDING after the repo-only pack
+Changed:
+5. `src/routes/_authenticated/launch-control.tsx` — mount the panel only
+6. `scripts/pcart-l1-closure-regression.ts` — re-pin migration count (see section 9)
+7. `scripts/pcart-l2-draft-artifact-regression.ts` — re-pin migration count (see section 9)
+8. `src/integrations/supabase/types.ts` — regenerated by the platform, not hand-edited
+9. `docs/PCART_L1_CLOSURE_PACK.md` — status line only (see section 9)
 
-**Can be marked CLOSED:**
-- L1-a operational ETH reserve policy (0.10 / 0.05, budget guardrail).
-- L1-b (implementation half only) — Safe v1.4.1 SafeL2 + SafeProxyFactory on 4663 chosen as the frozen treasury architecture.
-- L1-c (internal half only) — PEPECARTEL communications rules.
-- L1-d — dated, versioned, fail-closed compatibility manifest, with mandatory L5 revalidation.
-- L1-e1 — infrastructure/protocol compatibility evidence.
+Prohibited paths: `src/lib/treasury-safe-verify.ts`, `src/lib/treasury-safe-verify.functions.ts`, `src/components/cartel/TreasurySafeVerificationPanel.tsx`, `src/components/cartel/ProductionDeploymentRequestPanel.tsx`, `src/lib/launch-production-request.ts`, `contracts/**`, `src/lib/cartel-fixed-erc20.artifact.ts`, any chain execution/liquidity/runtime-control file, `package.json`/lock, `.lovable/plan.md`, every other migration.
 
-**Must remain PENDING (and L1 cannot be declared fully closed for execution purposes until each is met):**
-- Actual PEPECARTEL Safe deployment; the Safe address and 3 signer addresses.
-- The six stronger Safe verifications (singleton slot, proxy code hash, strict VERSION, empty modules, zero guard, readable nonce) implemented in the verifier and passing against the real Safe.
-- PCART initial treasury recipient address.
-- External legal sign-off, if the owner requires it.
-- L1-e2 exact-artifact testnet rehearsal (Phase 3).
-- On-chain revalidation of every manifest address immediately before L5.
-- Funded deployer wallet meeting the 0.05 ETH floor.
+## 6. Tests and regressions
 
-Recommended framing: **L1 POLICY CLOSED / L1 EXECUTION PREREQUISITES PENDING.** Phase 2 compilation may be authorized on POLICY CLOSED alone.
+New `scripts/pcart-treasury-signers-regression.ts` (dependency-free, source + pure-logic):
 
-## 9. Exact stop point
+- Validation: happy path; short/long/non-hex address; zero address; duplicates in any position; two addresses; four addresses; mixed-case input normalising to identical lowercase.
+- Storage normalisation is lowercase; display path uses checksum.
+- Threshold is a hard-coded `2` with no UI control writing it.
+- Migration source asserts: `is_workspace_owner` used in every policy; no `to anon` and no anon grant; `security definer` + `set search_path = public` on the RPC; the status CHECK contains only `DRAFT` and `SIGNERS_READY` and does **not** contain `SAFE_CREATED` or `VERIFIED`; threshold CHECK `= 2` present; unique on `launch_id`.
+- Component source contains "Save signer wallets" and contains no "Create Safe", no seed/private-key input, no `sendTransaction`/`signMessage`/wallet import.
+- Tripwires: no 40-hex address literal appears in any new file; `MAINNET_LIQUIDITY_TX_ENABLED` still `false`; `APPROVED_OFFICIAL_ARTIFACT_ID` still `cartel-fixed-erc20-v1`; `ProductionDeploymentRequestPanel.tsx` unchanged and production submission does **not** reference the signer config; hardened verifier files unchanged.
 
-Stop immediately after the repo-only pack is committed and all gates pass. Specifically, stop **before**: creating or deploying any Safe; funding any wallet; compiling anything; producing `pepecartel-token-v1`; any testnet or mainnet transaction; any ARM/CLAIM/send-window action; any PCART production request; any SQL. Report SHA, diffstat, per-suite counts, CLOSED/PENDING table, residual uncertainty. Do not start Phase 2.
+Re-run unchanged: pcart-l1b (59), pcart-l1-closure, pcart-l2-draft, hardening-b, p1a, p2c2, p3c-f/f1/f2, launcher-b, launcher-b3, verifier-state-write-activation, wallet-connector, plus `bunx tsgo --noEmit` and `bun run build`.
 
-## 10. Prohibited changes
+## 7. Can this be built now without knowing the addresses?
 
-Any `src/**`, `supabase/**`, `docs/sql/**` or generated-types edit; any migration or SQL; editing `contracts/PepeCartelToken.sol` or `src/lib/cartel-fixed-erc20.artifact.ts`; widening the artifact allowlist; adding `pepecartel-token-v1` outside documentation; placing any Safe, router, factory, Permit2 or treasury address into runtime code; any compile step or solc/hardhat/foundry install; any package/config change; changing `MAINNET_DEPLOYMENT_TX_ENABLED`, `MAINNET_LIQUIDITY_TX_ENABLED`, `MAINNET_VERIFICATION_STATE_WRITES_ENABLED` or runtime execution control; creating a PCART production request; Safe creation; wallet signing, broadcasting or value movement on any chain; deploy, publish, secret change or Telegram send; weakening or deleting any existing regression assertion; asserting legal approval anywhere in the pack.
+**YES, fully.** Nothing in the schema, RLS, RPC, UI or tests depends on the values. The addresses arrive at runtime, typed by the owner, and live only in a row. Regressions use synthetic fixtures that are asserted never to leak into shipped source.
+
+## 8. Stop point
+
+Stop once the migration is applied, the panel saves and reloads correctly for the workspace owner, all suites pass and the diff matches the allowlist. Stop **before**: creating any Safe; selecting or funding any wallet; any signature or transaction on any chain; wiring the stored signers into the verifier as a hard comparison; gating production request submission; Phase 2 PCART compilation; deploy or publish. No status beyond `SIGNERS_READY` may exist.
+
+## 9. Conflicts with the master plan / L1 closure docs
+
+Three, all surfaced rather than worked around:
+
+1. **Migration count tripwire — blocking.** `scripts/pcart-l1-closure-regression.ts:379` and `scripts/pcart-l2-draft-artifact-regression.ts:210` both assert exactly 82 migration files. This phase adds one, so both fail unless explicitly re-pinned to 83 with the new filename named. Those two scripts are therefore on the allowlist and need your explicit authorisation; I will not delete or loosen the assertion, only re-pin it.
+2. **Address-leak tripwire — not blocking.** `L1C-6` forbids external Safe/Uniswap addresses in `src/**`. Owner-entered addresses are runtime data, never source, and the new regression adds its own no-literal-address check, so `L1C-6` stays untouched.
+3. **Closure-pack status wording — documentation only.** The closure pack currently lists "PCART initial treasury recipient address" and the exact-owner match as PENDING. After this phase the *intended* signer addresses become recordable, but the Safe still does not exist. Proposed single amendment: note that signer-address capture is BUILT while actual Safe creation, the live canonical pass and the exact owner-address match remain PENDING. No frozen economic value, no L1 closure status, and no "execution ready" claim changes.
+
+Also worth naming: this phase intentionally does **not** make production request submission depend on signer setup. PCART-L2 is not ready, so gating would add a dependency that cannot yet be satisfied; it stays a guided prerequisite only.
