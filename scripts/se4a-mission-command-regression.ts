@@ -21,7 +21,7 @@ function check(name: string, condition: boolean): void {
 const WEBHOOK_PATH = "supabase/functions/telegram-webhook/index.ts";
 const TRANSPORT_PATH = "backend-source/edge-functions/social-mission-telegram/index.ts";
 const SQL_PATH = "docs/sql/SE4A_mission_command_launcher.sql";
-const STALE_WEBHOOK_PATH = "backend-source/edge-functions/telegram-webhook/index.ts";
+const MIRROR_WEBHOOK_PATH = "backend-source/edge-functions/telegram-webhook/index.ts";
 
 const webhookSrc = readFileSync(WEBHOOK_PATH, "utf8");
 const transportSrc = readFileSync(TRANSPORT_PATH, "utf8");
