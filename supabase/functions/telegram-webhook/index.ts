@@ -3424,14 +3424,20 @@ Deno.serve(async (req: Request) => {
             return json({ ok: true });
           }
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Targets reset to automatic.");
-          if (outcome === "ok") {
-            await mcRefreshCard({
-              binding,
-              actorUserId: linked?.user_id ? String(linked.user_id) : null,
-              seed: `${updateId}:reset_auto`,
-            });
-          }
-          await mcRenderPanel(operatorId, callbackChatId, missionId, binding, "Targets are automatic again.");
+          // Committed `ok` AND `replayed` both roll the card: a webhook retry
+          // whose first replacement result was lost must be able to self-heal.
+          const resetResurface = await mcResurfaceLiveCard({
+            binding,
+            actorUserId: linked?.user_id ? String(linked.user_id) : null,
+            seed: `${updateId}:reset_auto`,
+          });
+          await mcRenderPanel(
+            operatorId,
+            callbackChatId,
+            missionId,
+            binding,
+            mcResurfaceNote("Targets are automatic again.", resetResurface),
+          );
           return json({ ok: true });
         }
 
