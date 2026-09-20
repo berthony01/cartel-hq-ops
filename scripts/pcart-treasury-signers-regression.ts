@@ -31,6 +31,10 @@ const VERIFIER_FN = "src/lib/treasury-safe-verify.functions.ts";
 const REGISTRY = "src/lib/chain-mainnet-registry.ts";
 const MIGRATIONS = "supabase/migrations";
 const MIGRATION_FILE = "20260920053942_42259f41-35d1-4b5c-9e6a-78127867cddd.sql";
+// Narrow completion migration: re-applies the owner-only INSERT/UPDATE policies and
+// authenticated table grants that did not take effect when the first file was applied.
+const POLICY_COMPLETION_MIGRATION_FILE =
+  "20260920054150_5dcb8ca1-aba1-4c9b-995e-cd9ff00da488.sql";
 
 const read = (p: string) => readFileSync(p, "utf8");
 
