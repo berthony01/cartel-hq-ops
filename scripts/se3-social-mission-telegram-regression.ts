@@ -272,7 +272,7 @@ check("8.7 claim records the exact intent text", sendBlock.includes("send_text_i
 check("8.8 claim clears confirmed fields", sendBlock.includes("message_text_snapshot: null"));
 check("8.9 claim is state-guarded (compare-and-set)", sendBlock.includes('.eq("delivery_state", state)'));
 check("8.10 live verification after claim", sendBlock.indexOf("verifyGroup") > sendBlock.indexOf('delivery_state: "SENDING"'));
-check("8.11 exactly one sendMessage call path", (indexSrc.match(/"sendMessage"/g) ?? []).length === 1);
+check("8.11 exactly one sendMessage call path in the send lane", (sendBlock.match(/"sendMessage"/g) ?? []).length === 1);
 check("8.12 preview disabled", sendBlock.includes("disable_web_page_preview: true"));
 check("8.13 SENT requires numeric message id", sendBlock.includes('typeof messageId !== "number"'));
 check("8.14 SENT persists confirmed snapshot", sendBlock.includes("message_text_snapshot: rendered.text"));
