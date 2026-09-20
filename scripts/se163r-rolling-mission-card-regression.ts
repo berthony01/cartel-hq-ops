@@ -731,7 +731,13 @@ check("13.5 the LIVE helper sends no caller revision", !/revision:/.test(resurfa
 check("13.6 end/cancel still use the in-place edit lane exactly twice", (webhookSrc.match(/await mcRefreshCard\(\{/g) ?? []).length === 2);
 check("13.7 the final lane still carries an edit revision", /mcRefreshCard[\s\S]{0,1600}revision: Number\(\(target as any\)\.edit_revision \?\? 0\) \+ 1/.test(webhookSrc));
 check("13.8 five LIVE config edits roll the card", (webhookSrc.match(/await mcResurfaceLiveCard\(\{/g) ?? []).length >= 5);
-check("13.9 LIVE resurface runs for ok AND replayed", (webhookSrc.match(/=== "ok" \|\| [A-Za-z.\[\]"_]+ === "replayed"/g) ?? []).length >= 5);
+check("13.9 LIVE resurface runs for ok AND replayed", (() => {
+  const guards = [...webhookSrc.matchAll(/if \(outcome !== "ok" && outcome !== "replayed"\) \{/g)].map((m) => m.index ?? 0);
+  const live = [...webhookSrc.matchAll(/await mcResurfaceLiveCard\(\{/g)].map((m) => m.index ?? 0);
+  // Each LIVE resurface call site sits AFTER a guard that already refused every
+  // non-committed outcome, so both "ok" and "replayed" reach the replacement.
+  return live.length >= 5 && live.every((i) => guards.some((g) => g < i && i - g < 4000));
+})());
 
 // 13b — bot correlation rules.
 check("13.10 a deterministic BASE resurface id exists", /se163r-mission-control-resurface:\$\{seed\}/.test(webhookSrc));
@@ -782,7 +788,7 @@ check("13.40 only the bot's own warning is ever deleted", /message_id: Number\(w
 check("13.41 activation wiring makes no pin or unpin call", !/pinChatMessage|unpinChatMessage/.test(activityHook) && !/pinChatMessage|unpinChatMessage/.test(resurfaceHelper));
 check("13.42 activation wiring reads no X provider", !/api\.twitter\.com|api\.x\.com|lookupXPostMetrics/.test(activityHook + resurfaceHelper));
 check("13.43 the stale backend-source webhook copy is untouched", !staleWebhookSrc.includes("noteMissionChatActivity") && !staleWebhookSrc.includes("mcResurfaceLiveCard"));
-check("13.44 the v17 transport source is unchanged by this unit", transportSrc.includes("const handleResurface") && !transportSrc.includes("noteMissionChatActivity"));
+check("13.44 the v17 transport source is unchanged by this unit", transportSrc.includes("async function handleResurface(") && !transportSrc.includes("noteMissionChatActivity"));
 
 // 13h — Mini App activation.
 check("13.45 the Mini App transport action is resurface_mission", /MINIAPP_TRANSPORT_ACTION = "resurface_mission"/.test(bridgeSrc));
@@ -791,7 +797,7 @@ check("13.47 the Mini App keeps exact target binding", /\.eq\("id", targetId\)/.
 check("13.48 cleanup_pending is a bounded refresh state", /"cleanup_pending"/.test(bridgeSrc));
 check("13.49 committed + cleanup_pending is a truthful no-retry warning", /result\.refresh === "cleanup_pending"[\s\S]{0,320}retry: false/.test(miniClientSrc) && /previous card is queued for removal/.test(miniClientSrc));
 check("13.50 the Mini App copy describes the rolling card", /move the current Telegram card to the bottom of the chat/.test(miniRouteSrc));
-check("13.51 the Mini App still exposes no END or CANCEL capability", !/end_now|"END_NOW"|cancel_mission/i.test(bridgeSrc.replace(/END\/CANCEL/g, "")) && !/end_now|cancel_mission/i.test(miniRouteSrc));
+check("13.51 the Mini App still refuses END and CANCEL", /end_now: "bot_finalize_required"/.test(bridgeSrc) && /cancel: "bot_finalize_required"/.test(bridgeSrc) && !/action: "end_now"|action: "cancel"/.test(bridgeSrc));
 
 // ---------------------------------------------------------------------------
 
