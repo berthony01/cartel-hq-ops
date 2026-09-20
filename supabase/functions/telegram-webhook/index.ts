@@ -3768,7 +3768,7 @@ Deno.serve(async (req: Request) => {
             return json({ ok: true });
           }
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Cancelling the mission…");
-          const transport = await mcRefreshCard({
+          const transport = await mcFinalizeCardEdit({
             binding,
             actorUserId: linked?.user_id ? String(linked.user_id) : null,
             seed: `${updateId}:cancel`,
