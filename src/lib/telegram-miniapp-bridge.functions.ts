@@ -35,7 +35,48 @@ export const MINIAPP_RPC = {
   panel: "social_mission_control_panel",
   applyTargets: "social_mission_apply_target_override",
   applyDuration: "social_mission_apply_duration_override",
+  /**
+   * SE-16.2P — reused (NOT newly defined) service-only authorization RPC. It is
+   * the authoritative source of `actor_user_id` and `target_id` for the card
+   * refresh: neither value may ever come from the client.
+   */
+  authorize: "social_mission_control_authorize",
 } as const;
+
+/* ------------------------------------------- SE-16.2P CARD-REFRESH PARITY */
+
+/**
+ * SE-16.2P — the bot refreshes the canonical Telegram mission card after every
+ * successful Mission Control mutation (`mcRefreshCard`). Without that, a Mini
+ * App edit would commit to the database while the pinned card kept showing the
+ * old targets / end time, with no metric-independent path that corrects it.
+ *
+ * This bridge therefore performs the SAME single same-card edit through the
+ * SAME existing service-only transport (`social-mission-telegram`,
+ * `action: "edit_mission"`). It never renders a card and never calls the
+ * Telegram Bot API to edit or send a message. A LIVE target/duration edit is
+ * card-edit only; the transport's provider/X snapshot path belongs to mission
+ * completion, not to this call.
+ */
+export const MINIAPP_TRANSPORT_FUNCTION = "social-mission-telegram";
+export const MINIAPP_TRANSPORT_ACTION = "edit_mission";
+/** Existing accepted internal-source value; no new transport source is added. */
+export const MINIAPP_TRANSPORT_INTERNAL_SOURCE = "telegram-webhook";
+export const MINIAPP_TRANSPORT_TIMEOUT_MS = 15_000;
+
+/**
+ * Bounded, non-secret refresh states. Raw transport payloads, headers, status
+ * codes and errors never reach the client.
+ *  - `edited`    the card was edited now
+ *  - `replayed`  the transport recognised this exact refresh request already
+ *  - `ambiguous` outcome unknown (timeout / unresolved edit) — safe to retry
+ *  - `failed`    refresh did not happen; the DB mutation still stands
+ */
+export const MINIAPP_REFRESH_STATES = ["edited", "replayed", "ambiguous", "failed"] as const;
+export type MiniAppRefreshState = (typeof MINIAPP_REFRESH_STATES)[number];
+
+/** Mutation outcomes that are committed and therefore warrant a card refresh. */
+export const MINIAPP_REFRESHABLE_OUTCOMES = ["ok", "replayed"] as const;
 
 /**
  * END NOW / CANCEL are intentionally NOT implemented in bridge V1: the bot
