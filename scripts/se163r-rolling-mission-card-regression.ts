@@ -690,3 +690,11 @@ check("12.107 the edit lane still uses the original verifyGroup", editLane.inclu
 check("12.108 the edit lane still requires a caller revision", editLane.includes("revision !== currentRevision + 1"));
 check("12.109 the replacement lane never touches send or edit state", !/delivery_state:/.test(lane) && !/edit_state:/.test(lane) && !/edit_revision:/.test(lane));
 check("12.110 the replacement lane adds no new network host", (lane.match(/https?:\/\//g) ?? []).length === 0);
+
+// ---------------------------------------------------------------------------
+
+console.log(`SE-16.3R regression: ${passed} passed, ${failures.length} failed`);
+if (failures.length > 0) {
+  for (const failure of failures) console.log(`  FAIL ${failure}`);
+  process.exit(1);
+}
