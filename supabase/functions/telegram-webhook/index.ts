@@ -2281,14 +2281,48 @@ Deno.serve(async (req: Request) => {
    * by the shared resolver.
    */
 
-  /** Deterministic RFC-4122-shaped id so a Telegram retry reuses the same edit. */
-  const mcRequestUuid = async (seed: string) => {
-    const hex = await sha256Hex(`se15-mission-control-edit:${seed}`);
+  /** Deterministic RFC-4122-shaped id so a Telegram retry reuses the same request. */
+  const mcUuidFromSeed = async (namespacedSeed: string) => {
+    const hex = await sha256Hex(namespacedSeed);
     const chars = hex.slice(0, 32).split("");
     chars[12] = "5";
     chars[16] = ["8", "9", "a", "b"][parseInt(hex[16], 16) % 4];
     const h = chars.join("");
     return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+  };
+
+  /** In-place FINAL-state card edit id (END / CANCEL lane). Unchanged namespace. */
+  const mcRequestUuid = (seed: string) => mcUuidFromSeed(`se15-mission-control-edit:${seed}`);
+
+  /**
+   * SE-16.3R-3 — BASE transport id for a LIVE rolling-card replacement. A
+   * Telegram retry of the same tap therefore hits the transport's duplicate
+   * short-circuit instead of producing a second card.
+   */
+  const mcResurfaceUuid = (seed: string) =>
+    mcUuidFromSeed(`se163r-mission-control-resurface:${seed}`);
+
+  /**
+   * SE-16.3R-3 — recovery id, deterministic for ONE durable FAILED resurface
+   * revision. A durable FAILED proves no new card remained, so exactly one new
+   * safe attempt per revision is allowed. CLAIMED / AMBIGUOUS never get one.
+   */
+  const mcResurfaceRecoveryUuid = (seed: string, revision: number) =>
+    mcUuidFromSeed(`se163r-mission-control-resurface-recovery:${seed}:${revision}`);
+
+  /** SE-16.3R-3 — bounded local outcome of a LIVE card replacement attempt. */
+  type MissionResurfaceOutcome = {
+    kind: "RESURFACED" | "REPLAYED" | "FAILED" | "AMBIGUOUS" | "UNAVAILABLE";
+    message: string | null;
+  };
+
+  /** Bounded permission-repair detection for admin-facing copy. */
+  const mcPermissionHint = (message: string | null | undefined) => {
+    const text = String(message ?? "");
+    if (/delete messages/i.test(text)) return "Delete Messages";
+    if (/pin messages/i.test(text)) return "Pin Messages";
+    if (/administrator/i.test(text)) return "administrator";
+    return null;
   };
 
   /**
