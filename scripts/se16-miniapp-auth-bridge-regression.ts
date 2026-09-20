@@ -295,7 +295,28 @@ const opts = { now: NOW_MS };
     /await import\("@\/integrations\/supabase\/client\.server"\)/.test(bridgeCode) &&
       !/^import[\s\S]{0,80}client\.server/m.test(bridgeCode),
   );
-  check("6.4 bridge never reads the service role key directly", !/SUPABASE_SERVICE_ROLE_KEY/.test(bridgeCode));
+  check(
+    // SE-16.2P — the service-role key is now read for exactly ONE purpose: the
+    // internal transport headers of the card refresh. It is read per-request
+    // inside that helper, is never module-scope, never exported, never
+    // returned and never logged.
+    "6.4 service role key appears only as a per-request transport credential",
+    (() => {
+      const hits = (bridgeCode.match(/SUPABASE_SERVICE_ROLE_KEY/g) ?? []).length;
+      const helper = bridgeCode.slice(
+        bridgeCode.indexOf("async function miniAppRefreshCard"),
+        bridgeCode.indexOf("export const miniAppListMissionWorkspaces"),
+      );
+      return (
+        hits === 1 &&
+        /const serviceKey = process\.env\["SUPABASE_SERVICE_ROLE_KEY"\] \?\? "";/.test(helper) &&
+        !/^const\s+\w+\s*=\s*process\.env\["SUPABASE_SERVICE_ROLE_KEY"\]/m.test(bridgeCode) &&
+        !/export[^\n]*serviceKey/.test(bridgeCode) &&
+        !/return[^\n]*serviceKey/.test(bridgeCode) &&
+        !/console\.[a-z]+\([^)]*serviceKey/.test(bridgeCode)
+      );
+    })(),
+  );
   check("6.5 no console logging in the bridge", !/console\./.test(bridgeCode));
   check("6.6 no console logging in the auth module", !/console\./.test(authCode));
   check("6.7 token never returned by the validator", !/return[^\n]*botToken/.test(authCode));
@@ -315,23 +336,41 @@ const opts = { now: NOW_MS };
     "social_mission_control_panel",
     "social_mission_apply_target_override",
     "social_mission_apply_duration_override",
+    // SE-16.2P — reused (never newly defined) service-only authorization RPC.
+    "social_mission_control_authorize",
   ];
   for (const name of expected) {
     check(`7.1 reuses existing RPC ${name}`, bridgeCode.includes(name));
   }
-  const rpcNames = [...bridgeCode.matchAll(/"(social_mission_[a-z_]+|end_social_mission_[a-z_]+|cancel_social_mission_[a-z_]+)"/g)].map(
-    (m) => m[1]!,
-  );
+  /** Exactly the tables this bridge may read. Both are read-only lookups. */
+  const expectedTables = ["social_metric_snapshots", "social_mission_targets"];
+  const rpcNames = [
+    ...bridgeCode.matchAll(
+      /"(social_mission_[a-z_]+|end_social_mission_[a-z_]+|cancel_social_mission_[a-z_]+|social_metric_[a-z_]+)"/g,
+    ),
+  ].map((m) => m[1]!);
+  const allowed = [...expected, ...expectedTables];
   check(
-    "7.2 no RPC outside the approved SE-15 set",
-    rpcNames.every((n) => expected.includes(n)),
-    rpcNames.filter((n) => !expected.includes(n)).join(", "),
+    "7.2 no RPC or table outside the approved SE-15 / SE-16.2P set",
+    rpcNames.every((n) => allowed.includes(n)),
+    rpcNames.filter((n) => !allowed.includes(n)).join(", "),
   );
   check(
     "7.3 bridge defines no SQL/schema change",
     !/CREATE TABLE|ALTER TABLE|CREATE FUNCTION|CREATE POLICY|GRANT /i.test(bridgeSrc),
   );
-  check("7.4 only the one snapshots table is read", (bridgeCode.match(/\.from\("/g) ?? []).length === 1);
+  check(
+    "7.4 exactly the two approved tables are read, and only for reads",
+    (() => {
+      const froms = [...bridgeCode.matchAll(/\.from\("([a-z_]+)"\)/g)].map((m) => m[1]!);
+      return (
+        froms.length === 2 &&
+        froms.every((t) => expectedTables.includes(t)) &&
+        new Set(froms).size === 2 &&
+        !/\.from\("[a-z_]+"\)\s*\n?\s*\.(insert|update|upsert|delete)\(/.test(bridgeCode)
+      );
+    })(),
+  );
   check("7.5 the table read is social_metric_snapshots", bridgeCode.includes('.from("social_metric_snapshots")'));
 }
 
@@ -564,6 +603,154 @@ const opts = { now: NOW_MS };
         .filter(Boolean);
       return hits.length === 1 && hits[0] === "src/lib/telegram-miniapp-bridge.functions.ts";
     })(),
+  );
+}
+
+/* ------------- 14. SE-16.2P mission card-refresh parity */
+
+{
+  const refreshFn =
+    bridgeCode.slice(
+      bridgeCode.indexOf("async function miniAppRefreshCard"),
+      bridgeCode.indexOf("export const miniAppListMissionWorkspaces"),
+    ) || "";
+
+  check("14.1 a card-refresh helper exists", refreshFn.length > 0);
+  check(
+    "14.2 refresh uses the existing social-mission-telegram transport endpoint",
+    /MINIAPP_TRANSPORT_FUNCTION\s*=\s*"social-mission-telegram"/.test(bridgeCode) &&
+      /\/functions\/v1\/\$\{MINIAPP_TRANSPORT_FUNCTION\}/.test(refreshFn),
+  );
+  check(
+    "14.3 transport action is edit_mission",
+    /MINIAPP_TRANSPORT_ACTION\s*=\s*"edit_mission"/.test(bridgeCode) &&
+      /action:\s*MINIAPP_TRANSPORT_ACTION/.test(refreshFn),
+  );
+  check(
+    "14.4 internal-source header reuses an already accepted transport source",
+    /MINIAPP_TRANSPORT_INTERNAL_SOURCE\s*=\s*"telegram-webhook"/.test(bridgeCode) &&
+      /"X-Cartel-Internal-Source":\s*MINIAPP_TRANSPORT_INTERNAL_SOURCE/.test(refreshFn),
+  );
+  check(
+    "14.5 service credentials are read server-side per request and never returned",
+    /process\.env\["SUPABASE_SERVICE_ROLE_KEY"\]/.test(refreshFn) &&
+      !/return[^\n]*serviceKey/.test(refreshFn) &&
+      !/console\.(log|error|warn)/.test(refreshFn),
+  );
+  check(
+    "14.6 authoritative actor/target come from the reused authorize RPC",
+    /authorize:\s*"social_mission_control_authorize"/.test(bridgeCode) &&
+      /admin\.rpc\(MINIAPP_RPC\.authorize/.test(refreshFn) &&
+      /authRow\["actor_user_id"\]/.test(refreshFn) &&
+      /authRow\["target_id"\]/.test(refreshFn),
+  );
+  check(
+    "14.7 no new SQL/RPC definition is introduced by the bridge",
+    !/CREATE\s+(OR\s+REPLACE\s+)?FUNCTION/i.test(bridgeSrc) && !/CREATE\s+TABLE/i.test(bridgeSrc),
+  );
+  check(
+    "14.8 refresh binding inputs are server-derived, never read from client data",
+    !/\bdata\?\./.test(refreshFn) &&
+      !/\bdata\.[A-Za-z]/.test(refreshFn) &&
+      /workspaceId:\s*binding\.workspaceId/.test(refreshFn) &&
+      /missionId:\s*binding\.missionId/.test(refreshFn) &&
+      /"X-Cartel-Actor-User-Id":\s*actorUserId/.test(refreshFn),
+  );
+  check(
+    "14.9 no mutation/refresh input validator accepts chat, workspace, actor, target, revision or telegram user id",
+    !/inputValidator\(\s*\(input:\s*\{[^}]*(chatId|workspaceId|telegramUserId|targetId|actorUserId|revision)/s.test(
+      bridgeCode.slice(bridgeCode.indexOf("MUTATIONS")),
+    ),
+  );
+  check(
+    "14.10 exact-target lookup pins target id + mission + workspace + verified chat",
+    /\.eq\("id",\s*targetId\)/.test(refreshFn) &&
+      /\.eq\("mission_id",\s*binding\.missionId\)/.test(refreshFn) &&
+      /\.eq\("workspace_id",\s*binding\.workspaceId\)/.test(refreshFn) &&
+      /\.eq\("telegram_chat_id",\s*Number\(binding\.chatId\)\)/.test(refreshFn),
+  );
+  check(
+    "14.11 edit_revision is read from that exact target row and incremented",
+    /select\("id,\s*edit_revision"\)/.test(refreshFn) &&
+      /revision:\s*Number\(targetRow\["edit_revision"\]\s*\?\?\s*0\)\s*\+\s*1/.test(refreshFn),
+  );
+  check(
+    "14.12 refresh request id is deterministic, action-separated and retry-stable",
+    /se16-miniapp-refresh:\$\{telegramUserId\}:\$\{action\}:\$\{requestId\}/.test(bridgeCode),
+  );
+  check(
+    "14.13 refresh request id is UUID-shaped",
+    (() => {
+      const fn = bridgeCode.slice(bridgeCode.indexOf("function miniAppRefreshRequestUuid"));
+      return /chars\[12\] = "5"/.test(fn) && /h\.slice\(0, 8\)\}-\$\{h\.slice\(8, 12\)/.test(fn);
+    })(),
+  );
+  check(
+    "14.14 only ok and replayed outcomes trigger a refresh",
+    /MINIAPP_REFRESHABLE_OUTCOMES = \["ok", "replayed"\]/.test(bridgeCode) &&
+      /MINIAPP_REFRESHABLE_OUTCOMES as readonly string\[\]\)\.includes\(outcome\)/.test(bridgeCode),
+  );
+  check(
+    "14.15 both mutations route their committed outcome through the refresh wrapper",
+    (bridgeCode.match(/withCardRefresh\(outcome,/g) ?? []).length === 2 &&
+      /action: "apply_targets"/.test(bridgeCode) &&
+      /action: "apply_duration"/.test(bridgeCode),
+  );
+  check(
+    "14.16 refresh state is a bounded non-secret allowlist",
+    /MINIAPP_REFRESH_STATES = \["edited", "replayed", "ambiguous", "failed"\]/.test(bridgeCode),
+  );
+  check(
+    "14.17 refresh outcome is reported separately from the mutation outcome",
+    /ok:\s*true;\s*outcome:\s*string;\s*refresh\?:\s*MiniAppRefreshState/.test(bridgeCode) &&
+      /refresh:\s*await miniAppRefreshCard\(args\)/.test(bridgeCode),
+  );
+  check(
+    "14.18 a failed refresh never rolls back or downgrades the committed mutation",
+    !/rollback|revert|undo/i.test(refreshFn) && /return \{ ok: true, outcome, refresh:/.test(bridgeCode),
+  );
+  check(
+    "14.19 the transport call is timeout-bounded",
+    /MINIAPP_TRANSPORT_TIMEOUT_MS/.test(refreshFn) && /AbortSignal\.timeout\(MINIAPP_TRANSPORT_TIMEOUT_MS\)/.test(refreshFn),
+  );
+  check(
+    "14.20 raw transport payloads and status codes are never returned to the client",
+    !/return\s+payload/.test(refreshFn) && !/return\s+response/.test(refreshFn),
+  );
+  check(
+    "14.21 the bridge never calls the Telegram Bot API to edit or send a message",
+    !/api\.telegram\.org/.test(bridgeCode) &&
+      !/editMessageText|sendMessage|editMessageCaption/.test(bridgeCode),
+  );
+  check(
+    "14.22 the bridge renders no Telegram card itself",
+    !/renderMissionCard|buildMissionCard/.test(bridgeCode),
+  );
+  check(
+    "14.23 no provider/X read is introduced on the mutation path",
+    !/api\.twitter\.com|api\.x\.com|X_API|fetchMetrics|provider_read/i.test(bridgeCode),
+  );
+  check(
+    "14.24 END NOW / CANCEL remain disabled and unexported as actions",
+    /end_now:\s*"bot_finalize_required"/.test(bridgeCode) &&
+      /cancel:\s*"bot_finalize_required"/.test(bridgeCode) &&
+      !/end_social_mission_from_control|cancel_social_mission_from_control/.test(bridgeCode) &&
+      !/export const miniAppEnd|export const miniAppCancel/.test(bridgeCode),
+  );
+  check(
+    "14.25 the authorization chain of both mutations is unchanged",
+    (bridgeCode.match(/const gate = await authorizeMission\(data\?\.initData, data\?\.missionId\);/g) ?? [])
+      .length === 3 &&
+      /isCurrentChatAdmin\(token, binding\.chatId, auth\.user\.id\)/.test(bridgeCode) &&
+      /_verified_chat_id:\s*Number\(binding\.chatId\)/.test(bridgeCode),
+  );
+  check(
+    "14.26 refresh runs only after a successful authorize outcome",
+    /String\(authRow\["outcome"\] \?\? ""\) !== "ok"\) return "failed"/.test(refreshFn),
+  );
+  check(
+    "14.27 the authorize workspace must match the server-derived binding",
+    /workspaceId !== binding\.workspaceId/.test(refreshFn),
   );
 }
 
