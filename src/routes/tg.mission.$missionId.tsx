@@ -448,7 +448,7 @@ function MiniAppMission() {
       {isLive ? (
         <MiniAppPanel
           heading="Mission controls"
-          note="Changes apply to the live mission and refresh the pinned Telegram card."
+          note="Changes apply to the live mission and move the current Telegram card to the bottom of the chat."
         >
           <div className="flex min-w-0 flex-col gap-2">
             <MiniAppActionButton

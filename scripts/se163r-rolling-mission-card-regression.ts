@@ -703,6 +703,103 @@ check("12.109 the replacement lane never touches send or edit state", !/delivery
 check("12.110 the replacement lane adds no new network host", (lane.match(/https?:\/\//g) ?? []).length === 0);
 
 // ---------------------------------------------------------------------------
+// 13. SE-16.3R-3 ACTIVATION WIRING (repo-only).
+// ---------------------------------------------------------------------------
+
+const webhookSrc = readFileSync("supabase/functions/telegram-webhook/index.ts", "utf8");
+const staleWebhookSrc = readFileSync("backend-source/edge-functions/telegram-webhook/index.ts", "utf8");
+const bridgeSrc = readFileSync("src/lib/telegram-miniapp-bridge.functions.ts", "utf8");
+const miniClientSrc = readFileSync("src/lib/telegram-miniapp-client.ts", "utf8");
+const miniRouteSrc = readFileSync("src/routes/tg.mission.$missionId.tsx", "utf8");
+const transportSrc = readFileSync("supabase/functions/social-mission-telegram/index.ts", "utf8");
+
+const resurfaceHelper = (() => {
+  const start = webhookSrc.indexOf("const mcResurfaceLiveCard = async (");
+  return start < 0 ? "" : webhookSrc.slice(start, webhookSrc.indexOf("const mcResurfaceNote", start));
+})();
+const activityHook = (() => {
+  const start = webhookSrc.indexOf("const noteMissionChatActivity = async (");
+  return start < 0 ? "" : webhookSrc.slice(start, webhookSrc.indexOf("await noteMissionChatActivity();", start));
+})();
+
+// 13a — two explicit, separated card lanes in the bot console.
+check("13.1 a LIVE rolling-replacement helper exists", resurfaceHelper.length > 0);
+check("13.2 a final-state in-place edit helper still exists", webhookSrc.includes("const mcRefreshCard = async ("));
+check("13.3 the LIVE helper uses resurface_mission", /action: "resurface_mission"/.test(resurfaceHelper));
+check("13.4 the LIVE helper never edits or sends", !/"edit_mission"/.test(resurfaceHelper) && !/"send_mission"/.test(resurfaceHelper));
+check("13.5 the LIVE helper sends no caller revision", !/revision:/.test(resurfaceHelper.slice(resurfaceHelper.indexOf("body: JSON.stringify"))));
+check("13.6 end/cancel still use the in-place edit lane exactly twice", (webhookSrc.match(/await mcRefreshCard\(\{/g) ?? []).length === 2);
+check("13.7 the final lane still carries an edit revision", /mcRefreshCard[\s\S]{0,1600}revision: Number\(\(target as any\)\.edit_revision \?\? 0\) \+ 1/.test(webhookSrc));
+check("13.8 five LIVE config edits roll the card", (webhookSrc.match(/await mcResurfaceLiveCard\(\{/g) ?? []).length >= 5);
+check("13.9 LIVE resurface runs for ok AND replayed", (() => {
+  const guards = [...webhookSrc.matchAll(/if \(outcome !== "ok" && outcome !== "replayed"\) \{/g)].map((m) => m.index ?? 0);
+  const live = [...webhookSrc.matchAll(/await mcResurfaceLiveCard\(\{/g)].map((m) => m.index ?? 0);
+  // Each LIVE resurface call site sits AFTER a guard that already refused every
+  // non-committed outcome, so both "ok" and "replayed" reach the replacement.
+  return live.length >= 5 && live.every((i) => guards.some((g) => g < i && i - g < 4000));
+})());
+
+// 13b — bot correlation rules.
+check("13.10 a deterministic BASE resurface id exists", /se163r-mission-control-resurface:\$\{seed\}/.test(webhookSrc));
+check("13.11 a revision-namespaced recovery id exists", /se163r-mission-control-resurface-recovery:\$\{seed\}:\$\{revision\}/.test(webhookSrc));
+check("13.12 an exact-request RESURFACED lane replays locally with zero transport", /state === "RESURFACED"[\s\S]{0,140}return \{ kind: "REPLAYED"/.test(resurfaceHelper) && resurfaceHelper.indexOf('state === "RESURFACED"') < resurfaceHelper.indexOf("await fetch("));
+check("13.13 CLAIMED or AMBIGUOUS never mints a new id", /state === "CLAIMED" \|\| state === "AMBIGUOUS"[\s\S]{0,140}kind: "AMBIGUOUS"/.test(resurfaceHelper));
+check("13.14 only a durable FAILED lane gets a recovery id", /state === "FAILED"[\s\S]{0,140}mcResurfaceRecoveryUuid\(args\.seed, revision\)/.test(resurfaceHelper));
+check("13.15 correlation state is read only from the exact target row", /select\("id, resurface_state, resurface_client_request_id, resurface_revision"\)/.test(resurfaceHelper) && /\.eq\("telegram_chat_id", Number\(args\.binding\.chatId\)\)/.test(resurfaceHelper));
+
+// 13c — truthful bot copy.
+check("13.16 RESURFACED says the card moved to the bottom", /moved to the bottom of the chat/.test(webhookSrc));
+check("13.17 FAILED admits the card was not reposted but the change saved", /could not be reposted/.test(webhookSrc));
+check("13.18 AMBIGUOUS refuses to claim or resend", /could not be confirmed\. Do not resend it\./.test(webhookSrc));
+check("13.19 the permission hint is bounded", /const mcPermissionHint[\s\S]{0,400}Delete Messages[\s\S]{0,200}Pin Messages/.test(webhookSrc));
+
+// 13d — qualifying human activity.
+check("13.20 the activity hook exists", activityHook.length > 0);
+check("13.21 the RPC is the only counter path", /admin\.rpc\(\s*"social_mission_note_chat_activity"/.test(activityHook) && !/activity_message_count:\s/.test(webhookSrc));
+check("13.22 only group and supergroup chats count", /activityChatType !== "group" && activityChatType !== "supergroup"/.test(activityHook));
+check("13.23 sender_chat and bots are excluded", /msg\["sender_chat"\]\) return/.test(activityHook) && /author\.is_bot === true/.test(activityHook));
+check("13.24 bot commands are excluded by entity and by fallback", /e\?\.type === "bot_command" && Number\(e\?\.offset \?\? -1\) === 0/.test(activityHook) && /body\.trimStart\(\)\.startsWith\("\/"\)/.test(activityHook));
+check("13.25 service messages are excluded", /new_chat_members/.test(activityHook) && /pinned_message/.test(activityHook));
+check("13.26 ordinary human media counts", ["photo", "video", "animation", "document", "audio", "voice", "sticker", "video_note"].every((k) => activityHook.includes(`"${k}"`)));
+check("13.27 the hook runs before the text-only early return", (() => {
+  const hook = webhookSrc.indexOf("await noteMissionChatActivity();");
+  const textOnly = webhookSrc.indexOf("if (typeof text !== \"string\"", hook - 200000);
+  return hook > 0 && (textOnly < 0 || hook < webhookSrc.indexOf("if (typeof text !== \"string\"", hook));
+})());
+check("13.28 activity failure is fail-soft", /try \{\s*await noteMissionChatActivity\(\);\s*\} catch/.test(webhookSrc));
+
+// 13e — activity-triggered transport.
+check("13.29 only counted + should_resurface reaches transport", /!== "counted"\) return;/.test(activityHook) && /should_resurface"\] !== true\) return;/.test(activityHook));
+check("13.30 every returned binding value is revalidated", /UUID_SHAPE\.test\(activityWorkspaceId\)/.test(activityHook) && /UUID_SHAPE\.test\(activityMissionId\)/.test(activityHook) && /UUID_SHAPE\.test\(activityTargetId\)/.test(activityHook));
+check("13.31 the returned chat must equal the incoming chat", /signal\["telegram_chat_id"\] \?\? ""\) !== String\(Number\(chatId\)\)/.test(activityHook));
+check("13.32 the actor comes only from a workspace_members owner/admin query", /from\("workspace_members"\)[\s\S]{0,300}\.in\("role", \["owner", "admin"\]\)/.test(activityHook) && /role"\] \?\? ""\) === "owner"/.test(activityHook));
+check("13.33 the activity request id is deterministic in target + message id", /se163r-activity-resurface:\$\{activityTargetId\}:\$\{messageId\}/.test(activityHook));
+check("13.34 activity transport uses service headers and the resolved actor", /"X-Cartel-Internal-Source": "telegram-webhook"/.test(activityHook) && /"X-Cartel-Actor-User-Id": activityActorId/.test(activityHook));
+check("13.35 the activity transport sends no revision", !/revision:/.test(activityHook.slice(activityHook.indexOf("body: JSON.stringify"))));
+check("13.36 an unknown transport outcome never warns and never resends", /\} catch \{[\s\S]{0,140}return;/.test(activityHook));
+
+// 13f — bounded permission warning.
+check("13.37 only a bounded FAILED permission reason warns", /resurfaceState !== "FAILED"\) return;/.test(activityHook) && /const hint = mcPermissionHint\(resurfaceMessage\);/.test(activityHook));
+check("13.38 a repeated identical error never warns twice", /previousError && previousError === resurfaceMessage\) return;/.test(activityHook) && /select\("resurface_last_error"\)/.test(activityHook));
+check("13.39 the warning auto-deletes with the existing waitUntil pattern", /EdgeRuntime\?\.waitUntil\?\.\(cleanup\)/.test(activityHook) && /12_000/.test(activityHook));
+check("13.40 only the bot's own warning is ever deleted", /message_id: Number\(warnedId\)/.test(activityHook));
+
+// 13g — untouched boundaries.
+check("13.41 activation wiring makes no pin or unpin call", !/pinChatMessage|unpinChatMessage/.test(activityHook) && !/pinChatMessage|unpinChatMessage/.test(resurfaceHelper));
+check("13.42 activation wiring reads no X provider", !/api\.twitter\.com|api\.x\.com|lookupXPostMetrics/.test(activityHook + resurfaceHelper));
+check("13.43 the stale backend-source webhook copy is untouched", !staleWebhookSrc.includes("noteMissionChatActivity") && !staleWebhookSrc.includes("mcResurfaceLiveCard"));
+check("13.44 the v17 transport source is unchanged by this unit", transportSrc.includes("async function handleResurface(") && !transportSrc.includes("noteMissionChatActivity"));
+
+// 13h — Mini App activation.
+check("13.45 the Mini App transport action is resurface_mission", /MINIAPP_TRANSPORT_ACTION = "resurface_mission"/.test(bridgeSrc));
+check("13.46 the Mini App sends no caller revision", !/revision: Number\(targetRow\["edit_revision"\]/.test(bridgeSrc));
+check("13.47 the Mini App keeps exact target binding", /\.eq\("id", targetId\)/.test(bridgeSrc) && /\.eq\("telegram_chat_id", Number\(binding\.chatId\)\)/.test(bridgeSrc));
+check("13.48 cleanup_pending is a bounded refresh state", /"cleanup_pending"/.test(bridgeSrc));
+check("13.49 committed + cleanup_pending is a truthful no-retry warning", /result\.refresh === "cleanup_pending"[\s\S]{0,320}retry: false/.test(miniClientSrc) && /previous card is queued for removal/.test(miniClientSrc));
+check("13.50 the Mini App copy describes the rolling card", /move the current Telegram card to the bottom of the chat/.test(miniRouteSrc));
+check("13.51 the Mini App still refuses END and CANCEL", /end_now: "bot_finalize_required"/.test(bridgeSrc) && /cancel: "bot_finalize_required"/.test(bridgeSrc) && !/action: "end_now"|action: "cancel"/.test(bridgeSrc));
+
+// ---------------------------------------------------------------------------
 
 console.log(`SE-16.3R regression: ${passed} passed, ${failures.length} failed`);
 if (failures.length > 0) {

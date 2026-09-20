@@ -621,10 +621,17 @@ const opts = { now: NOW_MS };
     /MINIAPP_TRANSPORT_FUNCTION\s*=\s*"social-mission-telegram"/.test(bridgeCode) &&
       /\/functions\/v1\/\$\{MINIAPP_TRANSPORT_FUNCTION\}/.test(refreshFn),
   );
+  // SE-16.3R-3 — re-pinned, not loosened: the Mini App's LIVE edit lane now
+  // replaces the card instead of editing it in place. END/CANCEL remain
+  // bot-owned and are asserted absent from the Mini App elsewhere.
   check(
-    "14.3 transport action is edit_mission",
-    /MINIAPP_TRANSPORT_ACTION\s*=\s*"edit_mission"/.test(bridgeCode) &&
+    "14.3 transport action is resurface_mission",
+    /MINIAPP_TRANSPORT_ACTION\s*=\s*"resurface_mission"/.test(bridgeCode) &&
       /action:\s*MINIAPP_TRANSPORT_ACTION/.test(refreshFn),
+  );
+  check(
+    "14.3b the Mini App never sends edit_mission or send_mission",
+    !/"edit_mission"/.test(bridgeCode) && !/"send_mission"/.test(bridgeCode),
   );
   check(
     "14.4 internal-source header reuses an already accepted transport source",
@@ -670,9 +677,31 @@ const opts = { now: NOW_MS };
       /\.eq\("telegram_chat_id",\s*Number\(binding\.chatId\)\)/.test(refreshFn),
   );
   check(
-    "14.11 edit_revision is read from that exact target row and incremented",
-    /select\("id,\s*edit_revision"\)/.test(refreshFn) &&
-      /revision:\s*Number\(targetRow\["edit_revision"\]\s*\?\?\s*0\)\s*\+\s*1/.test(refreshFn),
+    "14.11 the resurface lane is read from that exact target row and no caller revision is sent",
+    /select\("id,\s*resurface_state,\s*resurface_client_request_id,\s*resurface_revision"\)/.test(
+      refreshFn,
+    ) && !/revision:/.test(refreshFn.slice(refreshFn.indexOf("body: JSON.stringify"))),
+  );
+  check(
+    "14.11b a durable FAILED lane gets exactly one revision-namespaced recovery id",
+    /lane === "FAILED"[\s\S]{0,400}miniAppRefreshRequestUuid\([\s\S]{0,200}resurfaceRevision/.test(
+      refreshFn,
+    ) && /se16-miniapp-refresh-recovery:/.test(bridgeCode),
+  );
+  check(
+    "14.11c CLAIMED or AMBIGUOUS never mints a new transport id",
+    /lane === "CLAIMED" \|\| lane === "AMBIGUOUS"[\s\S]{0,160}return "ambiguous"/.test(refreshFn) &&
+      refreshFn.indexOf('lane === "CLAIMED"') < refreshFn.indexOf('lane === "FAILED"'),
+  );
+  check(
+    "14.11d an exact-request RESURFACED lane replays locally with zero transport call",
+    /lane === "RESURFACED"[\s\S]{0,120}return "replayed"/.test(refreshFn) &&
+      refreshFn.indexOf('lane === "RESURFACED"') < refreshFn.indexOf("await fetch("),
+  );
+  check(
+    "14.11e correlation reads only server-side target state, never client input",
+    /recordedRequestId\s*=\s*String\(targetRow\["resurface_client_request_id"\]/.test(refreshFn) &&
+      /resurfaceRevision\s*=\s*Number\(targetRow\["resurface_revision"\]/.test(refreshFn),
   );
   check(
     "14.12 refresh request id is deterministic, action-separated and retry-stable",
@@ -698,7 +727,14 @@ const opts = { now: NOW_MS };
   );
   check(
     "14.16 refresh state is a bounded non-secret allowlist",
-    /MINIAPP_REFRESH_STATES = \["edited", "replayed", "ambiguous", "failed"\]/.test(bridgeCode),
+    /MINIAPP_REFRESH_STATES = \[\s*"edited",\s*"replayed",\s*"cleanup_pending",\s*"ambiguous",\s*"failed",?\s*\]/.test(
+      bridgeCode,
+    ),
+  );
+  check(
+    "14.16b cleanup_pending is reported only for a confirmed new card",
+    /cleanupPending[\s\S]{0,200}"cleanup_pending"/.test(bridgeCode) &&
+      /RESURFACED/.test(bridgeCode),
   );
   check(
     "14.17 refresh outcome is reported separately from the mutation outcome",

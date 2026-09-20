@@ -2281,14 +2281,48 @@ Deno.serve(async (req: Request) => {
    * by the shared resolver.
    */
 
-  /** Deterministic RFC-4122-shaped id so a Telegram retry reuses the same edit. */
-  const mcRequestUuid = async (seed: string) => {
-    const hex = await sha256Hex(`se15-mission-control-edit:${seed}`);
+  /** Deterministic RFC-4122-shaped id so a Telegram retry reuses the same request. */
+  const mcUuidFromSeed = async (namespacedSeed: string) => {
+    const hex = await sha256Hex(namespacedSeed);
     const chars = hex.slice(0, 32).split("");
     chars[12] = "5";
     chars[16] = ["8", "9", "a", "b"][parseInt(hex[16], 16) % 4];
     const h = chars.join("");
     return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+  };
+
+  /** In-place FINAL-state card edit id (END / CANCEL lane). Unchanged namespace. */
+  const mcRequestUuid = (seed: string) => mcUuidFromSeed(`se15-mission-control-edit:${seed}`);
+
+  /**
+   * SE-16.3R-3 — BASE transport id for a LIVE rolling-card replacement. A
+   * Telegram retry of the same tap therefore hits the transport's duplicate
+   * short-circuit instead of producing a second card.
+   */
+  const mcResurfaceUuid = (seed: string) =>
+    mcUuidFromSeed(`se163r-mission-control-resurface:${seed}`);
+
+  /**
+   * SE-16.3R-3 — recovery id, deterministic for ONE durable FAILED resurface
+   * revision. A durable FAILED proves no new card remained, so exactly one new
+   * safe attempt per revision is allowed. CLAIMED / AMBIGUOUS never get one.
+   */
+  const mcResurfaceRecoveryUuid = (seed: string, revision: number) =>
+    mcUuidFromSeed(`se163r-mission-control-resurface-recovery:${seed}:${revision}`);
+
+  /** SE-16.3R-3 — bounded local outcome of a LIVE card replacement attempt. */
+  type MissionResurfaceOutcome = {
+    kind: "RESURFACED" | "REPLAYED" | "FAILED" | "AMBIGUOUS" | "UNAVAILABLE";
+    message: string | null;
+  };
+
+  /** Bounded permission-repair detection for admin-facing copy. */
+  const mcPermissionHint = (message: string | null | undefined) => {
+    const text = String(message ?? "");
+    if (/delete messages/i.test(text)) return "Delete Messages";
+    if (/pin messages/i.test(text)) return "Pin Messages";
+    if (/administrator/i.test(text)) return "administrator";
+    return null;
   };
 
   /**
@@ -2395,10 +2429,10 @@ Deno.serve(async (req: Request) => {
   };
 
   /**
-   * Exactly ONE same-card edit through the existing transport, reusing its
-   * revision + client-request idempotency. A target-only or end-time-only
-   * change never triggers a provider read: the transport performs its final X
-   * snapshot only for a COMPLETED mission.
+   * FINAL-STATE in-place card edit. END MISSION NOW, CANCEL and any other
+   * final-state update keep this exact lane: exactly ONE same-card edit through
+   * the existing transport, reusing its revision + client-request idempotency.
+   * A completion never rolls the card to the bottom of the chat.
    */
   const mcRefreshCard = async (args: {
     binding: MissionControlBinding;
@@ -2447,6 +2481,122 @@ Deno.serve(async (req: Request) => {
     } catch {
       return null;
     }
+  };
+
+  /**
+   * SE-16.3R-3 — LIVE rolling card. A committed target / Primary Goal /
+   * supporting-target / end-time change on a still-LIVE mission REPLACES the
+   * community card at the bottom of the chat instead of editing it silently
+   * far above the current conversation.
+   *
+   * The transport owns the claim, the single send, the pin preservation and
+   * the old-card cleanup. This helper owns only correlation:
+   *   - a BASE id deterministic in the mutation seed, so a Telegram retry of
+   *     the same tap short-circuits instead of posting a second card;
+   *   - exactly one RECOVERY id per durable FAILED revision, because a FAILED
+   *     lane proves the replacement card did not remain;
+   *   - never a new id after CLAIMED or AMBIGUOUS, whose real-world effect is
+   *     unknown and must never be guessed at with another card.
+   * No value here is ever taken from a client.
+   */
+  const mcResurfaceLiveCard = async (args: {
+    binding: MissionControlBinding;
+    actorUserId: string | null;
+    seed: string;
+  }): Promise<MissionResurfaceOutcome> => {
+    const workspaceId = args.binding.workspaceId;
+    const missionId = args.binding.missionId;
+    const { data: target } = await admin
+      .from("social_mission_targets")
+      .select("id, resurface_state, resurface_client_request_id, resurface_revision")
+      .eq("mission_id", missionId)
+      .eq("workspace_id", workspaceId)
+      .eq("telegram_chat_id", Number(args.binding.chatId))
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (!target?.id) return { kind: "UNAVAILABLE", message: null };
+
+    const baseId = await mcResurfaceUuid(args.seed);
+    const state = String((target as any).resurface_state ?? "IDLE").toUpperCase();
+    const recorded = String((target as any).resurface_client_request_id ?? "");
+    const revision = Number((target as any).resurface_revision ?? 0);
+
+    let clientRequestId = baseId;
+    if (recorded && recorded === baseId) {
+      // The transport already recorded THIS exact request. It duplicate
+      // short-circuits every state, so the truthful answer is local.
+      if (state === "RESURFACED") return { kind: "REPLAYED", message: null };
+      if (state === "CLAIMED" || state === "AMBIGUOUS") {
+        return { kind: "AMBIGUOUS", message: null };
+      }
+      if (state === "FAILED") {
+        clientRequestId = await mcResurfaceRecoveryUuid(args.seed, revision);
+      }
+    }
+
+    try {
+      const response = await fetch(
+        `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/social-mission-telegram`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: SERVICE_KEY,
+            Authorization: `Bearer ${SERVICE_KEY}`,
+            "X-Cartel-Internal-Source": "telegram-webhook",
+            ...(args.actorUserId ? { "X-Cartel-Actor-User-Id": args.actorUserId } : {}),
+          },
+          body: JSON.stringify({
+            action: "resurface_mission",
+            workspaceId,
+            missionId,
+            targetId: String(target.id),
+            clientRequestId,
+          }),
+          signal: AbortSignal.timeout(30_000),
+        },
+      );
+      const payload = (await response.json().catch(() => null)) as
+        | { resurfaceState?: string; duplicate?: boolean; message?: string; error?: string }
+        | null;
+      const message =
+        typeof payload?.message === "string"
+          ? payload.message
+          : typeof payload?.error === "string"
+            ? payload.error
+            : null;
+      const nextState = String(payload?.resurfaceState ?? "").toUpperCase();
+      if (nextState === "RESURFACED") {
+        return { kind: payload?.duplicate === true ? "REPLAYED" : "RESURFACED", message };
+      }
+      if (nextState === "CLAIMED" || nextState === "AMBIGUOUS") {
+        return { kind: "AMBIGUOUS", message };
+      }
+      if (nextState === "FAILED") return { kind: "FAILED", message };
+      return { kind: response.ok ? "AMBIGUOUS" : "FAILED", message };
+    } catch {
+      // Timeout or transport error: the replacement may or may not have landed.
+      return { kind: "AMBIGUOUS", message: null };
+    }
+  };
+
+  /**
+   * Truthful private Mission Control note. The database change is committed in
+   * every one of these branches; only the community card differs.
+   */
+  const mcResurfaceNote = (base: string, outcome: MissionResurfaceOutcome | null) => {
+    if (!outcome || outcome.kind === "UNAVAILABLE") return base;
+    if (outcome.kind === "RESURFACED" || outcome.kind === "REPLAYED") {
+      return `${base} The community mission card was moved to the bottom of the chat.`;
+    }
+    if (outcome.kind === "FAILED") {
+      const hint = mcPermissionHint(outcome.message);
+      return hint
+        ? `${base} Saved, but the community card could not be reposted: the bot needs ${hint} in that community.`
+        : `${base} Saved, but the community card could not be reposted.`;
+    }
+    return `${base} Saved, but the card replacement could not be confirmed. Do not resend it.`;
   };
 
   /**
@@ -3274,14 +3424,20 @@ Deno.serve(async (req: Request) => {
             return json({ ok: true });
           }
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Targets reset to automatic.");
-          if (outcome === "ok") {
-            await mcRefreshCard({
-              binding,
-              actorUserId: linked?.user_id ? String(linked.user_id) : null,
-              seed: `${updateId}:reset_auto`,
-            });
-          }
-          await mcRenderPanel(operatorId, callbackChatId, missionId, binding, "Targets are automatic again.");
+          // Committed `ok` AND `replayed` both roll the card: a webhook retry
+          // whose first replacement result was lost must be able to self-heal.
+          const resetResurface = await mcResurfaceLiveCard({
+            binding,
+            actorUserId: linked?.user_id ? String(linked.user_id) : null,
+            seed: `${updateId}:reset_auto`,
+          });
+          await mcRenderPanel(
+            operatorId,
+            callbackChatId,
+            missionId,
+            binding,
+            mcResurfaceNote("Targets are automatic again.", resetResurface),
+          );
           return json({ ok: true });
         }
 
@@ -3346,14 +3502,18 @@ Deno.serve(async (req: Request) => {
             return json({ ok: true });
           }
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Primary Goal updated.");
-          if (outcome === "ok") {
-            await mcRefreshCard({
-              binding,
-              actorUserId: linked?.user_id ? String(linked.user_id) : null,
-              seed: `${updateId}:goal:${type}`,
-            });
-          }
-          await mcRenderPanel(operatorId, callbackChatId, missionId, binding, "Primary Goal updated.");
+          const goalResurface = await mcResurfaceLiveCard({
+            binding,
+            actorUserId: linked?.user_id ? String(linked.user_id) : null,
+            seed: `${updateId}:goal:${type}`,
+          });
+          await mcRenderPanel(
+            operatorId,
+            callbackChatId,
+            missionId,
+            binding,
+            mcResurfaceNote("Primary Goal updated.", goalResurface),
+          );
           return json({ ok: true });
         }
 
@@ -3474,14 +3634,18 @@ Deno.serve(async (req: Request) => {
             return json({ ok: true });
           }
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "End time updated.");
-          if (outcome === "ok") {
-            await mcRefreshCard({
-              binding,
-              actorUserId: linked?.user_id ? String(linked.user_id) : null,
-              seed: `${updateId}:duration:${minutes}`,
-            });
-          }
-          await mcRenderPanel(operatorId, callbackChatId, missionId, binding, "End time updated.");
+          const durationResurface = await mcResurfaceLiveCard({
+            binding,
+            actorUserId: linked?.user_id ? String(linked.user_id) : null,
+            seed: `${updateId}:duration:${minutes}`,
+          });
+          await mcRenderPanel(
+            operatorId,
+            callbackChatId,
+            missionId,
+            binding,
+            mcResurfaceNote("End time updated.", durationResurface),
+          );
           return json({ ok: true });
         }
 
@@ -4127,6 +4291,203 @@ Deno.serve(async (req: Request) => {
 
     }
 
+    /**
+     * SE-16.3R-3 — QUALIFYING HUMAN GROUP ACTIVITY.
+     *
+     * Runs AFTER join / welcome handling and BEFORE the text-only early return,
+     * so ordinary human MEDIA counts too. `social_mission_note_chat_activity`
+     * is the ONLY counter: this webhook never writes an activity column itself,
+     * and the RPC alone owns the exactly-one-LIVE-target match, the message-id
+     * dedupe, the 6-message threshold and the 3-minute cooldown.
+     *
+     * Everything here is fail-soft: an activity problem never turns a delivered
+     * Telegram update into a webhook error, and never touches the command,
+     * Link Finder or Project Inbox branches that follow.
+     */
+    const noteMissionChatActivity = async (): Promise<void> => {
+      const activityChatType = chat?.type;
+      if (activityChatType !== "group" && activityChatType !== "supergroup") return;
+      const messageId = Number((message as any)?.message_id ?? 0);
+      if (!chatId || !Number.isFinite(messageId) || messageId <= 0) return;
+
+      const msg = (message ?? {}) as Record<string, unknown>;
+
+      // A genuine human author, proven by Telegram. An anonymous admin, a
+      // channel-on-behalf post or any bot is never counted, and no human
+      // identity is ever guessed for them.
+      if (msg["sender_chat"]) return;
+      const author = msg["from"] as { id?: unknown; is_bot?: unknown } | undefined;
+      if (!author || author.id == null || author.is_bot === true) return;
+
+      // Service messages are chat events, not member conversation.
+      const SERVICE_KEYS = [
+        "new_chat_members", "left_chat_member", "new_chat_title", "new_chat_photo",
+        "delete_chat_photo", "group_chat_created", "supergroup_chat_created",
+        "channel_chat_created", "message_auto_delete_timer_changed", "migrate_to_chat_id",
+        "migrate_from_chat_id", "pinned_message", "successful_payment", "users_shared",
+        "chat_shared", "write_access_allowed", "proximity_alert_triggered",
+        "forum_topic_created", "forum_topic_edited", "forum_topic_closed",
+        "forum_topic_reopened", "general_forum_topic_hidden", "general_forum_topic_unhidden",
+        "video_chat_scheduled", "video_chat_started", "video_chat_ended",
+        "video_chat_participants_invited", "web_app_data", "boost_added",
+        "giveaway_created", "giveaway", "giveaway_winners", "giveaway_completed",
+      ];
+      for (const key of SERVICE_KEYS) if (msg[key] != null) return;
+
+      // Bot commands are control input, not conversation. The declared
+      // `bot_command` entity at offset 0 is authoritative; the leading-slash
+      // check is only a defensive fallback.
+      const body =
+        typeof msg["text"] === "string"
+          ? (msg["text"] as string)
+          : typeof msg["caption"] === "string"
+            ? (msg["caption"] as string)
+            : "";
+      const entities = (Array.isArray(msg["entities"]) ? msg["entities"] : msg["caption_entities"]) as
+        | Array<{ type?: unknown; offset?: unknown }>
+        | undefined;
+      const declaredCommand =
+        Array.isArray(entities) &&
+        entities.some((e) => e?.type === "bot_command" && Number(e?.offset ?? -1) === 0);
+      if (declaredCommand || body.trimStart().startsWith("/")) return;
+
+      // Ordinary content-bearing member messages: text, captions and normal
+      // media. An empty non-media message counts as nothing.
+      const MEDIA_KEYS = [
+        "photo", "video", "animation", "document", "audio", "voice", "sticker",
+        "video_note", "poll", "dice", "contact", "location", "venue",
+      ];
+      const hasMedia = MEDIA_KEYS.some((key) => msg[key] != null);
+      if (body.trim().length === 0 && !hasMedia) return;
+
+      const { data: noted, error: noteError } = await admin.rpc(
+        "social_mission_note_chat_activity",
+        { _telegram_chat_id: Number(chatId), _telegram_message_id: messageId },
+      );
+      if (noteError || !noted || typeof noted !== "object") return;
+      const signal = noted as Record<string, unknown>;
+      if (String(signal["outcome"] ?? "") !== "counted") return;
+      if (signal["should_resurface"] !== true) return;
+
+      // Every binding value is re-validated, including that the RPC is talking
+      // about the SAME chat this update arrived in.
+      const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const activityWorkspaceId = String(signal["workspace_id"] ?? "");
+      const activityMissionId = String(signal["mission_id"] ?? "");
+      const activityTargetId = String(signal["target_id"] ?? "");
+      if (
+        !UUID_SHAPE.test(activityWorkspaceId) ||
+        !UUID_SHAPE.test(activityMissionId) ||
+        !UUID_SHAPE.test(activityTargetId)
+      ) return;
+      if (String(signal["telegram_chat_id"] ?? "") !== String(Number(chatId))) return;
+
+      // The transport actor is resolved SERVER-SIDE from workspace membership.
+      // No chat member, sender or callback identity authorizes this send.
+      const { data: members } = await admin
+        .from("workspace_members")
+        .select("user_id, role")
+        .eq("workspace_id", activityWorkspaceId)
+        .in("role", ["owner", "admin"]);
+      const memberRows = Array.isArray(members) ? (members as Array<Record<string, unknown>>) : [];
+      const actorRow =
+        memberRows.find((m) => String(m["role"] ?? "") === "owner") ??
+        memberRows.find((m) => String(m["role"] ?? "") === "admin") ??
+        null;
+      const activityActorId = String(actorRow?.["user_id"] ?? "");
+      if (!UUID_SHAPE.test(activityActorId)) return;
+
+      // Previous bounded error, read BEFORE the attempt, so the SAME permission
+      // warning is never posted twice. A later successful resurface clears it.
+      const { data: beforeRow } = await admin
+        .from("social_mission_targets")
+        .select("resurface_last_error")
+        .eq("id", activityTargetId)
+        .maybeSingle();
+      const previousError = String((beforeRow as any)?.resurface_last_error ?? "");
+
+      // Deterministic in the exact target + the triggering message id, so a
+      // Telegram redelivery can never produce a second card.
+      const activityRequestId = await mcUuidFromSeed(
+        `se163r-activity-resurface:${activityTargetId}:${messageId}`,
+      );
+
+      let resurfaceState = "";
+      let resurfaceMessage = "";
+      try {
+        const response = await fetch(
+          `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/social-mission-telegram`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: SERVICE_KEY,
+              Authorization: `Bearer ${SERVICE_KEY}`,
+              "X-Cartel-Internal-Source": "telegram-webhook",
+              "X-Cartel-Actor-User-Id": activityActorId,
+            },
+            body: JSON.stringify({
+              action: "resurface_mission",
+              workspaceId: activityWorkspaceId,
+              missionId: activityMissionId,
+              targetId: activityTargetId,
+              clientRequestId: activityRequestId,
+            }),
+            signal: AbortSignal.timeout(30_000),
+          },
+        );
+        const payload = (await response.json().catch(() => null)) as
+          | { resurfaceState?: string; message?: string; error?: string }
+          | null;
+        resurfaceState = String(payload?.resurfaceState ?? "").toUpperCase();
+        resurfaceMessage = String(payload?.message ?? payload?.error ?? "");
+      } catch {
+        // Unknown outcome. Never warn, never resend.
+        return;
+      }
+
+      // ONE admin-facing repair notice, and only for a bounded, definite
+      // permission failure that was not already reported for this target.
+      if (resurfaceState !== "FAILED") return;
+      const hint = mcPermissionHint(resurfaceMessage);
+      if (!hint) return;
+      if (previousError && previousError === resurfaceMessage) return;
+
+      const warned = await sendMessage(
+        TELEGRAM_BOT_TOKEN,
+        chatId,
+        `<b>⚠️ Mission card could not be refreshed</b>\n\nCartel HQ needs the <b>${escapeHtml(hint)}</b> permission in this community to move the live mission card to the bottom of the chat.\n\nA group admin can fix this in <i>Manage group → Administrators → @${BOT_USERNAME}</i>. Member messages are never deleted.`,
+        { parse_mode: "HTML" },
+      );
+      const warnedId = (warned as any)?.message_id;
+      if (!warnedId) return;
+      const cleanup = (async () => {
+        await new Promise((resolve) => setTimeout(resolve, 12_000));
+        try {
+          await telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", {
+            chat_id: chatId,
+            message_id: Number(warnedId),
+          });
+        } catch (e) {
+          // Leaving the notice visible is safer than sending it again.
+          console.error(
+            "[telegram-webhook] resurface permission notice cleanup",
+            e instanceof Error ? e.message : "unknown",
+          );
+        }
+      })();
+      try { (globalThis as any).EdgeRuntime?.waitUntil?.(cleanup); } catch { }
+    };
+
+    try {
+      await noteMissionChatActivity();
+    } catch (e) {
+      console.error(
+        "[telegram-webhook] mission chat activity",
+        e instanceof Error ? e.message : "unknown",
+      );
+    }
+
     if (!text || !from?.id || !chatId) return json({ ok: true });
 
     if ((chat?.type === "group" || chat?.type === "supergroup") && /^\/(?:cartelhq|connect)(?:@\w+)?$/i.test(text)) {
@@ -4603,13 +4964,11 @@ Deno.serve(async (req: Request) => {
             await sendMessage(TELEGRAM_BOT_TOKEN, chatId, MC_OUTCOME_TEXT[outcome] ?? "That change was refused.");
             return json({ ok: true });
           }
-          if (outcome === "ok") {
-            await mcRefreshCard({
-              binding,
-              actorUserId: actorUserId ? String(actorUserId) : null,
-              seed: `${update?.update_id}:duration_custom`,
-            });
-          }
+          const customDurationResurface = await mcResurfaceLiveCard({
+            binding,
+            actorUserId: actorUserId ? String(actorUserId) : null,
+            seed: `${update?.update_id}:duration_custom`,
+          });
           await admin.rpc("social_mission_control_set_session", {
             _telegram_user_id: Number(from.id),
             _workspace_id: binding.workspaceId,
@@ -4617,7 +4976,13 @@ Deno.serve(async (req: Request) => {
             _pending_field: null,
             _clear: false,
           });
-          await mcRenderPanel(Number(from.id), chatId, pendingMission, binding, "End time updated.");
+          await mcRenderPanel(
+            Number(from.id),
+            chatId,
+            pendingMission,
+            binding,
+            mcResurfaceNote("End time updated.", customDurationResurface),
+          );
           return json({ ok: true });
         }
 
@@ -4672,13 +5037,11 @@ Deno.serve(async (req: Request) => {
           await sendMessage(TELEGRAM_BOT_TOKEN, chatId, MC_OUTCOME_TEXT[outcome] ?? "That change was refused.");
           return json({ ok: true });
         }
-        if (outcome === "ok") {
-          await mcRefreshCard({
-            binding,
-            actorUserId: actorUserId ? String(actorUserId) : null,
-            seed: `${update?.update_id}:${pendingField}`,
-          });
-        }
+        const targetResurface = await mcResurfaceLiveCard({
+          binding,
+          actorUserId: actorUserId ? String(actorUserId) : null,
+          seed: `${update?.update_id}:${pendingField}`,
+        });
         await admin.rpc("social_mission_control_set_session", {
           _telegram_user_id: Number(from.id),
           _workspace_id: binding.workspaceId,
@@ -4686,7 +5049,13 @@ Deno.serve(async (req: Request) => {
           _pending_field: null,
           _clear: false,
         });
-        await mcRenderPanel(Number(from.id), chatId, pendingMission, binding, "Targets updated.");
+        await mcRenderPanel(
+          Number(from.id),
+          chatId,
+          pendingMission,
+          binding,
+          mcResurfaceNote("Targets updated.", targetResurface),
+        );
         return json({ ok: true });
       }
     }

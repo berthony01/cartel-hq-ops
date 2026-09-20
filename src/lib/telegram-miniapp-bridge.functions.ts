@@ -43,23 +43,22 @@ export const MINIAPP_RPC = {
   authorize: "social_mission_control_authorize",
 } as const;
 
-/* ------------------------------------------- SE-16.2P CARD-REFRESH PARITY */
+/* --------------------------------------- SE-16.3R-3 ROLLING-CARD PARITY */
 
 /**
- * SE-16.2P — the bot refreshes the canonical Telegram mission card after every
- * successful Mission Control mutation (`mcRefreshCard`). Without that, a Mini
- * App edit would commit to the database while the pinned card kept showing the
- * old targets / end time, with no metric-independent path that corrects it.
+ * SE-16.3R-3 — a committed LIVE target / end-time change now REPLACES the
+ * canonical community card at the bottom of the chat instead of editing it in
+ * place far above the current conversation. The Mini App uses exactly the same
+ * service-only transport and the same `resurface_mission` action as the bot
+ * console, so there is one rolling-card path and no second finalization path.
  *
- * This bridge therefore performs the SAME single same-card edit through the
- * SAME existing service-only transport (`social-mission-telegram`,
- * `action: "edit_mission"`). It never renders a card and never calls the
- * Telegram Bot API to edit or send a message. A LIVE target/duration edit is
- * card-edit only; the transport's provider/X snapshot path belongs to mission
- * completion, not to this call.
+ * END NOW / CANCEL and every other final-state update remain the bot's
+ * in-place `edit_mission` lane; `resurface_mission` requires a LIVE mission.
+ *
+ * This bridge never renders a card and never calls the Telegram Bot API.
  */
 export const MINIAPP_TRANSPORT_FUNCTION = "social-mission-telegram";
-export const MINIAPP_TRANSPORT_ACTION = "edit_mission";
+export const MINIAPP_TRANSPORT_ACTION = "resurface_mission";
 /** Existing accepted internal-source value; no new transport source is added. */
 export const MINIAPP_TRANSPORT_INTERNAL_SOURCE = "telegram-webhook";
 export const MINIAPP_TRANSPORT_TIMEOUT_MS = 15_000;
@@ -67,12 +66,19 @@ export const MINIAPP_TRANSPORT_TIMEOUT_MS = 15_000;
 /**
  * Bounded, non-secret refresh states. Raw transport payloads, headers, status
  * codes and errors never reach the client.
- *  - `edited`    the card was edited now
- *  - `replayed`  the transport recognised this exact refresh request already
- *  - `ambiguous` outcome unknown (timeout / unresolved edit) — safe to retry
- *  - `failed`    refresh did not happen; the DB mutation still stands
+ *  - `edited`           a new canonical card is live and the old one is gone
+ *  - `replayed`         the transport recognised this exact request already
+ *  - `cleanup_pending`  the new card is live; the old one is queued for removal
+ *  - `ambiguous`        outcome unknown (timeout / unresolved) — never resent
+ *  - `failed`           the card did not change; the DB mutation still stands
  */
-export const MINIAPP_REFRESH_STATES = ["edited", "replayed", "ambiguous", "failed"] as const;
+export const MINIAPP_REFRESH_STATES = [
+  "edited",
+  "replayed",
+  "cleanup_pending",
+  "ambiguous",
+  "failed",
+] as const;
 export type MiniAppRefreshState = (typeof MINIAPP_REFRESH_STATES)[number];
 
 /** Mutation outcomes that are committed and therefore warrant a card refresh. */
@@ -257,25 +263,31 @@ function hexDigest(buffer: ArrayBuffer): string {
 }
 
 /**
- * SE-16.2P — deterministic UUID for the refresh request.
+ * SE-16.3R-3 — deterministic UUID for the card-replacement request.
  *
  * The transport requires a UUID-shaped `clientRequestId` (a 40-char hash would
- * be rejected), and binds it to the target's edit revision. Deriving it from
- * the VALIDATED Telegram user id + the mutation action + the client request id
- * means: a retry of the same mutation re-uses the same refresh id (so the
- * transport replays instead of double-editing), while a target edit and a
- * duration edit can never collide on one request id.
+ * be rejected). Deriving it from the VALIDATED Telegram user id + the mutation
+ * action + the client request id means a retry of the SAME mutation re-uses the
+ * SAME transport id, so the transport duplicate short-circuits instead of
+ * posting a second card, while a target edit and a duration edit can never
+ * collide on one id.
+ *
+ * `recoveryRevision` is supplied ONLY after a durable FAILED lane, which proves
+ * the previous replacement card did not remain. It is stable for that one
+ * resurface revision, so even the recovery attempt cannot duplicate a card.
  */
 export async function miniAppRefreshRequestUuid(
   telegramUserId: number,
   action: string,
   requestId: string,
+  recoveryRevision?: number | null,
 ): Promise<string> {
+  const seed =
+    recoveryRevision === undefined || recoveryRevision === null
+      ? `se16-miniapp-refresh:${telegramUserId}:${action}:${requestId}`
+      : `se16-miniapp-refresh-recovery:${telegramUserId}:${action}:${requestId}:${recoveryRevision}`;
   const hex = hexDigest(
-    await crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(`se16-miniapp-refresh:${telegramUserId}:${action}:${requestId}`),
-    ),
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(seed)),
   );
   const chars = hex.slice(0, 32).split("");
   chars[12] = "5";
@@ -286,22 +298,29 @@ export async function miniAppRefreshRequestUuid(
 
 /** Maps the transport's bounded reply to an allowlisted, non-secret state. */
 function refreshStateFrom(status: number, payload: Record<string, unknown> | null): MiniAppRefreshState {
-  const editState = String(payload?.["editState"] ?? "").toUpperCase();
-  if (payload?.["duplicate"] === true) return "replayed";
-  if (editState === "AMBIGUOUS") return "ambiguous";
-  if (status >= 200 && status < 300 && editState === "EDITED") return "edited";
-  return "failed";
+  const state = String(payload?.["resurfaceState"] ?? "").toUpperCase();
+  if (state === "RESURFACED") {
+    if (payload?.["duplicate"] === true) return "replayed";
+    return payload?.["cleanupPending"] === true ? "cleanup_pending" : "edited";
+  }
+  if (state === "AMBIGUOUS" || state === "CLAIMED") return "ambiguous";
+  if (state === "FAILED") return "failed";
+  return status >= 200 && status < 300 ? "ambiguous" : "failed";
 }
 
 /**
- * SE-16.2P — refresh the canonical Telegram mission card through the EXISTING
+ * SE-16.3R-3 — replace the canonical Telegram mission card through the EXISTING
  * transport. Every binding input is server-derived:
  *   - the Telegram user id comes from the verified initData signature,
  *   - workspace / mission / chat come from the operator-scoped binding,
  *   - `actor_user_id` and `target_id` come from the reused service-only
  *     `social_mission_control_authorize` RPC,
- *   - the edit revision is read from the EXACT target row (target id + mission
+ *   - the resurface lane is read from the EXACT target row (target id + mission
  *     + workspace + verified chat), never a loose mission-only lookup.
+ *
+ * Correlation is entirely server-side. The client keeps the SAME mutation
+ * payload and request id on retry; only this bridge may derive a new transport
+ * id, and only after a DURABLE FAILED lane.
  *
  * Failure here never rolls back the committed mutation; it is reported
  * separately so the caller can honestly say "saved, card refresh needs retry".
@@ -334,11 +353,11 @@ async function miniAppRefreshCard(args: {
   }
 
   // EXACT target row. Mission+workspace alone could match a second delivered
-  // target and edit the wrong card, so the verified chat and the authoritative
-  // target id are both part of the lookup.
+  // target and replace the wrong card, so the verified chat and the
+  // authoritative target id are both part of the lookup.
   const { data: target } = await admin
     .from("social_mission_targets")
-    .select("id, edit_revision")
+    .select("id, resurface_state, resurface_client_request_id, resurface_revision")
     .eq("id", targetId)
     .eq("mission_id", binding.missionId)
     .eq("workspace_id", binding.workspaceId)
@@ -346,6 +365,35 @@ async function miniAppRefreshCard(args: {
     .maybeSingle();
   const targetRow = (target ?? null) as Record<string, unknown> | null;
   if (!targetRow?.["id"]) return "failed";
+
+  const baseRequestId = await miniAppRefreshRequestUuid(
+    telegramUserId,
+    args.action,
+    args.requestId,
+  );
+  const lane = String(targetRow["resurface_state"] ?? "IDLE").toUpperCase();
+  const recordedRequestId = String(targetRow["resurface_client_request_id"] ?? "");
+  const resurfaceRevision = Number(targetRow["resurface_revision"] ?? 0);
+
+  let clientRequestId = baseRequestId;
+  if (recordedRequestId && recordedRequestId === baseRequestId) {
+    // The transport already recorded THIS exact request and duplicate
+    // short-circuits every lane, so the truthful answer is local.
+    if (lane === "RESURFACED") return "replayed";
+    // CLAIMED / AMBIGUOUS: the real-world effect is unknown. Never mint a new
+    // id and never send a second card.
+    if (lane === "CLAIMED" || lane === "AMBIGUOUS") return "ambiguous";
+    if (lane === "FAILED") {
+      // A durable FAILED proves the replacement card did not remain, so one
+      // deterministic recovery attempt per revision is safe.
+      clientRequestId = await miniAppRefreshRequestUuid(
+        telegramUserId,
+        args.action,
+        args.requestId,
+        resurfaceRevision,
+      );
+    }
+  }
 
   // Service credentials are read per-request, used only as request headers, and
   // never returned or logged.
@@ -370,12 +418,7 @@ async function miniAppRefreshCard(args: {
           workspaceId: binding.workspaceId,
           missionId: binding.missionId,
           targetId,
-          clientRequestId: await miniAppRefreshRequestUuid(
-            telegramUserId,
-            args.action,
-            args.requestId,
-          ),
-          revision: Number(targetRow["edit_revision"] ?? 0) + 1,
+          clientRequestId,
         }),
         signal: AbortSignal.timeout(MINIAPP_TRANSPORT_TIMEOUT_MS),
       },
@@ -383,7 +426,7 @@ async function miniAppRefreshCard(args: {
     const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
     return refreshStateFrom(response.status, payload);
   } catch {
-    // Timeout or transport error: the edit may or may not have landed.
+    // Timeout or transport error: the replacement may or may not have landed.
     return "ambiguous";
   }
 }

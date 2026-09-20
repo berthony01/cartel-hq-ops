@@ -352,6 +352,17 @@ export function classifyMutationResult(
         retry: false,
       };
     }
+    // SE-16.3R-3 — the new canonical card IS live; only the removal of the old
+    // one is still queued. That is not a failure and must not invite a retry.
+    if (result.refresh === "cleanup_pending") {
+      return {
+        tone: "warning",
+        message:
+          "Saved and the new Telegram card was posted. The previous card is queued for removal.",
+        committed: true,
+        retry: false,
+      };
+    }
     return {
       tone: "warning",
       message: "Saved, but the Telegram card could not be confirmed. Retry card refresh.",

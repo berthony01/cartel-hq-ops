@@ -243,10 +243,12 @@ check("7.10 CANCELLED is renderable by the transport", transport.includes('if (m
 // ---------------------------------------------------------------------------
 // 8 — same-card edit, zero X read for target-only changes.
 // ---------------------------------------------------------------------------
-check("8.1 a control change edits the same card", webhook.includes("const mcRefreshCard = async ("));
-check("8.2 the refresh uses edit_mission, never a resend", /mcRefreshCard[\s\S]{0,1400}action: "edit_mission"/.test(webhook) && !/mcRefreshCard[\s\S]{0,1400}"send_mission"/.test(webhook));
+check("8.1 a final-state control change edits the same card", webhook.includes("const mcRefreshCard = async ("));
+check("8.2 the final-state refresh uses edit_mission, never a resend", /mcRefreshCard[\s\S]{0,1400}action: "edit_mission"/.test(webhook) && !/mcRefreshCard[\s\S]{0,1400}"send_mission"/.test(webhook));
 check("8.3 the refresh reuses the transport revision contract", webhook.includes('revision: Number((target as any).edit_revision ?? 0) + 1'));
-check("8.4 the refresh id is deterministic per update", webhook.includes("const mcRequestUuid = async (seed: string)"));
+// SE-16.3R-3 — re-pinned: the deterministic id builder was generalised into a
+// namespaced seed helper shared by the final-edit and resurface lanes.
+check("8.4 the refresh id is deterministic per update", webhook.includes("const mcUuidFromSeed = async (namespacedSeed: string)") && webhook.includes('mcUuidFromSeed(`se15-mission-control-edit:${seed}`)'));
 check("8.5 the webhook never calls an X provider", !webhook.includes("lookupXPostMetrics") && !webhook.includes("api.twitter.com"));
 check("8.6 the transport reads X only for a COMPLETED mission", transport.includes('args.finalRefresh === true && String(mission["status"] ?? "") === "COMPLETED"'));
 check(
@@ -528,13 +530,22 @@ check("19.40 the unpin binds the verified chat", /mcSafeUnpin[\s\S]{0,700}eq\("t
 check("19.41 the unpin still requires HQ ownership", /mcSafeUnpin[\s\S]{0,900}pinned\?\.pinned_by_hq/.test(webhook));
 check("19.42 no loose mission-only card match remains", !/eq\("workspace_id", args\.workspaceId\)\s*\n\s*\.maybeSingle\(\)/.test(webhook));
 
-// 19.42b — every Mission Control card refresh uses the binding-based shape.
+// 19.42b — every Mission Control card call uses the binding-based shape.
+// SE-16.3R-3 re-pin: the seven former call sites split into two explicit lanes
+// (2 final-state in-place edits + 5 LIVE rolling replacements). Both lanes are
+// counted here, so the total binding coverage is NOT weakened.
 {
-  const callArgs = [...webhook.matchAll(/await mcRefreshCard\(\{([\s\S]{0,300}?)\}\)/g)].map((m) => m[1]);
-  check("19.42b every mcRefreshCard call passes binding", callArgs.length >= 7 && callArgs.every((a) => /(^|\s)binding,/.test(a)));
+  const finalArgs = [...webhook.matchAll(/await mcRefreshCard\(\{([\s\S]{0,300}?)\}\)/g)].map((m) => m[1]);
+  const liveArgs = [...webhook.matchAll(/await mcResurfaceLiveCard\(\{([\s\S]{0,300}?)\}\)/g)].map((m) => m[1]);
+  const callArgs = [...finalArgs, ...liveArgs];
+  check("19.42b every Mission Control card call passes binding", finalArgs.length === 2 && liveArgs.length >= 5 && callArgs.length >= 7 && callArgs.every((a) => /(^|\s)binding,/.test(a)));
   check(
     "19.42c no stale workspaceId/missionId call shape remains",
     callArgs.every((a) => !/\bworkspaceId\s*:/.test(a) && !/\bmissionId\s*:/.test(a)),
+  );
+  check(
+    "19.42d no LIVE resurface call sends a caller revision",
+    liveArgs.every((a) => !/\brevision\s*:/.test(a)),
   );
 }
 
