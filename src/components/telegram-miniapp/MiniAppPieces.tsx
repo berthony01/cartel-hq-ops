@@ -156,3 +156,169 @@ export function MiniAppSkeleton({ label }: { label: string }) {
     </div>
   );
 }
+
+/* ===================================================================== */
+/* SE-16.2 UI — presentation-only editor primitives.                      */
+/*                                                                        */
+/* These render controls; they never call a server function, never hold a */
+/* credential, and never decide authorization. All data and every         */
+/* mutation handler are owned by the mission route.                       */
+/* ===================================================================== */
+
+export function MiniAppActionButton({
+  label,
+  onPress,
+  pending,
+  disabled,
+  tone = "primary",
+  pendingLabel,
+}: {
+  label: string;
+  onPress: () => void;
+  pending?: boolean;
+  disabled?: boolean;
+  tone?: "primary" | "quiet";
+  pendingLabel?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onPress}
+      disabled={pending || disabled}
+      className={cn(
+        "inline-flex min-h-11 w-full items-center justify-center rounded-md border px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] transition-colors disabled:opacity-60",
+        tone === "primary"
+          ? "border-gold/45 bg-gold/12 text-gold hover:bg-gold/20"
+          : "border-border/70 bg-surface-raised/40 text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {pending ? (pendingLabel ?? "Saving…") : label}
+    </button>
+  );
+}
+
+/** Small selectable chip for a bounded choice. Presentation only. */
+export function MiniAppChoiceChip({
+  label,
+  selected,
+  onSelect,
+  disabled,
+}: {
+  label: string;
+  selected: boolean;
+  onSelect: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      disabled={disabled}
+      aria-pressed={selected}
+      className={cn(
+        "min-h-11 min-w-0 flex-1 rounded-md border px-2 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors disabled:opacity-60",
+        selected
+          ? "border-gold/50 bg-gold/15 text-gold"
+          : "border-border/60 bg-surface-raised/30 text-muted-foreground hover:text-foreground",
+      )}
+    >
+      <span className="block truncate">{label}</span>
+    </button>
+  );
+}
+
+/** Labelled numeric field row. Blank is a meaningful value ("Off") upstream. */
+export function MiniAppFieldRow({
+  label,
+  hint,
+  value,
+  onValueChange,
+  placeholder,
+  disabled,
+}: {
+  label: string;
+  hint?: string | undefined;
+  value: string;
+  onValueChange: (next: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="flex min-w-0 flex-col gap-1 py-1.5">
+      <span className="truncate text-[12px] text-muted-foreground">{label}</span>
+      <input
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
+        value={value}
+        disabled={disabled}
+        placeholder={placeholder}
+        onChange={(event) => onValueChange(event.target.value)}
+        className="min-h-11 w-full min-w-0 rounded-md border border-border/70 bg-background px-3 py-2 text-sm tabular-nums text-foreground outline-none focus:border-gold/50 disabled:opacity-60"
+      />
+      {hint ? <span className="text-[11px] leading-4 text-muted-foreground">{hint}</span> : null}
+    </label>
+  );
+}
+
+/** Inline notice. Copy is always pre-bounded by the caller. */
+export function MiniAppNotice({
+  tone,
+  message,
+  action,
+}: {
+  tone: "success" | "warning" | "error";
+  message: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div
+      role="status"
+      className={cn(
+        "min-w-0 rounded-md border px-3 py-2.5 text-[12px] leading-5",
+        tone === "success"
+          ? "border-pepe/40 bg-pepe/8 text-pepe"
+          : tone === "warning"
+            ? "border-gold/40 bg-gold/8 text-gold"
+            : "border-signal/40 bg-signal/8 text-signal",
+      )}
+    >
+      <p className="min-w-0 break-words">{message}</p>
+      {action ? <div className="mt-2">{action}</div> : null}
+    </div>
+  );
+}
+
+/** Inline editor container. Opens in place; never navigates or uses prompts. */
+export function MiniAppEditorShell({
+  title,
+  description,
+  onClose,
+  children,
+}: {
+  title: string;
+  description?: string | undefined;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <section className="min-w-0 rounded-lg border border-gold/30 bg-surface-raised/50 px-3.5 py-3.5">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="type-eyebrow text-gold">{title}</p>
+          {description ? (
+            <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{description}</p>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="min-h-9 shrink-0 rounded-md border border-border/60 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground transition-colors hover:text-foreground"
+        >
+          Close
+        </button>
+      </div>
+      <div className="mt-3 min-w-0">{children}</div>
+    </section>
+  );
+}

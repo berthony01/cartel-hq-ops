@@ -98,33 +98,57 @@ check(
   !/chatId|chat_id|verifiedChatId|telegram_chat_id/.test(uiCode),
 );
 
-/* ----------------------------------------------- 5. read-only scope in V1 */
+/* ------------------------- 5. SE-16.2 bounded mutation scope (narrowed) */
 
+/**
+ * END NOW and CANCEL stay permanently bot-owned. These are still absolute
+ * prohibitions: no import, no RPC name, no actionable control anywhere in the
+ * Mini App UI.
+ */
 const FORBIDDEN_FNS = [
-  "miniAppApplyTargets",
-  "miniAppApplyDuration",
   "end_social_mission_from_control",
   "cancel_social_mission_from_control",
+  "miniAppEndMission",
+  "miniAppCancelMission",
 ];
 for (const fn of FORBIDDEN_FNS) {
-  check(`5.${fn} is not referenced by SE-16.1 UI`, !uiCode.includes(fn));
+  check(`5.${fn} is not referenced by the Mini App UI`, !uiCode.includes(fn));
+}
+const missionOnlyMutations = ["miniAppApplyTargets", "miniAppApplyDuration"];
+for (const fn of missionOnlyMutations) {
+  check(
+    `5.scope ${fn} is imported by the mission route only`,
+    code.mission.includes(fn) &&
+      !code.home.includes(fn) &&
+      !code.layout.includes(fn) &&
+      !code.pieces.includes(fn) &&
+      !code.client.includes(fn),
+  );
 }
 check(
-  "5.5 only read bridge functions are imported",
+  "5.5 the read bridge functions are still the only read imports",
   /miniAppListMissionWorkspaces/.test(code.home) &&
     /miniAppListMissions/.test(code.home) &&
     /miniAppMissionPanel/.test(code.mission),
 );
 check(
-  "5.6 no mutation-intent controls are rendered",
-  !/Edit targets|Change end time|End now|End Now|Cancel mission/i.test(
-    code.home + code.mission.replace(/cancelling a mission/gi, ""),
-  ),
+  "5.6 exactly the two authorized mutation controls are rendered",
+  /Edit targets/.test(code.mission) &&
+    /Change end time/.test(code.mission) &&
+    !/End now|End Now|End mission|End Mission|Cancel mission|Cancel Mission/.test(code.mission) &&
+    !/Edit targets|Change end time/.test(code.home),
 );
 check(
-  "5.7 end/cancel are explicitly attributed to the bot",
-  /read-only/i.test(code.mission) && /Telegram bot\./.test(code.mission),
+  "5.7 end/cancel are explicitly attributed to the bot, without a read-only claim",
+  /Ending or cancelling the mission is still handled/.test(code.mission) &&
+    /Telegram bot\./.test(code.mission) &&
+    !/This view is read-only/.test(code.mission),
 );
+check(
+  "5.8 no reset-to-auto control exists (the bridge does not expose it)",
+  !/Reset to auto|reset_to_auto|resetToAuto/i.test(uiCode),
+);
+
 
 /* --------------------------------------------- 6. results vs targets split */
 
@@ -413,9 +437,19 @@ check(
   /MiniAppRetryButton/.test(code.mission) && /panelQuery\.refetch\(\)/.test(code.mission),
 );
 check(
-  "16.4 retry reuses the same validated read, never a mutation",
-  !/miniAppApply|useMutation/.test(code.home + code.mission + code.pieces),
+  "16.4 read-failure retry stays read-only; mutations live only in explicit handlers",
+  // The read-recovery primitive and the home screen never mutate.
+  !/miniAppApply|useMutation/.test(code.home + code.pieces) &&
+    // The mission screen's only mutation entry points are the two named
+    // mutations, invoked from explicit submit/retry handlers.
+    /panelQuery\.refetch\(\)/.test(code.mission) &&
+    (code.mission.match(/useMutation\(/g) ?? []).length === 2 &&
+    (code.mission.match(/\.mutate\(/g) ?? []).length === 4 &&
+    /function submitTargets\(\)/.test(code.mission) &&
+    /function submitDuration\(/.test(code.mission) &&
+    /function retryPending\(\)/.test(code.mission),
 );
+
 check(
   "16.5 retry surfaces pending state instead of silently re-firing",
   /pending=\{workspacesQuery\.isFetching\}/.test(code.home) &&
@@ -498,6 +532,176 @@ check(
   /https:\/\/telegram\.org\/js\/telegram-web-app\.js/.test(code.layout),
 );
 check("18.14 /tg stays noindex", /"robots", content: "noindex"/.test(code.layout));
+
+/* ------------------- 19. SE-16.2 target + end-time mutation UI contract */
+
+check(
+  "19.1 mutation controls render only for authoritative LIVE status",
+  /panel\.status\.toUpperCase\(\) === "LIVE"/.test(code.mission) &&
+    /isLive \? \(/.test(code.mission) &&
+    /isLive && editor === "targets"/.test(code.mission) &&
+    /isLive && editor === "duration"/.test(code.mission),
+);
+check(
+  "19.2 no client-supplied identity is sent with a mutation",
+  !/chatId|chat_id|workspaceId|workspace_id|telegramUserId|telegram_user_id|targetId|target_id|actorUserId|actor_user_id|editRevision|edit_revision/.test(
+    code.mission,
+  ),
+);
+check(
+  "19.3 mutation payloads carry only credential + mission hint + request id + bounded values",
+  /type TargetsPayload = \{\s*initData: string;\s*missionId: string;\s*requestId: string;\s*primaryType: string;\s*primaryTarget: number;/.test(
+    code.mission,
+  ) &&
+    /type DurationPayload = \{\s*initData: string;\s*missionId: string;\s*requestId: string;\s*minutes: number;\s*\};/.test(
+      code.mission,
+    ),
+);
+check(
+  "19.4 a new submit mints a fresh crypto.randomUUID request id",
+  /source\.randomUUID\(\)/.test(code.client) &&
+    /globalThis\.crypto/.test(code.client) &&
+    (code.mission.match(/newRequestId\(\)/g) ?? []).length === 2,
+);
+check(
+  "19.5 newRequestId fails safely instead of fabricating an id",
+  /typeof source\.randomUUID !== "function"\) return null/.test(code.client) &&
+    /if \(!requestId\) \{/.test(code.mission),
+);
+check(
+  "19.6 retry resends the SAME stored payload and request id",
+  /function retryPending\(\)/.test(code.mission) &&
+    /targetsMutation\.mutate\(pendingTargets\)/.test(code.mission) &&
+    /durationMutation\.mutate\(pendingDuration\)/.test(code.mission) &&
+    !/retryPending[\s\S]{0,240}newRequestId\(\)/.test(code.mission),
+);
+check(
+  "19.7 primary goal choices are exactly the bridge allowlist",
+  /MINI_APP_PRIMARY_TYPES = \[\s*"VIEWS",\s*"LIKES",\s*"REPLIES",\s*"REPOSTS",\s*"TOTAL_INTERACTIONS",\s*\]/.test(
+    code.client,
+  ),
+);
+check(
+  "19.8 supporting metric fields are exactly the bridge metric set",
+  /MINI_APP_SUPPORTING_METRICS = \[\s*"views",\s*"likes",\s*"replies",\s*"reposts",\s*"bookmarks",\s*\]/.test(
+    code.client,
+  ),
+);
+check(
+  "19.9 blank supporting target means Off (null), never zero",
+  /if \(trimmed\.length === 0\) return \{ ok: true, value: null \}/.test(code.client) &&
+    !/\?\?\s*0\b/.test(code.mission) &&
+    /placeholder="Off"/.test(code.mission),
+);
+check(
+  "19.10 client-side validation rejects non-integer, zero and unsafe values",
+  /!\/\^\[0-9\]\+\$\/\.test\(trimmed\)/.test(code.client) &&
+    /!Number\.isSafeInteger\(parsed\) \|\| parsed <= 0/.test(code.client),
+);
+check(
+  "19.11 a pinned supporting metric is disclosed, not silently overridden",
+  /MINI_APP_PINNED_SUPPORT/.test(code.client) &&
+    /pinned to the\s+primary target by the server/.test(code.mission),
+);
+check(
+  "19.12 AUTO missions are told that saving switches to MANUAL control",
+  /AUTO/.test(code.mission) && /switches this mission to MANUAL target control/.test(code.mission),
+);
+check(
+  "19.13 duration bounds match the bridge/RPC exactly",
+  /MINI_APP_MIN_MINUTES = 1;/.test(code.client) &&
+    /MINI_APP_MAX_MINUTES = 1440;/.test(code.client) &&
+    /minutes >= MINI_APP_MIN_MINUTES &&\s*minutes <= MINI_APP_MAX_MINUTES/.test(code.client) &&
+    /isMinutesInBounds\(minutes\)/.test(code.mission),
+);
+check(
+  "19.14 duration quick choices are exactly 30m/1h/2h/4h/12h/24h",
+  /\{ label: "30m", minutes: 30 \}/.test(code.client) &&
+    /\{ label: "1h", minutes: 60 \}/.test(code.client) &&
+    /\{ label: "2h", minutes: 120 \}/.test(code.client) &&
+    /\{ label: "4h", minutes: 240 \}/.test(code.client) &&
+    /\{ label: "12h", minutes: 720 \}/.test(code.client) &&
+    /\{ label: "24h", minutes: 1440 \}/.test(code.client),
+);
+check(
+  "19.15 the end time is described as minutes from now, never fabricated",
+  /minutes from now/i.test(code.mission) && !/new Date\(/.test(code.mission),
+);
+check(
+  "19.16 only ok and replayed count as committed",
+  /outcome === "ok" \|\| outcome === "replayed"/.test(code.client) &&
+    /MINI_APP_COMMITTED_OUTCOMES = \["ok", "replayed"\]/.test(code.client),
+);
+check(
+  "19.17 committed outcomes refetch the authoritative panel and close the editor",
+  /if \(classified\.committed\) \{[\s\S]{0,200}setEditor\(null\);[\s\S]{0,200}panelQuery\.refetch\(\)/.test(
+    code.mission,
+  ),
+);
+check(
+  "19.18 a committed mutation with unconfirmed refresh is not reported as full success",
+  /message: "Saved, but the Telegram card could not be confirmed\. Retry card refresh\."/.test(
+    code.client,
+  ) &&
+    /committed: true,\s*retry: true/.test(code.client) &&
+    /refresh === "edited" \|\| result\.refresh === "replayed"/.test(code.client),
+);
+check(
+  "19.19 network uncertainty never claims a save and keeps a safe retry",
+  /Could not confirm whether the change was saved\. Retry safely\./.test(code.client) &&
+    /networkUncertaintyNotice\(\)/.test(code.mission) &&
+    /committed: false,\s*retry: true/.test(code.client),
+);
+check(
+  "19.20 not_live and conflict get bounded explanatory copy",
+  /case "not_live":/.test(code.client) &&
+    /no longer live/.test(code.client) &&
+    /case "conflict":/.test(code.client) &&
+    /Try again in a few seconds/.test(code.client),
+);
+check(
+  "19.21 raw reasons, errors, payloads, request ids and initData are never rendered",
+  !/\{reason\}|\{error|String\(error\)|error\.message|JSON\.stringify\(|\{requestId\}|\{initData\}/.test(
+    code.mission,
+  ),
+);
+check(
+  "19.22 double-submit is prevented while a mutation is pending",
+  /mutationPending = targetsMutation\.isPending \|\| durationMutation\.isPending/.test(
+    code.mission,
+  ) && /disabled=\{mutationPending\}/.test(code.mission),
+);
+check(
+  "19.23 target and duration mutations stay independent",
+  /const targetsMutation = useMutation\(/.test(code.mission) &&
+    /const durationMutation = useMutation\(/.test(code.mission) &&
+    /pendingTargets/.test(code.mission) &&
+    /pendingDuration/.test(code.mission),
+);
+check(
+  "19.24 pending state is visible to the user",
+  /pendingLabel="Saving…"/.test(code.mission) && /pendingLabel="Updating…"/.test(code.mission),
+);
+check(
+  "19.25 editors are inline; no browser prompt/alert/confirm and no navigation away",
+  !/window\.prompt|window\.alert|window\.confirm|\bprompt\(|\balert\(|\bconfirm\(/.test(
+    code.mission,
+  ) && /MiniAppEditorShell/.test(code.mission),
+);
+check(
+  "19.26 presentation primitives hold no data call, credential or mutation",
+  !/useServerFn|useMutation|useQuery|initData|supabase|process\.env/.test(code.pieces),
+);
+check(
+  "19.27 the client helper module imports no server-only module",
+  !/\.server|bridge\.functions|process\.env|SERVICE_ROLE/.test(code.client),
+);
+check(
+  "19.28 no direct Telegram API call or provider/X read exists in the UI",
+  !/api\.telegram\.org|x\.com\/i\/api|twitter\.com\/i\/api|X_API|BOT_TOKEN/.test(uiCode),
+);
+
+
 
 if (failures.length > 0) {
 
