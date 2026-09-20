@@ -235,19 +235,45 @@ const LEAK_CANDIDATES = [
   SAFE_FACTORY_CODEHASH,
   ...EXTERNAL_ADDRESSES,
 ];
+/**
+ * NARROW, EXPLICITLY AUTHORIZED EXCEPTION. The read-only canonical Safe v1.4.1
+ * verifier must pin Safe identity constants to compare against. Exactly ONE
+ * runtime file may carry exactly these values. Every other candidate value,
+ * and every other file, stays forbidden.
+ */
+const SAFE_PIN_EXCEPTION_FILE = "src/lib/treasury-safe-verify.ts";
+const SAFE_PIN_EXCEPTION_VALUES = new Set(
+  [SAFE_SINGLETON, SAFE_SINGLETON_CODEHASH].map((v) => v.toLowerCase()),
+);
 const protectedFiles = PROTECTED_ROOTS.flatMap((root) => walk(root));
 const leaks: string[] = [];
 for (const file of protectedFiles) {
   const body = readFileSync(file, "utf8").toLowerCase();
+  const normalized = file.replace(/\\/g, "/");
   for (const value of LEAK_CANDIDATES) {
-    if (body.includes(value.toLowerCase())) leaks.push(`${file}:${value}`);
+    if (!body.includes(value.toLowerCase())) continue;
+    const excepted =
+      normalized === SAFE_PIN_EXCEPTION_FILE && SAFE_PIN_EXCEPTION_VALUES.has(value.toLowerCase());
+    if (!excepted) leaks.push(`${file}:${value}`);
   }
 }
 check(
   "L1C-6",
   leaks.length === 0,
-  `no Safe/Uniswap manifest address appears under src/**, supabase/**, contracts/** or docs/sql/** (${leaks.join(", ") || "none"})`,
+  `no Safe/Uniswap manifest address appears under src/**, supabase/**, contracts/** or docs/sql/** outside the single verifier pin exception (${leaks.join(", ") || "none"})`,
 );
+const verifierSrc = readFileSync(SAFE_PIN_EXCEPTION_FILE, "utf8");
+check(
+  "L1C-6b",
+  verifierSrc.includes(SAFE_SINGLETON) &&
+    verifierSrc.includes(
+      "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+    ) &&
+    !verifierSrc.toLowerCase().includes(SAFE_FACTORY.toLowerCase()) &&
+    !EXTERNAL_ADDRESSES.some((a) => verifierSrc.toLowerCase().includes(a.toLowerCase())),
+  "the single excepted verifier pins the canonical singleton and SafeProxy code hash and nothing else",
+);
+
 
 // -------------------------------------------------- 7. internal comms policy
 check(
