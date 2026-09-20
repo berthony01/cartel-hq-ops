@@ -35,20 +35,36 @@ The Safe official deployment registry maps Robinhood chain `4663` and testnet `4
 
 **The actual PEPECARTEL Safe does not exist.** Signer addresses are unresolved, the Safe address is unresolved, and no PCART treasury recipient is fixed. None of them is invented here.
 
-### 2.1 Stronger Safe verification requirements — PENDING
+### 2.1 Stronger Safe verification requirements — IMPLEMENTATION BUILT / LIVE VALIDATION PENDING
 
 All of the following must be implemented and must **pass against the real Safe** before that Safe may be used as the PCART treasury. **Fail closed on any ambiguity, unreadable read, or mismatch.**
 
-1. **PENDING** — singleton / masterCopy must equal the canonical SafeL2 v1.4.1 singleton.
-2. **PENDING** — proxy runtime code hash must match the expected canonical SafeProxy code.
-3. **PENDING** — `VERSION()` must be readable and exactly `1.4.1` (strict; an unreadable VERSION must not pass).
-4. **PENDING** — modules must be empty.
-5. **PENDING** — guard must be zero / unset.
-6. **PENDING** — `nonce()` must be readable.
+1. **BUILT** — singleton / masterCopy must equal the canonical SafeL2 v1.4.1 singleton.
+2. **BUILT** — proxy runtime code hash must match the expected canonical SafeProxy code.
+3. **BUILT** — `VERSION()` must be readable and exactly `1.4.1` (strict; an unreadable VERSION must not pass).
+4. **BUILT** — modules must be empty.
+5. **BUILT** — guard must be zero / unset.
+6. **BUILT** — `nonce()` must be readable.
 7. **PENDING** — owners must exactly match the selected 3 signer addresses.
-8. **PENDING** — threshold must be exactly 2.
+8. **BUILT** — threshold must be exactly 2.
 
-The current verifier (`src/lib/treasury-safe-verify.ts`) checks contract code presence, chain 4663, 3 unique non-zero owners, threshold 2 and optional `VERSION()`. It is explicitly **not** proof of a specific proxy or singleton version. **It is not modified in this unit.**
+**BUILT** means the check exists in code, fails closed, and is covered by static regression. It does **not** mean it has been run against a real PEPECARTEL Safe, because no such Safe exists.
+
+### 2.2 Hardening status update (2026-09-20, separately authorized read-only unit)
+
+The v1 closure snapshot above originally recorded all eight items as PENDING, and the verifier was not modified in that earlier closure unit. A later, separately authorized **read-only, repo-only** unit hardened `src/lib/treasury-safe-verify.ts` from an ABI-compatible 2-of-3 check into a canonical Safe v1.4.1 profile check:
+
+- exact SafeProxy v1.4.x runtime code hash `0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c`;
+- `masterCopy()` (selector `0xa619486e`) must equal the canonical SafeL2 v1.4.1 singleton;
+- strict `VERSION()` exactly `1.4.1` — no longer optional;
+- readable `nonce()`;
+- `getModulesPaginated(SENTINEL_MODULES, 1)` must decode to an empty list with the sentinel as `next`;
+- the v1.4.1 transaction-guard storage slot must be zero / unset;
+- 3 unique non-zero owners and threshold exactly 2 preserved;
+- every failed, reverted or malformed read fails closed, over the managed server RPC only, authenticated and read-only.
+
+**Still PENDING:** live validation against the future actual PEPECARTEL Safe, and the exact selected owner-address match (item 7). The hardened verifier **remains non-gating** for production request submission, creates nothing, approves nothing and moves nothing. A canonical pass is **not** a PEPECARTEL treasury approval.
+
 
 ## 3. Robinhood / Uniswap compatibility (POLICY CLOSED — dated research evidence)
 
