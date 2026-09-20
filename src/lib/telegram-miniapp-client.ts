@@ -172,3 +172,211 @@ export const MINI_APP_METRIC_LABELS: Record<string, string> = {
   reposts: "Reposts",
   bookmarks: "Bookmarks",
 };
+
+/* ===================================================================== */
+/* SE-16.2 UI — bounded mutation helpers (client-safe, non-secret).       */
+/*                                                                        */
+/* Nothing here talks to a server, holds a credential, or derives any     */
+/* identity. Request ids are opaque correlation values only: the bridge   */
+/* never treats one as identity or authorization evidence.                */
+/* ===================================================================== */
+
+/** Primary goal choices, exactly matching the bridge allowlist. */
+export const MINI_APP_PRIMARY_TYPES = [
+  "VIEWS",
+  "LIKES",
+  "REPLIES",
+  "REPOSTS",
+  "TOTAL_INTERACTIONS",
+] as const;
+export type MiniAppPrimaryType = (typeof MINI_APP_PRIMARY_TYPES)[number];
+
+export const MINI_APP_PRIMARY_LABELS: Record<string, string> = {
+  VIEWS: "Views",
+  LIKES: "Likes",
+  REPLIES: "Replies",
+  REPOSTS: "Reposts",
+  TOTAL_INTERACTIONS: "Total interactions",
+};
+
+/** Supporting target fields, exactly matching the bridge metric set. */
+export const MINI_APP_SUPPORTING_METRICS = [
+  "views",
+  "likes",
+  "replies",
+  "reposts",
+  "bookmarks",
+] as const;
+export type MiniAppSupportingMetric = (typeof MINI_APP_SUPPORTING_METRICS)[number];
+
+/**
+ * A non-TOTAL primary type pins its own supporting metric to the primary
+ * target server-side. The editor must say so rather than imply a conflicting
+ * supporting value would win.
+ */
+export const MINI_APP_PINNED_SUPPORT: Record<string, MiniAppSupportingMetric | null> = {
+  VIEWS: "views",
+  LIKES: "likes",
+  REPLIES: "replies",
+  REPOSTS: "reposts",
+  TOTAL_INTERACTIONS: null,
+};
+
+/** Quick end-time choices. Minutes FROM NOW, never an absolute time. */
+export const MINI_APP_DURATION_CHOICES = [
+  { label: "30m", minutes: 30 },
+  { label: "1h", minutes: 60 },
+  { label: "2h", minutes: 120 },
+  { label: "4h", minutes: 240 },
+  { label: "12h", minutes: 720 },
+  { label: "24h", minutes: 1440 },
+] as const;
+
+/** Exactly the bridge/RPC bound. */
+export const MINI_APP_MIN_MINUTES = 1;
+export const MINI_APP_MAX_MINUTES = 1440;
+
+/**
+ * Fresh opaque correlation id for a NEW submit. Fails safely to null when the
+ * runtime has no `crypto.randomUUID`, so the UI can refuse instead of sending
+ * a fabricated value the bridge would reject.
+ */
+export function newRequestId(): string | null {
+  try {
+    const source = globalThis.crypto;
+    if (!source || typeof source.randomUUID !== "function") return null;
+    const value = source.randomUUID();
+    return typeof value === "string" && value.length === 36 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export type MiniAppDraftParse = { ok: true; value: number | null } | { ok: false };
+
+/**
+ * Blank means Off and yields null — never 0. Anything non-integer, zero,
+ * negative or beyond the safe-integer range is rejected before submit.
+ */
+export function parseOptionalPositiveInt(raw: string): MiniAppDraftParse {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return { ok: true, value: null };
+  if (!/^[0-9]+$/.test(trimmed)) return { ok: false };
+  const parsed = Number(trimmed);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) return { ok: false };
+  return { ok: true, value: parsed };
+}
+
+/** Same rules, but the field is mandatory: blank is rejected, not Off. */
+export function parseRequiredPositiveInt(raw: string): MiniAppDraftParse {
+  const parsed = parseOptionalPositiveInt(raw);
+  if (!parsed.ok || parsed.value === null) return { ok: false };
+  return parsed;
+}
+
+export function isMinutesInBounds(minutes: number): boolean {
+  return (
+    Number.isSafeInteger(minutes) &&
+    minutes >= MINI_APP_MIN_MINUTES &&
+    minutes <= MINI_APP_MAX_MINUTES
+  );
+}
+
+/** Outcomes that mean the database mutation is committed. */
+export const MINI_APP_COMMITTED_OUTCOMES = ["ok", "replayed"] as const;
+
+export function isCommittedOutcome(outcome: string | null | undefined): boolean {
+  return outcome === "ok" || outcome === "replayed";
+}
+
+export type MiniAppNoticeTone = "success" | "warning" | "error";
+
+/**
+ * `committed` is the database fact; `retry` is the Telegram-card fact. They are
+ * deliberately separate so the UI can never claim a card refresh that did not
+ * happen, and can never deny a mutation that did.
+ */
+export type MiniAppMutationNotice = {
+  tone: MiniAppNoticeTone;
+  message: string;
+  committed: boolean;
+  retry: boolean;
+};
+
+/** Bounded, user-safe copy for mutation refusals. No raw reason is rendered. */
+export function miniAppMutationFailureMessage(reason: string | null | undefined): string {
+  switch (reason) {
+    case "not_live":
+      return "This mission is no longer live, so it can no longer be edited here.";
+    case "conflict":
+    case "event_claimed":
+      return "This mission is updating right now. Try again in a few seconds.";
+    case "invalid_minutes":
+      return "Choose a whole number of minutes between 1 and 1440.";
+    case "invalid_primary_type":
+    case "invalid_primary_target":
+    case "invalid_target":
+      return "Those target values were not accepted. Use whole numbers above zero.";
+    case "invalid_request_id":
+    case "invalid_mode":
+      return "That change could not be submitted. Close and reopen Mission Control from the bot.";
+    case "denied":
+      return "You are not allowed to change this mission.";
+    default:
+      return miniAppFailureMessage(reason);
+  }
+}
+
+/**
+ * Maps a bounded bridge result to truthful copy. A committed mutation whose
+ * card refresh is `failed`/`ambiguous` is reported as saved-but-unconfirmed,
+ * never as full success.
+ */
+export function classifyMutationResult(
+  result: { ok?: boolean; outcome?: string; refresh?: string; reason?: string } | null | undefined,
+): MiniAppMutationNotice {
+  if (!result || result.ok !== true) {
+    return {
+      tone: "error",
+      message: miniAppMutationFailureMessage(result?.reason),
+      committed: false,
+      retry: false,
+    };
+  }
+  if (isCommittedOutcome(result.outcome)) {
+    if (result.refresh === "edited" || result.refresh === "replayed") {
+      return {
+        tone: "success",
+        message: "Saved and Telegram card updated.",
+        committed: true,
+        retry: false,
+      };
+    }
+    return {
+      tone: "warning",
+      message: "Saved, but the Telegram card could not be confirmed. Retry card refresh.",
+      committed: true,
+      retry: true,
+    };
+  }
+  const outcome = result.outcome;
+  return {
+    tone: "error",
+    message: miniAppMutationFailureMessage(outcome),
+    committed: false,
+    retry: outcome === "conflict" || outcome === "event_claimed",
+  };
+}
+
+/**
+ * A transport-layer failure proves nothing either way, so success is never
+ * claimed and the SAME payload/request id stays available for a safe retry.
+ */
+export function networkUncertaintyNotice(): MiniAppMutationNotice {
+  return {
+    tone: "warning",
+    message: "Could not confirm whether the change was saved. Retry safely.",
+    committed: false,
+    retry: true,
+  };
+}
