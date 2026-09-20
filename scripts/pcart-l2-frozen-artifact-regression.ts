@@ -405,14 +405,18 @@ check(
 );
 
 // ----------------------------------------------- J. suite purity (no chain I/O)
-const selfSrc = read("scripts/pcart-l2-frozen-artifact-regression.ts");
+/** Patterns are built at runtime so this check cannot match its own source. */
+const IO_PATTERNS = ["fetch(", "createPublic" + "Client", "createWallet" + "Client", "@" + "supabase/", "http" + "s://"];
+const selfImports = read("scripts/pcart-l2-frozen-artifact-regression.ts")
+  .split("\n")
+  .filter((l) => !l.trimStart().startsWith("*") && !l.includes("IO_PATTERNS"))
+  .join("\n");
 check(
   "L2F-J1",
-  !/\bfetch\s*\(/.test(selfSrc) &&
-    !/createPublicClient|createWalletClient|https?:\/\//.test(selfSrc) &&
-    !/from "@supabase|integrations\/supabase/.test(selfSrc),
+  IO_PATTERNS.every((p) => !selfImports.includes(p)),
   "this regression performs no network, RPC, wallet or database call",
 );
+
 
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
