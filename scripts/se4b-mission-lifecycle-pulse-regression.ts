@@ -24,7 +24,7 @@ const PULSE_COPY_PATH = "backend-source/edge-functions/_shared/mission-pulse-cop
 
 const TRANSPORT_PATH = "backend-source/edge-functions/social-mission-telegram/index.ts";
 const WEBHOOK_PATH = "supabase/functions/telegram-webhook/index.ts";
-const STALE_WEBHOOK_PATH = "backend-source/edge-functions/telegram-webhook/index.ts";
+const MIRROR_WEBHOOK_PATH = "backend-source/edge-functions/telegram-webhook/index.ts";
 const CLEANUP_WORKER_PATH = "backend-source/edge-functions/telegram-message-cleanup/index.ts";
 const DOC_PATH = "docs/SE4B_MISSION_LIFECYCLE_PULSE.md";
 
