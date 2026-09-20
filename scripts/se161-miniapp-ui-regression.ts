@@ -98,33 +98,57 @@ check(
   !/chatId|chat_id|verifiedChatId|telegram_chat_id/.test(uiCode),
 );
 
-/* ----------------------------------------------- 5. read-only scope in V1 */
+/* ------------------------- 5. SE-16.2 bounded mutation scope (narrowed) */
 
+/**
+ * END NOW and CANCEL stay permanently bot-owned. These are still absolute
+ * prohibitions: no import, no RPC name, no actionable control anywhere in the
+ * Mini App UI.
+ */
 const FORBIDDEN_FNS = [
-  "miniAppApplyTargets",
-  "miniAppApplyDuration",
   "end_social_mission_from_control",
   "cancel_social_mission_from_control",
+  "miniAppEndMission",
+  "miniAppCancelMission",
 ];
 for (const fn of FORBIDDEN_FNS) {
-  check(`5.${fn} is not referenced by SE-16.1 UI`, !uiCode.includes(fn));
+  check(`5.${fn} is not referenced by the Mini App UI`, !uiCode.includes(fn));
+}
+const missionOnlyMutations = ["miniAppApplyTargets", "miniAppApplyDuration"];
+for (const fn of missionOnlyMutations) {
+  check(
+    `5.scope ${fn} is imported by the mission route only`,
+    code.mission.includes(fn) &&
+      !code.home.includes(fn) &&
+      !code.layout.includes(fn) &&
+      !code.pieces.includes(fn) &&
+      !code.client.includes(fn),
+  );
 }
 check(
-  "5.5 only read bridge functions are imported",
+  "5.5 the read bridge functions are still the only read imports",
   /miniAppListMissionWorkspaces/.test(code.home) &&
     /miniAppListMissions/.test(code.home) &&
     /miniAppMissionPanel/.test(code.mission),
 );
 check(
-  "5.6 no mutation-intent controls are rendered",
-  !/Edit targets|Change end time|End now|End Now|Cancel mission/i.test(
-    code.home + code.mission.replace(/cancelling a mission/gi, ""),
-  ),
+  "5.6 exactly the two authorized mutation controls are rendered",
+  /Edit targets/.test(code.mission) &&
+    /Change end time/.test(code.mission) &&
+    !/End now|End Now|End mission|End Mission|Cancel mission|Cancel Mission/.test(code.mission) &&
+    !/Edit targets|Change end time/.test(code.home),
 );
 check(
-  "5.7 end/cancel are explicitly attributed to the bot",
-  /read-only/i.test(code.mission) && /Telegram bot\./.test(code.mission),
+  "5.7 end/cancel are explicitly attributed to the bot, without a read-only claim",
+  /Ending or cancelling the mission is still handled/.test(code.mission) &&
+    /Telegram bot\./.test(code.mission) &&
+    !/This view is read-only/.test(code.mission),
 );
+check(
+  "5.8 no reset-to-auto control exists (the bridge does not expose it)",
+  !/Reset to auto|reset_to_auto|resetToAuto/i.test(uiCode),
+);
+
 
 /* --------------------------------------------- 6. results vs targets split */
 
