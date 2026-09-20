@@ -72,9 +72,10 @@ check(
 );
 check(
   "L2D-A5",
-  /PCART-L1 remains \*\*OPEN\*\*/.test(planSrc) &&
-    /NON-COMPILED, NON-FROZEN, NON-ALLOWLISTED/.test(planSrc),
-  "master plan records the narrow DRAFT exception with L1 still OPEN",
+  /\*\*PCART-L1 remains OPEN\.\*\*/.test(planSrc) &&
+    /NON-COMPILED, NON-FROZEN, NON-ALLOWLISTED/.test(planSrc) &&
+    /PCART-L2 may not begin until PCART-L1 is explicitly closed/.test(planSrc),
+  "master plan records the narrow DRAFT exception with L1 still OPEN and L2 still gated",
 );
 
 // --------------------------------------------- B/C. pragma, imports, base
