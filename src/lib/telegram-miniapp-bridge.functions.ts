@@ -250,6 +250,144 @@ async function authorizeMission(
   return { ok: true, admin, telegramUserId: auth.user.id, binding };
 }
 
+function hexDigest(buffer: ArrayBuffer): string {
+  return Array.from(new Uint8Array(buffer))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * SE-16.2P — deterministic UUID for the refresh request.
+ *
+ * The transport requires a UUID-shaped `clientRequestId` (a 40-char hash would
+ * be rejected), and binds it to the target's edit revision. Deriving it from
+ * the VALIDATED Telegram user id + the mutation action + the client request id
+ * means: a retry of the same mutation re-uses the same refresh id (so the
+ * transport replays instead of double-editing), while a target edit and a
+ * duration edit can never collide on one request id.
+ */
+export async function miniAppRefreshRequestUuid(
+  telegramUserId: number,
+  action: string,
+  requestId: string,
+): Promise<string> {
+  const hex = hexDigest(
+    await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(`se16-miniapp-refresh:${telegramUserId}:${action}:${requestId}`),
+    ),
+  );
+  const chars = hex.slice(0, 32).split("");
+  chars[12] = "5";
+  chars[16] = ["8", "9", "a", "b"][parseInt(hex[16] ?? "0", 16) % 4] ?? "8";
+  const h = chars.join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+}
+
+/** Maps the transport's bounded reply to an allowlisted, non-secret state. */
+function refreshStateFrom(status: number, payload: Record<string, unknown> | null): MiniAppRefreshState {
+  const editState = String(payload?.["editState"] ?? "").toUpperCase();
+  if (payload?.["duplicate"] === true) return "replayed";
+  if (editState === "AMBIGUOUS") return "ambiguous";
+  if (status >= 200 && status < 300 && editState === "EDITED") return "edited";
+  return "failed";
+}
+
+/**
+ * SE-16.2P — refresh the canonical Telegram mission card through the EXISTING
+ * transport. Every binding input is server-derived:
+ *   - the Telegram user id comes from the verified initData signature,
+ *   - workspace / mission / chat come from the operator-scoped binding,
+ *   - `actor_user_id` and `target_id` come from the reused service-only
+ *     `social_mission_control_authorize` RPC,
+ *   - the edit revision is read from the EXACT target row (target id + mission
+ *     + workspace + verified chat), never a loose mission-only lookup.
+ *
+ * Failure here never rolls back the committed mutation; it is reported
+ * separately so the caller can honestly say "saved, card refresh needs retry".
+ */
+async function miniAppRefreshCard(args: {
+  admin: AdminClient;
+  telegramUserId: number;
+  binding: Binding;
+  action: string;
+  requestId: string;
+}): Promise<MiniAppRefreshState> {
+  const { admin, telegramUserId, binding } = args;
+
+  const { data: authRows, error: authError } = await admin.rpc(MINIAPP_RPC.authorize, {
+    _telegram_user_id: telegramUserId,
+    _mission_id: binding.missionId,
+    _verified_chat_id: Number(binding.chatId),
+  });
+  if (authError) return "failed";
+  const authRow = (Array.isArray(authRows) ? authRows[0] : authRows) as
+    | Record<string, unknown>
+    | null
+    | undefined;
+  if (!authRow || String(authRow["outcome"] ?? "") !== "ok") return "failed";
+  const actorUserId = String(authRow["actor_user_id"] ?? "");
+  const targetId = String(authRow["target_id"] ?? "");
+  const workspaceId = String(authRow["workspace_id"] ?? "");
+  if (!isUuid(actorUserId) || !isUuid(targetId) || workspaceId !== binding.workspaceId) {
+    return "failed";
+  }
+
+  // EXACT target row. Mission+workspace alone could match a second delivered
+  // target and edit the wrong card, so the verified chat and the authoritative
+  // target id are both part of the lookup.
+  const { data: target } = await admin
+    .from("social_mission_targets")
+    .select("id, edit_revision")
+    .eq("id", targetId)
+    .eq("mission_id", binding.missionId)
+    .eq("workspace_id", binding.workspaceId)
+    .eq("telegram_chat_id", Number(binding.chatId))
+    .maybeSingle();
+  const targetRow = (target ?? null) as Record<string, unknown> | null;
+  if (!targetRow?.["id"]) return "failed";
+
+  // Service credentials are read per-request, used only as request headers, and
+  // never returned or logged.
+  const supabaseUrl = process.env["SUPABASE_URL"] ?? "";
+  const serviceKey = process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? "";
+  if (!supabaseUrl || !serviceKey) return "failed";
+
+  try {
+    const response = await fetch(
+      `${supabaseUrl.replace(/\/$/, "")}/functions/v1/${MINIAPP_TRANSPORT_FUNCTION}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+          "X-Cartel-Internal-Source": MINIAPP_TRANSPORT_INTERNAL_SOURCE,
+          "X-Cartel-Actor-User-Id": actorUserId,
+        },
+        body: JSON.stringify({
+          action: MINIAPP_TRANSPORT_ACTION,
+          workspaceId: binding.workspaceId,
+          missionId: binding.missionId,
+          targetId,
+          clientRequestId: await miniAppRefreshRequestUuid(
+            telegramUserId,
+            args.action,
+            args.requestId,
+          ),
+          revision: Number(targetRow["edit_revision"] ?? 0) + 1,
+        }),
+        signal: AbortSignal.timeout(MINIAPP_TRANSPORT_TIMEOUT_MS),
+      },
+    );
+    const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    return refreshStateFrom(response.status, payload);
+  } catch {
+    // Timeout or transport error: the edit may or may not have landed.
+    return "ambiguous";
+  }
+}
+
 /* ------------------------------------------------------------------ READS */
 
 export const miniAppListMissionWorkspaces = createServerFn({ method: "POST" })
