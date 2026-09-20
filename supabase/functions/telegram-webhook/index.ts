@@ -3696,7 +3696,7 @@ Deno.serve(async (req: Request) => {
           // The transport performs the existing best-effort FINAL official X
           // snapshot for a COMPLETED mission, guarded by its own current-minute
           // duplicate-read guard: at most one read, never retried here.
-          const transport = await mcRefreshCard({
+          const transport = await mcFinalizeCardEdit({
             binding,
             actorUserId: linked?.user_id ? String(linked.user_id) : null,
             seed: `${updateId}:end_now`,
