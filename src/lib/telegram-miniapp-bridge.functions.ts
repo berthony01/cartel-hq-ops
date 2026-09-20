@@ -303,7 +303,6 @@ function refreshStateFrom(status: number, payload: Record<string, unknown> | nul
     if (payload?.["duplicate"] === true) return "replayed";
     return payload?.["cleanupPending"] === true ? "cleanup_pending" : "edited";
   }
-  if (payload?.["duplicate"] === true) return "ambiguous";
   if (state === "AMBIGUOUS" || state === "CLAIMED") return "ambiguous";
   if (state === "FAILED") return "failed";
   return status >= 200 && status < 300 ? "ambiguous" : "failed";
