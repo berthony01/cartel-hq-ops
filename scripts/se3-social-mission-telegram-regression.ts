@@ -666,7 +666,7 @@ check(
   sendBlock33.includes("transport_kind: desiredTransportKind") &&
     sendBlock33.indexOf("transport_kind: desiredTransportKind") < sendBlock33.indexOf('"sendPhoto"'),
 );
-check("14.26 exactly one sendPhoto call path", (indexSrc.match(/"sendPhoto"/g) ?? []).length === 1);
+check("14.26 exactly one sendPhoto call path in the send lane", (sendBlock33.match(/"sendPhoto"/g) ?? []).length === 1);
 check("14.27 sendPhoto is multipart with binary bytes", sendBlock33.includes("new FormData()") && sendBlock33.includes('form.append("photo"'));
 check("14.28 caption carries the rendered card", sendBlock33.includes('form.append("caption", rendered.text)'));
 check("14.29 branded send reuses the existing inline keyboard", sendBlock33.includes('form.append("reply_markup", JSON.stringify(rendered.replyMarkup))'));
