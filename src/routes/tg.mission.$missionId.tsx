@@ -94,6 +94,15 @@ type DurationPayload = {
 
 type BoundedResult = { ok?: boolean; outcome?: string; refresh?: string; reason?: string };
 
+/**
+ * Exactly one retry can be pending at a time, and it carries its own kind, so
+ * the visible Retry always replays the mutation the notice is about.
+ */
+type PendingRetry =
+  | { kind: "targets"; payload: TargetsPayload }
+  | { kind: "duration"; payload: DurationPayload };
+
+
 const BLANK_SUPPORT: Record<MiniAppSupportingMetric, string> = {
   views: "",
   likes: "",
@@ -134,9 +143,13 @@ function MiniAppMission() {
     useState<Record<MiniAppSupportingMetric, string>>(BLANK_SUPPORT);
   const [minutesDraft, setMinutesDraft] = useState("");
 
-  // Retained ONLY so a retry resends the identical payload + request id.
-  const [pendingTargets, setPendingTargets] = useState<TargetsPayload | null>(null);
-  const [pendingDuration, setPendingDuration] = useState<DurationPayload | null>(null);
+  /**
+   * A SINGLE discriminated retry slot. Retained only so a retry resends the
+   * identical payload and request id. Because there is exactly one slot, the
+   * visible Retry can never fire the other mutation's stale payload.
+   */
+  const [pendingRetry, setPendingRetry] = useState<PendingRetry | null>(null);
+
 
   useEffect(() => {
     let cancelled = false;
@@ -160,46 +173,47 @@ function MiniAppMission() {
   const applyTargetsFn = useServerFn(miniAppApplyTargets);
   const applyDurationFn = useServerFn(miniAppApplyDuration);
 
-  /** Committed mutations always re-read authoritative state from the server. */
-  function settle(result: unknown, keepPayload: () => void, dropPayload: () => void) {
-    const classified = classifyMutationResult(result as BoundedResult);
+  /**
+
+   * Committed mutations re-read authoritative state. `not_live` is not
+   * committed and is never reported as success, but it still refetches so the
+   * stale LIVE controls disappear when the mission ended after page load.
+   */
+  function settle(result: unknown, kind: PendingRetry["kind"], payload: PendingRetry["payload"]) {
+    const bounded = result as BoundedResult;
+    const classified = classifyMutationResult(bounded);
     setNotice(classified);
-    if (classified.retry) keepPayload();
-    else dropPayload();
-    if (classified.committed) {
+    // Exactly one slot: writing it replaces any opposite-kind payload.
+    setPendingRetry(
+      classified.retry ? ({ kind, payload } as PendingRetry) : null,
+    );
+    const noLongerLive = bounded?.ok === true && bounded.outcome === "not_live";
+    if (classified.committed || noLongerLive) {
       setEditor(null);
       setFormError(null);
+      if (noLongerLive) setPendingRetry(null);
       void panelQuery.refetch();
     }
   }
 
   const targetsMutation = useMutation({
     mutationFn: (payload: TargetsPayload) => applyTargetsFn({ data: payload }),
-    onSuccess: (result, payload) =>
-      settle(
-        result,
-        () => setPendingTargets(payload),
-        () => setPendingTargets(null),
-      ),
+    onSuccess: (result, payload) => settle(result, "targets", payload),
     onError: (_error, payload) => {
-      setPendingTargets(payload);
+      setPendingRetry({ kind: "targets", payload });
       setNotice(networkUncertaintyNotice());
     },
   });
 
   const durationMutation = useMutation({
     mutationFn: (payload: DurationPayload) => applyDurationFn({ data: payload }),
-    onSuccess: (result, payload) =>
-      settle(
-        result,
-        () => setPendingDuration(payload),
-        () => setPendingDuration(null),
-      ),
+    onSuccess: (result, payload) => settle(result, "duration", payload),
     onError: (_error, payload) => {
-      setPendingDuration(payload);
+      setPendingRetry({ kind: "duration", payload });
       setNotice(networkUncertaintyNotice());
     },
   });
+
 
   if (booting) {
     return (
@@ -272,6 +286,8 @@ function MiniAppMission() {
     setSupportDraft(seeded);
     setFormError(null);
     setNotice(null);
+    // Opening a target edit discards any stale duration retry payload.
+    setPendingRetry(null);
     setEditor("targets");
   }
 
@@ -279,8 +295,11 @@ function MiniAppMission() {
     setMinutesDraft("");
     setFormError(null);
     setNotice(null);
+    // Opening a duration edit discards any stale target retry payload.
+    setPendingRetry(null);
     setEditor("duration");
   }
+
 
   function submitTargets() {
     if (!initData) return;
@@ -310,7 +329,10 @@ function MiniAppMission() {
       return;
     }
     setFormError(null);
+    // A new target submit invalidates any earlier retry payload of either kind.
+    setPendingRetry(null);
     targetsMutation.mutate({
+
       initData,
       missionId,
       requestId,
@@ -338,6 +360,8 @@ function MiniAppMission() {
       return;
     }
     setFormError(null);
+    // A new duration submit invalidates any earlier retry payload of either kind.
+    setPendingRetry(null);
     durationMutation.mutate({ initData, missionId, requestId, minutes });
   }
 
@@ -352,11 +376,16 @@ function MiniAppMission() {
     submitDuration(parsed.value);
   }
 
-  /** Retry resends the SAME payload and request id: never a new one. */
+  /**
+   * Retry replays the single active pending payload with its ORIGINAL request
+   * id, dispatched by its own kind. No new id is ever minted here.
+   */
   function retryPending() {
-    if (pendingTargets) targetsMutation.mutate(pendingTargets);
-    else if (pendingDuration) durationMutation.mutate(pendingDuration);
+    if (!pendingRetry) return;
+    if (pendingRetry.kind === "targets") targetsMutation.mutate(pendingRetry.payload);
+    else durationMutation.mutate(pendingRetry.payload);
   }
+
 
   const pinned = MINI_APP_PINNED_SUPPORT[primaryType];
 

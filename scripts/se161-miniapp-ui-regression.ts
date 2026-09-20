@@ -571,8 +571,8 @@ check(
 check(
   "19.6 retry resends the SAME stored payload and request id",
   /function retryPending\(\)/.test(code.mission) &&
-    /targetsMutation\.mutate\(pendingTargets\)/.test(code.mission) &&
-    /durationMutation\.mutate\(pendingDuration\)/.test(code.mission) &&
+    /targetsMutation\.mutate\(pendingRetry\.payload\)/.test(code.mission) &&
+    /durationMutation\.mutate\(pendingRetry\.payload\)/.test(code.mission) &&
     !/retryPending[\s\S]{0,240}newRequestId\(\)/.test(code.mission),
 );
 check(
@@ -634,7 +634,7 @@ check(
 );
 check(
   "19.17 committed outcomes refetch the authoritative panel and close the editor",
-  /if \(classified\.committed\) \{[\s\S]{0,200}setEditor\(null\);[\s\S]{0,200}panelQuery\.refetch\(\)/.test(
+  /if \(classified\.committed \|\| noLongerLive\) \{[\s\S]{0,260}setEditor\(null\);[\s\S]{0,260}panelQuery\.refetch\(\)/.test(
     code.mission,
   ),
 );
@@ -675,9 +675,10 @@ check(
   "19.23 target and duration mutations stay independent",
   /const targetsMutation = useMutation\(/.test(code.mission) &&
     /const durationMutation = useMutation\(/.test(code.mission) &&
-    /pendingTargets/.test(code.mission) &&
-    /pendingDuration/.test(code.mission),
+    /kind: "targets"/.test(code.mission) &&
+    /kind: "duration"/.test(code.mission),
 );
+
 check(
   "19.24 pending state is visible to the user",
   /pendingLabel="Saving…"/.test(code.mission) && /pendingLabel="Updating…"/.test(code.mission),
@@ -700,6 +701,81 @@ check(
   "19.28 no direct Telegram API call or provider/X read exists in the UI",
   !/api\.telegram\.org|x\.com\/i\/api|twitter\.com\/i\/api|X_API|BOT_TOKEN/.test(uiCode),
 );
+
+/* ------- 20. SE-16.2 correction: single retry slot + not_live refetch */
+
+check(
+  "20.1 exactly one discriminated retry slot exists",
+  /const \[pendingRetry, setPendingRetry\] = useState<PendingRetry \| null>\(null\)/.test(
+    code.mission,
+  ) &&
+    !/pendingTargets|pendingDuration/.test(code.mission) &&
+    /type PendingRetry =\s*\| \{ kind: "targets"; payload: TargetsPayload \}\s*\| \{ kind: "duration"; payload: DurationPayload \};/.test(
+      code.mission,
+    ),
+);
+check(
+  "20.2 opening a target edit clears any stale duration retry payload",
+  /setSupportDraft\(seeded\);[\s\S]{0,160}setPendingRetry\(null\);\s*setEditor\("targets"\);/.test(
+    code.mission,
+  ),
+);
+check(
+  "20.3 opening a duration edit clears any stale target retry payload",
+  /setMinutesDraft\(""\);[\s\S]{0,160}setPendingRetry\(null\);\s*setEditor\("duration"\);/.test(
+    code.mission,
+  ),
+);
+check(
+  "20.4 each new submit clears the single retry slot before dispatching",
+  /setPendingRetry\(null\);\s*targetsMutation\.mutate\(\{/.test(code.mission) &&
+    /setPendingRetry\(null\);\s*durationMutation\.mutate\(\{ initData, missionId, requestId, minutes \}\)/.test(
+      code.mission,
+    ),
+);
+check(
+  "20.5 settle writes the single slot with the settling mutation's own kind",
+  /function settle\(result: unknown, kind: PendingRetry\["kind"\], payload: PendingRetry\["payload"\]\)/.test(
+    code.mission,
+  ) &&
+    /setPendingRetry\(\s*classified\.retry \? \(\{ kind, payload \} as PendingRetry\) : null,\s*\)/.test(
+      code.mission,
+    ) &&
+    /settle\(result, "targets", payload\)/.test(code.mission) &&
+    /settle\(result, "duration", payload\)/.test(code.mission),
+);
+check(
+  "20.6 a transport error records only its own kind in the single slot",
+  /setPendingRetry\(\{ kind: "targets", payload \}\)/.test(code.mission) &&
+    /setPendingRetry\(\{ kind: "duration", payload \}\)/.test(code.mission),
+);
+check(
+  "20.7 retry dispatches by the active slot's kind, matching the visible notice",
+  /if \(!pendingRetry\) return;\s*if \(pendingRetry\.kind === "targets"\) targetsMutation\.mutate\(pendingRetry\.payload\);\s*else durationMutation\.mutate\(pendingRetry\.payload\);/.test(
+    code.mission,
+  ),
+);
+check(
+  "20.8 retry still reuses the original request id and never mints a new one",
+  !/function retryPending\(\)[\s\S]{0,400}newRequestId\(\)/.test(code.mission) &&
+    (code.mission.match(/newRequestId\(\)/g) ?? []).length === 2,
+);
+check(
+  "20.9 not_live closes the editor, clears the retry slot and refetches the panel",
+  /const noLongerLive = bounded\?\.ok === true && bounded\.outcome === "not_live";/.test(
+    code.mission,
+  ) &&
+    /if \(classified\.committed \|\| noLongerLive\) \{[\s\S]{0,260}setEditor\(null\);[\s\S]{0,260}if \(noLongerLive\) setPendingRetry\(null\);[\s\S]{0,120}panelQuery\.refetch\(\)/.test(
+      code.mission,
+    ),
+);
+check(
+  "20.10 not_live is still never reported as success",
+  /case "not_live":/.test(code.client) &&
+    /tone: "error"/.test(code.client) &&
+    !/not_live[\s\S]{0,120}committed: true/.test(code.client),
+);
+
 
 
 
