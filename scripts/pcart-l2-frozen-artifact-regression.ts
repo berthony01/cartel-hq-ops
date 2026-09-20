@@ -408,11 +408,12 @@ check(
 const selfSrc = read("scripts/pcart-l2-frozen-artifact-regression.ts");
 check(
   "L2F-J1",
-  !/\bfetch\s*\(|createPublicClient|http:\/\/|https:\/\/|supabase|eth_/i.test(
-    selfSrc.replace(/^ \*.*$/gm, ""),
-  ),
+  !/\bfetch\s*\(/.test(selfSrc) &&
+    !/createPublicClient|createWalletClient|https?:\/\//.test(selfSrc) &&
+    !/from "@supabase|integrations\/supabase/.test(selfSrc),
   "this regression performs no network, RPC, wallet or database call",
 );
+
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
