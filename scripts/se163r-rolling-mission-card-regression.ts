@@ -582,7 +582,18 @@ check(
   "12.64 a missing or unusable message id is AMBIGUOUS",
   /typeof newMessageIdRaw !== "number" \|\| !Number\.isInteger\(newMessageIdRaw\) \|\| newMessageIdRaw <= 0[\s\S]{0,200}"AMBIGUOUS"/.test(handler),
 );
-check("12.65 no automatic retry loop exists in the lane", !/for \(|while \(|retry|setTimeout/.test(handler));
+/**
+ * Prose may legitimately say "never retried"; executable code may not loop or
+ * schedule. Comments are stripped so only real constructs are judged.
+ */
+const handlerCode = handler
+  .replace(/\/\*[\s\S]*?\*\//g, "")
+  .replace(/^\s*\/\/.*$/gm, "")
+  .replace(/\s\/\/.*$/gm, "");
+check(
+  "12.65 no automatic retry loop or scheduler exists in the lane",
+  !/\bfor\s*\(|\bwhile\s*\(|\bdo\s*\{|setTimeout|setInterval|\.retry\(/.test(handlerCode),
+);
 
 // --- 12i. Pin preservation --------------------------------------------------
 
