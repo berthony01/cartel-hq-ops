@@ -4840,13 +4840,11 @@ Deno.serve(async (req: Request) => {
           await sendMessage(TELEGRAM_BOT_TOKEN, chatId, MC_OUTCOME_TEXT[outcome] ?? "That change was refused.");
           return json({ ok: true });
         }
-        if (outcome === "ok") {
-          await mcRefreshCard({
-            binding,
-            actorUserId: actorUserId ? String(actorUserId) : null,
-            seed: `${update?.update_id}:${pendingField}`,
-          });
-        }
+        const targetResurface = await mcResurfaceLiveCard({
+          binding,
+          actorUserId: actorUserId ? String(actorUserId) : null,
+          seed: `${update?.update_id}:${pendingField}`,
+        });
         await admin.rpc("social_mission_control_set_session", {
           _telegram_user_id: Number(from.id),
           _workspace_id: binding.workspaceId,
@@ -4854,7 +4852,13 @@ Deno.serve(async (req: Request) => {
           _pending_field: null,
           _clear: false,
         });
-        await mcRenderPanel(Number(from.id), chatId, pendingMission, binding, "Targets updated.");
+        await mcRenderPanel(
+          Number(from.id),
+          chatId,
+          pendingMission,
+          binding,
+          mcResurfaceNote("Targets updated.", targetResurface),
+        );
         return json({ ok: true });
       }
     }
