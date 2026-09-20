@@ -2300,6 +2300,7 @@ export type Database = {
       }
       social_mission_targets: {
         Row: {
+          activity_message_count: number
           command_deleted_at: string | null
           command_message_id: number | null
           created_at: string
@@ -2311,13 +2312,20 @@ export type Database = {
           edit_text_snapshot: string | null
           group_connection_id: string | null
           id: string
+          last_activity_message_id: number | null
           last_edit_at: string | null
           last_error: string | null
           last_metric_signature: string | null
+          last_resurface_at: string | null
+          last_resurface_attempt_at: string | null
           message_text_snapshot: string | null
           mission_id: string
           pinned_at: string | null
           pinned_by_hq: boolean
+          resurface_client_request_id: string | null
+          resurface_last_error: string | null
+          resurface_revision: number
+          resurface_state: string
           send_client_request_id: string | null
           send_text_intent: string | null
           sent_at: string | null
@@ -2328,6 +2336,7 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          activity_message_count?: number
           command_deleted_at?: string | null
           command_message_id?: number | null
           created_at?: string
@@ -2339,13 +2348,20 @@ export type Database = {
           edit_text_snapshot?: string | null
           group_connection_id?: string | null
           id?: string
+          last_activity_message_id?: number | null
           last_edit_at?: string | null
           last_error?: string | null
           last_metric_signature?: string | null
+          last_resurface_at?: string | null
+          last_resurface_attempt_at?: string | null
           message_text_snapshot?: string | null
           mission_id: string
           pinned_at?: string | null
           pinned_by_hq?: boolean
+          resurface_client_request_id?: string | null
+          resurface_last_error?: string | null
+          resurface_revision?: number
+          resurface_state?: string
           send_client_request_id?: string | null
           send_text_intent?: string | null
           sent_at?: string | null
@@ -2356,6 +2372,7 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          activity_message_count?: number
           command_deleted_at?: string | null
           command_message_id?: number | null
           created_at?: string
@@ -2367,13 +2384,20 @@ export type Database = {
           edit_text_snapshot?: string | null
           group_connection_id?: string | null
           id?: string
+          last_activity_message_id?: number | null
           last_edit_at?: string | null
           last_error?: string | null
           last_metric_signature?: string | null
+          last_resurface_at?: string | null
+          last_resurface_attempt_at?: string | null
           message_text_snapshot?: string | null
           mission_id?: string
           pinned_at?: string | null
           pinned_by_hq?: boolean
+          resurface_client_request_id?: string | null
+          resurface_last_error?: string | null
+          resurface_revision?: number
+          resurface_state?: string
           send_client_request_id?: string | null
           send_text_intent?: string | null
           sent_at?: string | null
@@ -6293,6 +6317,15 @@ export type Database = {
         Args: { _mission_id: string }
         Returns: Json
       }
+      social_mission_finalize_resurface: {
+        Args: {
+          _client_request_id: string
+          _message_text: string
+          _new_message_id: number
+          _target_id: string
+        }
+        Returns: Json
+      }
       social_mission_metric_targets: {
         Args: {
           _comments: number
@@ -6303,6 +6336,10 @@ export type Database = {
           _shares: number
           _views: number
         }
+        Returns: Json
+      }
+      social_mission_note_chat_activity: {
+        Args: { _telegram_chat_id: number; _telegram_message_id: number }
         Returns: Json
       }
       social_mission_preset_config: { Args: { _preset: string }; Returns: Json }
