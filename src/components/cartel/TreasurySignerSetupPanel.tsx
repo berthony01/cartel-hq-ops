@@ -80,10 +80,15 @@ export function TreasurySignerSetupPanel({
   return (
     <div className="min-w-0 space-y-3 rounded-lg border border-border-subtle bg-surface-raised/40 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="flex items-center gap-2 text-sm font-semibold leading-snug text-foreground">
-          <KeyRound className="size-4" aria-hidden="true" />
-          PEPECARTEL Treasury Setup
-        </p>
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Step 1 · Before deployment
+          </p>
+          <p className="flex items-center gap-2 text-sm font-semibold leading-snug text-foreground">
+            <KeyRound className="size-4" aria-hidden="true" />
+            Treasury signer setup
+          </p>
+        </div>
         {configQuery.isLoading ? (
           <StatusBadge tone="gold">
             <span>Loading</span>
