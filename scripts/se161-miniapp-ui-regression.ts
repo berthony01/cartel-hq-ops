@@ -437,9 +437,19 @@ check(
   /MiniAppRetryButton/.test(code.mission) && /panelQuery\.refetch\(\)/.test(code.mission),
 );
 check(
-  "16.4 retry reuses the same validated read, never a mutation",
-  !/miniAppApply|useMutation/.test(code.home + code.mission + code.pieces),
+  "16.4 read-failure retry stays read-only; mutations live only in explicit handlers",
+  // The read-recovery primitive and the home screen never mutate.
+  !/miniAppApply|useMutation/.test(code.home + code.pieces) &&
+    // The mission screen's only mutation entry points are the two named
+    // mutations, invoked from explicit submit/retry handlers.
+    /panelQuery\.refetch\(\)/.test(code.mission) &&
+    (code.mission.match(/useMutation\(/g) ?? []).length === 2 &&
+    (code.mission.match(/\.mutate\(/g) ?? []).length === 4 &&
+    /function submitTargets\(\)/.test(code.mission) &&
+    /function submitDuration\(/.test(code.mission) &&
+    /function retryPending\(\)/.test(code.mission),
 );
+
 check(
   "16.5 retry surfaces pending state instead of silently re-firing",
   /pending=\{workspacesQuery\.isFetching\}/.test(code.home) &&
