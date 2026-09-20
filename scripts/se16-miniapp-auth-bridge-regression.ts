@@ -727,7 +727,7 @@ const opts = { now: NOW_MS };
   );
   check(
     "14.16 refresh state is a bounded non-secret allowlist",
-    /MINIAPP_REFRESH_STATES = \["edited", "replayed", "ambiguous", "failed", "cleanup_pending"\]/.test(
+    /MINIAPP_REFRESH_STATES = \[\s*"edited",\s*"replayed",\s*"cleanup_pending",\s*"ambiguous",\s*"failed",?\s*\]/.test(
       bridgeCode,
     ),
   );
