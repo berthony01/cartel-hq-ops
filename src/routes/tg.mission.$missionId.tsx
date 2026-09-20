@@ -167,43 +167,46 @@ function MiniAppMission() {
   /** Committed mutations always re-read authoritative state from the server. */
   function settle(result: unknown, keepPayload: () => void, dropPayload: () => void) {
     const classified = classifyMutationResult(result as BoundedResult);
+  /**
+   * Committed mutations re-read authoritative state. `not_live` is not
+   * committed and is never reported as success, but it still refetches so the
+   * stale LIVE controls disappear when the mission ended after page load.
+   */
+  function settle(result: unknown, kind: PendingRetry["kind"], payload: PendingRetry["payload"]) {
+    const bounded = result as BoundedResult;
+    const classified = classifyMutationResult(bounded);
     setNotice(classified);
-    if (classified.retry) keepPayload();
-    else dropPayload();
-    if (classified.committed) {
+    // Exactly one slot: writing it replaces any opposite-kind payload.
+    setPendingRetry(
+      classified.retry ? ({ kind, payload } as PendingRetry) : null,
+    );
+    const noLongerLive = bounded?.ok === true && bounded.outcome === "not_live";
+    if (classified.committed || noLongerLive) {
       setEditor(null);
       setFormError(null);
+      if (noLongerLive) setPendingRetry(null);
       void panelQuery.refetch();
     }
   }
 
   const targetsMutation = useMutation({
     mutationFn: (payload: TargetsPayload) => applyTargetsFn({ data: payload }),
-    onSuccess: (result, payload) =>
-      settle(
-        result,
-        () => setPendingTargets(payload),
-        () => setPendingTargets(null),
-      ),
+    onSuccess: (result, payload) => settle(result, "targets", payload),
     onError: (_error, payload) => {
-      setPendingTargets(payload);
+      setPendingRetry({ kind: "targets", payload });
       setNotice(networkUncertaintyNotice());
     },
   });
 
   const durationMutation = useMutation({
     mutationFn: (payload: DurationPayload) => applyDurationFn({ data: payload }),
-    onSuccess: (result, payload) =>
-      settle(
-        result,
-        () => setPendingDuration(payload),
-        () => setPendingDuration(null),
-      ),
+    onSuccess: (result, payload) => settle(result, "duration", payload),
     onError: (_error, payload) => {
-      setPendingDuration(payload);
+      setPendingRetry({ kind: "duration", payload });
       setNotice(networkUncertaintyNotice());
     },
   });
+
 
   if (booting) {
     return (
