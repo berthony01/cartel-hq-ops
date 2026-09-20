@@ -196,8 +196,10 @@ check(
 // -------------------------------------------------------------- 5. migration
 check(
   "TS-5a",
-  migrationFiles.length === 84 && migrationFiles.includes(MIGRATION_FILE),
-  `exactly one new migration is added (${migrationFiles.length} files)`,
+  migrationFiles.length === 84 &&
+    migrationFiles.includes(MIGRATION_FILE) &&
+    migrationFiles.includes(POLICY_COMPLETION_MIGRATION_FILE),
+  `treasury signer migration plus its policy completion are pinned (${migrationFiles.length} files)`,
 );
 check(
   "TS-5b",
