@@ -610,8 +610,11 @@ const opts = { now: NOW_MS };
     !/CREATE\s+(OR\s+REPLACE\s+)?FUNCTION/i.test(bridgeSrc) && !/CREATE\s+TABLE/i.test(bridgeSrc),
   );
   check(
-    "14.8 refresh binding inputs are server-derived, never client-supplied",
-    /telegramUserId:\s*number/.test(refreshFn) === false || true,
+    "14.8 refresh binding inputs are server-derived, never read from client data",
+    !/\bdata[?.]/.test(refreshFn) &&
+      /workspaceId:\s*binding\.workspaceId/.test(refreshFn) &&
+      /missionId:\s*binding\.missionId/.test(refreshFn) &&
+      /"X-Cartel-Actor-User-Id":\s*actorUserId/.test(refreshFn),
   );
   check(
     "14.9 no mutation/refresh input validator accepts chat, workspace, actor, target, revision or telegram user id",
