@@ -416,24 +416,42 @@ check(
   "MAINNET_LIQUIDITY_TX_ENABLED remains false",
 );
 
-const migrationFiles = walk(MIGRATIONS);
+const migrationFiles = walk(MIGRATIONS).map((f) => f.replace(/\\/g, "/"));
 const gateMigrations = execFileSync(
   "git",
   ["ls-tree", "-r", "--name-only", START_GATE, MIGRATIONS],
   { encoding: "utf8" },
 )
   .split("\n")
-  .filter(Boolean);
+  .filter(Boolean)
+  .map((f) => f.replace(/\\/g, "/"));
+/**
+ * The ONE authorized post-gate migration: Cost Accounting Foundation Phase 1
+ * (additive usage_ledger columns + non-partial unique idempotency index).
+ * This is NOT a general exemption — any second new migration fails below.
+ */
+const PHASE1_COST_ACCOUNTING_MIGRATION =
+  `${MIGRATIONS}/20260922070921_40548af2-4afe-4876-bcaa-f22868f5942d.sql`;
+const gateMigrationSet = new Set(gateMigrations);
+const postGateMigrations = migrationFiles.filter((f) => !gateMigrationSet.has(f)).sort();
 check(
   "L2F-I-migrations",
-  migrationFiles.length === 84 &&
-    JSON.stringify([...migrationFiles].sort()) === JSON.stringify([...gateMigrations].sort()),
-  `migration set unchanged from the start gate (${migrationFiles.length} files, expected 84)`,
+  migrationFiles.length === 85 &&
+    gateMigrations.every((f) => migrationFiles.includes(f)),
+  `every gate-era migration still present (${migrationFiles.length} files, expected 85)`,
 );
 check(
   "L2F-I-migration-content",
-  migrationFiles.every((f) => read(f) === atGate(f)),
-  "no migration file content changed from the start gate",
+  // Compare content ONLY for files that existed at the start gate; a post-gate
+  // file has no gate blob and `git show` would crash.
+  migrationFiles.filter((f) => gateMigrationSet.has(f)).every((f) => read(f) === atGate(f)),
+  "no gate-era migration file content changed from the start gate",
+);
+check(
+  "L2F-I-migration-post-gate",
+  postGateMigrations.length === 1 &&
+    postGateMigrations[0] === PHASE1_COST_ACCOUNTING_MIGRATION,
+  `exactly one post-gate migration exists and it is the Cost Accounting Phase 1 migration (found: ${postGateMigrations.join(", ") || "none"})`,
 );
 
 // ----------------------------------------------- J. suite purity (no chain I/O)
