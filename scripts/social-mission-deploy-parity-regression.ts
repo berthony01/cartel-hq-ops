@@ -31,6 +31,8 @@ const PARITY_FILES = [
   "_shared/mission-pulse-copy.ts",
   // SE-15 — the shared resolved-config module both deployable functions import.
   "_shared/mission-resolved-config.ts",
+  // Phase 2B — the shared usage-accounting writer the runner now imports.
+  "_shared/usage-accounting.ts",
 ] as const;
 
 function readOrNull(path: string): Buffer | null {

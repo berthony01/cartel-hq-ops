@@ -45,6 +45,26 @@ import {
   X_BATCH_MAX,
   type XCanonicalMetrics,
 } from "../_shared/x-metrics.ts";
+import {
+  recordXResourceRead,
+  type UsageAccountingClient,
+} from "../_shared/usage-accounting.ts";
+
+/**
+ * Phase 2B — raw X billable-resource accounting.
+ *
+ * The X request shape is UNCHANGED: `GET /2/tweets` with
+ * `tweet.fields=public_metrics,created_at,author_id` and NO expansions, so the
+ * ONLY resource type returned is a Post. There is deliberately no User
+ * accounting, because no User resource is ever returned.
+ *
+ * `social_x_tracked_post_read` remains exactly as it is in SQL: operational
+ * snapshot telemetry, untouched by this phase.
+ */
+const X_POST_RESOURCE_ACTION = "social_x_post_resource_read";
+const X_ENDPOINT_DESCRIPTOR = "GET /2/tweets";
+const X_ATTRIBUTION_POLICY = "lowest_workspace_then_mission";
+const MISSION_SAFETY_LIMIT = 300;
 
 /**
  * SE-5 metrics refresh, layered ON TOP of the frozen SE-4B behaviour above.
@@ -288,6 +308,22 @@ async function runMetricsRefresh(
     0,
     METRICS_MAX_BATCHES,
   );
+  // Phase 2B — deterministic attribution of ONE X Post resource to exactly one
+  // workspace/mission, so two workspaces tracking the same post never produce
+  // two ledger rows for one billable resource. Lexicographically smallest
+  // workspace_id then mission_id wins; the choice is recorded in metadata.
+  const attribution = new Map<string, MetricsRow>();
+  for (const row of rows) {
+    const current = attribution.get(row.external_post_id);
+    if (
+      !current ||
+      row.workspace_id < current.workspace_id ||
+      (row.workspace_id === current.workspace_id && row.mission_id < current.mission_id)
+    ) {
+      attribution.set(row.external_post_id, row);
+    }
+  }
+
   const found = new Map<string, { metrics: XCanonicalMetrics; observedAt: string }>();
   for (const batch of batches) {
     const read = await lookupXPostMetrics(bearer, batch);
@@ -295,6 +331,35 @@ async function runMetricsRefresh(
     if (!read.ok) continue; // No snapshot, no synthetic zeroes, no retry.
     for (const [id, post] of read.posts) {
       found.set(id, { metrics: post.metrics, observedAt: read.observedAt });
+
+      // Raw billable-resource accounting: one event per Post resource ACTUALLY
+      // returned, per UTC day. Requested-but-missing ids and failed lookups are
+      // never recorded. This is our resource/day estimate, not X's invoice.
+      const owner = attribution.get(id);
+      if (owner) {
+        const observedAt = read.observedAt;
+        const billingUtcDate = observedAt.slice(0, 10);
+        const pollBucket = minuteBucket(Date.parse(observedAt));
+        await recordXResourceRead(admin as unknown as UsageAccountingClient, {
+          workspaceId: owner.workspace_id,
+          userId: null,
+          actionType: X_POST_RESOURCE_ACTION,
+          resourceId: id,
+          billingUtcDate,
+          providerModel: X_ENDPOINT_DESCRIPTOR,
+          metadata: {
+            x_resource_type: "post",
+            x_resource_id: id,
+            x_billing_utc_date: billingUtcDate,
+            endpoint: X_ENDPOINT_DESCRIPTOR,
+            mission_id: owner.mission_id,
+            external_post_id: id,
+            observed_at: observedAt,
+            poll_bucket: pollBucket,
+            attribution_policy: X_ATTRIBUTION_POLICY,
+          },
+        });
+      }
     }
   }
   if (found.size === 0) return stats;
@@ -374,6 +439,19 @@ Deno.serve(async (request: Request) => {
   if (secretError || secretOk !== true) {
     return json({ error: "Unauthorized" }, 401);
   }
+
+  // Phase 2B RUNAWAY SAFETY — runs BEFORE runMetricsRefresh and therefore
+  // before any possible X API call. Repairs missing end times, ensures the
+  // COMPLETE event and expires finished missions. Applies to EVERY mission,
+  // owner included: this is automation safety, not a commercial entitlement.
+  // A failure here is non-fatal and is deliberately NOT logged (SE-4B freezes
+  // this worker as log-silent): the hardened selector remains the fail-safe
+  // that prevents any expired or unbounded mission from reaching the X API.
+  const safety = await admin.rpc(
+    "repair_and_expire_social_missions_for_metrics",
+    { _limit: MISSION_SAFETY_LIMIT },
+  );
+  const safetySwept = !safety.error;
 
   // SE-5 metrics phase first, so a pulse in this same invocation can quote the
   // freshest STORED snapshot without performing any provider call of its own.
@@ -599,5 +677,6 @@ Deno.serve(async (request: Request) => {
     unresolved,
     failed,
     metrics,
+    safetySwept,
   });
 });
