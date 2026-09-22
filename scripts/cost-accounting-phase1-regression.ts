@@ -42,7 +42,9 @@ const migrationFiles = walk(MIGRATIONS);
 const migrationNames = migrationFiles.map((f) => f.split("/").pop() ?? f).sort();
 const migrationSrc = read(join(MIGRATIONS, PHASE1_MIGRATION));
 /** Comment-stripped views: prose about prices/owners must not satisfy or fail a code assertion. */
-const migrationCode = migrationSrc.replace(/^\s*--.*$/gm, "");
+const migrationCode = migrationSrc
+  .replace(/^\s*--.*$/gm, "")
+  .replace(/COMMENT ON[\s\S]*?;/g, "");
 const helperSrc = read(HELPER);
 const helperCode = helperSrc
   .replace(/\/\*[\s\S]*?\*\//g, "")
