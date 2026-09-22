@@ -470,11 +470,12 @@ check(
 );
 check(
   "L2F-I-migration-post-gate",
-  postGateMigrations.length === 3 &&
+  postGateMigrations.length === 4 &&
     postGateMigrations[0] === PHASE1_COST_ACCOUNTING_MIGRATION &&
     postGateMigrations[1] === PHASE2B_MISSION_SAFETY_MIGRATION &&
-    postGateMigrations[2] === PHASE2B_DURATION_MIGRATION,
-  `exactly three post-gate migrations exist and they are the Cost Accounting Phase 1, Phase 2B mission-safety and Phase 2B corrective duration migrations (found: ${postGateMigrations.join(", ") || "none"})`,
+    postGateMigrations[2] === PHASE2B_DURATION_MIGRATION &&
+    postGateMigrations[3] === PROJECT_IDENTITY_GATE_MIGRATION,
+  `exactly four post-gate migrations exist and they are the Cost Accounting Phase 1, Phase 2B mission-safety, Phase 2B corrective duration and Project Identity Gate A migrations (found: ${postGateMigrations.join(", ") || "none"})`,
 );
 
 // ----------------------------------------------- J. suite purity (no chain I/O)
