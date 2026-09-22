@@ -368,6 +368,16 @@ Deno.serve(async (req: Request) => {
     return Boolean(data);
   };
 
+  /**
+   * Project Identity Gate A. Runs AFTER the existing membership check and
+   * BEFORE any provider request, new provider task or generated-state write.
+   * Fails closed; the platform-owner bypass lives inside can_use_project_tools.
+   */
+  const identityDenial = async (workspaceId: string) => {
+    const access = await requireProjectToolAccess(admin, user.id, workspaceId);
+    return access.allowed ? null : respond(access.body, access.status);
+  };
+
   const action = String(body.action ?? "");
   if (action === "config") {
     return respond({ configured: Boolean(KIE_API_KEY), model: MODEL, durationSeconds: 5, telegramReady: false });
