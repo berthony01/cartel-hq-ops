@@ -677,5 +677,6 @@ Deno.serve(async (request: Request) => {
     unresolved,
     failed,
     metrics,
+    safetySwept,
   });
 });
