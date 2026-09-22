@@ -249,6 +249,8 @@ const L2D_PHASE1_MIGRATION = "20260922070921_40548af2-4afe-4876-bcaa-f22868f5942
 const L2D_PHASE2B_MIGRATION = "20260922141917_c47c2384-73c4-4bbf-8cc2-495112d64990.sql";
 /** Third and last: the Phase 2B corrective duration-resolution migration. */
 const L2D_PHASE2B_DURATION_MIGRATION = "20260922142803_fedec44c-654f-4e1a-a117-30d027601e03.sql";
+/** Fourth and last: the Project Identity Gate A function-only migration. */
+const L2D_IDENTITY_GATE_MIGRATION = "20260922161918_ef6e322a-d993-4970-9d48-3b4f93afa222.sql";
 const l2dMigrationNames = migrationFiles
   .map((f) => f.replace(/\\/g, "/").split("/").pop() ?? f)
   .sort();
