@@ -688,6 +688,9 @@ Deno.serve(async (req: Request) => {
       if (!job) return respond({ error: "JOB_NOT_FOUND" }, 404);
       if (job.job_type !== JOB_TYPE) return respond({ error: "WRONG_JOB_TYPE" }, 400);
       if (!(await isMember(job.workspace_id))) return respond({ error: "FORBIDDEN" }, 403);
+      // `sync` polls the provider and finalizes generated motion state: gated.
+      const syncIdentityBlocked = await identityDenial(String(job.workspace_id));
+      if (syncIdentityBlocked) return syncIdentityBlocked;
 
       if (job.status === "failed") {
         return respond({ aiJobId: job.id, jobType: JOB_TYPE, status: "failed", error: job.error_message });
