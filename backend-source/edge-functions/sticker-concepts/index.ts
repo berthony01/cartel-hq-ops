@@ -1,16 +1,23 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { recordProviderUsage } from "../_shared/usage-accounting.ts";
 
 /**
  * sticker-concepts — TEXT ONLY.
  *
  * Produces editable sticker CONCEPT IDEAS for Sticker Lab Step 3. It never
- * creates images, never touches `stickers`, `sticker_packs`, `ai_jobs` or
- * `usage_ledger`, never calls the image pipeline (`/api/v1/jobs/createTask`)
- * and never invokes the `sticker-ai` function.
+ * creates images, never touches `stickers`, `sticker_packs` or `ai_jobs`,
+ * never calls the image pipeline (`/api/v1/jobs/createTask`) and never
+ * invokes the `sticker-ai` function.
+ *
+ * Cost Accounting Phase 2A: a successful provider response is recorded in
+ * `usage_ledger` with the RAW provider-reported token count (no `ai_jobs`
+ * row exists for this surface, and none is created). Accounting never alters
+ * the concept response.
  *
  * Reuses the existing KIE_API_KEY secret. No new secret is introduced.
  */
+
 
 const KIE_BASE = "https://api.kie.ai";
 const CHAT_MODEL = "gemini-2.5-flash";
@@ -474,7 +481,15 @@ Deno.serve(async (req: Request) => {
     },
   };
 
+  /**
+   * Cost Accounting Phase 2A — identity of THIS outbound provider request.
+   * Each actual request is a distinct provider event; the provider response
+   * `id` is preferred when present and this UUID is the fallback identity.
+   */
+  const serverInvocationId = crypto.randomUUID();
+
   // Exactly ONE provider request per explicit user action. No retries.
+
   let response: Response;
   try {
     response = await fetch(`${KIE_BASE}${CHAT_PATH}`, {
@@ -520,7 +535,45 @@ Deno.serve(async (req: Request) => {
     return respond({ error: "PROVIDER_FAILED", message }, safeStatus);
   }
 
+  /* ------------------------------------------- Cost Accounting Phase 2A ----
+   * Recorded as soon as a successful (2xx) provider response has been parsed
+   * and BEFORE any downstream content / JSON-schema validation, because the
+   * provider event already happened even when our own parsing rejects the
+   * body. Non-2xx responses are never recorded: this code cannot prove usage
+   * was incurred. Accounting can never change the concept response. */
+  {
+    const rawId = payload["id"];
+    const providerResponseId = typeof rawId === "string" && rawId.trim().length > 0 ? rawId.trim() : null;
+    const usageObj = isRecord(payload["usage"]) ? (payload["usage"] as Record<string, unknown>) : null;
+    const tokenCount = (value: unknown): number | null =>
+      typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+    const promptTokens = tokenCount(usageObj?.["prompt_tokens"]);
+    const completionTokens = tokenCount(usageObj?.["completion_tokens"]);
+    const totalTokens = tokenCount(usageObj?.["total_tokens"]);
+
+    await recordProviderUsage(admin, {
+      workspaceId,
+      userId: user.id,
+      aiJobId: null,
+      actionType: "sticker_concepts_generate",
+      units: totalTokens ?? 1,
+      unitType: totalTokens == null ? "api_request" : "token",
+      provider: "kie",
+      providerModel: CHAT_MODEL,
+      eventId: providerResponseId ?? serverInvocationId,
+      metadata: {
+        provider_response_id: providerResponseId,
+        server_invocation_id: serverInvocationId,
+        identity_source: providerResponseId ? "provider_response_id" : "server_invocation_id",
+        prompt_tokens: promptTokens,
+        completion_tokens: completionTokens,
+        total_tokens: totalTokens,
+      },
+    });
+  }
+
   const choices = payload["choices"];
+
   const first = Array.isArray(choices) && isRecord(choices[0]) ? (choices[0] as Record<string, unknown>) : null;
   const message = first && isRecord(first["message"]) ? (first["message"] as Record<string, unknown>) : null;
   const concepts = parseConcepts(message?.["content"], targetCount);

@@ -1,5 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { recordProviderUsage } from "../_shared/usage-accounting.ts";
+
 
 /**
  * CARTEL HQ — Animated Sticker Studio Phase C1
@@ -521,6 +523,29 @@ Deno.serve(async (req: Request) => {
         },
       }).eq("id", job.id);
 
+      /* -------------------------------------- Cost Accounting Phase 2A ----
+       * fal proves only that ONE background-removal request was submitted:
+       * no credits, seconds, frames or cost are reported by this endpoint,
+       * so nothing of the kind is fabricated. Recorded once, keyed by the
+       * fal request id; repeated syncs never add a second row, and the
+       * CloudConvert-only retry path never writes a fal row at all. */
+      if (requestId) {
+        await recordProviderUsage(admin, {
+          workspaceId,
+          userId: user.id,
+          aiJobId: job.id,
+          actionType: "motion_telegram_background_removal",
+          units: 1,
+          unitType: "api_request",
+          provider: "fal",
+          providerModel: FAL_MODEL,
+          eventId: requestId,
+          metadata: { fal_request_id: requestId },
+        });
+      }
+
+
+
       return respond({
         aiJobId: job.id, status: "running", stage: "background_removal",
         billable: true, telegramChanged: false, releaseChanged: false,
@@ -667,6 +692,46 @@ Deno.serve(async (req: Request) => {
         if (ccStatus !== "finished") {
           return respond({ aiJobId: job.id, jobType: JOB_TYPE, status: "running", stage: "telegram_normalizing" });
         }
+
+        /* ------------------------------------- Cost Accounting Phase 2A ----
+         * The CloudConvert job is FINISHED and its task list is available, so
+         * the provider work is done and billed. Per-task `credits` are the
+         * provider's own reported quantity: a genuine reported 0 is preserved
+         * as 0 and is NOT treated as "unreported". When no task reports a
+         * credits field at all, only the fact of one job is provable. This
+         * accounting is independent of the legacy `cloudconvert_credits`
+         * output/metadata fields, whose `|| null` coercion is left unchanged. */
+        {
+          const reportedTaskCredits = ccTasks(ccJob)
+            .map((t) => ({
+              name: str(t.name),
+              operation: str(t.operation),
+              credits: num(t.credits),
+            }))
+            .filter((t) => t.credits != null && t.credits >= 0);
+          const creditsReported = reportedTaskCredits.length > 0;
+          const creditsTotal = reportedTaskCredits.reduce((a, t) => a + (t.credits as number), 0);
+
+          await recordProviderUsage(admin, {
+            workspaceId: job.workspace_id,
+            userId: job.user_id ?? null,
+            aiJobId: job.id,
+            actionType: "motion_telegram_normalize",
+            units: creditsReported ? creditsTotal : 1,
+            unitType: creditsReported ? "provider_credit" : "api_request",
+            provider: "cloudconvert",
+            providerModel: NORMALIZE_CONTRACT_VERSION,
+            eventId: ccJobId,
+            metadata: {
+              cloudconvert_job_id: ccJobId,
+              cloudconvert_tag: str(output.cloudconvert_tag) ?? `cartelhq-motion-telegram-${job.id}`,
+              task_credits: reportedTaskCredits,
+              credits_reported: creditsReported,
+            },
+          });
+        }
+
+
 
         const exportTask = ccTask(ccJob, "export-motion", "export/url");
         const metaTask = ccTask(ccJob, "metadata-motion", "metadata");
