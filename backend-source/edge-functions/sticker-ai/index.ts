@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { recordProviderCreditUsage } from "../_shared/usage-accounting.ts";
 import {
   ImageMagick,
   initializeImageMagick,
@@ -486,13 +487,19 @@ Deno.serve(async (req: Request) => {
   };
 
 
+  // Cost Accounting Phase 1: the shared writer owns dedupe via the DB unique
+  // index on usage_ledger.idempotency_key. Never throws into the job path.
   const logCredits = async (job: Record<string, unknown>, credits: number | null) => {
-    if (credits == null) return;
-    const { data: existing } = await admin.from("usage_ledger").select("id").eq("ai_job_id", String(job.id)).maybeSingle();
-    if (existing) return;
-    await admin.from("usage_ledger").insert({
-      workspace_id: job.workspace_id, user_id: job.user_id, ai_job_id: job.id,
-      action_type: String(job.job_type), units: credits, provider_cost: null, internal_cost: null,
+    await recordProviderCreditUsage(admin, {
+      workspaceId: String(job.workspace_id ?? ""),
+      userId: job.user_id == null ? null : String(job.user_id),
+      aiJobId: String(job.id),
+      actionType: String(job.job_type),
+      credits,
+      provider: typeof job.provider === "string" && job.provider ? job.provider : "kie",
+      providerModel: typeof job.provider_model === "string" ? job.provider_model : null,
+      providerTaskId: typeof job.provider_task_id === "string" ? job.provider_task_id : null,
+      jobType: typeof job.job_type === "string" ? job.job_type : null,
     });
   };
 

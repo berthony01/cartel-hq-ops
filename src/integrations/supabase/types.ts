@@ -3978,9 +3978,18 @@ export type Database = {
           action_type: string
           ai_job_id: string | null
           created_at: string
+          currency: string | null
           id: string
+          idempotency_key: string | null
           internal_cost: number | null
+          metadata: Json
+          pricing_effective_at: string | null
+          pricing_source: string | null
+          pricing_version: string | null
+          provider: string | null
           provider_cost: number | null
+          provider_model: string | null
+          unit_type: string | null
           units: number
           user_id: string | null
           workspace_id: string
@@ -3989,9 +3998,18 @@ export type Database = {
           action_type: string
           ai_job_id?: string | null
           created_at?: string
+          currency?: string | null
           id?: string
+          idempotency_key?: string | null
           internal_cost?: number | null
+          metadata?: Json
+          pricing_effective_at?: string | null
+          pricing_source?: string | null
+          pricing_version?: string | null
+          provider?: string | null
           provider_cost?: number | null
+          provider_model?: string | null
+          unit_type?: string | null
           units?: number
           user_id?: string | null
           workspace_id: string
@@ -4000,9 +4018,18 @@ export type Database = {
           action_type?: string
           ai_job_id?: string | null
           created_at?: string
+          currency?: string | null
           id?: string
+          idempotency_key?: string | null
           internal_cost?: number | null
+          metadata?: Json
+          pricing_effective_at?: string | null
+          pricing_source?: string | null
+          pricing_version?: string | null
+          provider?: string | null
           provider_cost?: number | null
+          provider_model?: string | null
+          unit_type?: string | null
           units?: number
           user_id?: string | null
           workspace_id?: string
