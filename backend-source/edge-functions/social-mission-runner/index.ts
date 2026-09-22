@@ -288,6 +288,22 @@ async function runMetricsRefresh(
     0,
     METRICS_MAX_BATCHES,
   );
+  // Phase 2B — deterministic attribution of ONE X Post resource to exactly one
+  // workspace/mission, so two workspaces tracking the same post never produce
+  // two ledger rows for one billable resource. Lexicographically smallest
+  // workspace_id then mission_id wins; the choice is recorded in metadata.
+  const attribution = new Map<string, MetricsRow>();
+  for (const row of rows) {
+    const current = attribution.get(row.external_post_id);
+    if (
+      !current ||
+      row.workspace_id < current.workspace_id ||
+      (row.workspace_id === current.workspace_id && row.mission_id < current.mission_id)
+    ) {
+      attribution.set(row.external_post_id, row);
+    }
+  }
+
   const found = new Map<string, { metrics: XCanonicalMetrics; observedAt: string }>();
   for (const batch of batches) {
     const read = await lookupXPostMetrics(bearer, batch);
@@ -295,6 +311,35 @@ async function runMetricsRefresh(
     if (!read.ok) continue; // No snapshot, no synthetic zeroes, no retry.
     for (const [id, post] of read.posts) {
       found.set(id, { metrics: post.metrics, observedAt: read.observedAt });
+
+      // Raw billable-resource accounting: one event per Post resource ACTUALLY
+      // returned, per UTC day. Requested-but-missing ids and failed lookups are
+      // never recorded. This is our resource/day estimate, not X's invoice.
+      const owner = attribution.get(id);
+      if (owner) {
+        const observedAt = read.observedAt;
+        const billingUtcDate = observedAt.slice(0, 10);
+        const pollBucket = minuteBucket(Date.parse(observedAt));
+        await recordXResourceRead(admin as unknown as UsageAccountingClient, {
+          workspaceId: owner.workspace_id,
+          userId: null,
+          actionType: X_POST_RESOURCE_ACTION,
+          resourceId: id,
+          billingUtcDate,
+          providerModel: X_ENDPOINT_DESCRIPTOR,
+          metadata: {
+            x_resource_type: "post",
+            x_resource_id: id,
+            x_billing_utc_date: billingUtcDate,
+            endpoint: X_ENDPOINT_DESCRIPTOR,
+            mission_id: owner.mission_id,
+            external_post_id: id,
+            observed_at: observedAt,
+            poll_bucket: pollBucket,
+            attribution_policy: X_ATTRIBUTION_POLICY,
+          },
+        });
+      }
     }
   }
   if (found.size === 0) return stats;
