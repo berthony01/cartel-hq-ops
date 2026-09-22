@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { recordProviderCreditUsage } from "../_shared/usage-accounting.ts";
+import { requireProjectToolAccess } from "../_shared/project-identity.ts";
 import {
   ImageMagick,
   initializeImageMagick,
@@ -433,6 +434,16 @@ Deno.serve(async (req: Request) => {
     return Boolean(data);
   };
 
+  /**
+   * Project Identity Gate A. Runs AFTER the existing membership check and
+   * BEFORE any provider request, new provider task or generated-state write.
+   * Fails closed; the platform-owner bypass lives inside can_use_project_tools.
+   */
+  const identityDenial = async (workspaceId: string) => {
+    const access = await requireProjectToolAccess(admin, user.id, workspaceId);
+    return access.allowed ? null : respond(access.body, access.status);
+  };
+
   const action = String(body.action ?? "");
   if (action === "config") {
     return respond({ configured: Boolean(KIE_API_KEY), model: MODEL, backgroundModel: BG_MODEL });
@@ -537,6 +548,8 @@ Deno.serve(async (req: Request) => {
         }
       }
       if (!(await isMember(workspaceId))) return respond({ error: "FORBIDDEN" }, 403);
+      const identityBlocked = await identityDenial(workspaceId);
+      if (identityBlocked) return identityBlocked;
 
       const { data: pack } = await admin.from("sticker_packs").select("*").eq("id", packId).eq("workspace_id", workspaceId).maybeSingle();
       if (!pack) return respond({ error: "PACK_NOT_FOUND" }, 404);
@@ -804,6 +817,8 @@ Deno.serve(async (req: Request) => {
       const backgroundJobId = String(body.backgroundJobId ?? "");
       if (!workspaceId || !backgroundJobId) return respond({ error: "INVALID_INPUT" }, 400);
       if (!(await isMember(workspaceId))) return respond({ error: "FORBIDDEN" }, 403);
+      const retryIdentityBlocked = await identityDenial(workspaceId);
+      if (retryIdentityBlocked) return retryIdentityBlocked;
 
       const { data: failedJob } = await admin.from("ai_jobs").select("*").eq("id", backgroundJobId).maybeSingle();
       if (!failedJob) return respond({ error: "JOB_NOT_FOUND" }, 404);
@@ -985,6 +1000,10 @@ Deno.serve(async (req: Request) => {
       const { data: job } = await admin.from("ai_jobs").select("*").eq("id", aiJobId).maybeSingle();
       if (!job) return respond({ error: "JOB_NOT_FOUND" }, 404);
       if (!(await isMember(job.workspace_id))) return respond({ error: "FORBIDDEN" }, 403);
+      // `sync` polls the provider and can spawn the background-removal child
+      // task, so it is provider-spending work and is gated like a start.
+      const syncIdentityBlocked = await identityDenial(String(job.workspace_id));
+      if (syncIdentityBlocked) return syncIdentityBlocked;
 
       const jobMode = jobModeOf(job as Record<string, unknown>);
       const jobIsCandidate = jobMode === "candidate";

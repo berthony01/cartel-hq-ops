@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IdCard, Loader2, Plus, Rocket, Save, Trash2, Video, Wand2 } from "lucide-react";
 import { toast } from "sonner";
@@ -52,6 +52,10 @@ import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
 import { launchReadinessQueryKey } from "@/lib/launch-readiness";
 import { AssetUploader } from "@/components/cartel/AssetUploader";
 import { useSession } from "@/hooks/useSession";
+import {
+  projectToolAccessQueryKey,
+  safeInternalRedirect,
+} from "@/lib/project-identity";
 
 
 import { StickyActionBar } from "@/components/cartel/StickyActionBar";
@@ -68,6 +72,15 @@ import {
 } from "@/components/ui/select";
 
 export const Route = createFileRoute("/_authenticated/project-profile")({
+  /**
+   * Optional internal return destination used by the Project Identity gate.
+   * Only a path beginning with a single '/' is accepted; anything external or
+   * protocol-relative is dropped rather than sanitized.
+   */
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } => {
+    const redirect = safeInternalRedirect(search["redirect"]);
+    return redirect ? { redirect } : {};
+  },
   head: () => ({
     meta: [
       { title: "Project Profile — CARTEL HQ" },
@@ -171,6 +184,8 @@ function WorkingView({
 function ProjectProfilePage() {
   const { workspaceId, workspace, loading: workspaceLoading } = useWorkspace();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { redirect: gateRedirect } = Route.useSearch();
   const { user } = useSession();
   const userId = user?.id ?? null;
   const [form, setForm] = useState<Form>(EMPTY_FORM);
@@ -453,12 +468,21 @@ function ProjectProfilePage() {
       });
     },
     onSuccess: () => {
+      const wasNew = !profile;
       toast.success(profile ? "Project profile saved" : "Project profile created");
       queryClient.invalidateQueries({ queryKey: ["project-profile", workspaceId] });
       queryClient.invalidateQueries({ queryKey: launchReadinessQueryKey(workspaceId) });
       // A material identity change clears Platform Reviewed via a DB trigger.
       queryClient.invalidateQueries({ queryKey: ["project-verification"] });
+      // Project Identity Gate A: the gate answer just changed for this workspace.
+      queryClient.invalidateQueries({ queryKey: projectToolAccessQueryKey(workspaceId) });
 
+      // Only a NEW identity created from a gated flow returns automatically.
+      // Editing an existing profile never navigates away on its own.
+      const destination = safeInternalRedirect(gateRedirect);
+      if (wasNew && destination) {
+        navigate({ to: destination });
+      }
     },
     onError: (err: unknown) => {
       toast.error(err instanceof Error ? err.message : "Could not save the project profile.");
