@@ -444,14 +444,14 @@ Deno.serve(async (request: Request) => {
   // before any possible X API call. Repairs missing end times, ensures the
   // COMPLETE event and expires finished missions. Applies to EVERY mission,
   // owner included: this is automation safety, not a commercial entitlement.
-  // A failure here is non-fatal because the hardened selector is the fail-safe.
-  const { error: safetyError } = await admin.rpc(
+  // A failure here is non-fatal and is deliberately NOT logged (SE-4B freezes
+  // this worker as log-silent): the hardened selector remains the fail-safe
+  // that prevents any expired or unbounded mission from reaching the X API.
+  const safety = await admin.rpc(
     "repair_and_expire_social_missions_for_metrics",
     { _limit: MISSION_SAFETY_LIMIT },
   );
-  if (safetyError) {
-    console.error("mission safety sweep failed", { code: safetyError.code ?? null });
-  }
+  const safetySwept = !safety.error;
 
   // SE-5 metrics phase first, so a pulse in this same invocation can quote the
   // freshest STORED snapshot without performing any provider call of its own.
