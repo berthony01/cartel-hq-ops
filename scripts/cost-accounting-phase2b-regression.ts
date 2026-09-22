@@ -13,6 +13,8 @@ import { join } from "node:path";
 const MIGRATIONS = "supabase/migrations";
 const PHASE1_MIGRATION = "20260922070921_40548af2-4afe-4876-bcaa-f22868f5942d.sql";
 const PHASE2B_MIGRATION = "20260922141917_c47c2384-73c4-4bbf-8cc2-495112d64990.sql";
+/** Corrective follow-up: precise duration resolution for legacy configs. */
+const PHASE2B_DURATION_MIGRATION = "20260922142803_fedec44c-654f-4e1a-a117-30d027601e03.sql";
 const LAST_GATE_MIGRATION = "20260920054150_5dcb8ca1-aba1-4c9b-995e-cd9ff00da488.sql";
 
 const HELPER = "backend-source/edge-functions/_shared/usage-accounting.ts";
@@ -62,13 +64,16 @@ const postGate = migrationNames.filter((f) => f > LAST_GATE_MIGRATION);
 
 check(
   "CA2B-1a",
-  migrationNames.length === 86,
-  `exactly 86 migration files exist (found ${migrationNames.length})`,
+  migrationNames.length === 87,
+  `exactly 87 migration files exist (found ${migrationNames.length})`,
 );
 check(
   "CA2B-1b",
-  postGate.length === 2 && postGate[0] === PHASE1_MIGRATION && postGate[1] === PHASE2B_MIGRATION,
-  `the only post-gate migrations are Cost Accounting Phase 1 and Phase 2B mission safety (found: ${postGate.join(", ") || "none"})`,
+  postGate.length === 3 &&
+    postGate[0] === PHASE1_MIGRATION &&
+    postGate[1] === PHASE2B_MIGRATION &&
+    postGate[2] === PHASE2B_DURATION_MIGRATION,
+  `the only post-gate migrations are Cost Accounting Phase 1, Phase 2B mission safety and the Phase 2B corrective duration migration (found: ${postGate.join(", ") || "none"})`,
 );
 check(
   "CA2B-1c",
@@ -438,6 +443,189 @@ check(
   "CA2B-9b",
   /MAINNET_LIQUIDITY_TX_ENABLED\s*=\s*false/.test(read(REGISTRY)),
   "MAINNET_LIQUIDITY_TX_ENABLED remains false",
+);
+
+/* ------------------ 10. corrective migration: precise duration resolution */
+
+const correctiveSrc = read(`${MIGRATIONS}/${PHASE2B_DURATION_MIGRATION}`);
+const correctiveCode = correctiveSrc.replace(/^\s*--.*$/gm, "");
+const corrSelector = correctiveCode.slice(
+  correctiveCode.indexOf("list_active_social_missions_for_metrics"),
+  correctiveCode.indexOf("CREATE OR REPLACE FUNCTION public.repair_and_expire_social_missions_for_metrics"),
+);
+const corrRepair = correctiveCode.slice(
+  correctiveCode.indexOf("CREATE OR REPLACE FUNCTION public.repair_and_expire_social_missions_for_metrics"),
+);
+
+check(
+  "CA2B-10a",
+  !/\bCREATE TABLE\b|\bADD COLUMN\b|\bDROP COLUMN\b|\bALTER TABLE\b|CREATE POLICY|DROP POLICY|ENABLE ROW LEVEL SECURITY/i.test(
+    correctiveCode,
+  ) &&
+    !/\bINSERT INTO public\.usage_ledger\b/i.test(correctiveCode) &&
+    !/\busd\b|\bdollar|rate_card|\bprice\b|\$\s*[0-9]/i.test(correctiveCode),
+  "the corrective migration changes no table, column, policy or RLS state and adds no dollar value",
+);
+check(
+  "CA2B-10b",
+  !/CREATE (OR REPLACE )?FUNCTION public\.social_mission_effective_config/.test(correctiveCode) &&
+    !/CREATE (OR REPLACE )?FUNCTION public\.social_mission_(resolve|preset)_config/.test(correctiveCode) &&
+    (correctiveCode.match(/CREATE OR REPLACE FUNCTION/g) ?? []).length === 2,
+  "the corrective migration replaces exactly the two Phase 2B functions and never redefines social_mission_effective_config, _resolve_config or _preset_config",
+);
+check(
+  "CA2B-10c",
+  [
+    "mission_id uuid",
+    "workspace_id uuid",
+    "target_id uuid",
+    "external_post_id text",
+    "canonical_url text",
+    "telegram_chat_id bigint",
+    "telegram_message_id bigint",
+    "edit_revision integer",
+    "edit_state text",
+    "mission_created_by uuid",
+    "accomplished_at timestamptz",
+    "last_metric_signature text",
+    "effective_config jsonb",
+  ].every((col) => corrSelector.includes(col)) &&
+    /CREATE OR REPLACE FUNCTION public\.list_active_social_missions_for_metrics\(\s*_limit integer DEFAULT 100/.test(
+      correctiveCode,
+    ) &&
+    /CREATE OR REPLACE FUNCTION public\.repair_and_expire_social_missions_for_metrics\(\s*_limit integer DEFAULT 300/.test(
+      correctiveCode,
+    ) &&
+    /RETURNS jsonb/.test(corrRepair),
+  "both functions keep their exact signatures and the thirteen-column return signature",
+);
+check(
+  "CA2B-10d",
+  /t\.delivery_state = 'SENT'/.test(corrSelector) &&
+    /t\.sent_at IS NOT NULL/.test(corrSelector) &&
+    /t\.sent_at \+ interval '24 hours'/.test(corrSelector) &&
+    /now\(\) < LEAST\(/.test(corrSelector) &&
+    /p\.platform = 'x'/.test(corrSelector) &&
+    /external_post_id ~ '\^\[0-9\]\{1,32\}\$'/.test(corrSelector) &&
+    /live_metrics_enabled/.test(corrSelector) &&
+    /ORDER BY m\.started_at NULLS LAST/.test(corrSelector) &&
+    /SECURITY DEFINER/.test(corrSelector) &&
+    /SET search_path = public/.test(corrSelector),
+  "every Phase 2B safety condition, filter, ordering and definer setting survives the correction",
+);
+check(
+  "CA2B-10e",
+  /social_mission_effective_config\(m\.id\)/.test(corrSelector),
+  "the selector still returns the mission's effective_config column unchanged",
+);
+check(
+  "CA2B-10f",
+  /social_mission_resolve_config\(m\.metadata\)/.test(corrSelector) &&
+    /social_mission_resolve_config\(v_mission\.metadata\)/.test(corrRepair),
+  "duration resolution starts from social_mission_resolve_config so a Mission Control override is visible",
+);
+check(
+  "CA2B-10g",
+  [corrSelector, corrRepair].every(
+    (body) =>
+      /'\^\[0-9\]\+\$'/.test(body) &&
+      /BETWEEN 1 AND 1440/.test(body) &&
+      /GREATEST\(1, LEAST\(1440,/.test(body) &&
+      /social_mission_preset_config\(/.test(body) &&
+      /'STANDARD'/.test(body) &&
+      /effective_config' ->> 'preset'/.test(body),
+  ),
+  "both functions use an integer duration in 1..1440 when present, else the preset default via social_mission_preset_config with a STANDARD fallback",
+);
+check(
+  "CA2B-10h",
+  !/make_interval\(mins => 45\)|interval '45 minutes'|interval '20 minutes'|interval '60 minutes'|interval '120 minutes'/.test(
+    correctiveCode,
+  ) &&
+    !/COALESCE\([^)]*duration_minutes[^)]*,\s*NULL\s*\)/i.test(correctiveCode),
+  "no preset duration is hardcoded in SQL and NULL is never a duration fallback",
+);
+check(
+  "CA2B-10i",
+  (correctiveCode.match(/interval '24 hours'/g) ?? []).length === 2 &&
+    /v_absolute_cap := v_mission\.earliest_sent_at \+ interval '24 hours'/.test(corrRepair) &&
+    !/v_configured_end := [^;]*interval '24 hours'/.test(corrRepair),
+  "the absolute cap remains earliest confirmed sent_at + 24 hours and is never used as the configured duration",
+);
+check(
+  "CA2B-10j",
+  /status = 'COMPLETED'/.test(corrRepair) &&
+    !/'EXPIRED'/.test(corrRepair) &&
+    /min\(t\.sent_at\)/.test(corrRepair) &&
+    /v_safe_end := LEAST\(COALESCE\(v_mission\.ends_at, v_configured_end\), v_absolute_cap\)/.test(corrRepair) &&
+    /ON CONFLICT \(target_id, event_type, sequence_no\) DO NOTHING/.test(corrRepair) &&
+    /e\.event_type = 'PULSE'[\s\S]{0,80}e\.state = 'PENDING'/.test(corrRepair) &&
+    !/VALUES[^;]{0,200}'PULSE'/.test(corrRepair),
+  "repair/expire semantics are unchanged: COMPLETED only, earliest sent_at, idempotent COMPLETE events, only PENDING pulses cancelled, no PULSE synthesis",
+);
+check(
+  "CA2B-10k",
+  /REVOKE ALL ON FUNCTION public\.list_active_social_missions_for_metrics\(integer\)[\s\S]{0,80}FROM PUBLIC, anon, authenticated/.test(
+    correctiveCode,
+  ) &&
+    /GRANT EXECUTE ON FUNCTION public\.list_active_social_missions_for_metrics\(integer\) TO service_role/.test(
+      correctiveCode,
+    ) &&
+    /REVOKE ALL ON FUNCTION public\.repair_and_expire_social_missions_for_metrics\(integer\)[\s\S]{0,80}FROM PUBLIC, anon, authenticated/.test(
+      correctiveCode,
+    ) &&
+    /GRANT EXECUTE ON FUNCTION public\.repair_and_expire_social_missions_for_metrics\(integer\) TO service_role/.test(
+      correctiveCode,
+    ),
+  "grants are re-applied unchanged: service-role and postgres only, never anon or authenticated",
+);
+
+/**
+ * Executable mirror of the SQL duration rule. Kept in lockstep with the
+ * corrective migration so the legacy-config outcomes are asserted, not assumed.
+ */
+const PRESET_DEFAULTS: Record<string, number> = {
+  QUICK: 20,
+  STANDARD: 45,
+  LAUNCH: 60,
+  MAJOR_ANNOUNCEMENT: 120,
+};
+function resolveDurationMinutes(resolved: Record<string, unknown>, legacyPreset?: string): number {
+  const raw = resolved["duration_minutes"];
+  const text = raw === undefined || raw === null ? null : String(raw);
+  if (text !== null && /^[0-9]+$/.test(text)) {
+    const n = Number(text);
+    if (n >= 1 && n <= 1440) return Math.max(1, Math.min(1440, n));
+  }
+  const preset = String(resolved["preset"] ?? legacyPreset ?? "STANDARD").toUpperCase();
+  return Math.max(1, Math.min(1440, PRESET_DEFAULTS[preset] ?? PRESET_DEFAULTS["STANDARD"]!));
+}
+
+check(
+  "CA2B-10l",
+  resolveDurationMinutes({}) === 45 &&
+    resolveDurationMinutes({ duration_minutes: null }) === 45 &&
+    resolveDurationMinutes({ goal_source: "AUTO", milestone_type: "VIEWS" }) === 45,
+  "a legacy config with no duration and no preset resolves to STANDARD = 45 minutes, never NULL and never the 24h cap",
+);
+check(
+  "CA2B-10m",
+  resolveDurationMinutes({ preset: "QUICK" }) === 20 &&
+    resolveDurationMinutes({ preset: "LAUNCH" }) === 60 &&
+    resolveDurationMinutes({ preset: "MAJOR_ANNOUNCEMENT" }) === 120 &&
+    resolveDurationMinutes({}, "QUICK") === 20 &&
+    resolveDurationMinutes({}, "MAJOR_ANNOUNCEMENT") === 120,
+  "preset-specific fallbacks resolve QUICK=20, LAUNCH=60, MAJOR_ANNOUNCEMENT=120, from the resolved or the legacy preset",
+);
+check(
+  "CA2B-10n",
+  resolveDurationMinutes({ duration_minutes: 30, preset: "LAUNCH" }) === 30 &&
+    resolveDurationMinutes({ duration_minutes: "90" }) === 90 &&
+    resolveDurationMinutes({ duration_minutes: 5000, preset: "QUICK" }) === 20 &&
+    resolveDurationMinutes({ duration_minutes: 0 }) === 45 &&
+    resolveDurationMinutes({ duration_minutes: "abc", preset: "LAUNCH" }) === 60 &&
+    resolveDurationMinutes({ duration_minutes: 1440 }) === 1440,
+  "an explicit in-range duration (including a Mission Control override) wins; out-of-range, zero or non-numeric values fall back to the preset default",
 );
 
 console.log(failures === 0 ? "\nPhase 2B regression: PASS" : `\nPhase 2B regression: ${failures} FAILED`);
