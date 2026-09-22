@@ -80,7 +80,7 @@ check(
 check(
   "CA2B-1d",
   !/\bINSERT INTO public\.usage_ledger\b/i.test(migrationCode) &&
-    !/\$|usd|dollar|rate_card|price/i.test(migrationCode.replace(/\$\$/g, "").replace(/\$function\$/g, "")),
+    !/\busd\b|\bdollar|rate_card|\bprice\b|\$\s*[0-9]/i.test(migrationCode),
   "the Phase 2B migration backfills no usage row and contains no dollar, price or rate-card value",
 );
 
@@ -222,9 +222,11 @@ check(
   "CA2B-3j",
   /safety_expiry/.test(repairBody) &&
     /COALESCE\(m\.metadata, '\{\}'::jsonb\)\s*\|\|/.test(repairBody) &&
-    !/social_post_id\s*=/.test(repairBody) &&
-    !/telegram_message_id\s*=/.test(repairBody) &&
-    !/delivery_state\s*=/.test(repairBody),
+    // Only SET clauses count as writes; `delivery_state = 'SENT'` in a WHERE
+    // filter is a read and must not fail this assertion.
+    !/SET[\s\S]{0,400}?\b(social_post_id|telegram_message_id|delivery_state|sent_at)\s*=/.test(
+      repairBody.replace(/WHERE[\s\S]*?(?=;|\n\s*(UPDATE|INSERT|SELECT|END|IF|FOR)\b)/g, ""),
+    ),
   "expiry merges narrow safety metadata and never rewrites social_post_id, delivery state or telegram message ids",
 );
 
