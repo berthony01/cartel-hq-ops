@@ -523,6 +523,29 @@ Deno.serve(async (req: Request) => {
         },
       }).eq("id", job.id);
 
+      /* -------------------------------------- Cost Accounting Phase 2A ----
+       * fal proves only that ONE background-removal request was submitted:
+       * no credits, seconds, frames or cost are reported by this endpoint,
+       * so nothing of the kind is fabricated. Recorded once, keyed by the
+       * fal request id; repeated syncs never add a second row, and the
+       * CloudConvert-only retry path never writes a fal row at all. */
+      if (requestId) {
+        await recordProviderUsage(admin, {
+          workspaceId,
+          userId: user.id,
+          aiJobId: job.id,
+          actionType: "motion_telegram_background_removal",
+          units: 1,
+          unitType: "api_request",
+          provider: "fal",
+          providerModel: FAL_MODEL,
+          eventId: requestId,
+          metadata: { fal_request_id: requestId },
+        });
+      }
+
+
+
       return respond({
         aiJobId: job.id, status: "running", stage: "background_removal",
         billable: true, telegramChanged: false, releaseChanged: false,
