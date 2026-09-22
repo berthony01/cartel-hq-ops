@@ -431,6 +431,11 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
   if (!membership) return respond({ error: "FORBIDDEN" }, 403);
 
+  // Project Identity Gate A — before the single billable provider request.
+  // Fails closed; the platform-owner bypass lives inside can_use_project_tools.
+  const conceptAccess = await requireProjectToolAccess(admin, user.id, workspaceId);
+  if (!conceptAccess.allowed) return respond(conceptAccess.body, conceptAccess.status);
+
   const existing = Array.isArray(body["concepts"])
     ? (body["concepts"] as unknown[])
         .filter(isRecord)
