@@ -45,6 +45,26 @@ import {
   X_BATCH_MAX,
   type XCanonicalMetrics,
 } from "../_shared/x-metrics.ts";
+import {
+  recordXResourceRead,
+  type UsageAccountingClient,
+} from "../_shared/usage-accounting.ts";
+
+/**
+ * Phase 2B — raw X billable-resource accounting.
+ *
+ * The X request shape is UNCHANGED: `GET /2/tweets` with
+ * `tweet.fields=public_metrics,created_at,author_id` and NO expansions, so the
+ * ONLY resource type returned is a Post. There is deliberately no User
+ * accounting, because no User resource is ever returned.
+ *
+ * `social_x_tracked_post_read` remains exactly as it is in SQL: operational
+ * snapshot telemetry, untouched by this phase.
+ */
+const X_POST_RESOURCE_ACTION = "social_x_post_resource_read";
+const X_ENDPOINT_DESCRIPTOR = "GET /2/tweets";
+const X_ATTRIBUTION_POLICY = "lowest_workspace_then_mission";
+const MISSION_SAFETY_LIMIT = 300;
 
 /**
  * SE-5 metrics refresh, layered ON TOP of the frozen SE-4B behaviour above.
