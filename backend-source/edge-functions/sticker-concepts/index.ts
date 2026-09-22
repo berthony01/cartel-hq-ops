@@ -481,7 +481,15 @@ Deno.serve(async (req: Request) => {
     },
   };
 
+  /**
+   * Cost Accounting Phase 2A — identity of THIS outbound provider request.
+   * Each actual request is a distinct provider event; the provider response
+   * `id` is preferred when present and this UUID is the fallback identity.
+   */
+  const serverInvocationId = crypto.randomUUID();
+
   // Exactly ONE provider request per explicit user action. No retries.
+
   let response: Response;
   try {
     response = await fetch(`${KIE_BASE}${CHAT_PATH}`, {
