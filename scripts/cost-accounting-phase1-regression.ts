@@ -41,7 +41,12 @@ function walk(dir: string): string[] {
 const migrationFiles = walk(MIGRATIONS);
 const migrationNames = migrationFiles.map((f) => f.split("/").pop() ?? f).sort();
 const migrationSrc = read(join(MIGRATIONS, PHASE1_MIGRATION));
+/** Comment-stripped views: prose about prices/owners must not satisfy or fail a code assertion. */
+const migrationCode = migrationSrc.replace(/^\s*--.*$/gm, "");
 const helperSrc = read(HELPER);
+const helperCode = helperSrc
+  .replace(/\/\*[\s\S]*?\*\//g, "")
+  .replace(/^\s*\/\/.*$/gm, "");
 const stickerSrc = read(STICKER_AI);
 const motionSrc = read(MOTION_AI);
 
@@ -99,7 +104,7 @@ check(
 check(
   "CA1-2f",
   !/\$\s?\d|usd|price|rate_card|cost_per|dollar/i.test(
-    migrationSrc.replace(/provider_cost|internal_cost|pricing_source|pricing_version|pricing_effective_at/g, ""),
+    migrationCode.replace(/provider_cost|internal_cost|pricing_source|pricing_version|pricing_effective_at/g, ""),
   ),
   "no hardcoded dollar price or provider rate card in the migration",
 );
@@ -161,7 +166,7 @@ check(
 );
 check(
   "CA1-4g",
-  !/owner|is_platform_owner|unrestricted|plan|entitlement|quota|subscription|stripe/i.test(helperSrc),
+  !/owner|is_platform_owner|unrestricted|plan|entitlement|quota|subscription|stripe/i.test(helperCode),
   "the helper contains no owner bypass and no plan/entitlement/quota/billing logic",
 );
 check(
