@@ -189,6 +189,82 @@ export async function recordProviderUsage(
   return await insertLedgerRow(admin, row);
 }
 
+/* ------------------------------------------------------------ Phase 2B ---- */
+
+export const X_RESOURCE_UNIT_TYPE = "resource_read";
+export const X_RESOURCE_PROVIDER = "x";
+
+/**
+ * Phase 2B X key — `x:action:resource_id:YYYY-MM-DD`.
+ *
+ * DELIBERATELY APP-GLOBAL: X bills per resource returned, deduplicated per
+ * resource per UTC day at the APP level. A workspace or ai_job segment would
+ * count one billable resource twice whenever two workspaces track the same
+ * post on the same day, so neither appears in this key.
+ */
+export function buildXResourceIdempotencyKey(
+  actionType: string,
+  resourceId: string,
+  billingUtcDate: string,
+): string {
+  return `${X_RESOURCE_PROVIDER}:${actionType}:${resourceId.trim()}:${billingUtcDate.trim()}`;
+}
+
+export interface XResourceReadInput {
+  workspaceId: string;
+  userId: string | null;
+  actionType: string;
+  /** The X resource id actually present in the successful response. */
+  resourceId: string;
+  /** UTC calendar day of the read, `YYYY-MM-DD`. */
+  billingUtcDate: string;
+  /** Endpoint descriptor, never an invented model name. */
+  providerModel: string;
+  metadata?: UsageMetadata;
+}
+
+/**
+ * One raw billable X resource-read, per resource per UTC day.
+ *
+ * This is our best raw billing-identity estimate matching X's documented
+ * soft dedupe guarantee. It is NOT X's invoice: no rate, no currency and no
+ * dollar amount is recorded here or anywhere downstream of it.
+ */
+export async function recordXResourceRead(
+  admin: UsageAccountingClient,
+  input: XResourceReadInput,
+): Promise<UsageAccountingOutcome> {
+  if (typeof input.resourceId !== "string" || input.resourceId.trim().length === 0) {
+    return { recorded: false, duplicate: false, skipped: true };
+  }
+  if (typeof input.billingUtcDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(input.billingUtcDate.trim())) {
+    return { recorded: false, duplicate: false, skipped: true };
+  }
+  if (typeof input.actionType !== "string" || input.actionType.trim().length === 0) {
+    return { recorded: false, duplicate: false, skipped: true };
+  }
+
+  const row = {
+    workspace_id: input.workspaceId,
+    user_id: input.userId,
+    ai_job_id: null,
+    action_type: input.actionType,
+    units: 1,
+    provider: X_RESOURCE_PROVIDER,
+    provider_model: input.providerModel,
+    unit_type: X_RESOURCE_UNIT_TYPE,
+    ...NULL_PRICING,
+    idempotency_key: buildXResourceIdempotencyKey(
+      input.actionType,
+      input.resourceId,
+      input.billingUtcDate,
+    ),
+    metadata: input.metadata ?? {},
+  };
+
+  return await insertLedgerRow(admin, row);
+}
+
 /* ------------------------------------------------------------- Phase 1 ---- */
 
 export interface ProviderCreditUsageInput {

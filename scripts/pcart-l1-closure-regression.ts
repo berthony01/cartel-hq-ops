@@ -387,18 +387,21 @@ check(
  */
 const L1C_LAST_GATE_MIGRATION = "20260920054150_5dcb8ca1-aba1-4c9b-995e-cd9ff00da488.sql";
 const L1C_PHASE1_MIGRATION = "20260922070921_40548af2-4afe-4876-bcaa-f22868f5942d.sql";
+/** Second and last authorized post-gate migration: Phase 2B mission safety. */
+const L1C_PHASE2B_MIGRATION = "20260922141917_c47c2384-73c4-4bbf-8cc2-495112d64990.sql";
 const l1cMigrationNames = migrationFiles
   .map((f) => f.replace(/\\/g, "/").split("/").pop() ?? f)
   .sort();
 const l1cPostGate = l1cMigrationNames.filter((f) => f > L1C_LAST_GATE_MIGRATION);
 check(
   "L1C-14",
-  migrationFiles.length === 85 &&
+  migrationFiles.length === 86 &&
     l1cMigrationNames.includes("20260920053942_42259f41-35d1-4b5c-9e6a-78127867cddd.sql") &&
     l1cMigrationNames.includes(L1C_LAST_GATE_MIGRATION) &&
-    l1cPostGate.length === 1 &&
-    l1cPostGate[0] === L1C_PHASE1_MIGRATION,
-  `migration set re-pinned for the treasury signer config plus exactly one authorized post-gate migration, the Cost Accounting Phase 1 file (${migrationFiles.length} files, expected 85; post-gate: ${l1cPostGate.join(", ") || "none"})`,
+    l1cPostGate.length === 2 &&
+    l1cPostGate[0] === L1C_PHASE1_MIGRATION &&
+    l1cPostGate[1] === L1C_PHASE2B_MIGRATION,
+  `migration set re-pinned for the treasury signer config plus exactly two authorized post-gate migrations, the Cost Accounting Phase 1 and Phase 2B files (${migrationFiles.length} files, expected 86; post-gate: ${l1cPostGate.join(", ") || "none"})`,
 );
 
 // ----------------------------- 15. no invented treasury / Safe / recipient

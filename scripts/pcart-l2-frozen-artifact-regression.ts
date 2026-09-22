@@ -432,13 +432,20 @@ const gateMigrations = execFileSync(
  */
 const PHASE1_COST_ACCOUNTING_MIGRATION =
   `${MIGRATIONS}/20260922070921_40548af2-4afe-4876-bcaa-f22868f5942d.sql`;
+/**
+ * The second authorized post-gate migration: Phase 2B mission safety (hardened
+ * metrics selector + repair/expire RPC). Still NOT a general exemption — any
+ * third new migration fails below.
+ */
+const PHASE2B_MISSION_SAFETY_MIGRATION =
+  `${MIGRATIONS}/20260922141917_c47c2384-73c4-4bbf-8cc2-495112d64990.sql`;
 const gateMigrationSet = new Set(gateMigrations);
 const postGateMigrations = migrationFiles.filter((f) => !gateMigrationSet.has(f)).sort();
 check(
   "L2F-I-migrations",
-  migrationFiles.length === 85 &&
+  migrationFiles.length === 86 &&
     gateMigrations.every((f) => migrationFiles.includes(f)),
-  `every gate-era migration still present (${migrationFiles.length} files, expected 85)`,
+  `every gate-era migration still present (${migrationFiles.length} files, expected 86)`,
 );
 check(
   "L2F-I-migration-content",
@@ -449,9 +456,10 @@ check(
 );
 check(
   "L2F-I-migration-post-gate",
-  postGateMigrations.length === 1 &&
-    postGateMigrations[0] === PHASE1_COST_ACCOUNTING_MIGRATION,
-  `exactly one post-gate migration exists and it is the Cost Accounting Phase 1 migration (found: ${postGateMigrations.join(", ") || "none"})`,
+  postGateMigrations.length === 2 &&
+    postGateMigrations[0] === PHASE1_COST_ACCOUNTING_MIGRATION &&
+    postGateMigrations[1] === PHASE2B_MISSION_SAFETY_MIGRATION,
+  `exactly two post-gate migrations exist and they are the Cost Accounting Phase 1 and Phase 2B mission-safety migrations (found: ${postGateMigrations.join(", ") || "none"})`,
 );
 
 // ----------------------------------------------- J. suite purity (no chain I/O)
