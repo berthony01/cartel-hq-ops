@@ -366,11 +366,43 @@ const UNCHANGED = [
   "src/lib/treasury-safe-verify.ts",
   "src/lib/treasury-safe-verify.functions.ts",
   "src/lib/launch-production-request.ts",
-  "package.json",
 ];
 for (const p of UNCHANGED) {
   check(`L2F-I:${p}`, read(p) === atGate(p), `${p} is byte-for-byte unchanged from the start gate`);
 }
+
+// package.json is handled by a dedicated check: exactly one verified Lovable
+// platform dependency bump is permitted; every other field must be identical to
+// the immutable Phase 2 start gate.
+const PKG_DRIFT_DEP = "@lovable.dev/vite-tanstack-config";
+/** The bumped dependency lives in devDependencies in both the gate and HEAD. */
+const PKG_DRIFT_SECTION = "devDependencies" as const;
+const PKG_DRIFT_GATE_VALUE = "^2.15.0";
+const PKG_DRIFT_CURRENT_VALUE = "2.23.1";
+const pkgGate = JSON.parse(atGate("package.json")) as Record<string, any>;
+const pkgCurrent = JSON.parse(read("package.json")) as Record<string, any>;
+check(
+  "L2F-I-package-gate-value",
+  pkgGate[PKG_DRIFT_SECTION]?.[PKG_DRIFT_DEP] === PKG_DRIFT_GATE_VALUE,
+  `start-gate package.json pins ${PKG_DRIFT_SECTION}["${PKG_DRIFT_DEP}"] to exactly ${PKG_DRIFT_GATE_VALUE}`,
+);
+check(
+  "L2F-I-package-current-value",
+  pkgCurrent[PKG_DRIFT_SECTION]?.[PKG_DRIFT_DEP] === PKG_DRIFT_CURRENT_VALUE,
+  `current package.json pins ${PKG_DRIFT_SECTION}["${PKG_DRIFT_DEP}"] to exactly ${PKG_DRIFT_CURRENT_VALUE}`,
+);
+const pkgNormalized = {
+  ...pkgCurrent,
+  [PKG_DRIFT_SECTION]: {
+    ...pkgCurrent[PKG_DRIFT_SECTION],
+    [PKG_DRIFT_DEP]: PKG_DRIFT_GATE_VALUE,
+  },
+};
+check(
+  "L2F-I-package-no-other-drift",
+  JSON.stringify(pkgNormalized) === JSON.stringify(pkgGate),
+  `the ONLY permitted package.json drift from the immutable Phase 2 start gate is the verified Lovable platform dependency bump ${PKG_DRIFT_DEP} ${PKG_DRIFT_GATE_VALUE} -> ${PKG_DRIFT_CURRENT_VALUE}; after normalizing that single dependency the whole package.json is deeply equal to the start gate`,
+);
 check(
   "L2F-I-allowlist",
   /export const APPROVED_OFFICIAL_ARTIFACT_ID = "cartel-fixed-erc20-v1" as const;/.test(
