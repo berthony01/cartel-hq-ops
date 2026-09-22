@@ -375,23 +375,28 @@ for (const p of UNCHANGED) {
 // platform dependency bump is permitted; every other field must be identical to
 // the immutable Phase 2 start gate.
 const PKG_DRIFT_DEP = "@lovable.dev/vite-tanstack-config";
+/** The bumped dependency lives in devDependencies in both the gate and HEAD. */
+const PKG_DRIFT_SECTION = "devDependencies" as const;
 const PKG_DRIFT_GATE_VALUE = "^2.15.0";
 const PKG_DRIFT_CURRENT_VALUE = "2.23.1";
 const pkgGate = JSON.parse(atGate("package.json")) as Record<string, any>;
 const pkgCurrent = JSON.parse(read("package.json")) as Record<string, any>;
 check(
   "L2F-I-package-gate-value",
-  pkgGate.dependencies?.[PKG_DRIFT_DEP] === PKG_DRIFT_GATE_VALUE,
-  `start-gate package.json pins ${PKG_DRIFT_DEP} to exactly ${PKG_DRIFT_GATE_VALUE}`,
+  pkgGate[PKG_DRIFT_SECTION]?.[PKG_DRIFT_DEP] === PKG_DRIFT_GATE_VALUE,
+  `start-gate package.json pins ${PKG_DRIFT_SECTION}["${PKG_DRIFT_DEP}"] to exactly ${PKG_DRIFT_GATE_VALUE}`,
 );
 check(
   "L2F-I-package-current-value",
-  pkgCurrent.dependencies?.[PKG_DRIFT_DEP] === PKG_DRIFT_CURRENT_VALUE,
-  `current package.json pins ${PKG_DRIFT_DEP} to exactly ${PKG_DRIFT_CURRENT_VALUE}`,
+  pkgCurrent[PKG_DRIFT_SECTION]?.[PKG_DRIFT_DEP] === PKG_DRIFT_CURRENT_VALUE,
+  `current package.json pins ${PKG_DRIFT_SECTION}["${PKG_DRIFT_DEP}"] to exactly ${PKG_DRIFT_CURRENT_VALUE}`,
 );
 const pkgNormalized = {
   ...pkgCurrent,
-  dependencies: { ...pkgCurrent.dependencies, [PKG_DRIFT_DEP]: PKG_DRIFT_GATE_VALUE },
+  [PKG_DRIFT_SECTION]: {
+    ...pkgCurrent[PKG_DRIFT_SECTION],
+    [PKG_DRIFT_DEP]: PKG_DRIFT_GATE_VALUE,
+  },
 };
 check(
   "L2F-I-package-no-other-drift",
