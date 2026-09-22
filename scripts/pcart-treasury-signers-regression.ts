@@ -243,21 +243,24 @@ check(
 
 // -------------------------------------------------------------- 5. migration
 /**
- * Exactly TWO post-gate migrations are authorized: Cost Accounting Phase 1 and
- * the Phase 2B mission-safety migration. Any third one fails this check.
+ * Exactly THREE post-gate migrations are authorized: Cost Accounting Phase 1,
+ * the Phase 2B mission-safety migration and its corrective duration-resolution
+ * migration. Any fourth one fails this check.
  */
 const TS_PHASE1_MIGRATION = "20260922070921_40548af2-4afe-4876-bcaa-f22868f5942d.sql";
 const TS_PHASE2B_MIGRATION = "20260922141917_c47c2384-73c4-4bbf-8cc2-495112d64990.sql";
+const TS_PHASE2B_DURATION_MIGRATION = "20260922142803_fedec44c-654f-4e1a-a117-30d027601e03.sql";
 const tsPostGate = migrationFiles.filter((f) => f > POLICY_COMPLETION_MIGRATION_FILE).sort();
 check(
   "TS-5a",
-  migrationFiles.length === 86 &&
+  migrationFiles.length === 87 &&
     migrationFiles.includes(MIGRATION_FILE) &&
     migrationFiles.includes(POLICY_COMPLETION_MIGRATION_FILE) &&
-    tsPostGate.length === 2 &&
+    tsPostGate.length === 3 &&
     tsPostGate[0] === TS_PHASE1_MIGRATION &&
-    tsPostGate[1] === TS_PHASE2B_MIGRATION,
-  `treasury signer migration plus its policy completion are pinned, with exactly two authorized post-gate migrations, the Cost Accounting Phase 1 and Phase 2B files (${migrationFiles.length} files, expected 86; post-gate: ${tsPostGate.join(", ") || "none"})`,
+    tsPostGate[1] === TS_PHASE2B_MIGRATION &&
+    tsPostGate[2] === TS_PHASE2B_DURATION_MIGRATION,
+  `treasury signer migration plus its policy completion are pinned, with exactly three authorized post-gate migrations, the Cost Accounting Phase 1, Phase 2B safety and Phase 2B corrective duration files (${migrationFiles.length} files, expected 87; post-gate: ${tsPostGate.join(", ") || "none"})`,
 );
 check(
   "TS-5b",
