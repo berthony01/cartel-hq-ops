@@ -513,6 +513,8 @@ Deno.serve(async (req: Request) => {
         rawMode === "quick" || rawMode === "ai" || rawMode === "custom" ? rawMode : null;
       if (!workspaceId || !packId || !stickerId || !mode) return respond({ error: "INVALID_INPUT" }, 400);
       if (!(await isMember(workspaceId))) return respond({ error: "FORBIDDEN" }, 403);
+      const startIdentityBlocked = await identityDenial(workspaceId);
+      if (startIdentityBlocked) return startIdentityBlocked;
 
       // Quick Motion presets are a strict server allowlist — never a silent fallback.
       let preset: MotionPreset | null = null;
