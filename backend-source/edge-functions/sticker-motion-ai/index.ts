@@ -397,6 +397,9 @@ Deno.serve(async (req: Request) => {
       return respond({ error: "INVALID_INPUT" }, 400);
     }
     if (!(await isMember(workspaceId))) return respond({ error: "FORBIDDEN" }, 403);
+    // Direct write that moves the current generated motion pointer: gated.
+    const setCurrentIdentityBlocked = await identityDenial(workspaceId);
+    if (setCurrentIdentityBlocked) return setCurrentIdentityBlocked;
 
     const { data: pack } = await admin
       .from("sticker_packs").select("id,workspace_id").eq("id", packId).maybeSingle();
