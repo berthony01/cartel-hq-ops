@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { recordProviderCreditUsage } from "../_shared/usage-accounting.ts";
+import { requireProjectToolAccess } from "../_shared/project-identity.ts";
 
 /**
  * CARTEL HQ — Animated Sticker Studio Phase B1
