@@ -61,13 +61,16 @@ const migrationNames = walk(MIGRATIONS).map((f) => f.split("/").pop() ?? f).sort
 const postGate = migrationNames.filter((f) => f > LAST_GATE_MIGRATION);
 check(
   "CA2A-1a",
-  migrationNames.length === 85,
-  "migration count remains exactly 85 — Phase 2A adds no migration",
+  migrationNames.length === 87,
+  "migration count is exactly 87 — Phase 2A itself adds no migration",
 );
 check(
   "CA2A-1b",
-  postGate.length === 1 && postGate[0] === PHASE1_MIGRATION,
-  `the Phase 1 migration remains the sole post-gate migration (found: ${postGate.join(", ") || "none"})`,
+  postGate.length === 3 &&
+    postGate[0] === PHASE1_MIGRATION &&
+    postGate[1] === "20260922141917_c47c2384-73c4-4bbf-8cc2-495112d64990.sql" &&
+    postGate[2] === "20260922142803_fedec44c-654f-4e1a-a117-30d027601e03.sql",
+  `the post-gate migrations are exactly Phase 1 plus the two Phase 2B mission-safety migrations (found: ${postGate.join(", ") || "none"})`,
 );
 
 /* -------------------------------------------------- 2. shared generic writer */

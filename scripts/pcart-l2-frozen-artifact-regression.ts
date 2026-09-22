@@ -439,13 +439,20 @@ const PHASE1_COST_ACCOUNTING_MIGRATION =
  */
 const PHASE2B_MISSION_SAFETY_MIGRATION =
   `${MIGRATIONS}/20260922141917_c47c2384-73c4-4bbf-8cc2-495112d64990.sql`;
+/**
+ * The third authorized post-gate migration: the Phase 2B corrective duration
+ * resolution fix. Still NOT a general exemption — any fourth new migration
+ * fails below.
+ */
+const PHASE2B_DURATION_MIGRATION =
+  `${MIGRATIONS}/20260922142803_fedec44c-654f-4e1a-a117-30d027601e03.sql`;
 const gateMigrationSet = new Set(gateMigrations);
 const postGateMigrations = migrationFiles.filter((f) => !gateMigrationSet.has(f)).sort();
 check(
   "L2F-I-migrations",
-  migrationFiles.length === 86 &&
+  migrationFiles.length === 87 &&
     gateMigrations.every((f) => migrationFiles.includes(f)),
-  `every gate-era migration still present (${migrationFiles.length} files, expected 86)`,
+  `every gate-era migration still present (${migrationFiles.length} files, expected 87)`,
 );
 check(
   "L2F-I-migration-content",
@@ -456,10 +463,11 @@ check(
 );
 check(
   "L2F-I-migration-post-gate",
-  postGateMigrations.length === 2 &&
+  postGateMigrations.length === 3 &&
     postGateMigrations[0] === PHASE1_COST_ACCOUNTING_MIGRATION &&
-    postGateMigrations[1] === PHASE2B_MISSION_SAFETY_MIGRATION,
-  `exactly two post-gate migrations exist and they are the Cost Accounting Phase 1 and Phase 2B mission-safety migrations (found: ${postGateMigrations.join(", ") || "none"})`,
+    postGateMigrations[1] === PHASE2B_MISSION_SAFETY_MIGRATION &&
+    postGateMigrations[2] === PHASE2B_DURATION_MIGRATION,
+  `exactly three post-gate migrations exist and they are the Cost Accounting Phase 1, Phase 2B mission-safety and Phase 2B corrective duration migrations (found: ${postGateMigrations.join(", ") || "none"})`,
 );
 
 // ----------------------------------------------- J. suite purity (no chain I/O)

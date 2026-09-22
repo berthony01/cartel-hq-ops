@@ -56,10 +56,12 @@ const motionSrc = read(MOTION_AI);
 const postGate = migrationNames.filter((f) => f > LAST_GATE_MIGRATION);
 check(
   "CA1-1",
-  migrationNames.length === 85 &&
-    postGate.length === 1 &&
-    postGate[0] === PHASE1_MIGRATION,
-  `migration count is exactly 85 and the only post-gate migration is ${PHASE1_MIGRATION} (found: ${postGate.join(", ") || "none"})`,
+  migrationNames.length === 87 &&
+    postGate.length === 3 &&
+    postGate[0] === PHASE1_MIGRATION &&
+    postGate[1] === "20260922141917_c47c2384-73c4-4bbf-8cc2-495112d64990.sql" &&
+    postGate[2] === "20260922142803_fedec44c-654f-4e1a-a117-30d027601e03.sql",
+  `migration count is exactly 87 and the only post-gate migrations are ${PHASE1_MIGRATION} plus the two Phase 2B mission-safety migrations (found: ${postGate.join(", ") || "none"})`,
 );
 
 // -------------------------------------------------------- 2. migration content
