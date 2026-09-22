@@ -249,22 +249,25 @@ const L2D_PHASE1_MIGRATION = "20260922070921_40548af2-4afe-4876-bcaa-f22868f5942
 const L2D_PHASE2B_MIGRATION = "20260922141917_c47c2384-73c4-4bbf-8cc2-495112d64990.sql";
 /** Third and last: the Phase 2B corrective duration-resolution migration. */
 const L2D_PHASE2B_DURATION_MIGRATION = "20260922142803_fedec44c-654f-4e1a-a117-30d027601e03.sql";
+/** Fourth and last: the Project Identity Gate A function-only migration. */
+const L2D_IDENTITY_GATE_MIGRATION = "20260922161918_ef6e322a-d993-4970-9d48-3b4f93afa222.sql";
 const l2dMigrationNames = migrationFiles
   .map((f) => f.replace(/\\/g, "/").split("/").pop() ?? f)
   .sort();
 const l2dPostGate = l2dMigrationNames.filter((f) => f > L2D_LAST_GATE_MIGRATION);
 check(
   "L2D-I7",
-  migrationFiles.length === 87 &&
+  migrationFiles.length === 88 &&
     l2dMigrationNames.includes("20260920053942_42259f41-35d1-4b5c-9e6a-78127867cddd.sql") &&
     l2dMigrationNames.includes(L2D_LAST_GATE_MIGRATION) &&
-    l2dPostGate.length === 3 &&
+    l2dPostGate.length === 4 &&
     l2dPostGate[0] === L2D_PHASE1_MIGRATION &&
     l2dPostGate[1] === L2D_PHASE2B_MIGRATION &&
     l2dPostGate[2] === L2D_PHASE2B_DURATION_MIGRATION &&
+    l2dPostGate[3] === L2D_IDENTITY_GATE_MIGRATION &&
     migrationFiles.every((f) => !/PepeCartelToken/.test(readFileSync(f, "utf8"))) &&
     !migrationFiles.some((f) => /pepecartel[-_]?token|pcart[-_]?artifact/i.test(f)),
-  `migration set re-pinned (87 files) with exactly three authorized post-gate migrations, the Cost Accounting Phase 1, Phase 2B safety and Phase 2B corrective duration files; none reference the draft PCART token artifact (post-gate: ${l2dPostGate.join(", ") || "none"})`,
+  `migration set re-pinned (88 files) with exactly four authorized post-gate migrations, the Cost Accounting Phase 1, Phase 2B safety, Phase 2B corrective duration and Project Identity Gate A files; none reference the draft PCART token artifact (post-gate: ${l2dPostGate.join(", ") || "none"})`,
 );
 check(
   "L2D-I8",

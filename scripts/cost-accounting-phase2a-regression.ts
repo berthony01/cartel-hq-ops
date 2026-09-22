@@ -62,16 +62,17 @@ const migrationNames = walk(MIGRATIONS).map((f) => f.split("/").pop() ?? f).sort
 const postGate = migrationNames.filter((f) => f > LAST_GATE_MIGRATION);
 check(
   "CA2A-1a",
-  migrationNames.length === 87,
-  "migration count is exactly 87 — Phase 2A itself adds no migration",
+  migrationNames.length === 88,
+  "migration count is exactly 88 — Phase 2A itself adds no migration",
 );
 check(
   "CA2A-1b",
-  postGate.length === 3 &&
+  postGate.length === 4 &&
     postGate[0] === PHASE1_MIGRATION &&
     postGate[1] === "20260922141917_c47c2384-73c4-4bbf-8cc2-495112d64990.sql" &&
-    postGate[2] === "20260922142803_fedec44c-654f-4e1a-a117-30d027601e03.sql",
-  `the post-gate migrations are exactly Phase 1 plus the two Phase 2B mission-safety migrations (found: ${postGate.join(", ") || "none"})`,
+    postGate[2] === "20260922142803_fedec44c-654f-4e1a-a117-30d027601e03.sql" &&
+    postGate[3] === "20260922161918_ef6e322a-d993-4970-9d48-3b4f93afa222.sql",
+  `the post-gate migrations are exactly Phase 1, the two Phase 2B mission-safety migrations and the Project Identity Gate A function-only migration (found: ${postGate.join(", ") || "none"})`,
 );
 
 /* -------------------------------------------------- 2. shared generic writer */
@@ -153,12 +154,38 @@ check(
     /unit_type: PROVIDER_CREDIT_UNIT_TYPE/.test(helperCode),
   "the Phase 1 credit path still records unit_type='provider_credit'",
 );
+/**
+ * Re-pinned for Project Identity Gate A. These two functions are no longer
+ * byte-identical to the Phase 2A start gate, because Gate A legitimately added
+ * server-side identity enforcement. The Phase 2A invariant that still matters
+ * is that NOTHING was removed and every added line is Gate A identity code —
+ * so no accounting, provider, idempotency or membership line changed.
+ */
+const IDENTITY_GATE_ADDITION =
+  /^(\s*)(\/\/.*|\/\*\*?.*|\*.*|\*\/|import \{ requireProjectToolAccess \} from "\.\.\/_shared\/project-identity\.ts";|const identityDenial = async \(workspaceId: string\) => \{|const access = await requireProjectToolAccess\(admin, user\.id, workspaceId\);|return access\.allowed \? null : respond\(access\.body, access\.status\);|\};|const \w*[Ii]dentityBlocked = await identityDenial\(.*\);|if \(\w*[Ii]dentityBlocked\) return \w*[Ii]dentityBlocked;|)$/;
 for (const [label, path] of [["sticker-ai", STICKER_AI], ["sticker-motion-ai", MOTION_AI]] as const) {
-  const gate = execFileSync("git", ["show", `${START_GATE}:${path}`], { encoding: "utf8" });
+  const gateLines = execFileSync("git", ["show", `${START_GATE}:${path}`], {
+    encoding: "utf8",
+  }).split("\n");
+  const nowLines = read(path).split("\n");
+  // Every gate-era line must still be present, in order, unmodified.
+  let cursor = 0;
+  const added: string[] = [];
+  for (const line of nowLines) {
+    if (cursor < gateLines.length && line === gateLines[cursor]) cursor += 1;
+    else added.push(line);
+  }
   check(
     `CA2A-3c:${label}`,
-    gate === read(path),
-    `${label} is byte-for-byte unchanged from the Phase 2A start gate`,
+    cursor === gateLines.length,
+    `${label} still contains every Phase 2A start-gate line unmodified and in order`,
+  );
+  check(
+    `CA2A-3d:${label}`,
+    added.every((l) => IDENTITY_GATE_ADDITION.test(l)),
+    `${label} adds only Project Identity Gate A enforcement lines (offending: ${
+      added.filter((l) => !IDENTITY_GATE_ADDITION.test(l)).join(" | ") || "none"
+    })`,
   );
 }
 

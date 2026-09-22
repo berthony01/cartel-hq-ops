@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { recordProviderUsage } from "../_shared/usage-accounting.ts";
+import { requireProjectToolAccess } from "../_shared/project-identity.ts";
 
 /**
  * sticker-concepts — TEXT ONLY.
@@ -429,6 +430,11 @@ Deno.serve(async (req: Request) => {
     .eq("user_id", user.id)
     .maybeSingle();
   if (!membership) return respond({ error: "FORBIDDEN" }, 403);
+
+  // Project Identity Gate A — before the single billable provider request.
+  // Fails closed; the platform-owner bypass lives inside can_use_project_tools.
+  const conceptAccess = await requireProjectToolAccess(admin, user.id, workspaceId);
+  if (!conceptAccess.allowed) return respond(conceptAccess.body, conceptAccess.status);
 
   const existing = Array.isArray(body["concepts"])
     ? (body["concepts"] as unknown[])

@@ -4660,6 +4660,10 @@ export type Database = {
         Args: { _workspace_id: string }
         Returns: boolean
       }
+      can_use_project_tools: {
+        Args: { _user_id?: string; _workspace_id: string }
+        Returns: boolean
+      }
       cancel_claimed_launch_chain_production_presign_authorization: {
         Args: {
           _authorization_id: string

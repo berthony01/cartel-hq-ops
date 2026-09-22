@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
+import { useRouterState } from "@tanstack/react-router";
 import { Menu } from "lucide-react";
+import { ProjectIdentityGate } from "@/components/cartel/ProjectIdentityGate";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { CartelMark, SidebarNav } from "@/components/cartel/SidebarNav";
@@ -36,8 +38,18 @@ function TopBar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
 }
 
 
+/**
+ * Project Identity Gate A covers Sticker Lab and its descendants ONLY.
+ * Community/Telegram/X/Launch Watch enforcement is a later Gate B.
+ */
+function isProjectIdentityGatedPath(pathname: string): boolean {
+  return pathname === "/sticker-lab" || pathname.startsWith("/sticker-lab/");
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const gated = isProjectIdentityGatedPath(pathname);
 
   return (
     <div className="min-h-screen bg-background/75">
@@ -72,7 +84,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="lg:pl-64">
         <TopBar onOpenMobileNav={() => setMobileOpen(true)} />
         <main className="app-gutter app-scroll-pad mx-auto w-full max-w-7xl py-6 lg:py-9">
-          {children}
+          {gated ? <ProjectIdentityGate>{children}</ProjectIdentityGate> : children}
         </main>
       </div>
 

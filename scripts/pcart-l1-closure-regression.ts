@@ -392,20 +392,23 @@ const L1C_PHASE1_MIGRATION = "20260922070921_40548af2-4afe-4876-bcaa-f22868f5942
 const L1C_PHASE2B_MIGRATION = "20260922141917_c47c2384-73c4-4bbf-8cc2-495112d64990.sql";
 /** Third and last: the Phase 2B corrective duration-resolution migration. */
 const L1C_PHASE2B_DURATION_MIGRATION = "20260922142803_fedec44c-654f-4e1a-a117-30d027601e03.sql";
+/** Fourth and last: the Project Identity Gate A function-only migration. */
+const L1C_IDENTITY_GATE_MIGRATION = "20260922161918_ef6e322a-d993-4970-9d48-3b4f93afa222.sql";
 const l1cMigrationNames = migrationFiles
   .map((f) => f.replace(/\\/g, "/").split("/").pop() ?? f)
   .sort();
 const l1cPostGate = l1cMigrationNames.filter((f) => f > L1C_LAST_GATE_MIGRATION);
 check(
   "L1C-14",
-  migrationFiles.length === 87 &&
+  migrationFiles.length === 88 &&
     l1cMigrationNames.includes("20260920053942_42259f41-35d1-4b5c-9e6a-78127867cddd.sql") &&
     l1cMigrationNames.includes(L1C_LAST_GATE_MIGRATION) &&
-    l1cPostGate.length === 3 &&
+    l1cPostGate.length === 4 &&
     l1cPostGate[0] === L1C_PHASE1_MIGRATION &&
     l1cPostGate[1] === L1C_PHASE2B_MIGRATION &&
-    l1cPostGate[2] === L1C_PHASE2B_DURATION_MIGRATION,
-  `migration set re-pinned for the treasury signer config plus exactly three authorized post-gate migrations, the Cost Accounting Phase 1, Phase 2B safety and Phase 2B corrective duration files (${migrationFiles.length} files, expected 87; post-gate: ${l1cPostGate.join(", ") || "none"})`,
+    l1cPostGate[2] === L1C_PHASE2B_DURATION_MIGRATION &&
+    l1cPostGate[3] === L1C_IDENTITY_GATE_MIGRATION,
+  `migration set re-pinned for the treasury signer config plus exactly four authorized post-gate migrations, the Cost Accounting Phase 1, Phase 2B safety, Phase 2B corrective duration and Project Identity Gate A files (${migrationFiles.length} files, expected 88; post-gate: ${l1cPostGate.join(", ") || "none"})`,
 );
 
 // ----------------------------- 15. no invented treasury / Safe / recipient

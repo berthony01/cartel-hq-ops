@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { recordProviderCreditUsage } from "../_shared/usage-accounting.ts";
+import { requireProjectToolAccess } from "../_shared/project-identity.ts";
 
 /**
  * CARTEL HQ — Animated Sticker Studio Phase B1
@@ -367,6 +368,16 @@ Deno.serve(async (req: Request) => {
     return Boolean(data);
   };
 
+  /**
+   * Project Identity Gate A. Runs AFTER the existing membership check and
+   * BEFORE any provider request, new provider task or generated-state write.
+   * Fails closed; the platform-owner bypass lives inside can_use_project_tools.
+   */
+  const identityDenial = async (workspaceId: string) => {
+    const access = await requireProjectToolAccess(admin, user.id, workspaceId);
+    return access.allowed ? null : respond(access.body, access.status);
+  };
+
   const action = String(body.action ?? "");
   if (action === "config") {
     return respond({ configured: Boolean(KIE_API_KEY), model: MODEL, durationSeconds: 5, telegramReady: false });
@@ -386,6 +397,9 @@ Deno.serve(async (req: Request) => {
       return respond({ error: "INVALID_INPUT" }, 400);
     }
     if (!(await isMember(workspaceId))) return respond({ error: "FORBIDDEN" }, 403);
+    // Direct write that moves the current generated motion pointer: gated.
+    const setCurrentIdentityBlocked = await identityDenial(workspaceId);
+    if (setCurrentIdentityBlocked) return setCurrentIdentityBlocked;
 
     const { data: pack } = await admin
       .from("sticker_packs").select("id,workspace_id").eq("id", packId).maybeSingle();
@@ -499,6 +513,8 @@ Deno.serve(async (req: Request) => {
         rawMode === "quick" || rawMode === "ai" || rawMode === "custom" ? rawMode : null;
       if (!workspaceId || !packId || !stickerId || !mode) return respond({ error: "INVALID_INPUT" }, 400);
       if (!(await isMember(workspaceId))) return respond({ error: "FORBIDDEN" }, 403);
+      const startIdentityBlocked = await identityDenial(workspaceId);
+      if (startIdentityBlocked) return startIdentityBlocked;
 
       // Quick Motion presets are a strict server allowlist — never a silent fallback.
       let preset: MotionPreset | null = null;
@@ -672,6 +688,9 @@ Deno.serve(async (req: Request) => {
       if (!job) return respond({ error: "JOB_NOT_FOUND" }, 404);
       if (job.job_type !== JOB_TYPE) return respond({ error: "WRONG_JOB_TYPE" }, 400);
       if (!(await isMember(job.workspace_id))) return respond({ error: "FORBIDDEN" }, 403);
+      // `sync` polls the provider and finalizes generated motion state: gated.
+      const syncIdentityBlocked = await identityDenial(String(job.workspace_id));
+      if (syncIdentityBlocked) return syncIdentityBlocked;
 
       if (job.status === "failed") {
         return respond({ aiJobId: job.id, jobType: JOB_TYPE, status: "failed", error: job.error_message });

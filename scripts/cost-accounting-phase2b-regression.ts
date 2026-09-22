@@ -64,16 +64,17 @@ const postGate = migrationNames.filter((f) => f > LAST_GATE_MIGRATION);
 
 check(
   "CA2B-1a",
-  migrationNames.length === 87,
-  `exactly 87 migration files exist (found ${migrationNames.length})`,
+  migrationNames.length === 88,
+  `exactly 88 migration files exist (found ${migrationNames.length})`,
 );
 check(
   "CA2B-1b",
-  postGate.length === 3 &&
+  postGate.length === 4 &&
     postGate[0] === PHASE1_MIGRATION &&
     postGate[1] === PHASE2B_MIGRATION &&
-    postGate[2] === PHASE2B_DURATION_MIGRATION,
-  `the only post-gate migrations are Cost Accounting Phase 1, Phase 2B mission safety and the Phase 2B corrective duration migration (found: ${postGate.join(", ") || "none"})`,
+    postGate[2] === PHASE2B_DURATION_MIGRATION &&
+    postGate[3] === "20260922161918_ef6e322a-d993-4970-9d48-3b4f93afa222.sql",
+  `the only post-gate migrations are Cost Accounting Phase 1, Phase 2B mission safety, the Phase 2B corrective duration migration and the Project Identity Gate A function-only migration (found: ${postGate.join(", ") || "none"})`,
 );
 check(
   "CA2B-1c",
