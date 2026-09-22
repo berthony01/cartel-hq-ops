@@ -124,14 +124,21 @@ check(
 );
 
 // --------------------------------------------------------------- 4. helper
+// Phase 2B deployment-parity re-pin: the authoritative source stays in
+// backend-source, and exactly ONE deployable mirror now exists under
+// supabase/functions so the runner can import it. The two must be identical.
+const helperCopies = walk("backend-source/edge-functions")
+  .concat(walk("src"))
+  .concat(walk("supabase/functions"))
+  .filter((f) => /usage-accounting\.ts$/.test(f))
+  .sort();
 check(
   "CA1-4a",
-  walk("backend-source/edge-functions")
-    .concat(walk("src"))
-    .concat(walk("supabase/functions"))
-    .filter((f) => /usage-accounting\.ts$/.test(f))
-    .join(",") === HELPER,
-  `the shared accounting helper exists at exactly ${HELPER} and nowhere else`,
+  helperCopies.length === 2 &&
+    helperCopies.includes(HELPER) &&
+    helperCopies.includes(HELPER_MIRROR) &&
+    readFileSync(HELPER).equals(readFileSync(HELPER_MIRROR)),
+  `the shared accounting helper exists at exactly ${HELPER} (authoritative) plus exactly one byte-for-byte identical deployable mirror at ${HELPER_MIRROR}, and nowhere else`,
 );
 check(
   "CA1-4b",
