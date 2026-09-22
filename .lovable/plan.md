@@ -1,153 +1,119 @@
-# PCART Treasury Signer Setup Foundation — PLAN / AUDIT ONLY
+# Cost Accounting Foundation — Read-Only Audit
 
-Inspected at HEAD `3c1d479d12f413bed9198a1fb5d33a28128a8bc2`, working tree clean. No file edited, no SQL run, no chain call, no Safe touched.
+No file was edited. No migration, deploy, publish, secret, billing, chain, wallet, PCART or launcher action occurred.
 
-Goal: the project owner types three public wallet addresses into CARTEL HQ, they are saved, and nothing on-chain happens. No address is ever written into source, config, env or a migration.
+## A. Verification report
 
-## 1. Current files, components and routes involved
+- **HEAD at time of verification:** `c105f7c21f47933fc93f723c1213d04132ba7754` (platform auto-commit; not the `2eb8bf5c` previously reported). Working tree clean.
+- **Diff vs `66b8cd6877442d7be92819a3c4dba6cbf0c0d952` — 3 files, +12/−5:**
+  - `scripts/pcart-l1-closure-regression.ts` (+9/−2) — the authorized L1C-10 narrowing
+  - `package.json` (+1/−1) — platform drift (`@lovable.dev/vite-tanstack-config` `^2.15.0` → `2.23.1`)
+  - `bun.lock` (+2/−2) — matching platform lock drift
 
-Confirmed by reading HEAD:
+| Suite | Result |
+|---|---|
+| pcart-l1-closure | PASS (all, incl. narrowed L1C-10, migrations pinned 84) |
+| pcart-l2-frozen-artifact | **1 FAIL — L2F-I:package.json** (see exception below); all substantive checks PASS |
+| pcart-l2-draft-artifact | PASS |
+| pcart-l1b-treasury-safe-verify | PASS |
+| pcart-treasury-signers | PASS |
+| hardening-b | PASS |
+| p1a-project-journey | PASS |
+| p2c2-launch-isolation | PASS |
+| p3c-f / f1 / f2 | PASS |
+| launcher-b-handoff | PASS (129) |
+| launcher-b3-platform-execution | PASS (69) |
+| verifier-state-write-activation | PASS |
+| wallet-connector | PASS |
+| `bunx tsgo --noEmit` | clean, no output |
+| `bun run build` | succeeded |
 
-- `src/routes/_authenticated/launch-control.tsx` — the owner's launch surface; renders `ProductionDeploymentRequestPanel` at line 2878.
-- `src/components/cartel/ProductionDeploymentRequestPanel.tsx` — the production request form; renders `TreasurySafeVerificationPanel` at line 490.
-- `src/components/cartel/TreasurySafeVerificationPanel.tsx` — hardened read-only canonical Safe v1.4.1 check. Its success copy already states the exact PEPECARTEL signer addresses are not pinned — this phase supplies the missing half.
-- `src/lib/treasury-safe-verify.ts` — owns `normalizeTreasuryAddress` (lowercase), `isCandidateTreasuryAddress` (EVM shape + nonzero), `ZERO_ADDRESS`. Reused as-is; **not modified**.
-- `src/lib/launch-production-request.ts` — existing address helpers and query-key conventions to mirror.
-- `src/lib/workspace-context.tsx` — `workspaceId` / `workspace.owner_id` for the current workspace.
-- DB ownership primitive: `public.is_workspace_owner(uuid, uuid)`, already `SECURITY DEFINER` and revoked from `PUBLIC/anon/authenticated`, used by every existing owner-gated RPC (e.g. the launcher-B1 handoff migration).
+### Documented baseline-drift exception (temporary, this turn only)
 
-No checksum utility exists in the repo today; `viem` (present) exports `getAddress` for display-only checksumming.
+`FAIL L2F-I:package.json — package.json is byte-for-byte unchanged from the start gate`.
 
-## 2. Table and RLS proposal
+Accepted as a **known baseline-drift exception for this read-only audit turn only**, on your explicit instruction, because the `package.json`/`bun.lock` change was platform-generated before this phase, the tree is clean, and every substantive PCART assertion (artifact hashes, compiler settings, protected-file integrity, migration count 84, liquidity flag false, approved artifact `cartel-fixed-erc20-v1`) passed. **This is NOT an accepted permanent baseline.** The tripwire remains failing in the repository and must be resolved in a separate, explicitly authorized turn — either by reverting the platform bump or by a one-file re-pin of `scripts/pcart-l2-frozen-artifact-regression.ts`. No regression, `package.json` or `bun.lock` was modified.
 
-One new table, one new owner-gated RPC. Nothing is bolted onto `launches` or `project_profiles`.
+## B. Audit findings by provider / feature
 
-```sql
-create table public.launch_treasury_signer_configs (
-  id uuid primary key default gen_random_uuid(),
-  workspace_id uuid not null references public.workspaces(id) on delete cascade,
-  launch_id uuid not null references public.launches(id) on delete cascade,
-  signer_addresses text[] not null,
-  threshold smallint not null default 2,
-  status text not null default 'DRAFT',
-  created_by uuid not null,
-  updated_by uuid not null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  constraint launch_treasury_signer_configs_launch_unique unique (launch_id),
-  constraint launch_treasury_signer_configs_threshold_fixed check (threshold = 2),
-  constraint launch_treasury_signer_configs_status_allowed
-    check (status in ('DRAFT','SIGNERS_READY')),
-  constraint launch_treasury_signer_configs_addresses_shape check (
-    array_length(signer_addresses, 1) = 3
-    and signer_addresses <@ array(select unnest(signer_addresses))  -- placeholder, see note
-  )
-);
+Live read-only evidence (external Supabase `ocoinbnjgstkmnwwvnhi`): `usage_ledger` holds 4 action types only — `social_x_tracked_post_read` (13,173 rows), `sticker_generate` (15), `remove_background` (12), `sticker_motion_generate` (7). **`provider_cost` is populated on 0 of 13,207 rows. `ai_jobs.provider_cost` is populated on 0 of 49 rows.** No monetary value has ever been recorded.
+
+| Feature | Provider / model | ai_jobs | usage_ledger | Monetary | Idempotency |
+|---|---|---|---|---|---|
+| Static sticker generation | Kie `flux-2/pro-image-to-image` (`sticker-ai/index.ts:770`) | yes | yes, `units` = raw Kie credits, `action_type='sticker_generate'` | none | app-level `select…maybeSingle()` on `ai_job_id` (`:491`) — **no DB unique constraint**, race-able |
+| Background removal | Kie `recraft/remove-background` (`sticker-ai/index.ts:948,1055`) | yes (child job) | yes, `remove_background` | none | same app-level guard |
+| Sticker concept suggestions | Gemini 2.5 Flash via Kie (`sticker-concepts/index.ts:480`) | **no** | **no** | none | single synchronous call, no retries |
+| Kling motion generation | Kie `kling-2.6/image-to-video` (`sticker-motion-ai/index.ts:645`) | yes | yes, `sticker_motion_generate` | none | partial unique index on active job + app-level ledger guard |
+| Motion background prep | fal.ai `veed/video-background-removal/fast` (`sticker-motion-telegram/index.ts:491`) | yes (`sticker_motion_telegram_prepare`) | **no** | none; no fal credit value captured at all | partial unique index on active job; `X-Fal-No-Retry: 1` |
+| Normalization | CloudConvert `/v2/jobs` (`sticker-motion-telegram/index.ts:245`) | yes (same parent job) | **no**; credits only in `ai_jobs.output_json.cloudconvert_credits` | none | CC job tag `cartelhq-motion-telegram-<aiJobId>`; scoped retry path |
+| X social mission reads | X API v2 (`social-read-x.server.ts:394,419,439`; runner `:293`; telegram `:126,198`) | no | yes — but written **in SQL**, not in the read path: `INSERT … 'social_x_tracked_post_read', 1` inside the mission RPC (`docs/sql/SE14_multi_metric_mission_targets.sql:230`) | none | snapshot dedupe `ON CONFLICT (mission_id, provider, poll_bucket) DO NOTHING`; telegram pre-checks the minute bucket before paying |
+| YouTube reads | YouTube Data API v3 | no | **no** | none | marked `billable:false` (quota, not money) |
+| Sticker Drops / auto-posting | Telegram `sendSticker` (`backend-source/edge-functions/sticker-drops/index.ts:213`) | no | **no** | n/a (zero provider cost) | app-level `recovered_prior_send` window guard; daily cap counted from `sticker_drop_events`; **564 executed events exist, none counted as usage** |
+
+**Platform-owner bypass (verified live):** `public.is_platform_owner(_user_id)` = `platform_user_roles.role='owner'` with an `auth.uid()` self-check; `has_platform_unrestricted_access` simply delegates to it. It is used purely as an authorization gate — **no usage-recording or usage-limit path skips it today**, because no limit enforcement exists yet. Any future bypass must be added at the *enforcement* layer, never at the recording layer, so owner usage stays truthfully logged.
+
+## C. Schema gaps
+
+`usage_ledger` today: `id, workspace_id, user_id, ai_job_id, action_type, units numeric(14,4), provider_cost numeric(12,6), internal_cost numeric(12,6), created_at`. Indexes: PK + `(workspace_id, created_at)`.
+
+1. **No provider column.** `action_type` conflates feature and provider; a `sticker_motion_telegram_prepare` spans fal.ai *and* CloudConvert and cannot be split.
+2. **No model/operation column.** Model lives only on `ai_jobs`, and unmapped rows (X reads, drops) have no job at all.
+3. **No unit type.** `units` mixes Kie credits, CloudConvert credits, seconds of video and API request counts in one numeric with no discriminator.
+4. **No currency.** `provider_cost`/`internal_cost` are bare numerics with an explicit "no currency is asserted here" note (`src/lib/platform.ts:360`), and are never written.
+5. **No pricing provenance.** No pricing source, rate version or effective date, so a later rate change would rewrite history rather than being applied forward.
+6. **No idempotency key + no unique constraint.** The `ai_job_id` guard is app-level only and race-able; and rows without a job (X reads, drops) have no dedupe anchor at all.
+7. **No operation metadata.** No jsonb column for the non-monetary detail (group, schedule, mission, bucket) needed to attribute operational usage.
+8. **Missing writers.** Concept generation, fal.ai and CloudConvert never write the ledger; Sticker Drops never write it.
+9. **Dead column.** `ai_jobs.provider_cost` is declared but written nowhere — currently misleading.
+
+## D. Proposed minimal implementation allowlist (for a LATER, separately authorized phase)
+
+Schema shape (additive only, no rewrite, no data migration):
+
+```
+ALTER TABLE public.usage_ledger ADD COLUMN
+  provider text,                    -- 'kie' | 'fal' | 'cloudconvert' | 'x' | 'telegram' | 'internal'
+  provider_model text,              -- model/endpoint identifier, nullable
+  unit_type text,                   -- 'provider_credit' | 'api_request' | 'operation' | 'second'
+  currency text,                    -- ISO code, nullable until pricing exists
+  pricing_source text,              -- where the rate came from
+  pricing_version text,             -- rate-card version
+  pricing_effective_at timestamptz, -- rate validity date
+  idempotency_key text,             -- stable per billable event
+  metadata jsonb NOT NULL DEFAULT '{}';
+CREATE UNIQUE INDEX usage_ledger_idempotency_key_uniq
+  ON public.usage_ledger (idempotency_key) WHERE idempotency_key IS NOT NULL;
 ```
 
-Address validity is enforced by a **validation trigger**, not a CHECK, per project rules: exactly 3 entries, each matching `^0x[0-9a-f]{40}$`, each not the zero address, all three distinct, and `threshold = 2`. Fail-closed: the trigger raises on any violation for insert and update.
+`units` stays the raw provider quantity, never overwritten; dollars are derived later from `unit_type` + rate card, so rate changes never rewrite history. Existing columns and existing rows are untouched; all new columns nullable except `metadata`.
 
-`SAFE_CREATED` / `VERIFIED` are deliberately **absent from the allowed-status CHECK** in this phase, so no row can ever claim on-chain state that does not exist. Adding them is a later authorized migration.
+Files (maximum scope; each later phase should take a strict subset):
 
-Grants and RLS (exact order: create → grant → enable RLS → policies):
+1. one new migration — the additive columns + partial unique index + grants unchanged
+2. `src/lib/usage-accounting.ts` — NEW shared helper: build idempotency key, normalize provider/unit fields
+3. `backend-source/edge-functions/sticker-ai/index.ts` + its `supabase/functions` parity copy — populate new fields in `logCredits`
+4. `backend-source/edge-functions/sticker-motion-ai/index.ts` (+ parity copy) — same
+5. `backend-source/edge-functions/sticker-motion-telegram/index.ts` (+ parity copy) — add the two missing ledger writes (fal request unit, CloudConvert credits)
+6. `backend-source/edge-functions/sticker-concepts/index.ts` (+ parity copy) — add one ledger write per concept call
+7. `backend-source/edge-functions/sticker-drops/index.ts` (+ parity copy) — one `operation` row per successful send only
+8. one migration updating the mission SQL function to fill the new fields on the existing X read insert
+9. `src/integrations/supabase/types.ts` — platform-regenerated only
+10. new regression script `scripts/cost-accounting-foundation-regression.ts`
+11. documentation file for the cost-accounting contract
 
-```sql
-grant select, insert, update on public.launch_treasury_signer_configs to authenticated;
-grant all on public.launch_treasury_signer_configs to service_role;
--- no anon grant: no public or anonymous access at all
-alter table public.launch_treasury_signer_configs enable row level security;
+Explicitly out of scope: any billing, Stripe, entitlement, quota, plan-gate or UI pricing change; any PCART/chain/wallet/launcher/treasury file; any provider behavior change beyond the instrumentation write.
 
-create policy "owner reads own treasury signer config"
-  on public.launch_treasury_signer_configs for select to authenticated
-  using (public.is_workspace_owner(workspace_id, auth.uid()));
+## E. Regression / verification plan
 
-create policy "owner writes own treasury signer config"
-  on public.launch_treasury_signer_configs for insert to authenticated
-  with check (public.is_workspace_owner(workspace_id, auth.uid()));
+New `cost-accounting-foundation-regression.ts` asserts: the migration is additive only and adds no NOT NULL without default; the unique idempotency index exists; every cost-bearing provider call site writes exactly one ledger row with provider + unit_type set; no dollar rate is hardcoded in any source file; `units` is never derived from a price; Sticker Drops write `unit_type='operation'` on success only and never on failure; no owner bypass exists in the recording path; migration count re-pinned; `MAINNET_LIQUIDITY_TX_ENABLED` still false; approved artifact still `cartel-fixed-erc20-v1`; no PCART or treasury file changed.
 
-create policy "owner updates own treasury signer config"
-  on public.launch_treasury_signer_configs for update to authenticated
-  using (public.is_workspace_owner(workspace_id, auth.uid()))
-  with check (public.is_workspace_owner(workspace_id, auth.uid()));
-```
+Re-run: `pcart-l1-closure`, `pcart-l2-frozen-artifact`, `pcart-l2-draft-artifact`, `pcart-l1b-treasury-safe-verify`, `pcart-treasury-signers`, `se1-social-engine-schema`, `se2-social-read-provider`, `se6-step1-authoritative`, `se14-multi-metric-mission-targets`, `se21-direct-first-provider`, `p1a-project-journey`, `p2c2-launch-isolation`, `launcher-b-handoff`, `launcher-b3-platform-execution`, `wallet-connector`, plus `bunx tsgo --noEmit` and `bun run build`. Live read-only post-checks: new columns present, index present, and one ledger row per new job with no duplicate `idempotency_key`.
 
-No DELETE policy and no DELETE grant — a non-owner member can neither read, write nor remove; a workspace member who is not the owner gets zero rows and a denied write. Cascade delete still works through the FK at service level.
+## F. Recommended stop point
 
-**RPC: yes, one is needed** — `public.save_launch_treasury_signers(_launch_id uuid, _signers text[])`, `SECURITY DEFINER`, `set search_path = public`, revoked from `PUBLIC/anon` and granted to `authenticated`. It resolves `workspace_id` from the launch itself (never from the client), re-asserts `is_workspace_owner(l.workspace_id, auth.uid())`, lowercases and validates the three addresses server-side, upserts on `launch_id`, sets `status = 'SIGNERS_READY'`, stamps `updated_by`/`updated_at`, and returns the stored row. This matches the existing launcher-B1 pattern and stops a client from claiming another workspace's launch. Reads go through plain RLS-protected `select`.
+Stop here. Before any implementation, two things need separate authorization, in this order:
 
-Also added: the standard `update_updated_at_column` trigger.
+1. **Resolve the `package.json` tripwire** in its own one-file turn — it must not carry forward as an accepted baseline.
+2. **Authorize Cost Accounting Phase 1** — the additive migration plus `src/lib/usage-accounting.ts` plus the two existing Kie writers only (items 1–4 above), verified live, before touching the missing writers (fal, CloudConvert, concepts, drops, X SQL) in a Phase 2.
 
-## 3. UI placement and fields
-
-A new distinct card, **PEPECARTEL Treasury Setup**, rendered in `src/routes/_authenticated/launch-control.tsx` immediately **before** the production deployment request panel. `ProductionDeploymentRequestPanel.tsx` is **not** edited.
-
-New component `src/components/cartel/TreasurySignerSetupPanel.tsx`:
-
-- Heading + plain-English explainer covering, verbatim in spirit: three keys controlling one treasury, not three wallets receiving tokens; the eventual Safe is 2-of-3 so any two approve; never enter a seed phrase or private key; addresses must be three different, real, non-empty EVM addresses; they can be edited freely until the Safe is created, after which changing them needs a separate explicit process; this step only records the intended addresses — it creates nothing, signs nothing, moves nothing and authorises no launch.
-- Three labelled inputs: `Signer wallet 1 / 2 / 3`, monospace, `spellCheck=false`, `autoComplete="off"`, placeholder `0x…`, each with inline per-field validation text.
-- A read-only line: **Signatures required: 2 of 3 (fixed for PEPECARTEL)** — no control can change it.
-- Primary button labelled exactly **Save signer wallets**. No "Create Safe" anywhere.
-- Status badge: `Not set` (no row) / `Draft` / `Signers ready`. No badge implies an existing Safe.
-- After save: the three addresses displayed in checksummed form via `viem`'s `getAddress`, with an Edit control returning to the inputs.
-- Read-only for non-owners with an explanatory line, mirroring existing owner-gated panels.
-
-The guided-journey model (`src/lib/project-journey.ts` / `launch-readiness.ts`) is **not** touched in this phase — adding a step there would change the global NEXT STEP for every non-PCART workspace. Called out as a separate later unit.
-
-## 4. Validation rules (identical client and server)
-
-1. Trim, strip nothing else; reject empty.
-2. Must match `^0x[0-9a-fA-F]{40}$` — reuse `isCandidateTreasuryAddress`.
-3. Must not be the zero address.
-4. Normalise to lowercase for storage via `normalizeTreasuryAddress`.
-5. Exactly three addresses; all three distinct after normalisation (duplicate → named error on the offending field).
-6. Threshold is the literal `2`; never read from client input.
-7. Any failure → nothing is written; the trigger and the RPC both raise. Client validation is convenience only.
-8. No ENS, no name resolution, no address generation, no private-key or seed input of any kind anywhere in the component.
-
-## 5. File and migration allowlist
-
-New:
-1. `supabase/migrations/<generated>_pcart_treasury_signer_config.sql` (via the migration tool)
-2. `src/lib/treasury-signers.ts` — types, validation, query keys, read/save client calls
-3. `src/components/cartel/TreasurySignerSetupPanel.tsx`
-4. `scripts/pcart-treasury-signers-regression.ts`
-
-Changed:
-5. `src/routes/_authenticated/launch-control.tsx` — mount the panel only
-6. `scripts/pcart-l1-closure-regression.ts` — re-pin migration count (see section 9)
-7. `scripts/pcart-l2-draft-artifact-regression.ts` — re-pin migration count (see section 9)
-8. `src/integrations/supabase/types.ts` — regenerated by the platform, not hand-edited
-9. `docs/PCART_L1_CLOSURE_PACK.md` — status line only (see section 9)
-
-Prohibited paths: `src/lib/treasury-safe-verify.ts`, `src/lib/treasury-safe-verify.functions.ts`, `src/components/cartel/TreasurySafeVerificationPanel.tsx`, `src/components/cartel/ProductionDeploymentRequestPanel.tsx`, `src/lib/launch-production-request.ts`, `contracts/**`, `src/lib/cartel-fixed-erc20.artifact.ts`, any chain execution/liquidity/runtime-control file, `package.json`/lock, `.lovable/plan.md`, every other migration.
-
-## 6. Tests and regressions
-
-New `scripts/pcart-treasury-signers-regression.ts` (dependency-free, source + pure-logic):
-
-- Validation: happy path; short/long/non-hex address; zero address; duplicates in any position; two addresses; four addresses; mixed-case input normalising to identical lowercase.
-- Storage normalisation is lowercase; display path uses checksum.
-- Threshold is a hard-coded `2` with no UI control writing it.
-- Migration source asserts: `is_workspace_owner` used in every policy; no `to anon` and no anon grant; `security definer` + `set search_path = public` on the RPC; the status CHECK contains only `DRAFT` and `SIGNERS_READY` and does **not** contain `SAFE_CREATED` or `VERIFIED`; threshold CHECK `= 2` present; unique on `launch_id`.
-- Component source contains "Save signer wallets" and contains no "Create Safe", no seed/private-key input, no `sendTransaction`/`signMessage`/wallet import.
-- Tripwires: no 40-hex address literal appears in any new file; `MAINNET_LIQUIDITY_TX_ENABLED` still `false`; `APPROVED_OFFICIAL_ARTIFACT_ID` still `cartel-fixed-erc20-v1`; `ProductionDeploymentRequestPanel.tsx` unchanged and production submission does **not** reference the signer config; hardened verifier files unchanged.
-
-Re-run unchanged: pcart-l1b (59), pcart-l1-closure, pcart-l2-draft, hardening-b, p1a, p2c2, p3c-f/f1/f2, launcher-b, launcher-b3, verifier-state-write-activation, wallet-connector, plus `bunx tsgo --noEmit` and `bun run build`.
-
-## 7. Can this be built now without knowing the addresses?
-
-**YES, fully.** Nothing in the schema, RLS, RPC, UI or tests depends on the values. The addresses arrive at runtime, typed by the owner, and live only in a row. Regressions use synthetic fixtures that are asserted never to leak into shipped source.
-
-## 8. Stop point
-
-Stop once the migration is applied, the panel saves and reloads correctly for the workspace owner, all suites pass and the diff matches the allowlist. Stop **before**: creating any Safe; selecting or funding any wallet; any signature or transaction on any chain; wiring the stored signers into the verifier as a hard comparison; gating production request submission; Phase 2 PCART compilation; deploy or publish. No status beyond `SIGNERS_READY` may exist.
-
-## 9. Conflicts with the master plan / L1 closure docs
-
-Three, all surfaced rather than worked around:
-
-1. **Migration count tripwire — blocking.** `scripts/pcart-l1-closure-regression.ts:379` and `scripts/pcart-l2-draft-artifact-regression.ts:210` both assert exactly 82 migration files. This phase adds one, so both fail unless explicitly re-pinned to 83 with the new filename named. Those two scripts are therefore on the allowlist and need your explicit authorisation; I will not delete or loosen the assertion, only re-pin it.
-2. **Address-leak tripwire — not blocking.** `L1C-6` forbids external Safe/Uniswap addresses in `src/**`. Owner-entered addresses are runtime data, never source, and the new regression adds its own no-literal-address check, so `L1C-6` stays untouched.
-3. **Closure-pack status wording — documentation only.** The closure pack currently lists "PCART initial treasury recipient address" and the exact-owner match as PENDING. After this phase the *intended* signer addresses become recordable, but the Safe still does not exist. Proposed single amendment: note that signer-address capture is BUILT while actual Safe creation, the live canonical pass and the exact owner-address match remain PENDING. No frozen economic value, no L1 closure status, and no "execution ready" claim changes.
-
-Also worth naming: this phase intentionally does **not** make production request submission depend on signer setup. PCART-L2 is not ready, so gating would add a dependency that cannot yet be satisfied; it stays a guided prerequisite only.
+Dollar rate cards, plan limits and the $49 packaging remain deliberately unaddressed; this foundation only makes usage truthful enough to price later.
