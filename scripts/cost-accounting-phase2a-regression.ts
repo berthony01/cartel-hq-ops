@@ -162,7 +162,7 @@ check(
  * so no accounting, provider, idempotency or membership line changed.
  */
 const IDENTITY_GATE_ADDITION =
-  /^(\s*)(\/\/.*|\/\*\*?.*|\*.*|\*\/|import \{ requireProjectToolAccess \} from "\.\.\/_shared\/project-identity\.ts";|const identityDenial = async \(workspaceId: string\) => \{|const access = await requireProjectToolAccess\(admin, user\.id, workspaceId\);|return access\.allowed \? null : respond\(access\.body, access\.status\);|\};|const \w*[Ii]dentityBlocked = await identityDenial\([^)]*\);|if \(\w*[Ii]dentityBlocked\) return \w*[Ii]dentityBlocked;|)$/;
+  /^(\s*)(\/\/.*|\/\*\*?.*|\*.*|\*\/|import \{ requireProjectToolAccess \} from "\.\.\/_shared\/project-identity\.ts";|const identityDenial = async \(workspaceId: string\) => \{|const access = await requireProjectToolAccess\(admin, user\.id, workspaceId\);|return access\.allowed \? null : respond\(access\.body, access\.status\);|\};|const \w*[Ii]dentityBlocked = await identityDenial\(.*\);|if \(\w*[Ii]dentityBlocked\) return \w*[Ii]dentityBlocked;|)$/;
 for (const [label, path] of [["sticker-ai", STICKER_AI], ["sticker-motion-ai", MOTION_AI]] as const) {
   const gateLines = execFileSync("git", ["show", `${START_GATE}:${path}`], {
     encoding: "utf8",
