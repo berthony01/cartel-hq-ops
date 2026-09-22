@@ -6078,6 +6078,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      repair_and_expire_social_missions_for_metrics: {
+        Args: { _limit?: number }
+        Returns: Json
+      }
       request_project_verification: {
         Args: { _project_profile_id: string }
         Returns: {
