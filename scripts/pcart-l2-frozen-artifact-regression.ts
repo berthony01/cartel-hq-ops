@@ -457,9 +457,9 @@ const gateMigrationSet = new Set(gateMigrations);
 const postGateMigrations = migrationFiles.filter((f) => !gateMigrationSet.has(f)).sort();
 check(
   "L2F-I-migrations",
-  migrationFiles.length === 87 &&
+  migrationFiles.length === 88 &&
     gateMigrations.every((f) => migrationFiles.includes(f)),
-  `every gate-era migration still present (${migrationFiles.length} files, expected 87)`,
+  `every gate-era migration still present (${migrationFiles.length} files, expected 88)`,
 );
 check(
   "L2F-I-migration-content",
