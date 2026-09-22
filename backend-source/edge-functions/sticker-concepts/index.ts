@@ -1,16 +1,23 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { recordProviderUsage } from "../_shared/usage-accounting.ts";
 
 /**
  * sticker-concepts — TEXT ONLY.
  *
  * Produces editable sticker CONCEPT IDEAS for Sticker Lab Step 3. It never
- * creates images, never touches `stickers`, `sticker_packs`, `ai_jobs` or
- * `usage_ledger`, never calls the image pipeline (`/api/v1/jobs/createTask`)
- * and never invokes the `sticker-ai` function.
+ * creates images, never touches `stickers`, `sticker_packs` or `ai_jobs`,
+ * never calls the image pipeline (`/api/v1/jobs/createTask`) and never
+ * invokes the `sticker-ai` function.
+ *
+ * Cost Accounting Phase 2A: a successful provider response is recorded in
+ * `usage_ledger` with the RAW provider-reported token count (no `ai_jobs`
+ * row exists for this surface, and none is created). Accounting never alters
+ * the concept response.
  *
  * Reuses the existing KIE_API_KEY secret. No new secret is introduced.
  */
+
 
 const KIE_BASE = "https://api.kie.ai";
 const CHAT_MODEL = "gemini-2.5-flash";
