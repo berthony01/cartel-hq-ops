@@ -17,6 +17,7 @@ const PHASE1_MIGRATION = "20260922070921_40548af2-4afe-4876-bcaa-f22868f5942d.sq
 const LAST_GATE_MIGRATION = "20260920054150_5dcb8ca1-aba1-4c9b-995e-cd9ff00da488.sql";
 
 const HELPER = "backend-source/edge-functions/_shared/usage-accounting.ts";
+const HELPER_MIRROR = "supabase/functions/_shared/usage-accounting.ts";
 const CONCEPTS = "backend-source/edge-functions/sticker-concepts/index.ts";
 const MOTION_TG = "backend-source/edge-functions/sticker-motion-telegram/index.ts";
 const STICKER_AI = "backend-source/edge-functions/sticker-ai/index.ts";
