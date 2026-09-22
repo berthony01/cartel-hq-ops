@@ -25,6 +25,7 @@ const PROFILE_ROUTE = "src/routes/_authenticated/project-profile.tsx";
 const ACCOUNTING_HELPER = "backend-source/edge-functions/_shared/usage-accounting.ts";
 const DEPLOYABLE_ACCOUNTING_HELPER = "supabase/functions/_shared/usage-accounting.ts";
 const REGISTRY = "src/lib/chain-mainnet-registry.ts";
+const EVIDENCE = "src/lib/launch-evidence-checks.ts";
 
 const STICKER_FUNCTIONS = [
   "backend-source/edge-functions/sticker-ai/index.ts",
@@ -202,7 +203,7 @@ check(
 );
 check(
   "PIG-5d",
-  /data !== true/.test(edgeHelperCode) || /!== true/.test(edgeHelperCode),
+  /=== true/.test(edgeHelperCode) && /denied/.test(edgeHelperCode),
   "an RPC error or any non-true answer fails closed",
 );
 check(
@@ -272,7 +273,7 @@ check(
   /const conceptAccess = await requireProjectToolAccess\(admin, user\.id, workspaceId\);/.test(
     stickerConcepts,
   ) &&
-    stickerConcepts.indexOf("conceptAccess") < stickerConcepts.indexOf("KIE_API"),
+    stickerConcepts.indexOf("conceptAccess") < stickerConcepts.indexOf("await fetch("),
   "sticker-concepts gates before its single billable provider request",
 );
 check(
@@ -338,7 +339,7 @@ check(
 );
 check(
   "PIG-8e",
-  /safeInternalRedirect\(/.test(gateCode) && /to: "\/project-profile"/.test(gateCode),
+  /safeInternalRedirect\(/.test(gateCode) && /to="\/project-profile"/.test(gateCode),
   "the CTA routes to /project-profile preserving a validated internal destination",
 );
 check(
@@ -374,8 +375,7 @@ check(
 );
 check(
   "PIG-10b",
-  /APPROVED_OFFICIAL_ARTIFACT_ID/.test(read(REGISTRY)) &&
-    /cartel-fixed-erc20-v1/.test(read(REGISTRY)),
+  /export const APPROVED_OFFICIAL_ARTIFACT_ID = "cartel-fixed-erc20-v1"/.test(read(EVIDENCE)),
   "the approved PCART official artifact is unchanged",
 );
 check(
