@@ -242,17 +242,22 @@ check(
 );
 
 // -------------------------------------------------------------- 5. migration
-/** Exactly ONE post-gate migration is authorized: Cost Accounting Phase 1. */
+/**
+ * Exactly TWO post-gate migrations are authorized: Cost Accounting Phase 1 and
+ * the Phase 2B mission-safety migration. Any third one fails this check.
+ */
 const TS_PHASE1_MIGRATION = "20260922070921_40548af2-4afe-4876-bcaa-f22868f5942d.sql";
+const TS_PHASE2B_MIGRATION = "20260922141917_c47c2384-73c4-4bbf-8cc2-495112d64990.sql";
 const tsPostGate = migrationFiles.filter((f) => f > POLICY_COMPLETION_MIGRATION_FILE).sort();
 check(
   "TS-5a",
-  migrationFiles.length === 85 &&
+  migrationFiles.length === 86 &&
     migrationFiles.includes(MIGRATION_FILE) &&
     migrationFiles.includes(POLICY_COMPLETION_MIGRATION_FILE) &&
-    tsPostGate.length === 1 &&
-    tsPostGate[0] === TS_PHASE1_MIGRATION,
-  `treasury signer migration plus its policy completion are pinned, with exactly one authorized post-gate migration, the Cost Accounting Phase 1 file (${migrationFiles.length} files, expected 85; post-gate: ${tsPostGate.join(", ") || "none"})`,
+    tsPostGate.length === 2 &&
+    tsPostGate[0] === TS_PHASE1_MIGRATION &&
+    tsPostGate[1] === TS_PHASE2B_MIGRATION,
+  `treasury signer migration plus its policy completion are pinned, with exactly two authorized post-gate migrations, the Cost Accounting Phase 1 and Phase 2B files (${migrationFiles.length} files, expected 86; post-gate: ${tsPostGate.join(", ") || "none"})`,
 );
 check(
   "TS-5b",
