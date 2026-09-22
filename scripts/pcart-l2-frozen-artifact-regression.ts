@@ -446,6 +446,13 @@ const PHASE2B_MISSION_SAFETY_MIGRATION =
  */
 const PHASE2B_DURATION_MIGRATION =
   `${MIGRATIONS}/20260922142803_fedec44c-654f-4e1a-a117-30d027601e03.sql`;
+/**
+ * The fourth authorized post-gate migration: the Project Identity Gate A
+ * function-only migration. Still NOT a general exemption — any fifth new
+ * migration fails below.
+ */
+const PROJECT_IDENTITY_GATE_MIGRATION =
+  `${MIGRATIONS}/20260922161918_ef6e322a-d993-4970-9d48-3b4f93afa222.sql`;
 const gateMigrationSet = new Set(gateMigrations);
 const postGateMigrations = migrationFiles.filter((f) => !gateMigrationSet.has(f)).sort();
 check(
