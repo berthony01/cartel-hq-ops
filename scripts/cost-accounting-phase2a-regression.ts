@@ -17,6 +17,7 @@ const PHASE1_MIGRATION = "20260922070921_40548af2-4afe-4876-bcaa-f22868f5942d.sq
 const LAST_GATE_MIGRATION = "20260920054150_5dcb8ca1-aba1-4c9b-995e-cd9ff00da488.sql";
 
 const HELPER = "backend-source/edge-functions/_shared/usage-accounting.ts";
+const HELPER_MIRROR = "supabase/functions/_shared/usage-accounting.ts";
 const CONCEPTS = "backend-source/edge-functions/sticker-concepts/index.ts";
 const MOTION_TG = "backend-source/edge-functions/sticker-motion-telegram/index.ts";
 const STICKER_AI = "backend-source/edge-functions/sticker-ai/index.ts";
@@ -75,14 +76,20 @@ check(
 
 /* -------------------------------------------------- 2. shared generic writer */
 
+// Phase 2B deployment-parity re-pin: authoritative source in backend-source
+// plus exactly ONE byte-for-byte identical deployable mirror.
+const helperCopies = walk("backend-source/edge-functions")
+  .concat(walk("src"))
+  .concat(walk("supabase/functions"))
+  .filter((f) => /usage-accounting\.ts$/.test(f))
+  .sort();
 check(
   "CA2A-2a",
-  walk("backend-source/edge-functions")
-    .concat(walk("src"))
-    .concat(walk("supabase/functions"))
-    .filter((f) => /usage-accounting\.ts$/.test(f))
-    .join(",") === HELPER,
-  `the shared accounting helper still exists at exactly ${HELPER} and nowhere else`,
+  helperCopies.length === 2 &&
+    helperCopies.includes(HELPER) &&
+    helperCopies.includes(HELPER_MIRROR) &&
+    readFileSync(HELPER).equals(readFileSync(HELPER_MIRROR)),
+  `the shared accounting helper still exists at exactly ${HELPER} (authoritative) plus exactly one byte-for-byte identical deployable mirror at ${HELPER_MIRROR}, and nowhere else`,
 );
 check(
   "CA2A-2b",
