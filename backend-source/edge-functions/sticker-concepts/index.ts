@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { recordProviderUsage } from "../_shared/usage-accounting.ts";
+import { requireProjectToolAccess } from "../_shared/project-identity.ts";
 
 /**
  * sticker-concepts — TEXT ONLY.
