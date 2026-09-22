@@ -286,7 +286,15 @@ for (const [index, forbidden] of ["ACCOMPLISHED", "/mission refresh", "/mission 
   );
   check(`12.${index + 1}c ${forbidden} is absent from the webhook`, !webhookCode.includes(forbidden));
 }
-check("12.4 no contributor recognition, points or billing in this phase", !/contributor_badge|points_awarded|billing/i.test(runnerCode + sqlCode));
+// Phase 2B re-pin: provider resource-accounting metadata (for example
+// `x_billing_utc_date`, the UTC day X uses as its billable-resource dedupe
+// window) is legitimate in the runner. The frozen prohibition is contributor
+// recognition/points and CUSTOMER commercial billing/entitlement logic.
+check(
+  "12.4 no contributor recognition, points or customer billing/entitlement in this phase",
+  !/contributor_badge|points_awarded|stripe|subscription|invoice|checkout|payment_intent|plan_entitlement|customer_billing|commission|reseller|affiliate/i
+    .test(runnerCode + sqlCode),
+);
 // SE-5 re-pin: stored snapshots are now read and written by the metrics phase.
 // The frozen rule that survives is that the PULSE path never fetches.
 // Re-pinned for Step 1: `buildPulseText` moved into the pure shared module,
