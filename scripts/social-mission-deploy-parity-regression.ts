@@ -33,6 +33,8 @@ const PARITY_FILES = [
   "_shared/mission-resolved-config.ts",
   // Phase 2B — the shared usage-accounting writer the runner now imports.
   "_shared/usage-accounting.ts",
+  // Project Identity Gate B — shared identity authority imported by telegram-webhook.
+  "_shared/project-identity.ts",
 ] as const;
 
 function readOrNull(path: string): Buffer | null {
