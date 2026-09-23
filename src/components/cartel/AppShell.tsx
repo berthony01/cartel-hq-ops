@@ -39,11 +39,17 @@ function TopBar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
 
 
 /**
- * Project Identity Gate A covers Sticker Lab and its descendants ONLY.
- * Community/Telegram/X/Launch Watch enforcement is a later Gate B.
+ * Project Identity Gate A: Sticker Lab and its descendants.
+ * Gate B: Community Command (/telegram) and Sticker Drops (/distribution).
+ * Launch Control / Watchlist are structurally bound to a profile and stay ungated.
  */
 function isProjectIdentityGatedPath(pathname: string): boolean {
-  return pathname === "/sticker-lab" || pathname.startsWith("/sticker-lab/");
+  return (
+    pathname === "/sticker-lab" ||
+    pathname.startsWith("/sticker-lab/") ||
+    pathname === "/telegram" ||
+    pathname === "/distribution"
+  );
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
