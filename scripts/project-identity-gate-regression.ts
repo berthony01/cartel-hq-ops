@@ -304,23 +304,27 @@ check(
   "only a single-slash internal path is accepted as a return destination",
 );
 
-/* ------------------------------------------------ 8. UI gate scope is Gate A */
+/* ------------------------------------- 8. UI gate scope is Gate A + Gate B */
 const shellSrc = read(APP_SHELL);
 const shellCode = code(shellSrc);
+const gatedPathFn = shellCode.slice(
+  shellCode.indexOf("isProjectIdentityGatedPath"),
+  shellCode.indexOf("isProjectIdentityGatedPath") + 400,
+);
 check(
   "PIG-8a",
-  /pathname === "\/sticker-lab" \|\| pathname\.startsWith\("\/sticker-lab\/"\)/.test(shellCode),
-  "the UI gate matches /sticker-lab and its descendants",
+  /pathname === "\/sticker-lab"/.test(gatedPathFn) &&
+    /pathname\.startsWith\("\/sticker-lab\/"\)/.test(gatedPathFn) &&
+    /pathname === "\/telegram"/.test(gatedPathFn) &&
+    /pathname === "\/distribution"/.test(gatedPathFn),
+  "the UI gate matches exactly /sticker-lab(+descendants), /telegram and /distribution",
 );
 check(
   "PIG-8b",
-  !/\/telegram|\/launch-control|\/distribution|\/brand-kit|\/assets|\/watchlist|\/project-profile/.test(
-    shellCode.slice(
-      shellCode.indexOf("isProjectIdentityGatedPath"),
-      shellCode.indexOf("isProjectIdentityGatedPath") + 400,
-    ),
+  !/\/launch-control|\/watchlist|\/project-profile|\/brand-kit|\/assets|\/settings|\/admin|\/analytics|\/operations|\/operatives|\/cartel-shield|\/chain-launcher|\/mainnet-canary/.test(
+    gatedPathFn,
   ),
-  "no other surface is gated in Gate A",
+  "no other surface is Project Identity gated",
 );
 check(
   "PIG-8c",
