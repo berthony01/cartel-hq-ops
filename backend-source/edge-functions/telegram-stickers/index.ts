@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireProjectToolAccess } from "../_shared/project-identity.ts";
 import { PNG } from "npm:pngjs@7.0.0";
 import { Buffer } from "node:buffer";
 
@@ -252,6 +253,17 @@ Deno.serve(async (req: Request) => {
   try { body = (await req.json()) as Record<string, unknown>; } catch { return respond({ error: "INVALID_BODY", message: "The Telegram request was malformed." }, 400); }
   const action = String(body.action ?? "");
   const member = async (workspaceId: string) => Boolean((await admin.from("workspace_members").select("user_id").eq("workspace_id", workspaceId).eq("user_id", user.id).maybeSingle()).data);
+  // Project Identity Gate B — gate user-initiated publish/release actions after
+  // membership and before any Telegram side effect. `config` stays ungated;
+  // non-members fall through to the existing per-action FORBIDDEN response.
+  const PROJECT_IDENTITY_GATED_ACTIONS = new Set(["publish", "refresh", "send_test", "replace_version", "release_motion"]);
+  if (PROJECT_IDENTITY_GATED_ACTIONS.has(action)) {
+    const gateWorkspaceId = String(body.workspaceId ?? "");
+    if (gateWorkspaceId && (await member(gateWorkspaceId))) {
+      const identityGate = await requireProjectToolAccess(admin, user.id, gateWorkspaceId);
+      if (!identityGate.allowed) return respond(identityGate.body, identityGate.status);
+    }
+  }
   const getBot = async () => {
     if (!TELEGRAM_BOT_TOKEN) return null;
     const me = await telegramJson(TELEGRAM_BOT_TOKEN, "getMe");
