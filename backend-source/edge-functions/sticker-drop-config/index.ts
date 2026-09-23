@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireProjectToolAccess } from "../_shared/project-identity.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -101,6 +102,12 @@ Deno.serve(async (req: Request) => {
   try {
     if (action === "status") return respond(await loadState());
     if (!canManage) return respond({ error: "MANAGER_REQUIRED", message: "Only workspace owners and admins can manage Sticker Drops." }, 403);
+    // Project Identity Gate B — create/update and ENABLE only. Disabling,
+    // delete_schedule and set_kill_switch are safety stops and stay ungated.
+    if (action === "save_schedule" || (action === "set_schedule_enabled" && body.enabled === true)) {
+      const identityGate = await requireProjectToolAccess(admin, authData.user.id, workspaceId);
+      if (!identityGate.allowed) return respond(identityGate.body, identityGate.status);
+    }
 
     if (action === "save_schedule") {
       const scheduleId = body.scheduleId ? String(body.scheduleId) : "";

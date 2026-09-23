@@ -28,6 +28,8 @@ import {
 } from "./social-read-provider";
 
 const PROVIDER_ID_FOR_REFUSAL = "none";
+const PROJECT_IDENTITY_REQUIRED_MESSAGE =
+  "Create Project Identity first. Token launch is not required.";
 
 export type SocialReadInput = {
   workspaceId: string;
@@ -81,6 +83,16 @@ export const socialRead = createServerFn({ method: "POST" })
         "UNKNOWN",
         "Only a workspace owner or admin can read social data for this workspace.",
       );
+    }
+
+    // Project Identity Gate B — after operator authorization, before any paid
+    // provider call. One authority (can_use_project_tools); fails closed.
+    const { data: canUseTools, error: identityError } = await context.supabase.rpc(
+      "can_use_project_tools",
+      { _workspace_id: data.workspaceId, _user_id: context.userId },
+    );
+    if (identityError || canUseTools !== true) {
+      return refusal(operation, "UNKNOWN", PROJECT_IDENTITY_REQUIRED_MESSAGE);
     }
 
     // Server-only import: keeps every provider adapter out of client bundles.

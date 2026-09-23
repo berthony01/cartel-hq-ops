@@ -87,6 +87,17 @@ export const captureMissionMetrics = createServerFn({ method: "POST" })
       return failure("Only a workspace owner or admin can run this test capture.");
     }
 
+    // Project Identity Gate B — after operator authorization, before the paid
+    // X read. Owner bypass lives only inside can_use_project_tools; fails closed.
+    const { data: canUseTools, error: identityError } = await context.supabase.rpc(
+      "can_use_project_tools",
+      { _workspace_id: mission.workspace_id, _user_id: context.userId },
+    );
+    if (identityError || canUseTools !== true) {
+      return failure("Create Project Identity first. Token launch is not required.");
+    }
+
+
     // 3. Exact fixture binding: pinned post URL, single SENT target, pinned group.
     const post = await context.supabase
       .from("social_posts")

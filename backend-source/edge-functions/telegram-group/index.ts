@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireProjectToolAccess } from "../_shared/project-identity.ts";
 
 const TG_BASE = "https://api.telegram.org";
 const MAX_BATCH_GROUPS = 50;
@@ -47,6 +48,14 @@ Deno.serve(async (req: Request) => {
   if (!workspaceId) return respond({ error: "WORKSPACE_REQUIRED", message: "Workspace is required." }, 400);
   const { data: membership } = await admin.from("workspace_members").select("user_id,role").eq("workspace_id", workspaceId).eq("user_id", user.id).maybeSingle(); if (!membership) return respond({ error: "FORBIDDEN", message: "You do not have access to this workspace." }, 403);
   const canManageCommunity = membership.role === "owner" || membership.role === "admin";
+  // Project Identity Gate B — user-initiated mutating/Telegram-send actions only.
+  // Read-only actions (status, distribution_status, welcome_settings,
+  // broadcast_launch_options) stay ungated.
+  const PROJECT_IDENTITY_GATED_ACTIONS = new Set(["assign_pack", "distribute_pack", "send_group_test", "save_welcome_settings", "send_welcome_test", "send_group_announcement", "send_official_contract_broadcast"]);
+  if (PROJECT_IDENTITY_GATED_ACTIONS.has(action)) {
+    const identityGate = await requireProjectToolAccess(admin, user.id, workspaceId);
+    if (!identityGate.allowed) return respond(identityGate.body, identityGate.status);
+  }
 
   const getGroup = async (id = groupConnectionId) => { if (!id) return null; const { data } = await admin.from("telegram_group_connections").select("*").eq("id", id).eq("workspace_id", workspaceId).maybeSingle(); return data; };
 

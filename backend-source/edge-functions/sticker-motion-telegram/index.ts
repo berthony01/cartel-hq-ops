@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireProjectToolAccess } from "../_shared/project-identity.ts";
 import { recordProviderUsage } from "../_shared/usage-accounting.ts";
 
 
@@ -367,6 +368,10 @@ Deno.serve(async (req: Request) => {
       const motionVersionId = String(body.motionVersionId ?? "");
       if (!workspaceId || !packId || !stickerId || !motionVersionId) return respond({ error: "INVALID_INPUT" }, 400);
       if (!(await isMember(workspaceId))) return respond({ error: "FORBIDDEN" }, 403);
+      // Project Identity Gate B — `start` only. `config` and `sync` (in-flight
+      // completion of an already-authorized job) stay ungated.
+      const identityGate = await requireProjectToolAccess(admin, user.id, workspaceId);
+      if (!identityGate.allowed) return respond(identityGate.body, identityGate.status);
 
       const { data: pack } = await admin
         .from("sticker_packs").select("id,workspace_id").eq("id", packId).maybeSingle();

@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireProjectToolAccess } from "../_shared/project-identity.ts";
 
 const TG_BASE = "https://api.telegram.org";
 const BOT_USERNAME = "PepeCartelHQBot";
@@ -1253,6 +1254,35 @@ Deno.serve(async (req: Request) => {
         { kind: "MISSING_RIGHTS", missing: missingRights },
       );
       return;
+    }
+
+    // ---- Project Identity Gate B — mission START preflight -----------------
+    //
+    // Covers /mission <X link> and Link Finder start (both converge here),
+    // BEFORE create_social_mission_from_telegram_link. Actor resolution uses
+    // the SAME mapping as the RPC: telegram_connections.telegram_user_id ->
+    // user_id. Absent or ambiguous mapping fails closed for mission start only.
+    // Close/cancel/stop and all inbound plumbing are never gated.
+    {
+      const { data: actorRows, error: actorError } = await admin
+        .from("telegram_connections")
+        .select("user_id")
+        .eq("telegram_user_id", telegramUserId)
+        .limit(2);
+      const actorUserId = !actorError && Array.isArray(actorRows) && actorRows.length === 1
+        ? String((actorRows[0] as { user_id?: string }).user_id ?? "")
+        : "";
+      if (!actorUserId) {
+        timing.log(isLinkFinder ? "link_finder_start_blocked" : "mission_command_blocked");
+        await reply("Link your Telegram account to CARTEL HQ before starting a Social Mission.");
+        return;
+      }
+      const identityGate = await requireProjectToolAccess(admin, actorUserId, connection.workspace_id);
+      if (!identityGate.allowed) {
+        timing.log(isLinkFinder ? "link_finder_start_blocked" : "mission_command_blocked");
+        await reply("Create this project's Project Identity in CARTEL HQ first (project name + URL slug). Token launch is not required.");
+        return;
+      }
     }
 
     // Preflight passed. Acknowledge immediately — the first canonical card
