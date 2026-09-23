@@ -171,6 +171,86 @@ export type Database = {
           },
         ]
       }
+      commercial_plan_entitlements: {
+        Row: {
+          created_at: string
+          customer_visible: boolean
+          enabled: boolean
+          feature_key: string
+          kind: string
+          limit_value: number | null
+          metadata: Json
+          period: string
+          plan_id: string
+        }
+        Insert: {
+          created_at?: string
+          customer_visible?: boolean
+          enabled?: boolean
+          feature_key: string
+          kind: string
+          limit_value?: number | null
+          metadata?: Json
+          period: string
+          plan_id: string
+        }
+        Update: {
+          created_at?: string
+          customer_visible?: boolean
+          enabled?: boolean
+          feature_key?: string
+          kind?: string
+          limit_value?: number | null
+          metadata?: Json
+          period?: string
+          plan_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commercial_plan_entitlements_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "commercial_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      commercial_plans: {
+        Row: {
+          billing_interval: string
+          code: string
+          created_at: string
+          currency: string
+          id: string
+          name: string
+          price_cents: number
+          status: string
+          version: number
+        }
+        Insert: {
+          billing_interval: string
+          code: string
+          created_at?: string
+          currency: string
+          id?: string
+          name: string
+          price_cents: number
+          status: string
+          version: number
+        }
+        Update: {
+          billing_interval?: string
+          code?: string
+          created_at?: string
+          currency?: string
+          id?: string
+          name?: string
+          price_cents?: number
+          status?: string
+          version?: number
+        }
+        Relationships: []
+      }
       launch_chain_deployments: {
         Row: {
           artifact_id: string | null
@@ -4058,6 +4138,75 @@ export type Database = {
           },
         ]
       }
+      workspace_commercial_assignments: {
+        Row: {
+          assigned_by: string | null
+          assignment_source: string
+          billing_owner_user_id: string | null
+          channel: string
+          channel_partner_ref: string | null
+          created_at: string
+          ends_at: string | null
+          enforcement_mode: string
+          external_ref: string | null
+          id: string
+          plan_id: string
+          starts_at: string
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          assigned_by?: string | null
+          assignment_source?: string
+          billing_owner_user_id?: string | null
+          channel?: string
+          channel_partner_ref?: string | null
+          created_at?: string
+          ends_at?: string | null
+          enforcement_mode?: string
+          external_ref?: string | null
+          id?: string
+          plan_id: string
+          starts_at?: string
+          status: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          assigned_by?: string | null
+          assignment_source?: string
+          billing_owner_user_id?: string | null
+          channel?: string
+          channel_partner_ref?: string | null
+          created_at?: string
+          ends_at?: string | null
+          enforcement_mode?: string
+          external_ref?: string | null
+          id?: string
+          plan_id?: string
+          starts_at?: string
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_commercial_assignments_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "commercial_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_commercial_assignments_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workspace_members: {
         Row: {
           created_at: string
@@ -4854,6 +5003,15 @@ export type Database = {
         Args: { _telegram_chat_id: number; _telegram_user_id: number }
         Returns: Json
       }
+      commercial_feature_usage: {
+        Args: {
+          _feature_key: string
+          _period_end: string
+          _period_start: string
+          _workspace_id: string
+        }
+        Returns: number
+      }
       correct_verified_launch_contract: {
         Args: {
           _deployment_id: string
@@ -5175,6 +5333,10 @@ export type Database = {
       enqueue_due_launch_reminder_events: {
         Args: { _now?: string }
         Returns: number
+      }
+      evaluate_commercial_access: {
+        Args: { _feature_key: string; _user_id?: string; _workspace_id: string }
+        Returns: Json
       }
       finalize_project_inbox_delivery: {
         Args: {
@@ -5685,6 +5847,10 @@ export type Database = {
           verification_status: string
           verified_at: string
         }[]
+      }
+      get_workspace_commercial_usage: {
+        Args: { _user_id?: string; _workspace_id: string }
+        Returns: Json
       }
       has_platform_unrestricted_access: {
         Args: { _user_id: string }
@@ -6318,6 +6484,22 @@ export type Database = {
       }
       set_sticker_current_version: {
         Args: { _sticker_id: string; _version_id: string }
+        Returns: Json
+      }
+      set_workspace_commercial_assignment: {
+        Args: {
+          _assignment_source?: string
+          _billing_owner_user_id?: string
+          _channel?: string
+          _channel_partner_ref?: string
+          _ends_at?: string
+          _enforcement_mode?: string
+          _external_ref?: string
+          _plan_code: string
+          _plan_version: number
+          _status?: string
+          _workspace_id: string
+        }
         Returns: Json
       }
       social_mission_apply_duration_override: {
