@@ -396,22 +396,25 @@ const L1C_PHASE2B_DURATION_MIGRATION = "20260922142803_fedec44c-654f-4e1a-a117-3
 const L1C_IDENTITY_GATE_MIGRATION = "20260922161918_ef6e322a-d993-4970-9d48-3b4f93afa222.sql";
 /** Fifth and last: the Commercial Foundation A migration. */
 const L1C_COMMERCIAL_A_MIGRATION = "20260923170038_eaa2a24d-9c13-49c9-9aa3-6a5a8e18c300.sql";
+/** Sixth and last: the Commercial Foundation B function-only guard migration. */
+const L1C_COMMERCIAL_B_MIGRATION = "20260924005521_b9fca846-4db3-4e8f-bf91-bdb4bd863228.sql";
 const l1cMigrationNames = migrationFiles
   .map((f) => f.replace(/\\/g, "/").split("/").pop() ?? f)
   .sort();
 const l1cPostGate = l1cMigrationNames.filter((f) => f > L1C_LAST_GATE_MIGRATION);
 check(
   "L1C-14",
-  migrationFiles.length === 89 &&
+  migrationFiles.length === 90 &&
     l1cMigrationNames.includes("20260920053942_42259f41-35d1-4b5c-9e6a-78127867cddd.sql") &&
     l1cMigrationNames.includes(L1C_LAST_GATE_MIGRATION) &&
-    l1cPostGate.length === 5 &&
+    l1cPostGate.length === 6 &&
     l1cPostGate[0] === L1C_PHASE1_MIGRATION &&
     l1cPostGate[1] === L1C_PHASE2B_MIGRATION &&
     l1cPostGate[2] === L1C_PHASE2B_DURATION_MIGRATION &&
     l1cPostGate[3] === L1C_IDENTITY_GATE_MIGRATION &&
-    l1cPostGate[4] === L1C_COMMERCIAL_A_MIGRATION,
-  `migration set re-pinned for the treasury signer config plus exactly five authorized post-gate migrations, the Cost Accounting Phase 1, Phase 2B safety, Phase 2B corrective duration, Project Identity Gate A and Commercial Foundation A files (${migrationFiles.length} files, expected 89; post-gate: ${l1cPostGate.join(", ") || "none"})`,
+    l1cPostGate[4] === L1C_COMMERCIAL_A_MIGRATION &&
+    l1cPostGate[5] === L1C_COMMERCIAL_B_MIGRATION,
+  `migration set re-pinned for the treasury signer config plus exactly six authorized post-gate migrations, the Cost Accounting Phase 1, Phase 2B safety, Phase 2B corrective duration, Project Identity Gate A, Commercial Foundation A and Commercial Foundation B files (${migrationFiles.length} files, expected 90; post-gate: ${l1cPostGate.join(", ") || "none"})`,
 );
 
 // ----------------------------- 15. no invented treasury / Safe / recipient

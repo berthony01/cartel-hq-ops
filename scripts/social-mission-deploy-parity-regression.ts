@@ -35,6 +35,8 @@ const PARITY_FILES = [
   "_shared/usage-accounting.ts",
   // Project Identity Gate B — shared identity authority imported by telegram-webhook.
   "_shared/project-identity.ts",
+  // Commercial Foundation B — shared commercial guard imported by telegram-webhook.
+  "_shared/commercial-access.ts",
 ] as const;
 
 function readOrNull(path: string): Buffer | null {

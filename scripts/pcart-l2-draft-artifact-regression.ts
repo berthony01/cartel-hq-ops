@@ -253,24 +253,27 @@ const L2D_PHASE2B_DURATION_MIGRATION = "20260922142803_fedec44c-654f-4e1a-a117-3
 const L2D_IDENTITY_GATE_MIGRATION = "20260922161918_ef6e322a-d993-4970-9d48-3b4f93afa222.sql";
 /** Fifth and last: the Commercial Foundation A migration. */
 const L2D_COMMERCIAL_A_MIGRATION = "20260923170038_eaa2a24d-9c13-49c9-9aa3-6a5a8e18c300.sql";
+/** Sixth and last: the Commercial Foundation B function-only guard migration. */
+const L2D_COMMERCIAL_B_MIGRATION = "20260924005521_b9fca846-4db3-4e8f-bf91-bdb4bd863228.sql";
 const l2dMigrationNames = migrationFiles
   .map((f) => f.replace(/\\/g, "/").split("/").pop() ?? f)
   .sort();
 const l2dPostGate = l2dMigrationNames.filter((f) => f > L2D_LAST_GATE_MIGRATION);
 check(
   "L2D-I7",
-  migrationFiles.length === 89 &&
+  migrationFiles.length === 90 &&
     l2dMigrationNames.includes("20260920053942_42259f41-35d1-4b5c-9e6a-78127867cddd.sql") &&
     l2dMigrationNames.includes(L2D_LAST_GATE_MIGRATION) &&
-    l2dPostGate.length === 5 &&
+    l2dPostGate.length === 6 &&
     l2dPostGate[0] === L2D_PHASE1_MIGRATION &&
     l2dPostGate[1] === L2D_PHASE2B_MIGRATION &&
     l2dPostGate[2] === L2D_PHASE2B_DURATION_MIGRATION &&
     l2dPostGate[3] === L2D_IDENTITY_GATE_MIGRATION &&
     l2dPostGate[4] === L2D_COMMERCIAL_A_MIGRATION &&
+    l2dPostGate[5] === L2D_COMMERCIAL_B_MIGRATION &&
     migrationFiles.every((f) => !/PepeCartelToken/.test(readFileSync(f, "utf8"))) &&
     !migrationFiles.some((f) => /pepecartel[-_]?token|pcart[-_]?artifact/i.test(f)),
-  `migration set re-pinned (89 files) with exactly five authorized post-gate migrations, the Cost Accounting Phase 1, Phase 2B safety, Phase 2B corrective duration, Project Identity Gate A and Commercial Foundation A files; none reference the draft PCART token artifact (post-gate: ${l2dPostGate.join(", ") || "none"})`,
+  `migration set re-pinned (90 files) with exactly six authorized post-gate migrations, the Cost Accounting Phase 1, Phase 2B safety, Phase 2B corrective duration, Project Identity Gate A, Commercial Foundation A and Commercial Foundation B files; none reference the draft PCART token artifact (post-gate: ${l2dPostGate.join(", ") || "none"})`,
 );
 check(
   "L2D-I8",

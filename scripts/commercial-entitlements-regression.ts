@@ -11,6 +11,7 @@ const POST_GATE = [
   "20260922142803_fedec44c-654f-4e1a-a117-30d027601e03.sql",
   "20260922161918_ef6e322a-d993-4970-9d48-3b4f93afa222.sql",
   "20260923170038_eaa2a24d-9c13-49c9-9aa3-6a5a8e18c300.sql",
+  "20260924005521_b9fca846-4db3-4e8f-bf91-bdb4bd863228.sql",
 ];
 const COMMERCIAL = POST_GATE[4];
 
@@ -25,10 +26,10 @@ function check(id: string, ok: boolean, detail = "") {
 }
 
 const migrations = readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort();
-check("C-1.1 migration count exactly 89", migrations.length === 89, String(migrations.length));
+check("C-1.1 migration count exactly 90", migrations.length === 90, String(migrations.length));
 const postGate = migrations.filter((f) => f >= "20260922");
-check("C-1.2 exact five authorized post-gate migrations", JSON.stringify(postGate) === JSON.stringify(POST_GATE), postGate.join(","));
-check("C-1.3 commercial migration is the last file", migrations[migrations.length - 1] === COMMERCIAL);
+check("C-1.2 exact six authorized post-gate migrations", JSON.stringify(postGate) === JSON.stringify(POST_GATE), postGate.join(","));
+check("C-1.3 commercial A migration is immediately before the Commercial Foundation B migration (last file)", migrations[migrations.length - 2] === COMMERCIAL && migrations[migrations.length - 1] === POST_GATE[5]);
 
 const raw = readFileSync(`${MIGRATIONS}/${COMMERCIAL}`, "utf8");
 const sql = raw.replace(/^\s*--.*$/gm, "");
