@@ -62,19 +62,20 @@ const migrationNames = walk(MIGRATIONS).map((f) => f.split("/").pop() ?? f).sort
 const postGate = migrationNames.filter((f) => f > LAST_GATE_MIGRATION);
 check(
   "CA2A-1a",
-  migrationNames.length === 90,
-  "migration count is exactly 90 — Phase 2A itself adds no migration",
+  migrationNames.length === 91,
+  "migration count is exactly 91 — Phase 2A itself adds no migration; the 91st is the Stripe/Free billing migration",
 );
 check(
   "CA2A-1b",
-  postGate.length === 6 &&
+  postGate.length === 7 &&
     postGate[0] === PHASE1_MIGRATION &&
     postGate[1] === "20260922141917_c47c2384-73c4-4bbf-8cc2-495112d64990.sql" &&
     postGate[2] === "20260922142803_fedec44c-654f-4e1a-a117-30d027601e03.sql" &&
     postGate[3] === "20260922161918_ef6e322a-d993-4970-9d48-3b4f93afa222.sql" &&
     postGate[4] === "20260923170038_eaa2a24d-9c13-49c9-9aa3-6a5a8e18c300.sql" &&
-    postGate[5] === "20260924005521_b9fca846-4db3-4e8f-bf91-bdb4bd863228.sql",
-  `the post-gate migrations are exactly Phase 1, the two Phase 2B mission-safety migrations and the Project Identity Gate A function-only migration and the Commercial Foundation A migration and the Commercial Foundation B function-only migration (found: ${postGate.join(", ") || "none"})`,
+    postGate[5] === "20260924005521_b9fca846-4db3-4e8f-bf91-bdb4bd863228.sql" &&
+    postGate[6] === "20260924021801_e48c0c41-9053-4f77-a267-04fbba8d206d.sql",
+  `the post-gate migrations are exactly Phase 1, the two Phase 2B mission-safety migrations and the Project Identity Gate A function-only migration and the Commercial Foundation A migration and the Commercial Foundation B function-only migration and the Stripe/Free billing migration (found: ${postGate.join(", ") || "none"})`,
 );
 
 /* -------------------------------------------------- 2. shared generic writer */

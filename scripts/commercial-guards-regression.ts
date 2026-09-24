@@ -16,6 +16,7 @@ const POST_GATE = [
   "20260922161918_ef6e322a-d993-4970-9d48-3b4f93afa222.sql",
   "20260923170038_eaa2a24d-9c13-49c9-9aa3-6a5a8e18c300.sql",
   "20260924005521_b9fca846-4db3-4e8f-bf91-bdb4bd863228.sql",
+  "20260924021801_e48c0c41-9053-4f77-a267-04fbba8d206d.sql",
 ];
 const B_MIGRATION = POST_GATE[5]!;
 
@@ -52,9 +53,9 @@ const before = (src: string, a: string, b: string) => {
 
 // 1 — migrations.
 const migrations = readdirSync(MIG).filter((f) => f.endsWith(".sql")).sort();
-check("1.1 migration count exactly 90", migrations.length === 90, String(migrations.length));
+check("1.1 migration count exactly 91", migrations.length === 91, String(migrations.length));
 const postGate = migrations.filter((f) => f >= "20260922");
-check("1.2 exact six authorized post-gate migrations", JSON.stringify(postGate) === JSON.stringify(POST_GATE), postGate.join(","));
+check("1.2 exact seven authorized post-gate migrations", JSON.stringify(postGate) === JSON.stringify(POST_GATE), postGate.join(","));
 
 const msql = read(`${MIG}/${B_MIGRATION}`).replace(/^\s*--.*$/gm, "");
 const created = [...msql.matchAll(/CREATE OR REPLACE FUNCTION public\.(\w+)\(/g)].map((m) => m[1]).sort();
@@ -98,7 +99,8 @@ const helperCode = helper.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/
 const rpcs = [...helperCode.matchAll(/\.rpc\("(\w+)"/g)].map((m) => m[1]);
 check("3.1 helper calls only evaluate_commercial_access", rpcs.length === 1 && rpcs[0] === "evaluate_commercial_access");
 check("3.2 helper has no stripe/email/usage_ledger/pricing", !/stripe|usage_ledger|@[a-z]|price|amount_cents|\$49/i.test(helperCode));
-check("3.3 PLAN_LIMIT_REACHED -> 429", /PLAN_LIMIT_REACHED"\) return deny\(429, "PLAN_LIMIT_REACHED", "Monthly plan limit reached\."\)/.test(helperCode));
+check("3.3 PLAN_LIMIT_REACHED -> 429 (monthly message for monthly quotas)", helperCode.includes('return deny(429, "PLAN_LIMIT_REACHED", "Monthly plan limit reached.");'));
+check("3.3a telegram_groups non-period limit message never says monthly", helperCode.includes('NON_PERIOD_QUOTA_KEYS: readonly string[] = ["telegram_groups"]') && helperCode.includes('deny(429, "PLAN_LIMIT_REACHED", "Plan limit reached for connected Telegram groups.")'));
 check("3.4 FEATURE_NOT_INCLUDED -> 403", helperCode.includes('deny(403, "FEATURE_NOT_INCLUDED", "This feature is not included in the current plan.")'));
 check("3.5 ASSIGNMENT_* -> PLAN_ACCESS_INACTIVE", helperCode.includes('r.startsWith("ASSIGNMENT_")) return deny(403, "PLAN_ACCESS_INACTIVE", "Plan access is not active.")'));
 check("3.6 other -> COMMERCIAL_ACCESS_DENIED", helperCode.includes('deny(403, "COMMERCIAL_ACCESS_DENIED", "This action is not available for this workspace.")'));
@@ -156,7 +158,7 @@ check("5.13 G1 correction broadcast identity-gated", tgGated.includes("send_offi
 const mapBlock = tg.slice(tg.indexOf("COMMERCIAL_ACTION_FEATURES"), tg.indexOf("};", tg.indexOf("COMMERCIAL_ACTION_FEATURES")));
 const expected: Record<string, string> = {
   assign_pack: "sticker_auto_posting", distribute_pack: "sticker_auto_posting",
-  send_group_test: "community_tools", save_welcome_settings: "community_tools", send_welcome_test: "community_tools",
+  send_group_test: "community_basic", save_welcome_settings: "community_basic", send_welcome_test: "community_basic",
   send_group_announcement: "official_broadcasts", send_official_contract_broadcast: "official_broadcasts",
   send_official_contract_correction_broadcast: "official_broadcasts",
 };
@@ -183,7 +185,8 @@ const teamPre = wh.slice(wh.indexOf('bot_inbox_active_reply_session", {'), teamI
 check("6.2 bot team reply: actor mapping + identity + project_inbox before RPC",
   teamPre.includes('.from("telegram_connections")') && teamPre.includes('.eq("telegram_user_id", Number(from.id))') &&
   before(teamPre, "requireProjectToolAccess(admin, inboxActorUserId, inboxWorkspaceId)", '"project_inbox"'));
-check("6.3 exactly two commercial call sites in webhook (mission + team reply)", (wh.match(/requireCommercialAccess\(/g) ?? []).length === 2);
+check("6.3 exactly three commercial call sites in webhook (mission + team reply + new-group telegram_groups)", (wh.match(/requireCommercialAccess\(/g) ?? []).length === 3);
+check("6.3a telegram_groups guard only for genuinely new group, before the connection upsert", /if \(!claimed\) \{\s*const groupLimitGate = await requireCommercialAccess\(admin, link\.user_id, workspaceId, "telegram_groups"\)/.test(wh) && wh.indexOf('"telegram_groups")') < wh.indexOf('from("telegram_group_connections").upsert'));
 check("6.4 inbound capture/launch reply RPCs not preceded by commercial guard in the same branch", !/requireCommercialAccess[\s\S]{0,400}bot_inbox_capture|requireCommercialAccess[\s\S]{0,400}capture_project_inbox/.test(wh));
 
 // 7 — X reads.

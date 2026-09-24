@@ -404,17 +404,18 @@ const l1cMigrationNames = migrationFiles
 const l1cPostGate = l1cMigrationNames.filter((f) => f > L1C_LAST_GATE_MIGRATION);
 check(
   "L1C-14",
-  migrationFiles.length === 90 &&
+  migrationFiles.length === 91 &&
     l1cMigrationNames.includes("20260920053942_42259f41-35d1-4b5c-9e6a-78127867cddd.sql") &&
     l1cMigrationNames.includes(L1C_LAST_GATE_MIGRATION) &&
-    l1cPostGate.length === 6 &&
+    l1cPostGate.length === 7 &&
     l1cPostGate[0] === L1C_PHASE1_MIGRATION &&
     l1cPostGate[1] === L1C_PHASE2B_MIGRATION &&
     l1cPostGate[2] === L1C_PHASE2B_DURATION_MIGRATION &&
     l1cPostGate[3] === L1C_IDENTITY_GATE_MIGRATION &&
     l1cPostGate[4] === L1C_COMMERCIAL_A_MIGRATION &&
-    l1cPostGate[5] === L1C_COMMERCIAL_B_MIGRATION,
-  `migration set re-pinned for the treasury signer config plus exactly six authorized post-gate migrations, the Cost Accounting Phase 1, Phase 2B safety, Phase 2B corrective duration, Project Identity Gate A, Commercial Foundation A and Commercial Foundation B files (${migrationFiles.length} files, expected 90; post-gate: ${l1cPostGate.join(", ") || "none"})`,
+    l1cPostGate[5] === L1C_COMMERCIAL_B_MIGRATION &&
+    l1cPostGate[6] === "20260924021801_e48c0c41-9053-4f77-a267-04fbba8d206d.sql",
+  `migration set re-pinned for the treasury signer config plus exactly seven authorized post-gate migrations, the Cost Accounting Phase 1, Phase 2B safety, Phase 2B corrective duration, Project Identity Gate A, Commercial Foundation A, Commercial Foundation B and Stripe/Free billing files (${migrationFiles.length} files, expected 91; post-gate: ${l1cPostGate.join(", ") || "none"})`,
 );
 
 // ----------------------------- 15. no invented treasury / Safe / recipient

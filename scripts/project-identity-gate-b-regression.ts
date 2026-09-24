@@ -26,7 +26,7 @@ function actionBlock(src: string, name: string): string {
 
 // 1 — migrations.
 const migrations = readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql")).sort();
-check("1.1 migration count exactly 90", migrations.length === 90, String(migrations.length));
+check("1.1 migration count exactly 91", migrations.length === 91, String(migrations.length));
 const POST_GATE = [
   "20260922070921_40548af2-4afe-4876-bcaa-f22868f5942d.sql",
   "20260922141917_c47c2384-73c4-4bbf-8cc2-495112d64990.sql",
@@ -34,6 +34,7 @@ const POST_GATE = [
   "20260922161918_ef6e322a-d993-4970-9d48-3b4f93afa222.sql",
   "20260923170038_eaa2a24d-9c13-49c9-9aa3-6a5a8e18c300.sql",
   "20260924005521_b9fca846-4db3-4e8f-bf91-bdb4bd863228.sql",
+  "20260924021801_e48c0c41-9053-4f77-a267-04fbba8d206d.sql",
 ];
 const postGate = migrations.filter((f) => f >= "20260922");
 check("1.2 exact authorized post-gate migration set", JSON.stringify(postGate) === JSON.stringify(POST_GATE), postGate.join(","));

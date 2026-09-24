@@ -69,19 +69,20 @@ const migrationCode = migrationSrc.replace(/^\s*--.*$/gm, "");
 /* ------------------------------------------------ 1. authorized migration set */
 check(
   "PIG-1a",
-  migrationNames.length === 90,
-  `exactly 90 migration files exist (found ${migrationNames.length})`,
+  migrationNames.length === 91,
+  `exactly 91 migration files exist (found ${migrationNames.length})`,
 );
 check(
   "PIG-1b",
-  postGate.length === 6 &&
+  postGate.length === 7 &&
     postGate[0] === PHASE1_MIGRATION &&
     postGate[1] === PHASE2B_MIGRATION &&
     postGate[2] === PHASE2B_DURATION_MIGRATION &&
     postGate[3] === IDENTITY_MIGRATION &&
     postGate[4] === COMMERCIAL_A_MIGRATION &&
-    postGate[5] === COMMERCIAL_B_MIGRATION,
-  `the only post-gate migrations are Cost Accounting Phase 1, the two Phase 2B mission-safety migrations and the Project Identity Gate A function-only migration and the Commercial Foundation A migration and the Commercial Foundation B function-only migration (found: ${postGate.join(", ") || "none"})`,
+    postGate[5] === COMMERCIAL_B_MIGRATION &&
+    postGate[6] === "20260924021801_e48c0c41-9053-4f77-a267-04fbba8d206d.sql",
+  `the only post-gate migrations are Cost Accounting Phase 1, the two Phase 2B mission-safety migrations and the Project Identity Gate A function-only migration and the Commercial Foundation A migration and the Commercial Foundation B function-only migration and the Stripe/Free billing migration (found: ${postGate.join(", ") || "none"})`,
 );
 check(
   "PIG-1c",
