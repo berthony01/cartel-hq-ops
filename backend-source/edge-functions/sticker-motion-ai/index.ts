@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { recordProviderCreditUsage } from "../_shared/usage-accounting.ts";
 import { requireProjectToolAccess } from "../_shared/project-identity.ts";
+import { requireCommercialAccess } from "../_shared/commercial-access.ts";
 
 /**
  * CARTEL HQ — Animated Sticker Studio Phase B1
@@ -633,6 +634,11 @@ Deno.serve(async (req: Request) => {
       if (signedError || !signed?.signedUrl) {
         return respond({ error: "SOURCE_URL_FAILED", message: "The current sticker image could not be prepared for animation." }, 500);
       }
+
+      // Commercial Foundation B — motion_ai_generations quota, after identity and
+      // reuse checks, before the new motion job/provider.
+      const motionCommercial = await requireCommercialAccess(admin, user.id, workspaceId, "motion_ai_generations");
+      if (!motionCommercial.allowed) return respond(motionCommercial.body, motionCommercial.status);
 
       const { data: job, error: jobError } = await admin.from("ai_jobs").insert({
         workspace_id: workspaceId, user_id: user.id, pack_id: packId, sticker_id: stickerId,
