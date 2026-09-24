@@ -67,7 +67,7 @@ const tg = read(`${EF}/telegram-group/index.ts`);
 const tgSet = tg.match(/PROJECT_IDENTITY_GATED_ACTIONS = new Set\((\[[^\]]*\])\)/);
 const tgGated = tgSet ? (JSON.parse(tgSet[1]!) as string[]).sort() : [];
 check("3.1 telegram-group exact gated set", JSON.stringify(tgGated) === JSON.stringify(
-  ["assign_pack", "distribute_pack", "send_group_test", "save_welcome_settings", "send_welcome_test", "send_group_announcement", "send_official_contract_broadcast"].sort()));
+  ["assign_pack", "distribute_pack", "send_group_test", "save_welcome_settings", "send_welcome_test", "send_group_announcement", "send_official_contract_broadcast", "send_official_contract_correction_broadcast"].sort()));
 for (const u of ["status", "distribution_status", "welcome_settings", "broadcast_launch_options"]) {
   check(`3.2 telegram-group ungated: ${u}`, !tgGated.includes(u));
 }
@@ -88,9 +88,15 @@ check("4.3 stickers gate after member helper + membership, before actions",
 
 // 5 — sticker-motion-telegram.
 const mt = read(`${EF}/sticker-motion-telegram/index.ts`);
-check("5.1 motion: exactly one gate call", mt.split("requireProjectToolAccess(").length - 1 === 1);
+// Commercial Foundation B (G2): exactly two gate calls — start + retry_normalization.
+check("5.1 motion: exactly two gate calls (start + retry_normalization)", mt.split("requireProjectToolAccess(").length - 1 === 2);
 const mtStart = actionBlock(mt, "start");
 check("5.2 motion start gated after isMember", mtStart.indexOf("requireProjectToolAccess(") > mtStart.indexOf("isMember(workspaceId)") && mtStart.indexOf("isMember(workspaceId)") > 0);
+const mtRetry = actionBlock(mt, "retry_normalization");
+check("5.2b motion retry_normalization gated after isMember, before source read",
+  mtRetry.indexOf("isMember(workspaceId)") > 0 &&
+  mtRetry.indexOf("requireProjectToolAccess(") > mtRetry.indexOf("isMember(workspaceId)") &&
+  mtRetry.indexOf("requireProjectToolAccess(") < mtRetry.indexOf('from("ai_jobs")'));
 check("5.3 motion sync ungated", !actionBlock(mt, "sync").includes("requireProjectToolAccess"));
 check("5.4 motion config ungated", !mt.slice(mt.indexOf('if (action === "config")'), mt.indexOf('if (action === "start")')).includes("requireProjectToolAccess"));
 
