@@ -256,17 +256,18 @@ const TS_COMMERCIAL_B_MIGRATION = "20260924005521_b9fca846-4db3-4e8f-bf91-bdb4bd
 const tsPostGate = migrationFiles.filter((f) => f > POLICY_COMPLETION_MIGRATION_FILE).sort();
 check(
   "TS-5a",
-  migrationFiles.length === 90 &&
+  migrationFiles.length === 91 &&
     migrationFiles.includes(MIGRATION_FILE) &&
     migrationFiles.includes(POLICY_COMPLETION_MIGRATION_FILE) &&
-    tsPostGate.length === 6 &&
+    tsPostGate.length === 7 &&
     tsPostGate[0] === TS_PHASE1_MIGRATION &&
     tsPostGate[1] === TS_PHASE2B_MIGRATION &&
     tsPostGate[2] === TS_PHASE2B_DURATION_MIGRATION &&
     tsPostGate[3] === TS_IDENTITY_GATE_MIGRATION &&
     tsPostGate[4] === TS_COMMERCIAL_A_MIGRATION &&
-    tsPostGate[5] === TS_COMMERCIAL_B_MIGRATION,
-  `treasury signer migration plus its policy completion are pinned, with exactly six authorized post-gate migrations, the Cost Accounting Phase 1, Phase 2B safety, Phase 2B corrective duration, Project Identity Gate A, Commercial Foundation A and Commercial Foundation B files (${migrationFiles.length} files, expected 90; post-gate: ${tsPostGate.join(", ") || "none"})`,
+    tsPostGate[5] === TS_COMMERCIAL_B_MIGRATION &&
+    tsPostGate[6] === "20260924021801_e48c0c41-9053-4f77-a267-04fbba8d206d.sql",
+  `treasury signer migration plus its policy completion are pinned, with exactly seven authorized post-gate migrations, the Cost Accounting Phase 1, Phase 2B safety, Phase 2B corrective duration, Project Identity Gate A, Commercial Foundation A, Commercial Foundation B and Stripe/Free billing files (${migrationFiles.length} files, expected 91; post-gate: ${tsPostGate.join(", ") || "none"})`,
 );
 check(
   "TS-5b",

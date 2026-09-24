@@ -466,9 +466,9 @@ const gateMigrationSet = new Set(gateMigrations);
 const postGateMigrations = migrationFiles.filter((f) => !gateMigrationSet.has(f)).sort();
 check(
   "L2F-I-migrations",
-  migrationFiles.length === 90 &&
+  migrationFiles.length === 91 &&
     gateMigrations.every((f) => migrationFiles.includes(f)),
-  `every gate-era migration still present (${migrationFiles.length} files, expected 90)`,
+  `every gate-era migration still present (${migrationFiles.length} files, expected 91)`,
 );
 check(
   "L2F-I-migration-content",
@@ -479,14 +479,15 @@ check(
 );
 check(
   "L2F-I-migration-post-gate",
-  postGateMigrations.length === 6 &&
+  postGateMigrations.length === 7 &&
     postGateMigrations[0] === PHASE1_COST_ACCOUNTING_MIGRATION &&
     postGateMigrations[1] === PHASE2B_MISSION_SAFETY_MIGRATION &&
     postGateMigrations[2] === PHASE2B_DURATION_MIGRATION &&
     postGateMigrations[3] === PROJECT_IDENTITY_GATE_MIGRATION &&
     postGateMigrations[4] === COMMERCIAL_A_MIGRATION &&
-    postGateMigrations[5] === COMMERCIAL_B_MIGRATION,
-  `exactly six post-gate migrations exist and they are the Cost Accounting Phase 1, Phase 2B mission-safety, Phase 2B corrective duration, Project Identity Gate A, Commercial Foundation A and Commercial Foundation B migrations (found: ${postGateMigrations.join(", ") || "none"})`,
+    postGateMigrations[5] === COMMERCIAL_B_MIGRATION &&
+    postGateMigrations[6] === `${MIGRATIONS}/20260924021801_e48c0c41-9053-4f77-a267-04fbba8d206d.sql`,
+  `exactly seven post-gate migrations exist and they are the Cost Accounting Phase 1, Phase 2B mission-safety, Phase 2B corrective duration, Project Identity Gate A, Commercial Foundation A, Commercial Foundation B and Stripe/Free billing migrations (found: ${postGateMigrations.join(", ") || "none"})`,
 );
 
 // ----------------------------------------------- J. suite purity (no chain I/O)

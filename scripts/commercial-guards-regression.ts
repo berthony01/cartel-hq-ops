@@ -16,6 +16,7 @@ const POST_GATE = [
   "20260922161918_ef6e322a-d993-4970-9d48-3b4f93afa222.sql",
   "20260923170038_eaa2a24d-9c13-49c9-9aa3-6a5a8e18c300.sql",
   "20260924005521_b9fca846-4db3-4e8f-bf91-bdb4bd863228.sql",
+  "20260924021801_e48c0c41-9053-4f77-a267-04fbba8d206d.sql",
 ];
 const B_MIGRATION = POST_GATE[5]!;
 
@@ -52,9 +53,9 @@ const before = (src: string, a: string, b: string) => {
 
 // 1 — migrations.
 const migrations = readdirSync(MIG).filter((f) => f.endsWith(".sql")).sort();
-check("1.1 migration count exactly 90", migrations.length === 90, String(migrations.length));
+check("1.1 migration count exactly 91", migrations.length === 91, String(migrations.length));
 const postGate = migrations.filter((f) => f >= "20260922");
-check("1.2 exact six authorized post-gate migrations", JSON.stringify(postGate) === JSON.stringify(POST_GATE), postGate.join(","));
+check("1.2 exact seven authorized post-gate migrations", JSON.stringify(postGate) === JSON.stringify(POST_GATE), postGate.join(","));
 
 const msql = read(`${MIG}/${B_MIGRATION}`).replace(/^\s*--.*$/gm, "");
 const created = [...msql.matchAll(/CREATE OR REPLACE FUNCTION public\.(\w+)\(/g)].map((m) => m[1]).sort();
@@ -156,7 +157,7 @@ check("5.13 G1 correction broadcast identity-gated", tgGated.includes("send_offi
 const mapBlock = tg.slice(tg.indexOf("COMMERCIAL_ACTION_FEATURES"), tg.indexOf("};", tg.indexOf("COMMERCIAL_ACTION_FEATURES")));
 const expected: Record<string, string> = {
   assign_pack: "sticker_auto_posting", distribute_pack: "sticker_auto_posting",
-  send_group_test: "community_tools", save_welcome_settings: "community_tools", send_welcome_test: "community_tools",
+  send_group_test: "community_basic", save_welcome_settings: "community_basic", send_welcome_test: "community_basic",
   send_group_announcement: "official_broadcasts", send_official_contract_broadcast: "official_broadcasts",
   send_official_contract_correction_broadcast: "official_broadcasts",
 };
