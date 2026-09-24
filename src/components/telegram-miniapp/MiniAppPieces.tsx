@@ -50,18 +50,26 @@ export function MiniAppFrame({
   );
 }
 
-export function MiniAppIdentity({ subtitle = "Operator Console" }: { subtitle?: string | undefined }) {
+export function MiniAppIdentity({
+  title = "Mission Control",
+  subtitle,
+}: {
+  title?: string;
+  subtitle?: string | undefined;
+}) {
   return (
     <div className="flex min-w-0 items-center justify-between gap-3 border-b border-border-subtle pb-3">
       <div className="min-w-0">
         <p className="type-eyebrow text-gold">Cartel HQ</p>
         <p className="mt-1 truncate font-display text-lg uppercase leading-none text-foreground">
-          {subtitle}
+          {title}
         </p>
       </div>
-      <span className="shrink-0 rounded-sm border border-gold/25 bg-gold/5 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-gold">
-        Owner
-      </span>
+      {subtitle ? (
+        <span className="max-w-[45%] truncate text-right text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+          {subtitle}
+        </span>
+      ) : null}
     </div>
   );
 }

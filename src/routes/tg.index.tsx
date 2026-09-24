@@ -39,6 +39,22 @@ import {
 
 export const Route = createFileRoute("/tg/")({
   ssr: false,
+  head: () => ({
+    meta: [
+      { title: "Operator Home — CARTEL HQ" },
+      {
+        name: "description",
+        content: "CARTEL HQ Telegram owner console for project status and mission operations.",
+      },
+      { property: "og:title", content: "Operator Home — CARTEL HQ" },
+      {
+        property: "og:description",
+        content: "CARTEL HQ Telegram owner console for project status and mission operations.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: MiniAppHome,
 });
 
@@ -110,7 +126,7 @@ function MiniAppHome() {
   if (booting) {
     return (
       <MiniAppFrame>
-        <MiniAppIdentity />
+        <MiniAppIdentity title="Operator Console" />
         <MiniAppSkeleton label="Connecting to Telegram…" />
       </MiniAppFrame>
     );
@@ -119,7 +135,7 @@ function MiniAppHome() {
   if (!initData) {
     return (
       <MiniAppFrame>
-        <MiniAppIdentity />
+        <MiniAppIdentity title="Operator Console" />
         <MiniAppMessage
           title="Open Mission Control from Telegram"
           description="This screen only works inside the CARTEL HQ Telegram bot. Open Mission Control from the bot to continue."
@@ -140,7 +156,7 @@ function MiniAppHome() {
 
   return (
     <MiniAppFrame navigation={navigation}>
-      <MiniAppIdentity />
+      <MiniAppIdentity title="Operator Console" subtitle={activeWorkspace?.workspaceName} />
 
       {workspacesQuery.isPending ? <MiniAppSkeleton label="Loading projects…" /> : null}
 
