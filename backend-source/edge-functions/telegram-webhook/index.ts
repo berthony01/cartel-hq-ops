@@ -2086,6 +2086,15 @@ Deno.serve(async (req: Request) => {
       await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "This Telegram group is already connected to another CARTEL HQ workspace.");
       return { ok: false, reason: "claimed" };
     }
+    // Stripe/Free foundation: a genuinely NEW group for this workspace consumes
+    // the telegram_groups quota. Same-workspace reconnect/reverify bypasses it.
+    if (!claimed) {
+      const groupLimitGate = await requireCommercialAccess(admin, link.user_id, workspaceId, "telegram_groups");
+      if (!groupLimitGate.allowed) {
+        await sendMessage(TELEGRAM_BOT_TOKEN, chatId, `CARTEL HQ could not connect this group: ${groupLimitGate.body.message} Upgrade in CARTEL HQ Settings to connect more groups.`);
+        return { ok: false, reason: "plan_limit" };
+      }
+    }
     const row = {
       workspace_id: workspaceId,
       connected_by: link.user_id,
