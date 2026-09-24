@@ -11,7 +11,15 @@
  */
 
 import type { ReactNode } from "react";
-import { RotateCw } from "lucide-react";
+import {
+  CircleEllipsis,
+  Home,
+  Inbox,
+  Palette,
+  RotateCw,
+  Target,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Telegram content-safe area -> Telegram safe area -> browser env() -> minimum. */
@@ -19,37 +27,131 @@ function inset(edge: "top" | "right" | "bottom" | "left", minimum: string): stri
   return `max(var(--tg-content-safe-area-inset-${edge}, var(--tg-safe-area-inset-${edge}, env(safe-area-inset-${edge}, 0px))), ${minimum})`;
 }
 
-export function MiniAppFrame({ children }: { children: ReactNode }) {
+export function MiniAppFrame({
+  children,
+  navigation,
+}: {
+  children: ReactNode;
+  navigation?: ReactNode;
+}) {
   return (
     <div
       className="min-h-screen w-full bg-background text-foreground"
       style={{
         paddingTop: inset("top", "0.75rem"),
-        paddingBottom: inset("bottom", "1.25rem"),
+        paddingBottom: inset("bottom", navigation ? "5.5rem" : "1.25rem"),
         paddingLeft: inset("left", "0.875rem"),
         paddingRight: inset("right", "0.875rem"),
       }}
     >
       <div className="mx-auto flex w-full min-w-0 max-w-md flex-col gap-4">{children}</div>
+      {navigation}
     </div>
   );
 }
 
-export function MiniAppIdentity({ subtitle }: { subtitle?: string | undefined }) {
+export function MiniAppIdentity({ subtitle = "Operator Console" }: { subtitle?: string | undefined }) {
   return (
     <div className="flex min-w-0 items-center justify-between gap-3 border-b border-border-subtle pb-3">
       <div className="min-w-0">
         <p className="type-eyebrow text-gold">Cartel HQ</p>
         <p className="mt-1 truncate font-display text-lg uppercase leading-none text-foreground">
-          Mission Control
+          {subtitle}
         </p>
       </div>
-      {subtitle ? (
-        <span className="max-w-[45%] truncate text-right text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-          {subtitle}
-        </span>
-      ) : null}
+      <span className="shrink-0 rounded-sm border border-gold/25 bg-gold/5 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-gold">
+        Owner
+      </span>
     </div>
+  );
+}
+
+export type MiniAppTab = "home" | "missions" | "inbox" | "brand" | "more";
+
+const MINI_APP_NAV_ITEMS: { key: MiniAppTab; label: string; icon: LucideIcon }[] = [
+  { key: "home", label: "Home", icon: Home },
+  { key: "missions", label: "Missions", icon: Target },
+  { key: "inbox", label: "Inbox", icon: Inbox },
+  { key: "brand", label: "Brand", icon: Palette },
+  { key: "more", label: "More", icon: CircleEllipsis },
+];
+
+export function MiniAppTabBar({
+  active,
+  onSelect,
+}: {
+  active: MiniAppTab;
+  onSelect: (tab: MiniAppTab) => void;
+}) {
+  return (
+    <nav
+      aria-label="Operator console"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 backdrop-blur-xl"
+      style={{ paddingBottom: inset("bottom", "0.5rem") }}
+    >
+      <ul className="mx-auto grid w-full max-w-md grid-cols-5 gap-1 px-2 pt-1.5">
+        {MINI_APP_NAV_ITEMS.map((item) => {
+          const Icon = item.icon;
+          const selected = active === item.key;
+          return (
+            <li key={item.key} className="min-w-0">
+              <button
+                type="button"
+                onClick={() => onSelect(item.key)}
+                aria-current={selected ? "page" : undefined}
+                className={cn(
+                  "flex min-h-12 w-full min-w-0 flex-col items-center justify-center gap-1 rounded-md border border-transparent px-0.5 py-1 text-[9px] font-semibold uppercase transition-colors",
+                  selected
+                    ? "border-gold/20 bg-gold/8 text-gold"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Icon className="size-4 shrink-0" aria-hidden="true" />
+                <span className="w-full truncate text-center">{item.label}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
+export function MiniAppProjectIdentity({
+  projectName,
+  ticker,
+  logoDataUrl,
+}: {
+  projectName: string;
+  ticker: string | null;
+  logoDataUrl: string | null;
+}) {
+  return (
+    <section className="surface-command min-w-0 rounded-lg px-4 py-4">
+      <div className="flex min-w-0 items-center gap-3">
+        {logoDataUrl ? (
+          <img
+            src={logoDataUrl}
+            alt=""
+            className="size-12 shrink-0 rounded-md border border-gold/25 object-cover"
+          />
+        ) : (
+          <span
+            aria-hidden="true"
+            className="flex size-12 shrink-0 items-center justify-center rounded-md border border-gold/25 bg-gold/8 font-display text-xl text-gold"
+          >
+            {projectName.trim().slice(0, 1).toUpperCase() || "C"}
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="type-eyebrow text-muted-foreground">Active project</p>
+          <h1 className="mt-1 truncate font-display text-2xl uppercase leading-none text-foreground">
+            {projectName}
+          </h1>
+          {ticker ? <p className="mt-1 truncate text-xs font-semibold text-gold">${ticker}</p> : null}
+        </div>
+      </div>
+    </section>
   );
 }
 

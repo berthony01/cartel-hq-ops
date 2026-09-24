@@ -119,7 +119,24 @@ export const MINIAPP_PRIMARY_TYPES = [
 
 export type MiniAppFailure = { ok: false; reason: string };
 
-export type MiniAppWorkspace = { workspaceId: string; workspaceName: string; liveMissions: number };
+export type MiniAppWorkspace = {
+  workspaceId: string;
+  workspaceName: string;
+  liveMissions: number;
+};
+export type MiniAppOperatorHome = {
+  ok: true;
+  identity: {
+    projectName: string;
+    ticker: string | null;
+    logoDataUrl: string | null;
+    source: "profile" | "workspace";
+  };
+  community: {
+    connectedGroups: number;
+    adminReadyGroups: number;
+  };
+};
 export type MiniAppMission = {
   missionId: string;
   authorHandle: string | null;
@@ -179,7 +196,11 @@ function botToken(): string {
   return process.env["TELEGRAM_BOT_TOKEN"] ?? "";
 }
 
-type AdminClient = { rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>; from: (table: string) => any };
+type AdminClient = {
+  rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
+  from: (table: string) => any;
+  storage: { from: (bucket: string) => any };
+};
 
 async function adminClient(): Promise<AdminClient> {
   // Loaded inside the handler: a top-level import of the service-role client
@@ -483,6 +504,110 @@ export const miniAppListMissions = createServerFn({ method: "POST" })
           status: String(r["status"] ?? "LIVE"),
         };
       }),
+    };
+  });
+
+const MINIAPP_LOGO_MAX_BYTES = 2 * 1024 * 1024;
+const MINIAPP_LOGO_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
+}
+
+/**
+ * MINI-HQ-1A — bounded operator-home read.
+ *
+ * Workspace authorization still comes exclusively from the existing operator
+ * RPC. The selected workspace must be in that returned set before any profile,
+ * asset or community row is read. No provider identifiers leave the server.
+ */
+export const miniAppOperatorHome = createServerFn({ method: "POST" })
+  .inputValidator((input: { initData: string; workspaceId: string }) => input)
+  .handler(async ({ data }): Promise<MiniAppOperatorHome | MiniAppFailure> => {
+    const auth = await validateTelegramInitData(data?.initData, botToken());
+    if (!auth.ok) return fail(auth.reason);
+    if (!isUuid(data?.workspaceId)) return fail("invalid_workspace_id");
+
+    const admin = await adminClient();
+    const { data: workspaceRows, error: workspaceError } = await admin.rpc(
+      MINIAPP_RPC.workspaces,
+      { _telegram_user_id: auth.user.id },
+    );
+    if (workspaceError) return fail("unavailable");
+    const authorizedWorkspace = (Array.isArray(workspaceRows) ? workspaceRows : []).find(
+      (row) => String((row as Record<string, unknown>)["workspace_id"] ?? "") === data.workspaceId,
+    ) as Record<string, unknown> | undefined;
+    if (!authorizedWorkspace) return fail("not_found");
+
+    const workspaceName = String(authorizedWorkspace["workspace_name"] ?? "Workspace");
+    const [{ data: profileData, error: profileError }, { data: communityData, error: communityError }] =
+      await Promise.all([
+        admin
+          .from("project_profiles")
+          .select("project_name, ticker, logo_asset_id")
+          .eq("workspace_id", data.workspaceId)
+          .maybeSingle(),
+        admin
+          .from("telegram_group_connections")
+          .select("bot_is_admin")
+          .eq("workspace_id", data.workspaceId),
+      ]);
+    if (profileError || communityError) return fail("unavailable");
+
+    const profile = (profileData ?? null) as Record<string, unknown> | null;
+    const projectName = String(profile?.["project_name"] ?? "").trim() || workspaceName;
+    const tickerText = String(profile?.["ticker"] ?? "").trim();
+    const logoAssetId = String(profile?.["logo_asset_id"] ?? "").trim();
+    let logoDataUrl: string | null = null;
+
+    if (logoAssetId) {
+      const { data: assetData } = await admin
+        .from("media_assets")
+        .select("storage_path, mime_type, file_size_bytes")
+        .eq("id", logoAssetId)
+        .eq("workspace_id", data.workspaceId)
+        .maybeSingle();
+      const asset = (assetData ?? null) as Record<string, unknown> | null;
+      const mimeType = String(asset?.["mime_type"] ?? "");
+      const byteCount = Number(asset?.["file_size_bytes"] ?? 0);
+      const storagePath = String(asset?.["storage_path"] ?? "");
+      if (
+        storagePath &&
+        MINIAPP_LOGO_MIME_TYPES.has(mimeType) &&
+        Number.isFinite(byteCount) &&
+        byteCount > 0 &&
+        byteCount <= MINIAPP_LOGO_MAX_BYTES
+      ) {
+        const { data: logoBlob, error: logoError } = await admin.storage
+          .from("workspace-assets")
+          .download(storagePath);
+        if (!logoError && logoBlob && logoBlob.size <= MINIAPP_LOGO_MAX_BYTES) {
+          logoDataUrl = `data:${mimeType};base64,${bytesToBase64(
+            new Uint8Array(await logoBlob.arrayBuffer()),
+          )}`;
+        }
+      }
+    }
+
+    const communities = Array.isArray(communityData)
+      ? (communityData as Record<string, unknown>[])
+      : [];
+    return {
+      ok: true,
+      identity: {
+        projectName,
+        ticker: tickerText || null,
+        logoDataUrl,
+        source: profile ? "profile" : "workspace",
+      },
+      community: {
+        connectedGroups: communities.length,
+        adminReadyGroups: communities.filter((row) => row["bot_is_admin"] === true).length,
+      },
     };
   });
 

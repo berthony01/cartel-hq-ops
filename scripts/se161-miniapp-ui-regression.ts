@@ -268,8 +268,8 @@ check(
 
 const gitStatus = execSync("git status --porcelain", { encoding: "utf8" });
 check(
-  "11.1 the SE-16.0 bridge modules are untouched by this phase",
-  !/telegram-miniapp-auth\.server\.ts|telegram-miniapp-bridge\.functions\.ts/.test(gitStatus),
+  "11.1 the Telegram initData validator remains untouched",
+  !/telegram-miniapp-auth\.server\.ts/.test(gitStatus),
 );
 check(
   "11.2 no SQL, supabase config or env file is modified",
