@@ -143,6 +143,34 @@ check("no direct supabase/browser inbox RPCs", !/@\/integrations\/supabase|@\/li
 
 // --- Deep link + 1A preservation
 check("search is validated", /validateSearch: parseMiniAppHomeSearch/.test(home));
+
+// --- Workspace deep-link: bounded parsing + authorized-list-only preselection
+check("search type carries optional workspace", /workspace\?: string/.test(home));
+check(
+  "workspace query is length+UUID bounded and lowercased",
+  /typeof workspace === "string" && workspace\.length === 36 && CONVERSATION_UUID\.test\(workspace\)/.test(home) &&
+    /out\.workspace = workspace\.toLowerCase\(\)/.test(home),
+);
+check(
+  "conversation query still forces inbox tab",
+  /out\.conversation = conversation\.toLowerCase\(\);\s*out\.tab = "inbox";/.test(home),
+);
+check(
+  "workspace resolver only returns ids from the authorized list",
+  /export function resolveAuthorizedWorkspace/.test(home) &&
+    /authorized\.find\(\(w\) => w\.workspaceId\.toLowerCase\(\) === requested\)/.test(home) &&
+    /return match \? match\.workspaceId : null;/.test(home),
+);
+check(
+  "preselection is fed only from miniAppListMissionWorkspaces result",
+  /resolveAuthorizedWorkspace\(requestedWorkspace, workspaces\)/.test(home) &&
+    /workspacesQuery\.data\?\.ok \? workspacesQuery\.data\.workspaces : \[\]/.test(home),
+);
+check(
+  "no-query behavior preserved: single auto-select, multiple require choice",
+  /if \(workspaces\.length === 1\) \{[\s\S]{0,120}only\.workspaceId[\s\S]{0,60}return null;/.test(home),
+);
+check("raw workspace query never set directly", !/setWorkspaceId\(search\.workspace/.test(home) && !/setWorkspaceId\(requestedWorkspace/.test(home));
 check("tab is allow-listed", /MINI_APP_TABS as readonly string\[\]\)\.includes\(tab\)/.test(home));
 check("conversation must be a UUID", /CONVERSATION_UUID\.test\(conversation\)/.test(home));
 check("inbox tab is functional", /<MiniAppInbox/.test(home) && !/Inbox is coming next/.test(home));
