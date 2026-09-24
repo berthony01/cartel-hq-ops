@@ -2147,12 +2147,32 @@ Deno.serve(async (req: Request) => {
     return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20, 32)}`;
   };
 
-  const inboxListMarkup = (rows: any[]) => ({
+  /**
+   * MINI-HQ-1B.1 — Owner Mini App Inbox deep link. Only UUID-shaped workspace
+   * and conversation ids are ever placed in the URL; never Telegram user/chat/
+   * provider identifiers. Returns null when a safe URL cannot be formed.
+   */
+  const INBOX_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const buildInboxWebAppUrl = (workspaceId: string, conversationId: string): string | null => {
+    if (!INBOX_UUID_RE.test(workspaceId) || !INBOX_UUID_RE.test(conversationId)) return null;
+    const url = new URL(MISSION_CONTROL_WEBAPP_URL);
+    url.search = new URLSearchParams({
+      tab: "inbox",
+      workspace: workspaceId,
+      conversation: conversationId,
+    }).toString();
+    return url.toString();
+  };
+
+  const inboxListMarkup = (rows: any[], workspaceId: string) => ({
     inline_keyboard: [
-      ...rows.map((r: any) => [{
-        text: `${INBOX_STATUS_DOT(String(r.conversation_status))} ${String(r.member_ref)}`,
-        callback_data: `pi_c_${String(r.conversation_id)}`,
-      }]),
+      ...rows.map((r: any) => {
+        const text = `${INBOX_STATUS_DOT(String(r.conversation_status))} ${String(r.member_ref)}`;
+        const url = buildInboxWebAppUrl(workspaceId, String(r.conversation_id));
+        return [url
+          ? { text, web_app: { url } }
+          : { text, callback_data: `pi_c_${String(r.conversation_id)}` }];
+      }),
       [{ text: "✖️ Close inbox", callback_data: "pi_x" }],
     ],
   });
@@ -2188,8 +2208,8 @@ Deno.serve(async (req: Request) => {
     await sendMessage(
       TELEGRAM_BOT_TOKEN,
       chatId,
-      `<b>📥 PROJECT INBOX — ${escapeHtml(workspaceName)}</b>\n\n${lines.join("\n\n")}\n\nPick a conversation to read and reply.`,
-      { parse_mode: "HTML", reply_markup: inboxListMarkup(rows) },
+      `<b>📥 PROJECT INBOX — ${escapeHtml(workspaceName)}</b>\n\n${lines.join("\n\n")}\n\nOpen a conversation in the Mini App to read and reply.`,
+      { parse_mode: "HTML", reply_markup: inboxListMarkup(rows, workspaceId) },
     );
   };
 
@@ -2271,6 +2291,37 @@ Deno.serve(async (req: Request) => {
    * a failure here can never roll back or invalidate the captured message.
    * The member's Telegram identity is never included; only member_ref.
    */
+  /**
+   * MINI-HQ-1B.1 — resolve the conversation's workspace server-side from the
+   * trusted conversation_id (exact id lookup), then re-authorize the operator
+   * against bot_inbox_operator_workspaces. Returns null on any failure so the
+   * caller falls back to the legacy pi_c_* callback button.
+   */
+  const resolveAlertInboxWebAppUrl = async (operatorId: number, conversationId: string): Promise<string | null> => {
+    try {
+      if (!INBOX_UUID_RE.test(conversationId)) return null;
+      const { data: conv, error: convError } = await admin
+        .from("project_conversations")
+        .select("workspace_id")
+        .eq("id", conversationId)
+        .maybeSingle();
+      if (convError || !conv) return null;
+      const workspaceId = String((conv as any).workspace_id ?? "");
+      if (!INBOX_UUID_RE.test(workspaceId)) return null;
+      const { data: wsData, error: wsError } = await admin.rpc("bot_inbox_operator_workspaces", {
+        _telegram_user_id: operatorId,
+      });
+      if (wsError) return null;
+      const allowed = (Array.isArray(wsData) ? wsData : []).some(
+        (w: any) => String(w.workspace_id) === workspaceId,
+      );
+      if (!allowed) return null;
+      return buildInboxWebAppUrl(workspaceId, conversationId);
+    } catch {
+      return null;
+    }
+  };
+
   const notifyTeamOfCapture = async (updateId: number) => {
     try {
       const { data, error } = await admin.rpc("bot_inbox_capture_alert_targets", {
@@ -2284,6 +2335,11 @@ Deno.serve(async (req: Request) => {
         const heading = target.is_new_conversation === true
           ? "🆕 NEW PROJECT INBOX MESSAGE"
           : "📥 PROJECT INBOX MESSAGE";
+        const conversationId = String(target.conversation_id);
+        const webAppUrl = await resolveAlertInboxWebAppUrl(operatorId, conversationId);
+        const alertButton = webAppUrl
+          ? { text: "📥 Open Inbox", web_app: { url: webAppUrl } }
+          : { text: "📖 Open conversation", callback_data: `pi_c_${conversationId}` };
         await sendMessage(
           TELEGRAM_BOT_TOKEN,
           String(operatorId),
@@ -2291,7 +2347,7 @@ Deno.serve(async (req: Request) => {
           {
             parse_mode: "HTML",
             reply_markup: {
-              inline_keyboard: [[{ text: "📖 Open conversation", callback_data: `pi_c_${String(target.conversation_id)}` }]],
+              inline_keyboard: [[alertButton]],
             },
           },
         );
