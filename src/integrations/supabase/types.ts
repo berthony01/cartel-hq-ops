@@ -6384,6 +6384,147 @@ export type Database = {
       }
       mark_stale_launch_notification_claims: { Args: never; Returns: number }
       mark_stale_project_inbox_delivery_claims: { Args: never; Returns: number }
+      miniapp_inbox_ack_uncertainty: {
+        Args: {
+          _conversation_id: string
+          _message_id: string
+          _telegram_user_id: number
+          _workspace_id: string
+        }
+        Returns: {
+          delivery_status: string
+          message_id: string
+          uncertainty_acknowledged_at: string
+        }[]
+      }
+      miniapp_inbox_bind_operator: {
+        Args: {
+          _conversation_id?: string
+          _telegram_user_id: number
+          _workspace_id: string
+        }
+        Returns: string
+      }
+      miniapp_inbox_create_team_reply: {
+        Args: {
+          _body: string
+          _client_request_id: string
+          _conversation_id: string
+          _telegram_user_id: number
+          _workspace_id: string
+        }
+        Returns: {
+          conversation_status: string
+          created_at: string
+          delivery_status: string
+          idempotent_replay: boolean
+          message_id: string
+        }[]
+      }
+      miniapp_inbox_get_conversation: {
+        Args: {
+          _conversation_id: string
+          _telegram_user_id: number
+          _workspace_id: string
+        }
+        Returns: {
+          assigned_display_name: string
+          assigned_to: string
+          category: string
+          contact_status: string
+          conversation_id: string
+          last_message_at: string
+          member_ref: string
+          opened_at: string
+          origin_text_snapshot: string
+          origin_title_snapshot: string
+          origin_type: string
+          priority: string
+          resolved_at: string
+          status: string
+        }[]
+      }
+      miniapp_inbox_list_conversations: {
+        Args: {
+          _limit?: number
+          _status?: string
+          _telegram_user_id: number
+          _workspace_id: string
+        }
+        Returns: {
+          assigned_display_name: string
+          assigned_to: string
+          category: string
+          contact_status: string
+          conversation_id: string
+          last_message_at: string
+          latest_message_preview: string
+          member_ref: string
+          opened_at: string
+          origin_title_snapshot: string
+          origin_type: string
+          priority: string
+          status: string
+        }[]
+      }
+      miniapp_inbox_list_messages: {
+        Args: {
+          _conversation_id: string
+          _limit?: number
+          _telegram_user_id: number
+          _workspace_id: string
+        }
+        Returns: {
+          author_type: string
+          body: string
+          channel: string
+          created_at: string
+          delivery_sent_at: string
+          delivery_status: string
+          delivery_uncertainty_acknowledged_at: string
+          message_id: string
+          reply_to_message_id: string
+          team_display_name: string
+        }[]
+      }
+      miniapp_inbox_set_blocked: {
+        Args: {
+          _blocked: boolean
+          _conversation_id: string
+          _telegram_user_id: number
+          _workspace_id: string
+        }
+        Returns: {
+          blocked_at: string
+          contact_status: string
+          conversation_id: string
+          member_ref: string
+        }[]
+      }
+      miniapp_inbox_summary: {
+        Args: { _telegram_user_id: number; _workspace_id: string }
+        Returns: {
+          blocked_contact_count: number
+          open_count: number
+          resolved_count: number
+          waiting_on_member_count: number
+          waiting_on_team_count: number
+        }[]
+      }
+      miniapp_inbox_update_status: {
+        Args: {
+          _conversation_id: string
+          _status: string
+          _telegram_user_id: number
+          _workspace_id: string
+        }
+        Returns: {
+          conversation_id: string
+          resolved_at: string
+          status: string
+          updated_at: string
+        }[]
+      }
       notify_launch_watchers_official_contract: {
         Args: { _launch_id: string }
         Returns: Json
