@@ -959,8 +959,9 @@ export const miniAppInboxSummary = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<{ ok: true; summary: MiniAppInboxSummary } | MiniAppFailure> => {
     const gate = await inboxGate(data?.initData, data?.workspaceId);
     if (!gate.ok) return gate;
+    const telegramUserId = gate.telegramUserId;
     const { data: rows, error } = await gate.admin.rpc(MINIAPP_INBOX_RPC.summary, {
-      _telegram_user_id: gate.telegramUserId,
+      _telegram_user_id: telegramUserId,
       _workspace_id: data.workspaceId,
     });
     if (error) return inboxFailure(error);
@@ -983,9 +984,10 @@ export const miniAppInboxList = createServerFn({ method: "POST" })
     async ({ data }): Promise<{ ok: true; conversations: MiniAppInboxConversation[] } | MiniAppFailure> => {
       const gate = await inboxGate(data?.initData, data?.workspaceId);
       if (!gate.ok) return gate;
+    const telegramUserId = gate.telegramUserId;
       if (data.status !== null && !isInboxStatus(data.status)) return fail("invalid_status");
       const args: Record<string, unknown> = {
-        _telegram_user_id: gate.telegramUserId,
+        _telegram_user_id: telegramUserId,
         _workspace_id: data.workspaceId,
         _limit: 50,
       };
@@ -1011,9 +1013,10 @@ export const miniAppInboxThread = createServerFn({ method: "POST" })
     > => {
       const gate = await inboxGate(data?.initData, data?.workspaceId);
       if (!gate.ok) return gate;
+    const telegramUserId = gate.telegramUserId;
       if (!isUuid(data?.conversationId)) return fail("not_found");
       const base = {
-        _telegram_user_id: gate.telegramUserId,
+        _telegram_user_id: telegramUserId,
         _workspace_id: data.workspaceId,
         _conversation_id: data.conversationId,
       };
@@ -1057,10 +1060,11 @@ export const miniAppInboxSetStatus = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<{ ok: true; status: string } | MiniAppFailure> => {
     const gate = await inboxGate(data?.initData, data?.workspaceId);
     if (!gate.ok) return gate;
+    const telegramUserId = gate.telegramUserId;
     if (!isUuid(data?.conversationId)) return fail("not_found");
     if (!isInboxStatus(data?.status)) return fail("invalid_status");
     const { data: rows, error } = await gate.admin.rpc(MINIAPP_INBOX_RPC.status, {
-      _telegram_user_id: gate.telegramUserId,
+      _telegram_user_id: telegramUserId,
       _workspace_id: data.workspaceId,
       _conversation_id: data.conversationId,
       _status: data.status,
@@ -1076,10 +1080,11 @@ export const miniAppInboxSetBlocked = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<{ ok: true; contactStatus: string } | MiniAppFailure> => {
     const gate = await inboxGate(data?.initData, data?.workspaceId);
     if (!gate.ok) return gate;
+    const telegramUserId = gate.telegramUserId;
     if (!isUuid(data?.conversationId)) return fail("not_found");
     if (typeof data?.blocked !== "boolean") return fail("invalid_request");
     const { data: rows, error } = await gate.admin.rpc(MINIAPP_INBOX_RPC.block, {
-      _telegram_user_id: gate.telegramUserId,
+      _telegram_user_id: telegramUserId,
       _workspace_id: data.workspaceId,
       _conversation_id: data.conversationId,
       _blocked: data.blocked,
@@ -1111,6 +1116,7 @@ export const miniAppInboxReply = createServerFn({ method: "POST" })
     > => {
       const gate = await inboxGate(data?.initData, data?.workspaceId);
       if (!gate.ok) return gate;
+    const telegramUserId = gate.telegramUserId;
       if (!isUuid(data?.conversationId)) return fail("not_found");
       if (!isUuid(data?.clientRequestId)) return fail("invalid_request");
       const body = typeof data?.body === "string" ? data.body : "";
@@ -1118,7 +1124,7 @@ export const miniAppInboxReply = createServerFn({ method: "POST" })
         return fail("inbox:Reply must be between 1 and 3500 characters");
       }
       const { data: rows, error } = await gate.admin.rpc(MINIAPP_INBOX_RPC.reply, {
-        _telegram_user_id: gate.telegramUserId,
+        _telegram_user_id: telegramUserId,
         _workspace_id: data.workspaceId,
         _conversation_id: data.conversationId,
         _body: body,
@@ -1144,9 +1150,10 @@ export const miniAppInboxAckUncertainty = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<{ ok: true } | MiniAppFailure> => {
     const gate = await inboxGate(data?.initData, data?.workspaceId);
     if (!gate.ok) return gate;
+    const telegramUserId = gate.telegramUserId;
     if (!isUuid(data?.conversationId) || !isUuid(data?.messageId)) return fail("not_found");
     const { error } = await gate.admin.rpc(MINIAPP_INBOX_RPC.ack, {
-      _telegram_user_id: gate.telegramUserId,
+      _telegram_user_id: telegramUserId,
       _workspace_id: data.workspaceId,
       _conversation_id: data.conversationId,
       _message_id: data.messageId,
