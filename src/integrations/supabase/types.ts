@@ -171,6 +171,170 @@ export type Database = {
           },
         ]
       }
+      commercial_billing_customers: {
+        Row: {
+          billing_owner_user_id: string
+          created_at: string
+          customer_ref: string
+          environment: string
+          id: string
+          provider: string
+          updated_at: string
+        }
+        Insert: {
+          billing_owner_user_id: string
+          created_at?: string
+          customer_ref: string
+          environment: string
+          id?: string
+          provider?: string
+          updated_at?: string
+        }
+        Update: {
+          billing_owner_user_id?: string
+          created_at?: string
+          customer_ref?: string
+          environment?: string
+          id?: string
+          provider?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      commercial_billing_events: {
+        Row: {
+          attempt_count: number
+          created_at: string
+          environment: string
+          event_ref: string
+          event_type: string
+          id: string
+          last_error: string | null
+          livemode: boolean
+          object_ref: string | null
+          processed_at: string | null
+          processing_status: string
+          provider: string
+          subscription_ref: string | null
+          updated_at: string
+          workspace_id: string | null
+        }
+        Insert: {
+          attempt_count?: number
+          created_at?: string
+          environment: string
+          event_ref: string
+          event_type: string
+          id?: string
+          last_error?: string | null
+          livemode: boolean
+          object_ref?: string | null
+          processed_at?: string | null
+          processing_status?: string
+          provider?: string
+          subscription_ref?: string | null
+          updated_at?: string
+          workspace_id?: string | null
+        }
+        Update: {
+          attempt_count?: number
+          created_at?: string
+          environment?: string
+          event_ref?: string
+          event_type?: string
+          id?: string
+          last_error?: string | null
+          livemode?: boolean
+          object_ref?: string | null
+          processed_at?: string | null
+          processing_status?: string
+          provider?: string
+          subscription_ref?: string | null
+          updated_at?: string
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commercial_billing_events_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      commercial_billing_subscriptions: {
+        Row: {
+          billing_owner_user_id: string | null
+          cancel_at_period_end: boolean
+          created_at: string
+          current_period_end: string | null
+          current_period_start: string | null
+          customer_ref: string
+          environment: string
+          id: string
+          last_payment_failed_at: string | null
+          plan_id: string
+          price_ref: string
+          provider: string
+          stripe_status: string
+          subscription_ref: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          billing_owner_user_id?: string | null
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          customer_ref: string
+          environment: string
+          id?: string
+          last_payment_failed_at?: string | null
+          plan_id: string
+          price_ref: string
+          provider?: string
+          stripe_status: string
+          subscription_ref: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          billing_owner_user_id?: string | null
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          customer_ref?: string
+          environment?: string
+          id?: string
+          last_payment_failed_at?: string | null
+          plan_id?: string
+          price_ref?: string
+          provider?: string
+          stripe_status?: string
+          subscription_ref?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commercial_billing_subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "commercial_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commercial_billing_subscriptions_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       commercial_plan_entitlements: {
         Row: {
           created_at: string
@@ -208,6 +372,53 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "commercial_plan_entitlements_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "commercial_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      commercial_plan_provider_refs: {
+        Row: {
+          active: boolean
+          created_at: string
+          environment: string
+          id: string
+          plan_id: string
+          portal_configuration_ref: string | null
+          price_ref: string
+          product_ref: string
+          provider: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          environment: string
+          id?: string
+          plan_id: string
+          portal_configuration_ref?: string | null
+          price_ref: string
+          product_ref: string
+          provider?: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          environment?: string
+          id?: string
+          plan_id?: string
+          portal_configuration_ref?: string | null
+          price_ref?: string
+          product_ref?: string
+          provider?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commercial_plan_provider_refs_plan_id_fkey"
             columns: ["plan_id"]
             isOneToOne: false
             referencedRelation: "commercial_plans"
@@ -4357,6 +4568,10 @@ export type Database = {
         Args: { _mission_id: string; _target_id: string }
         Returns: Json
       }
+      apply_commercial_downgrade_effects: {
+        Args: { _workspace_id: string }
+        Returns: Json
+      }
       apply_launch_chain_deployment_verification: {
         Args: {
           _block_hash?: string
@@ -4633,6 +4848,24 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      apply_stripe_subscription_state: {
+        Args: {
+          _billing_owner_user_id: string
+          _cancel_at_period_end: boolean
+          _current_period_end: string
+          _current_period_start: string
+          _customer_ref: string
+          _environment: string
+          _payment_failed_at: string
+          _plan_code: string
+          _plan_version: number
+          _price_ref: string
+          _stripe_status: string
+          _subscription_ref: string
+          _workspace_id: string
+        }
+        Returns: Json
       }
       archive_sticker_pack: { Args: { _pack_id: string }; Returns: Json }
       arm_launch_chain_production_canary_execution: {
@@ -5847,6 +6080,10 @@ export type Database = {
           verification_status: string
           verified_at: string
         }[]
+      }
+      get_workspace_billing_status: {
+        Args: { _user_id?: string; _workspace_id: string }
+        Returns: Json
       }
       get_workspace_commercial_usage: {
         Args: { _user_id?: string; _workspace_id: string }
