@@ -68,7 +68,7 @@ function statusTone(status: string): "green" | "gold" | "red" | "muted" {
 
 function deliveryTone(status: string): string {
   if (status === "sent") return "text-pepe";
-  if (status === "failed") return "text-destructive";
+  if (status === "failed") return "text-signal";
   if (status === "ambiguous") return "text-gold";
   return "text-muted-foreground";
 }
@@ -179,7 +179,7 @@ function InboxList({
                       {row.memberRef}
                     </span>
                     {row.contactStatus === "BLOCKED" ? (
-                      <span className="shrink-0 text-[10px] uppercase text-destructive">Blocked</span>
+                      <span className="shrink-0 text-[10px] uppercase text-signal">Blocked</span>
                     ) : null}
                   </span>
                   <span className="mt-1 block truncate text-xs text-muted-foreground">
