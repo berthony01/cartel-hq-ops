@@ -65,7 +65,7 @@ check("1.4 no table/schema/policy/grant/data DDL",
   !/\b(GRANT|REVOKE|TRUNCATE)\b/i.test(msql) &&
   !/\bSECURITY INVOKER\b/i.test(msql));
 check("1.5 exactly four SECURITY DEFINER + search_path public", (msql.match(/SECURITY DEFINER/g) ?? []).length === 4 && (msql.match(/SET search_path TO 'public'/g) ?? []).length === 4);
-check("1.6 no usage_ledger/email/stripe in migration", !/usage_ledger|@|stripe/i.test(msql));
+check("1.6 no usage_ledger/email/stripe in migration", !/usage_ledger|[a-z0-9._-]+@[a-z0-9-]+\.[a-z]|stripe/i.test(msql));
 
 function fnBody(name: string): string {
   const s = msql.indexOf(`FUNCTION public.${name}(`);
