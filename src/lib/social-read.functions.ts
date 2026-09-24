@@ -45,6 +45,14 @@ export type SocialReadOutcome =
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+function commercialDenialMessage(reason: unknown): string {
+  const r = typeof reason === "string" ? reason : "";
+  if (r === "PLAN_LIMIT_REACHED") return "Monthly plan limit reached.";
+  if (r === "FEATURE_NOT_INCLUDED") return "This feature is not included in the current plan.";
+  if (r.startsWith("ASSIGNMENT_")) return "Plan access is not active.";
+  return "This action is not available for this workspace.";
+}
+
 function refusal(operation: SocialReadCapability, code: "INVALID_URL" | "UNKNOWN", message: string) {
   return {
     operation,
@@ -93,6 +101,20 @@ export const socialRead = createServerFn({ method: "POST" })
     );
     if (identityError || canUseTools !== true) {
       return refusal(operation, "UNKNOWN", PROJECT_IDENTITY_REQUIRED_MESSAGE);
+    }
+
+    // Commercial Foundation B — x_reads after identity, before any paid provider
+    // call. Single authority (evaluate_commercial_access); fails closed.
+    const { data: commercial, error: commercialError } = await context.supabase.rpc(
+      "evaluate_commercial_access",
+      { _workspace_id: data.workspaceId, _feature_key: "x_reads", _user_id: context.userId },
+    );
+    const commercialResult = commercial as { allowed?: unknown; reason?: unknown } | null;
+    if (commercialError || !commercialResult || typeof commercialResult !== "object") {
+      return refusal(operation, "UNKNOWN", "Plan access could not be verified. Try again.");
+    }
+    if (commercialResult.allowed !== true) {
+      return refusal(operation, "UNKNOWN", commercialDenialMessage(commercialResult.reason));
     }
 
     // Server-only import: keeps every provider adapter out of client bundles.

@@ -459,13 +459,16 @@ const PROJECT_IDENTITY_GATE_MIGRATION =
  */
 const COMMERCIAL_A_MIGRATION =
   `${MIGRATIONS}/20260923170038_eaa2a24d-9c13-49c9-9aa3-6a5a8e18c300.sql`;
+/** The sixth authorized post-gate migration: Commercial Foundation B (function-only). */
+const COMMERCIAL_B_MIGRATION =
+  `${MIGRATIONS}/20260924005521_b9fca846-4db3-4e8f-bf91-bdb4bd863228.sql`;
 const gateMigrationSet = new Set(gateMigrations);
 const postGateMigrations = migrationFiles.filter((f) => !gateMigrationSet.has(f)).sort();
 check(
   "L2F-I-migrations",
-  migrationFiles.length === 89 &&
+  migrationFiles.length === 90 &&
     gateMigrations.every((f) => migrationFiles.includes(f)),
-  `every gate-era migration still present (${migrationFiles.length} files, expected 89)`,
+  `every gate-era migration still present (${migrationFiles.length} files, expected 90)`,
 );
 check(
   "L2F-I-migration-content",
@@ -476,13 +479,14 @@ check(
 );
 check(
   "L2F-I-migration-post-gate",
-  postGateMigrations.length === 5 &&
+  postGateMigrations.length === 6 &&
     postGateMigrations[0] === PHASE1_COST_ACCOUNTING_MIGRATION &&
     postGateMigrations[1] === PHASE2B_MISSION_SAFETY_MIGRATION &&
     postGateMigrations[2] === PHASE2B_DURATION_MIGRATION &&
     postGateMigrations[3] === PROJECT_IDENTITY_GATE_MIGRATION &&
-    postGateMigrations[4] === COMMERCIAL_A_MIGRATION,
-  `exactly five post-gate migrations exist and they are the Cost Accounting Phase 1, Phase 2B mission-safety, Phase 2B corrective duration, Project Identity Gate A and Commercial Foundation A migrations (found: ${postGateMigrations.join(", ") || "none"})`,
+    postGateMigrations[4] === COMMERCIAL_A_MIGRATION &&
+    postGateMigrations[5] === COMMERCIAL_B_MIGRATION,
+  `exactly six post-gate migrations exist and they are the Cost Accounting Phase 1, Phase 2B mission-safety, Phase 2B corrective duration, Project Identity Gate A, Commercial Foundation A and Commercial Foundation B migrations (found: ${postGateMigrations.join(", ") || "none"})`,
 );
 
 // ----------------------------------------------- J. suite purity (no chain I/O)

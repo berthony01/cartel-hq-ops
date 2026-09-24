@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { requireProjectToolAccess } from "../_shared/project-identity.ts";
+import { requireCommercialAccess } from "../_shared/commercial-access.ts";
 
 const TG_BASE = "https://api.telegram.org";
 const BOT_USERNAME = "PepeCartelHQBot";
@@ -1281,6 +1282,14 @@ Deno.serve(async (req: Request) => {
       if (!identityGate.allowed) {
         timing.log(isLinkFinder ? "link_finder_start_blocked" : "mission_command_blocked");
         await reply("Create this project's Project Identity in CARTEL HQ first (project name + URL slug). Token launch is not required.");
+        return;
+      }
+      // Commercial Foundation B — x_missions quota after identity, before
+      // onStartAccepted and create_social_mission_from_telegram_link.
+      const missionCommercialGate = await requireCommercialAccess(admin, actorUserId, connection.workspace_id, "x_missions");
+      if (!missionCommercialGate.allowed) {
+        timing.log(isLinkFinder ? "link_finder_start_blocked" : "mission_command_blocked");
+        await reply(`${missionCommercialGate.body.message} No mission was started.`);
         return;
       }
     }
@@ -5107,6 +5116,35 @@ Deno.serve(async (req: Request) => {
       });
       const session = Array.isArray(sessionData) ? sessionData[0] : null;
       if (session?.conversation_id) {
+        // Commercial Foundation B — bot TEAM reply only. Resolve the authoritative
+        // telegram_connections.telegram_user_id -> user_id actor and the session's
+        // known workspace, then Project Identity + project_inbox, before the RPC.
+        // Member inbound capture and delivery plumbing are never gated.
+        {
+          const inboxWorkspaceId = String(session.workspace_id ?? "");
+          const { data: inboxActorRows, error: inboxActorError } = await admin
+            .from("telegram_connections")
+            .select("user_id")
+            .eq("telegram_user_id", Number(from.id))
+            .limit(2);
+          const inboxActorUserId = !inboxActorError && Array.isArray(inboxActorRows) && inboxActorRows.length === 1
+            ? String((inboxActorRows[0] as { user_id?: string }).user_id ?? "")
+            : "";
+          if (!inboxActorUserId || !inboxWorkspaceId) {
+            await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "That reply could not be queued. Nothing was sent. Try again.");
+            return json({ ok: true });
+          }
+          const inboxIdentityGate = await requireProjectToolAccess(admin, inboxActorUserId, inboxWorkspaceId);
+          if (!inboxIdentityGate.allowed) {
+            await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "Create this project's Project Identity in CARTEL HQ first. Nothing was sent.");
+            return json({ ok: true });
+          }
+          const inboxCommercialGate = await requireCommercialAccess(admin, inboxActorUserId, inboxWorkspaceId, "project_inbox");
+          if (!inboxCommercialGate.allowed) {
+            await sendMessage(TELEGRAM_BOT_TOKEN, chatId, `${inboxCommercialGate.body.message} Nothing was sent.`);
+            return json({ ok: true });
+          }
+        }
         const requestId = await replyRequestId(Number(update?.update_id));
         const { data: replyData, error: replyError } = await admin.rpc("bot_inbox_create_team_reply", {
           _telegram_user_id: Number(from.id),

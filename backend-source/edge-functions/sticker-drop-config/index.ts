@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { requireProjectToolAccess } from "../_shared/project-identity.ts";
+import { requireCommercialAccess } from "../_shared/commercial-access.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -107,6 +108,8 @@ Deno.serve(async (req: Request) => {
     if (action === "save_schedule" || (action === "set_schedule_enabled" && body.enabled === true)) {
       const identityGate = await requireProjectToolAccess(admin, authData.user.id, workspaceId);
       if (!identityGate.allowed) return respond(identityGate.body, identityGate.status);
+      const commercialGate = await requireCommercialAccess(admin, authData.user.id, workspaceId, "sticker_drops");
+      if (!commercialGate.allowed) return respond(commercialGate.body, commercialGate.status);
     }
 
     if (action === "save_schedule") {

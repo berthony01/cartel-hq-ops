@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { recordProviderUsage } from "../_shared/usage-accounting.ts";
 import { requireProjectToolAccess } from "../_shared/project-identity.ts";
+import { requireCommercialAccess } from "../_shared/commercial-access.ts";
 
 /**
  * sticker-concepts — TEXT ONLY.
@@ -435,6 +436,9 @@ Deno.serve(async (req: Request) => {
   // Fails closed; the platform-owner bypass lives inside can_use_project_tools.
   const conceptAccess = await requireProjectToolAccess(admin, user.id, workspaceId);
   if (!conceptAccess.allowed) return respond(conceptAccess.body, conceptAccess.status);
+  // Commercial Foundation B — concept_generation, after identity, before Kie/Gemini.
+  const conceptCommercial = await requireCommercialAccess(admin, user.id, workspaceId, "concept_generation");
+  if (!conceptCommercial.allowed) return respond(conceptCommercial.body, conceptCommercial.status);
 
   const existing = Array.isArray(body["concepts"])
     ? (body["concepts"] as unknown[])

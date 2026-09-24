@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { recordProviderCreditUsage } from "../_shared/usage-accounting.ts";
 import { requireProjectToolAccess } from "../_shared/project-identity.ts";
+import { requireCommercialAccess, type CommercialFeatureKey } from "../_shared/commercial-access.ts";
 import {
   ImageMagick,
   initializeImageMagick,
@@ -444,6 +445,12 @@ Deno.serve(async (req: Request) => {
     return access.allowed ? null : respond(access.body, access.status);
   };
 
+  /** Commercial Foundation B — after identity, before paid work. */
+  const commercialDenial = async (workspaceId: string, featureKey: CommercialFeatureKey) => {
+    const access = await requireCommercialAccess(admin, user.id, workspaceId, featureKey);
+    return access.allowed ? null : respond(access.body, access.status);
+  };
+
   const action = String(body.action ?? "");
   if (action === "config") {
     return respond({ configured: Boolean(KIE_API_KEY), model: MODEL, backgroundModel: BG_MODEL });
@@ -764,6 +771,11 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      // Commercial Foundation B — static_ai_generations quota, after identity and
+      // reuse/idempotency checks, before the new sticker_generate job/provider.
+      const startCommercialBlocked = await commercialDenial(workspaceId, "static_ai_generations");
+      if (startCommercialBlocked) return startCommercialBlocked;
+
       const { data: job, error: jobError } = await admin.from("ai_jobs").insert({
         workspace_id: workspaceId, user_id: user.id, pack_id: packId, sticker_id: stickerId,
         job_type: "sticker_generate", provider: "kie", provider_model: MODEL, status: "queued",
@@ -886,6 +898,10 @@ Deno.serve(async (req: Request) => {
       if ((activeJobs ?? []).length > 0) {
         return respond({ error: "ACTIVE_JOB_CONFLICT", message: "This sticker is already running a generation task. Wait for it to finish before retrying." }, 409);
       }
+
+      // Commercial Foundation B — static_ai_tools, after identity, before provider.
+      const retryCommercialBlocked = await commercialDenial(workspaceId, "static_ai_tools");
+      if (retryCommercialBlocked) return retryCommercialBlocked;
 
       // Retrieval only — never a createTask for image generation.
       const sourceQuery = await kieRequest(`/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(String(sourceJob.provider_task_id))}`, KIE_API_KEY, { method: "GET" });

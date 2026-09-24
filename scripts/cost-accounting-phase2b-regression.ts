@@ -64,18 +64,19 @@ const postGate = migrationNames.filter((f) => f > LAST_GATE_MIGRATION);
 
 check(
   "CA2B-1a",
-  migrationNames.length === 89,
-  `exactly 89 migration files exist (found ${migrationNames.length})`,
+  migrationNames.length === 90,
+  `exactly 90 migration files exist (found ${migrationNames.length})`,
 );
 check(
   "CA2B-1b",
-  postGate.length === 5 &&
+  postGate.length === 6 &&
     postGate[0] === PHASE1_MIGRATION &&
     postGate[1] === PHASE2B_MIGRATION &&
     postGate[2] === PHASE2B_DURATION_MIGRATION &&
     postGate[3] === "20260922161918_ef6e322a-d993-4970-9d48-3b4f93afa222.sql" &&
-    postGate[4] === "20260923170038_eaa2a24d-9c13-49c9-9aa3-6a5a8e18c300.sql",
-  `the only post-gate migrations are Cost Accounting Phase 1, Phase 2B mission safety, the Phase 2B corrective duration migration and the Project Identity Gate A function-only migration and the Commercial Foundation A migration (found: ${postGate.join(", ") || "none"})`,
+    postGate[4] === "20260923170038_eaa2a24d-9c13-49c9-9aa3-6a5a8e18c300.sql" &&
+    postGate[5] === "20260924005521_b9fca846-4db3-4e8f-bf91-bdb4bd863228.sql",
+  `the only post-gate migrations are Cost Accounting Phase 1, Phase 2B mission safety, the Phase 2B corrective duration migration and the Project Identity Gate A function-only migration and the Commercial Foundation A migration and the Commercial Foundation B function-only migration (found: ${postGate.join(", ") || "none"})`,
 );
 check(
   "CA2B-1c",

@@ -17,6 +17,7 @@ const PHASE2B_MIGRATION = "20260922141917_c47c2384-73c4-4bbf-8cc2-495112d64990.s
 const PHASE2B_DURATION_MIGRATION = "20260922142803_fedec44c-654f-4e1a-a117-30d027601e03.sql";
 const IDENTITY_MIGRATION = "20260922161918_ef6e322a-d993-4970-9d48-3b4f93afa222.sql";
 const COMMERCIAL_A_MIGRATION = "20260923170038_eaa2a24d-9c13-49c9-9aa3-6a5a8e18c300.sql";
+const COMMERCIAL_B_MIGRATION = "20260924005521_b9fca846-4db3-4e8f-bf91-bdb4bd863228.sql";
 
 const EDGE_HELPER = "backend-source/edge-functions/_shared/project-identity.ts";
 const BROWSER_AUTHORITY = "src/lib/project-identity.ts";
@@ -68,18 +69,19 @@ const migrationCode = migrationSrc.replace(/^\s*--.*$/gm, "");
 /* ------------------------------------------------ 1. authorized migration set */
 check(
   "PIG-1a",
-  migrationNames.length === 89,
-  `exactly 89 migration files exist (found ${migrationNames.length})`,
+  migrationNames.length === 90,
+  `exactly 90 migration files exist (found ${migrationNames.length})`,
 );
 check(
   "PIG-1b",
-  postGate.length === 5 &&
+  postGate.length === 6 &&
     postGate[0] === PHASE1_MIGRATION &&
     postGate[1] === PHASE2B_MIGRATION &&
     postGate[2] === PHASE2B_DURATION_MIGRATION &&
     postGate[3] === IDENTITY_MIGRATION &&
-    postGate[4] === COMMERCIAL_A_MIGRATION,
-  `the only post-gate migrations are Cost Accounting Phase 1, the two Phase 2B mission-safety migrations and the Project Identity Gate A function-only migration and the Commercial Foundation A migration (found: ${postGate.join(", ") || "none"})`,
+    postGate[4] === COMMERCIAL_A_MIGRATION &&
+    postGate[5] === COMMERCIAL_B_MIGRATION,
+  `the only post-gate migrations are Cost Accounting Phase 1, the two Phase 2B mission-safety migrations and the Project Identity Gate A function-only migration and the Commercial Foundation A migration and the Commercial Foundation B function-only migration (found: ${postGate.join(", ") || "none"})`,
 );
 check(
   "PIG-1c",

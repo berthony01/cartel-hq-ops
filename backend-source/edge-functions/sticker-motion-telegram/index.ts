@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { requireProjectToolAccess } from "../_shared/project-identity.ts";
+import { requireCommercialAccess } from "../_shared/commercial-access.ts";
 import { recordProviderUsage } from "../_shared/usage-accounting.ts";
 
 
@@ -372,6 +373,8 @@ Deno.serve(async (req: Request) => {
       // completion of an already-authorized job) stay ungated.
       const identityGate = await requireProjectToolAccess(admin, user.id, workspaceId);
       if (!identityGate.allowed) return respond(identityGate.body, identityGate.status);
+      const startCommercialGate = await requireCommercialAccess(admin, user.id, workspaceId, "telegram_motion_prep");
+      if (!startCommercialGate.allowed) return respond(startCommercialGate.body, startCommercialGate.status);
 
       const { data: pack } = await admin
         .from("sticker_packs").select("id,workspace_id").eq("id", packId).maybeSingle();
@@ -1013,6 +1016,12 @@ Deno.serve(async (req: Request) => {
       const failedPrepJobId = String(body.failedPrepJobId ?? "");
       if (!workspaceId || !failedPrepJobId) return respond({ error: "INVALID_INPUT" }, 400);
       if (!(await isMember(workspaceId))) return respond({ error: "FORBIDDEN" }, 403);
+      // G2 fix — Project Identity then commercial telegram_motion_prep, both
+      // before any source read, provider call or new job.
+      const retryIdentityGate = await requireProjectToolAccess(admin, user.id, workspaceId);
+      if (!retryIdentityGate.allowed) return respond(retryIdentityGate.body, retryIdentityGate.status);
+      const retryCommercialGate = await requireCommercialAccess(admin, user.id, workspaceId, "telegram_motion_prep");
+      if (!retryCommercialGate.allowed) return respond(retryCommercialGate.body, retryCommercialGate.status);
 
       const { data: source } = await admin
         .from("ai_jobs").select("*").eq("id", failedPrepJobId).maybeSingle();

@@ -26,13 +26,14 @@ function actionBlock(src: string, name: string): string {
 
 // 1 — migrations.
 const migrations = readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql")).sort();
-check("1.1 migration count exactly 89", migrations.length === 89, String(migrations.length));
+check("1.1 migration count exactly 90", migrations.length === 90, String(migrations.length));
 const POST_GATE = [
   "20260922070921_40548af2-4afe-4876-bcaa-f22868f5942d.sql",
   "20260922141917_c47c2384-73c4-4bbf-8cc2-495112d64990.sql",
   "20260922142803_fedec44c-654f-4e1a-a117-30d027601e03.sql",
   "20260922161918_ef6e322a-d993-4970-9d48-3b4f93afa222.sql",
   "20260923170038_eaa2a24d-9c13-49c9-9aa3-6a5a8e18c300.sql",
+  "20260924005521_b9fca846-4db3-4e8f-bf91-bdb4bd863228.sql",
 ];
 const postGate = migrations.filter((f) => f >= "20260922");
 check("1.2 exact authorized post-gate migration set", JSON.stringify(postGate) === JSON.stringify(POST_GATE), postGate.join(","));
@@ -66,7 +67,7 @@ const tg = read(`${EF}/telegram-group/index.ts`);
 const tgSet = tg.match(/PROJECT_IDENTITY_GATED_ACTIONS = new Set\((\[[^\]]*\])\)/);
 const tgGated = tgSet ? (JSON.parse(tgSet[1]!) as string[]).sort() : [];
 check("3.1 telegram-group exact gated set", JSON.stringify(tgGated) === JSON.stringify(
-  ["assign_pack", "distribute_pack", "send_group_test", "save_welcome_settings", "send_welcome_test", "send_group_announcement", "send_official_contract_broadcast"].sort()));
+  ["assign_pack", "distribute_pack", "send_group_test", "save_welcome_settings", "send_welcome_test", "send_group_announcement", "send_official_contract_broadcast", "send_official_contract_correction_broadcast"].sort()));
 for (const u of ["status", "distribution_status", "welcome_settings", "broadcast_launch_options"]) {
   check(`3.2 telegram-group ungated: ${u}`, !tgGated.includes(u));
 }
@@ -87,9 +88,15 @@ check("4.3 stickers gate after member helper + membership, before actions",
 
 // 5 — sticker-motion-telegram.
 const mt = read(`${EF}/sticker-motion-telegram/index.ts`);
-check("5.1 motion: exactly one gate call", mt.split("requireProjectToolAccess(").length - 1 === 1);
+// Commercial Foundation B (G2): exactly two gate calls — start + retry_normalization.
+check("5.1 motion: exactly two gate calls (start + retry_normalization)", mt.split("requireProjectToolAccess(").length - 1 === 2);
 const mtStart = actionBlock(mt, "start");
 check("5.2 motion start gated after isMember", mtStart.indexOf("requireProjectToolAccess(") > mtStart.indexOf("isMember(workspaceId)") && mtStart.indexOf("isMember(workspaceId)") > 0);
+const mtRetry = actionBlock(mt, "retry_normalization");
+check("5.2b motion retry_normalization gated after isMember, before source read",
+  mtRetry.indexOf("isMember(workspaceId)") > 0 &&
+  mtRetry.indexOf("requireProjectToolAccess(") > mtRetry.indexOf("isMember(workspaceId)") &&
+  mtRetry.indexOf("requireProjectToolAccess(") < mtRetry.indexOf('from("ai_jobs")'));
 check("5.3 motion sync ungated", !actionBlock(mt, "sync").includes("requireProjectToolAccess"));
 check("5.4 motion config ungated", !mt.slice(mt.indexOf('if (action === "config")'), mt.indexOf('if (action === "start")')).includes("requireProjectToolAccess"));
 
