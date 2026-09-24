@@ -17,7 +17,9 @@ import {
   miniAppListMissionWorkspaces,
   miniAppListMissions,
   miniAppOperatorHome,
+  miniAppInboxSummary,
 } from "@/lib/telegram-miniapp-bridge.functions";
+import { MiniAppInbox } from "@/components/telegram-miniapp/MiniAppInbox";
 import {
   MiniAppFrame,
   MiniAppIdentity,
@@ -37,8 +39,33 @@ import {
   resolveTelegramSession,
 } from "@/lib/telegram-miniapp-client";
 
+const MINI_APP_TABS: readonly MiniAppTab[] = ["home", "missions", "inbox", "brand", "more"];
+const CONVERSATION_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * MINI-HQ-1B — bounded deep-link state. Only a known tab and a syntactically
+ * valid UUID survive; anything else is dropped. Existence and workspace
+ * ownership are decided server-side and fail closed without disclosure.
+ */
+export type MiniAppHomeSearch = { tab?: MiniAppTab; conversation?: string };
+
+export function parseMiniAppHomeSearch(search: Record<string, unknown>): MiniAppHomeSearch {
+  const out: MiniAppHomeSearch = {};
+  const tab = search["tab"];
+  if (typeof tab === "string" && (MINI_APP_TABS as readonly string[]).includes(tab)) {
+    out.tab = tab as MiniAppTab;
+  }
+  const conversation = search["conversation"];
+  if (typeof conversation === "string" && conversation.length === 36 && CONVERSATION_UUID.test(conversation)) {
+    out.conversation = conversation.toLowerCase();
+    out.tab = "inbox";
+  }
+  return out;
+}
+
 export const Route = createFileRoute("/tg/")({
   ssr: false,
+  validateSearch: parseMiniAppHomeSearch,
   head: () => ({
     meta: [
       { title: "Operator Home — CARTEL HQ" },
@@ -62,7 +89,9 @@ function MiniAppHome() {
   const [initData, setInitData] = useState<string | null>(null);
   const [booting, setBooting] = useState(true);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<MiniAppTab>("home");
+  const search = Route.useSearch();
+  const [activeTab, setActiveTab] = useState<MiniAppTab>(search.tab ?? "home");
+  const [conversationId, setConversationId] = useState<string | null>(search.conversation ?? null);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,6 +108,7 @@ function MiniAppHome() {
   const listWorkspaces = useServerFn(miniAppListMissionWorkspaces);
   const listMissions = useServerFn(miniAppListMissions);
   const loadOperatorHome = useServerFn(miniAppOperatorHome);
+  const loadInboxSummary = useServerFn(miniAppInboxSummary);
 
   const workspacesQuery = useQuery({
     queryKey: ["tg", "workspaces"],
@@ -123,6 +153,14 @@ function MiniAppHome() {
       loadOperatorHome({ data: { initData: initData as string, workspaceId: workspaceId as string } }),
   });
 
+  const inboxSummaryQuery = useQuery({
+    queryKey: ["tg", "inbox", "summary", workspaceId],
+    enabled: Boolean(initData && workspaceId),
+    retry: false,
+    queryFn: () =>
+      loadInboxSummary({ data: { initData: initData as string, workspaceId: workspaceId as string } }),
+  });
+
   if (booting) {
     return (
       <MiniAppFrame>
@@ -152,6 +190,8 @@ function MiniAppHome() {
   const homeFailure = homeQuery.data && !homeQuery.data.ok ? homeQuery.data.reason : null;
   const homeData = homeQuery.data?.ok ? homeQuery.data : null;
   const liveMissionCount = missionsQuery.data?.ok ? missionsQuery.data.missions.length : null;
+  // Null when unavailable: Home then shows no inbox claim at all.
+  const inboxSummary = inboxSummaryQuery.data?.ok ? inboxSummaryQuery.data.summary : null;
   const navigation = <MiniAppTabBar active={activeTab} onSelect={setActiveTab} />;
 
   return (
@@ -242,6 +282,27 @@ function MiniAppHome() {
       {workspaceId && activeTab === "home" ? (
         <>
           <MiniAppPanel heading="Needs attention">
+            {inboxSummary && inboxSummary.waitingOnTeam > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setConversationId(null);
+                  setActiveTab("inbox");
+                }}
+                className="mb-3 flex w-full min-w-0 items-start gap-3 border-b border-border/40 pb-3 text-left text-sm"
+              >
+                <Send className="mt-0.5 size-4 shrink-0 text-gold" aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold text-foreground">
+                    {inboxSummary.waitingOnTeam === 1
+                      ? "1 conversation needs a reply"
+                      : `${inboxSummary.waitingOnTeam} conversations need a reply`}
+                  </span>
+                  <span className="mt-1 block text-xs text-muted-foreground">Open Project Inbox</span>
+                </span>
+                <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              </button>
+            ) : null}
             {homeData && homeData.community.connectedGroups === 0 ? (
               <div className="flex min-w-0 items-start gap-3 text-sm">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0 text-gold" aria-hidden="true" />
@@ -335,7 +396,7 @@ function MiniAppHome() {
                 className="flex min-h-14 min-w-0 items-center gap-2 rounded-md border border-border/60 bg-surface-raised/40 px-3 text-left text-xs font-semibold text-foreground"
               >
                 <Send className="size-4 shrink-0 text-gold" aria-hidden="true" />
-                <span className="truncate">Inbox status</span>
+                <span className="truncate">Project Inbox</span>
               </button>
             </div>
           </MiniAppPanel>
@@ -390,9 +451,11 @@ function MiniAppHome() {
       ) : null}
 
       {workspaceId && activeTab === "inbox" ? (
-        <MiniAppMessage
-          title="Inbox is coming next"
-          description="Project Inbox remains available in the full CARTEL HQ app while the owner Mini App inbox is being connected."
+        <MiniAppInbox
+          initData={initData}
+          workspaceId={workspaceId}
+          conversationId={conversationId}
+          onOpenConversation={setConversationId}
         />
       ) : null}
 

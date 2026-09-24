@@ -821,3 +821,343 @@ export const miniAppCapabilities = createServerFn({ method: "POST" })
       },
     };
   });
+
+/* ------------------------------------------------ MINI-HQ-1B PROJECT INBOX */
+
+/**
+ * MINI-HQ-1B — service-only Project Inbox wrappers (staged SQL:
+ * docs/sql/MINI_HQ_1B_miniapp_inbox_wrappers.sql). Each wrapper maps the
+ * signature-derived Telegram user id to its linked platform user, verifies
+ * owner/admin on the claimed workspace (and conversation membership), sets a
+ * transaction-local auth subject, then delegates to the UNCHANGED existing
+ * Project Inbox RPC. This bridge copies no reply/commercial/idempotency/lock/
+ * delivery logic: it validates initData, bounds inputs, and projects only the
+ * privacy-safe fields below. Until the SQL is applied every call fails closed
+ * with "unavailable".
+ */
+export const MINIAPP_INBOX_RPC = {
+  summary: "miniapp_inbox_summary",
+  list: "miniapp_inbox_list_conversations",
+  detail: "miniapp_inbox_get_conversation",
+  messages: "miniapp_inbox_list_messages",
+  status: "miniapp_inbox_update_status",
+  block: "miniapp_inbox_set_blocked",
+  reply: "miniapp_inbox_create_team_reply",
+  ack: "miniapp_inbox_ack_uncertainty",
+} as const;
+
+export const MINIAPP_INBOX_STATUSES = [
+  "OPEN",
+  "WAITING_ON_TEAM",
+  "WAITING_ON_MEMBER",
+  "RESOLVED",
+] as const;
+export type MiniAppInboxStatus = (typeof MINIAPP_INBOX_STATUSES)[number];
+export const MINIAPP_REPLY_MAX_CHARS = 3500;
+
+export type MiniAppInboxSummary = {
+  open: number;
+  waitingOnTeam: number;
+  waitingOnMember: number;
+  resolved: number;
+  blockedContacts: number;
+};
+export type MiniAppInboxConversation = {
+  conversationId: string;
+  memberRef: string;
+  contactStatus: string;
+  category: string;
+  status: string;
+  priority: string;
+  originType: string;
+  originTitle: string | null;
+  preview: string | null;
+  lastMessageAt: string;
+};
+export type MiniAppInboxDetail = MiniAppInboxConversation & {
+  originText: string | null;
+  resolvedAt: string | null;
+};
+export type MiniAppInboxMessage = {
+  messageId: string;
+  authorType: string;
+  body: string;
+  teamDisplayName: string | null;
+  createdAt: string;
+  deliveryStatus: string | null;
+  deliverySentAt: string | null;
+  uncertaintyAcknowledgedAt: string | null;
+};
+
+/** Known existing-RPC user copy that is safe to surface verbatim. */
+const MINIAPP_INBOX_SAFE_ERRORS = [
+  "Reply must be between 1 and 3500 characters",
+  "This request id was already used for a different reply",
+  "This conversation is resolved. Reopen it before replying.",
+  "This member is blocked",
+  "An earlier reply in this conversation is not settled yet",
+  "Save your Project Profile name before replying",
+  "This reply is too long to deliver",
+  "Only an uncertain delivery can be acknowledged",
+];
+
+/** Maps any RPC error to a bounded reason; never leaks internals/existence. */
+function inboxFailure(error: unknown): MiniAppFailure {
+  const message = String((error as { message?: unknown })?.message ?? "");
+  if (message.startsWith("COMMERCIAL_ACCESS_DENIED")) return fail("inbox_plan_required");
+  const safe = MINIAPP_INBOX_SAFE_ERRORS.find((text) => message.includes(text));
+  if (safe) return fail(`inbox:${safe}`);
+  if (/not_found|Not authorized/.test(message)) return fail("not_found");
+  return fail("unavailable");
+}
+
+function str(value: unknown): string {
+  return value === null || value === undefined ? "" : String(value);
+}
+function strOrNull(value: unknown): string | null {
+  return value === null || value === undefined || value === "" ? null : String(value);
+}
+function count(value: unknown): number {
+  const n = Number(value);
+  return Number.isSafeInteger(n) && n >= 0 ? n : 0;
+}
+function firstRow(data: unknown): Record<string, unknown> | null {
+  const row = Array.isArray(data) ? data[0] : data;
+  return row && typeof row === "object" ? (row as Record<string, unknown>) : null;
+}
+function projectConversation(r: Record<string, unknown>): MiniAppInboxConversation {
+  return {
+    conversationId: str(r["conversation_id"]),
+    memberRef: str(r["member_ref"]),
+    contactStatus: str(r["contact_status"]),
+    category: str(r["category"]),
+    status: str(r["status"]),
+    priority: str(r["priority"]),
+    originType: str(r["origin_type"]),
+    originTitle: strOrNull(r["origin_title_snapshot"]),
+    preview: strOrNull(r["latest_message_preview"]),
+    lastMessageAt: str(r["last_message_at"]),
+  };
+}
+function isInboxStatus(value: unknown): value is MiniAppInboxStatus {
+  return (MINIAPP_INBOX_STATUSES as readonly unknown[]).includes(value);
+}
+
+/** Gate: initData first, then UUID-bounded workspace. */
+async function inboxGate(
+  initData: unknown,
+  workspaceId: unknown,
+): Promise<{ ok: true; telegramUserId: number; admin: AdminClient } | MiniAppFailure> {
+  const auth = await validateTelegramInitData(initData, botToken());
+  if (!auth.ok) return fail(auth.reason);
+  if (!isUuid(workspaceId)) return fail("invalid_workspace_id");
+  return { ok: true, telegramUserId: auth.user.id, admin: await adminClient() };
+}
+
+export const miniAppInboxSummary = createServerFn({ method: "POST" })
+  .inputValidator((input: { initData: string; workspaceId: string }) => input)
+  .handler(async ({ data }): Promise<{ ok: true; summary: MiniAppInboxSummary } | MiniAppFailure> => {
+    const gate = await inboxGate(data?.initData, data?.workspaceId);
+    if (!gate.ok) return gate;
+    const telegramUserId = gate.telegramUserId;
+    const { data: rows, error } = await gate.admin.rpc(MINIAPP_INBOX_RPC.summary, {
+      _telegram_user_id: telegramUserId,
+      _workspace_id: data.workspaceId,
+    });
+    if (error) return inboxFailure(error);
+    const r = firstRow(rows) ?? {};
+    return {
+      ok: true,
+      summary: {
+        open: count(r["open_count"]),
+        waitingOnTeam: count(r["waiting_on_team_count"]),
+        waitingOnMember: count(r["waiting_on_member_count"]),
+        resolved: count(r["resolved_count"]),
+        blockedContacts: count(r["blocked_contact_count"]),
+      },
+    };
+  });
+
+export const miniAppInboxList = createServerFn({ method: "POST" })
+  .inputValidator((input: { initData: string; workspaceId: string; status: string | null }) => input)
+  .handler(
+    async ({ data }): Promise<{ ok: true; conversations: MiniAppInboxConversation[] } | MiniAppFailure> => {
+      const gate = await inboxGate(data?.initData, data?.workspaceId);
+      if (!gate.ok) return gate;
+    const telegramUserId = gate.telegramUserId;
+      if (data.status !== null && !isInboxStatus(data.status)) return fail("invalid_status");
+      const args: Record<string, unknown> = {
+        _telegram_user_id: telegramUserId,
+        _workspace_id: data.workspaceId,
+        _limit: 50,
+      };
+      if (data.status) args["_status"] = data.status;
+      const { data: rows, error } = await gate.admin.rpc(MINIAPP_INBOX_RPC.list, args);
+      if (error) return inboxFailure(error);
+      return {
+        ok: true,
+        conversations: (Array.isArray(rows) ? rows : []).map((row) =>
+          projectConversation(row as Record<string, unknown>),
+        ),
+      };
+    },
+  );
+
+export const miniAppInboxThread = createServerFn({ method: "POST" })
+  .inputValidator((input: { initData: string; workspaceId: string; conversationId: string }) => input)
+  .handler(
+    async ({
+      data,
+    }): Promise<
+      { ok: true; conversation: MiniAppInboxDetail; messages: MiniAppInboxMessage[] } | MiniAppFailure
+    > => {
+      const gate = await inboxGate(data?.initData, data?.workspaceId);
+      if (!gate.ok) return gate;
+    const telegramUserId = gate.telegramUserId;
+      if (!isUuid(data?.conversationId)) return fail("not_found");
+      const base = {
+        _telegram_user_id: telegramUserId,
+        _workspace_id: data.workspaceId,
+        _conversation_id: data.conversationId,
+      };
+      const { data: detailRows, error: detailError } = await gate.admin.rpc(MINIAPP_INBOX_RPC.detail, base);
+      if (detailError) return inboxFailure(detailError);
+      const d = firstRow(detailRows);
+      if (!d) return fail("not_found");
+      const { data: messageRows, error: messageError } = await gate.admin.rpc(MINIAPP_INBOX_RPC.messages, {
+        ...base,
+        _limit: 200,
+      });
+      if (messageError) return inboxFailure(messageError);
+      return {
+        ok: true,
+        conversation: {
+          ...projectConversation(d),
+          originText: strOrNull(d["origin_text_snapshot"]),
+          resolvedAt: strOrNull(d["resolved_at"]),
+        },
+        messages: (Array.isArray(messageRows) ? messageRows : []).map((row) => {
+          const m = row as Record<string, unknown>;
+          return {
+            messageId: str(m["message_id"]),
+            authorType: str(m["author_type"]),
+            body: str(m["body"]),
+            teamDisplayName: strOrNull(m["team_display_name"]),
+            createdAt: str(m["created_at"]),
+            deliveryStatus: strOrNull(m["delivery_status"]),
+            deliverySentAt: strOrNull(m["delivery_sent_at"]),
+            uncertaintyAcknowledgedAt: strOrNull(m["delivery_uncertainty_acknowledged_at"]),
+          };
+        }),
+      };
+    },
+  );
+
+export const miniAppInboxSetStatus = createServerFn({ method: "POST" })
+  .inputValidator(
+    (input: { initData: string; workspaceId: string; conversationId: string; status: string }) => input,
+  )
+  .handler(async ({ data }): Promise<{ ok: true; status: string } | MiniAppFailure> => {
+    const gate = await inboxGate(data?.initData, data?.workspaceId);
+    if (!gate.ok) return gate;
+    const telegramUserId = gate.telegramUserId;
+    if (!isUuid(data?.conversationId)) return fail("not_found");
+    if (!isInboxStatus(data?.status)) return fail("invalid_status");
+    const { data: rows, error } = await gate.admin.rpc(MINIAPP_INBOX_RPC.status, {
+      _telegram_user_id: telegramUserId,
+      _workspace_id: data.workspaceId,
+      _conversation_id: data.conversationId,
+      _status: data.status,
+    });
+    if (error) return inboxFailure(error);
+    return { ok: true, status: str(firstRow(rows)?.["status"]) };
+  });
+
+export const miniAppInboxSetBlocked = createServerFn({ method: "POST" })
+  .inputValidator(
+    (input: { initData: string; workspaceId: string; conversationId: string; blocked: boolean }) => input,
+  )
+  .handler(async ({ data }): Promise<{ ok: true; contactStatus: string } | MiniAppFailure> => {
+    const gate = await inboxGate(data?.initData, data?.workspaceId);
+    if (!gate.ok) return gate;
+    const telegramUserId = gate.telegramUserId;
+    if (!isUuid(data?.conversationId)) return fail("not_found");
+    if (typeof data?.blocked !== "boolean") return fail("invalid_request");
+    const { data: rows, error } = await gate.admin.rpc(MINIAPP_INBOX_RPC.block, {
+      _telegram_user_id: telegramUserId,
+      _workspace_id: data.workspaceId,
+      _conversation_id: data.conversationId,
+      _blocked: data.blocked,
+    });
+    if (error) return inboxFailure(error);
+    return { ok: true, contactStatus: str(firstRow(rows)?.["contact_status"]) };
+  });
+
+/**
+ * Queues ONE team reply through the existing idempotent RPC. Success means
+ * QUEUED, not delivered. The same clientRequestId + exact body replays the
+ * original message instead of sending twice.
+ */
+export const miniAppInboxReply = createServerFn({ method: "POST" })
+  .inputValidator(
+    (input: {
+      initData: string;
+      workspaceId: string;
+      conversationId: string;
+      body: string;
+      clientRequestId: string;
+    }) => input,
+  )
+  .handler(
+    async ({
+      data,
+    }): Promise<
+      { ok: true; messageId: string; deliveryStatus: string | null; idempotentReplay: boolean } | MiniAppFailure
+    > => {
+      const gate = await inboxGate(data?.initData, data?.workspaceId);
+      if (!gate.ok) return gate;
+    const telegramUserId = gate.telegramUserId;
+      if (!isUuid(data?.conversationId)) return fail("not_found");
+      if (!isUuid(data?.clientRequestId)) return fail("invalid_request");
+      const body = typeof data?.body === "string" ? data.body : "";
+      if (body.trim().length < 1 || body.length > MINIAPP_REPLY_MAX_CHARS) {
+        return fail("inbox:Reply must be between 1 and 3500 characters");
+      }
+      const { data: rows, error } = await gate.admin.rpc(MINIAPP_INBOX_RPC.reply, {
+        _telegram_user_id: telegramUserId,
+        _workspace_id: data.workspaceId,
+        _conversation_id: data.conversationId,
+        _body: body,
+        _client_request_id: data.clientRequestId,
+      });
+      if (error) return inboxFailure(error);
+      const r = firstRow(rows);
+      if (!r) return fail("unavailable");
+      return {
+        ok: true,
+        messageId: str(r["message_id"]),
+        deliveryStatus: strOrNull(r["delivery_status"]),
+        idempotentReplay: r["idempotent_replay"] === true,
+      };
+    },
+  );
+
+/** Acknowledges an UNCERTAIN delivery. Bookkeeping only — nothing is resent. */
+export const miniAppInboxAckUncertainty = createServerFn({ method: "POST" })
+  .inputValidator(
+    (input: { initData: string; workspaceId: string; conversationId: string; messageId: string }) => input,
+  )
+  .handler(async ({ data }): Promise<{ ok: true } | MiniAppFailure> => {
+    const gate = await inboxGate(data?.initData, data?.workspaceId);
+    if (!gate.ok) return gate;
+    const telegramUserId = gate.telegramUserId;
+    if (!isUuid(data?.conversationId) || !isUuid(data?.messageId)) return fail("not_found");
+    const { error } = await gate.admin.rpc(MINIAPP_INBOX_RPC.ack, {
+      _telegram_user_id: telegramUserId,
+      _workspace_id: data.workspaceId,
+      _conversation_id: data.conversationId,
+      _message_id: data.messageId,
+    });
+    if (error) return inboxFailure(error);
+    return { ok: true };
+  });
