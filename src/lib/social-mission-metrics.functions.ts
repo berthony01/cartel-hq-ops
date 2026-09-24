@@ -97,6 +97,21 @@ export const captureMissionMetrics = createServerFn({ method: "POST" })
       return failure("Create Project Identity first. Token launch is not required.");
     }
 
+    // Commercial Foundation B — x_reads after identity, before the paid X read.
+    const { data: commercial, error: commercialError } = await context.supabase.rpc(
+      "evaluate_commercial_access",
+      { _workspace_id: mission.workspace_id, _feature_key: "x_reads", _user_id: context.userId },
+    );
+    const commercialResult = commercial as { allowed?: unknown } | null;
+    if (commercialError || !commercialResult || typeof commercialResult !== "object") {
+      return failure("Plan access could not be verified. Try again.");
+    }
+    if (commercialResult.allowed !== true) {
+      return failure("This action is not available for this workspace.");
+    }
+
+
+
 
     // 3. Exact fixture binding: pinned post URL, single SENT target, pinned group.
     const post = await context.supabase
