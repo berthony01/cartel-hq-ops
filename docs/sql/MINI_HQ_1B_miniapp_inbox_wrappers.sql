@@ -1,7 +1,8 @@
 -- =============================================================================
 -- MINI-HQ-1B — Service-only Mini App Project Inbox wrappers
--- STATUS: STAGED FOR REVIEW ONLY. NOT APPLIED. Apply only through the Lovable
--- migration tool in a separately authorized turn after independent review.
+-- STATUS: APPLIED. Historical source record only. Applied externally to
+-- Supabase ocoinbnjgstkmnwwvnhi as migration 20260924151436 named
+-- mini_hq_1b_miniapp_inbox_wrappers. Do not re-run; no further review gate.
 --
 -- Purpose
 --   The Telegram owner Mini App has validated Telegram initData but no Supabase

@@ -67,7 +67,8 @@ This is a separate future phase for community-facing project identity, mission p
 - No deployment or publication without explicit authorization.
 ## MINI-HQ-1B implementation note
 
-- Inbox tab reuses the existing Project Inbox RPCs through service-only wrappers staged in `docs/sql/MINI_HQ_1B_miniapp_inbox_wrappers.sql` (review-only; not applied).
+- 1B is IMPLEMENTED. The backend wrappers were applied externally to Supabase `ocoinbnjgstkmnwwvnhi` as migration `20260924151436` (`mini_hq_1b_miniapp_inbox_wrappers`) and verified live; `docs/sql/MINI_HQ_1B_miniapp_inbox_wrappers.sql` is the exact historical source record of that migration.
+- The Inbox tab reuses the existing Project Inbox RPCs through the nine service-only `miniapp_inbox_*` wrappers (service_role EXECUTE only).
 - Wrappers map the signature-derived Telegram user to the linked platform user, verify owner/admin on the workspace and conversation membership, set a transaction-local `request.jwt.claim.sub`, then delegate to the unchanged RPC.
 - `/tg?tab=inbox&conversation=<uuid>` is bounded deep-link state; unknown or foreign conversations fail closed.
-- Bot notification buttons and the 30-minute Telegram reply mode are unchanged.
+- Bot notification buttons and the 30-minute Telegram reply mode remain the unchanged fallback; the bot handoff cutover is NOT finished and remains a later decision.
