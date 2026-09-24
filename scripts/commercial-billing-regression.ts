@@ -200,10 +200,7 @@ check("B-14.5 never client-grants (no DB writes)", !/\.(insert|update|upsert|del
 check("B-14.6 integrated into settings", read("src/routes/_authenticated/settings.tsx").includes("<BillingSection />"));
 
 /* 15. PCART/chain untouched */
-check("B-15.1 MAINNET_LIQUIDITY_TX_ENABLED remains false", readdirSync("src/lib").some((f) => /MAINNET_LIQUIDITY_TX_ENABLED\s*=\s*false/.test(read(`src/lib/${f}`).toString())) || /MAINNET_LIQUIDITY_TX_ENABLED\s*=\s*false/.test(execSafe()));
-function execSafe(): string {
-  try { return read("src/lib/launch-chain.ts"); } catch { return ""; }
-}
+check("B-15.1 MAINNET_LIQUIDITY_TX_ENABLED remains false", /MAINNET_LIQUIDITY_TX_ENABLED\s*=\s*false/.test(read("src/lib/chain-mainnet-registry.ts")));
 check("B-15.2 billing sources reference no PCART/chain", !/pcart|pepecartel-token|treasury|liquidity/i.test(allBilling + ui));
 
 console.log(`commercial-billing-regression: ${passed} passed, ${failed} failed`);
