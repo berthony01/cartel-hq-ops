@@ -57,9 +57,9 @@ Deno.serve(async (req: Request) => {
   const COMMERCIAL_ACTION_FEATURES: Record<string, CommercialFeatureKey> = {
     assign_pack: "sticker_auto_posting",
     distribute_pack: "sticker_auto_posting",
-    send_group_test: "community_tools",
-    save_welcome_settings: "community_tools",
-    send_welcome_test: "community_tools",
+    send_group_test: "community_basic",
+    save_welcome_settings: "community_basic",
+    send_welcome_test: "community_basic",
     send_group_announcement: "official_broadcasts",
     send_official_contract_broadcast: "official_broadcasts",
     send_official_contract_correction_broadcast: "official_broadcasts",
