@@ -13,6 +13,7 @@ import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
+import { BillingSection } from "@/components/cartel/BillingSection";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
@@ -152,6 +153,9 @@ function SettingsPage() {
           </Link>
         ))}
       </Section>
+
+      <BillingSection />
+
 
       <Section
         variant="surface"
