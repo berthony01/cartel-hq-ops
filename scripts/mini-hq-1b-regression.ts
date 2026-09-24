@@ -1,5 +1,5 @@
 /** MINI-HQ-1B focused repository regression. No network or database access. */
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 let passed = 0;
 const failures: string[] = [];
@@ -179,13 +179,12 @@ check("Home/Missions/mission detail preserved", /activeTab === "home"/.test(home
 check("no finalization controls", !/End Mission|Cancel Mission|miniAppEndMission|miniAppCancelMission/.test(home + inbox));
 check("no hard-coded customer brand", !/PEPECARTEL|PepeCartel|pepecartel/.test(home + inbox + sql));
 
-// --- Not applied: no new migration file for these wrappers
-const migrations = readdirSync("supabase/migrations");
-check("migration count unchanged (91)", migrations.length === 91);
+// --- Applied: the SQL source record names the applied migration/version
 check(
-  "wrappers are not present in any applied migration",
-  migrations.every((f) => !readFileSync(`supabase/migrations/${f}`, "utf8").includes("miniapp_inbox_")),
+  "sql source record names the applied migration",
+  sql.includes("20260924151436") && sql.includes("mini_hq_1b_miniapp_inbox_wrappers"),
 );
+check("sql header no longer claims unapplied", !/NOT APPLIED/i.test(sql));
 
 if (failures.length > 0) {
   console.error(`FAIL — ${failures.length} failed, ${passed} passed`);
