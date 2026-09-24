@@ -13,6 +13,7 @@
 import type { ReactNode } from "react";
 import {
   CircleEllipsis,
+  Folder,
   Home,
   Inbox,
   Palette,
@@ -145,10 +146,10 @@ export function MiniAppProjectIdentity({
           />
         ) : (
           <span
-            aria-hidden="true"
+                aria-label="No project logo configured"
             className="flex size-12 shrink-0 items-center justify-center rounded-md border border-gold/25 bg-gold/8 font-display text-xl text-gold"
           >
-            {projectName.trim().slice(0, 1).toUpperCase() || "C"}
+                <Folder className="size-5" aria-hidden="true" />
           </span>
         )}
         <div className="min-w-0 flex-1">
