@@ -153,7 +153,7 @@ export function BillingSection() {
                 <span className="font-display text-xl uppercase text-foreground">
                   {isPro ? "Cartel HQ Pro" : "Cartel HQ Free"}
                 </span>
-                <StatusBadge tone={isPro ? "success" : "muted"}>{isPro ? "$49/month" : "$0"}</StatusBadge>
+                <StatusBadge tone={isPro ? "gold" : "muted"}>{isPro ? "$49/month" : "$0"}</StatusBadge>
               </div>
               <p className="text-sm text-muted-foreground">
                 {isPro
@@ -178,7 +178,7 @@ export function BillingSection() {
                   {Object.entries(USAGE_LABELS)
                     .filter(([k]) => s.usage?.[k])
                     .map(([k, label]) => {
-                      const c = s.usage![k];
+                      const c = s.usage![k]!;
                       return (
                         <li key={k} className="rounded-md border border-border/70 bg-surface-raised/40 px-3 py-2 text-sm">
                           <span className="block text-muted-foreground">{label}</span>
