@@ -2176,7 +2176,38 @@ Deno.serve(async (req: Request) => {
       [{ text: "✖️ Close inbox", callback_data: "pi_x" }],
     ],
   });
-...
+
+  const renderInboxList = async (
+    telegramUserId: number,
+    chatId: string,
+    workspaceId: string,
+    workspaceName: string,
+  ) => {
+    const { data, error } = await admin.rpc("bot_inbox_list_conversations", {
+      _telegram_user_id: telegramUserId,
+      _workspace_id: workspaceId,
+      _limit: 8,
+    });
+    if (error) {
+      await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "Project Inbox is unavailable right now. Try again shortly.");
+      return;
+    }
+    const rows = Array.isArray(data) ? data : [];
+    if (rows.length === 0) {
+      await sendMessage(
+        TELEGRAM_BOT_TOKEN,
+        chatId,
+        `<b>📥 PROJECT INBOX — ${escapeHtml(workspaceName)}</b>\n\nNo member conversations yet.`,
+        { parse_mode: "HTML" },
+      );
+      return;
+    }
+    const lines = rows.map((r: any) =>
+      `${INBOX_STATUS_DOT(String(r.conversation_status))} <b>${escapeHtml(String(r.member_ref))}</b> • ${escapeHtml(String(r.conversation_status))}\n<i>${escapeHtml(String(r.preview ?? ""))}</i>`
+    );
+    await sendMessage(
+      TELEGRAM_BOT_TOKEN,
+      chatId,
       `<b>📥 PROJECT INBOX — ${escapeHtml(workspaceName)}</b>\n\n${lines.join("\n\n")}\n\nOpen a conversation in the Mini App to read and reply.`,
       { parse_mode: "HTML", reply_markup: inboxListMarkup(rows, workspaceId) },
     );
