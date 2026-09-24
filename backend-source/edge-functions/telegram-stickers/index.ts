@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { requireProjectToolAccess } from "../_shared/project-identity.ts";
+import { requireCommercialAccess } from "../_shared/commercial-access.ts";
 import { PNG } from "npm:pngjs@7.0.0";
 import { Buffer } from "node:buffer";
 
@@ -262,6 +263,9 @@ Deno.serve(async (req: Request) => {
     if (gateWorkspaceId && (await member(gateWorkspaceId))) {
       const identityGate = await requireProjectToolAccess(admin, user.id, gateWorkspaceId);
       if (!identityGate.allowed) return respond(identityGate.body, identityGate.status);
+      // Commercial Foundation B — sticker_auto_posting after membership+identity.
+      const commercialGate = await requireCommercialAccess(admin, user.id, gateWorkspaceId, "sticker_auto_posting");
+      if (!commercialGate.allowed) return respond(commercialGate.body, commercialGate.status);
     }
   }
   const getBot = async () => {
