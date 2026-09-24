@@ -111,7 +111,25 @@ for (const u of ["delete_schedule", "set_kill_switch"]) check(`6.4 drop ungated:
 
 // 7 — telegram-webhook.
 const wh = read(`${EF}/telegram-webhook/index.ts`);
-check("7.1 webhook: exactly one gate call", wh.split("requireProjectToolAccess(").length - 1 === 1);
+// Re-pinned for Commercial Foundation B: exactly TWO call sites — mission START
+// preflight and Project Inbox bot team reply preflight — each before its own
+// commercial guard and mutation RPC; capture paths stay ungated.
+{
+  const sites = wh.split("requireProjectToolAccess(").length - 1;
+  const mGate = wh.indexOf("requireProjectToolAccess(admin, actorUserId, connection.workspace_id)");
+  const mCom = wh.indexOf('requireCommercialAccess(admin, actorUserId, connection.workspace_id, "x_missions")');
+  const mRpc = wh.indexOf('admin.rpc("create_social_mission_from_telegram_link"');
+  const iGate = wh.indexOf("requireProjectToolAccess(admin, inboxActorUserId, inboxWorkspaceId)");
+  const iCom = wh.indexOf('requireCommercialAccess(admin, inboxActorUserId, inboxWorkspaceId, "project_inbox")');
+  const iRpc = wh.indexOf('admin.rpc("bot_inbox_create_team_reply"');
+  const launchCap = wh.indexOf('admin.rpc("capture_project_inbox_launch_reply"');
+  const memberCap = wh.indexOf('"capture_project_inbox_member_message"');
+  check("7.1 webhook: exactly two gate call sites (mission start + inbox team reply)", sites === 2 && mGate > 0 && iGate > 0);
+  check("7.1a mission gate < x_missions guard < create RPC", mGate < mCom && mCom < mRpc);
+  check("7.1b inbox gate < project_inbox guard < team-reply RPC, gate close to its branch", iGate < iCom && iCom < iRpc && iRpc - iGate < 1500);
+  check("7.1c launch/member capture after both gates and not preceded by a gate in their branch",
+    launchCap > iRpc && memberCap > launchCap && !wh.slice(iRpc, memberCap + 200).includes("requireProjectToolAccess("));
+}
 const whGate = wh.indexOf("requireProjectToolAccess(admin, actorUserId, connection.workspace_id)");
 const whRpc = wh.indexOf('admin.rpc("create_social_mission_from_telegram_link"');
 check("7.2 webhook gate before mission-create RPC", whGate > 0 && whRpc > whGate);
