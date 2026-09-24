@@ -113,6 +113,22 @@ const BLANK_SUPPORT: Record<MiniAppSupportingMetric, string> = {
 
 export const Route = createFileRoute("/tg/mission/$missionId")({
   ssr: false,
+  head: () => ({
+    meta: [
+      { title: "Mission Control — CARTEL HQ" },
+      {
+        name: "description",
+        content: "CARTEL HQ Telegram mission results, targets, and safe mission controls.",
+      },
+      { property: "og:title", content: "Mission Control — CARTEL HQ" },
+      {
+        property: "og:description",
+        content: "CARTEL HQ Telegram mission results, targets, and safe mission controls.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: MiniAppMission,
 });
 
