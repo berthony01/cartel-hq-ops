@@ -167,7 +167,7 @@ function MiniAppHome() {
       {workspaces.length > 1 ? (
         <MiniAppPanel
           heading="Project"
-          note={workspaceId ? undefined : "Choose the project you want to control."}
+          note={workspaceId ? undefined : "Choose a project to control."}
         >
           <div className="flex flex-wrap gap-2">
             {workspaces.map((workspace) => {
