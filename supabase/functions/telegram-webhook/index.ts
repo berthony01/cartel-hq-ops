@@ -2352,7 +2352,6 @@ Deno.serve(async (req: Request) => {
           },
         );
       }
-
     } catch (alertError) {
       console.error("[telegram-webhook] inbox alert", alertError instanceof Error ? alertError.message : "unknown error");
     }
