@@ -342,8 +342,15 @@ const opts = { now: NOW_MS };
   for (const name of expected) {
     check(`7.1 reuses existing RPC ${name}`, bridgeCode.includes(name));
   }
-  /** Exactly the tables this bridge may read. Both are read-only lookups. */
-  const expectedTables = ["social_metric_snapshots", "social_mission_targets"];
+  /** Exactly the tables this bridge may read. All are read-only lookups. */
+  const expectedTables = [
+    "social_metric_snapshots",
+    "social_mission_targets",
+    // MINI-HQ-1A — project identity and truthful operator-home community status.
+    "project_profiles",
+    "media_assets",
+    "telegram_group_connections",
+  ];
   const rpcNames = [
     ...bridgeCode.matchAll(
       /"(social_mission_[a-z_]+|end_social_mission_[a-z_]+|cancel_social_mission_[a-z_]+|social_metric_[a-z_]+)"/g,
@@ -360,13 +367,13 @@ const opts = { now: NOW_MS };
     !/CREATE TABLE|ALTER TABLE|CREATE FUNCTION|CREATE POLICY|GRANT /i.test(bridgeSrc),
   );
   check(
-    "7.4 exactly the two approved tables are read, and only for reads",
+    "7.4 exactly the approved tables are read, and only for reads",
     (() => {
       const froms = [...bridgeCode.matchAll(/\.from\("([a-z_]+)"\)/g)].map((m) => m[1]!);
       return (
-        froms.length === 2 &&
+        froms.length === expectedTables.length &&
         froms.every((t) => expectedTables.includes(t)) &&
-        new Set(froms).size === 2 &&
+        new Set(froms).size === expectedTables.length &&
         !/\.from\("[a-z_]+"\)\s*\n?\s*\.(insert|update|upsert|delete)\(/.test(bridgeCode)
       );
     })(),
