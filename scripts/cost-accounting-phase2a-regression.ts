@@ -182,11 +182,33 @@ for (const [label, path] of [["sticker-ai", STICKER_AI], ["sticker-motion-ai", M
     cursor === gateLines.length,
     `${label} still contains every Phase 2A start-gate line unmodified and in order`,
   );
+  // Re-pinned for Commercial Foundation B: the ONLY other admissible additions
+  // are these exact commercial-access import/call/denial lines (trimmed match).
+  const COMMERCIAL_B_ADDITIONS = new Set(
+    label === "sticker-ai"
+      ? [
+          'import { requireCommercialAccess, type CommercialFeatureKey } from "../_shared/commercial-access.ts";',
+          "const commercialDenial = async (workspaceId: string, featureKey: CommercialFeatureKey) => {",
+          "const access = await requireCommercialAccess(admin, user.id, workspaceId, featureKey);",
+          'const startCommercialBlocked = await commercialDenial(workspaceId, "static_ai_generations");',
+          "if (startCommercialBlocked) return startCommercialBlocked;",
+          'const retryCommercialBlocked = await commercialDenial(workspaceId, "static_ai_tools");',
+          "if (retryCommercialBlocked) return retryCommercialBlocked;",
+        ]
+      : [
+          'import { requireCommercialAccess } from "../_shared/commercial-access.ts";',
+          'const motionCommercial = await requireCommercialAccess(admin, user.id, workspaceId, "motion_ai_generations");',
+          "if (!motionCommercial.allowed) return respond(motionCommercial.body, motionCommercial.status);",
+        ],
+  );
+  const admissible = (l: string) => IDENTITY_GATE_ADDITION.test(l) || COMMERCIAL_B_ADDITIONS.has(l.trim());
   check(
     `CA2A-3d:${label}`,
-    added.every((l) => IDENTITY_GATE_ADDITION.test(l)),
-    `${label} adds only Project Identity Gate A enforcement lines (offending: ${
-      added.filter((l) => !IDENTITY_GATE_ADDITION.test(l)).join(" | ") || "none"
+    added.every(admissible) &&
+      [...COMMERCIAL_B_ADDITIONS].every((l) => added.some((a) => a.trim() === l)) &&
+      !added.some((l) => /stripe|usage_ledger|price|@[a-z0-9-]+\./i.test(l)),
+    `${label} adds only Project Identity Gate A lines plus the exact Commercial Foundation B guard lines, with no billing/pricing/usage_ledger logic (offending: ${
+      added.filter((l) => !admissible(l)).join(" | ") || "none"
     })`,
   );
 }
