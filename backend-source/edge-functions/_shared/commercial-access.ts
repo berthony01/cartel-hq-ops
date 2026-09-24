@@ -4,8 +4,8 @@
  * Invariants:
  *  - The decision is made ONLY by `public.evaluate_commercial_access`.
  *  - Platform owner / unrestricted bypass lives ONLY inside that RPC.
- *  - No assignment => the RPC returns allowed (observe). Observe-mode
- *    would_block=true is still allowed here.
+ *  - No assignment => the RPC evaluates the virtual cartel_free plan with
+ *    enforce semantics. Observe-mode would_block=true is still allowed here.
  *  - FAIL CLOSED: RPC error, null or malformed result denies.
  *  - No billing, pricing, email or accounting logic lives here.
  *  - Call AFTER auth, membership/operator and Project Identity, BEFORE the
@@ -32,7 +32,12 @@ export const COMMERCIAL_FEATURE_KEYS = [
   "project_inbox",
   "launch_watch",
   "x_reads",
+  "community_basic",
+  "telegram_groups",
 ] as const;
+
+/** Quota keys whose limit is concurrent (period none), never monthly. */
+export const NON_PERIOD_QUOTA_KEYS: readonly string[] = ["telegram_groups"];
 
 export type CommercialFeatureKey = (typeof COMMERCIAL_FEATURE_KEYS)[number];
 
@@ -46,9 +51,14 @@ function deny(status: 403 | 429 | 503, code: string, message: string): Commercia
   return { allowed: false, status, body: { error: code, code, message } };
 }
 
-export function commercialDenialFor(reason: unknown): CommercialAccessResult {
+export function commercialDenialFor(reason: unknown, featureKey?: string): CommercialAccessResult {
   const r = typeof reason === "string" ? reason : "";
-  if (r === "PLAN_LIMIT_REACHED") return deny(429, "PLAN_LIMIT_REACHED", "Monthly plan limit reached.");
+  if (r === "PLAN_LIMIT_REACHED") {
+    if (featureKey && NON_PERIOD_QUOTA_KEYS.includes(featureKey)) {
+      return deny(429, "PLAN_LIMIT_REACHED", "Plan limit reached for connected Telegram groups.");
+    }
+    return deny(429, "PLAN_LIMIT_REACHED", "Monthly plan limit reached.");
+  }
   if (r === "FEATURE_NOT_INCLUDED") {
     return deny(403, "FEATURE_NOT_INCLUDED", "This feature is not included in the current plan.");
   }
@@ -88,7 +98,7 @@ export async function requireCommercialAccess(
       }
       return { allowed: true };
     }
-    return commercialDenialFor(data.reason);
+    return commercialDenialFor(data.reason, featureKey);
   } catch (err) {
     console.error("evaluate_commercial_access threw; denying", err);
     return UNAVAILABLE();
