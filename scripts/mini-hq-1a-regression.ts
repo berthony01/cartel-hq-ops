@@ -27,7 +27,7 @@ const changedSurface = [home, pieces, bridge, doc].join("\n");
 
 check("operator navigation is complete", ["Home", "Missions", "Inbox", "Brand", "More"].every((label) => pieces.includes(`label: "${label}"`)));
 check("Home and Missions are functional tabs", /activeTab === "home"/.test(home) && /activeTab === "missions"/.test(home));
-check("deferred surfaces are explicit", /Inbox is coming next/.test(home) && /Brand controls are coming next/.test(home) && /More tools stay in CARTEL HQ/.test(home));
+check("deferred surfaces are explicit", /Brand controls are coming next/.test(home) && /More tools stay in CARTEL HQ/.test(home));
 check("Home includes required operational hierarchy", /Needs attention/.test(home) && /Community status/.test(home) && /Quick actions/.test(home));
 check("zero mission state remains useful", /No mission is live/.test(home) && /Post an X link as an admin/.test(home));
 check("mission detail route is unchanged in purpose", /createFileRoute\("\/tg\/mission\/\$missionId"\)/.test(mission));

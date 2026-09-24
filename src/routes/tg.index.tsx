@@ -47,7 +47,7 @@ const CONVERSATION_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
  * valid UUID survive; anything else is dropped. Existence and workspace
  * ownership are decided server-side and fail closed without disclosure.
  */
-export type MiniAppHomeSearch = { tab?: MiniAppTab; conversation?: string };
+export type MiniAppHomeSearch = { tab?: MiniAppTab; conversation?: string; workspace?: string };
 
 export function parseMiniAppHomeSearch(search: Record<string, unknown>): MiniAppHomeSearch {
   const out: MiniAppHomeSearch = {};
@@ -55,12 +55,26 @@ export function parseMiniAppHomeSearch(search: Record<string, unknown>): MiniApp
   if (typeof tab === "string" && (MINI_APP_TABS as readonly string[]).includes(tab)) {
     out.tab = tab as MiniAppTab;
   }
+  const workspace = search["workspace"];
+  if (typeof workspace === "string" && workspace.length === 36 && CONVERSATION_UUID.test(workspace)) {
+    out.workspace = workspace.toLowerCase();
+  }
   const conversation = search["conversation"];
   if (typeof conversation === "string" && conversation.length === 36 && CONVERSATION_UUID.test(conversation)) {
     out.conversation = conversation.toLowerCase();
     out.tab = "inbox";
   }
   return out;
+}
+
+/** Returns the requested workspace id only if it is in the authorized list. */
+export function resolveAuthorizedWorkspace(
+  requested: string | null | undefined,
+  authorized: ReadonlyArray<{ workspaceId: string }>,
+): string | null {
+  if (!requested) return null;
+  const match = authorized.find((w) => w.workspaceId.toLowerCase() === requested);
+  return match ? match.workspaceId : null;
 }
 
 export const Route = createFileRoute("/tg/")({
@@ -126,10 +140,17 @@ function MiniAppHome() {
    * exactly one -> auto-selected; two or more -> nothing selected until the
    * operator chooses. An existing valid selection survives a refetch.
    */
+  const requestedWorkspace = search.workspace ?? null;
   useEffect(() => {
     setWorkspaceId((current) => {
       if (current && workspaces.some((workspace) => workspace.workspaceId === current)) {
         return current;
+      }
+      // Deep-link preselection: only honoured when the requested workspace is
+      // in the server-authorized list. Anything else is silently ignored.
+      const authorizedRequested = resolveAuthorizedWorkspace(requestedWorkspace, workspaces);
+      if (authorizedRequested) {
+        return authorizedRequested;
       }
       if (workspaces.length === 1) {
         const only = workspaces[0];
@@ -137,7 +158,7 @@ function MiniAppHome() {
       }
       return null;
     });
-  }, [workspaces]);
+  }, [workspaces, requestedWorkspace]);
 
   const missionsQuery = useQuery({
     queryKey: ["tg", "missions", workspaceId],
