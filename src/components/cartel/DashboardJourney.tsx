@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Check, ChevronDown, Circle, CircleDot, Loader2, Lock, RefreshCw } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   JourneyLink,
   journeyStageGuidance,

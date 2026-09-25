@@ -54,7 +54,8 @@ import { InlineRow } from "@/components/cartel/InlineRow";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
