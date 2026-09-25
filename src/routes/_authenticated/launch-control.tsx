@@ -1331,8 +1331,6 @@ function LaunchControlPage() {
         status={workspace ? workspace.name : "No project"}
       />
 
-      {profile ? <LaunchReadinessCallout workspaceId={workspaceId} /> : null}
-
       <RelatedLinks label="Go to">
         <Link to="/telegram" className={relatedLinkClass}>
           Community Command
@@ -1846,7 +1844,7 @@ function LaunchControlPage() {
                     <PreviewRow label="Launch" value={selected.token_name} />
                     <PreviewRow label="Ticker" value={selected.ticker} />
                     <PreviewRow label="Chain" value={selected.chain} />
-                    <PreviewRow label="Visibility" value={selected.visibility} />
+                    <PreviewRow label="Schedule mode" value={selected.schedule_mode ?? "Not set"} />
                     <PreviewRow label="Status" value={LAUNCH_STATUS_LABELS[status]} />
                   </dl>
                 </Section>
