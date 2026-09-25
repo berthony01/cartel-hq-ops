@@ -325,7 +325,7 @@ function HqDashboard() {
                   <h2 id="active-launch-heading" className="mt-2 font-display text-3xl uppercase text-foreground">Create your Project Profile</h2>
                   <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">Your profile is the identity the launch journey, community tools and creative work build on.</p>
                 </div>
-                {dominantStage ? <Button asChild className="min-h-11 w-full sm:w-auto"><JourneyLink stage={dominantStage} primaryLaunchId={journey?.primaryLaunchId ?? null} label={dominantStage.actionLabel} /></Button> : null}
+                {dominantStage ? <JourneyLink stage={dominantStage} primaryLaunchId={journey?.primaryLaunchId ?? null} label={dominantStage.actionLabel} linkClassName={cn(buttonVariants(), "h-auto min-h-11 w-full min-w-0 whitespace-normal text-center sm:w-auto")} /> : null}
               </div>
             ) : !primaryLaunch ? (
               <div className="grid min-h-64 gap-5 px-5 py-7 sm:px-7 lg:grid-cols-[minmax(0,1fr)_minmax(17rem,0.55fr)] lg:items-center">
@@ -337,7 +337,7 @@ function HqDashboard() {
                 <div className="border border-gold/25 bg-surface-raised/55 p-4">
                   <p className="type-meta text-gold">Next required action</p>
                   <p className="mt-2 text-base font-semibold text-foreground [overflow-wrap:anywhere]">{journeyQuery.isPending ? "Checking project journey…" : journey?.nextAction.headline ?? "Review your project journey"}</p>
-                  {dominantStage ? <Button asChild variant={journeyBlocked ? "outline" : "default"} className="mt-4 min-h-11 w-full"><JourneyLink stage={dominantStage} primaryLaunchId={journey?.primaryLaunchId ?? null} label={journeyBlocked ? (dominantStage.reviewLabel ?? `Review ${dominantStage.title}`) : dominantStage.actionLabel} /></Button> : null}
+                  {dominantStage ? <JourneyLink stage={dominantStage} primaryLaunchId={journey?.primaryLaunchId ?? null} label={journeyBlocked ? (dominantStage.reviewLabel ?? `Review ${dominantStage.title}`) : dominantStage.actionLabel} linkClassName={cn(buttonVariants({ variant: journeyBlocked ? "outline" : "default" }), "mt-4 h-auto min-h-11 w-full min-w-0 whitespace-normal text-center")} /> : null}
                 </div>
               </div>
             ) : (
