@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Bell,
-  Check,
   ChevronDown,
   Copy,
   ExternalLink,
@@ -98,8 +97,14 @@ import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { EmptyState } from "@/components/cartel/EmptyState";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
+import { LaunchControlHero } from "@/components/cartel/LaunchControlHero";
+import { LaunchFacts } from "@/components/cartel/LaunchFacts";
+import { LaunchLifecycleRail } from "@/components/cartel/LaunchLifecycleRail";
 import { ScheduleChangeSummary } from "@/components/cartel/ScheduleChangeSummary";
-import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
+import {
+  ProjectJourneyProgress,
+  useProjectJourney,
+} from "@/components/cartel/ProjectJourney";
 import { VerifiedDeploymentEvidencePanel } from "@/components/cartel/VerifiedDeploymentEvidencePanel";
 import { VerifiedContractRegistrationPanel } from "@/components/cartel/VerifiedContractRegistrationPanel";
 import { ProductionDeploymentRequestPanel } from "@/components/cartel/ProductionDeploymentRequestPanel";
@@ -423,6 +428,8 @@ function LaunchControlPage() {
     queryFn: () => getProjectProfile(workspaceId!),
   });
   const profile = profileQuery.data ?? null;
+
+  const projectJourneyQuery = useProjectJourney(workspaceId);
 
   const launchesQuery = useQuery({
     queryKey: ["launches", workspaceId, profile?.id ?? null],
