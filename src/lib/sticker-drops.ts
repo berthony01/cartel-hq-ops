@@ -146,7 +146,16 @@ async function readServerMessage(error: unknown): Promise<string | null> {
 async function invoke<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke("sticker-drop-config", { body });
   if (error) {
+    const status = (error as { context?: { status?: unknown } } | null)?.context?.status;
     const serverMessage = await readServerMessage(error);
+    const authenticationExpired =
+      status === 401 &&
+      (serverMessage === "UNAUTHENTICATED" ||
+        serverMessage?.toLowerCase().includes("session expired") === true);
+    if (authenticationExpired) {
+      await supabase.auth.signOut();
+      throw new Error("Your session expired. Sign in again.");
+    }
     throw new Error(
       serverMessage || error.message || "The sticker drop service is unavailable right now.",
     );
