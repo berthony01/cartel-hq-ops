@@ -70,13 +70,15 @@ function JourneyRow({
                   : "Later"}
         </StatusBadge>
         {!complete && !isNext ? (
-          <Button asChild size="sm" variant="ghost" className="min-h-11 max-w-full justify-start whitespace-normal text-left text-muted-foreground [overflow-wrap:anywhere] sm:justify-center">
-            <JourneyLink
-              stage={stage}
-              primaryLaunchId={primaryLaunchId}
-              label={blocked ? reviewLabel(stage) : "Open"}
-            />
-          </Button>
+          <JourneyLink
+            stage={stage}
+            primaryLaunchId={primaryLaunchId}
+            label={blocked ? reviewLabel(stage) : "Open"}
+            linkClassName={cn(
+              buttonVariants({ variant: "ghost", size: "sm" }),
+              "min-h-11 max-w-full min-w-0 justify-start whitespace-normal text-left text-muted-foreground [overflow-wrap:anywhere] sm:justify-center",
+            )}
+          />
         ) : null}
       </span>
     </li>
