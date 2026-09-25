@@ -41,7 +41,7 @@ export function useProjectJourney(workspaceId: string | null | undefined) {
   });
 }
 
-function ProgressBar({ value, total }: { value: number; total: number }) {
+export function ProjectJourneyProgress({ value, total }: { value: number; total: number }) {
   const pct = total > 0 ? Math.round((value / total) * 100) : 0;
   return (
     <div
@@ -87,7 +87,7 @@ const TELEGRAM_TAB_BY_STAGE: Partial<
   communications: "inbox",
 };
 
-function JourneyLink({
+export function JourneyLink({
   stage,
   primaryLaunchId,
   label,
@@ -526,7 +526,7 @@ export function ProjectJourneyPanel({ workspaceId, workspaceName }: SharedProps)
       }
       contentClassName="space-y-5"
     >
-      <ProgressBar value={journey.completedCount} total={journey.totalCount} />
+      <ProjectJourneyProgress value={journey.completedCount} total={journey.totalCount} />
       <NextActionBlock journey={journey} />
       <CompletedStages
         stages={completedStages}
@@ -604,7 +604,7 @@ export function ProjectJourneyCallout({
       }
       contentClassName="space-y-3"
     >
-      <ProgressBar value={journey.completedCount} total={journey.totalCount} />
+      <ProjectJourneyProgress value={journey.completedCount} total={journey.totalCount} />
       <NextActionBlock journey={journey} compact />
     </Section>
   );
