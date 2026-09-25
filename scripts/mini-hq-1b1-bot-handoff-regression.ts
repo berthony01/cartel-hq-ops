@@ -25,7 +25,7 @@ const notify = between("const notifyTeamOfCapture", "} catch (alertError)");
 
 // URL construction
 check("1.1 base reuses MISSION_CONTROL_WEBAPP_URL", /new URL\(MISSION_CONTROL_WEBAPP_URL\)/.test(builder));
-check("1.2 base constant unchanged", src.includes('const MISSION_CONTROL_WEBAPP_URL = "https://cartel-hq-ops.lovable.app/tg";'));
+check("1.2 base constant unchanged", src.includes('const MISSION_CONTROL_WEBAPP_URL = "https://pepecartelhq.com/tg";'));
 check("1.3 uses URLSearchParams", /new URLSearchParams\(/.test(builder));
 check("1.4 tab=inbox", /tab:\s*"inbox"/.test(builder));
 check("1.5 workspace + conversation params", /workspace:\s*workspaceId/.test(builder) && /conversation:\s*conversationId/.test(builder));

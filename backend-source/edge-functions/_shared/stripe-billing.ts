@@ -15,7 +15,7 @@ export const CARTEL_APP = "cartel_hq";
 export const PRO_PLAN_CODE = "cartel_49";
 export const PRO_PLAN_VERSION = 1;
 export const STRIPE_API_VERSION = "2025-02-24.acacia";
-export const DEFAULT_PUBLIC_BASE_URL = "https://cartel-hq-ops.lovable.app";
+export const DEFAULT_PUBLIC_BASE_URL = "https://pepecartelhq.com";
 
 export type StripeEnvironment = "test" | "live";
 
