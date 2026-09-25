@@ -4,6 +4,7 @@ import { Building2, Check, ChevronDown, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace, workspacesQueryKey } from "@/lib/workspace-context";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -108,7 +109,7 @@ export function CreateWorkspaceDialog({
   );
 }
 
-export function WorkspaceSwitcher() {
+export function WorkspaceSwitcher({ fullWidth = false }: { fullWidth?: boolean }) {
   const { workspaces, workspace, loading, selectWorkspace } = useWorkspace();
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -120,10 +121,13 @@ export function WorkspaceSwitcher() {
             type="button"
             variant="outline"
             aria-label="Project selector"
-            className="flex w-full min-w-0 min-h-11 justify-start gap-2 border-border-subtle bg-surface-quiet px-3 text-sm text-muted-foreground shadow-none hover:border-gold/30 hover:bg-surface-raised lg:min-h-10 lg:w-auto"
+            className={cn(
+              "flex w-full min-w-0 min-h-11 justify-start gap-2 border-border-subtle bg-surface-quiet px-3 text-sm text-muted-foreground shadow-none hover:border-gold/30 hover:bg-surface-raised lg:min-h-10",
+              fullWidth ? "lg:w-full" : "lg:w-auto",
+            )}
           >
             <Building2 className="size-4 shrink-0 text-gold" aria-hidden="true" />
-            <span className="min-w-0 flex-1 truncate text-left font-medium text-foreground lg:max-w-40 lg:flex-none">
+            <span className={cn("min-w-0 flex-1 truncate text-left font-medium text-foreground", !fullWidth && "lg:max-w-40 lg:flex-none")}>
               {loading ? "Loading…" : (workspace?.name ?? "No project")}
             </span>
             <ChevronDown className="size-4 shrink-0" aria-hidden="true" />
