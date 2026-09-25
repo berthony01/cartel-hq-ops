@@ -131,17 +131,10 @@ export function JourneyLink({
 
 export function journeyStageGuidance(stage: JourneyStage): string {
   if (stage.status === "unavailable") {
-    const state = stage.detail ?? "Current state could not be verified. Review the destination before continuing.";
-    return stage.dependency && stage.dependency !== state ? `${state} ${stage.dependency}` : state;
+    return stage.detail ?? "Current state could not be verified. Review the destination before continuing.";
   }
-  if (stage.status === "waiting") {
-    if (stage.dependency && stage.detail && stage.dependency !== stage.detail) {
-      return `${stage.dependency} ${stage.detail}`;
-    }
-    return stage.dependency ?? stage.detail ?? "Complete the required earlier stage before this becomes available.";
-  }
-  if (stage.detail) return stage.detail;
   if (stage.dependency) return stage.dependency;
+  if (stage.detail) return stage.detail;
   return "Complete the required earlier stage before this becomes available.";
 }
 

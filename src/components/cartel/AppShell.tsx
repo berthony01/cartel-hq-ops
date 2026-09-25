@@ -30,7 +30,7 @@ function TopBar({ onOpenMobileNav, dashboard }: { onOpenMobileNav: () => void; d
         <WorkspaceSwitcher />
       </div>
 
-      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2 lg:col-start-2 lg:justify-self-end">
         <UserMenu />
       </div>
     </header>
