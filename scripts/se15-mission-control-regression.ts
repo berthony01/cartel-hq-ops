@@ -61,8 +61,8 @@ check("1.12 help text advertises the command", webhook.includes("/mission manage
 // ---------------------------------------------------------------------------
 // 1A — SE-16.3 Mini App reachability: private panel web_app button only.
 // ---------------------------------------------------------------------------
-const EXACT_WEBAPP_URL = "https://cartel-hq-ops.lovable.app/tg";
-check("1A.1 Mini App URL constant exists", webhook.includes('const MISSION_CONTROL_WEBAPP_URL = "https://cartel-hq-ops.lovable.app/tg"'));
+const EXACT_WEBAPP_URL = "https://pepecartelhq.com/tg";
+check("1A.1 Mini App URL constant exists", webhook.includes('const MISSION_CONTROL_WEBAPP_URL = "https://pepecartelhq.com/tg"'));
 check("1A.2 web_app button URL is exact and appears once", (webhook.match(new RegExp(`web_app: \\{ url: MISSION_CONTROL_WEBAPP_URL \\}`, "g")) ?? []).length === 1);
 const panelKbMatch = webhook.match(/const mcPanelKeyboard = \(missionId: string\) => \(\{[\s\S]{0,900}?\n  \}\);/);
 check("1A.3 panel keyboard exists for scoping", panelKbMatch !== null);
