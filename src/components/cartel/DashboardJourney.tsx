@@ -2,14 +2,14 @@ import { useState } from "react";
 import { Check, ChevronDown, Circle, CircleDot, Loader2, Lock, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { JourneyLink, useProjectJourney } from "@/components/cartel/ProjectJourney";
+import {
+  JourneyLink,
+  journeyStageGuidance,
+  useProjectJourney,
+} from "@/components/cartel/ProjectJourney";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import type { JourneyStage } from "@/lib/project-journey";
 import { cn } from "@/lib/utils";
-
-function guidance(stage: JourneyStage) {
-  return stage.dependency ?? stage.detail ?? "Complete the required earlier stage before this becomes available.";
-}
 
 function reviewLabel(stage: JourneyStage) {
   return stage.reviewLabel ?? `Review ${stage.title}`;
@@ -53,16 +53,24 @@ function JourneyRow({
         </span>
         {!complete ? (
           <span className="mt-1 block text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-            {blocked ? guidance(stage) : stage.detail ?? stage.description}
+             {blocked ? journeyStageGuidance(stage) : stage.detail ?? stage.description}
           </span>
         ) : null}
       </span>
-      <span className="col-start-2 flex min-w-0 items-center gap-2 sm:col-start-3 sm:row-start-1 sm:justify-end">
+      <span className="col-start-2 flex min-w-0 flex-col items-start gap-2 sm:col-start-3 sm:row-start-1 sm:items-end">
         <StatusBadge tone={complete ? "green" : isNext ? "gold" : "muted"}>
-          {complete ? "Done" : isNext ? "Next" : stage.lockedLabel ?? "Later"}
+          {complete
+            ? "Done"
+            : stage.status === "unavailable"
+              ? "Unavailable"
+              : stage.status === "waiting"
+                ? "Blocked"
+                : isNext
+                  ? "Next"
+                  : "Later"}
         </StatusBadge>
         {!complete && !isNext ? (
-          <Button asChild size="sm" variant="ghost" className="min-h-11 text-muted-foreground">
+          <Button asChild size="sm" variant="ghost" className="min-h-11 max-w-full justify-start whitespace-normal text-left text-muted-foreground [overflow-wrap:anywhere] sm:justify-center">
             <JourneyLink
               stage={stage}
               primaryLaunchId={primaryLaunchId}

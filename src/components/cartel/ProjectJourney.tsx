@@ -129,12 +129,19 @@ export function JourneyLink({
   );
 }
 
-function blockedGuidance(stage: JourneyStage): string {
+export function journeyStageGuidance(stage: JourneyStage): string {
   if (stage.status === "unavailable") {
-    return stage.detail ?? "Current state could not be verified. Review the destination before continuing.";
+    const state = stage.detail ?? "Current state could not be verified. Review the destination before continuing.";
+    return stage.dependency && stage.dependency !== state ? `${state} ${stage.dependency}` : state;
   }
-  if (stage.dependency) return stage.dependency;
+  if (stage.status === "waiting") {
+    if (stage.dependency && stage.detail && stage.dependency !== stage.detail) {
+      return `${stage.dependency} ${stage.detail}`;
+    }
+    return stage.dependency ?? stage.detail ?? "Complete the required earlier stage before this becomes available.";
+  }
   if (stage.detail) return stage.detail;
+  if (stage.dependency) return stage.dependency;
   return "Complete the required earlier stage before this becomes available.";
 }
 
@@ -151,7 +158,7 @@ function NextActionBlock({
   const blocked = !allComplete && nextAction.stage === null && blockedStage !== null;
   const StateIcon = allComplete ? Check : blocked ? Lock : Target;
   const explanation =
-    blocked && blockedStage ? blockedGuidance(blockedStage) : nextAction.explanation;
+    blocked && blockedStage ? journeyStageGuidance(blockedStage) : nextAction.explanation;
   return (
     <div
       className={cn(
@@ -254,7 +261,7 @@ function LockedLaunchMilestoneCard({
           </p>
           <div className="mt-4 border-l-2 border-border-strong pl-3 sm:pl-4">
             <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-              {blockedGuidance(stage)}
+              {journeyStageGuidance(stage)}
             </p>
           </div>
         </div>
@@ -340,7 +347,7 @@ function StageRow({
               "mt-1 block text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]",
             )}
           >
-            {blocked ? blockedGuidance(stage) : stage.detail ?? stage.description}
+            {blocked ? journeyStageGuidance(stage) : stage.detail ?? stage.description}
           </span>
         )}
       </span>

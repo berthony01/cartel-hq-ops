@@ -46,6 +46,7 @@ import { DashboardJourney as ProjectJourneyPanel } from "@/components/cartel/Das
 import {
   JourneyLink,
   ProjectJourneyProgress,
+  journeyStageGuidance,
   useProjectJourney,
 } from "@/components/cartel/ProjectJourney";
 import { EmptyState } from "@/components/cartel/EmptyState";
@@ -118,7 +119,7 @@ function MetricSurface({
   return (
     <Link
       to={to}
-      className="group grid min-h-36 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-3 border border-border-subtle bg-surface px-4 py-4 shadow-[var(--shadow-cartel-soft)] transition-[border-color,transform] hover:-translate-y-0.5 hover:border-gold/35 sm:px-5"
+      className="group grid min-h-36 min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-3 border border-border-subtle bg-surface px-4 py-4 shadow-[var(--shadow-cartel-soft)] transition-[border-color,transform] hover:-translate-y-0.5 hover:border-gold/35 sm:px-5"
     >
       <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-gold/20 bg-gold/5 text-gold">
         <Icon className="size-4" aria-hidden="true" />
@@ -128,7 +129,7 @@ function MetricSurface({
         <span className="mt-2 block text-xl font-semibold text-foreground [overflow-wrap:anywhere]">{value}</span>
         <span className="mt-1 block text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{detail}</span>
       </span>
-      <span className="flex shrink-0 flex-col items-end justify-between gap-2">
+      <span className="col-span-2 flex min-w-0 items-center justify-between gap-3 border-t border-border-subtle pt-3">
         <StatusBadge tone={tone}>{status}</StatusBadge>
         <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-gold" aria-hidden="true" />
       </span>
@@ -243,32 +244,43 @@ function HqDashboard() {
 
   const launchLoading = profileQuery.isPending || (!!profileId && launchesQuery.isPending);
   const launchUnavailable = profileQuery.isError || launchesQuery.isError;
-  const watchValue = !watchToken
-    ? "Not open"
-    : watchQuery.isPending
-      ? "Loading…"
-      : watchQuery.isError
-        ? "Unavailable"
+  const watchPending = launchLoading || (!!watchToken && watchQuery.isPending);
+  const watchUnavailable = launchUnavailable || (!!watchToken && watchQuery.isError);
+  const watchValue = watchPending
+    ? "Loading…"
+    : watchUnavailable
+      ? "Unavailable"
+      : !watchToken
+        ? "Not open"
         : `${watchQuery.data?.active_count ?? 0}`;
-  const watchDetail = !watchToken
-    ? "Open Launch Watch from the project journey when available."
-    : watchQuery.isError
-      ? "Aggregate watcher count could not be loaded."
-      : "Active watchers receiving private launch updates.";
+  const watchDetail = watchPending
+    ? "Reading the active launch and Launch Watch state."
+    : watchUnavailable
+      ? "Launch Watch state could not be loaded."
+      : !watchToken
+        ? "Open Launch Watch from the project journey when available."
+        : "Active watchers receiving private launch updates.";
+  const watchStatus = watchPending ? "Loading" : watchUnavailable ? "Unavailable" : !watchToken ? "Closed" : "Active";
   const communityValue = telegramQuery.isPending ? "Loading…" : telegramQuery.isError ? "Unavailable" : `${healthyGroups}/${groupCount}`;
-  const communityDetail = telegramQuery.isError
-    ? "Community state could not be loaded."
-    : groupCount === 0
-      ? "No Telegram community connected."
-      : `${healthyGroups} operational of ${groupCount} connected.`;
+  const communityDetail = telegramQuery.isPending
+    ? "Reading connected community state."
+    : telegramQuery.isError
+      ? "Community state could not be loaded."
+      : groupCount === 0
+        ? "No Telegram community connected."
+        : `${healthyGroups} operational of ${groupCount} connected.`;
+  const communityStatus = telegramQuery.isPending ? "Loading" : telegramQuery.isError ? "Unavailable" : groupCount === 0 ? "Not connected" : healthyGroups === groupCount ? "Operational" : "Review";
   const dropValue = dropsQuery.isPending ? "Loading…" : dropsQuery.isError ? "Unavailable" : killSwitch ? "Paused" : `${activeSchedules}`;
-  const dropDetail = dropsQuery.isError
-    ? dropErrorMessage(dropsQuery.error)
-    : killSwitch
-      ? "Emergency pause is on. Nothing will send."
-      : nextRun
-        ? `Next ${nextRun.isDue ? "due now" : formatClock(nextRun.at)} · ${dropsSentToday} sent today`
-        : `${dropsSentToday} sent today · no upcoming run`;
+  const dropDetail = dropsQuery.isPending
+    ? "Reading Sticker Drops operations."
+    : dropsQuery.isError
+      ? dropErrorMessage(dropsQuery.error)
+      : killSwitch
+        ? "Emergency pause is on. Nothing will send."
+        : nextRun
+          ? `Next ${nextRun.isDue ? "due now" : formatClock(nextRun.at)} · ${dropsSentToday} sent today`
+          : `${dropsSentToday} sent today · no upcoming run`;
+  const dropStatus = dropsQuery.isPending ? "Loading" : dropsQuery.isError ? "Unavailable" : killSwitch ? "Emergency pause" : activeSchedules > 0 ? "Running" : "Not scheduled";
 
   return (
     <div className="space-y-7 sm:space-y-9">
@@ -341,37 +353,37 @@ function HqDashboard() {
                   <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground">{LAUNCH_STATUS_HELP[status!]}</p>
                   <dl className="mt-6 grid gap-4 border-t border-border-subtle pt-4 sm:grid-cols-3">
                     <Fact label="Schedule" value={scheduleSummary(primaryLaunch)} />
-                    <Fact label="Launch Watch" value={!watchToken ? "Not opened" : watchQuery.isError ? "Unavailable" : watchQuery.isPending ? "Loading…" : `${watchQuery.data?.active_count ?? 0} active`} />
+                     <Fact label="Launch Watch" value={watchPending || watchUnavailable || !watchToken ? watchValue : `${watchValue} active`} />
                     <Fact label="Official contract" value={contractRegistered ? "Registered" : status === "CONTRACT_PENDING" ? "Pending registration" : "Not yet available"} />
                   </dl>
                   {journey ? <div className="mt-6"><div className="mb-2 flex items-center justify-between gap-3"><span className="type-meta text-muted-foreground">Project journey</span><span className="text-xs font-semibold text-foreground">{journey.completedCount}/{journey.totalCount}</span></div><ProjectJourneyProgress value={journey.completedCount} total={journey.totalCount} /></div> : null}
                 </div>
                 <div className="border-t border-gold/25 bg-surface-raised/55 p-5 sm:p-6 lg:border-l lg:border-t-0">
                   <div className="flex items-center gap-2 text-gold"><CircleDot className="size-4" aria-hidden="true" /><p className="type-meta">Next required action</p></div>
-                  {journeyQuery.isPending ? <p className="mt-4 text-sm text-muted-foreground">Checking project journey…</p> : journeyQuery.isError ? <div className="mt-4"><p className="text-sm text-muted-foreground">The next action is unavailable right now.</p><Button size="sm" variant="outline" className="mt-3 min-h-11" onClick={() => void journeyQuery.refetch()}><RefreshCw className="size-4" aria-hidden="true" />Retry</Button></div> : journey ? <><h3 className="mt-4 text-xl font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{journeyBlocked && blockedStage ? blockedStage.title : journey.nextAction.headline}</h3><p className="mt-2 text-xs leading-relaxed text-muted-foreground">{journeyBlocked && blockedStage ? (blockedStage.dependency ?? blockedStage.detail ?? journey.nextAction.explanation) : journey.nextAction.explanation}</p>{dominantStage ? <Button asChild variant={journeyBlocked ? "outline" : "default"} className="mt-5 min-h-11 w-full"><JourneyLink stage={dominantStage} primaryLaunchId={journey.primaryLaunchId} label={journeyBlocked ? (dominantStage.reviewLabel ?? `Review ${dominantStage.title}`) : dominantStage.actionLabel} /></Button> : journey.allComplete ? <Button asChild variant="outline" className="mt-5 min-h-11 w-full"><Link to="/launch-control">Review Launch Control<ArrowRight className="size-4" aria-hidden="true" /></Link></Button> : null}</> : null}
+                   {journeyQuery.isPending ? <p className="mt-4 text-sm text-muted-foreground">Checking project journey…</p> : journeyQuery.isError ? <div className="mt-4"><p className="text-sm text-muted-foreground">The next action is unavailable right now.</p><Button size="sm" variant="outline" className="mt-3 min-h-11" onClick={() => void journeyQuery.refetch()}><RefreshCw className="size-4" aria-hidden="true" />Retry</Button></div> : journey ? <><h3 className="mt-4 text-xl font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{journeyBlocked && blockedStage ? blockedStage.title : journey.nextAction.headline}</h3><p className="mt-2 text-xs leading-relaxed text-muted-foreground">{journeyBlocked && blockedStage ? journeyStageGuidance(blockedStage) : journey.nextAction.explanation}</p>{dominantStage ? <Button asChild variant={journeyBlocked ? "outline" : "default"} className="mt-5 min-h-11 w-full"><JourneyLink stage={dominantStage} primaryLaunchId={journey.primaryLaunchId} label={journeyBlocked ? (dominantStage.reviewLabel ?? `Review ${dominantStage.title}`) : dominantStage.actionLabel} /></Button> : journey.allComplete ? <Button asChild variant="outline" className="mt-5 min-h-11 w-full"><Link to="/launch-control">Review Launch Control<ArrowRight className="size-4" aria-hidden="true" /></Link></Button> : null}</> : null}
                 </div>
               </div>
             )}
           </section>
 
           <section aria-label="Live project metrics" className="grid gap-3 md:grid-cols-3 [&>*]:min-w-0">
-            <MetricSurface icon={Radio} label="Launch Watch" value={watchValue} detail={watchDetail} status={!watchToken ? "Closed" : watchQuery.isError ? "Unavailable" : "Active"} tone={!watchToken || watchQuery.isError ? "muted" : "green"} to="/launch-control" />
-            <MetricSurface icon={Users} label="Communities" value={communityValue} detail={communityDetail} status={telegramQuery.isError ? "Unavailable" : groupCount === 0 ? "Not connected" : healthyGroups === groupCount ? "Operational" : "Review"} tone={telegramQuery.isError || groupCount === 0 ? "muted" : healthyGroups === groupCount ? "green" : "gold"} to="/telegram" />
-            <MetricSurface icon={Send} label="Sticker Drops" value={dropValue} detail={dropDetail} status={dropsQuery.isError ? "Unavailable" : killSwitch ? "Emergency pause" : activeSchedules > 0 ? "Running" : "Not scheduled"} tone={dropsQuery.isError ? "muted" : killSwitch ? "red" : activeSchedules > 0 ? "green" : "muted"} to="/distribution" />
+             <MetricSurface icon={Radio} label="Launch Watch" value={watchValue} detail={watchDetail} status={watchStatus} tone={watchPending || watchUnavailable || !watchToken ? "muted" : "green"} to="/launch-control" />
+             <MetricSurface icon={Users} label="Communities" value={communityValue} detail={communityDetail} status={communityStatus} tone={telegramQuery.isPending || telegramQuery.isError || groupCount === 0 ? "muted" : healthyGroups === groupCount ? "green" : "gold"} to="/telegram" />
+             <MetricSurface icon={Send} label="Sticker Drops" value={dropValue} detail={dropDetail} status={dropStatus} tone={dropsQuery.isPending || dropsQuery.isError ? "muted" : killSwitch ? "red" : activeSchedules > 0 ? "green" : "muted"} to="/distribution" />
           </section>
 
           <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
-            <Section variant="surface" title="Launch readiness" description="The authoritative 16-stage project journey." actions={journey ? <StatusBadge tone={journey.allComplete ? "green" : "gold"}>{journey.completedCount}/{journey.totalCount}</StatusBadge> : undefined} className="min-w-0" contentClassName="min-w-0">
+             <Section variant="surface" title="Launch readiness" description="Your path from project setup to launch." actions={journey ? <StatusBadge tone={journey.allComplete ? "green" : "gold"}>{journey.completedCount}/{journey.totalCount}</StatusBadge> : undefined} className="min-w-0" contentClassName="min-w-0">
               <ProjectJourneyPanel workspaceId={workspaceId} />
             </Section>
             <div className="grid content-start gap-4">
               <Section variant="surface" title="Operator focus" leading={<Activity className="size-4" aria-hidden="true" />} contentClassName="space-y-3">
                 <p className="text-sm font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{attention.length > 0 ? `${attention.length} operational ${attention.length === 1 ? "item needs" : "items need"} review.` : journey?.allComplete ? "Launch foundation is ready." : dominantStage ? dominantStage.title : "Keep the project journey moving."}</p>
-                <p className="text-xs leading-relaxed text-muted-foreground">{attention.length > 0 ? "Resolve operational warnings before routine work. The action above remains the authoritative next project step." : journeyBlocked && blockedStage ? (blockedStage.dependency ?? "The remaining work depends on an earlier requirement.") : journey?.nextAction.explanation ?? "Live project state will guide the next action when available."}</p>
+                 <p className="text-xs leading-relaxed text-muted-foreground">{attention.length > 0 ? "Resolve operational warnings before routine work. The action above remains the authoritative next project step." : journeyBlocked && blockedStage ? journeyStageGuidance(blockedStage) : journey?.nextAction.explanation ?? "Live project state will guide the next action when available."}</p>
               </Section>
               <Section variant="surface" title="Live operations" leading={<Clock3 className="size-4" aria-hidden="true" />} contentClassName="divide-y divide-border-subtle">
-                <InlineRow leading={<Users className="size-4" aria-hidden="true" />} title="Communities" subtitle={communityDetail} trailing={<StatusBadge tone={healthyGroups > 0 ? "green" : "muted"}>{communityValue}</StatusBadge>} />
-                <InlineRow leading={<Send className="size-4" aria-hidden="true" />} title="Sticker Drops" subtitle={dropDetail} trailing={<StatusBadge tone={killSwitch ? "red" : activeSchedules > 0 ? "green" : "muted"}>{dropValue}</StatusBadge>} />
+                 <InlineRow leading={<Users className="size-4" aria-hidden="true" />} title="Communities" subtitle={communityDetail} trailing={<StatusBadge tone={!telegramQuery.isPending && !telegramQuery.isError && healthyGroups > 0 ? "green" : "muted"}>{communityValue}</StatusBadge>} />
+                 <InlineRow leading={<Send className="size-4" aria-hidden="true" />} title="Sticker Drops" subtitle={dropDetail} trailing={<StatusBadge tone={dropsQuery.isPending || dropsQuery.isError ? "muted" : killSwitch ? "red" : activeSchedules > 0 ? "green" : "muted"}>{dropValue}</StatusBadge>} />
                 <InlineRow leading={<Sticker className="size-4" aria-hidden="true" />} title="Sticker packs" subtitle={packsQuery.isError ? "Pack state unavailable." : packTotal === 0 ? "No packs created yet." : `${packTotal} pack${packTotal === 1 ? "" : "s"} in this project.`} trailing={<StatusBadge tone={packTotal > 0 ? "green" : "muted"}>{packsQuery.isPending ? "—" : packsQuery.isError ? "Unavailable" : packTotal}</StatusBadge>} />
               </Section>
             </div>
@@ -384,7 +396,7 @@ function HqDashboard() {
           ) : null}
 
           <Section variant="surface" title="Recent packs" actions={<Button asChild size="sm" variant="outline" className="min-h-11"><Link to="/sticker-lab">Open Lab</Link></Button>} contentClassName="space-y-1">
-            {packsQuery.isPending ? <p className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="size-4 animate-spin" aria-hidden="true" />Loading packs…</p> : packsQuery.isError ? <p className="text-xs text-muted-foreground">Recent packs are unavailable right now.</p> : recentPacks.length === 0 ? <EmptyState icon={PackageOpen} title="No packs yet" description="Sticker packs saved from Sticker Lab appear here for this project." action={<Button asChild size="sm" className="min-h-11"><Link to="/sticker-lab">Open Sticker Lab</Link></Button>} /> : recentPacks.map((pack) => <InlineRow key={pack.id} leading={<Sticker className="size-4" aria-hidden="true" />} title={pack.title} subtitle={`${pack.pack_size} stickers · ${pack.theme}`} trailing={<StatusBadge tone={String(pack.status ?? "").toLowerCase().includes("publish") ? "green" : "muted"}>{pack.status}</StatusBadge>} />)}
+             {packsQuery.isPending ? <p className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="size-4 animate-spin" aria-hidden="true" />Loading packs…</p> : packsQuery.isError ? <p className="text-xs text-muted-foreground">Recent packs are unavailable right now.</p> : recentPacks.length === 0 ? <EmptyState icon={PackageOpen} title="No packs yet" description="Sticker packs saved from Sticker Lab appear here for this project." action={<Button asChild size="sm" variant="outline" className="min-h-11"><Link to="/sticker-lab">Open Sticker Lab</Link></Button>} /> : recentPacks.map((pack) => <InlineRow key={pack.id} leading={<Sticker className="size-4" aria-hidden="true" />} title={pack.title} subtitle={`${pack.pack_size} stickers · ${pack.theme}`} trailing={<StatusBadge tone={String(pack.status ?? "").toLowerCase().includes("publish") ? "green" : "muted"}>{pack.status}</StatusBadge>} />)}
           </Section>
         </>
       )}

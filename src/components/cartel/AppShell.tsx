@@ -9,7 +9,7 @@ import { WorkspaceSwitcher } from "@/components/cartel/WorkspaceSwitcher";
 import { UserMenu } from "@/components/cartel/UserMenu";
 import { MobileTabBar } from "@/components/cartel/MobileTabBar";
 
-function TopBar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
+function TopBar({ onOpenMobileNav, dashboard }: { onOpenMobileNav: () => void; dashboard: boolean }) {
   return (
     <header className="app-gutter sticky top-0 z-30 grid h-14 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-border-subtle bg-background/88 backdrop-blur-xl lg:h-16 lg:grid-cols-[minmax(0,1fr)_auto]">
       <Button
@@ -26,7 +26,7 @@ function TopBar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
         <CartelMark />
       </div>
 
-      <div className="flex min-w-0 items-center">
+      <div className={`min-w-0 items-center ${dashboard ? "flex lg:hidden" : "flex"}`}>
         <WorkspaceSwitcher />
       </div>
 
@@ -56,6 +56,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const gated = isProjectIdentityGatedPath(pathname);
+  const dashboard = pathname === "/";
 
   return (
     <div className="min-h-screen bg-background/75">
@@ -64,6 +65,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           <CartelMark />
         </div>
         <div className="mt-6 flex-1 min-h-0 overflow-y-auto pr-1">
+          {dashboard ? (
+            <div className="mb-6 border-b border-sidebar-border px-1 pb-5">
+              <p className="type-eyebrow mb-2 px-2 text-muted-foreground/55">Active project</p>
+              <WorkspaceSwitcher fullWidth />
+            </div>
+          ) : null}
           <SidebarNav />
         </div>
         <p className="border-t border-sidebar-border px-2 pt-4 text-[10px] font-semibold uppercase leading-relaxed tracking-[0.14em] text-muted-foreground/60">
@@ -88,7 +95,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </Sheet>
 
       <div className="lg:pl-64">
-        <TopBar onOpenMobileNav={() => setMobileOpen(true)} />
+        <TopBar dashboard={dashboard} onOpenMobileNav={() => setMobileOpen(true)} />
         <main className="app-gutter app-scroll-pad mx-auto w-full max-w-7xl py-6 lg:py-9">
           {gated ? <ProjectIdentityGate>{children}</ProjectIdentityGate> : children}
         </main>
