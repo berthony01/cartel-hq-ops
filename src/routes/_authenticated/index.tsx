@@ -42,7 +42,7 @@ import {
 } from "@/lib/sticker-drops";
 import { groupIsOperational } from "@/lib/launch-readiness";
 
-import { DashboardJourney } from "@/components/cartel/DashboardJourney";
+import { DashboardJourney as ProjectJourneyPanel } from "@/components/cartel/DashboardJourney";
 import {
   JourneyLink,
   ProjectJourneyProgress,
@@ -362,7 +362,7 @@ function HqDashboard() {
 
           <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
             <Section variant="surface" title="Launch readiness" description="The authoritative 16-stage project journey." actions={journey ? <StatusBadge tone={journey.allComplete ? "green" : "gold"}>{journey.completedCount}/{journey.totalCount}</StatusBadge> : undefined} className="min-w-0" contentClassName="min-w-0">
-              <DashboardJourney workspaceId={workspaceId} />
+              <ProjectJourneyPanel workspaceId={workspaceId} />
             </Section>
             <div className="grid content-start gap-4">
               <Section variant="surface" title="Operator focus" leading={<Activity className="size-4" aria-hidden="true" />} contentClassName="space-y-3">
