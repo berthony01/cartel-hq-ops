@@ -1844,7 +1844,7 @@ function LaunchControlPage() {
                     <PreviewRow label="Launch" value={selected.token_name} />
                     <PreviewRow label="Ticker" value={selected.ticker} />
                     <PreviewRow label="Chain" value={selected.chain} />
-                    <PreviewRow label="Schedule mode" value={selected.schedule_mode ?? "Not set"} />
+                    <PreviewRow label="Public path" value={`/${selected.public_slug}`} />
                     <PreviewRow label="Status" value={LAUNCH_STATUS_LABELS[status]} />
                   </dl>
                 </Section>
