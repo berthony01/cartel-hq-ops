@@ -91,10 +91,12 @@ export function JourneyLink({
   stage,
   primaryLaunchId,
   label,
+  linkClassName,
 }: {
   stage: JourneyStage;
   primaryLaunchId: string | null;
   label: string;
+  linkClassName?: string;
 }) {
   const section = LAUNCH_SECTION_BY_STAGE[stage.key];
   if (stage.to === "/launch-control" && section) {
@@ -104,6 +106,7 @@ export function JourneyLink({
         to="/launch-control"
         search={search}
         aria-label={`${label}: ${stage.title}`}
+        className={linkClassName}
       >
         {label}
         <ArrowRight className="size-4" aria-hidden="true" />
@@ -114,7 +117,7 @@ export function JourneyLink({
   const tab = TELEGRAM_TAB_BY_STAGE[stage.key];
   if (stage.to === "/telegram" && tab) {
     return (
-      <Link to="/telegram" search={{ tab }} aria-label={`${label}: ${stage.title}`}>
+      <Link to="/telegram" search={{ tab }} aria-label={`${label}: ${stage.title}`} className={linkClassName}>
         {label}
         <ArrowRight className="size-4" aria-hidden="true" />
       </Link>
@@ -122,7 +125,7 @@ export function JourneyLink({
   }
 
   return (
-    <Link to={stage.to} aria-label={`${label}: ${stage.title}`}>
+    <Link to={stage.to} aria-label={`${label}: ${stage.title}`} className={linkClassName}>
       {label}
       <ArrowRight className="size-4" aria-hidden="true" />
     </Link>

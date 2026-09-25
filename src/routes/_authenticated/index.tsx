@@ -54,7 +54,8 @@ import { InlineRow } from "@/components/cartel/InlineRow";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
@@ -324,7 +325,7 @@ function HqDashboard() {
                   <h2 id="active-launch-heading" className="mt-2 font-display text-3xl uppercase text-foreground">Create your Project Profile</h2>
                   <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">Your profile is the identity the launch journey, community tools and creative work build on.</p>
                 </div>
-                {dominantStage ? <Button asChild className="min-h-11 w-full sm:w-auto"><JourneyLink stage={dominantStage} primaryLaunchId={journey?.primaryLaunchId ?? null} label={dominantStage.actionLabel} /></Button> : null}
+                {dominantStage ? <JourneyLink stage={dominantStage} primaryLaunchId={journey?.primaryLaunchId ?? null} label={dominantStage.actionLabel} linkClassName={cn(buttonVariants(), "h-auto min-h-11 w-full min-w-0 whitespace-normal text-center sm:w-auto")} /> : null}
               </div>
             ) : !primaryLaunch ? (
               <div className="grid min-h-64 gap-5 px-5 py-7 sm:px-7 lg:grid-cols-[minmax(0,1fr)_minmax(17rem,0.55fr)] lg:items-center">
@@ -336,7 +337,7 @@ function HqDashboard() {
                 <div className="border border-gold/25 bg-surface-raised/55 p-4">
                   <p className="type-meta text-gold">Next required action</p>
                   <p className="mt-2 text-base font-semibold text-foreground [overflow-wrap:anywhere]">{journeyQuery.isPending ? "Checking project journey…" : journey?.nextAction.headline ?? "Review your project journey"}</p>
-                  {dominantStage ? <Button asChild variant={journeyBlocked ? "outline" : "default"} className="mt-4 min-h-11 w-full"><JourneyLink stage={dominantStage} primaryLaunchId={journey?.primaryLaunchId ?? null} label={journeyBlocked ? (dominantStage.reviewLabel ?? `Review ${dominantStage.title}`) : dominantStage.actionLabel} /></Button> : null}
+                  {dominantStage ? <JourneyLink stage={dominantStage} primaryLaunchId={journey?.primaryLaunchId ?? null} label={journeyBlocked ? (dominantStage.reviewLabel ?? `Review ${dominantStage.title}`) : dominantStage.actionLabel} linkClassName={cn(buttonVariants({ variant: journeyBlocked ? "outline" : "default" }), "mt-4 h-auto min-h-11 w-full min-w-0 whitespace-normal text-center")} /> : null}
                 </div>
               </div>
             ) : (
@@ -360,7 +361,7 @@ function HqDashboard() {
                 </div>
                 <div className="border-t border-gold/25 bg-surface-raised/55 p-5 sm:p-6 lg:border-l lg:border-t-0">
                   <div className="flex items-center gap-2 text-gold"><CircleDot className="size-4" aria-hidden="true" /><p className="type-meta">Next required action</p></div>
-                   {journeyQuery.isPending ? <p className="mt-4 text-sm text-muted-foreground">Checking project journey…</p> : journeyQuery.isError ? <div className="mt-4"><p className="text-sm text-muted-foreground">The next action is unavailable right now.</p><Button size="sm" variant="outline" className="mt-3 min-h-11" onClick={() => void journeyQuery.refetch()}><RefreshCw className="size-4" aria-hidden="true" />Retry</Button></div> : journey ? <><h3 className="mt-4 text-xl font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{journeyBlocked && blockedStage ? blockedStage.title : journey.nextAction.headline}</h3><p className="mt-2 text-xs leading-relaxed text-muted-foreground">{journeyBlocked && blockedStage ? journeyStageGuidance(blockedStage) : journey.nextAction.explanation}</p>{dominantStage ? <Button asChild variant={journeyBlocked ? "outline" : "default"} className="mt-5 min-h-11 w-full"><JourneyLink stage={dominantStage} primaryLaunchId={journey.primaryLaunchId} label={journeyBlocked ? (dominantStage.reviewLabel ?? `Review ${dominantStage.title}`) : dominantStage.actionLabel} /></Button> : journey.allComplete ? <Button asChild variant="outline" className="mt-5 min-h-11 w-full"><Link to="/launch-control">Review Launch Control<ArrowRight className="size-4" aria-hidden="true" /></Link></Button> : null}</> : null}
+                   {journeyQuery.isPending ? <p className="mt-4 text-sm text-muted-foreground">Checking project journey…</p> : journeyQuery.isError ? <div className="mt-4"><p className="text-sm text-muted-foreground">The next action is unavailable right now.</p><Button size="sm" variant="outline" className="mt-3 min-h-11" onClick={() => void journeyQuery.refetch()}><RefreshCw className="size-4" aria-hidden="true" />Retry</Button></div> : journey ? <><h3 className="mt-4 text-xl font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{journeyBlocked && blockedStage ? blockedStage.title : journey.nextAction.headline}</h3><p className="mt-2 text-xs leading-relaxed text-muted-foreground">{journeyBlocked && blockedStage ? journeyStageGuidance(blockedStage) : journey.nextAction.explanation}</p>{dominantStage ? <JourneyLink stage={dominantStage} primaryLaunchId={journey.primaryLaunchId} label={journeyBlocked ? (dominantStage.reviewLabel ?? `Review ${dominantStage.title}`) : dominantStage.actionLabel} linkClassName={cn(buttonVariants({ variant: journeyBlocked ? "outline" : "default" }), "mt-5 h-auto min-h-11 w-full min-w-0 whitespace-normal text-center")} /> : journey.allComplete ? <Button asChild variant="outline" className="mt-5 min-h-11 w-full"><Link to="/launch-control">Review Launch Control<ArrowRight className="size-4" aria-hidden="true" /></Link></Button> : null}</> : null}
                 </div>
               </div>
             )}
