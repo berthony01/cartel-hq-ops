@@ -1917,6 +1917,21 @@ function LaunchControlPage() {
                         : "Identity fields can only be edited while the launch is a draft."
                     }
                   >
+                    <div className="mb-5 border-b border-border-subtle pb-4">
+                      <p className="type-eyebrow text-muted-foreground">Identity preview</p>
+                      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
+                        <span className="min-w-0 text-lg font-semibold text-foreground [overflow-wrap:anywhere]">
+                          {form.token_name || "Untitled launch"}
+                        </span>
+                        <StatusBadge tone="gold"><span>{form.ticker || "No ticker"}</span></StatusBadge>
+                        <StatusBadge tone="muted"><span>{form.chain || "No chain"}</span></StatusBadge>
+                      </div>
+                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                        {idLocked
+                          ? "This saved identity is locked because the launch has left Draft."
+                          : "This preview follows the editable identity below. Identity locks after the launch leaves Draft."}
+                      </p>
+                    </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="min-w-0">
                         <Label htmlFor="token-name">Token name</Label>
@@ -1997,6 +2012,26 @@ function LaunchControlPage() {
                         : `Times are entered and displayed in this device's timezone (${tz}) and stored as absolute timestamps. There is no arbitrary timezone conversion in this phase.`
                     }
                   >
+                    <div className="mb-5 grid min-w-0 gap-3 border-b border-border-subtle pb-4 sm:grid-cols-2">
+                      <div className="surface-quiet min-w-0 rounded-md p-3">
+                        <p className="type-eyebrow text-muted-foreground">Saved schedule</p>
+                        <p className="mt-1.5 text-sm font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">
+                          {selected.launch_at
+                            ? formatTimestamp(selected.launch_at)
+                            : selected.launch_window_start && selected.launch_window_end
+                              ? `${formatTimestamp(selected.launch_window_start)} → ${formatTimestamp(selected.launch_window_end)}`
+                              : "Not set"}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">Recorded timezone: {selected.timezone}</p>
+                      </div>
+                      <div className="surface-quiet min-w-0 rounded-md p-3">
+                        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                          <p className="type-eyebrow text-muted-foreground">Reminder state</p>
+                          <StatusBadge tone={armingState.tone}><span>{armingState.badge}</span></StatusBadge>
+                        </div>
+                        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{armingState.detail}</p>
+                      </div>
+                    </div>
                     {scheduleCommQuery.isError ? (
                       <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
                         Could not check whether this launch has an unnotified schedule change.
