@@ -124,20 +124,24 @@ function LandingPage() {
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
             CARTEL HQ is the operating layer for crypto project teams: identity, launch
             control, Telegram community operations, launch alerts, and creative tooling —
-            in one private command center.
+            in one private command center. Project teams sign in to run it.
+          </p>
+          <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            CARTEL HQ is a utility and operations platform. It is separate from the
+            PEPECARTEL token and community website.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Link
               to="/auth"
               className={cn(buttonVariants({ size: "lg" }), "min-h-11 gap-2")}
             >
-              Sign in <ArrowRight className="size-4" aria-hidden="true" />
+              Sign in to CARTEL HQ <ArrowRight className="size-4" aria-hidden="true" />
             </Link>
             <Link
               to="/network"
               className={cn(buttonVariants({ variant: "outline", size: "lg" }), "min-h-11")}
             >
-              Explore the network
+              Explore Cartel Network
             </Link>
           </div>
         </section>

@@ -300,7 +300,7 @@ const statusOf = (j: ReturnType<typeof journey>, key: JourneyStageKey) =>
 
 // J10 — every surface consumes the same model.
 {
-  const hq = read("src/routes/_authenticated/index.tsx");
+  const hq = read("src/routes/_authenticated/dashboard.tsx");
   const callout = read("src/components/cartel/LaunchReadiness.tsx");
   check(
     "J10",
