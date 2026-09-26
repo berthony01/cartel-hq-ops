@@ -127,6 +127,10 @@ check("B-9.1 pinned official Stripe SDK", helper.includes('import Stripe from "n
 check("B-9.2 env derived from key prefix, else fail closed", helper.includes('key.startsWith("sk_test_") || key.startsWith("rk_test_")') && helper.includes('key.startsWith("sk_live_") || key.startsWith("rk_live_")') && helper.includes('return { ok: false, code: "BILLING_NOT_CONFIGURED" }'));
 check("B-9.3 app=cartel_hq, cartel_49 v1", helper.includes('CARTEL_APP = "cartel_hq"') && helper.includes('PRO_PLAN_CODE = "cartel_49"') && helper.includes("PRO_PLAN_VERSION = 1"));
 check("B-9.4 base URL from CARTEL_HQ_PUBLIC_BASE_URL https only", helper.includes('Deno.env.get("CARTEL_HQ_PUBLIC_BASE_URL")') && helper.includes('u.protocol !== "https:"'));
+check("B-9.11 dedicated test/live keys + explicit env selection + legacy fallback", helper.includes('"STRIPE_TEST_SECRET_KEY"') && helper.includes('"STRIPE_LIVE_SECRET_KEY"') && helper.includes('envValue("CARTEL_HQ_BILLING_ENVIRONMENT")') && helper.includes('envValue("STRIPE_SECRET_KEY")'));
+check("B-9.12 dual webhook secrets + legacy fallback", helper.includes('"STRIPE_TEST_WEBHOOK_SECRET"') && helper.includes('"STRIPE_LIVE_WEBHOOK_SECRET"') && helper.includes('envValue("STRIPE_WEBHOOK_SECRET")'));
+check("B-9.13 fallback base URL is pepecartelhq.com, never used as fallback", helper.includes('DEFAULT_PUBLIC_BASE_URL = "https://pepecartelhq.com"') && (helper.match(/DEFAULT_PUBLIC_BASE_URL/g) ?? []).length === 1);
+check("B-9.14 PRO_STATUSES shared", helper.includes('export const PRO_STATUSES = ["active", "trialing", "past_due"] as const;'));
 for (const fn of ["billing-checkout", "billing-portal", "stripe-billing-webhook"]) {
   check(`B-9.5 ${fn} authoritative in backend-source`, existsSync(`${EF}/${fn}/index.ts`) && existsSync(`${EF}/${fn}/deno.json`));
   check(`B-9.6 ${fn} not required as a supabase/functions folder`, !existsSync(`${DEP}/${fn}`));
