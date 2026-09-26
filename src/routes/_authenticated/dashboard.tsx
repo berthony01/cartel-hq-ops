@@ -65,7 +65,7 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
         name: "description",
         content: "CARTEL HQ brings project launch readiness, community operations, and creative deployment into one private command center.",
       },
-      { property: "og:title", content: "CARTEL HQ — Project Command Center" },
+      { property: "og:title", content: "Dashboard — CARTEL HQ" },
       {
         property: "og:description",
         content: "The private project command center for launch readiness, community operations, and creative deployment.",
