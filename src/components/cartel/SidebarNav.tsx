@@ -64,7 +64,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
 export function CartelMark() {
   return (
-    <Link to="/" className="group flex min-w-0 items-center gap-3 rounded-md px-1 py-1">
+    <Link to="/dashboard" className="group flex min-w-0 items-center gap-3 rounded-md px-1 py-1">
       <span className="flex size-10 shrink-0 items-center justify-center rounded-md border border-gold/40 bg-[image:var(--gradient-gold)] font-display text-xl text-primary-foreground shadow-[0_10px_28px_-18px_var(--gold)] transition-transform group-hover:-translate-y-px">
         PC
       </span>

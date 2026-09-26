@@ -10,9 +10,10 @@ import { Label } from "@/components/ui/label";
 type AuthSearch = { redirect?: string };
 
 function safeRedirect(value: unknown): string {
-  if (typeof value !== "string") return "/";
-  if (!value.startsWith("/") || value.startsWith("//")) return "/";
-  if (value.startsWith("/auth")) return "/";
+  if (typeof value !== "string") return "/dashboard";
+  if (!value.startsWith("/") || value.startsWith("//")) return "/dashboard";
+  if (value.startsWith("/auth")) return "/dashboard";
+  if (value === "/") return "/dashboard";
   return value;
 }
 

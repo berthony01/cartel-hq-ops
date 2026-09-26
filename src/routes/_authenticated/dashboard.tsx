@@ -57,15 +57,15 @@ import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/_authenticated/")({
+export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
-      { title: "CARTEL HQ — Project Command Center" },
+      { title: "Dashboard — CARTEL HQ" },
       {
         name: "description",
         content: "CARTEL HQ brings project launch readiness, community operations, and creative deployment into one private command center.",
       },
-      { property: "og:title", content: "CARTEL HQ — Project Command Center" },
+      { property: "og:title", content: "Dashboard — CARTEL HQ" },
       {
         property: "og:description",
         content: "The private project command center for launch readiness, community operations, and creative deployment.",

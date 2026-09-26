@@ -45,7 +45,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Command",
     items: [
-      { label: "HQ", to: "/", icon: LayoutDashboard, mobilePrimary: true },
+      { label: "HQ", to: "/dashboard", icon: LayoutDashboard, mobilePrimary: true },
       { label: "Project Profile", to: "/project-profile", icon: IdCard },
       {
         label: "Launch Control",
