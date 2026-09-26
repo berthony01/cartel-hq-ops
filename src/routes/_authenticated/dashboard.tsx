@@ -60,7 +60,7 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
-      { title: "CARTEL HQ — Project Command Center" },
+      { title: "Dashboard — CARTEL HQ" },
       {
         name: "description",
         content: "CARTEL HQ brings project launch readiness, community operations, and creative deployment into one private command center.",
