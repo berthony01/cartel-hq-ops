@@ -162,6 +162,8 @@ check("B-11.3 explicit portal configuration + return URL", po.includes("configur
 /* 12. webhook */
 const wh = read(`${EF}/stripe-billing-webhook/index.ts`);
 const iSig = wh.indexOf("constructEventAsync(rawBody, signature, webhookSecret");
+check("B-12.10 verify against whichever env signs", wh.includes("for (const c of getStripeWebhookConfigs") || (wh.includes("getStripeWebhookConfigs()") && wh.includes("for (const c of configs)")));
+check("B-12.11 scheduled period-end cancellation", wh.includes("s.cancel_at === periodEnd") && wh.includes("_cancel_at_period_end: cancelAtPeriodEnd"));
 check("B-12.1 signature verified before any processing/DB", iSig > 0 && iSig < wh.indexOf("createClient(") && iSig < wh.indexOf("subscriptions.retrieve"));
 check("B-12.2 raw body", wh.includes("const rawBody = await req.text();"));
 check("B-12.3 livemode must match key env", wh.includes('if (eventEnv !== environment) return text("environment mismatch", 400);'));

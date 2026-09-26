@@ -2,10 +2,11 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   CARTEL_APP,
-  getStripeConfig,
+  getStripeWebhookConfigs,
   isCartelMetadata,
   PRO_PLAN_CODE,
   PRO_PLAN_VERSION,
+  PRO_STATUSES,
   stripeCryptoProvider,
   type Stripe,
 } from "../_shared/stripe-billing.ts";
@@ -14,7 +15,8 @@ import {
  * CARTEL HQ stripe-billing-webhook (verify_jwt=false).
  *
  *  - Raw body + Stripe-Signature verified with the official SDK BEFORE any processing.
- *  - event.livemode must match the STRIPE_SECRET_KEY environment.
+ *  - Signature is verified against each configured environment (test/live);
+ *    the environment that verifies it is used, and event.livemode must match.
  *  - Shared Stripe account: events whose subscription/session lacks app=cartel_hq
  *    are acknowledged and ignored with NO Cartel database mutation.
  *  - Stripe's current subscription object (retrieved) is the source of truth;
@@ -55,21 +57,28 @@ function tsOrNull(value: unknown): string | null {
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return text("method not allowed", 405);
 
-  const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET") ?? "";
-  const cfg = getStripeConfig();
-  if (!webhookSecret || !cfg.ok) return text("billing not configured", 503);
-  const { stripe, environment } = cfg;
+  const configs = getStripeWebhookConfigs();
+  if (configs.length === 0) return text("billing not configured", 503);
 
   const signature = req.headers.get("Stripe-Signature") ?? "";
   if (!signature) return text("missing signature", 400);
   const rawBody = await req.text();
 
-  let event: Stripe.Event;
-  try {
-    event = await stripe.webhooks.constructEventAsync(rawBody, signature, webhookSecret, undefined, stripeCryptoProvider);
-  } catch {
-    return text("invalid signature", 400);
+  let event: Stripe.Event | null = null;
+  let stripe: Stripe | null = null;
+  let environment: "test" | "live" | null = null;
+  for (const c of configs) {
+    const webhookSecret = c.webhookSecret;
+    try {
+      event = await c.stripe.webhooks.constructEventAsync(rawBody, signature, webhookSecret, undefined, stripeCryptoProvider);
+      stripe = c.stripe;
+      environment = c.environment;
+      break;
+    } catch {
+      // try next configured environment
+    }
   }
+  if (!event || !stripe || !environment) return text("invalid signature", 400);
 
   const eventEnv = event.livemode ? "live" : "test";
   if (eventEnv !== environment) return text("environment mismatch", 400);
@@ -172,6 +181,10 @@ Deno.serve(async (req: Request) => {
 
   // deno-lint-ignore no-explicit-any
   const s = sub as any;
+  const periodEnd = s.current_period_end ?? items[0]?.current_period_end;
+  // Scheduled cancellation: flag or a cancel_at scheduled exactly at period end.
+  const cancelAtPeriodEnd = sub.cancel_at_period_end === true ||
+    (typeof s.cancel_at === "number" && typeof periodEnd === "number" && s.cancel_at === periodEnd && PRO_STATUSES.includes(sub.status as typeof PRO_STATUSES[number]));
   const { error: applyErr } = await admin.rpc("apply_stripe_subscription_state", {
     _environment: environment,
     _workspace_id: workspaceId,
@@ -180,7 +193,7 @@ Deno.serve(async (req: Request) => {
     _subscription_ref: sub.id,
     _price_ref: priceRef,
     _stripe_status: sub.status,
-    _cancel_at_period_end: sub.cancel_at_period_end === true,
+    _cancel_at_period_end: cancelAtPeriodEnd,
     _current_period_start: tsOrNull(s.current_period_start ?? items[0]?.current_period_start),
     _current_period_end: tsOrNull(s.current_period_end ?? items[0]?.current_period_end),
     _payment_failed_at: PAYMENT_FAILURE_EVENTS.has(event.type) ? tsOrNull(event.created) : null,
