@@ -166,7 +166,7 @@ check("B-11.3 explicit portal configuration + return URL", po.includes("configur
 
 /* 12. webhook */
 const wh = read(`${EF}/stripe-billing-webhook/index.ts`);
-const iSig = wh.indexOf("constructEventAsync(rawBody, signature, webhookSecret");
+const iSig = wh.indexOf("constructEventAsync(rawBody, signature, cfg.webhookSecret");
 check("B-12.10 verify against whichever env signs", wh.includes("for (const cfg of configs)") && wh.includes("verifiedEvent = await cfg.stripe.webhooks.constructEventAsync("));
 check("B-12.11 scheduled period-end cancellation only while Pro retained", wh.includes("const keepsPro = PRO_STATUSES.includes(") && wh.includes("const scheduledAtPeriodEnd = keepsPro &&") && wh.includes("cancelAt === currentPeriodEnd") && wh.includes("_cancel_at_period_end: scheduledAtPeriodEnd") && wh.includes("_current_period_end: tsOrNull(currentPeriodEnd)"));
 check("B-12.1 signature verified before any processing/DB", iSig > 0 && iSig < wh.indexOf("createClient(") && iSig < wh.indexOf("subscriptions.retrieve"));
