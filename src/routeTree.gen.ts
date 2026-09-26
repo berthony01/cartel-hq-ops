@@ -13,13 +13,13 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as NetworkRouteImport } from './routes/network'
 import { Route as TgRouteImport } from './routes/tg'
-import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as AuthenticatedAssetsRouteImport } from './routes/_authenticated/assets'
 import { Route as AuthenticatedBrandKitRouteImport } from './routes/_authenticated/brand-kit'
 import { Route as AuthenticatedCartelShieldRouteImport } from './routes/_authenticated/cartel-shield'
 import { Route as AuthenticatedChainLauncherRouteImport } from './routes/_authenticated/chain-launcher'
+import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedDistributionRouteImport } from './routes/_authenticated/distribution'
 import { Route as AuthenticatedLaunchControlRouteImport } from './routes/_authenticated/launch-control'
 import { Route as AuthenticatedMainnetCanaryRouteImport } from './routes/_authenticated/mainnet-canary'
@@ -62,11 +62,6 @@ const TgRoute = TgRouteImport.update({
   path: '/tg',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -99,6 +94,11 @@ const AuthenticatedChainLauncherRoute =
     path: '/chain-launcher',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedDistributionRoute =
   AuthenticatedDistributionRouteImport.update({
     id: '/distribution',
@@ -219,7 +219,7 @@ const TgMissionMissionIdRoute = TgMissionMissionIdRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof AuthenticatedIndexRoute
+  '/': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/network': typeof NetworkRouteWithChildren
   '/tg': typeof TgRouteWithChildren
@@ -229,6 +229,7 @@ export interface FileRoutesByFullPath {
   '/brand-kit': typeof AuthenticatedBrandKitRoute
   '/cartel-shield': typeof AuthenticatedCartelShieldRoute
   '/chain-launcher': typeof AuthenticatedChainLauncherRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
   '/distribution': typeof AuthenticatedDistributionRoute
   '/launch-control': typeof AuthenticatedLaunchControlRoute
   '/mainnet-canary': typeof AuthenticatedMainnetCanaryRoute
@@ -253,6 +254,7 @@ export interface FileRoutesByFullPath {
   '/sticker-lab/': typeof AuthenticatedStickerLabIndexRoute
 }
 export interface FileRoutesByTo {
+  '/': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
@@ -260,6 +262,7 @@ export interface FileRoutesByTo {
   '/brand-kit': typeof AuthenticatedBrandKitRoute
   '/cartel-shield': typeof AuthenticatedCartelShieldRoute
   '/chain-launcher': typeof AuthenticatedChainLauncherRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
   '/distribution': typeof AuthenticatedDistributionRoute
   '/launch-control': typeof AuthenticatedLaunchControlRoute
   '/mainnet-canary': typeof AuthenticatedMainnetCanaryRoute
@@ -273,7 +276,6 @@ export interface FileRoutesByTo {
   '/network/launches': typeof NetworkLaunchesRoute
   '/network/projects': typeof NetworkProjectsRoute
   '/network/signals': typeof NetworkSignalsRoute
-  '/': typeof AuthenticatedIndexRoute
   '/network': typeof NetworkIndexRoute
   '/tg': typeof TgIndexRoute
   '/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
@@ -295,6 +297,7 @@ export interface FileRoutesById {
   '/_authenticated/brand-kit': typeof AuthenticatedBrandKitRoute
   '/_authenticated/cartel-shield': typeof AuthenticatedCartelShieldRoute
   '/_authenticated/chain-launcher': typeof AuthenticatedChainLauncherRoute
+  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/distribution': typeof AuthenticatedDistributionRoute
   '/_authenticated/launch-control': typeof AuthenticatedLaunchControlRoute
   '/_authenticated/mainnet-canary': typeof AuthenticatedMainnetCanaryRoute
@@ -309,7 +312,6 @@ export interface FileRoutesById {
   '/network/launches': typeof NetworkLaunchesRoute
   '/network/projects': typeof NetworkProjectsRoute
   '/network/signals': typeof NetworkSignalsRoute
-  '/_authenticated/': typeof AuthenticatedIndexRoute
   '/network/': typeof NetworkIndexRoute
   '/tg/': typeof TgIndexRoute
   '/_authenticated/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
@@ -332,6 +334,7 @@ export interface FileRouteTypes {
     | '/brand-kit'
     | '/cartel-shield'
     | '/chain-launcher'
+    | '/dashboard'
     | '/distribution'
     | '/launch-control'
     | '/mainnet-canary'
@@ -356,6 +359,7 @@ export interface FileRouteTypes {
     | '/sticker-lab/'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/'
     | '/auth'
     | '/admin'
     | '/analytics'
@@ -363,6 +367,7 @@ export interface FileRouteTypes {
     | '/brand-kit'
     | '/cartel-shield'
     | '/chain-launcher'
+    | '/dashboard'
     | '/distribution'
     | '/launch-control'
     | '/mainnet-canary'
@@ -376,7 +381,6 @@ export interface FileRouteTypes {
     | '/network/launches'
     | '/network/projects'
     | '/network/signals'
-    | '/'
     | '/network'
     | '/tg'
     | '/sticker-lab/$packId'
@@ -397,6 +401,7 @@ export interface FileRouteTypes {
     | '/_authenticated/brand-kit'
     | '/_authenticated/cartel-shield'
     | '/_authenticated/chain-launcher'
+    | '/_authenticated/dashboard'
     | '/_authenticated/distribution'
     | '/_authenticated/launch-control'
     | '/_authenticated/mainnet-canary'
@@ -411,7 +416,6 @@ export interface FileRouteTypes {
     | '/network/launches'
     | '/network/projects'
     | '/network/signals'
-    | '/_authenticated/'
     | '/network/'
     | '/tg/'
     | '/_authenticated/sticker-lab/$packId'
@@ -460,13 +464,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TgRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/': {
-      id: '/_authenticated/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof AuthenticatedIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/admin': {
       id: '/_authenticated/admin'
       path: '/admin'
@@ -507,6 +504,13 @@ declare module '@tanstack/react-router' {
       path: '/chain-launcher'
       fullPath: '/chain-launcher'
       preLoaderRoute: typeof AuthenticatedChainLauncherRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/distribution': {
@@ -691,6 +695,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedBrandKitRoute: typeof AuthenticatedBrandKitRoute
   AuthenticatedCartelShieldRoute: typeof AuthenticatedCartelShieldRoute
   AuthenticatedChainLauncherRoute: typeof AuthenticatedChainLauncherRoute
+  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDistributionRoute: typeof AuthenticatedDistributionRoute
   AuthenticatedLaunchControlRoute: typeof AuthenticatedLaunchControlRoute
   AuthenticatedMainnetCanaryRoute: typeof AuthenticatedMainnetCanaryRoute
@@ -701,7 +706,6 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedStickerLabRoute: typeof AuthenticatedStickerLabRouteWithChildren
   AuthenticatedTelegramRoute: typeof AuthenticatedTelegramRoute
   AuthenticatedWatchlistRoute: typeof AuthenticatedWatchlistRoute
-  AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -711,6 +715,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedBrandKitRoute: AuthenticatedBrandKitRoute,
   AuthenticatedCartelShieldRoute: AuthenticatedCartelShieldRoute,
   AuthenticatedChainLauncherRoute: AuthenticatedChainLauncherRoute,
+  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDistributionRoute: AuthenticatedDistributionRoute,
   AuthenticatedLaunchControlRoute: AuthenticatedLaunchControlRoute,
   AuthenticatedMainnetCanaryRoute: AuthenticatedMainnetCanaryRoute,
@@ -721,7 +726,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedStickerLabRoute: AuthenticatedStickerLabRouteWithChildren,
   AuthenticatedTelegramRoute: AuthenticatedTelegramRoute,
   AuthenticatedWatchlistRoute: AuthenticatedWatchlistRoute,
-  AuthenticatedIndexRoute: AuthenticatedIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

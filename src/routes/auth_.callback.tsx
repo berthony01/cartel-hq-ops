@@ -72,7 +72,7 @@ function AuthCallbackPage() {
         }
 
         if (!active) return;
-        navigate({ to: "/", replace: true });
+        navigate({ to: "/dashboard", replace: true });
       } catch (err) {
         if (!active) return;
         setError(err instanceof Error ? err.message : "Could not complete confirmation.");

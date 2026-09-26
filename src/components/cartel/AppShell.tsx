@@ -56,7 +56,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const gated = isProjectIdentityGatedPath(pathname);
-  const dashboard = pathname === "/";
+  const dashboard = pathname === "/dashboard";
 
   return (
     <div className="min-h-screen bg-background/75">

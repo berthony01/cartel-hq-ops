@@ -57,7 +57,7 @@ import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/_authenticated/")({
+export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
       { title: "CARTEL HQ — Project Command Center" },
