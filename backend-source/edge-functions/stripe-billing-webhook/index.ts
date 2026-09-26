@@ -67,21 +67,21 @@ Deno.serve(async (req: Request) => {
   let event: Stripe.Event | null = null;
   let stripe: Stripe | null = null;
   let environment: "test" | "live" | null = null;
-  for (const c of configs) {
-    const webhookSecret = c.webhookSecret;
+  for (const cfg of configs) {
+    let verifiedEvent: Stripe.Event;
     try {
-      event = await c.stripe.webhooks.constructEventAsync(rawBody, signature, webhookSecret, undefined, stripeCryptoProvider);
-      stripe = c.stripe;
-      environment = c.environment;
-      break;
+      verifiedEvent = await cfg.stripe.webhooks.constructEventAsync(rawBody, signature, cfg.webhookSecret, undefined, stripeCryptoProvider);
     } catch {
-      // try next configured environment
+      continue; // try next configured environment
     }
+    const eventEnvironment = verifiedEvent.livemode ? "live" : "test";
+    if (eventEnvironment !== cfg.environment) return text("environment mismatch", 400);
+    event = verifiedEvent;
+    stripe = cfg.stripe;
+    environment = cfg.environment;
+    break;
   }
   if (!event || !stripe || !environment) return text("invalid signature", 400);
-
-  const eventEnv = event.livemode ? "live" : "test";
-  if (eventEnv !== environment) return text("environment mismatch", 400);
   if (!RELEVANT_EVENTS.has(event.type)) return text("ignored", 200);
 
   // deno-lint-ignore no-explicit-any
@@ -181,10 +181,13 @@ Deno.serve(async (req: Request) => {
 
   // deno-lint-ignore no-explicit-any
   const s = sub as any;
-  const periodEnd = s.current_period_end ?? items[0]?.current_period_end;
-  // Scheduled cancellation: flag or a cancel_at scheduled exactly at period end.
-  const cancelAtPeriodEnd = sub.cancel_at_period_end === true ||
-    (typeof s.cancel_at === "number" && typeof periodEnd === "number" && s.cancel_at === periodEnd && PRO_STATUSES.includes(sub.status as typeof PRO_STATUSES[number]));
+  const currentPeriodEnd = s.current_period_end ?? items[0]?.current_period_end;
+  const cancelAt = typeof s.cancel_at === "number" ? s.cancel_at : null;
+  const keepsPro = PRO_STATUSES.includes(sub.status as typeof PRO_STATUSES[number]);
+  // Scheduled cancellation only while Pro is retained: flag, or cancel_at exactly at period end.
+  const scheduledAtPeriodEnd = keepsPro &&
+    (sub.cancel_at_period_end === true ||
+      (cancelAt !== null && typeof currentPeriodEnd === "number" && cancelAt === currentPeriodEnd));
   const { error: applyErr } = await admin.rpc("apply_stripe_subscription_state", {
     _environment: environment,
     _workspace_id: workspaceId,
@@ -193,9 +196,9 @@ Deno.serve(async (req: Request) => {
     _subscription_ref: sub.id,
     _price_ref: priceRef,
     _stripe_status: sub.status,
-    _cancel_at_period_end: cancelAtPeriodEnd,
+    _cancel_at_period_end: scheduledAtPeriodEnd,
     _current_period_start: tsOrNull(s.current_period_start ?? items[0]?.current_period_start),
-    _current_period_end: tsOrNull(s.current_period_end ?? items[0]?.current_period_end),
+    _current_period_end: tsOrNull(currentPeriodEnd),
     _payment_failed_at: PAYMENT_FAILURE_EVENTS.has(event.type) ? tsOrNull(event.created) : null,
     _plan_code: PRO_PLAN_CODE,
     _plan_version: PRO_PLAN_VERSION,

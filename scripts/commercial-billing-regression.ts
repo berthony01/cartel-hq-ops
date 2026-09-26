@@ -127,8 +127,9 @@ check("B-9.1 pinned official Stripe SDK", helper.includes('import Stripe from "n
 check("B-9.2 env derived from key prefix, else fail closed", helper.includes('key.startsWith("sk_test_") || key.startsWith("rk_test_")') && helper.includes('key.startsWith("sk_live_") || key.startsWith("rk_live_")') && helper.includes('return { ok: false, code: "BILLING_NOT_CONFIGURED" }'));
 check("B-9.3 app=cartel_hq, cartel_49 v1", helper.includes('CARTEL_APP = "cartel_hq"') && helper.includes('PRO_PLAN_CODE = "cartel_49"') && helper.includes("PRO_PLAN_VERSION = 1"));
 check("B-9.4 base URL from CARTEL_HQ_PUBLIC_BASE_URL https only", helper.includes('Deno.env.get("CARTEL_HQ_PUBLIC_BASE_URL")') && helper.includes('u.protocol !== "https:"'));
-check("B-9.11 dedicated test/live keys + explicit env selection + legacy fallback", helper.includes('"STRIPE_TEST_SECRET_KEY"') && helper.includes('"STRIPE_LIVE_SECRET_KEY"') && helper.includes('envValue("CARTEL_HQ_BILLING_ENVIRONMENT")') && helper.includes('envValue("STRIPE_SECRET_KEY")'));
-check("B-9.12 dual webhook secrets + legacy fallback", helper.includes('"STRIPE_TEST_WEBHOOK_SECRET"') && helper.includes('"STRIPE_LIVE_WEBHOOK_SECRET"') && helper.includes('envValue("STRIPE_WEBHOOK_SECRET")'));
+check("B-9.11 dedicated key only when prefix matches, legacy fallback not blocked", helper.includes('"STRIPE_TEST_SECRET_KEY"') && helper.includes('"STRIPE_LIVE_SECRET_KEY"') && helper.includes("export function getStripeConfigForEnvironment(") && helper.includes("if (dedicated && stripeEnvironmentForKey(dedicated) === environment)") && helper.includes("if (legacy && stripeEnvironmentForKey(legacy) === environment)") && !helper.includes("if (dedicated) return null"));
+check("B-9.11b active env: exact test|live else legacy key prefix (no invalid fail-closed state)", helper.includes("export function activeStripeEnvironment(") && helper.includes('if (configured === "test" || configured === "live") return configured;') && !helper.includes('"invalid"') && helper.includes("return getStripeConfigForEnvironment(environment);"));
+check("B-9.12 dual webhook secrets; legacy secret bound only to legacy key env", helper.includes('"STRIPE_TEST_WEBHOOK_SECRET"') && helper.includes('"STRIPE_LIVE_WEBHOOK_SECRET"') && helper.includes('Deno.env.get("STRIPE_WEBHOOK_SECRET")') && /const legacyEnvironment = stripeEnvironmentForKey\(\(Deno\.env\.get\("STRIPE_SECRET_KEY"\)/.test(helper) && helper.includes("(legacyEnvironment === environment ? legacySecret : \"\")"));
 check("B-9.13 fallback base URL is pepecartelhq.com, never used as fallback", helper.includes('DEFAULT_PUBLIC_BASE_URL = "https://pepecartelhq.com"') && (helper.match(/DEFAULT_PUBLIC_BASE_URL/g) ?? []).length === 1);
 check("B-9.14 PRO_STATUSES shared", helper.includes('export const PRO_STATUSES = ["active", "trialing", "past_due"] as const;'));
 for (const fn of ["billing-checkout", "billing-portal", "stripe-billing-webhook"]) {
@@ -165,12 +166,12 @@ check("B-11.3 explicit portal configuration + return URL", po.includes("configur
 
 /* 12. webhook */
 const wh = read(`${EF}/stripe-billing-webhook/index.ts`);
-const iSig = wh.indexOf("constructEventAsync(rawBody, signature, webhookSecret");
-check("B-12.10 verify against whichever env signs", wh.includes("for (const c of getStripeWebhookConfigs") || (wh.includes("getStripeWebhookConfigs()") && wh.includes("for (const c of configs)")));
-check("B-12.11 scheduled period-end cancellation", wh.includes("s.cancel_at === periodEnd") && wh.includes("_cancel_at_period_end: cancelAtPeriodEnd"));
+const iSig = wh.indexOf("constructEventAsync(rawBody, signature, cfg.webhookSecret");
+check("B-12.10 verify against whichever env signs", wh.includes("for (const cfg of configs)") && wh.includes("verifiedEvent = await cfg.stripe.webhooks.constructEventAsync("));
+check("B-12.11 scheduled period-end cancellation only while Pro retained", wh.includes("const keepsPro = PRO_STATUSES.includes(") && wh.includes("const scheduledAtPeriodEnd = keepsPro &&") && wh.includes("cancelAt === currentPeriodEnd") && wh.includes("_cancel_at_period_end: scheduledAtPeriodEnd") && wh.includes("_current_period_end: tsOrNull(currentPeriodEnd)"));
 check("B-12.1 signature verified before any processing/DB", iSig > 0 && iSig < wh.indexOf("createClient(") && iSig < wh.indexOf("subscriptions.retrieve"));
 check("B-12.2 raw body", wh.includes("const rawBody = await req.text();"));
-check("B-12.3 livemode must match key env", wh.includes('if (eventEnv !== environment) return text("environment mismatch", 400);'));
+check("B-12.3 livemode must match verifying env (immediate 400)", wh.includes('const eventEnvironment = verifiedEvent.livemode ? "live" : "test";') && wh.includes('if (eventEnvironment !== cfg.environment) return text("environment mismatch", 400);'));
 check("B-12.4 shared-account filter before DB mutation", wh.indexOf('if (!isCartelMetadata(md)) return text("ignored", 200);') < wh.indexOf('.from("commercial_billing_events").insert'));
 check("B-12.5 exact price mapping required", wh.includes('.eq("price_ref", priceRef).eq("active", true)') && wh.includes("PRICE_NOT_MAPPED"));
 check("B-12.6 Stripe subscription retrieved is source of truth", wh.includes("await stripe.subscriptions.retrieve(subscriptionRef)"));

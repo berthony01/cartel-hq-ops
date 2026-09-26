@@ -4,9 +4,9 @@
  * Invariants:
  *  - Official Stripe SDK, pinned Deno npm import. No package.json change.
  *  - Stripe keys are read server-side only and never logged.
- *  - CARTEL_HQ_BILLING_ENVIRONMENT (test|live) selects STRIPE_TEST_SECRET_KEY /
- *    STRIPE_LIVE_SECRET_KEY; legacy STRIPE_SECRET_KEY is the fallback.
- *  - The key prefix must match the selected environment; otherwise fail closed.
+ *  - CARTEL_HQ_BILLING_ENVIRONMENT (exactly test|live) selects the environment,
+ *    otherwise it is derived from the legacy STRIPE_SECRET_KEY prefix.
+ *  - A key is used only when its prefix matches the environment.
  *  - No hardcoded Stripe price/product/customer IDs: refs come from the DB.
  *  - Every Cartel runtime Stripe object carries app=cartel_hq metadata.
  *  - Email is never an authority; at most a receipt/prefill value.
@@ -31,18 +31,6 @@ export function stripeEnvironmentForKey(key: string): StripeEnvironment | null {
   return null;
 }
 
-function envValue(name: string): string {
-  return (Deno.env.get(name) ?? "").trim();
-}
-
-/** Explicit environment selection; null when unset (legacy mode) or invalid. */
-export function selectedBillingEnvironment(): StripeEnvironment | "invalid" | null {
-  const raw = envValue("CARTEL_HQ_BILLING_ENVIRONMENT").toLowerCase();
-  if (!raw) return null;
-  if (raw === "test" || raw === "live") return raw;
-  return "invalid";
-}
-
 function stripeClient(key: string): Stripe {
   return new Stripe(key, {
     apiVersion: STRIPE_API_VERSION as Stripe.LatestApiVersion,
@@ -50,51 +38,54 @@ function stripeClient(key: string): Stripe {
   });
 }
 
-/** Resolve the Stripe key for one environment: dedicated key first, legacy fallback. */
-function keyForEnvironment(env: StripeEnvironment): string | null {
-  const dedicated = envValue(env === "live" ? "STRIPE_LIVE_SECRET_KEY" : "STRIPE_TEST_SECRET_KEY");
-  if (dedicated && stripeEnvironmentForKey(dedicated) === env) return dedicated;
-  if (dedicated) return null; // dedicated key present but wrong mode: fail closed
-  const legacy = envValue("STRIPE_SECRET_KEY");
-  if (legacy && stripeEnvironmentForKey(legacy) === env) return legacy;
-  return null;
+/**
+ * Dedicated STRIPE_{TEST,LIVE}_SECRET_KEY is used only when its prefix matches the
+ * requested environment; otherwise legacy STRIPE_SECRET_KEY is used if it matches.
+ * A wrong-mode dedicated key never blocks a correct legacy fallback.
+ */
+export function getStripeConfigForEnvironment(environment: StripeEnvironment): StripeConfig {
+  const dedicated = (Deno.env.get(environment === "live" ? "STRIPE_LIVE_SECRET_KEY" : "STRIPE_TEST_SECRET_KEY") ?? "").trim();
+  const legacy = (Deno.env.get("STRIPE_SECRET_KEY") ?? "").trim();
+  if (dedicated && stripeEnvironmentForKey(dedicated) === environment) {
+    return { ok: true, stripe: stripeClient(dedicated), environment };
+  }
+  if (legacy && stripeEnvironmentForKey(legacy) === environment) {
+    return { ok: true, stripe: stripeClient(legacy), environment };
+  }
+  return { ok: false, code: "BILLING_NOT_CONFIGURED" };
+}
+
+/** CARTEL_HQ_BILLING_ENVIRONMENT if exactly test/live; otherwise derived from STRIPE_SECRET_KEY. */
+export function activeStripeEnvironment(): StripeEnvironment | null {
+  const configured = (Deno.env.get("CARTEL_HQ_BILLING_ENVIRONMENT") ?? "").trim().toLowerCase();
+  if (configured === "test" || configured === "live") return configured;
+  return stripeEnvironmentForKey((Deno.env.get("STRIPE_SECRET_KEY") ?? "").trim());
 }
 
 export function getStripeConfig(): StripeConfig {
-  const selected = selectedBillingEnvironment();
-  if (selected === "invalid") return { ok: false, code: "BILLING_NOT_CONFIGURED" };
-  if (selected) {
-    const key = keyForEnvironment(selected);
-    if (!key) return { ok: false, code: "BILLING_NOT_CONFIGURED" };
-    return { ok: true, stripe: stripeClient(key), environment: selected };
-  }
-  // Legacy single-key mode: environment derived from STRIPE_SECRET_KEY prefix.
-  const key = envValue("STRIPE_SECRET_KEY");
-  const environment = stripeEnvironmentForKey(key);
+  const environment = activeStripeEnvironment();
   if (!environment) return { ok: false, code: "BILLING_NOT_CONFIGURED" };
-  return { ok: true, stripe: stripeClient(key), environment };
+  return getStripeConfigForEnvironment(environment);
 }
 
 export type StripeWebhookConfig = { stripe: Stripe; environment: StripeEnvironment; webhookSecret: string };
 
 /**
- * All webhook configurations that are fully configured (key + signing secret).
- * Dedicated STRIPE_{TEST,LIVE}_WEBHOOK_SECRET first; legacy STRIPE_WEBHOOK_SECRET
- * applies only to the legacy/selected environment.
+ * Fully configured webhook environments. Dedicated STRIPE_{TEST,LIVE}_WEBHOOK_SECRET
+ * first; legacy STRIPE_WEBHOOK_SECRET applies only to the environment of the legacy
+ * STRIPE_SECRET_KEY prefix (never assigned via CARTEL_HQ_BILLING_ENVIRONMENT).
  */
 export function getStripeWebhookConfigs(): StripeWebhookConfig[] {
-  const selected = selectedBillingEnvironment();
-  if (selected === "invalid") return [];
-  const legacyEnv: StripeEnvironment | null = selected ?? stripeEnvironmentForKey(envValue("STRIPE_SECRET_KEY"));
-  const legacySecret = envValue("STRIPE_WEBHOOK_SECRET");
+  const legacyEnvironment = stripeEnvironmentForKey((Deno.env.get("STRIPE_SECRET_KEY") ?? "").trim());
+  const legacySecret = (Deno.env.get("STRIPE_WEBHOOK_SECRET") ?? "").trim();
   const out: StripeWebhookConfig[] = [];
-  for (const env of ["test", "live"] as const) {
-    const key = keyForEnvironment(env);
-    if (!key) continue;
-    const dedicated = envValue(env === "live" ? "STRIPE_LIVE_WEBHOOK_SECRET" : "STRIPE_TEST_WEBHOOK_SECRET");
-    const webhookSecret = dedicated || (legacyEnv === env ? legacySecret : "");
+  for (const environment of ["test", "live"] as const) {
+    const cfg = getStripeConfigForEnvironment(environment);
+    if (!cfg.ok) continue;
+    const dedicatedSecret = (Deno.env.get(environment === "live" ? "STRIPE_LIVE_WEBHOOK_SECRET" : "STRIPE_TEST_WEBHOOK_SECRET") ?? "").trim();
+    const webhookSecret = dedicatedSecret || (legacyEnvironment === environment ? legacySecret : "");
     if (!webhookSecret) continue;
-    out.push({ stripe: stripeClient(key), environment: env, webhookSecret });
+    out.push({ stripe: cfg.stripe, environment, webhookSecret });
   }
   return out;
 }
