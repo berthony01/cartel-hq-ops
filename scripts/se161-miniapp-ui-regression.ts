@@ -109,12 +109,17 @@ const FORBIDDEN_FNS = [
   "end_social_mission_from_control",
   "cancel_social_mission_from_control",
   "miniAppEndMission",
-  "miniAppCancelMission",
 ];
+// MINI-HQ-1C — End/Cancel are now authorized, mission-route-only mutations.
 for (const fn of FORBIDDEN_FNS) {
   check(`5.${fn} is not referenced by the Mini App UI`, !uiCode.includes(fn));
 }
-const missionOnlyMutations = ["miniAppApplyTargets", "miniAppApplyDuration"];
+const missionOnlyMutations = [
+  "miniAppApplyTargets",
+  "miniAppApplyDuration",
+  "miniAppEndMission",
+  "miniAppCancelMission",
+];
 for (const fn of missionOnlyMutations) {
   check(
     `5.scope ${fn} is imported by the mission route only`,
@@ -132,16 +137,22 @@ check(
     /miniAppMissionPanel/.test(code.mission),
 );
 check(
-  "5.6 exactly the two authorized mutation controls are rendered",
+  "5.6 exactly the four authorized mutation controls are rendered (mission route only)",
   /Edit targets/.test(code.mission) &&
     /Change end time/.test(code.mission) &&
-    !/End now|End Now|End mission|End Mission|Cancel mission|Cancel Mission/.test(code.mission) &&
+    /label="End mission now"/.test(code.mission) &&
+    /label="Cancel mission"/.test(code.mission) &&
+    !/End mission now|Cancel mission/.test(code.home) &&
     !/Edit targets|Change end time/.test(code.home),
 );
 check(
-  "5.7 end/cancel are explicitly attributed to the bot, without a read-only claim",
-  /Ending or cancelling the mission is still handled/.test(code.mission) &&
-    /Telegram bot\./.test(code.mission) &&
+  "5.7 end/cancel require a two-step confirmation with irreversible copy",
+  /openLifecycleConfirm\("end_now"\)/.test(code.mission) &&
+    /openLifecycleConfirm\("cancel"\)/.test(code.mission) &&
+    /label=\{editor === "end_now" \? "Yes, end it now" : "Yes, cancel it"\}/.test(code.mission) &&
+    /Keep it running/.test(code.mission) &&
+    (code.mission.match(/This cannot be undone\./g) ?? []).length === 2 &&
+    /no X reading is taken/.test(code.mission) &&
     !/This view is read-only/.test(code.mission),
 );
 check(
@@ -443,8 +454,10 @@ check(
     // The mission screen's only mutation entry points are the two named
     // mutations, invoked from explicit submit/retry handlers.
     /panelQuery\.refetch\(\)/.test(code.mission) &&
-    (code.mission.match(/useMutation\(/g) ?? []).length === 2 &&
-    (code.mission.match(/\.mutate\(/g) ?? []).length === 4 &&
+    (code.mission.match(/useMutation\(/g) ?? []).length === 3 &&
+    (code.mission.match(/\.mutate\(/g) ?? []).length === 6 &&
+    /function confirmLifecycle\(/.test(code.mission) &&
+    /function retryLifecycle\(\)/.test(code.mission) &&
     /function submitTargets\(\)/.test(code.mission) &&
     /function submitDuration\(/.test(code.mission) &&
     /function retryPending\(\)/.test(code.mission),
@@ -561,7 +574,7 @@ check(
   "19.4 a new submit mints a fresh crypto.randomUUID request id",
   /source\.randomUUID\(\)/.test(code.client) &&
     /globalThis\.crypto/.test(code.client) &&
-    (code.mission.match(/newRequestId\(\)/g) ?? []).length === 2,
+    (code.mission.match(/newRequestId\(\)/g) ?? []).length === 3,
 );
 check(
   "19.5 newRequestId fails safely instead of fabricating an id",
@@ -667,7 +680,7 @@ check(
 );
 check(
   "19.22 double-submit is prevented while a mutation is pending",
-  /mutationPending = targetsMutation\.isPending \|\| durationMutation\.isPending/.test(
+  /targetsMutation\.isPending \|\| durationMutation\.isPending \|\| lifecycleMutation\.isPending/.test(
     code.mission,
   ) && /disabled=\{mutationPending\}/.test(code.mission),
 );
@@ -758,7 +771,8 @@ check(
 check(
   "20.8 retry still reuses the original request id and never mints a new one",
   !/function retryPending\(\)[\s\S]{0,400}newRequestId\(\)/.test(code.mission) &&
-    (code.mission.match(/newRequestId\(\)/g) ?? []).length === 2,
+    !/function retryLifecycle\(\)[\s\S]{0,200}newRequestId\(\)/.test(code.mission) &&
+    (code.mission.match(/newRequestId\(\)/g) ?? []).length === 3,
 );
 check(
   "20.9 not_live closes the editor, clears the retry slot and refetches the panel",
