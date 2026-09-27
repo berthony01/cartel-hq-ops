@@ -626,6 +626,13 @@ export const miniAppListMissions = createServerFn({ method: "POST" })
     if (!isUuid(data?.workspaceId)) return fail("invalid_workspace_id");
 
     const admin = await adminClient();
+    // C3A — server-side x_missions entitlement, same derived actor + authority
+    // as the commercial status read. Fails closed; lifecycle paths untouched.
+    const gate = await miniAppCommercialActor(admin, auth.user.id, data.workspaceId);
+    if (!gate.ok) return gate;
+    const entitled = await miniAppFeatureAllowed(admin, data.workspaceId, "x_missions", gate.actorUserId);
+    if (entitled === null) return fail("unavailable");
+    if (!entitled) return fail("missions_plan_required");
     const { data: rows, error } = await admin.rpc(MINIAPP_RPC.missions, {
       _telegram_user_id: auth.user.id,
       _workspace_id: data.workspaceId,
@@ -1159,6 +1166,49 @@ export type MiniAppCommercialStatus = {
   features: Record<MiniAppCommercialFeature, boolean>;
 };
 
+/**
+ * Workspace must be in the operator-scoped set for the VALIDATED Telegram user
+ * before the linked platform user is resolved server-side. Never client input.
+ */
+async function miniAppCommercialActor(
+  admin: AdminClient,
+  telegramUserId: number,
+  workspaceId: string,
+): Promise<{ ok: true; actorUserId: string } | MiniAppFailure> {
+  const { data: workspaceRows, error: workspaceError } = await admin.rpc(MINIAPP_RPC.workspaces, {
+    _telegram_user_id: telegramUserId,
+  });
+  if (workspaceError) return fail("unavailable");
+  const authorized = (Array.isArray(workspaceRows) ? workspaceRows : []).some(
+    (row) => String((row as Record<string, unknown>)["workspace_id"] ?? "") === workspaceId,
+  );
+  if (!authorized) return fail("not_found");
+  const { data: link, error: linkError } = await admin
+    .from("telegram_connections")
+    .select("user_id")
+    .eq("telegram_user_id", telegramUserId)
+    .maybeSingle();
+  const actorUserId = String((link as Record<string, unknown> | null)?.["user_id"] ?? "");
+  if (linkError || !isUuid(actorUserId)) return fail("unavailable");
+  return { ok: true, actorUserId };
+}
+
+/** true/false from evaluate_commercial_access; null on any error (fail closed). */
+async function miniAppFeatureAllowed(
+  admin: AdminClient,
+  workspaceId: string,
+  feature: string,
+  actorUserId: string,
+): Promise<boolean | null> {
+  const { data, error } = await admin.rpc(MINIAPP_COMMERCIAL_RPC.access, {
+    _workspace_id: workspaceId,
+    _feature_key: feature,
+    _user_id: actorUserId,
+  });
+  if (error || !data || typeof data !== "object") return null;
+  return (data as Record<string, unknown>)["allowed"] === true;
+}
+
 export const miniAppCommercialStatus = createServerFn({ method: "POST" })
   .inputValidator((input: { initData: string; workspaceId: string }) => input)
   .handler(async ({ data }): Promise<MiniAppCommercialStatus | MiniAppFailure> => {
@@ -1167,22 +1217,9 @@ export const miniAppCommercialStatus = createServerFn({ method: "POST" })
     if (!isUuid(data?.workspaceId)) return fail("invalid_workspace_id");
 
     const admin = await adminClient();
-    const { data: workspaceRows, error: workspaceError } = await admin.rpc(MINIAPP_RPC.workspaces, {
-      _telegram_user_id: auth.user.id,
-    });
-    if (workspaceError) return fail("unavailable");
-    const authorized = (Array.isArray(workspaceRows) ? workspaceRows : []).some(
-      (row) => String((row as Record<string, unknown>)["workspace_id"] ?? "") === data.workspaceId,
-    );
-    if (!authorized) return fail("not_found");
-
-    const { data: link, error: linkError } = await admin
-      .from("telegram_connections")
-      .select("user_id")
-      .eq("telegram_user_id", auth.user.id)
-      .maybeSingle();
-    const actorUserId = String((link as Record<string, unknown> | null)?.["user_id"] ?? "");
-    if (linkError || !isUuid(actorUserId)) return fail("unavailable");
+    const gate = await miniAppCommercialActor(admin, auth.user.id, data.workspaceId);
+    if (!gate.ok) return gate;
+    const actorUserId = gate.actorUserId;
 
     const { data: statusData, error: statusError } = await admin.rpc(MINIAPP_COMMERCIAL_RPC.billingStatus, {
       _workspace_id: data.workspaceId,
@@ -1196,13 +1233,9 @@ export const miniAppCommercialStatus = createServerFn({ method: "POST" })
 
     const features = {} as Record<MiniAppCommercialFeature, boolean>;
     for (const feature of MINIAPP_COMMERCIAL_FEATURES) {
-      const { data: accessData, error: accessError } = await admin.rpc(MINIAPP_COMMERCIAL_RPC.access, {
-        _workspace_id: data.workspaceId,
-        _feature_key: feature,
-        _user_id: actorUserId,
-      });
-      if (accessError) return fail("unavailable");
-      features[feature] = (accessData as Record<string, unknown> | null)?.["allowed"] === true;
+      const allowed = await miniAppFeatureAllowed(admin, data.workspaceId, feature, actorUserId);
+      if (allowed === null) return fail("unavailable");
+      features[feature] = allowed;
     }
 
     return {
