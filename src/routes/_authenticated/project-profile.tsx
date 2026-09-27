@@ -656,6 +656,7 @@ function ProjectProfilePage() {
               ) : null}
             </div>
           </div>
+          </div>
         </Section>
 
         <LaunchReadinessCallout workspaceId={workspaceId} title="Setup guide" />
@@ -1527,6 +1528,7 @@ function ProjectProfilePage() {
             </Section>
           </aside>
           </div>
+        </div>
         </div>
       )}
 
