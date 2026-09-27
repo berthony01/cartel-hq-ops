@@ -288,7 +288,7 @@ export function MiniAppActionButton({
   onPress: () => void;
   pending?: boolean;
   disabled?: boolean;
-  tone?: "primary" | "quiet";
+  tone?: "primary" | "quiet" | "danger";
   pendingLabel?: string;
 }) {
   return (
@@ -300,7 +300,9 @@ export function MiniAppActionButton({
         "inline-flex min-h-11 w-full items-center justify-center rounded-md border px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] transition-colors disabled:opacity-60",
         tone === "primary"
           ? "border-gold/45 bg-gold/12 text-gold hover:bg-gold/20"
-          : "border-border/70 bg-surface-raised/40 text-muted-foreground hover:text-foreground",
+          : tone === "danger"
+            ? "border-destructive/50 bg-destructive/10 text-destructive hover:bg-destructive/20"
+            : "border-border/70 bg-surface-raised/40 text-muted-foreground hover:text-foreground",
       )}
     >
       {pending ? (pendingLabel ?? "Saving…") : label}
