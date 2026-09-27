@@ -130,6 +130,25 @@ function MiniAppProLocked({ area }: { area: string }) {
   );
 }
 
+/** Commercial status failed/unknown: no premium content, no lock claim. */
+function MiniAppPlanUnavailable({ onRetry, pending }: { onRetry: () => void; pending: boolean }) {
+  return (
+    <MiniAppMessage
+      title="Plan status unavailable"
+      description="We couldn't confirm this project's plan, so this area stays closed. Try again in a moment."
+      action={<MiniAppRetryButton onRetry={onRetry} pending={pending} />}
+    />
+  );
+}
+
+function PlanUnknownTag() {
+  return (
+    <span className="ml-auto shrink-0 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+      Plan…
+    </span>
+  );
+}
+
 function ProTag() {
   return (
     <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded border border-gold/40 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-gold">
@@ -232,18 +251,21 @@ function MiniAppHome() {
     queryFn: () =>
       loadCommercialStatus({ data: { initData: initData as string, workspaceId: workspaceId as string } }),
   });
+  // C3A fail-closed: premium reads run ONLY on explicit ok=true + feature true.
   const commercial = commercialQuery.data?.ok ? commercialQuery.data : null;
-  const commercialSettled = Boolean(workspaceId) && !commercialQuery.isPending;
-  // null = unknown (status unavailable): existing server-side gates decide.
+  const commercialUnavailable =
+    Boolean(workspaceId) && !commercialQuery.isPending && commercial === null;
   const missionsAllowed = commercial ? commercial.features.x_missions : null;
   const inboxAllowed = commercial ? commercial.features.project_inbox : null;
   const stickerDropsAllowed = commercial ? commercial.features.sticker_drops : null;
   const missionsLocked = missionsAllowed === false;
   const inboxLocked = inboxAllowed === false;
+  const missionsEnabled = missionsAllowed === true;
+  const inboxEnabled = inboxAllowed === true;
 
   const missionsQuery = useQuery({
     queryKey: ["tg", "missions", workspaceId],
-    enabled: Boolean(initData && workspaceId && commercialSettled && !missionsLocked),
+    enabled: Boolean(initData && workspaceId && missionsEnabled),
     queryFn: () =>
       listMissions({ data: { initData: initData as string, workspaceId: workspaceId as string } }),
   });
@@ -257,7 +279,7 @@ function MiniAppHome() {
 
   const inboxSummaryQuery = useQuery({
     queryKey: ["tg", "inbox", "summary", workspaceId],
-    enabled: Boolean(initData && workspaceId && commercialSettled && !inboxLocked),
+    enabled: Boolean(initData && workspaceId && inboxEnabled),
     retry: false,
     queryFn: () =>
       loadInboxSummary({ data: { initData: initData as string, workspaceId: workspaceId as string } }),
@@ -350,7 +372,7 @@ function MiniAppHome() {
         </MiniAppPanel>
       ) : null}
 
-      {workspaceId && (homeQuery.isPending || commercialQuery.isPending || (!missionsLocked && missionsQuery.isPending)) ? (
+      {workspaceId && (homeQuery.isPending || commercialQuery.isPending || (missionsEnabled && missionsQuery.isPending)) ? (
         <MiniAppSkeleton label="Loading operator console…" />
       ) : null}
 
@@ -450,7 +472,7 @@ function MiniAppHome() {
             )}
           </MiniAppPanel>
 
-          {missionsLocked ? null : (
+          {!missionsEnabled ? null : (
           <MiniAppPanel heading="Missions" note="Live mission activity for this project.">
             <div className="flex min-w-0 items-center gap-3">
               <span className="flex size-10 shrink-0 items-center justify-center rounded-md border border-gold/25 bg-gold/8 text-gold">
@@ -507,7 +529,7 @@ function MiniAppHome() {
               >
                 <Radio className="size-4 shrink-0 text-gold" aria-hidden="true" />
                 <span className="truncate">Mission Control</span>
-                {missionsLocked ? <ProTag /> : null}
+                {missionsLocked ? <ProTag /> : missionsEnabled ? null : <PlanUnknownTag />}
               </button>
               <button
                 type="button"
@@ -516,7 +538,7 @@ function MiniAppHome() {
               >
                 <Send className="size-4 shrink-0 text-gold" aria-hidden="true" />
                 <span className="truncate">Project Inbox</span>
-                {inboxLocked ? <ProTag /> : null}
+                {inboxLocked ? <ProTag /> : inboxEnabled ? null : <PlanUnknownTag />}
               </button>
             </div>
           </MiniAppPanel>
@@ -525,7 +547,11 @@ function MiniAppHome() {
 
       {workspaceId && activeTab === "missions" && missionsLocked ? <MiniAppProLocked area="Mission Control" /> : null}
 
-      {workspaceId && activeTab === "missions" && !missionsLocked ? (
+      {workspaceId && activeTab === "missions" && commercialUnavailable ? (
+        <MiniAppPlanUnavailable onRetry={() => void commercialQuery.refetch()} pending={commercialQuery.isFetching} />
+      ) : null}
+
+      {workspaceId && activeTab === "missions" && missionsEnabled ? (
         <MiniAppPanel heading="Live missions" note="Select a mission to view its latest results.">
           {missionsQuery.isError || missionsFailure ? (
             <MiniAppMessage
@@ -574,7 +600,11 @@ function MiniAppHome() {
 
       {workspaceId && activeTab === "inbox" && inboxLocked ? <MiniAppProLocked area="Project Inbox" /> : null}
 
-      {workspaceId && activeTab === "inbox" && !inboxLocked && commercialSettled ? (
+      {workspaceId && activeTab === "inbox" && commercialUnavailable ? (
+        <MiniAppPlanUnavailable onRetry={() => void commercialQuery.refetch()} pending={commercialQuery.isFetching} />
+      ) : null}
+
+      {workspaceId && activeTab === "inbox" && inboxEnabled ? (
         <MiniAppInbox
           initData={initData}
           workspaceId={workspaceId}
@@ -635,10 +665,12 @@ function MiniAppHome() {
             <div className="flex min-w-0 flex-col gap-2">
               <FullAppLink to="/launch-control" label="Launch Control" />
               <FullAppLink to="/telegram" label="Community Command" />
-              {stickerDropsAllowed === false ? (
+              {stickerDropsAllowed === true ? (
+                <FullAppLink to="/distribution" label="Sticker Drops" />
+              ) : stickerDropsAllowed === false ? (
                 <FullAppLink to="/settings" label="Sticker Drops · Pro locked — upgrade" />
               ) : (
-                <FullAppLink to="/distribution" label="Sticker Drops" />
+                <FullAppLink to="/settings" label="Sticker Drops · plan status unavailable" />
               )}
             </div>
           </MiniAppPanel>
