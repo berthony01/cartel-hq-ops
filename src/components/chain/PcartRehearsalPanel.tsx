@@ -172,6 +172,11 @@ export function PcartRehearsalPanel(props: {
         </Button>
       }
     >
+      {blockedReason ? (
+        <p role="status" className="mb-3 rounded-md border border-border bg-muted/40 p-3 text-xs leading-relaxed text-foreground">
+          {blockedReason} Only failed or abandoned attempts may be retried.
+        </p>
+      ) : null}
       <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs leading-relaxed">
         <p className="font-semibold uppercase tracking-wide text-destructive">
           Testnet rehearsal — not the official PEPECARTEL token
