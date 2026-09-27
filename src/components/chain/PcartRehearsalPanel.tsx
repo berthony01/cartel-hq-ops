@@ -31,7 +31,7 @@ const TERMINAL = new Set(["CONFIRMED", "FAILED", "ABANDONED"]);
  * launch only. Fixed intent; the only input is a rehearsal recipient. Never
  * the production treasury, never mainnet, never an official contract record,
  * lifecycle change, notification or liquidity action. Evidence list shows
- * pepecartel-token-v1 attempts ONLY; verification is manual (no polling).
+ * PCART rehearsal attempts ONLY; verification is manual (no polling).
  */
 export function PcartRehearsalPanel(props: {
   launchId: string;

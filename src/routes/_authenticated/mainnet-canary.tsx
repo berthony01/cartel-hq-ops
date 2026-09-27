@@ -240,9 +240,7 @@ function CanaryConsole() {
     setTail(null);
   };
 
-  const selectLaunch = (requested: string) => {
-    // PCART-L3: only ids in the (canonical-excluded) option list are accepted.
-    const id = (launches.data ?? []).some((row) => row.id === requested) ? requested : "";
+  const selectLaunch = (id: string) => {
     resetLaunchScopedState();
     setLaunchId(id);
     if (typeof window === "undefined") return;
@@ -777,7 +775,9 @@ function CanaryConsole() {
         <CanaryIntentForm
           launches={launches.data ?? []}
           launchId={launchId}
-          onSelectLaunch={(id) => {
+          onSelectLaunch={(requested) => {
+            // PCART-L3: only ids in the (canonical-excluded) option list are accepted.
+            const id = (launches.data ?? []).some((row) => row.id === requested) ? requested : "";
             selectLaunch(id);
             const row = (launches.data ?? []).find((item) => item.id === id);
             if (row) {
