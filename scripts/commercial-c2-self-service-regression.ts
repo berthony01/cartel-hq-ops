@@ -36,6 +36,7 @@ const lib = read("src/lib/self-service-workspace.ts");
 check("B1 dialog uses RPC helper", sw.includes("createSelfServiceWorkspace("));
 check("B2 no direct workspace insert in switcher", !/from\("workspaces"\)/.test(sw) && !/\.insert\(/.test(sw));
 check("B3 helper calls RPC", lib.includes('"create_self_service_workspace"') && !/from\("workspaces"\)/.test(lib));
+check("B3b direct typed RPC, no generic cast", lib.includes('supabase.rpc("create_self_service_workspace"') && !/as unknown as/.test(lib));
 check("B4 friendly limit message", /FREE_PROJECT_LIMIT_REACHED:\s*\n?\s*"Your Free account already has a project/.test(lib));
 check("B5 invalidation + selection kept", sw.includes("invalidateQueries({ queryKey: workspacesQueryKey })") && sw.includes("selectWorkspace(id)"));
 const srcInserts = execSync(`rg -l 'from\\("workspaces"\\)\\s*\\.insert' src || true`).toString().trim();
