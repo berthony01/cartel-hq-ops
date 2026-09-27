@@ -10,13 +10,13 @@ const check = (n: string, ok: boolean) => { ok ? pass++ : failN++; console.log(`
 const idx = (s: string) => fn.indexOf(s);
 check("S1 status fn exists", start > 0);
 check("S2 initData validated first", idx("validateTelegramInitData") > 0 && idx("validateTelegramInitData") < idx("isUuid(data?.workspaceId)"));
-check("S3 workspace authorized via operator RPC before any commercial/link read",
-  idx("MINIAPP_RPC.workspaces") > 0 && idx('return fail("not_found")') < idx("telegram_connections") && idx("telegram_connections") < idx("MINIAPP_COMMERCIAL_RPC.billingStatus"));
+const helper = bridge.slice(bridge.indexOf("async function miniAppCommercialActor"), bridge.indexOf("export const miniAppCommercialStatus"));
+check("S3 workspace authorized via operator RPC before link read; helper runs before commercial calls", helper.indexOf("MINIAPP_RPC.workspaces") > 0 && helper.indexOf('return fail("not_found")') < helper.indexOf("telegram_connections") && idx("miniAppCommercialActor") < idx("MINIAPP_COMMERCIAL_RPC.billingStatus"));
 check("S4 input type accepts only initData + workspaceId (no actor id)", /inputValidator\(\(input: \{ initData: string; workspaceId: string \}\)/.test(fn) && !/data\??\.(userId|user_id|actorUserId)/.test(fn));
-check("S5 actor from telegram_connections by validated telegram user", /\.eq\("telegram_user_id", auth\.user\.id\)/.test(fn) && /_user_id: actorUserId/.test(fn));
+check("S5 actor from telegram_connections by validated telegram user", /\.eq\("telegram_user_id", telegramUserId\)/.test(helper) && /miniAppCommercialActor\(admin, auth\.user\.id, data\.workspaceId\)/.test(fn) && /_user_id: actorUserId/.test(fn));
 check("S6 reuses existing authoritative DB fns", /billingStatus: "get_workspace_billing_status"/.test(bridge) && /access: "evaluate_commercial_access"/.test(bridge));
 check("S7 features exactly x_missions/project_inbox/sticker_drops", /MINIAPP_COMMERCIAL_FEATURES = \["x_missions", "project_inbox", "sticker_drops"\]/.test(bridge));
-check("S8 fails closed on errors/non-ok", /status\["ok"\] !== true\) return fail\("unavailable"\)/.test(fn) && /accessError\) return fail\("unavailable"\)/.test(fn) && /!isUuid\(actorUserId\)\) return fail/.test(fn));
+check("S8 fails closed on errors/non-ok", /status\["ok"\] !== true\) return fail\("unavailable"\)/.test(fn) && /allowed === null\) return fail\("unavailable"\)/.test(fn) && /!isUuid\(actorUserId\)\) return fail/.test(helper));
 check("S9 no Stripe ids / provider details returned, no writes", !/stripe_|customer_id|subscription_id|\.insert\(|\.update\(|\.upsert\(|\.delete\(|fetch\(/.test(fn));
 check("U1 missions query disabled when denied", /enabled: Boolean\(initData && workspaceId && missionsEnabled\)/.test(ui));
 check("U2 inbox summary disabled when denied", /enabled: Boolean\(initData && workspaceId && inboxEnabled\)/.test(ui));
