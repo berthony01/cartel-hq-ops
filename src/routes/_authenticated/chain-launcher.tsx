@@ -95,6 +95,8 @@ import {
   isLiquidityPlanFresh,
   type LiquidityPlan,
 } from "@/lib/liquidity-plan";
+import { PcartRehearsalPanel } from "@/components/chain/PcartRehearsalPanel";
+import { isCanonicalPcartLaunch } from "@/lib/launch-artifact-registry";
 
 export const Route = createFileRoute("/_authenticated/chain-launcher")({
   head: () => ({
@@ -793,6 +795,15 @@ function ChainLauncherPage() {
           </div>
         )}
       </Section>
+
+      {launchId && isCanonicalPcartLaunch(selectedLaunch) ? (
+        <PcartRehearsalPanel
+          launchId={launchId}
+          account={account}
+          onTestnet={onTestnet}
+          onChanged={invalidate}
+        />
+      ) : null}
 
       <Section
         variant="primary"
