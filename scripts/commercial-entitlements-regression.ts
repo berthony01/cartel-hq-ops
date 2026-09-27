@@ -13,8 +13,10 @@ const POST_GATE = [
   "20260923170038_eaa2a24d-9c13-49c9-9aa3-6a5a8e18c300.sql",
   "20260924005521_b9fca846-4db3-4e8f-bf91-bdb4bd863228.sql",
   "20260924021801_e48c0c41-9053-4f77-a267-04fbba8d206d.sql",
+  "20260927013341_1f8494c2-8155-4e9d-832a-4e387a8f56b4.sql",
 ];
 const COMMERCIAL = POST_GATE[4];
+const LEAST_PRIVILEGE = POST_GATE[7];
 
 let failed = 0;
 let passed = 0;
@@ -27,10 +29,10 @@ function check(id: string, ok: boolean, detail = "") {
 }
 
 const migrations = readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort();
-check("C-1.1 migration count exactly 91", migrations.length === 91, String(migrations.length));
+check("C-1.1 migration count exactly 92", migrations.length === 92, String(migrations.length));
 const postGate = migrations.filter((f) => f >= "20260922");
-check("C-1.2 exact seven authorized post-gate migrations", JSON.stringify(postGate) === JSON.stringify(POST_GATE), postGate.join(","));
-check("C-1.3 commercial A, then Commercial Foundation B, then the Stripe/Free billing migration (last file)", migrations[migrations.length - 3] === COMMERCIAL && migrations[migrations.length - 2] === POST_GATE[5] && migrations[migrations.length - 1] === POST_GATE[6]);
+check("C-1.2 exact eight authorized post-gate migrations", JSON.stringify(postGate) === JSON.stringify(POST_GATE), postGate.join(","));
+check("C-1.3 commercial A, then Commercial Foundation B, then the Stripe/Free billing migration, then least-privilege (last file)", migrations[migrations.length - 4] === COMMERCIAL && migrations[migrations.length - 3] === POST_GATE[5] && migrations[migrations.length - 2] === POST_GATE[6] && migrations[migrations.length - 1] === LEAST_PRIVILEGE);
 
 const raw = readFileSync(`${MIGRATIONS}/${COMMERCIAL}`, "utf8");
 const sql = raw.replace(/^\s*--.*$/gm, "");
@@ -188,6 +190,21 @@ check("C-8.5 no destructive DDL", !/\bDROP\b|\bTRUNCATE\b|\bDELETE FROM\b/i.test
 check("C-8.6 no ALTER of existing tables", !/ALTER TABLE public\.(?!commercial_plans|commercial_plan_entitlements|workspace_commercial_assignments)/.test(norm));
 check("C-8.7 no dollar-cost logic in evaluator", !/price_cents|provider_cost/.test(ev));
 check("C-8.8 self hygiene: no fetch/createClient here", !/\bfetch\(|createClient\(/.test(readFileSync(new URL(import.meta.url), "utf8").replace(/check\("C-8\.8[^\n]*\n/, "")));
+
+/* 9. least-privilege migration: neutralize direct authenticated plan-table access */
+const lpRaw = readFileSync(`${MIGRATIONS}/${LEAST_PRIVILEGE}`, "utf8");
+const lp = lpRaw.replace(/^\s*--.*$/gm, "").replace(/\s+/g, " ");
+check("C-9.1 drops plans allow-all policy", lp.includes('DROP POLICY IF EXISTS "Authenticated users can read commercial plans" ON public.commercial_plans;'));
+check("C-9.2 drops entitlements allow-all policy", lp.includes('DROP POLICY IF EXISTS "Authenticated users can read commercial plan entitlements" ON public.commercial_plan_entitlements;'));
+check("C-9.3 revokes authenticated SELECT on plans", lp.includes("REVOKE SELECT ON public.commercial_plans FROM authenticated;"));
+check("C-9.4 revokes authenticated SELECT on entitlements", lp.includes("REVOKE SELECT ON public.commercial_plan_entitlements FROM authenticated;"));
+check("C-9.5 no new grants in least-privilege migration", !/\bGRANT\b/.test(lp));
+check("C-9.6 no new policies in least-privilege migration", !/CREATE POLICY/.test(lp));
+check("C-9.7 RLS not disabled", !/DISABLE ROW LEVEL SECURITY/.test(lp));
+check("C-9.8 service_role untouched", !/service_role/.test(lp));
+check("C-9.9 anon/public untouched", !/\banon\b|\bPUBLIC\b/.test(lp.replace(/public\./g, "")));
+check("C-9.10 no data-destructive DDL or DML", !/\bDROP (TABLE|SCHEMA|COLUMN)\b|\bTRUNCATE\b|\bDELETE\b|\bINSERT\b|\bUPDATE\b/i.test(lp));
+check("C-9.11 exactly four statements", lp.split(";").map((s) => s.trim()).filter(Boolean).length === 4);
 
 console.log(`commercial-entitlements-regression: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
