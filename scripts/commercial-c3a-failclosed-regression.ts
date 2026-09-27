@@ -1,13 +1,18 @@
-/** COMMERCIAL C3A — staged usage fix + Mini App fail-closed (static regression). */
+/** COMMERCIAL C3A — applied usage fix + Mini App fail-closed (static regression). */
 import { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
+const MIG = "supabase/migrations/20260927173127_commercial_c3a_usage_free_record_fix.sql";
 const sql = readFileSync("docs/sql/COMMERCIAL_C3A_usage_free_record_fix.sql", "utf8");
+const mig = readFileSync(MIG, "utf8");
+const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 const bridge = readFileSync("src/lib/telegram-miniapp-bridge.functions.ts", "utf8");
 const ui = readFileSync("src/routes/tg.index.tsx", "utf8");
 const body = sql.slice(sql.indexOf("BEGIN;"), sql.indexOf("COMMIT;"));
 let pass = 0, failN = 0;
 const check = (n: string, ok: boolean) => { ok ? pass++ : failN++; console.log(`${ok ? "PASS" : "FAIL"} ${n}`); };
-check("Q1 staged, not applied", /STATUS: STAGED FOR REVIEW ONLY\. NOT APPLIED\./.test(sql));
+check("Q0 exact applied migration 20260927173127 exists with the fix", MIG.endsWith("20260927173127_commercial_c3a_usage_free_record_fix.sql") && mig.includes("public.get_workspace_commercial_usage(_workspace_id uuid, _user_id uuid DEFAULT auth.uid())") && mig.startsWith("BEGIN;") && mig.trimEnd().endsWith("COMMIT;"));
+check("Q0b migration executable body identical to review SQL", norm(mig) === norm(body + "COMMIT;"));
+check("Q0c docs say APPLIED as 20260927173127", /STATUS: APPLIED as Supabase migration 20260927173127 \/ commercial_c3a_usage_free_record_fix\./.test(sql) && !/STAGED FOR REVIEW|NOT APPLIED/.test(sql.split("BEGIN;")[0]));
 check("Q2 no v_free record anywhere; typed scalars declared", !/v_free\s+record/.test(body) && !/v_free\./.test(body) && /v_free_id uuid;/.test(body) && /v_free_code text;/.test(body) && /v_free_version integer;/.test(body) && /v_free_name text;/.test(body));
 check("Q3 only record var left is v_assign, always assigned by SELECT INTO before use", (body.match(/\brecord;/g) ?? []).length === 1 && body.indexOf("INTO v_assign") < body.indexOf("v_assign.plan_id"));
 check("Q4 signature/STABLE/SECURITY DEFINER/search_path unchanged", body.includes("public.get_workspace_commercial_usage(_workspace_id uuid, _user_id uuid DEFAULT auth.uid())") && /STABLE SECURITY DEFINER/.test(body) && /SET search_path TO 'public'/.test(body) && /RETURNS jsonb/.test(body));
@@ -26,6 +31,7 @@ check("U3 content only when enabled", /activeTab === "missions" && missionsEnabl
 check("U4 Sticker Drops route only on explicit true", /stickerDropsAllowed === true \? \(\s*<FullAppLink to="\/distribution"/.test(ui) && (ui.match(/to="\/distribution"/g) ?? []).length === 1 && /plan status unavailable/.test(ui));
 check("U5 unknown plan not shown as access on quick actions", (ui.match(/<PlanUnknownTag \/>/g) ?? []).length === 2);
 const changed = execSync("git diff --name-only 6c927f59; git ls-files --others --exclude-standard", { encoding: "utf8" });
-check("F1 no migrations/Stripe/billing/launcher/PCART/chain/liquidity/treasury changes", !/supabase\/migrations|stripe|billing|launcher|pcart|chain|liquidity|treasury/i.test(changed));
+const changedFiltered = changed.split("\n").filter((l) => !l.includes("20260927173127_commercial_c3a_usage_free_record_fix.sql")).join("\n");
+check("F1 no migrations/Stripe/billing/launcher/PCART/chain/liquidity/treasury changes", !/supabase\/migrations|stripe|billing|launcher|pcart|chain|liquidity|treasury/i.test(changedFiltered));
 console.log(`\nC3A ${pass}/${pass + failN} passed`);
 if (failN) process.exit(1);
