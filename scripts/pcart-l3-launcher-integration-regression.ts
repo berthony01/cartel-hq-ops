@@ -128,6 +128,23 @@ check("C7", /attempts=\{attempts\}/.test(CL) && /onVerify=\{\(id\) => verifyMuta
   !/setInterval|refetchInterval/.test(PANEL),
   "PCART evidence panel: PCART attempts only, manual verification, no polling");
 
+// G. PCART double-broadcast lock + broadcast-write recovery handoff
+check("G1", /const inFlight = useRef\(false\)/.test(PANEL) &&
+  /if \(inFlight\.current\) return;\s*inFlight\.current = true;\s*try \{\s*await runLocked\(\);\s*\} finally \{\s*inFlight\.current = false;/.test(PANEL) &&
+  PANEL.indexOf("if (inFlight.current) return;") < PANEL.indexOf("createPcartRehearsalAttempt({"),
+  "synchronous in-flight lock wraps the entire run before any attempt/broadcast");
+check("G2", /try \{\s*await submitDeploymentTx\(attempt\.id, txHash\);\s*\} catch \(submitError\) \{[\s\S]*?props\.onBroadcastUnrecorded\(attempt, txHash\);\s*throw submitError;/.test(PANEL) &&
+  /else if \(attemptId && !txHash\)/.test(PANEL),
+  "submit failure after broadcast hands off to recovery and is never abandoned");
+check("G3", /props\.onBroadcastRecorded\(\);/.test(PANEL) && /\{props\.recoveryPanel\}/.test(PANEL),
+  "successful submit clears recovery; shared recovery UI rendered in the PCART panel");
+check("G4", /onBroadcastUnrecorded=\{handleBroadcastUnrecorded\}/.test(CL) &&
+  /recoveryPanel=\{recoveryPanel\}/.test(CL) && /\{recoveryPanel\}/.test(CL.slice(CL.indexOf(") : ("))) &&
+  /function handleBroadcastUnrecorded[\s\S]*?parseRecoveryRecord\([\s\S]*?saveRecoveryRecord\(record\)/.test(CL) &&
+  (CL.match(/Transaction broadcast but not recorded/g) ?? []).length === 1 &&
+  (CL + PANEL).match(/Record transaction hash/g)?.length === 1,
+  "single shared recovery implementation reused for PCART and generic routes");
+
 // F. freeform mainnet canary isolation
 check("F1", /\.filter\(\s*\(row\) => !isCanonicalPcartLaunch\(row\)/.test(CANARY_UI),
   "canary launch options exclude the canonical launch");

@@ -646,6 +646,7 @@ function ChainLauncherPage() {
     attempt: { id: string; attempt_number: number },
     txHash: string,
   ) {
+    if (!launchId) return;
     const record = parseRecoveryRecord(
       {
         attemptId: attempt.id,
@@ -664,7 +665,7 @@ function ChainLauncherPage() {
 
   function handleBroadcastRecorded() {
     setRecovery(null);
-    if (workspaceId) clearRecoveryRecord({ workspaceId, launchId });
+    if (workspaceId && launchId) clearRecoveryRecord({ workspaceId, launchId });
   }
 
   const recoveryPanel = recovery ? (
