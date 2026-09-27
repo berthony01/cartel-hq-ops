@@ -10,7 +10,7 @@ const ui = readFileSync("src/routes/tg.index.tsx", "utf8");
 const body = sql.slice(sql.indexOf("BEGIN;"), sql.indexOf("COMMIT;"));
 let pass = 0, failN = 0;
 const check = (n: string, ok: boolean) => { ok ? pass++ : failN++; console.log(`${ok ? "PASS" : "FAIL"} ${n}`); };
-check("Q0 exact applied migration 20260927173127 exists with the fix", MIG.endsWith("20260927173127_commercial_c3a_usage_free_record_fix.sql") && mig.includes("create or replace function public.get_workspace_commercial_usage".replace("or replace function", "OR REPLACE FUNCTION")) && mig.startsWith("BEGIN;") && mig.trimEnd().endsWith("COMMIT;"));
+check("Q0 exact applied migration 20260927173127 exists with the fix", MIG.endsWith("20260927173127_commercial_c3a_usage_free_record_fix.sql") && mig.includes("public.get_workspace_commercial_usage(_workspace_id uuid, _user_id uuid DEFAULT auth.uid())") && mig.startsWith("BEGIN;") && mig.trimEnd().endsWith("COMMIT;"));
 check("Q0b migration executable body identical to review SQL", norm(mig) === norm(body));
 check("Q0c docs say APPLIED as 20260927173127", /STATUS: APPLIED as Supabase migration 20260927173127 \/ commercial_c3a_usage_free_record_fix\./.test(sql) && !/STAGED FOR REVIEW|NOT APPLIED/.test(sql.split("BEGIN;")[0]));
 check("Q2 no v_free record anywhere; typed scalars declared", !/v_free\s+record/.test(body) && !/v_free\./.test(body) && /v_free_id uuid;/.test(body) && /v_free_code text;/.test(body) && /v_free_version integer;/.test(body) && /v_free_name text;/.test(body));
@@ -31,6 +31,7 @@ check("U3 content only when enabled", /activeTab === "missions" && missionsEnabl
 check("U4 Sticker Drops route only on explicit true", /stickerDropsAllowed === true \? \(\s*<FullAppLink to="\/distribution"/.test(ui) && (ui.match(/to="\/distribution"/g) ?? []).length === 1 && /plan status unavailable/.test(ui));
 check("U5 unknown plan not shown as access on quick actions", (ui.match(/<PlanUnknownTag \/>/g) ?? []).length === 2);
 const changed = execSync("git diff --name-only 6c927f59; git ls-files --others --exclude-standard", { encoding: "utf8" });
-check("F1 no migrations/Stripe/billing/launcher/PCART/chain/liquidity/treasury changes", !/supabase\/migrations|stripe|billing|launcher|pcart|chain|liquidity|treasury/i.test(changed));
+const changedFiltered = changed.split("\n").filter((l) => !l.includes("20260927173127_commercial_c3a_usage_free_record_fix.sql")).join("\n");
+check("F1 no migrations/Stripe/billing/launcher/PCART/chain/liquidity/treasury changes", !/supabase\/migrations|stripe|billing|launcher|pcart|chain|liquidity|treasury/i.test(changedFiltered));
 console.log(`\nC3A ${pass}/${pass + failN} passed`);
 if (failN) process.exit(1);
