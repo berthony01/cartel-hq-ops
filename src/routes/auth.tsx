@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-type AuthSearch = { redirect?: string };
+type AuthMode = "signin" | "signup";
+type AuthSearch = { redirect?: string; mode?: AuthMode };
 
 function safeRedirect(value: unknown): string {
   if (typeof value !== "string") return "/dashboard";
@@ -19,17 +20,21 @@ function safeRedirect(value: unknown): string {
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
-  validateSearch: (search: Record<string, unknown>): AuthSearch =>
-    typeof search['redirect'] === "string" ? { redirect: search['redirect'] } : {},
+  validateSearch: (search: Record<string, unknown>): AuthSearch => {
+    const out: AuthSearch = {};
+    if (typeof search['redirect'] === "string") out.redirect = search['redirect'];
+    if (search['mode'] === "signup") out.mode = "signup";
+    return out;
+  },
 
   head: () => ({
     meta: [
-      { title: "Sign in — CARTEL HQ" },
+      { title: "Sign in or start free — CARTEL HQ" },
       {
         name: "description",
-        content: "Sign in to CARTEL HQ, the operating layer for the PEPECARTEL ecosystem.",
+        content: "Sign in to CARTEL HQ or create a free account — no credit card required.",
       },
-      { property: "og:title", content: "Sign in — CARTEL HQ" },
+      { property: "og:title", content: "Sign in or start free — CARTEL HQ" },
       {
         property: "og:description",
         content: "Access the PEPECARTEL creative and campaign operating layer.",
@@ -42,21 +47,19 @@ export const Route = createFileRoute("/auth")({
 });
 
 /**
- * PRIVATE BETA: sign-in only.
- *
- * Public self-registration is intentionally absent from this surface. There is
- * no client `supabase.auth.signUp` path, no "Create account" tab, no display
- * name signup field, and no signup confirmation-resend UX. Accounts are
- * provisioned out of band for approved CARTEL HQ operators.
- *
- * The auth callback route is deliberately untouched: invite and recovery links
- * still need it.
+ * Sign in, or self-service Free account creation (?mode=signup).
+ * Email/password only, no credit card. With email confirmation enabled,
+ * signUp returns no session: we show a "check your email" state and never
+ * treat the user as signed in. The auth callback route is unchanged.
  */
 function AuthPage() {
   const navigate = useNavigate();
   const search = useSearch({ from: "/auth" });
   const destination = safeRedirect(search.redirect);
 
+  const mode: AuthMode = search.mode === "signup" ? "signup" : "signin";
+  const isSignup = mode === "signup";
+  const [confirmSentTo, setConfirmSentTo] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -78,6 +81,22 @@ function AuthPage() {
     setError(null);
 
     try {
+      if (isSignup) {
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+        });
+        if (signUpError) throw signUpError;
+        if (data.session) {
+          toast.success("Account created");
+          navigate({ to: destination, replace: true });
+        } else {
+          setConfirmSentTo(email.trim());
+          setPassword("");
+        }
+        return;
+      }
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
@@ -100,7 +119,7 @@ function AuthPage() {
           <span className="flex size-11 items-center justify-center rounded-md border border-gold/40 bg-surface-raised text-gold shadow-elevated">
             <ShieldCheck className="size-5" aria-hidden="true" />
           </span>
-          <p className="type-eyebrow mt-4 text-muted-foreground">Private operating layer</p>
+          <p className="type-eyebrow mt-4 text-muted-foreground">{isSignup ? "Start free" : "Sign in"}</p>
           <h1 className="mt-2 font-display text-3xl uppercase tracking-widest text-gold sm:text-4xl">
             CARTEL HQ
           </h1>
@@ -116,9 +135,20 @@ function AuthPage() {
             aria-hidden="true"
           />
           <div className="rounded-md border border-gold/35 bg-gold/5 px-3 py-2 text-xs leading-relaxed text-foreground">
-            Private Beta. Access is limited to approved CARTEL HQ operators.
+            {isSignup
+              ? "Free includes 1 project and 1 Telegram community. No credit card required."
+              : "Sign in to your CARTEL HQ account."}
           </div>
 
+          {confirmSentTo ? (
+            <div role="status" className="mt-6 space-y-2 text-sm leading-relaxed text-foreground">
+              <p className="font-semibold text-gold">Check your email</p>
+              <p className="text-muted-foreground">
+                We sent a confirmation link to {confirmSentTo}. You are not signed in yet — open
+                the link to confirm your account, then sign in.
+              </p>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div>
               <Label htmlFor="email">Email</Label>
@@ -140,7 +170,7 @@ function AuthPage() {
                 type="password"
                 required
                 minLength={6}
-                autoComplete="current-password"
+                autoComplete={isSignup ? "new-password" : "current-password"}
                 className="mt-2 min-h-11"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -155,13 +185,29 @@ function AuthPage() {
 
             <Button type="submit" disabled={busy} className="min-h-11 w-full">
               {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
-              Sign in
+              {isSignup ? "Create free account" : "Sign in"}
             </Button>
           </form>
+          )}
         </div>
 
-        <p className="mt-4 text-center text-[11px] text-muted-foreground/80">
-          Access is restricted to CARTEL HQ operators.
+        <p className="mt-4 text-center text-xs text-muted-foreground">
+          {isSignup ? "Already have an account? " : "New to CARTEL HQ? "}
+          <button
+            type="button"
+            className="min-h-11 font-semibold text-gold underline-offset-4 hover:underline"
+            onClick={() => {
+              setError(null);
+              setConfirmSentTo(null);
+              navigate({
+                to: "/auth",
+                search: { ...(search.redirect ? { redirect: search.redirect } : {}), ...(isSignup ? {} : { mode: "signup" as const }) },
+                replace: true,
+              });
+            }}
+          >
+            {isSignup ? "Sign in" : "Start free"}
+          </button>
         </p>
       </div>
     </main>
