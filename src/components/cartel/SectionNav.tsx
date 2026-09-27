@@ -42,6 +42,7 @@ export function SectionNav({
   className,
   activeId,
   onChange,
+  variant = "default",
 }: {
   items: SectionNavItem[];
   label: string;
@@ -50,6 +51,8 @@ export function SectionNav({
   activeId?: string;
   /** Controlled mode: called with the chosen section id. */
   onChange?: (id: string) => void;
+  /** Studio mode becomes a numbered vertical workflow rail on wide screens. */
+  variant?: "default" | "studio";
 }) {
   const controlled = activeId !== undefined && !!onChange;
   const [scrollActive, setScrollActive] = useState<string | null>(items[0]?.id ?? null);
@@ -91,12 +94,25 @@ export function SectionNav({
   return (
     <div
       className={cn(
-        "sticky top-14 z-20 -mx-4 border-y border-border/60 bg-background/90 px-4 py-1.5 backdrop-blur sm:mx-0 sm:rounded-lg sm:border sm:px-1.5 lg:top-16",
+        variant === "studio"
+          ? "sticky top-14 z-20 -mx-4 border-y border-border/60 bg-background/95 px-4 py-2 backdrop-blur sm:mx-0 sm:border sm:px-2 xl:top-20 xl:self-start xl:border-gold/20 xl:bg-surface/90 xl:p-2.5 xl:shadow-[var(--shadow-cartel-soft)]"
+          : "sticky top-14 z-20 -mx-4 border-y border-border/60 bg-background/90 px-4 py-1.5 backdrop-blur sm:mx-0 sm:rounded-lg sm:border sm:px-1.5 lg:top-16",
         className,
       )}
     >
-      <nav aria-label={label} className="no-scrollbar flex gap-1 overflow-x-auto">
-        {items.map((item) => {
+      {variant === "studio" ? (
+        <p className="type-meta mb-2 hidden border-b border-border-subtle px-2 pb-2 text-muted-foreground xl:block">
+          Profile studio
+        </p>
+      ) : null}
+      <nav
+        aria-label={label}
+        className={cn(
+          "no-scrollbar flex gap-1 overflow-x-auto",
+          variant === "studio" && "xl:grid xl:overflow-visible",
+        )}
+      >
+        {items.map((item, index) => {
           const isActive = active === item.id;
           const state = item.state ?? "neutral";
           const StateIcon =
@@ -110,11 +126,21 @@ export function SectionNav({
               className={cn(
                 "flex min-h-11 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-semibold uppercase tracking-[0.12em] transition-colors sm:text-[13px]",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/60",
+                variant === "studio" && "xl:w-full xl:justify-start xl:rounded-none xl:border-l-2 xl:px-3",
                 isActive
-                  ? "bg-surface-raised text-gold shadow-[inset_0_-2px_0_0_var(--gold)]"
-                  : "text-muted-foreground hover:bg-surface-raised/50 hover:text-foreground",
+                  ? variant === "studio"
+                    ? "bg-surface-raised text-gold shadow-[inset_0_-2px_0_0_var(--gold)] xl:border-gold xl:shadow-none"
+                    : "bg-surface-raised text-gold shadow-[inset_0_-2px_0_0_var(--gold)]"
+                  : variant === "studio"
+                    ? "border-transparent text-muted-foreground hover:border-border-strong hover:bg-surface-raised/50 hover:text-foreground"
+                    : "text-muted-foreground hover:bg-surface-raised/50 hover:text-foreground",
               )}
             >
+              {variant === "studio" ? (
+                <span className="type-technical text-[10px] text-muted-foreground" aria-hidden="true">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+              ) : null}
               {StateIcon ? (
                 <StateIcon
                   className={cn(
