@@ -191,5 +191,20 @@ check("C-8.6 no ALTER of existing tables", !/ALTER TABLE public\.(?!commercial_p
 check("C-8.7 no dollar-cost logic in evaluator", !/price_cents|provider_cost/.test(ev));
 check("C-8.8 self hygiene: no fetch/createClient here", !/\bfetch\(|createClient\(/.test(readFileSync(new URL(import.meta.url), "utf8").replace(/check\("C-8\.8[^\n]*\n/, "")));
 
+/* 9. least-privilege migration: neutralize direct authenticated plan-table access */
+const lpRaw = readFileSync(`${MIGRATIONS}/${LEAST_PRIVILEGE}`, "utf8");
+const lp = lpRaw.replace(/^\s*--.*$/gm, "").replace(/\s+/g, " ");
+check("C-9.1 drops plans allow-all policy", lp.includes('DROP POLICY IF EXISTS "Authenticated users can read commercial plans" ON public.commercial_plans;'));
+check("C-9.2 drops entitlements allow-all policy", lp.includes('DROP POLICY IF EXISTS "Authenticated users can read commercial plan entitlements" ON public.commercial_plan_entitlements;'));
+check("C-9.3 revokes authenticated SELECT on plans", lp.includes("REVOKE SELECT ON public.commercial_plans FROM authenticated;"));
+check("C-9.4 revokes authenticated SELECT on entitlements", lp.includes("REVOKE SELECT ON public.commercial_plan_entitlements FROM authenticated;"));
+check("C-9.5 no new grants in least-privilege migration", !/\bGRANT\b/.test(lp));
+check("C-9.6 no new policies in least-privilege migration", !/CREATE POLICY/.test(lp));
+check("C-9.7 RLS not disabled", !/DISABLE ROW LEVEL SECURITY/.test(lp));
+check("C-9.8 service_role untouched", !/service_role/.test(lp));
+check("C-9.9 anon/public untouched", !/\banon\b|\bPUBLIC\b/.test(lp.replace(/public\./g, "")));
+check("C-9.10 no data-destructive DDL or DML", !/\bDROP (TABLE|SCHEMA|COLUMN)\b|\bTRUNCATE\b|\bDELETE\b|\bINSERT\b|\bUPDATE\b/i.test(lp));
+check("C-9.11 exactly four statements", lp.split(";").map((s) => s.trim()).filter(Boolean).length === 4);
+
 console.log(`commercial-entitlements-regression: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
