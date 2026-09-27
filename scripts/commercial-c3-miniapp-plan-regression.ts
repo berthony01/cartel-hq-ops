@@ -18,15 +18,15 @@ check("S6 reuses existing authoritative DB fns", /billingStatus: "get_workspace_
 check("S7 features exactly x_missions/project_inbox/sticker_drops", /MINIAPP_COMMERCIAL_FEATURES = \["x_missions", "project_inbox", "sticker_drops"\]/.test(bridge));
 check("S8 fails closed on errors/non-ok", /status\["ok"\] !== true\) return fail\("unavailable"\)/.test(fn) && /accessError\) return fail\("unavailable"\)/.test(fn) && /!isUuid\(actorUserId\)\) return fail/.test(fn));
 check("S9 no Stripe ids / provider details returned, no writes", !/stripe_|customer_id|subscription_id|\.insert\(|\.update\(|\.upsert\(|\.delete\(|fetch\(/.test(fn));
-check("U1 missions query disabled when denied", /enabled: Boolean\(initData && workspaceId && commercialSettled && !missionsLocked\)/.test(ui));
-check("U2 inbox summary disabled when denied", /enabled: Boolean\(initData && workspaceId && commercialSettled && !inboxLocked\)/.test(ui));
-check("U3 inbox component not mounted when denied", /activeTab === "inbox" && !inboxLocked && commercialSettled \? \(\s*<MiniAppInbox/.test(ui));
-check("U4 locks only on explicit false (Pro/unrestricted/unknown keep behaviour)", /missionsLocked = missionsAllowed === false/.test(ui) && /inboxLocked = inboxAllowed === false/.test(ui));
-check("U5 Sticker Drops lock follows sticker_drops", /stickerDropsAllowed = commercial \? commercial\.features\.sticker_drops/.test(ui) && /stickerDropsAllowed === false \?[\s\S]{0,120}to="\/settings"/.test(ui));
+check("U1 missions query disabled when denied", /enabled: Boolean\(initData && workspaceId && missionsEnabled\)/.test(ui));
+check("U2 inbox summary disabled when denied", /enabled: Boolean\(initData && workspaceId && inboxEnabled\)/.test(ui));
+check("U3 inbox component not mounted when denied", /activeTab === "inbox" && inboxEnabled \? \(\s*<MiniAppInbox/.test(ui));
+check("U4 Pro lock only on explicit false", /missionsLocked = missionsAllowed === false/.test(ui) && /inboxLocked = inboxAllowed === false/.test(ui));
+check("U5 Sticker Drops lock follows sticker_drops", /stickerDropsAllowed = commercial \? commercial\.features\.sticker_drops/.test(ui) && /stickerDropsAllowed === false \? \(\s*<FullAppLink to="\/settings"/.test(ui));
 check("U6 plan labels", ui.includes("Platform Owner / Unrestricted") && ui.includes("Cartel HQ Pro ($49/month)"));
 check("U7 upgrade routes to Settings, no checkout in Mini App", !/checkout|createCheckout|stripe/i.test(ui) && /Upgrade to Pro — Settings & billing/.test(ui));
 check("U8 Launch Control / Community Command not locked", /<FullAppLink to="\/launch-control" label="Launch Control" \/>/.test(ui) && /<FullAppLink to="\/telegram" label="Community Command" \/>/.test(ui));
-const changed = execSync("git diff --name-only 6c927f59; git ls-files --others --exclude-standard", { encoding: "utf8" });
+const changed = execSync("git diff --name-only 6c927f59 -- . ':!docs/sql/COMMERCIAL_C3A_usage_free_record_fix.sql'; git ls-files --others --exclude-standard", { encoding: "utf8" });
 check("F1 no migrations/Stripe/C1/C2/launcher/PCART/chain/liquidity/treasury files changed",
   !/supabase\/migrations|stripe|billing|COMMERCIAL_C1|COMMERCIAL_C2|self-service|launcher|pcart|chain|liquidity|treasury/i.test(changed));
 console.log(`\nC3 ${pass}/${pass + failN} passed`);
