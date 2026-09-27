@@ -1,5 +1,5 @@
 -- COMMERCIAL C3A — get_workspace_commercial_usage: replace unassigned-record v_free
--- STATUS: STAGED FOR REVIEW ONLY. NOT APPLIED.
+-- STATUS: APPLIED as Supabase migration 20260927173127 / commercial_c3a_usage_free_record_fix.
 --
 -- Live defect: ERROR 55000 record "v_free" is not assigned yet, reached via
 -- get_workspace_billing_status for unrestricted / assigned workspaces, because
