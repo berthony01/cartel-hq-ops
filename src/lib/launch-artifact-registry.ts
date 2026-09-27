@@ -60,27 +60,39 @@ export function runtimeHashForArtifact(artifactId: string | null | undefined): s
 /* Canonical PEPECARTEL launch identity                                */
 /* ------------------------------------------------------------------ */
 
-/** Stable slug of the canonical PEPECARTEL PROJECT launch. */
+/**
+ * Semantic, exact identity of the canonical PEPECARTEL PROJECT launch. No
+ * generated UUID is pinned anywhere; ALL four fields must match exactly.
+ * Mirrors private.is_canonical_pcart_launch in the staged SQL.
+ */
 export const CANONICAL_PCART_LAUNCH_SLUG = "pepecartel-launch" as const;
-/** Pinned id of that launch (verified live, read-only). */
-export const CANONICAL_PCART_LAUNCH_ID = "9f9af215-66ee-4a10-92db-617b61fb7fd3" as const;
+export const CANONICAL_PCART_IDENTITY = {
+  public_slug: CANONICAL_PCART_LAUNCH_SLUG,
+  launch_kind: "PROJECT",
+  token_name: "PEPECARTEL",
+  ticker: "$PCART",
+} as const;
 
 export type LaunchIdentityHint = {
   id?: string | null;
   public_slug?: string | null;
   launch_kind?: string | null;
+  token_name?: string | null;
+  ticker?: string | null;
 };
 
 /**
- * UX isolation only. True when EITHER the pinned id or the canonical slug
- * matches, so the UI fails closed toward the blocked PCART path. The database
+ * True only when public_slug, launch_kind, token_name AND ticker all match the
+ * canonical identity exactly. Never matches by id or slug alone. The database
  * remains authoritative.
  */
 export function isCanonicalPcartLaunch(launch: LaunchIdentityHint | null | undefined): boolean {
   if (!launch) return false;
   return (
-    launch.id === CANONICAL_PCART_LAUNCH_ID ||
-    (launch.public_slug ?? "").trim().toLowerCase() === CANONICAL_PCART_LAUNCH_SLUG
+    launch.public_slug === CANONICAL_PCART_IDENTITY.public_slug &&
+    launch.launch_kind === CANONICAL_PCART_IDENTITY.launch_kind &&
+    launch.token_name === CANONICAL_PCART_IDENTITY.token_name &&
+    launch.ticker === CANONICAL_PCART_IDENTITY.ticker
   );
 }
 
