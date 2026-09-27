@@ -17,6 +17,7 @@ const POST_GATE = [
   "20260923170038_eaa2a24d-9c13-49c9-9aa3-6a5a8e18c300.sql",
   "20260924005521_b9fca846-4db3-4e8f-bf91-bdb4bd863228.sql",
   "20260924021801_e48c0c41-9053-4f77-a267-04fbba8d206d.sql",
+  "20260927013341_1f8494c2-8155-4e9d-832a-4e387a8f56b4.sql",
 ];
 const B_MIGRATION = POST_GATE[5]!;
 
@@ -53,9 +54,9 @@ const before = (src: string, a: string, b: string) => {
 
 // 1 — migrations.
 const migrations = readdirSync(MIG).filter((f) => f.endsWith(".sql")).sort();
-check("1.1 migration count exactly 91", migrations.length === 91, String(migrations.length));
+check("1.1 migration count exactly 92", migrations.length === 92, String(migrations.length));
 const postGate = migrations.filter((f) => f >= "20260922");
-check("1.2 exact seven authorized post-gate migrations", JSON.stringify(postGate) === JSON.stringify(POST_GATE), postGate.join(","));
+check("1.2 exact eight authorized post-gate migrations", JSON.stringify(postGate) === JSON.stringify(POST_GATE), postGate.join(","));
 
 const msql = read(`${MIG}/${B_MIGRATION}`).replace(/^\s*--.*$/gm, "");
 const created = [...msql.matchAll(/CREATE OR REPLACE FUNCTION public\.(\w+)\(/g)].map((m) => m[1]).sort();
