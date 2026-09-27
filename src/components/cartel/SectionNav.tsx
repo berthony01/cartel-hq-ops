@@ -82,7 +82,7 @@ export function SectionNav({
 
   const go = (id: string) => {
     if (controlled) {
-      onChange!(id);
+      onChange?.(id);
       return;
     }
     const node = document.getElementById(id);
