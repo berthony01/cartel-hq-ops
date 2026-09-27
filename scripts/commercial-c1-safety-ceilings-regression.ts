@@ -1,4 +1,4 @@
-/** COMMERCIAL SAFETY C1 — static checks on the staged SQL + guard source. */
+/** COMMERCIAL SAFETY C1 — static checks on the applied migration + review SQL + guard source. */
 import { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 
@@ -9,6 +9,9 @@ const sql = readFileSync("docs/sql/COMMERCIAL_C1_pro_provider_safety_ceilings.sq
 const body = sql.split("-- ROLLBACK")[0].replace(/^--.*$/gm, "");
 const n = body.replace(/\s+/g, " ");
 const guard = readFileSync("supabase/functions/_shared/commercial-access.ts", "utf8");
+const MIG_FILE = "20260927170206_commercial_c1_pro_provider_safety_ceilings.sql";
+const mig = readFileSync(`supabase/migrations/${MIG_FILE}`, "utf8");
+const migBody = mig.split("-- ROLLBACK")[0].replace(/^--.*$/gm, "").replace(/\s+/g, " ").trim();
 
 check("1 exact 100/100/10", /\('concept_generation', 100\), \('static_ai_tools', 100\), \('telegram_motion_prep', 10\)/.test(n));
 check("2 quota monthly hidden", /kind = 'quota'/.test(n) && /period = 'calendar_month_utc'/.test(n) && /customer_visible = false/.test(n));
@@ -32,8 +35,17 @@ check("12 evaluator not redefined (owner bypass intact)", !/evaluate_commercial_
 check("13 edge guard still fail-closed", /return UNAVAILABLE\(\);[\s\S]*typeof data\.allowed !== "boolean"[\s\S]*return UNAVAILABLE\(\);/.test(guard) && /threw; denying/.test(guard));
 check("14 transactional", /^[\s\S]*BEGIN;[\s\S]*COMMIT;/.test(body));
 
+check("16 exact applied migration 20260927170206 exists", mig.length > 0 &&
+  /UPDATE public\.commercial_plan_entitlements/.test(mig) &&
+  /CREATE OR REPLACE FUNCTION public\.commercial_feature_usage\(/.test(mig) &&
+  !/cartel_free/.test(migBody));
+check("17 migration executable body identical to review SQL", migBody.length > 0 && migBody === n.trim());
+check("18 docs say APPLIED as migration 20260927170206 / commercial_c1_pro_provider_safety_ceilings",
+  /APPLIED as Supabase migration 20260927170206 \/ commercial_c1_pro_provider_safety_ceilings/.test(sql) &&
+  !/STAGED ONLY|Not applied/.test(sql.split("BEGIN;")[0] ?? ""));
+
 const changed = execSync("git status --porcelain && git diff --name-only HEAD", { encoding: "utf8" });
-check("15 no launcher/PCART/chain/liquidity/Stripe/billing files changed",
+check("19 no launcher/PCART/chain/liquidity/Stripe/billing files changed",
   !/chain|pcart|launch|liquidity|treasury|stripe|billing|canary/i.test(changed));
 
 console.log(fails.length ? `FAIL — ${fails.length} failed, ${pass} passed` : `PASS — ${pass}/${pass} C1 checks passed`);

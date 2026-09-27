@@ -1,5 +1,5 @@
 -- COMMERCIAL SAFETY C1 — internal provider-spend safety ceilings for cartel_49 v1.
--- STAGED ONLY. Not applied. Additive and reversible (rollback at bottom).
+-- APPLIED as Supabase migration 20260927170206 / commercial_c1_pro_provider_safety_ceilings.
 -- Free plan, x_reads, primary quotas, owner bypass (inside evaluate_commercial_access) untouched.
 BEGIN;
 
