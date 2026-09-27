@@ -360,6 +360,9 @@ const opts = { now: NOW_MS };
     "project_profiles",
     "media_assets",
     "telegram_group_connections",
+    // MINI-HQ-1C follow-up — non-LIVE-capable lifecycle resolver (read-only,
+    // restricted to the validated operator's workspaces).
+    "social_missions",
   ];
   const rpcNames = [
     ...bridgeCode.matchAll(
