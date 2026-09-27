@@ -240,7 +240,9 @@ function CanaryConsole() {
     setTail(null);
   };
 
-  const selectLaunch = (id: string) => {
+  const selectLaunch = (requested: string) => {
+    // PCART-L3: only ids in the (canonical-excluded) option list are accepted.
+    const id = (launches.data ?? []).some((row) => row.id === requested) ? requested : "";
     resetLaunchScopedState();
     setLaunchId(id);
     if (typeof window === "undefined") return;
