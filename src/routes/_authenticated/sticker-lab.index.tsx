@@ -369,12 +369,6 @@ function StickerLabHome() {
             </p>
           </div>
           <div className="grid gap-3 lg:min-w-80">
-            <Button asChild className="hidden min-h-11 w-full sm:flex">
-              <Link to="/sticker-lab/new" search={{}} onClick={() => clearDraft()}>
-                <Plus className="size-4" aria-hidden="true" />
-                Open Sticker Builder
-              </Link>
-            </Button>
             <dl className="grid grid-cols-2 gap-2">
             <div className="surface-quiet min-w-0 rounded-md p-3">
               <dt className="type-eyebrow text-muted-foreground">Active packs</dt>
