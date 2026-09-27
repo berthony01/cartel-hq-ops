@@ -163,7 +163,7 @@ function LandingPage() {
             to="/auth"
             className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "min-h-11")}
           >
-            Operator sign in
+            Sign in
           </Link>
           <StartFreeCta size="sm" className="hidden sm:inline-flex" />
         </nav>
