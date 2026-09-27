@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
 const BETA_URL = "https://t.me/PepeCartelHQBot";
 const TITLE = "CARTEL HQ — Launch command center for crypto project teams";
 const DESC =
-  "One private operating layer for crypto project teams: project identity, launch control, Telegram community operations, launch alerts, branded stickers, social missions and public discovery. Invite-only private beta.";
+  "One private operating layer for crypto project teams: project identity, launch control, Telegram community operations, launch alerts, branded stickers, social missions and public discovery. Start free — 1 project and 1 Telegram community, no credit card required.";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -44,16 +44,39 @@ export const Route = createFileRoute("/")({
   component: LandingPage,
 });
 
-function BetaCta({ size = "lg", className }: { size?: "lg" | "sm"; className?: string }) {
+function StartFreeCta({ size = "lg", className }: { size?: "lg" | "sm"; className?: string }) {
+  return (
+    <Link
+      to="/auth"
+      search={{ mode: "signup" }}
+      className={cn(buttonVariants({ size }), "min-h-11 gap-2", className)}
+    >
+      Start Free
+    </Link>
+  );
+}
+
+function SeePlansCta({ className }: { className?: string }) {
+  return (
+    <a
+      href="#pricing"
+      className={cn(buttonVariants({ variant: "outline", size: "lg" }), "min-h-11 border-gold/40", className)}
+    >
+      See Plans
+    </a>
+  );
+}
+
+function BotLink() {
   return (
     <a
       href={BETA_URL}
       target="_blank"
       rel="noopener noreferrer"
-      className={cn(buttonVariants({ size }), "min-h-11 gap-2", className)}
+      className="inline-flex min-h-11 items-center gap-1 text-xs font-semibold text-gold underline-offset-4 hover:underline"
     >
-      Join private beta
-      <ArrowUpRight className="size-4" aria-hidden="true" />
+      Open @PepeCartelHQBot
+      <ArrowUpRight className="size-3" aria-hidden="true" />
       <span className="sr-only">(opens Telegram in a new tab)</span>
     </a>
   );
@@ -140,9 +163,9 @@ function LandingPage() {
             to="/auth"
             className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "min-h-11")}
           >
-            Operator sign in
+            Sign in
           </Link>
-          <BetaCta size="sm" className="hidden sm:inline-flex" />
+          <StartFreeCta size="sm" className="hidden sm:inline-flex" />
         </nav>
       </header>
 
@@ -152,7 +175,7 @@ function LandingPage() {
           <div className="min-w-0">
             <p className="inline-flex items-center gap-2 rounded-full border border-gold/35 bg-gold/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-gold">
               <Lock className="size-3" aria-hidden="true" />
-              Invite-only private beta
+              Free to start · no credit card
             </p>
             <h1 className="mt-5 font-display text-5xl uppercase leading-[0.95] tracking-wide text-foreground sm:text-7xl">
               The command center for your <span className="text-gold">crypto launch</span>
@@ -163,18 +186,14 @@ function LandingPage() {
               operating layer instead of ten scattered tools.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-              <BetaCta />
-              <Link
-                to="/auth"
-                className={cn(buttonVariants({ variant: "outline", size: "lg" }), "min-h-11 border-gold/40")}
-              >
-                Operator sign in
-              </Link>
+              <StartFreeCta />
+              <SeePlansCta />
+              <BotLink />
             </div>
             <p className="mt-4 max-w-xl text-xs leading-relaxed text-muted-foreground">
-              Access is granted to approved operators. Request a spot through our official
-              Telegram bot, @PepeCartelHQBot. CARTEL HQ is a utility platform, separate from
-              the PEPECARTEL token and community website.
+              Create a free account, add your project, then connect your Telegram community
+              with our official bot, @PepeCartelHQBot. CARTEL HQ is a utility platform,
+              separate from the PEPECARTEL token and community website.
             </p>
           </div>
 
@@ -292,7 +311,7 @@ function LandingPage() {
         </section>
 
         {/* Pricing */}
-        <section className="app-gutter mx-auto max-w-5xl pb-16">
+        <section id="pricing" className="app-gutter mx-auto max-w-5xl scroll-mt-20 pb-16">
           <h2 className="font-display text-3xl uppercase tracking-wide text-foreground sm:text-4xl">
             Pricing
           </h2>
@@ -305,8 +324,8 @@ function LandingPage() {
                 </span>
               </div>
               <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                Project Identity and profile, 1 Telegram group, and welcome setup, testing
-                and delivery.
+                1 project and 1 Telegram community. Project Identity and profile, plus welcome
+                setup, testing and delivery. No credit card required.
               </p>
             </article>
             <article className="cartel-panel min-w-0 rounded-xl border border-gold/40 p-6 shadow-elevated">
@@ -325,7 +344,7 @@ function LandingPage() {
             </article>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
-            Private beta — approved operators sign in to manage their plan.
+            Start on Free with no credit card. Signed-in owners manage their plan from HQ.
           </p>
         </section>
 
@@ -336,16 +355,16 @@ function LandingPage() {
               Run your next launch from HQ
             </h2>
             <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
-              Request access through @PepeCartelHQBot. Approved operators receive sign-in
-              access — there is no instant account creation.
+              Create a free account, set up your project and connect your Telegram
+              community. No credit card required.
             </p>
             <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <BetaCta />
+              <StartFreeCta />
               <Link
                 to="/auth"
                 className={cn(buttonVariants({ variant: "outline", size: "lg" }), "min-h-11")}
               >
-                Operator sign in
+                Sign in
               </Link>
             </div>
           </div>
@@ -354,7 +373,7 @@ function LandingPage() {
 
       <footer className="app-gutter border-t border-border-subtle py-6">
         <p className="text-center text-[11px] text-muted-foreground/80">
-          CARTEL HQ — private beta. Access is limited to approved operators.
+          CARTEL HQ — launch command center for crypto project teams.
         </p>
       </footer>
     </div>

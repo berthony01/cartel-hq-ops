@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -54,6 +55,7 @@ import { InlineRow } from "@/components/cartel/InlineRow";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
+import { CreateWorkspaceDialog } from "@/components/cartel/WorkspaceSwitcher";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -149,6 +151,7 @@ function Fact({ label, value }: { label: string; value: string }) {
 
 function HqDashboard() {
   const { workspace, workspaceId, loading: workspaceLoading } = useWorkspace();
+  const [createOpen, setCreateOpen] = useState(false);
   const journeyQuery = useProjectJourney(workspaceId);
 
   const packsQuery = useQuery({
@@ -285,6 +288,7 @@ function HqDashboard() {
 
   return (
     <div className="space-y-7 sm:space-y-9">
+      <CreateWorkspaceDialog open={createOpen} onOpenChange={setCreateOpen} />
       <PageHeader
         eyebrow="Command Center"
         title={workspace?.name ? `${workspace.name} HQ` : "Cartel HQ"}
@@ -297,8 +301,8 @@ function HqDashboard() {
           variant="surface"
           className="rise-in"
           title={workspaceLoading ? "Loading…" : "No project"}
-          description={workspaceLoading ? "Reading your project context." : "Add a project from the selector above to start using CARTEL HQ."}
-          actions={<StatusBadge tone="gold">Setup required</StatusBadge>}
+          description={workspaceLoading ? "Reading your project context." : "Create your free project to start using CARTEL HQ. Free includes 1 project and 1 Telegram community."}
+          actions={workspaceLoading ? <StatusBadge tone="gold">Setup required</StatusBadge> : <Button className="min-h-11" onClick={() => setCreateOpen(true)}>Create free project</Button>}
           headerClassName="mb-0"
         />
       ) : (
