@@ -160,9 +160,37 @@ check("F3", /select\("id, chain, public_slug, launch_kind, token_name, ticker"\)
 check("F4", /"LAUNCH_CHAIN_MISMATCH"/.test(attemptFn) && /RECIPIENT_MUST_MATCH_DEPLOYER/.test(attemptFn),
   "generic canary checks unchanged for noncanonical launches");
 
-// D. staged SQL — fail-closed + no generic-mainnet fallback
-check("D0", readdirSync("supabase/migrations").every((f) => !/pepecartel-token-v1/.test(read(`supabase/migrations/${f}`))),
-  "SQL is staged only; no applied migration references pepecartel-token-v1");
+// D. applied PCART-L3 SQL — fail-closed + no generic-mainnet fallback
+const MIG_FILE = "20260927141715_pcart_l3_rehearsal_and_mainnet_isolation.sql";
+const MIG = readdirSync("supabase/migrations").includes(MIG_FILE) ? read(`supabase/migrations/${MIG_FILE}`) : "";
+const MIG_PCART = readdirSync("supabase/migrations").filter((f) => /pepecartel-token-v1/.test(read(`supabase/migrations/${f}`)));
+check("D0", MIG.length > 0 && MIG_PCART.length === 1 && MIG_PCART[0] === MIG_FILE &&
+  MIG.includes("FUNCTION public.create_launch_chain_pcart_rehearsal_attempt(") &&
+  MIG.includes("FUNCTION private.is_canonical_pcart_launch(") &&
+  MIG.includes("FUNCTION public.enforce_canonical_pcart_no_production_deployment()") &&
+  MIG.includes("launch_chain_deployments_one_active_pcart_rehearsal"),
+  "exact applied migration 20260927141715 exists and is the only migration with the protected PCART SQL");
+const stripStatus = (t: string) => t.split("\nBEGIN;")[1] ?? "";
+check("D0b", stripStatus(MIG).length > 0 && stripStatus(MIG) === stripStatus(SQL),
+  "docs SQL executable body is identical to the applied migration");
+check("D0c", /STATUS: APPLIED as migration 20260927141715 \/ pcart_l3_rehearsal_and_mainnet_isolation/.test(SQL) &&
+  !/STAGED, NOT APPLIED|rehearsal RPC is missing/.test(SQL.split("\nBEGIN;")[0] ?? ""),
+  "docs say APPLIED with version 20260927141715; no staged/missing wording");
+const TYPES = read("src/integrations/supabase/types.ts");
+const reqTbl = TYPES.split("launch_production_deployment_requests: {")[1]?.split("Relationships:")[0] ?? "";
+check("D0d", /Row: \{\s*artifact_id: string\n/.test(reqTbl) && /Insert: \{\s*artifact_id\?: string\n/.test(reqTbl) &&
+  /Update: \{\s*artifact_id\?: string\n/.test(reqTbl),
+  "generated types include production-request artifact_id (Row/Insert/Update)");
+const pcartType = TYPES.split("create_launch_chain_pcart_rehearsal_attempt: {")[1]?.split("SetofOptions")[0] ?? "";
+const pcartSetof = TYPES.split("create_launch_chain_pcart_rehearsal_attempt: {")[1]?.split("isSetofReturn: false")[0] ?? "";
+check("D0e", /_client_request_id: string\s*_deployer_address: string\s*_launch_id: string\s*_rehearsal_recipient: string/.test(pcartType) &&
+  /from: "\*"\s*to: "launch_chain_deployments"\s*isOneToOne: true\s*$/.test(pcartSetof),
+  "generated types include the PCART rehearsal RPC returning a launch_chain_deployments row");
+const PCLIENT = read("src/lib/pcart-rehearsal.ts");
+check("D0f", /await supabase\.rpc\(PCART_REHEARSAL_RPC, \{/.test(PCLIENT) && !/RpcCaller/.test(PCLIENT) &&
+  !/supabase\.rpc\.bind/.test(PCLIENT) && /isMissingRpcError\(error\)\) throw new PcartRehearsalUnavailableError/.test(PCLIENT) &&
+  /isExactPcartRehearsalRow\(row, recipient\)/.test(PCLIENT),
+  "client calls typed supabase.rpc directly; missing-RPC fail-closed and exact row validation kept");
 check("D1", /artifact_id = 'pepecartel-token-v1'\s*AND chain_id = 46630\s*AND network_environment = 'TESTNET'/.test(SQL),
   "evidence constraint permits PCART only on 46630 TESTNET");
 check("D2", /CHECK \(artifact_id = 'cartel-fixed-erc20-v1'\)/.test(SQL) &&
@@ -197,8 +225,8 @@ check("D8", /REVOKE ALL ON FUNCTION public\.create_launch_chain_pcart_rehearsal_
 check("D9", /apply_launch_chain_token_deployment_verification\(\s*uuid, text, integer, text, bigint, text, text, text, text, text, smallint, numeric, numeric\s*\) FROM PUBLIC, anon, authenticated;/.test(SQL),
   "apply RPC stays service-role only");
 check("D10", !/runtime_control|emergency_stop|execution_control|MAINNET_LIQUIDITY/i.test(SQL),
-  "staged SQL does not touch runtime control, emergency stop or liquidity switches");
-check("D11", /^BEGIN;/m.test(SQL) && /^COMMIT;/m.test(SQL), "staged SQL is a single transaction");
+  "PCART-L3 SQL does not touch runtime control, emergency stop or liquidity switches");
+check("D11", /^BEGIN;/m.test(SQL) && /^COMMIT;/m.test(SQL), "PCART-L3 SQL is a single transaction");
 
 const guard = SQL.split("FUNCTION public.enforce_canonical_pcart_no_production_deployment()")[1] ?? "";
 check("D12", /NEW\.network_environment = 'PRODUCTION' OR NEW\.chain_id = 4663/.test(guard) &&
