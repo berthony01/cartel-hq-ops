@@ -357,7 +357,7 @@ function StickerLabHome() {
         </Link>
       </RelatedLinks>
 
-      <section className="surface-command overflow-hidden rounded-lg p-4 sm:p-6" aria-labelledby="studio-context-title">
+      <section className="surface-command rise-in overflow-hidden rounded-lg border border-gold/35 p-4 shadow-[var(--shadow-cartel),var(--glow-gold)] sm:p-6" aria-labelledby="studio-context-title">
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <div className="min-w-0">
             <p className="type-eyebrow text-gold">Creative operations</p>
@@ -368,7 +368,8 @@ function StickerLabHome() {
               Brand Kit defines the identity. Asset Vault holds the source material. Sticker Lab turns both into reviewed packs for Telegram and community distribution.
             </p>
           </div>
-          <dl className="grid grid-cols-2 gap-2 lg:min-w-72">
+          <div className="grid gap-3 lg:min-w-80">
+            <dl className="grid grid-cols-2 gap-2">
             <div className="surface-quiet min-w-0 rounded-md p-3">
               <dt className="type-eyebrow text-muted-foreground">Active packs</dt>
               <dd className="mt-1.5 font-display text-xl leading-none text-gold">{packsQuery.isLoading ? "—" : packs.length}</dd>
@@ -377,7 +378,8 @@ function StickerLabHome() {
               <dt className="type-eyebrow text-muted-foreground">Archived</dt>
               <dd className="mt-1.5 font-display text-xl leading-none text-foreground">{archivedQuery.isLoading ? "—" : archived.length}</dd>
             </div>
-          </dl>
+            </dl>
+          </div>
         </div>
       </section>
 
@@ -487,6 +489,8 @@ function StickerLabHome() {
               return (
                 <li key={pack.id}>
                   <InlineRow
+                    leading={<PackageOpen className="size-4" aria-hidden="true" />}
+                    className={label === "review" ? "border-pepe/35 bg-pepe/5" : "hover:border-gold/35"}
                     title={pack.title}
                     subtitle={`${pack.pack_size} stickers · ${pack.ready}/${pack.total} ready · updated ${relativeTime(pack.updated_at)}`}
                     trailing={
@@ -542,6 +546,8 @@ function StickerLabHome() {
             {archived.map((pack) => (
               <li key={pack.id}>
                 <InlineRow
+                  leading={<Archive className="size-4" aria-hidden="true" />}
+                  className="opacity-85"
                   title={pack.title}
                   subtitle={`${pack.pack_size} stickers · archived ${pack.archived_at ? relativeTime(pack.archived_at) : "recently"}`}
                   trailing={

@@ -373,7 +373,7 @@ function PackManagerPage() {
         }
       />
 
-      <section className="surface-command overflow-hidden rounded-lg p-4 sm:p-6" aria-labelledby="pack-command-title">
+      <section className="surface-command rise-in overflow-hidden rounded-lg border border-gold/35 p-4 shadow-[var(--shadow-cartel),var(--glow-gold)] sm:p-6" aria-labelledby="pack-command-title">
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <div className="min-w-0">
             <p className="type-eyebrow text-gold">Pack identity</p>
@@ -382,7 +382,7 @@ function PackManagerPage() {
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{pack.theme}</p>
           </div>
-          <dl className="grid grid-cols-3 gap-2 lg:min-w-[23rem]">
+          <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:min-w-[23rem]">
             <div className="surface-quiet min-w-0 rounded-md p-3">
               <dt className="type-eyebrow text-muted-foreground">Ready</dt>
               <dd className="mt-1.5 font-display text-xl leading-none text-pepe">{readyCount}/{stickers.length}</dd>
@@ -432,15 +432,13 @@ function PackManagerPage() {
             </li>
           ))}
         </ul>
-        <div className="mt-4 rounded-lg border border-gold/40 bg-gold/5 p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Recommended next step
-          </p>
-          <p className="mt-1 text-sm font-semibold text-foreground">{nextStep.title}</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{nextStep.body}</p>
-          {nextStep.action ? (
-            <div className="mt-3 flex flex-wrap gap-2 [&>*]:min-w-0">{nextStep.action}</div>
-          ) : null}
+        <div className="mt-4 grid min-w-0 gap-4 rounded-lg border border-gold/40 bg-gold/5 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+          <div className="min-w-0">
+            <p className="type-eyebrow text-gold">Recommended next step</p>
+            <p className="mt-1.5 text-base font-semibold text-foreground [overflow-wrap:anywhere]">{nextStep.title}</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{nextStep.body}</p>
+          </div>
+          {nextStep.action ? <div className="flex min-w-0 flex-wrap gap-2 [&>*]:w-full sm:[&>*]:w-auto">{nextStep.action}</div> : null}
         </div>
       </Section>
 
