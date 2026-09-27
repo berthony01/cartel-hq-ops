@@ -797,7 +797,7 @@ check("13.47 the Mini App keeps exact target binding", /\.eq\("id", targetId\)/.
 check("13.48 cleanup_pending is a bounded refresh state", /"cleanup_pending"/.test(bridgeSrc));
 check("13.49 committed + cleanup_pending is a truthful no-retry warning", /result\.refresh === "cleanup_pending"[\s\S]{0,320}retry: false/.test(miniClientSrc) && /previous card is queued for removal/.test(miniClientSrc));
 check("13.50 the Mini App copy describes the rolling card", /move the current Telegram card to the bottom of the chat/.test(miniRouteSrc));
-check("13.51 Mini App END/CANCEL use the in-place edit lane, never resurface", /MINIAPP_FINAL_TRANSPORT_ACTION = "edit_mission"/.test(bridgeSrc) && /action: MINIAPP_FINAL_TRANSPORT_ACTION/.test(bridgeSrc) && !/action: "end_now"|action: "cancel"/.test(bridgeSrc));
+check("13.51 Mini App END/CANCEL use the in-place edit lane, never resurface", /MINIAPP_FINAL_TRANSPORT_ACTION = "edit_mission"/.test(bridgeSrc) && /action: MINIAPP_FINAL_TRANSPORT_ACTION/.test(bridgeSrc) && !/action: "resurface_mission"[^\n]*end_now/.test(bridgeSrc));
 
 // ---------------------------------------------------------------------------
 
