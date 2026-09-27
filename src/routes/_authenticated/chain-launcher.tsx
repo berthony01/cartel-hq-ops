@@ -197,6 +197,7 @@ function ChainLauncherPage() {
     () => launches.find((l) => l.id === launchId) ?? null,
     [launches, launchId],
   );
+  const isCanonical = isCanonicalPcartLaunch(selectedLaunch);
 
   const refreshWallet = useCallback(async (address: string | null) => {
     setChainId(await readChainId());
@@ -798,15 +799,21 @@ function ChainLauncherPage() {
         )}
       </Section>
 
-      {launchId && isCanonicalPcartLaunch(selectedLaunch) ? (
+      {/* PCART-L3: the canonical PEPECARTEL launch sees ONLY the exact-artifact
+          rehearsal panel. Generic inert/test-token deploy and liquidity
+          planning are not rendered for it; unchanged for every other launch. */}
+      {launchId && isCanonical ? (
         <PcartRehearsalPanel
           launchId={launchId}
           account={account}
           onTestnet={onTestnet}
           onChanged={invalidate}
+          attempts={attempts}
+          onVerify={(id) => verifyMutation.mutate(id)}
+          verifying={verifyMutation.isPending}
         />
-      ) : null}
-
+      ) : (
+        <>
       <Section
         variant="primary"
         title="Test deployment"
@@ -1182,6 +1189,8 @@ function ChainLauncherPage() {
           </>
         )}
       </Section>
+        </>
+      )}
     </div>
   );
 }
