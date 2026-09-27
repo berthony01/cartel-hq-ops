@@ -200,6 +200,7 @@ const PCART_L3_CONSUMERS = [
   "src/lib/pcart-rehearsal.ts",
   "src/lib/chain-verify.functions.ts",
   "src/routes/_authenticated/chain-launcher.tsx",
+  "src/components/cartel/PcartProductionBlockedCheckpoint.tsx",
 ].map((p) => join(p));
 const srcHits = srcFiles.filter((f) => /pepecartel-token-v1/.test(readFileSync(f, "utf8")));
 const migHits = migrationFiles.filter((f) => /pepecartel-token-v1/.test(readFileSync(f, "utf8")));

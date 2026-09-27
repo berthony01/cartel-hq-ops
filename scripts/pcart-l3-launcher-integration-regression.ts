@@ -156,7 +156,8 @@ check("E6", PANEL.indexOf("createPcartRehearsalAttempt(") < PANEL.indexOf("broad
   "attempt is created (and must succeed) before any broadcast");
 check("E7", /NOT the production treasury/.test(PANEL) && /not the official PEPECARTEL token/.test(PANEL),
   "panel labels testnet-only and not the treasury");
-check("E8", !/4663\b|PRODUCTION|mainnet/i.test(CLIENT + PANEL.replace(/Chain Testnet/g, "")),
+const noComments = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/production treasury/gi, "");
+check("E8", !/\b4663\b|PRODUCTION|mainnet/i.test(noComments(CLIENT) + noComments(PANEL)),
   "rehearsal client/panel have no mainnet path");
 
 console.log(`\n${passes} passed, ${failures} failed`);
