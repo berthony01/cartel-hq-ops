@@ -26,7 +26,7 @@ check("U5 Sticker Drops lock follows sticker_drops", /stickerDropsAllowed = comm
 check("U6 plan labels", ui.includes("Platform Owner / Unrestricted") && ui.includes("Cartel HQ Pro ($49/month)"));
 check("U7 upgrade routes to Settings, no checkout in Mini App", !/checkout|createCheckout|stripe/i.test(ui) && /Upgrade to Pro — Settings & billing/.test(ui));
 check("U8 Launch Control / Community Command not locked", /<FullAppLink to="\/launch-control" label="Launch Control" \/>/.test(ui) && /<FullAppLink to="\/telegram" label="Community Command" \/>/.test(ui));
-const changed = execSync("git diff --name-only HEAD; git ls-files --others --exclude-standard", { encoding: "utf8" });
+const changed = execSync("git diff --name-only 6c927f59; git ls-files --others --exclude-standard", { encoding: "utf8" });
 check("F1 no migrations/Stripe/C1/C2/launcher/PCART/chain/liquidity/treasury files changed",
   !/supabase\/migrations|stripe|billing|COMMERCIAL_C1|COMMERCIAL_C2|self-service|launcher|pcart|chain|liquidity|treasury/i.test(changed));
 console.log(`\nC3 ${pass}/${pass + failN} passed`);
