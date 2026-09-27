@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { IdCard, Loader2, Plus, Rocket, Save, Trash2, Video, Wand2 } from "lucide-react";
+import { Eye, Globe2, IdCard, Loader2, Plus, Rocket, Save, ShieldCheck, Trash2, Video, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/lib/workspace-context";
@@ -546,10 +546,6 @@ function ProjectProfilePage() {
         status={workspace ? workspace.name : "No project"}
       />
 
-      <LaunchReadinessCallout workspaceId={workspaceId} title="Setup guide" />
-
-
-
       {workspaceLoading ? (
         <Section variant="surface">
           <p className="text-sm text-muted-foreground">Loading project…</p>
@@ -575,10 +571,11 @@ function ProjectProfilePage() {
         </Section>
       ) : (
         <div className="min-w-0 space-y-4 sm:space-y-6">
-        <Section variant="hero" className="min-w-0" contentClassName="min-w-0">
-          <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+        <Section variant="hero" className="min-w-0 overflow-hidden p-0" contentClassName="min-w-0">
+          <div className="grid min-w-0 lg:grid-cols-[minmax(0,1.55fr)_minmax(18rem,0.7fr)]">
+            <div className="min-w-0 p-4 sm:p-6 lg:p-7">
             <div className="flex min-w-0 items-start gap-3 sm:gap-4">
-              <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gold/30 bg-background/50 sm:size-16">
+              <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gold/35 bg-background/50 shadow-[var(--glow-gold)] sm:size-20">
                 {selectedLogo && urls[selectedLogo.storage_path] ? (
                   <img
                     src={urls[selectedLogo.storage_path]}
@@ -591,18 +588,18 @@ function ProjectProfilePage() {
                 )}
               </div>
               <div className="min-w-0">
-                <p className="type-eyebrow text-gold">Profile state</p>
+                <p className="type-eyebrow text-gold">Identity control room</p>
                 <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-                  <h2 className="min-w-0 font-display text-2xl uppercase leading-[0.95] text-foreground [overflow-wrap:anywhere] sm:text-3xl">
+                  <h2 className="min-w-0 font-display text-3xl uppercase leading-[0.95] text-foreground [overflow-wrap:anywhere] sm:text-5xl">
                     {profileQuery.isLoading
                       ? "Loading…"
-                      : profile
-                        ? profile.project_name
+                      : form.project_name.trim()
+                        ? form.project_name.trim()
                         : "Project profile not created yet"}
                   </h2>
-                  {profile ? (
-                    <StatusBadge tone={STATUS_TONE[profile.discovery_status]}>
-                      <span>{DISCOVERY_STATUS_LABELS[profile.discovery_status]}</span>
+                  {profile || form.project_name.trim() ? (
+                    <StatusBadge tone={STATUS_TONE[form.discovery_status]}>
+                      <span>{DISCOVERY_STATUS_LABELS[form.discovery_status]}</span>
                     </StatusBadge>
                   ) : (
                     <StatusBadge tone="muted">
@@ -610,26 +607,41 @@ function ProjectProfilePage() {
                     </StatusBadge>
                   )}
                 </div>
-                <p className="mt-2.5 max-w-prose type-helper text-muted-foreground [overflow-wrap:anywhere]">
+                <div className="mt-3 flex min-w-0 flex-wrap gap-x-4 gap-y-1 type-technical text-muted-foreground">
+                  {form.ticker.trim() ? <span className="text-foreground">{form.ticker.trim()}</span> : null}
+                  {form.primary_chain.trim() ? <span>{form.primary_chain.trim()}</span> : null}
+                </div>
+                <p className="mt-3 max-w-prose text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
                   {!profile
                     ? "Fill in the identity below and create the profile. Nothing is public until you create it and set the status to Published."
                     : profile.discovery_status === "published"
                       ? "This profile is published, so it is discoverable on the public Cartel Network."
                       : "This profile is saved but not discoverable on the public Cartel Network. Set the status to Published when you are ready."}
                 </p>
-                {profile?.public_slug || form.public_slug ? (
-                  <div className="mt-3 min-w-0 rounded-md border border-border-subtle bg-background/40 px-3 py-2">
+                {form.public_slug ? (
+                  <div className="mt-4 min-w-0 border-l-2 border-gold/50 pl-3">
                     <p className="type-eyebrow text-muted-foreground">
-                      {profile?.public_slug ? "Network address" : "Planned network address"}
+                      {profile ? "Network address" : "Planned network address"}
                     </p>
                     <p className="mt-1 min-w-0 type-technical text-foreground [overflow-wrap:anywhere]">
-                      /network/project/{profile?.public_slug ?? form.public_slug}
+                      /network/project/{form.public_slug}
                     </p>
                   </div>
                 ) : null}
               </div>
             </div>
-            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
+            </div>
+            <div className="flex min-w-0 flex-col justify-between gap-5 border-t border-gold/25 bg-surface-raised/55 p-4 sm:p-5 lg:border-l lg:border-t-0 lg:p-6">
+              <div>
+                <div className="flex items-center gap-2 text-gold">
+                  <Globe2 className="size-4" aria-hidden="true" />
+                  <p className="type-meta">Network identity</p>
+                </div>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                  Changes shown in the studio preview remain private until you save. Public discovery follows the selected visibility state.
+                </p>
+              </div>
+              <div className="flex min-w-0 flex-col gap-2">
               {saveButton}
               {profile && profile.discovery_status === "published" && profile.public_slug ? (
                 <Button asChild variant="outline" className="min-h-11">
@@ -637,24 +649,28 @@ function ProjectProfilePage() {
                     to="/network/project/$projectSlug"
                     params={{ projectSlug: profile.public_slug }}
                   >
+                    <Eye className="size-4" aria-hidden="true" />
                     View public page
                   </Link>
                 </Button>
               ) : null}
             </div>
           </div>
+          </div>
         </Section>
 
+        <LaunchReadinessCallout workspaceId={workspaceId} title="Setup guide" />
 
+        <div className="grid min-w-0 gap-4 sm:gap-6 xl:grid-cols-[13rem_minmax(0,1fr)] xl:items-start">
+          <SectionNav
+            label="Project Profile Studio"
+            items={STUDIO_SECTIONS}
+            activeId={activeSection}
+            onChange={setActiveSection}
+            variant="studio"
+          />
 
-        <SectionNav
-          label="Project Profile Studio"
-          items={STUDIO_SECTIONS}
-          activeId={activeSection}
-          onChange={setActiveSection}
-        />
-
-        <div className="grid gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+          <div className="grid min-w-0 gap-4 sm:gap-6 2xl:grid-cols-[minmax(0,1.55fr)_minmax(18rem,0.75fr)]">
 
           <div className="min-w-0 space-y-4 sm:space-y-6">
           <form
@@ -667,7 +683,7 @@ function ProjectProfilePage() {
           >
             <WorkingView id="pp-identity" active={activeSection === "pp-identity"}>
             <Section
-              variant="surface"
+              variant="primary"
               title="Identity"
               description="The public-facing name, ticker, chain and network address of this project."
               actions={
@@ -766,7 +782,7 @@ function ProjectProfilePage() {
             </Section>
 
             <Section
-              variant="surface"
+              variant="quiet"
               title="Project logo"
               description="Upload a logo or choose one already stored in this project. Branded Telegram broadcasts require a PNG or JPEG logo no larger than 10MB."
             >
@@ -837,7 +853,7 @@ function ProjectProfilePage() {
 
             <WorkingView id="pp-about" active={activeSection === "pp-about"}>
             <Section
-              variant="surface"
+              variant="primary"
               title="About"
               description="The public story this project publishes on its Cartel Network profile."
             >
@@ -965,7 +981,7 @@ function ProjectProfilePage() {
 
             <WorkingView id="pp-links" active={activeSection === "pp-links"}>
             <Section
-              variant="surface"
+              variant="primary"
               title="Official links"
               description="Only add links the project actually controls."
             >
@@ -1036,7 +1052,7 @@ function ProjectProfilePage() {
 
             <WorkingView id="pp-visibility" active={activeSection === "pp-visibility"}>
             <Section
-              variant="surface"
+              variant="primary"
               title="Visibility"
               description="Draft and hidden profiles stay behind authenticated project access. Published profiles appear on the public Cartel Network."
             >
@@ -1067,7 +1083,7 @@ function ProjectProfilePage() {
 
           <WorkingView id="pp-media" active={activeSection === "pp-media"}>
             <Section
-              variant="surface"
+              variant="primary"
               title="Media"
               description="Up to six YouTube videos shown on this project's public Cartel Network profile."
               actions={
@@ -1102,7 +1118,8 @@ function ProjectProfilePage() {
                 </div>
               ) : (
                 <div className="space-y-5">
-                  <div className="surface-quiet min-w-0 rounded-lg p-3.5">
+                  <div className="min-w-0 border-l-2 border-gold/50 bg-background/30 p-4">
+                    <ShieldCheck className="mb-4 size-5 text-gold" aria-hidden="true" />
                     <div className="grid gap-3 md:grid-cols-2 [&>*]:min-w-0">
                       <div>
                         <Label htmlFor="video_youtube">YouTube link or video ID</Label>
@@ -1274,7 +1291,7 @@ function ProjectProfilePage() {
                 description="Layered trust signals for this project. Only CARTEL HQ can grant a review; the project can request one."
               >
                 <div className="grid min-w-0 gap-3 lg:grid-cols-2">
-                  <div className="surface-quiet min-w-0 rounded-lg p-3.5">
+                  <div className="min-w-0 border-l-2 border-border-strong bg-background/30 p-4">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <StatusBadge tone="gold">
                         <span>Project Authenticated</span>
@@ -1363,7 +1380,7 @@ function ProjectProfilePage() {
 
           <WorkingView id="pp-launch" active={activeSection === "pp-launch"}>
             <Section
-              variant="surface"
+               variant="primary"
               title="Launch integration"
               description="Launch data is owned by Launch Control, not by this profile."
             >
@@ -1385,14 +1402,17 @@ function ProjectProfilePage() {
 
           <aside className="min-w-0">
             <Section
-              variant="surface"
+              variant="quiet"
               title="Network profile preview"
               description="How this identity reads today, from the current unsaved form state."
-              className="xl:sticky xl:top-6"
+              className="2xl:sticky 2xl:top-20"
               contentClassName="space-y-4"
             >
               <div className="min-w-0 overflow-hidden rounded-lg border border-border-subtle bg-background/40">
-                <div className="h-1 w-full bg-gradient-to-r from-gold/70 via-gold/25 to-transparent" />
+                <div className="flex min-h-11 items-center justify-between gap-3 border-b border-border-subtle bg-surface-raised/60 px-3.5 py-2">
+                  <span className="type-meta text-gold">Studio preview</span>
+                  <span className="type-technical text-muted-foreground">Unsaved</span>
+                </div>
                 <div className="space-y-4 p-3.5 sm:p-4">
                   <div className="flex min-w-0 items-start gap-3">
                     <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-background/60">
@@ -1440,6 +1460,13 @@ function ProjectProfilePage() {
                       {form.description.trim()}
                     </p>
                   ) : null}
+
+                  <div className="min-w-0 border-t border-border-subtle pt-3">
+                    <p className="type-meta text-muted-foreground">Network address</p>
+                    <p className="mt-1 type-technical text-foreground [overflow-wrap:anywhere]">
+                      /network/project/{form.public_slug || "your-slug"}
+                    </p>
+                  </div>
 
                   {form.website_url.trim() ||
                   form.telegram_url.trim() ||
@@ -1500,6 +1527,7 @@ function ProjectProfilePage() {
 
             </Section>
           </aside>
+          </div>
         </div>
         </div>
       )}
