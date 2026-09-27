@@ -13,8 +13,10 @@ const POST_GATE = [
   "20260923170038_eaa2a24d-9c13-49c9-9aa3-6a5a8e18c300.sql",
   "20260924005521_b9fca846-4db3-4e8f-bf91-bdb4bd863228.sql",
   "20260924021801_e48c0c41-9053-4f77-a267-04fbba8d206d.sql",
+  "20260927013341_1f8494c2-8155-4e9d-832a-4e387a8f56b4.sql",
 ];
 const COMMERCIAL = POST_GATE[4];
+const LEAST_PRIVILEGE = POST_GATE[7];
 
 let failed = 0;
 let passed = 0;
