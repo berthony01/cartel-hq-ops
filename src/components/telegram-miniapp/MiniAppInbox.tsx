@@ -444,7 +444,7 @@ function InboxThread({
         <div className="grid grid-cols-2 gap-2">
           <MiniAppActionButton
             tone="quiet"
-            label={resolved ? "Reopen" : "Resolve"}
+            label={resolved ? "Reopen conversation" : "Resolve conversation"}
             onPress={() => action.mutate(resolved ? "reopen" : "resolve")}
             pending={action.isPending}
           />
