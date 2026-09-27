@@ -63,17 +63,18 @@ check("1.12 help text advertises the command", webhook.includes("/mission manage
 // ---------------------------------------------------------------------------
 const EXACT_WEBAPP_URL = "https://pepecartelhq.com/tg";
 check("1A.1 Mini App URL constant exists", webhook.includes('const MISSION_CONTROL_WEBAPP_URL = "https://pepecartelhq.com/tg"'));
-check("1A.2 web_app button URL is exact and appears once", (webhook.match(new RegExp(`web_app: \\{ url: MISSION_CONTROL_WEBAPP_URL \\}`, "g")) ?? []).length === 1);
+check("1A.2 panel web_app uses the mission-specific URL with a safe fallback", (webhook.match(/web_app: \{ url: buildMissionWebAppUrl\(missionId\) \?\? MISSION_CONTROL_WEBAPP_URL \}/g) ?? []).length === 1);
+check("1A.2b mission URL builder validates a UUID and uses URL/URLSearchParams", /const buildMissionWebAppUrl = \(missionId: string\): string \| null => \{\s*if \(!MC_MISSION_UUID_RE\.test\(missionId\)\) return null;[\s\S]{0,300}new URL\([\s\S]{0,200}new URLSearchParams\(\)/.test(webhook));
 const panelKbMatch = webhook.match(/const mcPanelKeyboard = \(missionId: string\) => \(\{[\s\S]{0,900}?\n  \}\);/);
 check("1A.3 panel keyboard exists for scoping", panelKbMatch !== null);
 if (panelKbMatch) {
   const panelKb = panelKbMatch[0];
-  const webAppRows = panelKb.match(/\[\{ text: "[^"]+", web_app: \{ url: [A-Z_]+ \} \}\]/g) ?? [];
-  check("1A.4 exactly one web_app row in the panel keyboard", webAppRows.length === 1, `found ${webAppRows.length}`);
-  check("1A.5 panel web_app row text and placement", panelKb.includes('[{ text: "📲 Open Mission Control", web_app: { url: MISSION_CONTROL_WEBAPP_URL } }],'));
+  check("1A.4 exactly one web_app button in the panel keyboard", (panelKb.match(/web_app:/g) ?? []).length === 1);
+  check("1A.5 panel web_app button text", panelKb.includes('text: "📲 Open Mission Control"'));
   const panelRows = panelKb.slice(panelKb.indexOf("inline_keyboard: ["));
-  check("1A.6 web_app row is the FIRST panel row", panelRows.indexOf('text: "📲 Open Mission Control", web_app') < panelRows.indexOf("callback_data"));
-  check("1A.7 existing panel callbacks preserved", ["mc_t_", "mc_d_", "mc_e_", "mc_c_", "mc_x"].every((cb) => panelKb.includes(`callback_data: \`${cb}`) || panelKb.includes(`callback_data: "${cb}`)));
+  check("1A.6 web_app row is the FIRST panel row", panelRows.indexOf("web_app") < panelRows.indexOf("callback_data"));
+  check("1A.7 MINI-HQ-1C new panels advertise only Mini App + Exit", panelKb.includes('callback_data: "mc_x"') && !["mc_t_", "mc_d_", "mc_e_", "mc_c_"].some((cb) => panelKb.includes(cb)));
+  check("1A.7b legacy mc_* callback handlers retained for old messages", ["mc_t_", "mc_d_", "mc_e_", "mc_ec_", "mc_c_", "mc_cc_"].every((cb) => webhook.includes(`callbackData === \`${cb}\${missionId}\``)));
 }
 const missionPickerMatch = webhook.match(/const mcRenderMissionPicker = async \([\s\S]{0,4500}?exit/i) ?? webhook.match(/const mcRenderMissionPicker = async \([\s\S]{0,4500}?mc_x/);
 check("1A.8 mission picker keyboard has no web_app", missionPickerMatch === null || !(missionPickerMatch[0].includes("web_app")));
