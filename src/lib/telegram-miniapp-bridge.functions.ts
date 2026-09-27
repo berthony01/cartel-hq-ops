@@ -100,7 +100,7 @@ export const MINIAPP_REFRESHABLE_OUTCOMES = ["ok", "replayed"] as const;
  * END NOW / CANCEL are now at parity with the bot: same RPCs, same in-place
  * final card edit, same schedule-event ownership rule, same safe unpin.
  */
-export const MINIAPP_SUPPORTED_MUTATIONS = [
+export const MINIAPP_SUPPORTED_ACTIONS = [
   "apply_targets",
   "apply_duration",
   "end_now",
@@ -1018,7 +1018,7 @@ export const miniAppCapabilities = createServerFn({ method: "POST" })
       ok: true as const,
       version: MINIAPP_BRIDGE_VERSION,
       reads: ["list_workspaces", "list_missions", "mission_panel"],
-      mutations: [...MINIAPP_SUPPORTED_MUTATIONS],
+      mutations: [...MINIAPP_SUPPORTED_ACTIONS],
     };
   });
 
