@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { FlaskConical, Loader2, RefreshCw } from "lucide-react";
 import { Section } from "@/components/cartel/Section";
@@ -41,10 +41,18 @@ export function PcartRehearsalPanel(props: {
   attempts: DeploymentRow[];
   onVerify: (deploymentId: string) => void;
   verifying: boolean;
+  /** Shared chain-launcher recovery handoff (single implementation). */
+  onBroadcastUnrecorded: (attempt: { id: string; attempt_number: number }, txHash: string) => void;
+  onBroadcastRecorded: () => void;
+  /** The existing "Transaction broadcast but not recorded" UI, rendered here too. */
+  recoveryPanel: ReactNode;
 }) {
   const [recipient, setRecipient] = useState("");
   const [busy, setBusy] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
+  // Synchronous in-flight lock: React state is not synchronous, so a same-tick
+  // second invocation must be refused before any attempt row or broadcast.
+  const inFlight = useRef(false);
   const pcartAttempts = props.attempts.filter(isPcartRehearsalRow);
 
   let recipientError: string | null = null;
@@ -59,6 +67,16 @@ export function PcartRehearsalPanel(props: {
     !busy && !unavailable && !!props.account && props.onTestnet && !!recipient.trim() && !recipientError;
 
   async function run() {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    try {
+      await runLocked();
+    } finally {
+      inFlight.current = false;
+    }
+  }
+
+  async function runLocked() {
     if (!props.account || !canRun) return;
     setBusy(true);
     let attemptId: string | null = null;
@@ -74,7 +92,16 @@ export function PcartRehearsalPanel(props: {
       attemptId = attempt.id;
       await props.onChanged();
       txHash = await broadcastTokenDeployment(props.account, initCode);
-      await submitDeploymentTx(attempt.id, txHash);
+      try {
+        await submitDeploymentTx(attempt.id, txHash);
+      } catch (submitError) {
+        // Broadcast succeeded but the record write failed: the transaction may
+        // be on chain, so the attempt is NEVER abandoned. Hand off to the
+        // shared scoped recovery record for manual attachment.
+        props.onBroadcastUnrecorded(attempt, txHash);
+        throw submitError;
+      }
+      props.onBroadcastRecorded();
       await props.onChanged();
       toast.success("Rehearsal broadcast on testnet. Verify it once it is mined.");
     } catch (e) {
@@ -161,6 +188,7 @@ export function PcartRehearsalPanel(props: {
             broadcast.
           </p>
         ) : null}
+        {props.recoveryPanel}
         {!props.onTestnet && props.account ? (
           <p className="text-xs text-destructive">
             Switch the wallet to chain {ROBINHOOD_TESTNET_CHAIN_ID} first.

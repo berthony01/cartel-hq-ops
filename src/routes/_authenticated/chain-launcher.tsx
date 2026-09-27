@@ -637,6 +637,75 @@ function ChainLauncherPage() {
     }
   }
 
+  /**
+   * Shared (single) recovery handoff: used by the generic token path's UI and by
+   * the PCART rehearsal panel. Broadcast succeeded but the record write failed,
+   * so the same scoped RecoveryRecord is validated + saved; never abandoned.
+   */
+  function handleBroadcastUnrecorded(
+    attempt: { id: string; attempt_number: number },
+    txHash: string,
+  ) {
+    const record = parseRecoveryRecord(
+      {
+        attemptId: attempt.id,
+        attemptNumber: attempt.attempt_number,
+        txHash,
+        launchId,
+        workspaceId: workspaceId ?? "",
+      },
+      { workspaceId: workspaceId ?? "", launchId },
+    );
+    if (record) {
+      setRecovery(record);
+      saveRecoveryRecord(record);
+    }
+  }
+
+  function handleBroadcastRecorded() {
+    setRecovery(null);
+    if (workspaceId) clearRecoveryRecord({ workspaceId, launchId });
+  }
+
+  const recoveryPanel = recovery ? (
+          <div className="mt-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs leading-relaxed">
+            <p className="flex items-center gap-2 font-semibold uppercase tracking-wide text-destructive">
+              <AlertTriangle className="size-4" aria-hidden="true" />
+              Transaction broadcast but not recorded
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              Attempt #{recovery.attemptNumber} on Robinhood Chain Testnet{" "}
+              {ROBINHOOD_TESTNET_CHAIN_ID}. The wallet returned a transaction hash but CARTEL HQ
+              could not save it. The transaction may already be on chain —{" "}
+              <span className="text-foreground">do not deploy again</span> while this is pending.
+              Record the hash against this same attempt.
+            </p>
+            <p className="mt-1 break-all text-muted-foreground">
+              Attempt id <span className="text-foreground">{recovery.attemptId}</span>
+            </p>
+            <p className="mt-1 break-all text-foreground">{recovery.txHash}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button size="sm" disabled={recoveryBusy} onClick={() => void handleRecordTxHash()}>
+                {recoveryBusy ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <ShieldCheck className="size-4" aria-hidden="true" />
+                )}
+                Record transaction hash
+              </Button>
+              <a
+                className="text-gold underline"
+                href={explorerTxUrl(recovery.txHash)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                View on explorer
+                <ExternalLink className="ml-1 inline size-3" aria-hidden="true" />
+              </a>
+            </div>
+          </div>
+  ) : null;
+
   if (loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -817,6 +886,9 @@ function ChainLauncherPage() {
           attempts={attempts}
           onVerify={(id) => verifyMutation.mutate(id)}
           verifying={verifyMutation.isPending}
+          onBroadcastUnrecorded={handleBroadcastUnrecorded}
+          onBroadcastRecorded={handleBroadcastRecorded}
+          recoveryPanel={recoveryPanel}
         />
       ) : (
         <>
@@ -1013,44 +1085,7 @@ function ChainLauncherPage() {
           </p>
         )}
 
-        {recovery ? (
-          <div className="mt-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs leading-relaxed">
-            <p className="flex items-center gap-2 font-semibold uppercase tracking-wide text-destructive">
-              <AlertTriangle className="size-4" aria-hidden="true" />
-              Transaction broadcast but not recorded
-            </p>
-            <p className="mt-1 text-muted-foreground">
-              Attempt #{recovery.attemptNumber} on Robinhood Chain Testnet{" "}
-              {ROBINHOOD_TESTNET_CHAIN_ID}. The wallet returned a transaction hash but CARTEL HQ
-              could not save it. The transaction may already be on chain —{" "}
-              <span className="text-foreground">do not deploy again</span> while this is pending.
-              Record the hash against this same attempt.
-            </p>
-            <p className="mt-1 break-all text-muted-foreground">
-              Attempt id <span className="text-foreground">{recovery.attemptId}</span>
-            </p>
-            <p className="mt-1 break-all text-foreground">{recovery.txHash}</p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Button size="sm" disabled={recoveryBusy} onClick={() => void handleRecordTxHash()}>
-                {recoveryBusy ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <ShieldCheck className="size-4" aria-hidden="true" />
-                )}
-                Record transaction hash
-              </Button>
-              <a
-                className="text-gold underline"
-                href={explorerTxUrl(recovery.txHash)}
-                target="_blank"
-                rel="noreferrer"
-              >
-                View on explorer
-                <ExternalLink className="ml-1 inline size-3" aria-hidden="true" />
-              </a>
-            </div>
-          </div>
-        ) : null}
+        {recoveryPanel}
 
         {latest ? (
           <div className="mt-3">
