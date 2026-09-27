@@ -172,9 +172,10 @@ function DistributionPage() {
       : "Not scheduled";
 
   const hasStatus = !!status && !statusQuery.isError;
+  const failedGroupId = failedEvents[0]?.group_connection_id;
   const priorityGroup =
     groups.find((group) => scheduleState(scheduleByGroup[group.id], false) === "auto_paused") ??
-    (failedEvents[0] ? groups.find((group) => group.id === failedEvents[0].group_connection_id) : undefined) ??
+    (failedGroupId ? groups.find((group) => group.id === failedGroupId) : undefined) ??
     groups.find((group) => !scheduleByGroup[group.id]);
   const operationTitle = killSwitch
     ? "Resume or keep the emergency pause"
