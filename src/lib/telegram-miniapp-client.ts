@@ -88,6 +88,9 @@ export async function resolveTelegramSession(
  */
 export function miniAppFailureMessage(reason: string | null | undefined): string {
   switch (reason) {
+    // C3A — server-side x_missions entitlement refusal.
+    case "missions_plan_required":
+      return "Mission Control is included with Cartel HQ Pro ($49/month).";
     // Live Telegram group permission.
     case "not_group_admin":
       return "You are not currently an admin of this mission's Telegram group.";
