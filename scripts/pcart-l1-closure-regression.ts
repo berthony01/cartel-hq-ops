@@ -344,16 +344,25 @@ check(
 const srcFiles = walk("src");
 const migrationFiles = walk(MIGRATIONS);
 const FROZEN_PCART_ARTIFACT = "src/lib/pepecartel-token.artifact.ts";
+/** PCART-L3: the closed TESTNET-rehearsal consumer set (supersedes "frozen artifact only"). */
+const PCART_L3_CONSUMERS = new Set([
+  FROZEN_PCART_ARTIFACT,
+  "src/lib/launch-artifact-registry.ts",
+  "src/lib/pcart-rehearsal.ts",
+  "src/lib/chain-verify.functions.ts",
+  "src/routes/_authenticated/chain-launcher.tsx",
+  "src/components/cartel/PcartProductionBlockedCheckpoint.tsx",
+]);
 check(
   "L1C-10",
   srcFiles.every(
     (f) =>
-      f.replace(/\\/g, "/") === FROZEN_PCART_ARTIFACT ||
+      PCART_L3_CONSUMERS.has(f.replace(/\\/g, "/")) ||
       !/pepecartel-token-v1/.test(readFileSync(f, "utf8")),
   ) &&
     readFileSync(FROZEN_PCART_ARTIFACT, "utf8").includes("pepecartel-token-v1") &&
     migrationFiles.every((f) => !/pepecartel-token-v1/.test(readFileSync(f, "utf8"))),
-  "`pepecartel-token-v1` appears only in the dedicated frozen artifact src/lib/pepecartel-token.artifact.ts — it remains non-integrated, absent from every other src/** file and from supabase/migrations/**",
+  "`pepecartel-token-v1` appears only in the closed PCART-L3 testnet-rehearsal consumer set and in no applied supabase/migrations/** file",
 );
 
 check(

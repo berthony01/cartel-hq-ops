@@ -95,6 +95,8 @@ import {
   isLiquidityPlanFresh,
   type LiquidityPlan,
 } from "@/lib/liquidity-plan";
+import { PcartRehearsalPanel } from "@/components/chain/PcartRehearsalPanel";
+import { isCanonicalPcartLaunch } from "@/lib/launch-artifact-registry";
 
 export const Route = createFileRoute("/_authenticated/chain-launcher")({
   head: () => ({
@@ -241,6 +243,8 @@ function ChainLauncherPage() {
         (a) =>
           a.status === "CONFIRMED" &&
           a.deployment_kind === "FIXED_SUPPLY_ERC20" &&
+          // PCART rehearsal evidence never feeds any liquidity planning.
+          a.artifact_id !== "pepecartel-token-v1" &&
           typeof a.contract_address === "string" &&
           /^0x[0-9a-fA-F]{40}$/.test(a.contract_address),
       ),
@@ -793,6 +797,15 @@ function ChainLauncherPage() {
           </div>
         )}
       </Section>
+
+      {launchId && isCanonicalPcartLaunch(selectedLaunch) ? (
+        <PcartRehearsalPanel
+          launchId={launchId}
+          account={account}
+          onTestnet={onTestnet}
+          onChanged={invalidate}
+        />
+      ) : null}
 
       <Section
         variant="primary"

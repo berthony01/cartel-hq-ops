@@ -13,6 +13,13 @@ import {
   CARTEL_FIXED_ERC20_DECIMALS,
   CARTEL_FIXED_ERC20_RUNTIME_BYTECODE_HASH,
 } from "./cartel-fixed-erc20.artifact";
+import { PEPECARTEL_TOKEN_ARTIFACT_ID } from "./pepecartel-token.artifact";
+import {
+  PCART_ABI,
+  PCART_FIXED_INTENT,
+  buildPcartInitCode,
+  isArtifactAllowedIn,
+} from "./launch-artifact-registry";
 
 /**
  * C8.2 — independent, server-side chain verification.
@@ -94,12 +101,16 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
     }
 
     const isToken = row.deployment_kind === "FIXED_SUPPLY_ERC20";
+    // PCART-L3: exact-artifact TESTNET rehearsal rows for pepecartel-token-v1.
+    // Everything for the generic artifact below is unchanged.
+    const isPcart = isToken && row.artifact_id === PEPECARTEL_TOKEN_ARTIFACT_ID;
     // Fail closed: the supply used for every security comparison must be an
     // exact decimal digit string from the generated mirror, never a JS number.
     const supplyText =
       typeof row.token_total_supply_text === "string" ? row.token_total_supply_text : null;
     if (
       isToken &&
+      !isPcart &&
       (row.artifact_id !== "cartel-fixed-erc20-v1" ||
         row.token_decimals !== CARTEL_FIXED_ERC20_DECIMALS ||
         !row.token_name ||
@@ -107,6 +118,19 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
         supplyText === null ||
         !/^[0-9]+$/.test(supplyText) ||
         !row.token_recipient)
+    ) {
+      throw new Error("Unsupported deployment artifact");
+    }
+    if (
+      isPcart &&
+      (!isArtifactAllowedIn(row.artifact_id, "TESTNET") ||
+        row.token_name !== PCART_FIXED_INTENT.name ||
+        row.token_symbol !== PCART_FIXED_INTENT.symbol ||
+        row.token_decimals !== PCART_FIXED_INTENT.decimals ||
+        supplyText !== PCART_FIXED_INTENT.totalSupply.toString() ||
+        !row.token_recipient ||
+        !/^0x[0-9a-f]{40}$/.test(row.token_recipient) ||
+        /^0x0{40}$/.test(row.token_recipient))
     ) {
       throw new Error("Unsupported deployment artifact");
     }
@@ -241,16 +265,18 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
     if (isToken) {
       // supplyText is proven to be digits-only above; BigInt is exact.
       expectedTotalSupply = BigInt(supplyText as string);
-      const expectedInitCode = (CARTEL_FIXED_ERC20_CREATION_BYTECODE +
-        encodeAbiParameters(
-          [{ type: "string" }, { type: "string" }, { type: "uint256" }, { type: "address" }],
-          [
-            row.token_name as string,
-            row.token_symbol as string,
-            expectedTotalSupply,
-            row.token_recipient as `0x${string}`,
-          ],
-        ).slice(2)) as `0x${string}`;
+      const expectedInitCode = isPcart
+        ? buildPcartInitCode(row.token_recipient as string)
+        : ((CARTEL_FIXED_ERC20_CREATION_BYTECODE +
+            encodeAbiParameters(
+              [{ type: "string" }, { type: "string" }, { type: "uint256" }, { type: "address" }],
+              [
+                row.token_name as string,
+                row.token_symbol as string,
+                expectedTotalSupply,
+                row.token_recipient as `0x${string}`,
+              ],
+            ).slice(2)) as `0x${string}`);
 
       if ((tx.input ?? "0x").toLowerCase() !== expectedInitCode.toLowerCase()) {
         await apply({
@@ -340,7 +366,10 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
 
     if (isToken) {
       const runtimeHash = keccak256((code ?? "0x") as `0x${string}`);
-      if (runtimeHash.toLowerCase() !== CARTEL_FIXED_ERC20_RUNTIME_BYTECODE_HASH.toLowerCase()) {
+      const expectedRuntimeHash = isPcart
+        ? PCART_FIXED_INTENT.runtimeHash
+        : CARTEL_FIXED_ERC20_RUNTIME_BYTECODE_HASH;
+      if (runtimeHash.toLowerCase() !== expectedRuntimeHash.toLowerCase()) {
         await apply({
           status: "FAILED",
           confirmations,
@@ -353,7 +382,7 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
       }
 
       const address = created as `0x${string}`;
-      const abi = CARTEL_FIXED_ERC20_ABI;
+      const abi = (isPcart ? PCART_ABI : CARTEL_FIXED_ERC20_ABI) as typeof CARTEL_FIXED_ERC20_ABI;
       let onChain: {
         name: string;
         symbol: string;

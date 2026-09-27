@@ -108,6 +108,8 @@ import {
 import { VerifiedDeploymentEvidencePanel } from "@/components/cartel/VerifiedDeploymentEvidencePanel";
 import { VerifiedContractRegistrationPanel } from "@/components/cartel/VerifiedContractRegistrationPanel";
 import { ProductionDeploymentRequestPanel } from "@/components/cartel/ProductionDeploymentRequestPanel";
+import { PcartProductionBlockedCheckpoint } from "@/components/cartel/PcartProductionBlockedCheckpoint";
+import { isCanonicalPcartLaunch } from "@/lib/launch-artifact-registry";
 import { TreasurySignerSetupPanel } from "@/components/cartel/TreasurySignerSetupPanel";
 import {
   getLaunchProductionDeploymentRequest,
@@ -2852,7 +2854,9 @@ function LaunchControlPage() {
 
                 {/* Launcher-B2 — guided handoff request, before the technical
                     deployment evidence details. PROJECT launches only. */}
-                {selected && selectedIsProjectLaunch ? (
+                {selected && selectedIsProjectLaunch && isCanonicalPcartLaunch(selected) ? (
+                  <PcartProductionBlockedCheckpoint />
+                ) : selected && selectedIsProjectLaunch ? (
                   <ProductionDeploymentRequestPanel
                     launchId={selected.id}
                     launchTokenName={selected.token_name}

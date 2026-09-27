@@ -74,12 +74,13 @@ Because the contract declares no `immutable` state, the runtime bytecode is inde
 
 The `treasury_` address remains **deliberately undetermined**. It will be the PEPECARTEL 2-of-3 Safe, which has not yet been selected, deployed or verified. No PCART initial recipient is fixed, and no wallet, signer or Safe address appears in the source, the compiler input, the manifest or the TypeScript artifact.
 
-## 8. Integration status
+## 8. Integration status (updated by PCART-L3, repo only)
 
-- No database, schema, RPC, policy, grant or migration change in Phase 2.
-- No production runtime file references `pepecartel-token-v1`; the id appears only in the dedicated artifact file, `artifacts/**`, this documentation and the regression scripts.
-- No artifact allowlist widening; `src/lib/launch-evidence-checks.ts` still approves exactly `cartel-fixed-erc20-v1`.
-- `MAINNET_LIQUIDITY_TX_ENABLED` remains `false`; runtime mainnet execution control untouched.
-- No mainnet or testnet action of any kind; no wallet connection, signature, deployment request or liquidity action.
+- The frozen artifact is still **NOT production-allowlisted, NOT deployed, and no rehearsal has been performed.** Manifest status flags are unchanged.
+- PCART-L3 adds an exact-artifact **TESTNET rehearsal path** for the canonical `pepecartel-launch` PROJECT only: `src/lib/launch-artifact-registry.ts` (identity, init code, runtime hash, fixed intent, environment allowlist), `src/lib/pcart-rehearsal.ts`, `src/components/chain/PcartRehearsalPanel.tsx`, and artifact-aware verification in `src/lib/chain-verify.functions.ts`. The generic verification branch is unchanged.
+- Database support is **staged, not applied**: `docs/sql/PCART_L3_launcher_rehearsal_and_mainnet_isolation.sql`. Until it is applied in a separate gated turn, the rehearsal RPC is missing and the app fails closed (nothing is created or broadcast). No `supabase/migrations/**` file references `pepecartel-token-v1`.
+- Mainnet isolation: the canonical launch shows a read-only blocked checkpoint instead of the generic production request form; the staged SQL makes the generic request and begin-execution RPCs reject it and binds every production request immutably to `cartel-fixed-erc20-v1`.
+- `src/lib/launch-evidence-checks.ts` still approves exactly `cartel-fixed-erc20-v1`. `MAINNET_LIQUIDITY_TX_ENABLED` remains `false`; runtime mainnet execution control untouched.
+- No mainnet or testnet action of any kind has been performed.
 
-Static enforcement lives in `scripts/pcart-l2-draft-artifact-regression.ts` (source behavior and non-activation) and `scripts/pcart-l2-frozen-artifact-regression.ts` (frozen artifact integrity).
+Static enforcement lives in `scripts/pcart-l2-draft-artifact-regression.ts`, `scripts/pcart-l2-frozen-artifact-regression.ts` and `scripts/pcart-l3-launcher-integration-regression.ts`.

@@ -189,17 +189,30 @@ for (const [label, re] of FORBIDDEN) {
 // ------------------------------------------------- I. non-activation tripwires
 const srcFiles = walk(SRC);
 const migrationFiles = walk(MIGRATIONS);
+/**
+ * PCART-L3 superseded the Phase 2 "referenced nowhere" isolation: the frozen
+ * artifact is now consumed by an exact, closed set of TESTNET-rehearsal files.
+ * Any new reference outside this set still fails.
+ */
+const PCART_L3_CONSUMERS = [
+  FROZEN_TS,
+  "src/lib/launch-artifact-registry.ts",
+  "src/lib/pcart-rehearsal.ts",
+  "src/lib/chain-verify.functions.ts",
+  "src/routes/_authenticated/chain-launcher.tsx",
+  "src/components/cartel/PcartProductionBlockedCheckpoint.tsx",
+].map((p) => join(p));
 const srcHits = srcFiles.filter((f) => /pepecartel-token-v1/.test(readFileSync(f, "utf8")));
 const migHits = migrationFiles.filter((f) => /pepecartel-token-v1/.test(readFileSync(f, "utf8")));
 check(
   "L2D-I1",
-  srcHits.length === 1 && srcHits[0] === FROZEN_TS,
-  `pepecartel-token-v1 appears in exactly one src/** file, the dedicated frozen artifact (${srcFiles.length} scanned, hits: ${srcHits.join(", ") || "none"})`,
+  srcHits.length > 0 && srcHits.every((f) => PCART_L3_CONSUMERS.includes(f)),
+  `pepecartel-token-v1 appears only in the closed PCART-L3 consumer set (${srcFiles.length} scanned, hits: ${srcHits.join(", ") || "none"})`,
 );
 check(
   "L2D-I2",
   migHits.length === 0,
-  `pepecartel-token-v1 appears in no supabase/migrations/** file (${migrationFiles.length} scanned)`,
+  `pepecartel-token-v1 appears in no applied supabase/migrations/** file (${migrationFiles.length} scanned)`,
 );
 const nameHits = srcFiles.filter(
   (f) => f !== FROZEN_TS && /PepeCartelToken/.test(readFileSync(f, "utf8")),
@@ -213,9 +226,9 @@ check(
 check(
   "L2D-I3b",
   srcFiles
-    .filter((f) => f !== FROZEN_TS)
+    .filter((f) => !PCART_L3_CONSUMERS.includes(f))
     .every((f) => !/pepecartel[-_]token|PEPECARTEL_TOKEN_/i.test(readFileSync(f, "utf8"))),
-  "no production runtime file imports or references the frozen PCART artifact",
+  "only the closed PCART-L3 consumer set imports or references the frozen PCART artifact",
 );
 
 check(
