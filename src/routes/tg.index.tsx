@@ -18,6 +18,7 @@ import {
   miniAppListMissions,
   miniAppOperatorHome,
   miniAppInboxSummary,
+  miniAppCommercialStatus,
 } from "@/lib/telegram-miniapp-bridge.functions";
 import { MiniAppInbox } from "@/components/telegram-miniapp/MiniAppInbox";
 import {
@@ -104,6 +105,40 @@ function FullAppLink({ to, label }: { to: FullAppPath; label: string }) {
   );
 }
 
+/** C3 — honest plan label; no plan evaluation happens client-side. */
+export function miniAppPlanLabel(status: { unrestricted: boolean; plan: { code: string; name: string } }): string {
+  if (status.unrestricted) return "Platform Owner / Unrestricted";
+  if (status.plan.code === "cartel_49") return "Cartel HQ Pro ($49/month)";
+  if (status.plan.code === "cartel_free") return "Free";
+  return status.plan.name;
+}
+
+/** Pro-locked panel: the area stays discoverable, content is not fetched. */
+function MiniAppProLocked({ area }: { area: string }) {
+  return (
+    <MiniAppPanel heading={`${area} · Pro`} note="Included with Cartel HQ Pro ($49/month).">
+      <div className="flex min-w-0 flex-col gap-3">
+        <div className="flex min-w-0 items-start gap-3 text-sm">
+          <Lock className="mt-0.5 size-4 shrink-0 text-gold" aria-hidden="true" />
+          <p className="min-w-0 text-xs leading-5 text-muted-foreground">
+            {area} is not included in this project's current plan. Upgrade from Settings &amp; billing in the full CARTEL HQ app.
+          </p>
+        </div>
+        <FullAppLink to="/settings" label="Upgrade in Settings & billing" />
+      </div>
+    </MiniAppPanel>
+  );
+}
+
+function ProTag() {
+  return (
+    <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded border border-gold/40 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-gold">
+      <Lock className="size-3" aria-hidden="true" />
+      Pro
+    </span>
+  );
+}
+
 export const Route = createFileRoute("/tg/")({
   ssr: false,
   validateSearch: parseMiniAppHomeSearch,
@@ -150,6 +185,7 @@ function MiniAppHome() {
   const listMissions = useServerFn(miniAppListMissions);
   const loadOperatorHome = useServerFn(miniAppOperatorHome);
   const loadInboxSummary = useServerFn(miniAppInboxSummary);
+  const loadCommercialStatus = useServerFn(miniAppCommercialStatus);
 
   const workspacesQuery = useQuery({
     queryKey: ["tg", "workspaces"],
@@ -187,9 +223,27 @@ function MiniAppHome() {
     });
   }, [workspaces, requestedWorkspace]);
 
+  // C3 — read-only commercial status. Server authorization remains the gate;
+  // this only drives honest UI and skips premium reads once denied.
+  const commercialQuery = useQuery({
+    queryKey: ["tg", "commercial", workspaceId],
+    enabled: Boolean(initData && workspaceId),
+    retry: false,
+    queryFn: () =>
+      loadCommercialStatus({ data: { initData: initData as string, workspaceId: workspaceId as string } }),
+  });
+  const commercial = commercialQuery.data?.ok ? commercialQuery.data : null;
+  const commercialSettled = Boolean(workspaceId) && !commercialQuery.isPending;
+  // null = unknown (status unavailable): existing server-side gates decide.
+  const missionsAllowed = commercial ? commercial.features.x_missions : null;
+  const inboxAllowed = commercial ? commercial.features.project_inbox : null;
+  const stickerDropsAllowed = commercial ? commercial.features.sticker_drops : null;
+  const missionsLocked = missionsAllowed === false;
+  const inboxLocked = inboxAllowed === false;
+
   const missionsQuery = useQuery({
     queryKey: ["tg", "missions", workspaceId],
-    enabled: Boolean(initData && workspaceId),
+    enabled: Boolean(initData && workspaceId && commercialSettled && !missionsLocked),
     queryFn: () =>
       listMissions({ data: { initData: initData as string, workspaceId: workspaceId as string } }),
   });
@@ -203,7 +257,7 @@ function MiniAppHome() {
 
   const inboxSummaryQuery = useQuery({
     queryKey: ["tg", "inbox", "summary", workspaceId],
-    enabled: Boolean(initData && workspaceId),
+    enabled: Boolean(initData && workspaceId && commercialSettled && !inboxLocked),
     retry: false,
     queryFn: () =>
       loadInboxSummary({ data: { initData: initData as string, workspaceId: workspaceId as string } }),
@@ -296,7 +350,7 @@ function MiniAppHome() {
         </MiniAppPanel>
       ) : null}
 
-      {workspaceId && (homeQuery.isPending || missionsQuery.isPending) ? (
+      {workspaceId && (homeQuery.isPending || commercialQuery.isPending || (!missionsLocked && missionsQuery.isPending)) ? (
         <MiniAppSkeleton label="Loading operator console…" />
       ) : null}
 
@@ -329,6 +383,20 @@ function MiniAppHome() {
 
       {workspaceId && activeTab === "home" ? (
         <>
+          {commercial ? (
+            <MiniAppPanel heading="Plan">
+              <div className="flex min-w-0 items-center gap-3">
+                <p className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+                  {miniAppPlanLabel(commercial)}
+                </p>
+              </div>
+              {!commercial.unrestricted && commercial.plan.code === "cartel_free" ? (
+                <div className="mt-3 border-t border-border/40 pt-3">
+                  <FullAppLink to="/settings" label="Upgrade to Pro — Settings & billing" />
+                </div>
+              ) : null}
+            </MiniAppPanel>
+          ) : null}
           <MiniAppPanel heading="Needs attention">
             {inboxSummary && inboxSummary.waitingOnTeam > 0 ? (
               <button
@@ -382,6 +450,7 @@ function MiniAppHome() {
             )}
           </MiniAppPanel>
 
+          {missionsLocked ? null : (
           <MiniAppPanel heading="Missions" note="Live mission activity for this project.">
             <div className="flex min-w-0 items-center gap-3">
               <span className="flex size-10 shrink-0 items-center justify-center rounded-md border border-gold/25 bg-gold/8 text-gold">
@@ -410,6 +479,7 @@ function MiniAppHome() {
               </p>
             ) : null}
           </MiniAppPanel>
+          )}
 
           <MiniAppPanel heading="Community status">
             <div className="grid grid-cols-2 gap-2">
@@ -437,6 +507,7 @@ function MiniAppHome() {
               >
                 <Radio className="size-4 shrink-0 text-gold" aria-hidden="true" />
                 <span className="truncate">Mission Control</span>
+                {missionsLocked ? <ProTag /> : null}
               </button>
               <button
                 type="button"
@@ -445,13 +516,16 @@ function MiniAppHome() {
               >
                 <Send className="size-4 shrink-0 text-gold" aria-hidden="true" />
                 <span className="truncate">Project Inbox</span>
+                {inboxLocked ? <ProTag /> : null}
               </button>
             </div>
           </MiniAppPanel>
         </>
       ) : null}
 
-      {workspaceId && activeTab === "missions" ? (
+      {workspaceId && activeTab === "missions" && missionsLocked ? <MiniAppProLocked area="Mission Control" /> : null}
+
+      {workspaceId && activeTab === "missions" && !missionsLocked ? (
         <MiniAppPanel heading="Live missions" note="Select a mission to view its latest results.">
           {missionsQuery.isError || missionsFailure ? (
             <MiniAppMessage
@@ -498,7 +572,9 @@ function MiniAppHome() {
         </MiniAppPanel>
       ) : null}
 
-      {workspaceId && activeTab === "inbox" ? (
+      {workspaceId && activeTab === "inbox" && inboxLocked ? <MiniAppProLocked area="Project Inbox" /> : null}
+
+      {workspaceId && activeTab === "inbox" && !inboxLocked && commercialSettled ? (
         <MiniAppInbox
           initData={initData}
           workspaceId={workspaceId}
@@ -559,7 +635,11 @@ function MiniAppHome() {
             <div className="flex min-w-0 flex-col gap-2">
               <FullAppLink to="/launch-control" label="Launch Control" />
               <FullAppLink to="/telegram" label="Community Command" />
-              <FullAppLink to="/distribution" label="Sticker Drops" />
+              {stickerDropsAllowed === false ? (
+                <FullAppLink to="/settings" label="Sticker Drops · Pro locked — upgrade" />
+              ) : (
+                <FullAppLink to="/distribution" label="Sticker Drops" />
+              )}
             </div>
           </MiniAppPanel>
           <MiniAppPanel heading="Account" note="Opens CARTEL HQ in your browser.">
