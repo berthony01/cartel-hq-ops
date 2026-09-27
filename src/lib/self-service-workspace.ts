@@ -35,14 +35,11 @@ const FRIENDLY: Record<string, string> = {
 export async function createSelfServiceWorkspace(name: string): Promise<string> {
   const trimmed = name.trim();
   const slug = slugifyWorkspaceName(trimmed);
-  // RPC is staged (docs/sql/COMMERCIAL_C2_self_service_workspace.sql) and not yet in generated types.
-  const rpc = supabase.rpc as unknown as (
-    fn: string,
-    args: Record<string, unknown>,
-  ) => Promise<{ data: unknown; error: { message?: string; code?: string } | null }>;
-  const { data, error } = await rpc("create_self_service_workspace", {
+  // RPC applied as migration 20260927171231; fail closed if it is missing or drifted.
+  // The generated arg type is non-nullable string; the RPC normalizes '' to NULL.
+  const { data, error } = await supabase.rpc("create_self_service_workspace", {
     _name: trimmed,
-    _slug: slug || null,
+    _slug: slug,
   });
   if (error) {
     const raw = error.message ?? "";

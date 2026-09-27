@@ -8,6 +8,14 @@ const read = (p: string) => readFileSync(p, "utf8");
 
 const sql = read("docs/sql/COMMERCIAL_C2_self_service_workspace.sql");
 const exec = sql.replace(/--.*$/gm, "");
+const MIG = "supabase/migrations/20260927171231_commercial_c2_self_service_workspace.sql";
+const mig = read(MIG);
+const migExec = mig.replace(/--.*$/gm, "");
+check("A0 exact applied migration 20260927171231 exists with the RPC", mig.includes("create_self_service_workspace") && mig.includes("BEGIN;") && mig.includes("COMMIT;"));
+check("A0b migration executable body identical to review SQL", migExec.replace(/\s+/g, " ").trim() === exec.replace(/\s+/g, " ").trim());
+check("A0c docs say APPLIED as migration 20260927171231", /APPLIED as Supabase migration 20260927171231 \/ commercial_c2_self_service_workspace/.test(sql) && !/STAGED FOR REVIEW|NOT APPLIED/.test(sql.split("BEGIN;")[0] ?? ""));
+const types = read("src/integrations/supabase/types.ts");
+check("A0d generated types include the RPC returning string", /create_self_service_workspace: \{\s*Args: \{ _name: string; _slug: string[^}]*\}\s*Returns: string/.test(types));
 check("A1 RPC defined", /create or replace function public\.create_self_service_workspace\(_name text, _slug text\)/i.test(exec));
 check("A2 SECURITY DEFINER + empty search_path", /security definer/i.test(exec) && /set search_path = ''/i.test(exec));
 check("A3 auth.uid required", /v_uid is null[\s\S]*AUTH_REQUIRED/i.test(exec));
@@ -28,6 +36,7 @@ const lib = read("src/lib/self-service-workspace.ts");
 check("B1 dialog uses RPC helper", sw.includes("createSelfServiceWorkspace("));
 check("B2 no direct workspace insert in switcher", !/from\("workspaces"\)/.test(sw) && !/\.insert\(/.test(sw));
 check("B3 helper calls RPC", lib.includes('"create_self_service_workspace"') && !/from\("workspaces"\)/.test(lib));
+check("B3b direct typed RPC, no generic cast", lib.includes('supabase.rpc("create_self_service_workspace"') && !/as unknown as/.test(lib));
 check("B4 friendly limit message", /FREE_PROJECT_LIMIT_REACHED:\s*\n?\s*"Your Free account already has a project/.test(lib));
 check("B5 invalidation + selection kept", sw.includes("invalidateQueries({ queryKey: workspacesQueryKey })") && sw.includes("selectWorkspace(id)"));
 const srcInserts = execSync(`rg -l 'from\\("workspaces"\\)\\s*\\.insert' src || true`).toString().trim();
@@ -56,8 +65,9 @@ check("E1 dashboard Create free project reuses dialog", dash.includes("Create fr
 const changed = execSync("git diff --name-only HEAD~20 -- . 2>/dev/null || true").toString();
 void changed;
 const turn = execSync("git status --porcelain; git diff --name-only HEAD").toString();
+const turnFiltered = turn.split("\n").filter((l) => !l.includes("20260927171231_commercial_c2_self_service_workspace.sql")).join("\n");
 check("F1 no Stripe/launcher/PCART/chain/treasury/C1 files touched in working changes",
-  !/stripe|chain|pcart|launcher|treasury|liquidity|COMMERCIAL_C1|supabase\/migrations/i.test(turn));
+  !/stripe|chain|pcart|launcher|treasury|liquidity|COMMERCIAL_C1|supabase\/migrations/i.test(turnFiltered));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
