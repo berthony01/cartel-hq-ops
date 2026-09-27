@@ -6,7 +6,7 @@ let pass = 0;
 const fails: string[] = [];
 const check = (n: string, ok: boolean) => (ok ? pass++ : fails.push(n));
 const sql = readFileSync("docs/sql/COMMERCIAL_C1_pro_provider_safety_ceilings.sql", "utf8");
-const body = sql.split("-- ROLLBACK")[0];
+const body = sql.split("-- ROLLBACK")[0].replace(/^--.*$/gm, "");
 const n = body.replace(/\s+/g, " ");
 const guard = readFileSync("supabase/functions/_shared/commercial-access.ts", "utf8");
 
