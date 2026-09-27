@@ -43,6 +43,8 @@ check("no forbidden finalization controls", !/miniAppEndMission|miniAppCancelMis
 check("safe-area frame remains intact", /tg-content-safe-area-inset/.test(pieces) && /navigation \? "5\.5rem"/.test(pieces));
 check("architecture sequence is durable", ["MINI-HQ-1A", "MINI-HQ-1B", "MINI-HQ-1C", "MINI-HQ-1D", "MINI-HQ-2"].every((phase) => doc.includes(phase)));
 check("surface separation is recorded", /Telegram bot\/chat/.test(doc) && /Owner Mini App/.test(doc) && /Full CARTEL HQ web app/.test(doc) && /Future member Mini App/.test(doc));
+const root = readFileSync("src/routes/__root.tsx", "utf8");
+check("root html suppresses Telegram SDK hydration mismatch", /<html lang="en" suppressHydrationWarning>/.test(root));
 
 if (failures.length > 0) {
   console.error(`FAIL — ${failures.length} failed, ${passed} passed`);
