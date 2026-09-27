@@ -243,6 +243,8 @@ function ChainLauncherPage() {
         (a) =>
           a.status === "CONFIRMED" &&
           a.deployment_kind === "FIXED_SUPPLY_ERC20" &&
+          // PCART rehearsal evidence never feeds any liquidity planning.
+          a.artifact_id !== "pepecartel-token-v1" &&
           typeof a.contract_address === "string" &&
           /^0x[0-9a-fA-F]{40}$/.test(a.contract_address),
       ),
