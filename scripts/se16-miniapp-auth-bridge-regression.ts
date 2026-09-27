@@ -553,7 +553,7 @@ const opts = { now: NOW_MS };
     "11.5 end/cancel exported and routed through the shared gated flow",
     /export const miniAppEndMission[\s\S]{0,260}miniAppFinalize\(data, "end_now"\)/.test(bridgeCode) &&
       /export const miniAppCancelMission[\s\S]{0,260}miniAppFinalize\(data, "cancel"\)/.test(bridgeCode) &&
-      /const gate = await authorizeMission\(data\?\.initData, data\?\.missionId\);/.test(fin),
+      /const gate = await authorizeLifecycle\(data\?\.initData, data\?\.missionId\);/.test(fin),
   );
   check(
     "11.6 only safe unpin is added to the Telegram API (no send/edit, pinned_by_hq guarded)",
@@ -799,7 +799,8 @@ const opts = { now: NOW_MS };
   check(
     "14.25 the authorization chain of both mutations is unchanged",
     (bridgeCode.match(/const gate = await authorizeMission\(data\?\.initData, data\?\.missionId\);/g) ?? [])
-      .length === 4 &&
+      .length === 3 &&
+      /const gate = await authorizeLifecycle\(data\?\.initData, data\?\.missionId\);/.test(bridgeCode) &&
       /isCurrentChatAdmin\(token, binding\.chatId, auth\.user\.id\)/.test(bridgeCode) &&
       /_verified_chat_id:\s*Number\(binding\.chatId\)/.test(bridgeCode),
   );

@@ -24,7 +24,7 @@ const unpin = bridge.slice(bridge.indexOf("async function miniAppSafeUnpin"), br
 
 // 1. signed authorization + server-derived bindings
 check("1.1 request id validated before anything", /if \(!isRequestId\(data\?\.requestId\)\) return fail\("invalid_request_id"\);/.test(fin));
-check("1.2 initData -> operator binding -> live admin gate", /const gate = await authorizeMission\(data\?\.initData, data\?\.missionId\);/.test(fin));
+check("1.2 initData -> operator binding -> live admin gate", /const gate = await authorizeLifecycle\(data\?\.initData, data\?\.missionId\);/.test(fin));
 check("1.3 validators accept only initData/missionId/requestId", (bridge.match(/inputValidator\(\(input: \{ initData: string; missionId: string; requestId: string \}\) => input\)/g) ?? []).length === 2);
 check("1.4 chat id is server-derived", /_verified_chat_id: Number\(binding\.chatId\)/.test(fin));
 check("1.5 no entitlement/billing gate added", !/entitlement|billing|has_platform_unrestricted_access/i.test(fin));
@@ -43,6 +43,29 @@ check("3.6 replay also heals card + unpin", /if \(outcome !== "ok" && outcome !=
 // 4. schedule-event ownership + unpin
 check("4.1 finishes schedule event only when owned and only for end", /action === "end_now" && outcome === "ok" && row\["event_owned"\] === true && row\["schedule_event_id"\]/.test(fin));
 check("4.2 safe unpin guarded by pinned_by_hq on exact chat", /pinned_by_hq/.test(unpin) && /\.eq\("telegram_chat_id", Number\(binding\.chatId\)\)/.test(unpin));
+
+// 4b. MINI-HQ-1C follow-up: non-LIVE retry reachability + exact actor/target
+const lcRes = bridge.slice(bridge.indexOf("async function resolveLifecycleCandidates"), bridge.indexOf("type LifecycleAuthority"));
+const lcAuth = bridge.slice(bridge.indexOf("async function authorizeLifecycle"), bridge.indexOf("function hexDigest"));
+const listMissions = bridge.slice(bridge.indexOf("async function resolveBinding"), bridge.indexOf("async function authorizeMission"));
+const sqlSe15 = read("docs/sql/SE15_mission_control.sql");
+const authSql = sqlSe15.slice(sqlSe15.indexOf("FUNCTION public.social_mission_control_authorize"), sqlSe15.indexOf("REVOKE ALL ON FUNCTION public.social_mission_control_authorize"));
+check("4b.1 lifecycle resolver does not use the LIVE-only missions RPC", lcRes.length > 0 && !/MINIAPP_RPC\.missions/.test(lcRes) && !/LIVE/.test(lcRes.replace(/\/\*\*[\s\S]*?\*\//g, "")));
+check("4b.2 lifecycle resolver scopes by operator workspaces of the validated user", /MINIAPP_RPC\.workspaces/.test(lcRes) && /\.in\("workspace_id", \[\.\.\.names\.keys\(\)\]\)/.test(lcRes));
+check("4b.3 SQL authorize has no status filter (non-LIVE capable)", authSql.length > 0 && !/status\s*=\s*'LIVE'/.test(authSql));
+check("4b.4 normal list-missions path still LIVE-only RPC", /MINIAPP_RPC\.missions/.test(listMissions) && /AND m\.status = 'LIVE'/.test(sqlSe15));
+check("4b.5 lifecycle gate keeps fresh getChatMember check", /isCurrentChatAdmin\(token, candidate, auth\.user\.id\)/.test(lcAuth) && /if \(!chatId\) return fail\("not_group_admin"\);/.test(lcAuth));
+check("4b.6 lifecycle gate calls authorize with server-derived chat", /admin\.rpc\(MINIAPP_RPC\.authorize/.test(lcAuth) && /_verified_chat_id: Number\(chatId\)/.test(lcAuth));
+check("4b.7 authorize outcome/actor/target/workspace/status validated before RPC", /outcome"\] \?\? ""\) !== "ok"/.test(lcAuth) && /!isUuid\(actorUserId\)/.test(lcAuth) && /!isUuid\(targetId\)/.test(lcAuth) && /workspaceId !== candidates\.workspaceId/.test(lcAuth) && /missionStatus\.length === 0/.test(lcAuth));
+check("4b.8 authorize precedes lifecycle RPC", fin.indexOf("authorizeLifecycle") < fin.indexOf("MINIAPP_RPC.endNow"));
+check("4b.9 exact actor/target passed to final edit", /binding,\s*actorUserId,\s*targetId,\s*action,/.test(fin));
+check("4b.10 exact target passed to safe unpin", /miniAppSafeUnpin\(admin, binding, targetId\)/.test(fin));
+check("4b.11 no first-target fallback in edit or unpin", !/limit\(1\)|order\("created_at"/.test(edit) && !/limit\(1\)|order\("created_at"/.test(unpin) && /\.eq\("id", targetId\)/.test(edit) && /\.eq\("id", targetId\)/.test(unpin));
+check("4b.12 actor header always sent on authorized final edit", /"X-Cartel-Actor-User-Id": actorUserId,/.test(edit) && !/isUuid\(actorUserId\) \?/.test(edit) && /if \(!isUuid\(actorUserId\) \|\| !isUuid\(targetId\)\) return "failed";/.test(edit));
+check("4b.13 edit does not re-authorize or guess (stale comment removed)", !/MINIAPP_RPC\.authorize/.test(edit) && !/may refuse a no-longer-LIVE/.test(bridge));
+check("4b.14 same-request replay after non-LIVE: replayed still heals, schedule only on ok", /outcome !== "ok" && outcome !== "replayed"/.test(fin) && /action === "end_now" && outcome === "ok"/.test(fin));
+check("4b.15 same-request replay reuses deterministic idempotency + card id", /miniAppIdempotencyKey\(telegramUserId, action, data!\.requestId\)/.test(fin) && /alreadyBound \? currentRevision/.test(edit));
+check("4b.16 cancel path performs no X read in bridge", !/api\.x\.com|twitter|social-read/i.test(fin + edit));
 check("4.3 unpin recorded via existing RPC", /MINIAPP_RPC\.recordPin/.test(unpin) && /recordPin: "record_social_mission_target_pin"/.test(bridge));
 check("4.4 unpin never throws into finalization", /catch \{\s*\/\/ A pin problem/.test(unpin));
 // 5. UI
