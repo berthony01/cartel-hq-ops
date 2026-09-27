@@ -307,8 +307,15 @@ const opts = { now: NOW_MS };
         bridgeCode.indexOf("async function miniAppRefreshCard"),
         bridgeCode.indexOf("export const miniAppListMissionWorkspaces"),
       );
+      // MINI-HQ-1C: the in-place final-state edit is the second (and only
+      // other) per-request transport credential read.
+      const finalHelper = bridgeCode.slice(
+        bridgeCode.indexOf("async function miniAppFinalCardEdit"),
+        bridgeCode.indexOf("async function miniAppSafeUnpin"),
+      );
       return (
-        hits === 1 &&
+        hits === 2 &&
+        /const serviceKey = process\.env\["SUPABASE_SERVICE_ROLE_KEY"\] \?\? "";/.test(finalHelper) &&
         /const serviceKey = process\.env\["SUPABASE_SERVICE_ROLE_KEY"\] \?\? "";/.test(helper) &&
         !/^const\s+\w+\s*=\s*process\.env\["SUPABASE_SERVICE_ROLE_KEY"\]/m.test(bridgeCode) &&
         !/export[^\n]*serviceKey/.test(bridgeCode) &&
@@ -338,6 +345,9 @@ const opts = { now: NOW_MS };
     "social_mission_apply_duration_override",
     // SE-16.2P — reused (never newly defined) service-only authorization RPC.
     "social_mission_control_authorize",
+    // MINI-HQ-1C — reused existing lifecycle RPCs (none newly defined).
+    "end_social_mission_from_control",
+    "cancel_social_mission_from_control",
   ];
   for (const name of expected) {
     check(`7.1 reuses existing RPC ${name}`, bridgeCode.includes(name));
@@ -371,7 +381,6 @@ const opts = { now: NOW_MS };
     (() => {
       const froms = [...bridgeCode.matchAll(/\.from\("([a-z_]+)"\)/g)].map((m) => m[1]!);
       return (
-        froms.length === expectedTables.length &&
         froms.every((t) => expectedTables.includes(t)) &&
         new Set(froms).size === expectedTables.length &&
         !/\.from\("[a-z_]+"\)\s*\n?\s*\.(insert|update|upsert|delete)\(/.test(bridgeCode)
@@ -431,7 +440,7 @@ const opts = { now: NOW_MS };
 
 {
   const start = bridgeCode.indexOf("export const miniAppMissionPanel");
-  const region = bridgeCode.slice(start, bridgeCode.indexOf("MUTATIONS"));
+  const region = bridgeCode.slice(start, bridgeCode.indexOf("export const miniAppApplyTargets"));
   check("9.1 panel region located", start > 0 && region.length > 200);
   check(
     "9.2 panel reads the latest stored snapshot for the exact mission and workspace",
@@ -528,23 +537,28 @@ const opts = { now: NOW_MS };
   );
 }
 
-/* ------------------------------ 11. end/cancel not enabled in bridge V1 */
+/* ------------------- 11. MINI-HQ-1C end/cancel parity through existing paths */
 
 {
-  check("11.1 end RPC is never called from the bridge", !/end_social_mission_from_control/.test(bridgeCode));
-  check("11.2 cancel RPC is never called from the bridge", !/cancel_social_mission_from_control/.test(bridgeCode));
+  const fin = bridgeCode.slice(bridgeCode.indexOf("async function miniAppFinalize"), bridgeCode.indexOf("export const miniAppCancelMission"));
+  check("11.1 end reuses end_social_mission_from_control", /endNow: "end_social_mission_from_control"/.test(bridgeCode));
+  check("11.2 cancel reuses cancel_social_mission_from_control", /cancel: "cancel_social_mission_from_control"/.test(bridgeCode));
   check(
-    "11.3 end/cancel reported as bot-finalized capabilities",
-    /end_now: "bot_finalize_required"/.test(bridgeCode) && /cancel: "bot_finalize_required"/.test(bridgeCode),
+    "11.3 capabilities report end/cancel as supported",
+    /capabilities: \{ endNow: "supported", cancel: "supported" \}/.test(bridgeCode) &&
+      /"end_now",\s*"cancel",/.test(bridgeCode),
   );
-  check("11.4 bridge exposes the not-enabled constant", /not_enabled_in_bridge_v1/.test(bridgeCode));
+  check("11.4 obsolete disabled constants removed", !/bot_finalize_required|not_enabled_in_bridge_v1/.test(bridgeCode));
   check(
-    "11.5 bridge exports no end/cancel server function",
-    !/export const miniAppEnd/.test(bridgeCode) && !/export const miniAppCancel/.test(bridgeCode),
+    "11.5 end/cancel exported and routed through the shared gated flow",
+    /export const miniAppEndMission[\s\S]{0,260}miniAppFinalize\(data, "end_now"\)/.test(bridgeCode) &&
+      /export const miniAppCancelMission[\s\S]{0,260}miniAppFinalize\(data, "cancel"\)/.test(bridgeCode) &&
+      /const gate = await authorizeMission\(data\?\.initData, data\?\.missionId\);/.test(fin),
   );
   check(
-    "11.6 no second Telegram finalization path (no card edit, pin or unpin)",
-    !/editMessage|unpinChatMessage|pinChatMessage|sendMessage/i.test(bridgeCode),
+    "11.6 only safe unpin is added to the Telegram API (no send/edit, pinned_by_hq guarded)",
+    !/editMessage|pinChatMessage\b(?<!unpinChatMessage)|sendMessage/.test(bridgeCode.replace(/unpinChatMessage/g, "")) &&
+      /if \(!row\?\.\["pinned_by_hq"\] \|\| !row\["telegram_message_id"\]\) return;/.test(bridgeCode),
   );
   check(
     "11.7 only getChatMember is called against the Telegram API",
@@ -637,8 +651,10 @@ const opts = { now: NOW_MS };
       /action:\s*MINIAPP_TRANSPORT_ACTION/.test(refreshFn),
   );
   check(
-    "14.3b the Mini App never sends edit_mission or send_mission",
-    !/"edit_mission"/.test(bridgeCode) && !/"send_mission"/.test(bridgeCode),
+    "14.3b edit_mission is used only for the final-state lane; send_mission never",
+    (bridgeCode.match(/"edit_mission"/g) ?? []).length === 1 &&
+      /MINIAPP_FINAL_TRANSPORT_ACTION = "edit_mission"/.test(bridgeCode) &&
+      !/"send_mission"/.test(bridgeCode),
   );
   check(
     "14.4 internal-source header reuses an already accepted transport source",
@@ -762,7 +778,8 @@ const opts = { now: NOW_MS };
   );
   check(
     "14.21 the bridge never calls the Telegram Bot API to edit or send a message",
-    !/api\.telegram\.org/.test(bridgeCode) &&
+    (bridgeCode.match(/api\.telegram\.org/g) ?? []).length === 1 &&
+      /api\.telegram\.org\/bot\$\{token\}\/unpinChatMessage/.test(bridgeCode) &&
       !/editMessageText|sendMessage|editMessageCaption/.test(bridgeCode),
   );
   check(
@@ -774,16 +791,15 @@ const opts = { now: NOW_MS };
     !/api\.twitter\.com|api\.x\.com|X_API|fetchMetrics|provider_read/i.test(bridgeCode),
   );
   check(
-    "14.24 END NOW / CANCEL remain disabled and unexported as actions",
-    /end_now:\s*"bot_finalize_required"/.test(bridgeCode) &&
-      /cancel:\s*"bot_finalize_required"/.test(bridgeCode) &&
-      !/end_social_mission_from_control|cancel_social_mission_from_control/.test(bridgeCode) &&
-      !/export const miniAppEnd|export const miniAppCancel/.test(bridgeCode),
+    "14.24 END NOW / CANCEL finish the schedule event only when the RPC owns it",
+    /row\["event_owned"\] === true && row\["schedule_event_id"\]/.test(bridgeCode) &&
+      /outcome === "ok" && row\["event_owned"\]/.test(bridgeCode),
   );
+
   check(
     "14.25 the authorization chain of both mutations is unchanged",
     (bridgeCode.match(/const gate = await authorizeMission\(data\?\.initData, data\?\.missionId\);/g) ?? [])
-      .length === 3 &&
+      .length === 4 &&
       /isCurrentChatAdmin\(token, binding\.chatId, auth\.user\.id\)/.test(bridgeCode) &&
       /_verified_chat_id:\s*Number\(binding\.chatId\)/.test(bridgeCode),
   );
