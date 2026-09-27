@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Building2, Check, ChevronDown, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { createSelfServiceWorkspace } from "@/lib/self-service-workspace";
 import { useWorkspace, workspacesQueryKey } from "@/lib/workspace-context";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -25,13 +25,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48);
-}
 
 export function CreateWorkspaceDialog({
   open,
@@ -48,23 +41,16 @@ export function CreateWorkspaceDialog({
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const trimmed = name.trim();
-    if (!trimmed) return;
+    if (!trimmed || busy) return;
     setBusy(true);
     try {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError || !userData.user) throw userError ?? new Error("Not signed in.");
-
-      // Owner membership row is created by the existing on_workspace_created trigger.
-      const { data, error } = await supabase
-        .from("workspaces")
-        .insert({ name: trimmed, slug: slugify(trimmed) || null, owner_id: userData.user.id })
-        .select("id")
-        .single();
-      if (error) throw error;
+      // Owner membership + Free plan assignment are created by the existing
+      // on_workspace_created trigger; the RPC only inserts the workspace.
+      const id = await createSelfServiceWorkspace(trimmed);
 
       await queryClient.invalidateQueries({ queryKey: workspacesQueryKey });
       await queryClient.refetchQueries({ queryKey: workspacesQueryKey });
-      if (data?.id) selectWorkspace(data.id);
+      selectWorkspace(id);
       toast.success(`Project “${trimmed}” added`);
       setName("");
       onOpenChange(false);
