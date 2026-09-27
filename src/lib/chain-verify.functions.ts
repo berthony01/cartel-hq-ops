@@ -265,16 +265,18 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
     if (isToken) {
       // supplyText is proven to be digits-only above; BigInt is exact.
       expectedTotalSupply = BigInt(supplyText as string);
-      const expectedInitCode = (CARTEL_FIXED_ERC20_CREATION_BYTECODE +
-        encodeAbiParameters(
-          [{ type: "string" }, { type: "string" }, { type: "uint256" }, { type: "address" }],
-          [
-            row.token_name as string,
-            row.token_symbol as string,
-            expectedTotalSupply,
-            row.token_recipient as `0x${string}`,
-          ],
-        ).slice(2)) as `0x${string}`;
+      const expectedInitCode = isPcart
+        ? buildPcartInitCode(row.token_recipient as string)
+        : ((CARTEL_FIXED_ERC20_CREATION_BYTECODE +
+            encodeAbiParameters(
+              [{ type: "string" }, { type: "string" }, { type: "uint256" }, { type: "address" }],
+              [
+                row.token_name as string,
+                row.token_symbol as string,
+                expectedTotalSupply,
+                row.token_recipient as `0x${string}`,
+              ],
+            ).slice(2)) as `0x${string}`);
 
       if ((tx.input ?? "0x").toLowerCase() !== expectedInitCode.toLowerCase()) {
         await apply({
@@ -364,7 +366,10 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
 
     if (isToken) {
       const runtimeHash = keccak256((code ?? "0x") as `0x${string}`);
-      if (runtimeHash.toLowerCase() !== CARTEL_FIXED_ERC20_RUNTIME_BYTECODE_HASH.toLowerCase()) {
+      const expectedRuntimeHash = isPcart
+        ? PCART_FIXED_INTENT.runtimeHash
+        : CARTEL_FIXED_ERC20_RUNTIME_BYTECODE_HASH;
+      if (runtimeHash.toLowerCase() !== expectedRuntimeHash.toLowerCase()) {
         await apply({
           status: "FAILED",
           confirmations,
@@ -377,7 +382,7 @@ export const verifyChainDeployment = createServerFn({ method: "POST" })
       }
 
       const address = created as `0x${string}`;
-      const abi = CARTEL_FIXED_ERC20_ABI;
+      const abi = (isPcart ? PCART_ABI : CARTEL_FIXED_ERC20_ABI) as typeof CARTEL_FIXED_ERC20_ABI;
       let onChain: {
         name: string;
         symbol: string;
