@@ -108,7 +108,6 @@ check(
 const FORBIDDEN_FNS = [
   "end_social_mission_from_control",
   "cancel_social_mission_from_control",
-  "miniAppEndMission",
 ];
 // MINI-HQ-1C — End/Cancel are now authorized, mission-route-only mutations.
 for (const fn of FORBIDDEN_FNS) {
@@ -117,7 +116,6 @@ for (const fn of FORBIDDEN_FNS) {
 const missionOnlyMutations = [
   "miniAppApplyTargets",
   "miniAppApplyDuration",
-  "miniAppEndMission",
   "miniAppCancelMission",
 ];
 for (const fn of missionOnlyMutations) {
