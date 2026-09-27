@@ -356,7 +356,8 @@ const UNCHANGED = [
   "src/lib/chain-mainnet-verify-apply.ts",
   "src/lib/chain-mainnet-verify-receipt.ts",
   "src/lib/chain-mainnet-verify-shape.ts",
-  "src/lib/chain-mainnet-canary.functions.ts",
+  // PCART-L3: chain-mainnet-canary.functions.ts intentionally gained only the
+  // canonical-PCART freeform precheck; asserted by pcart-l3-launcher-integration F3/F4.
   "src/lib/chain-mainnet-canary-intent.ts",
   "src/lib/chain-mainnet-reconciliation.functions.ts",
   "src/lib/chain-mainnet-reconciliation.helpers.ts",

@@ -197,6 +197,7 @@ function ChainLauncherPage() {
     () => launches.find((l) => l.id === launchId) ?? null,
     [launches, launchId],
   );
+  const isCanonical = isCanonicalPcartLaunch(selectedLaunch);
 
   const refreshWallet = useCallback(async (address: string | null) => {
     setChainId(await readChainId());
@@ -239,7 +240,9 @@ function ChainLauncherPage() {
   // C8.6A — CONFIRMED fixed-supply test tokens that can be planned against.
   const liquiditySources = useMemo(
     () =>
-      attempts.filter(
+      isCanonical
+        ? []
+        : attempts.filter(
         (a) =>
           a.status === "CONFIRMED" &&
           a.deployment_kind === "FIXED_SUPPLY_ERC20" &&
@@ -248,7 +251,7 @@ function ChainLauncherPage() {
           typeof a.contract_address === "string" &&
           /^0x[0-9a-fA-F]{40}$/.test(a.contract_address),
       ),
-    [attempts],
+    [attempts, isCanonical],
   );
 
   const liquiditySource = useMemo(
@@ -414,7 +417,7 @@ function ChainLauncherPage() {
   }
 
   async function handleDeploy() {
-    if (!launchId || !account || !onTestnet) return;
+    if (!launchId || !account || !onTestnet || isCanonical) return;
     setBusy(true);
     let attemptId: string | null = null;
     let txHash: string | null = null;
@@ -485,6 +488,8 @@ function ChainLauncherPage() {
   }
 
   async function handleDeployToken() {
+    // PCART-L3: generic test-token path is never reachable for the canonical launch.
+    if (isCanonical) return;
     // Synchronous duplicate-broadcast guard: claimed BEFORE any await, so a
     // second invocation in the same tick returns before an attempt row is
     // created and before any wallet request is made.
@@ -666,11 +671,13 @@ function ChainLauncherPage() {
   }
 
   const canDeploy =
+    !isCanonical &&
     !!launchId && !!account && onTestnet && !busy && (!latest || isTerminal(latest.status));
   const simulationFresh = simulation ? isQuoteFresh(simulation.preflight, nowMs) : false;
   const simulationReady = !!simulation && simulation.preflight.passed && simulationFresh;
   const canSimulate = !!account && onTestnet && !simBusy && !tokenBusy;
   const canDeployToken =
+    !isCanonical &&
     !!launchId &&
     !!account &&
     onTestnet &&
@@ -798,15 +805,21 @@ function ChainLauncherPage() {
         )}
       </Section>
 
-      {launchId && isCanonicalPcartLaunch(selectedLaunch) ? (
+      {/* PCART-L3: the canonical PEPECARTEL launch sees ONLY the exact-artifact
+          rehearsal panel. Generic inert/test-token deploy and liquidity
+          planning are not rendered for it; unchanged for every other launch. */}
+      {launchId && isCanonical ? (
         <PcartRehearsalPanel
           launchId={launchId}
           account={account}
           onTestnet={onTestnet}
           onChanged={invalidate}
+          attempts={attempts}
+          onVerify={(id) => verifyMutation.mutate(id)}
+          verifying={verifyMutation.isPending}
         />
-      ) : null}
-
+      ) : (
+        <>
       <Section
         variant="primary"
         title="Test deployment"
@@ -1182,6 +1195,8 @@ function ChainLauncherPage() {
           </>
         )}
       </Section>
+        </>
+      )}
     </div>
   );
 }

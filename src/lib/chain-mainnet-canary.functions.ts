@@ -5,6 +5,7 @@ import {
   checkBaseUnitSupply,
   isRobinhoodChainLaunchMetadata,
 } from "./chain-mainnet-canary-intent";
+import { isCanonicalPcartLaunch } from "./launch-artifact-registry";
 
 
 /**
@@ -40,6 +41,7 @@ export type CanaryNotice =
   | "RECIPIENT_MUST_MATCH_DEPLOYER"
   | "SUPPLY_OUT_OF_RANGE"
   | "LAUNCH_CHAIN_MISMATCH"
+  | "CANONICAL_PCART_PROTECTED"
   | "RPC_REFUSED"
   | "CONTROL_STATE_UNAVAILABLE";
 
@@ -254,10 +256,18 @@ export const createCanaryDeploymentAttempt = createServerFn({ method: "POST" })
     // Robinhood Chain may produce a production attempt. This never writes.
     const { data: launch, error: launchError } = await context.supabase
       .from("launches")
-      .select("id, chain")
+      .select("id, chain, public_slug, launch_kind, token_name, ticker")
       .eq("id", data.launchId)
       .maybeSingle();
-    if (launchError || !launch || !isRobinhoodChainLaunchMetadata(launch.chain)) {
+    if (launchError || !launch) {
+      return attemptFail("LAUNCH_CHAIN_MISMATCH");
+    }
+    // PCART-L3: the canonical PEPECARTEL launch never enters the freeform
+    // generic canary path. Refused BEFORE the production-attempt RPC.
+    if (isCanonicalPcartLaunch(launch)) {
+      return attemptFail("CANONICAL_PCART_PROTECTED");
+    }
+    if (!isRobinhoodChainLaunchMetadata(launch.chain)) {
       return attemptFail("LAUNCH_CHAIN_MISMATCH");
     }
 

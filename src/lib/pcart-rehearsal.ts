@@ -12,7 +12,7 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 import type { DeploymentRow } from "./chain-launcher";
-import { normalizePcartRehearsalRecipient } from "./launch-artifact-registry";
+import { PCART_FIXED_INTENT, normalizePcartRehearsalRecipient } from "./launch-artifact-registry";
 
 export const PCART_REHEARSAL_RPC = "create_launch_chain_pcart_rehearsal_attempt" as const;
 
@@ -56,15 +56,40 @@ export async function createPcartRehearsalAttempt(input: {
   });
   if (isMissingRpcError(error)) throw new PcartRehearsalUnavailableError();
   if (error) throw new Error(error.message || "Could not start the PCART rehearsal attempt.");
-  const row = data as DeploymentRow | null;
-  if (
-    !row ||
-    row.artifact_id !== "pepecartel-token-v1" ||
-    Number(row.chain_id) !== 46630 ||
-    row.network_environment !== "TESTNET" ||
-    row.token_recipient !== recipient
-  ) {
+  const row = (Array.isArray(data) ? data[0] : data) as DeploymentRow | null;
+  if (!isExactPcartRehearsalRow(row, recipient)) {
     throw new Error("The rehearsal attempt returned by the server does not match the PCART intent.");
   }
-  return row;
+  return row as DeploymentRow;
+}
+
+/** Validates every frozen field of a freshly created PCART rehearsal row. */
+export function isExactPcartRehearsalRow(
+  row: DeploymentRow | null | undefined,
+  recipient: string,
+): boolean {
+  if (!row) return false;
+  let supply: bigint;
+  try {
+    supply = BigInt(String(row.token_total_supply ?? ""));
+  } catch {
+    return false;
+  }
+  return (
+    row.artifact_id === PCART_FIXED_INTENT.artifactId &&
+    row.deployment_kind === "FIXED_SUPPLY_ERC20" &&
+    Number(row.chain_id) === 46630 &&
+    row.network_environment === "TESTNET" &&
+    row.token_name === PCART_FIXED_INTENT.name &&
+    row.token_symbol === PCART_FIXED_INTENT.symbol &&
+    Number(row.token_decimals) === PCART_FIXED_INTENT.decimals &&
+    supply === PCART_FIXED_INTENT.totalSupply &&
+    row.token_recipient === recipient &&
+    row.status === "DRAFT"
+  );
+}
+
+/** True for PCART rehearsal evidence rows (used to scope the evidence panel). */
+export function isPcartRehearsalRow(row: Pick<DeploymentRow, "artifact_id">): boolean {
+  return row.artifact_id === PCART_FIXED_INTENT.artifactId;
 }

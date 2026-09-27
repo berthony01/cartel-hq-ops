@@ -13,8 +13,9 @@
 --     liquidity state;
 --   - change the signature or generic behavior of any existing RPC.
 --
--- Canonical launch: public.launches id 9f9af215-66ee-4a10-92db-617b61fb7fd3,
--- public_slug 'pepecartel-launch', launch_kind 'PROJECT'.
+-- Canonical launch identity is SEMANTIC and EXACT (no generated id pinned):
+-- public_slug 'pepecartel-launch' AND launch_kind 'PROJECT' AND
+-- token_name 'PEPECARTEL' AND ticker '$PCART'.
 -- =============================================================================
 
 BEGIN;
@@ -31,12 +32,13 @@ STABLE
 SECURITY DEFINER
 SET search_path = ''
 AS $$
-  SELECT _launch_id IS NOT NULL AND (
-    _launch_id = '9f9af215-66ee-4a10-92db-617b61fb7fd3'::uuid
-    OR EXISTS (
-      SELECT 1 FROM public.launches l
-       WHERE l.id = _launch_id AND l.public_slug = 'pepecartel-launch'
-    )
+  SELECT _launch_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM public.launches l
+     WHERE l.id = _launch_id
+       AND l.public_slug = 'pepecartel-launch'
+       AND l.launch_kind = 'PROJECT'
+       AND l.token_name = 'PEPECARTEL'
+       AND l.ticker = '$PCART'
   );
 $$;
 REVOKE ALL ON FUNCTION private.is_canonical_pcart_launch(uuid) FROM PUBLIC, anon, authenticated;
@@ -94,11 +96,12 @@ BEGIN
 
   SELECT * INTO l FROM public.launches WHERE id = _launch_id;
   IF NOT FOUND
-     OR l.id <> '9f9af215-66ee-4a10-92db-617b61fb7fd3'::uuid
+     OR NOT private.is_canonical_pcart_launch(l.id)
      OR l.public_slug IS DISTINCT FROM 'pepecartel-launch'
      OR l.launch_kind IS DISTINCT FROM 'PROJECT'
-     OR l.workspace_id IS DISTINCT FROM v_workspace
-     OR upper(btrim(coalesce(l.token_name, ''))) <> 'PEPECARTEL' THEN
+     OR l.token_name IS DISTINCT FROM 'PEPECARTEL'
+     OR l.ticker IS DISTINCT FROM '$PCART'
+     OR l.workspace_id IS DISTINCT FROM v_workspace THEN
     RAISE EXCEPTION 'PCART rehearsal is only available for the canonical PEPECARTEL project launch'
       USING ERRCODE = '42501';
   END IF;
@@ -667,5 +670,36 @@ REVOKE ALL ON FUNCTION public.begin_launch_production_request_execution(uuid, te
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.begin_launch_production_request_execution(uuid, text, text, text)
   TO authenticated;
+
+-- -----------------------------------------------------------------------------
+-- 8. Authoritative table-boundary guard: while pepecartel-token-v1 is NOT
+--    production-allowlisted, NO production (PRODUCTION or chain 4663) row may
+--    be created for, or moved onto, the canonical PCART launch — regardless of
+--    artifact or calling path (generic canary, request execution, direct
+--    insert). TESTNET rehearsal rows and every noncanonical launch are
+--    unaffected.
+-- -----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.enforce_canonical_pcart_no_production_deployment()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  IF (NEW.network_environment = 'PRODUCTION' OR NEW.chain_id = 4663)
+     AND private.is_canonical_pcart_launch(NEW.launch_id) THEN
+    RAISE EXCEPTION 'The canonical PEPECARTEL launch has no production-allowlisted artifact; production deployment rows are refused'
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.enforce_canonical_pcart_no_production_deployment()
+  FROM PUBLIC, anon, authenticated;
+
+CREATE TRIGGER trg_canonical_pcart_no_production_deployment
+  BEFORE INSERT OR UPDATE OF launch_id, chain_id, network_environment, artifact_id
+  ON public.launch_chain_deployments
+  FOR EACH ROW EXECUTE FUNCTION public.enforce_canonical_pcart_no_production_deployment();
 
 COMMIT;
