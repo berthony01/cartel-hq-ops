@@ -15,8 +15,11 @@
  * deterministic idempotency key handed to the existing SE-15 RPCs, not from a
  * global one-use cache.
  *
- * No new table, no new RPC, no schema change, no provider/X read, and no
- * second Telegram finalization path: END NOW and CANCEL stay disabled here.
+ * No new table, no new RPC, no schema change, and no provider/X read in this
+ * bridge. MINI-HQ-1C: END NOW and CANCEL reuse the EXISTING lifecycle RPCs and
+ * the EXISTING in-place `edit_mission` transport lane (which alone owns the
+ * single best-effort final X read for a COMPLETED card), plus the same
+ * pinned_by_hq-guarded safe unpin the bot uses.
  */
 
 import { createServerFn } from "@tanstack/react-start";
@@ -41,7 +44,15 @@ export const MINIAPP_RPC = {
    * refresh: neither value may ever come from the client.
    */
   authorize: "social_mission_control_authorize",
+  /** MINI-HQ-1C — reused (NOT newly defined) lifecycle RPCs. */
+  endNow: "end_social_mission_from_control",
+  cancel: "cancel_social_mission_from_control",
+  finishScheduleEvent: "finish_social_mission_schedule_event",
+  recordPin: "record_social_mission_target_pin",
 } as const;
+
+/** MINI-HQ-1C — the in-place final-state transport action (same as the bot). */
+export const MINIAPP_FINAL_TRANSPORT_ACTION = "edit_mission";
 
 /* --------------------------------------- SE-16.3R-3 ROLLING-CARD PARITY */
 
@@ -85,17 +96,18 @@ export type MiniAppRefreshState = (typeof MINIAPP_REFRESH_STATES)[number];
 export const MINIAPP_REFRESHABLE_OUTCOMES = ["ok", "replayed"] as const;
 
 /**
- * END NOW / CANCEL are intentionally NOT implemented in bridge V1: the bot
- * path also edits the mission card, takes the final snapshot and safely unpins
- * it. Duplicating that would create a second finalization path.
+ * MINI-HQ-1C — every Mission Control mutation the Mini App really supports.
+ * END NOW / CANCEL are now at parity with the bot: same RPCs, same in-place
+ * final card edit, same schedule-event ownership rule, same safe unpin.
  */
-export const MINIAPP_DISABLED_ACTIONS = {
-  end_now: "bot_finalize_required",
-  cancel: "bot_finalize_required",
-} as const;
+export const MINIAPP_SUPPORTED_ACTIONS = [
+  "apply_targets",
+  "apply_duration",
+  "end_now",
+  "cancel",
+] as const;
 
-export const MINIAPP_BRIDGE_VERSION = "v1";
-export const MINIAPP_NOT_ENABLED = "not_enabled_in_bridge_v1";
+export const MINIAPP_BRIDGE_VERSION = "v2";
 
 export const MINIAPP_METRICS = ["views", "likes", "replies", "reposts", "bookmarks"] as const;
 export type MiniAppMetric = (typeof MINIAPP_METRICS)[number];
@@ -157,7 +169,7 @@ export type MiniAppPanel = {
   targets: Record<MiniAppMetric, number | null>;
   /** Latest STORED snapshot. `null` means unavailable — never coerced to 0. */
   results: Record<MiniAppMetric, number | null>;
-  capabilities: { endNow: string; cancel: string };
+  capabilities: { endNow: "supported"; cancel: "supported" };
 };
 
 function fail(reason: string): MiniAppFailure {
@@ -663,10 +675,7 @@ export const miniAppMissionPanel = createServerFn({ method: "POST" })
       primaryTarget: positiveInt(config["milestone_target"]),
       targets,
       results,
-      capabilities: {
-        endNow: MINIAPP_DISABLED_ACTIONS.end_now,
-        cancel: MINIAPP_DISABLED_ACTIONS.cancel,
-      },
+      capabilities: { endNow: "supported", cancel: "supported" },
     };
   });
 
@@ -800,10 +809,206 @@ export const miniAppApplyDuration = createServerFn({ method: "POST" })
     });
   });
 
+/* ------------------------------------------ MINI-HQ-1C LIFECYCLE PARITY */
+
+export type MiniAppFinalRefreshState = "edited" | "replayed" | "ambiguous" | "failed";
+export type MiniAppLifecycleResult =
+  | { ok: true; outcome: string; refresh?: MiniAppFinalRefreshState }
+  | MiniAppFailure;
+
 /**
- * Capability probe for the future Mini App UI. END NOW and CANCEL are reported
- * as handled by the bot, so the UI never renders a second finalization path.
+ * FINAL-STATE in-place card edit through the EXISTING `edit_mission` lane.
+ * The transport id is deterministic in (validated user, action, request id);
+ * if the exact target row already recorded that id, the SAME revision is sent
+ * so the transport's duplicate short-circuit answers truthfully and nothing is
+ * edited — or read from X — a second time. Any other lane sends the next
+ * revision exactly once. The transport alone performs the best-effort final
+ * official X read (with its own current-minute duplicate-read guard) for a
+ * COMPLETED card; CANCELLED cards take no read. This bridge never reads X.
  */
+async function miniAppFinalCardEdit(args: {
+  admin: AdminClient;
+  telegramUserId: number;
+  binding: Binding;
+  action: "end_now" | "cancel";
+  requestId: string;
+}): Promise<MiniAppFinalRefreshState> {
+  const { admin, telegramUserId, binding } = args;
+  const { data: authRows, error: authError } = await admin.rpc(MINIAPP_RPC.authorize, {
+    _telegram_user_id: telegramUserId,
+    _mission_id: binding.missionId,
+    _verified_chat_id: Number(binding.chatId),
+  });
+  if (authError) return "failed";
+  const authRow = (Array.isArray(authRows) ? authRows[0] : authRows) as
+    | Record<string, unknown>
+    | null
+    | undefined;
+  // The authorize RPC may refuse a no-longer-LIVE mission; the actor/target it
+  // would have returned are then unavailable and nothing is guessed.
+  const actorUserId = String(authRow?.["actor_user_id"] ?? "");
+  const authTargetId = String(authRow?.["target_id"] ?? "");
+  if (authRow?.["workspace_id"] && String(authRow["workspace_id"]) !== binding.workspaceId) {
+    return "failed";
+  }
+
+  let query = admin
+    .from("social_mission_targets")
+    .select("id, edit_revision, edit_state, edit_client_request_id")
+    .eq("mission_id", binding.missionId)
+    .eq("workspace_id", binding.workspaceId)
+    .eq("telegram_chat_id", Number(binding.chatId));
+  query = isUuid(authTargetId)
+    ? query.eq("id", authTargetId)
+    : query.order("created_at", { ascending: true }).limit(1);
+  const { data: target } = await query.maybeSingle();
+  const row = (target ?? null) as Record<string, unknown> | null;
+  if (!row?.["id"]) return "failed";
+
+  const clientRequestId = await miniAppRefreshRequestUuid(
+    telegramUserId,
+    args.action,
+    args.requestId,
+  );
+  const currentRevision = Number(row["edit_revision"] ?? 0);
+  const alreadyBound = String(row["edit_client_request_id"] ?? "") === clientRequestId;
+  const revision = alreadyBound ? currentRevision : currentRevision + 1;
+
+  const supabaseUrl = process.env["SUPABASE_URL"] ?? "";
+  const serviceKey = process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? "";
+  if (!supabaseUrl || !serviceKey) return "failed";
+  try {
+    const response = await fetch(
+      `${supabaseUrl.replace(/\/$/, "")}/functions/v1/${MINIAPP_TRANSPORT_FUNCTION}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+          "X-Cartel-Internal-Source": MINIAPP_TRANSPORT_INTERNAL_SOURCE,
+          ...(isUuid(actorUserId) ? { "X-Cartel-Actor-User-Id": actorUserId } : {}),
+        },
+        body: JSON.stringify({
+          action: MINIAPP_FINAL_TRANSPORT_ACTION,
+          workspaceId: binding.workspaceId,
+          missionId: binding.missionId,
+          targetId: String(row["id"]),
+          clientRequestId,
+          revision,
+        }),
+        signal: AbortSignal.timeout(30_000),
+      },
+    );
+    const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    const state = String(payload?.["editState"] ?? "").toUpperCase();
+    if (state === "EDITED") return payload?.["duplicate"] === true ? "replayed" : "edited";
+    if (state === "FAILED") return "failed";
+    return "ambiguous";
+  } catch {
+    return "ambiguous";
+  }
+}
+
+/**
+ * Safe unpin — identical guard to the bot: ONLY a pin CARTEL HQ itself
+ * recorded (`pinned_by_hq`) on the exact verified target is removed. Idempotent
+ * on retry (a cleared flag short-circuits) and never fails a finalization.
+ */
+async function miniAppSafeUnpin(admin: AdminClient, binding: Binding): Promise<void> {
+  try {
+    const { data: pinned } = await admin
+      .from("social_mission_targets")
+      .select("id, telegram_chat_id, telegram_message_id, pinned_by_hq")
+      .eq("mission_id", binding.missionId)
+      .eq("workspace_id", binding.workspaceId)
+      .eq("telegram_chat_id", Number(binding.chatId))
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const row = (pinned ?? null) as Record<string, unknown> | null;
+    if (!row?.["pinned_by_hq"] || !row["telegram_message_id"]) return;
+    const token = botToken();
+    if (!token) return;
+    const res = await fetch(`https://api.telegram.org/bot${token}/unpinChatMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: String(row["telegram_chat_id"]),
+        message_id: Number(row["telegram_message_id"]),
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const body = (await res.json().catch(() => null)) as { ok?: unknown } | null;
+    if (res.ok && body?.ok === true) {
+      await admin.rpc(MINIAPP_RPC.recordPin, { _target_id: String(row["id"]), _pinned: false });
+    }
+  } catch {
+    // A pin problem never invalidates a persisted completion/cancellation.
+  }
+}
+
+/**
+ * Shared END NOW / CANCEL flow. Every binding is server-derived; the client
+ * supplies only the signed credential, the mission routing hint and an opaque
+ * request id. `ok` and `replayed` both run the (deterministic, duplicate-safe)
+ * final card edit and the idempotent safe unpin, so a retry after network
+ * ambiguity self-heals without a second edit, X read, or audit entry. The
+ * schedule event is finished ONLY when the RPC reports it owns it.
+ */
+async function miniAppFinalize(
+  data: { initData: string; missionId: string; requestId: string } | undefined,
+  action: "end_now" | "cancel",
+): Promise<MiniAppLifecycleResult> {
+  if (!isRequestId(data?.requestId)) return fail("invalid_request_id");
+  const gate = await authorizeMission(data?.initData, data?.missionId);
+  if (!gate.ok) return gate;
+  const { admin, telegramUserId, binding } = gate;
+
+  const { data: result, error } = await admin.rpc(
+    action === "end_now" ? MINIAPP_RPC.endNow : MINIAPP_RPC.cancel,
+    {
+      _telegram_user_id: telegramUserId,
+      _mission_id: binding.missionId,
+      _verified_chat_id: Number(binding.chatId),
+      _idempotency_key: await miniAppIdempotencyKey(telegramUserId, action, data!.requestId),
+    },
+  );
+  if (error) return fail("unavailable");
+  const row = (result ?? {}) as Record<string, unknown>;
+  const outcome = String(row["outcome"] ?? "denied");
+  if (outcome !== "ok" && outcome !== "replayed") return { ok: true, outcome };
+
+  const refresh = await miniAppFinalCardEdit({
+    admin,
+    telegramUserId,
+    binding,
+    action,
+    requestId: data!.requestId,
+  });
+
+  if (action === "end_now" && outcome === "ok" && row["event_owned"] === true && row["schedule_event_id"]) {
+    await admin.rpc(MINIAPP_RPC.finishScheduleEvent, {
+      _event_id: row["schedule_event_id"],
+      _state: refresh === "edited" ? "SENT" : refresh === "failed" ? "FAILED" : "AMBIGUOUS",
+      _telegram_message_id: null,
+      _last_error: refresh === "edited" ? null : "The manual end edit was not confirmed.",
+    });
+  }
+
+  await miniAppSafeUnpin(admin, binding);
+  return { ok: true, outcome, refresh };
+}
+
+export const miniAppEndMission = createServerFn({ method: "POST" })
+  .inputValidator((input: { initData: string; missionId: string; requestId: string }) => input)
+  .handler(async ({ data }): Promise<MiniAppLifecycleResult> => miniAppFinalize(data, "end_now"));
+
+export const miniAppCancelMission = createServerFn({ method: "POST" })
+  .inputValidator((input: { initData: string; missionId: string; requestId: string }) => input)
+  .handler(async ({ data }): Promise<MiniAppLifecycleResult> => miniAppFinalize(data, "cancel"));
+
+/** Capability probe: reports exactly the mutations this bridge supports. */
 export const miniAppCapabilities = createServerFn({ method: "POST" })
   .inputValidator((input: { initData: string }) => input)
   .handler(async ({ data }) => {
@@ -813,12 +1018,7 @@ export const miniAppCapabilities = createServerFn({ method: "POST" })
       ok: true as const,
       version: MINIAPP_BRIDGE_VERSION,
       reads: ["list_workspaces", "list_missions", "mission_panel"],
-      mutations: ["apply_targets", "apply_duration"],
-      disabled: {
-        end_now: MINIAPP_DISABLED_ACTIONS.end_now,
-        cancel: MINIAPP_DISABLED_ACTIONS.cancel,
-        note: MINIAPP_NOT_ENABLED,
-      },
+      mutations: [...MINIAPP_SUPPORTED_ACTIONS],
     };
   });
 

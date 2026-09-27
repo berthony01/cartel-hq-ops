@@ -77,3 +77,9 @@ This is a separate future phase for community-facing project identity, mission p
 - New team capture alerts and `/inbox` list rows open the owner Mini App via a private-chat `web_app` button: `/tg?tab=inbox&workspace=<uuid>&conversation=<uuid>` (built with URL/URLSearchParams, UUID-gated, no Telegram identifiers).
 - Alert workspace is resolved server-side by exact `project_conversations.id` lookup, then re-authorized with `bot_inbox_operator_workspaces`; any failure falls back to the legacy `pi_c_*` callback button.
 - Legacy `pi_c_*` callbacks, `openInboxConversation`, 30-minute reply mode and `/cancel` remain as backward-compatible fallback.
+
+
+## MINI-HQ-1C — Lifecycle parity + concise Telegram (code complete, not deployed)
+- `/tg/mission/$missionId` exposes End mission now and Cancel mission behind a two-step confirmation. Bridge `miniAppEndMission` / `miniAppCancelMission` reuse `end_social_mission_from_control` / `cancel_social_mission_from_control`, the existing in-place `edit_mission` transport lane (which alone owns the single best-effort final X read for COMPLETED; CANCELLED takes none), the schedule-event ownership rule (`event_owned`), and the `pinned_by_hq`-guarded safe unpin. Retries replay the same request id; the transport duplicate short-circuits.
+- New private Mission Control panels show only a mission-specific `Open Mission Control` web_app button (`/tg/mission/<uuid>`) plus Exit. Legacy `mc_*` callbacks stay handled for old messages and emergency fallback. Link Finder START MISSION / IGNORE unchanged.
+- Brand tab shows saved identity read-only and links to Project Profile / Brand Kit; More links to existing full-app routes. No new backend, RPC, table, or schema.

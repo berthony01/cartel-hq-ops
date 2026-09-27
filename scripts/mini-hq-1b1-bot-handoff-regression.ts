@@ -62,7 +62,7 @@ check("4.3 bot_inbox_open_conversation retained", src.includes('admin.rpc("bot_i
 check("4.4 30-minute reply mode copy retained", src.includes("Reply mode is on for 30 minutes."));
 check("4.5 /cancel retained", src.includes("/cancel"));
 check("4.6 reply idempotency helper retained", src.includes("pi-bot-reply:${updateId}"));
-check("4.7 mission control button unchanged", src.includes('[{ text: "📲 Open Mission Control", web_app: { url: MISSION_CONTROL_WEBAPP_URL } }]'));
+check("4.7 mission control button is mission-specific (MINI-HQ-1C)", src.includes('web_app: { url: buildMissionWebAppUrl(missionId) ?? MISSION_CONTROL_WEBAPP_URL }'));
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail > 0) process.exit(1);

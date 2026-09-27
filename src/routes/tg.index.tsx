@@ -77,6 +77,33 @@ export function resolveAuthorizedWorkspace(
   return match ? match.workspaceId : null;
 }
 
+type FullAppPath =
+  | "/project-profile"
+  | "/brand-kit"
+  | "/launch-control"
+  | "/telegram"
+  | "/distribution"
+  | "/dashboard"
+  | "/settings";
+
+/** Existing full-app destination; opens outside the Mini App (signed-in browser). */
+function FullAppLink({ to, label }: { to: FullAppPath; label: string }) {
+  return (
+    <Link
+      to={to}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex min-h-11 w-full min-w-0 items-center gap-3 rounded-md border border-border/60 bg-surface-raised/40 px-3 text-sm font-medium text-foreground transition-colors hover:border-gold/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/60"
+    >
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <span className="shrink-0 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+        Opens CARTEL HQ
+      </span>
+      <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+    </Link>
+  );
+}
+
 export const Route = createFileRoute("/tg/")({
   ssr: false,
   validateSearch: parseMiniAppHomeSearch,
@@ -481,17 +508,67 @@ function MiniAppHome() {
       ) : null}
 
       {workspaceId && activeTab === "brand" ? (
-        <MiniAppMessage
-          title="Brand controls are coming next"
-          description="Your saved project identity is shown here now. Editing remains in the full CARTEL HQ app for this release."
-        />
+        <>
+          <MiniAppPanel
+            heading="Saved project identity"
+            note="Read-only here. This is exactly what Telegram cards and public pages use."
+          >
+            {homeData ? (
+              <dl className="flex min-w-0 flex-col divide-y divide-border/40">
+                <div className="flex min-w-0 items-center justify-between gap-3 py-2">
+                  <dt className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Name</dt>
+                  <dd className="min-w-0 truncate text-sm font-medium text-foreground">
+                    {homeData.identity.projectName}
+                  </dd>
+                </div>
+                <div className="flex min-w-0 items-center justify-between gap-3 py-2">
+                  <dt className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Ticker</dt>
+                  <dd className="min-w-0 truncate text-sm text-foreground">
+                    {homeData.identity.ticker ? `$${homeData.identity.ticker}` : "Not set"}
+                  </dd>
+                </div>
+                <div className="flex min-w-0 items-center justify-between gap-3 py-2">
+                  <dt className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Logo</dt>
+                  <dd className="text-sm text-foreground">
+                    {homeData.identity.logoDataUrl ? "Saved" : "Not set"}
+                  </dd>
+                </div>
+                <div className="flex min-w-0 items-center justify-between gap-3 py-2">
+                  <dt className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Source</dt>
+                  <dd className="text-sm text-foreground">
+                    {homeData.identity.source === "profile" ? "Project Profile" : "Workspace name"}
+                  </dd>
+                </div>
+              </dl>
+            ) : (
+              <MiniAppSkeleton label="Loading project identity…" />
+            )}
+          </MiniAppPanel>
+          <MiniAppPanel heading="Edit in CARTEL HQ" note="Opens the full CARTEL HQ app in your browser.">
+            <div className="flex min-w-0 flex-col gap-2">
+              <FullAppLink to="/project-profile" label="Project Profile" />
+              <FullAppLink to="/brand-kit" label="Brand Kit" />
+            </div>
+          </MiniAppPanel>
+        </>
       ) : null}
 
       {workspaceId && activeTab === "more" ? (
-        <MiniAppMessage
-          title="More tools stay in CARTEL HQ"
-          description="Launch, billing, treasury, settings, and advanced operations remain in the full CARTEL HQ app."
-        />
+        <>
+          <MiniAppPanel heading="Launch & community" note="Opens CARTEL HQ in your browser.">
+            <div className="flex min-w-0 flex-col gap-2">
+              <FullAppLink to="/launch-control" label="Launch Control" />
+              <FullAppLink to="/telegram" label="Community Command" />
+              <FullAppLink to="/distribution" label="Sticker Drops" />
+            </div>
+          </MiniAppPanel>
+          <MiniAppPanel heading="Account" note="Opens CARTEL HQ in your browser.">
+            <div className="flex min-w-0 flex-col gap-2">
+              <FullAppLink to="/dashboard" label="Dashboard" />
+              <FullAppLink to="/settings" label="Settings & billing" />
+            </div>
+          </MiniAppPanel>
+        </>
       ) : null}
     </MiniAppFrame>
   );

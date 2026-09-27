@@ -8,8 +8,10 @@
  * ever sent from here — every mutation carries only the signed credential, the
  * mission routing hint, an opaque request id and bounded values.
  *
- * Ending and cancelling a mission stay bot-owned: this screen exposes no such
- * control and calls no such function.
+ * MINI-HQ-1C: End mission now and Cancel mission are available here behind a
+ * deliberate two-step confirmation. They reuse the existing lifecycle RPCs and
+ * the existing in-place final card edit through the bridge; a retry replays
+ * the SAME request id so nothing is finalized, edited or read twice.
  *
  * Truthfulness rule: the database mutation and the Telegram card refresh are
  * two separate facts. A committed mutation whose card refresh is unconfirmed
@@ -26,6 +28,8 @@ import { ChevronLeft } from "lucide-react";
 import {
   miniAppApplyDuration,
   miniAppApplyTargets,
+  miniAppCancelMission,
+  miniAppEndMission,
   miniAppMissionPanel,
 } from "@/lib/telegram-miniapp-bridge.functions";
 import {
@@ -52,6 +56,7 @@ import {
   MINI_APP_PRIMARY_LABELS,
   MINI_APP_PRIMARY_TYPES,
   MINI_APP_SUPPORTING_METRICS,
+  classifyLifecycleResult,
   classifyMutationResult,
   formatMetricValue,
   formatTargetValue,
@@ -64,6 +69,8 @@ import {
   parseOptionalPositiveInt,
   parseRequiredPositiveInt,
   resolveTelegramSession,
+  type MiniAppLifecycleKind,
+  type MiniAppLifecycleNotice,
   type MiniAppMutationNotice,
   type MiniAppSupportingMetric,
 } from "@/lib/telegram-miniapp-client";
@@ -91,6 +98,9 @@ type DurationPayload = {
   requestId: string;
   minutes: number;
 };
+
+/** Exactly the bounded fields the bridge validator accepts for End / Cancel. */
+type LifecyclePayload = { initData: string; missionId: string; requestId: string };
 
 type BoundedResult = { ok?: boolean; outcome?: string; refresh?: string; reason?: string };
 
@@ -149,7 +159,12 @@ function MiniAppMission() {
   const [initData, setInitData] = useState<string | null>(null);
   const [booting, setBooting] = useState(true);
 
-  const [editor, setEditor] = useState<"targets" | "duration" | null>(null);
+  const [editor, setEditor] = useState<"targets" | "duration" | MiniAppLifecycleKind | null>(null);
+  const [lifecycleNotice, setLifecycleNotice] = useState<MiniAppLifecycleNotice | null>(null);
+  /** Retained ONLY so an uncertain End/Cancel replays the identical request. */
+  const [lifecycleRetry, setLifecycleRetry] = useState<
+    { kind: MiniAppLifecycleKind; payload: LifecyclePayload } | null
+  >(null);
   const [notice, setNotice] = useState<MiniAppMutationNotice | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -188,6 +203,34 @@ function MiniAppMission() {
 
   const applyTargetsFn = useServerFn(miniAppApplyTargets);
   const applyDurationFn = useServerFn(miniAppApplyDuration);
+  const endMissionFn = useServerFn(miniAppEndMission);
+  const cancelMissionFn = useServerFn(miniAppCancelMission);
+
+  const lifecycleMutation = useMutation({
+    mutationFn: (vars: { kind: MiniAppLifecycleKind; payload: LifecyclePayload }) =>
+      vars.kind === "end_now"
+        ? endMissionFn({ data: vars.payload })
+        : cancelMissionFn({ data: vars.payload }),
+    onSuccess: (result, vars) => {
+      const classified = classifyLifecycleResult(vars.kind, result as BoundedResult);
+      setLifecycleNotice(classified);
+      setLifecycleRetry(classified.retry ? vars : null);
+      if (classified.finalized) setEditor(null);
+      else if (!classified.retry) void panelQuery.refetch();
+    },
+    onError: (_error, vars) => {
+      // Transport failure proves nothing: keep the SAME request for a replay.
+      setLifecycleRetry(vars);
+      setLifecycleNotice({
+        tone: "warning",
+        message:
+          "Could not confirm whether the mission was finalized. Retry safely — the same request is replayed, never a second one.",
+        committed: false,
+        retry: true,
+        finalized: false,
+      });
+    },
+  });
 
   /**
 
@@ -252,6 +295,23 @@ function MiniAppMission() {
     );
   }
 
+  if (lifecycleNotice?.finalized) {
+    return (
+      <MiniAppFrame>
+        <MiniAppIdentity />
+        <BackLink />
+        <MiniAppMessage
+          title={
+            lifecycleNotice.message.startsWith("Mission cancelled")
+              ? "Mission cancelled"
+              : "Mission ended"
+          }
+          description={lifecycleNotice.message}
+        />
+      </MiniAppFrame>
+    );
+  }
+
   if (panelQuery.isPending) {
     return (
       <MiniAppFrame>
@@ -284,7 +344,32 @@ function MiniAppMission() {
   }
 
   const isLive = panel.status.toUpperCase() === "LIVE";
-  const mutationPending = targetsMutation.isPending || durationMutation.isPending;
+  const mutationPending =
+    targetsMutation.isPending || durationMutation.isPending || lifecycleMutation.isPending;
+
+  function openLifecycleConfirm(kind: MiniAppLifecycleKind) {
+    setFormError(null);
+    setNotice(null);
+    setPendingRetry(null);
+    setLifecycleNotice(null);
+    setLifecycleRetry(null);
+    setEditor(kind);
+  }
+
+  function confirmLifecycle(kind: MiniAppLifecycleKind) {
+    if (!initData) return;
+    const requestId = newRequestId();
+    if (!requestId) {
+      setFormError("This browser cannot submit securely. Reopen Mission Control from the bot.");
+      return;
+    }
+    setFormError(null);
+    lifecycleMutation.mutate({ kind, payload: { initData, missionId, requestId } });
+  }
+
+  function retryLifecycle() {
+    if (lifecycleRetry) lifecycleMutation.mutate(lifecycleRetry);
+  }
 
   function openTargetsEditor() {
     if (!panel || !panel.ok) return;
@@ -461,6 +546,22 @@ function MiniAppMission() {
         />
       ) : null}
 
+      {lifecycleNotice && !lifecycleNotice.finalized ? (
+        <MiniAppNotice
+          tone={lifecycleNotice.tone}
+          message={lifecycleNotice.message}
+          action={
+            lifecycleNotice.retry ? (
+              <MiniAppRetryButton
+                onRetry={retryLifecycle}
+                pending={lifecycleMutation.isPending}
+                label="Retry"
+              />
+            ) : null
+          }
+        />
+      ) : null}
+
       {isLive ? (
         <MiniAppPanel
           heading="Mission controls"
@@ -480,6 +581,60 @@ function MiniAppMission() {
             />
           </div>
         </MiniAppPanel>
+      ) : null}
+
+      {isLive ? (
+        <MiniAppPanel
+          heading="Finish mission"
+          note="Both actions are final and update the community card in place."
+        >
+          <div className="grid min-w-0 grid-cols-1 gap-2 min-[360px]:grid-cols-2">
+            <MiniAppActionButton
+              label="End mission now"
+              onPress={() => openLifecycleConfirm("end_now")}
+              disabled={mutationPending}
+              tone="danger"
+            />
+            <MiniAppActionButton
+              label="Cancel mission"
+              onPress={() => openLifecycleConfirm("cancel")}
+              disabled={mutationPending}
+              tone="danger"
+            />
+          </div>
+        </MiniAppPanel>
+      ) : null}
+
+      {isLive && (editor === "end_now" || editor === "cancel") ? (
+        <MiniAppEditorShell
+          title={editor === "end_now" ? "End mission now?" : "Cancel mission?"}
+          description={
+            editor === "end_now"
+              ? "The community card is updated in place to COMPLETED using the final observed results. One best-effort final reading is taken from X first. Remaining updates stop. This cannot be undone."
+              : "The community card is updated in place to CANCELLED. No final results are claimed, no X reading is taken, and remaining updates stop. This cannot be undone."
+          }
+          onClose={() => {
+            if (!lifecycleMutation.isPending) setEditor(null);
+          }}
+        >
+          <div className="flex min-w-0 flex-col gap-2">
+            {formError ? <MiniAppNotice tone="error" message={formError} /> : null}
+            <MiniAppActionButton
+              label={editor === "end_now" ? "Yes, end it now" : "Yes, cancel it"}
+              pendingLabel={editor === "end_now" ? "Ending…" : "Cancelling…"}
+              onPress={() => confirmLifecycle(editor)}
+              pending={lifecycleMutation.isPending}
+              disabled={lifecycleRetry !== null}
+              tone="danger"
+            />
+            <MiniAppActionButton
+              label="Keep it running"
+              onPress={() => setEditor(null)}
+              disabled={lifecycleMutation.isPending}
+              tone="quiet"
+            />
+          </div>
+        </MiniAppEditorShell>
       ) : null}
 
       {isLive && editor === "targets" ? (
@@ -588,8 +743,8 @@ function MiniAppMission() {
       ) : null}
 
       <p className="px-1 text-[11px] leading-4 text-muted-foreground">
-        Targets and end time can be edited here. Ending or cancelling the mission is still handled
-        in the CARTEL HQ Telegram bot.
+        Targets, end time, ending and cancelling are all handled here. The bot keeps only
+        notifications and an emergency fallback.
       </p>
     </MiniAppFrame>
   );
