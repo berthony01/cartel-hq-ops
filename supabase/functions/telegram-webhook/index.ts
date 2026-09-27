@@ -2838,18 +2838,32 @@ Deno.serve(async (req: Request) => {
     return (data ?? {}) as { outcome?: string; target_id?: string };
   };
 
+  /**
+   * MINI-HQ-1C — mission-specific Mini App URL. Only a UUID-shaped mission id is
+   * ever placed in the path; never a Telegram chat/user or provider identifier.
+   * Returns null when a safe URL cannot be formed.
+   */
+  const MC_MISSION_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const buildMissionWebAppUrl = (missionId: string): string | null => {
+    if (!MC_MISSION_UUID_RE.test(missionId)) return null;
+    const base = new URL(MISSION_CONTROL_WEBAPP_URL);
+    const url = new URL(`${base.pathname.replace(/\/$/, "")}/mission/${encodeURIComponent(missionId)}`, base.origin);
+    url.search = new URLSearchParams().toString();
+    return url.toString();
+  };
+
+  /**
+   * MINI-HQ-1C — newly rendered private panels advertise ONLY the Mini App
+   * (the primary operating surface) plus Exit. Legacy `mc_t_/mc_d_/mc_e_/mc_c_`
+   * callback handlers are intentionally retained so buttons on older messages
+   * and emergency fallbacks keep working; they are simply no longer offered.
+   */
   const mcPanelKeyboard = (missionId: string) => ({
     inline_keyboard: [
-      // SE-16.3 — Mini App reachability. Private-chat only (Telegram permits
-      // web_app buttons exclusively in private chats); all bot fallback
-      // controls below stay unchanged and remain the mutating authority.
-      [{ text: "📲 Open Mission Control", web_app: { url: MISSION_CONTROL_WEBAPP_URL } }],
-      [{ text: "🎯 Edit targets", callback_data: `mc_t_${missionId}` }],
-      [{ text: "⏱ Change end time", callback_data: `mc_d_${missionId}` }],
-      [
-        { text: "🏁 End mission now", callback_data: `mc_e_${missionId}` },
-        { text: "🛑 Cancel mission", callback_data: `mc_c_${missionId}` },
-      ],
+      [{
+        text: "📲 Open Mission Control",
+        web_app: { url: buildMissionWebAppUrl(missionId) ?? MISSION_CONTROL_WEBAPP_URL },
+      }],
       [{ text: "✖️ Exit", callback_data: "mc_x" }],
     ],
   });
