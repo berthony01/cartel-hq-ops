@@ -240,7 +240,9 @@ function ChainLauncherPage() {
   // C8.6A — CONFIRMED fixed-supply test tokens that can be planned against.
   const liquiditySources = useMemo(
     () =>
-      attempts.filter(
+      isCanonical
+        ? []
+        : attempts.filter(
         (a) =>
           a.status === "CONFIRMED" &&
           a.deployment_kind === "FIXED_SUPPLY_ERC20" &&
@@ -249,7 +251,7 @@ function ChainLauncherPage() {
           typeof a.contract_address === "string" &&
           /^0x[0-9a-fA-F]{40}$/.test(a.contract_address),
       ),
-    [attempts],
+    [attempts, isCanonical],
   );
 
   const liquiditySource = useMemo(
@@ -415,7 +417,7 @@ function ChainLauncherPage() {
   }
 
   async function handleDeploy() {
-    if (!launchId || !account || !onTestnet) return;
+    if (!launchId || !account || !onTestnet || isCanonical) return;
     setBusy(true);
     let attemptId: string | null = null;
     let txHash: string | null = null;
@@ -486,6 +488,8 @@ function ChainLauncherPage() {
   }
 
   async function handleDeployToken() {
+    // PCART-L3: generic test-token path is never reachable for the canonical launch.
+    if (isCanonical) return;
     // Synchronous duplicate-broadcast guard: claimed BEFORE any await, so a
     // second invocation in the same tick returns before an attempt row is
     // created and before any wallet request is made.
@@ -667,11 +671,13 @@ function ChainLauncherPage() {
   }
 
   const canDeploy =
+    !isCanonical &&
     !!launchId && !!account && onTestnet && !busy && (!latest || isTerminal(latest.status));
   const simulationFresh = simulation ? isQuoteFresh(simulation.preflight, nowMs) : false;
   const simulationReady = !!simulation && simulation.preflight.passed && simulationFresh;
   const canSimulate = !!account && onTestnet && !simBusy && !tokenBusy;
   const canDeployToken =
+    !isCanonical &&
     !!launchId &&
     !!account &&
     onTestnet &&
