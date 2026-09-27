@@ -1,5 +1,5 @@
 -- COMMERCIAL ONBOARDING C2 — self-service Free project creation
--- STATUS: STAGED FOR REVIEW ONLY. NOT APPLIED.
+-- STATUS: APPLIED as Supabase migration 20260927171231 / commercial_c2_self_service_workspace.
 --
 -- Adds one authenticated SECURITY DEFINER RPC. It does NOT change the
 -- workspaces_insert_private_beta policy: direct browser inserts by ordinary
