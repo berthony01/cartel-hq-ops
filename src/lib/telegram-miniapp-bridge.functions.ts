@@ -289,6 +289,133 @@ async function authorizeMission(
   return { ok: true, admin, telegramUserId: auth.user.id, binding };
 }
 
+/**
+ * MINI-HQ-1C lifecycle resolver — NOT LIVE-only. A same-request End/Cancel
+ * retry must still reach the lifecycle RPC after the mission is already
+ * COMPLETED/CANCELLED, so the LIVE-filtered list RPC cannot be used here.
+ * Nothing client-supplied is trusted except the mission routing hint: the
+ * workspace set comes from the operator-scoped workspaces RPC for the
+ * VALIDATED Telegram user, and the mission + its delivered target chats are
+ * read server-side restricted to that set. Normal list-missions behaviour is
+ * unchanged (still LIVE-only).
+ */
+async function resolveLifecycleCandidates(
+  admin: AdminClient,
+  telegramUserId: number,
+  missionId: string,
+): Promise<{ workspaceId: string; workspaceName: string; chatIds: string[] } | null> {
+  const { data: workspaces, error } = await admin.rpc(MINIAPP_RPC.workspaces, {
+    _telegram_user_id: telegramUserId,
+  });
+  if (error) return null;
+  const names = new Map<string, string>();
+  for (const workspace of Array.isArray(workspaces) ? workspaces : []) {
+    const ws = workspace as Record<string, unknown>;
+    const id = String(ws["workspace_id"] ?? "");
+    if (isUuid(id)) names.set(id, String(ws["workspace_name"] ?? "Workspace"));
+  }
+  if (names.size === 0) return null;
+  const { data: mission } = await admin
+    .from("social_missions")
+    .select("id, workspace_id")
+    .eq("id", missionId)
+    .in("workspace_id", [...names.keys()])
+    .maybeSingle();
+  const m = (mission ?? null) as Record<string, unknown> | null;
+  const workspaceId = String(m?.["workspace_id"] ?? "");
+  if (!m || !names.has(workspaceId)) return null;
+  const { data: targets } = await admin
+    .from("social_mission_targets")
+    .select("telegram_chat_id")
+    .eq("mission_id", missionId)
+    .eq("workspace_id", workspaceId)
+    .order("created_at", { ascending: true });
+  const chatIds = [
+    ...new Set(
+      (Array.isArray(targets) ? targets : [])
+        .map((t) => String((t as Record<string, unknown>)["telegram_chat_id"] ?? ""))
+        .filter((c) => /^-?\d+$/.test(c)),
+    ),
+  ];
+  if (chatIds.length === 0) return null;
+  return { workspaceId, workspaceName: names.get(workspaceId)!, chatIds };
+}
+
+type LifecycleAuthority = {
+  admin: AdminClient;
+  telegramUserId: number;
+  binding: Binding;
+  actorUserId: string;
+  targetId: string;
+  missionStatus: string;
+};
+
+/**
+ * Lifecycle gate: initData -> non-LIVE-capable server binding -> fresh
+ * getChatMember admin check in the mission's own chat -> authoritative
+ * social_mission_control_authorize (which does NOT filter on status). The
+ * returned actor/target/workspace/status are validated before any mutation.
+ */
+async function authorizeLifecycle(
+  initData: unknown,
+  missionId: unknown,
+): Promise<({ ok: true } & LifecycleAuthority) | MiniAppFailure> {
+  const token = botToken();
+  const auth = await validateTelegramInitData(initData, token);
+  if (!auth.ok) return fail(auth.reason);
+  if (!isUuid(missionId)) return fail("invalid_mission_id");
+  const admin = await adminClient();
+  const candidates = await resolveLifecycleCandidates(admin, auth.user.id, missionId);
+  if (!candidates) return fail("not_found");
+
+  let chatId = "";
+  for (const candidate of candidates.chatIds) {
+    if (await isCurrentChatAdmin(token, candidate, auth.user.id)) {
+      chatId = candidate;
+      break;
+    }
+  }
+  if (!chatId) return fail("not_group_admin");
+
+  const { data: authRows, error } = await admin.rpc(MINIAPP_RPC.authorize, {
+    _telegram_user_id: auth.user.id,
+    _mission_id: missionId,
+    _verified_chat_id: Number(chatId),
+  });
+  if (error) return fail("unavailable");
+  const authRow = (Array.isArray(authRows) ? authRows[0] : authRows) as
+    | Record<string, unknown>
+    | null
+    | undefined;
+  if (String(authRow?.["outcome"] ?? "") !== "ok") return fail("not_found");
+  const actorUserId = String(authRow?.["actor_user_id"] ?? "");
+  const targetId = String(authRow?.["target_id"] ?? "");
+  const workspaceId = String(authRow?.["workspace_id"] ?? "");
+  const missionStatus = String(authRow?.["mission_status"] ?? "").toUpperCase();
+  if (
+    !isUuid(actorUserId) ||
+    !isUuid(targetId) ||
+    workspaceId !== candidates.workspaceId ||
+    missionStatus.length === 0
+  ) {
+    return fail("not_found");
+  }
+  return {
+    ok: true,
+    admin,
+    telegramUserId: auth.user.id,
+    binding: {
+      workspaceId,
+      workspaceName: candidates.workspaceName,
+      chatId,
+      missionId,
+    },
+    actorUserId,
+    targetId,
+    missionStatus,
+  };
+}
+
 function hexDigest(buffer: ArrayBuffer): string {
   return Array.from(new Uint8Array(buffer))
     .map((byte) => byte.toString(16).padStart(2, "0"))
@@ -830,38 +957,24 @@ async function miniAppFinalCardEdit(args: {
   admin: AdminClient;
   telegramUserId: number;
   binding: Binding;
+  actorUserId: string;
+  targetId: string;
   action: "end_now" | "cancel";
   requestId: string;
 }): Promise<MiniAppFinalRefreshState> {
-  const { admin, telegramUserId, binding } = args;
-  const { data: authRows, error: authError } = await admin.rpc(MINIAPP_RPC.authorize, {
-    _telegram_user_id: telegramUserId,
-    _mission_id: binding.missionId,
-    _verified_chat_id: Number(binding.chatId),
-  });
-  if (authError) return "failed";
-  const authRow = (Array.isArray(authRows) ? authRows[0] : authRows) as
-    | Record<string, unknown>
-    | null
-    | undefined;
-  // The authorize RPC may refuse a no-longer-LIVE mission; the actor/target it
-  // would have returned are then unavailable and nothing is guessed.
-  const actorUserId = String(authRow?.["actor_user_id"] ?? "");
-  const authTargetId = String(authRow?.["target_id"] ?? "");
-  if (authRow?.["workspace_id"] && String(authRow["workspace_id"]) !== binding.workspaceId) {
-    return "failed";
-  }
+  const { admin, telegramUserId, binding, actorUserId, targetId } = args;
+  // Actor + target come ONLY from the validated authorize row (which does not
+  // filter on status). No first-target fallback; no edit without an actor.
+  if (!isUuid(actorUserId) || !isUuid(targetId)) return "failed";
 
-  let query = admin
+  const { data: target } = await admin
     .from("social_mission_targets")
     .select("id, edit_revision, edit_state, edit_client_request_id")
+    .eq("id", targetId)
     .eq("mission_id", binding.missionId)
     .eq("workspace_id", binding.workspaceId)
-    .eq("telegram_chat_id", Number(binding.chatId));
-  query = isUuid(authTargetId)
-    ? query.eq("id", authTargetId)
-    : query.order("created_at", { ascending: true }).limit(1);
-  const { data: target } = await query.maybeSingle();
+    .eq("telegram_chat_id", Number(binding.chatId))
+    .maybeSingle();
   const row = (target ?? null) as Record<string, unknown> | null;
   if (!row?.["id"]) return "failed";
 
@@ -887,13 +1000,13 @@ async function miniAppFinalCardEdit(args: {
           apikey: serviceKey,
           Authorization: `Bearer ${serviceKey}`,
           "X-Cartel-Internal-Source": MINIAPP_TRANSPORT_INTERNAL_SOURCE,
-          ...(isUuid(actorUserId) ? { "X-Cartel-Actor-User-Id": actorUserId } : {}),
+          "X-Cartel-Actor-User-Id": actorUserId,
         },
         body: JSON.stringify({
           action: MINIAPP_FINAL_TRANSPORT_ACTION,
           workspaceId: binding.workspaceId,
           missionId: binding.missionId,
-          targetId: String(row["id"]),
+          targetId,
           clientRequestId,
           revision,
         }),
@@ -915,16 +1028,20 @@ async function miniAppFinalCardEdit(args: {
  * recorded (`pinned_by_hq`) on the exact verified target is removed. Idempotent
  * on retry (a cleared flag short-circuits) and never fails a finalization.
  */
-async function miniAppSafeUnpin(admin: AdminClient, binding: Binding): Promise<void> {
+async function miniAppSafeUnpin(
+  admin: AdminClient,
+  binding: Binding,
+  targetId: string,
+): Promise<void> {
+  if (!isUuid(targetId)) return;
   try {
     const { data: pinned } = await admin
       .from("social_mission_targets")
       .select("id, telegram_chat_id, telegram_message_id, pinned_by_hq")
+      .eq("id", targetId)
       .eq("mission_id", binding.missionId)
       .eq("workspace_id", binding.workspaceId)
       .eq("telegram_chat_id", Number(binding.chatId))
-      .order("created_at", { ascending: true })
-      .limit(1)
       .maybeSingle();
     const row = (pinned ?? null) as Record<string, unknown> | null;
     if (!row?.["pinned_by_hq"] || !row["telegram_message_id"]) return;
@@ -961,9 +1078,11 @@ async function miniAppFinalize(
   action: "end_now" | "cancel",
 ): Promise<MiniAppLifecycleResult> {
   if (!isRequestId(data?.requestId)) return fail("invalid_request_id");
-  const gate = await authorizeMission(data?.initData, data?.missionId);
+  // Lifecycle gate is NOT LIVE-only, so a same-request retry after the mission
+  // is already COMPLETED/CANCELLED still reaches the RPC's `replayed` outcome.
+  const gate = await authorizeLifecycle(data?.initData, data?.missionId);
   if (!gate.ok) return gate;
-  const { admin, telegramUserId, binding } = gate;
+  const { admin, telegramUserId, binding, actorUserId, targetId } = gate;
 
   const { data: result, error } = await admin.rpc(
     action === "end_now" ? MINIAPP_RPC.endNow : MINIAPP_RPC.cancel,
@@ -983,6 +1102,8 @@ async function miniAppFinalize(
     admin,
     telegramUserId,
     binding,
+    actorUserId,
+    targetId,
     action,
     requestId: data!.requestId,
   });
@@ -996,7 +1117,7 @@ async function miniAppFinalize(
     });
   }
 
-  await miniAppSafeUnpin(admin, binding);
+  await miniAppSafeUnpin(admin, binding, targetId);
   return { ok: true, outcome, refresh };
 }
 
