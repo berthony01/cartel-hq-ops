@@ -234,5 +234,29 @@ check("E9", ["artifact_id === PCART_FIXED_INTENT.artifactId", 'deployment_kind =
 check("E8", !/\b4663\b|PRODUCTION|mainnet/i.test(noComments(CLIENT) + noComments(PANEL)),
   "rehearsal client/panel have no mainnet path");
 
+// H — audit-first / no-repeat PCART rehearsal
+const blockSet = PANEL.match(/PCART_BLOCKING_STATUSES = new Set\(\[([^\]]*)\]\)/)?.[1] ?? "";
+const blocking = new Set([...blockSet.matchAll(/"([A-Z]+)"/g)].map((m) => m[1]));
+check("H1", ["DRAFT", "SUBMITTED", "PENDING", "CONFIRMED"].every((s) => blocking.has(s)) &&
+  !blocking.has("FAILED") && !blocking.has("ABANDONED") && blocking.size === 4,
+  "UI blocks DRAFT/SUBMITTED/PENDING/CONFIRMED; FAILED/ABANDONED retryable");
+check("H2", /pcartAttempts\.find\(\(a\) =>\s*PCART_BLOCKING_STATUSES\.has\(a\.status\)/.test(PANEL) &&
+  /!blockedReason &&/.test(PANEL.slice(PANEL.indexOf("const canRun"))),
+  "block derived only from PCART attempts and gates canRun");
+check("H3", /confirmed exact-artifact rehearsal already exists and must not be repeated/.test(PANEL) &&
+  /Resolve it before starting another rehearsal/.test(PANEL) && /Only failed or abandoned attempts may be retried/.test(PANEL),
+  "UI explains active-resolve-first and confirmed no-repeat");
+const fnStart = SQL.indexOf("FUNCTION public.create_launch_chain_pcart_rehearsal_attempt(");
+const fn = SQL.slice(fnStart, SQL.indexOf("$$;", fnStart));
+const replayIdx = fn.indexOf("client_request_id = v_request");
+const preIdx = fn.search(/IF EXISTS \(\s*SELECT 1 FROM public\.launch_chain_deployments b/);
+const allocIdx = fn.indexOf("max(d.attempt_number)");
+check("H4", replayIdx > 0 && preIdx > replayIdx && allocIdx > preIdx &&
+  /b\.artifact_id = 'pepecartel-token-v1'\s*AND b\.status IN \('DRAFT', 'SUBMITTED', 'PENDING', 'CONFIRMED'\)/.test(fn),
+  "RPC precheck runs after idempotent replay and before attempt allocation");
+check("H5", /CREATE UNIQUE INDEX IF NOT EXISTS launch_chain_deployments_one_active_pcart_rehearsal\s*ON public\.launch_chain_deployments \(launch_id\)\s*WHERE artifact_id = 'pepecartel-token-v1'\s*AND status IN \('DRAFT', 'SUBMITTED', 'PENDING', 'CONFIRMED'\);/.test(SQL) &&
+  SQL.indexOf("launch_chain_deployments_one_active_pcart_rehearsal") < fnStart,
+  "partial unique index: one active-or-confirmed PCART rehearsal per launch");
+
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures === 0 ? 0 : 1);
