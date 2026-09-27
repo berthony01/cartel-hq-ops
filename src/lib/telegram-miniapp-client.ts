@@ -391,3 +391,80 @@ export function networkUncertaintyNotice(): MiniAppMutationNotice {
     retry: true,
   };
 }
+
+/* ------------------------------------------ MINI-HQ-1C LIFECYCLE RESULTS */
+
+export type MiniAppLifecycleKind = "end_now" | "cancel";
+
+export type MiniAppLifecycleNotice = MiniAppMutationNotice & {
+  /** True only when the mission is proven final (committed). */
+  finalized: boolean;
+};
+
+/**
+ * Truthful copy for END NOW / CANCEL. The lifecycle commit and the in-place
+ * card edit are separate facts; an unconfirmed card edit never invites a
+ * second edit — the same request id is replayed and the transport dedupes.
+ */
+export function classifyLifecycleResult(
+  kind: MiniAppLifecycleKind,
+  result: { ok?: boolean; outcome?: string; refresh?: string; reason?: string } | null | undefined,
+): MiniAppLifecycleNotice {
+  const done = kind === "end_now" ? "Mission ended" : "Mission cancelled";
+  if (!result || result.ok !== true) {
+    // A retry after the mission already finalized can no longer resolve it as
+    // a live mission; that is reported honestly, not as a new success.
+    if (result?.reason === "not_found") {
+      return {
+        tone: "warning",
+        message:
+          "This mission is no longer live, so it may already be finalized. Check the card in the community before doing anything else.",
+        committed: false,
+        retry: false,
+        finalized: false,
+      };
+    }
+    return {
+      tone: "error",
+      message: miniAppMutationFailureMessage(result?.reason),
+      committed: false,
+      retry: false,
+      finalized: false,
+    };
+  }
+  if (isCommittedOutcome(result.outcome)) {
+    if (result.refresh === "edited" || result.refresh === "replayed") {
+      return {
+        tone: "success",
+        message: `${done}. The Telegram card was updated in place.`,
+        committed: true,
+        retry: false,
+        finalized: true,
+      };
+    }
+    return {
+      tone: "warning",
+      message: `${done}, but the Telegram card update could not be confirmed. Do not resend it from the bot.`,
+      committed: true,
+      retry: false,
+      finalized: true,
+    };
+  }
+  const outcome = result.outcome;
+  if (outcome === "not_live") {
+    return {
+      tone: "warning",
+      message: "This mission is no longer live. Nothing was changed.",
+      committed: false,
+      retry: false,
+      finalized: false,
+    };
+  }
+  return {
+    tone: "error",
+    message: miniAppMutationFailureMessage(outcome),
+    committed: false,
+    retry: outcome === "conflict" || outcome === "event_claimed",
+    finalized: false,
+  };
+}
