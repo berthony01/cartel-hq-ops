@@ -68,6 +68,15 @@ ALTER TABLE public.launch_chain_deployments
   );
 
 -- -----------------------------------------------------------------------------
+-- 2b. One active-or-confirmed PCART rehearsal per launch (race-safe authority)
+-- Live audit before staging: zero pepecartel-token-v1 rows, so no conflict.
+-- -----------------------------------------------------------------------------
+CREATE UNIQUE INDEX IF NOT EXISTS launch_chain_deployments_one_active_pcart_rehearsal
+  ON public.launch_chain_deployments (launch_id)
+  WHERE artifact_id = 'pepecartel-token-v1'
+    AND status IN ('DRAFT', 'SUBMITTED', 'PENDING', 'CONFIRMED');
+
+-- -----------------------------------------------------------------------------
 -- 3. Dedicated authenticated PCART rehearsal-attempt RPC
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.create_launch_chain_pcart_rehearsal_attempt(
@@ -134,6 +143,20 @@ BEGIN
       RAISE EXCEPTION 'Idempotency key conflict' USING ERRCODE = '22023';
     END IF;
     RETURN v_row;
+  END IF;
+
+  -- Audit-first / no-repeat: refuse a new PCART rehearsal while one is active
+  -- or already CONFIRMED. Runs AFTER the idempotent replay above so an exact
+  -- same-request retry still returns its row. The partial unique index
+  -- launch_chain_deployments_one_active_pcart_rehearsal is the concurrency authority.
+  IF EXISTS (
+    SELECT 1 FROM public.launch_chain_deployments b
+     WHERE b.launch_id = _launch_id
+       AND b.artifact_id = 'pepecartel-token-v1'
+       AND b.status IN ('DRAFT', 'SUBMITTED', 'PENDING', 'CONFIRMED')
+  ) THEN
+    RAISE EXCEPTION 'A PCART rehearsal is already active or confirmed for this launch; resolve it first (confirmed rehearsals are not repeated)'
+      USING ERRCODE = '23505';
   END IF;
 
   SELECT coalesce(max(d.attempt_number), 0) + 1 INTO v_next
