@@ -5541,6 +5541,10 @@ export type Database = {
           message_id: string
         }[]
       }
+      create_self_service_workspace: {
+        Args: { _name: string; _slug: string }
+        Returns: string
+      }
       create_social_mission_from_telegram_link: {
         Args: {
           _author_handle: string
