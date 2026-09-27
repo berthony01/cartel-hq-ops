@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { FlaskConical, Loader2 } from "lucide-react";
+import { FlaskConical, Loader2, RefreshCw } from "lucide-react";
 import { Section } from "@/components/cartel/Section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,9 +8,12 @@ import { ROBINHOOD_TESTNET_CHAIN_ID } from "@/lib/chain-registry";
 import {
   abandonDeploymentAttempt,
   broadcastTokenDeployment,
+  explorerAddressUrl,
+  explorerTxUrl,
   isUserRejection,
   newClientRequestId,
   submitDeploymentTx,
+  type DeploymentRow,
 } from "@/lib/chain-launcher";
 import {
   PCART_FIXED_INTENT,
@@ -20,23 +23,31 @@ import {
 import {
   PcartRehearsalUnavailableError,
   createPcartRehearsalAttempt,
+  isPcartRehearsalRow,
 } from "@/lib/pcart-rehearsal";
+
+const TERMINAL = new Set(["CONFIRMED", "FAILED", "ABANDONED"]);
 
 /**
  * PCART-L3 — exact-artifact TESTNET rehearsal for the canonical PEPECARTEL
  * launch only. Fixed intent; the only input is a rehearsal recipient. Never
  * the production treasury, never mainnet, never an official contract record,
- * lifecycle change, notification or liquidity action.
+ * lifecycle change, notification or liquidity action. Evidence list shows
+ * pepecartel-token-v1 attempts ONLY; verification is manual (no polling).
  */
 export function PcartRehearsalPanel(props: {
   launchId: string;
   account: string | null;
   onTestnet: boolean;
   onChanged: () => Promise<unknown> | void;
+  attempts: DeploymentRow[];
+  onVerify: (deploymentId: string) => void;
+  verifying: boolean;
 }) {
   const [recipient, setRecipient] = useState("");
   const [busy, setBusy] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
+  const pcartAttempts = props.attempts.filter(isPcartRehearsalRow);
 
   let recipientError: string | null = null;
   if (recipient.trim()) {
@@ -157,6 +168,63 @@ export function PcartRehearsalPanel(props: {
             Switch the wallet to chain {ROBINHOOD_TESTNET_CHAIN_ID} first.
           </p>
         ) : null}
+      </div>
+
+      <div className="mt-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          PCART rehearsal evidence
+        </p>
+        {pcartAttempts.length === 0 ? (
+          <p className="mt-2 text-xs text-muted-foreground">No PCART rehearsal attempt yet.</p>
+        ) : (
+          <ul className="mt-2 flex flex-col gap-2">
+            {pcartAttempts.map((a) => (
+              <li key={a.id} className="rounded-md border border-border p-3 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold text-foreground">
+                    Attempt #{a.attempt_number} · {a.status}
+                  </span>
+                  <span className="text-muted-foreground">{a.confirmations} confirmations</span>
+                </div>
+                <p className="mt-1 break-all text-muted-foreground">
+                  Recipient (rehearsal): {a.token_recipient}
+                </p>
+                {a.tx_hash ? (
+                  <p className="mt-1 break-all text-muted-foreground">
+                    Tx:{" "}
+                    <a className="text-gold underline" href={explorerTxUrl(a.tx_hash)} target="_blank" rel="noreferrer">
+                      {a.tx_hash}
+                    </a>
+                  </p>
+                ) : null}
+                {a.contract_address ? (
+                  <p className="mt-1 break-all text-muted-foreground">
+                    Verified rehearsal contract (testnet):{" "}
+                    <a className="text-gold underline" href={explorerAddressUrl(a.contract_address)} target="_blank" rel="noreferrer">
+                      {a.contract_address}
+                    </a>
+                  </p>
+                ) : null}
+                {a.failure_detail ? <p className="mt-1 text-destructive">{a.failure_detail}</p> : null}
+                {!TERMINAL.has(a.status) && a.tx_hash ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-2 min-h-11"
+                    disabled={props.verifying}
+                    onClick={() => props.onVerify(a.id)}
+                  >
+                    <RefreshCw className="size-4" aria-hidden="true" />
+                    Check verification
+                  </Button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-2 text-xs text-muted-foreground">
+          Verification is manual and runs only when you click it. No automatic polling.
+        </p>
       </div>
     </Section>
   );
