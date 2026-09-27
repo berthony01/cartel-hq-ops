@@ -33,6 +33,8 @@ const TERMINAL = new Set(["CONFIRMED", "FAILED", "ABANDONED"]);
  * lifecycle change, notification or liquidity action. Evidence list shows
  * PCART rehearsal attempts ONLY; verification is manual (no polling).
  */
+const PCART_BLOCKING_STATUSES = new Set(["DRAFT", "SUBMITTED", "PENDING", "CONFIRMED"]);
+
 export function PcartRehearsalPanel(props: {
   launchId: string;
   account: string | null;
@@ -63,8 +65,25 @@ export function PcartRehearsalPanel(props: {
       recipientError = e instanceof Error ? e.message : "Invalid recipient.";
     }
   }
+  // Audit-first / no-repeat: derived ONLY from PCART attempts. An active attempt
+  // must be resolved first; a CONFIRMED rehearsal is never repeated. Only
+  // FAILED / ABANDONED attempts allow a new run.
+  const activePcartAttempt = pcartAttempts.find((a) =>
+    PCART_BLOCKING_STATUSES.has(a.status),
+  );
+  const blockedReason: string | null = !activePcartAttempt
+    ? null
+    : activePcartAttempt.status === "CONFIRMED"
+      ? "A confirmed exact-artifact rehearsal already exists and must not be repeated."
+      : `Attempt #${activePcartAttempt.attempt_number} is ${activePcartAttempt.status}. Resolve it before starting another rehearsal.`;
   const canRun =
-    !busy && !unavailable && !!props.account && props.onTestnet && !!recipient.trim() && !recipientError;
+    !busy &&
+    !unavailable &&
+    !blockedReason &&
+    !!props.account &&
+    props.onTestnet &&
+    !!recipient.trim() &&
+    !recipientError;
 
   async function run() {
     if (inFlight.current) return;
