@@ -1141,6 +1141,7 @@ export type Database = {
       }
       launch_production_deployment_requests: {
         Row: {
+          artifact_id: string
           assigned_operator_id: string | null
           chain_id: number
           decision_note: string | null
@@ -1164,6 +1165,7 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          artifact_id?: string
           assigned_operator_id?: string | null
           chain_id?: number
           decision_note?: string | null
@@ -1187,6 +1189,7 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          artifact_id?: string
           assigned_operator_id?: string | null
           chain_id?: number
           decision_note?: string | null
@@ -4934,6 +4937,7 @@ export type Database = {
           _review_fingerprint: string
         }
         Returns: {
+          artifact_id: string
           assigned_operator_id: string | null
           chain_id: number
           decision_note: string | null
@@ -5259,6 +5263,69 @@ export type Database = {
           _client_request_id: string
           _deployer_address: string
           _launch_id: string
+        }
+        Returns: {
+          artifact_id: string | null
+          attempt_number: number
+          block_hash: string | null
+          block_number: number | null
+          chain_id: number
+          client_request_id: string
+          confirmations: number
+          contract_address: string | null
+          created_at: string
+          created_by: string | null
+          deployer_address: string
+          deployment_kind: string
+          failure_code: string | null
+          failure_detail: string | null
+          finality_last_checked_at: string | null
+          finality_notice: string | null
+          finality_provider_kind: string | null
+          finality_state: string
+          finalized_at: string | null
+          finalized_block_hash_confirmed: boolean | null
+          finalized_block_number: number | null
+          finalized_head_block_number: number | null
+          id: string
+          init_code_hash: string | null
+          last_checked_at: string | null
+          launch_id: string
+          network_environment: string
+          review_fingerprint: string | null
+          status: string
+          submitted_at: string | null
+          token_decimals: number | null
+          token_name: string | null
+          token_recipient: string | null
+          token_symbol: string | null
+          token_total_supply: number | null
+          token_total_supply_text: string | null
+          tx_hash: string | null
+          updated_at: string
+          verified_at: string | null
+          verified_recipient_balance: number | null
+          verified_recipient_balance_text: string | null
+          verified_token_decimals: number | null
+          verified_token_name: string | null
+          verified_token_symbol: string | null
+          verified_total_supply: number | null
+          verified_total_supply_text: string | null
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_chain_deployments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_launch_chain_pcart_rehearsal_attempt: {
+        Args: {
+          _client_request_id: string
+          _deployer_address: string
+          _launch_id: string
+          _rehearsal_recipient: string
         }
         Returns: {
           artifact_id: string | null
@@ -6744,6 +6811,7 @@ export type Database = {
       set_launch_production_deployment_request_status: {
         Args: { _note?: string; _request_id: string; _target_status: string }
         Returns: {
+          artifact_id: string
           assigned_operator_id: string | null
           chain_id: number
           decision_note: string | null
@@ -7170,6 +7238,7 @@ export type Database = {
           _token_supply_whole: string
         }
         Returns: {
+          artifact_id: string
           assigned_operator_id: string | null
           chain_id: number
           decision_note: string | null
@@ -7257,6 +7326,7 @@ export type Database = {
       withdraw_launch_production_deployment_request: {
         Args: { _request_id: string }
         Returns: {
+          artifact_id: string
           assigned_operator_id: string | null
           chain_id: number
           decision_note: string | null
