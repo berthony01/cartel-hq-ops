@@ -1,10 +1,11 @@
 -- =============================================================================
 -- PCART-L3 — Exact-artifact TESTNET rehearsal path + canonical mainnet isolation
 -- =============================================================================
--- STATUS: STAGED, NOT APPLIED. Review and apply UNCHANGED in a separate, gated
--- turn through the normal migration workflow. Until applied, the app fails
--- closed: the rehearsal RPC is missing, so no attempt is created and nothing is
--- broadcast.
+-- STATUS: APPLIED as migration 20260927141715 / pcart_l3_rehearsal_and_mainnet_isolation.
+-- The exact payload below is recorded byte-for-byte in
+-- supabase/migrations/20260927141715_pcart_l3_rehearsal_and_mainnet_isolation.sql.
+-- If the rehearsal RPC is ever missing or drifted, the app still fails closed:
+-- no attempt is created and nothing is broadcast.
 --
 -- Additive, single transaction. Does NOT:
 --   - production-allowlist pepecartel-token-v1;
