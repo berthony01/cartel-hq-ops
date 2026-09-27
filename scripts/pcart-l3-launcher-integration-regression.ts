@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { decodeAbiParameters, keccak256 } from "viem";
 import {
   ARTIFACT_ENVIRONMENT_ALLOWLIST,
-  CANONICAL_PCART_LAUNCH_ID,
+  CANONICAL_PCART_IDENTITY,
   PCART_FIXED_INTENT,
   buildPcartInitCode,
   isArtifactAllowedIn,
@@ -48,6 +48,9 @@ const PANEL = read("src/components/chain/PcartRehearsalPanel.tsx");
 const CHECKPOINT = read("src/components/cartel/PcartProductionBlockedCheckpoint.tsx");
 const LC = read("src/routes/_authenticated/launch-control.tsx");
 const CL = read("src/routes/_authenticated/chain-launcher.tsx");
+const CANARY_FN = read("src/lib/chain-mainnet-canary.functions.ts");
+const CANARY_UI = read("src/routes/_authenticated/mainnet-canary.tsx");
+const REGISTRY = read("src/lib/launch-artifact-registry.ts");
 const MANIFEST = JSON.parse(read("artifacts/pepecartel-token-v1.manifest.json"));
 
 // A. exact bytes + intent
@@ -92,19 +95,53 @@ check("B6", /MAINNET_LIQUIDITY_TX_ENABLED = false as const/.test(read("src/lib/c
   /LIQUIDITY_TX_ENABLED = false as const/.test(read("src/lib/chain-registry.ts")), "liquidity switches remain false");
 
 // C. canonical-launch isolation
-check("C1", isCanonicalPcartLaunch({ id: CANONICAL_PCART_LAUNCH_ID }) &&
-  isCanonicalPcartLaunch({ public_slug: "pepecartel-launch" }) &&
-  !isCanonicalPcartLaunch({ id: "00000000-0000-0000-0000-000000000000", public_slug: "other" }) &&
-  !isCanonicalPcartLaunch(null), "canonical detection by id or slug, fail closed");
+const CANON = { id: "x", public_slug: "pepecartel-launch", launch_kind: "PROJECT", token_name: "PEPECARTEL", ticker: "$PCART" };
+check("C1", isCanonicalPcartLaunch(CANON) &&
+  !isCanonicalPcartLaunch({ public_slug: "pepecartel-launch" }) &&
+  !isCanonicalPcartLaunch({ ...CANON, ticker: "PCART" }) &&
+  !isCanonicalPcartLaunch({ ...CANON, token_name: "pepecartel" }) &&
+  !isCanonicalPcartLaunch({ ...CANON, launch_kind: "INTERNAL_TEST" }) &&
+  !isCanonicalPcartLaunch({ ...CANON, public_slug: "other" }) &&
+  !isCanonicalPcartLaunch(null), "exact semantic identity: all four fields required, never slug/id alone");
+check("C1b", CANONICAL_PCART_IDENTITY.ticker === "$PCART" && !/CANONICAL_PCART_LAUNCH_ID/.test(REGISTRY),
+  "no pinned launch id export");
 check("C2", /isCanonicalPcartLaunch\(selected\)\s*\?\s*\(\s*<PcartProductionBlockedCheckpoint \/>/.test(LC),
   "Launch Control renders the blocked checkpoint instead of the generic request form for the canonical launch");
 check("C3", !/<input|<Input|<Button|onClick|onSubmit/.test(CHECKPOINT), "checkpoint is read-only (no inputs/actions)");
 for (const b of ["rehearsal", "2-of-3", "Safe verification", "production-allowlist migration"]) {
   check(`C4:${b}`, CHECKPOINT.includes(b), `checkpoint lists blocker: ${b}`);
 }
-check("C5", /isCanonicalPcartLaunch\(selectedLaunch\)\s*\?\s*\(\s*<PcartRehearsalPanel/.test(CL),
-  "chain launcher shows the rehearsal panel only for the canonical launch");
-check("C6", CL.includes('a.artifact_id !== "pepecartel-token-v1"'), "PCART rows never feed liquidity planning");
+check("C5", /launchId && isCanonical \? \(\s*<PcartRehearsalPanel[\s\S]*?\) : \(\s*<>\s*<Section/.test(CL),
+  "chain launcher: canonical -> rehearsal panel only; generic sections in the else branch");
+const elseBranch = CL.slice(CL.indexOf("launchId && isCanonical ?"));
+check("C5b", ["Deploy Test Contract", "Deploy Test Token", "Build Liquidity Plan"].every((t) => elseBranch.includes(t)) &&
+  elseBranch.indexOf("Deploy Test Contract") > elseBranch.indexOf(") : ("),
+  "generic inert / test-token / liquidity controls preserved for noncanonical launches");
+check("C5c", /!launchId \|\| !account \|\| !onTestnet \|\| isCanonical\) return;/.test(CL) &&
+  /handleDeployToken\(\) \{\s*\/\/[^\n]*\n\s*if \(isCanonical\) return;/.test(CL) &&
+  /const canDeploy =\s*!isCanonical &&/.test(CL) && /const canDeployToken =\s*!isCanonical &&/.test(CL),
+  "generic deploy handlers refuse the canonical launch");
+check("C6", CL.includes('a.artifact_id !== "pepecartel-token-v1"') && /isCanonical\s*\?\s*\[\]/.test(CL),
+  "PCART rows and the canonical launch never feed liquidity planning");
+check("C7", /attempts=\{attempts\}/.test(CL) && /onVerify=\{\(id\) => verifyMutation\.mutate\(id\)\}/.test(CL) &&
+  /props\.attempts\.filter\(isPcartRehearsalRow\)/.test(PANEL) && /Check verification/.test(PANEL) &&
+  !/setInterval|refetchInterval/.test(PANEL),
+  "PCART evidence panel: PCART attempts only, manual verification, no polling");
+
+// F. freeform mainnet canary isolation
+check("F1", /\.filter\(\s*\(row\) => !isCanonicalPcartLaunch\(row\)/.test(CANARY_UI),
+  "canary launch options exclude the canonical launch");
+check("F2", /some\(\(row\) => row\.id === requested\) \? requested : ""/.test(CANARY_UI) &&
+  /window\.localStorage\.removeItem\(LAUNCH_SELECTION_STORAGE_KEY\)/.test(CANARY_UI),
+  "stale/unknown (incl. canonical) stored selection is cleared/refused");
+const attemptFn = CANARY_FN.split("export const createCanaryDeploymentAttempt")[1] ?? "";
+check("F3", /select\("id, chain, public_slug, launch_kind, token_name, ticker"\)/.test(attemptFn) &&
+  attemptFn.indexOf('attemptFail("CANONICAL_PCART_PROTECTED")') > 0 &&
+  attemptFn.indexOf('attemptFail("CANONICAL_PCART_PROTECTED")') <
+    attemptFn.indexOf("create_launch_chain_production_token_deployment_attempt"),
+  "server precheck refuses the canonical launch before the production-attempt RPC");
+check("F4", /"LAUNCH_CHAIN_MISMATCH"/.test(attemptFn) && /RECIPIENT_MUST_MATCH_DEPLOYER/.test(attemptFn),
+  "generic canary checks unchanged for noncanonical launches");
 
 // D. staged SQL — fail-closed + no generic-mainnet fallback
 check("D0", readdirSync("supabase/migrations").every((f) => !/pepecartel-token-v1/.test(read(`supabase/migrations/${f}`))),
@@ -122,16 +159,21 @@ check("D4", /private\.is_canonical_pcart_launch\(r\.launch_id\)/.test(beginBody.
   /r\.artifact_id is distinct from 'cartel-fixed-erc20-v1'/.test(beginBody),
   "begin-execution RPC rejects the canonical launch and non-generic bindings");
 const rpc = SQL.split("FUNCTION public.create_launch_chain_pcart_rehearsal_attempt(")[1]?.split("$$;")[0] ?? "";
-check("D5", rpc.includes("9f9af215-66ee-4a10-92db-617b61fb7fd3") && rpc.includes("'pepecartel-launch'") &&
-  rpc.includes("'PROJECT'") && rpc.includes("46630, 'TESTNET'") &&
+check("D5", !/9f9af215/.test(SQL + REGISTRY + CL + CANARY_FN + CANARY_UI) &&
+  rpc.includes("private.is_canonical_pcart_launch(l.id)") && rpc.includes("'pepecartel-launch'") &&
+  rpc.includes("'PROJECT'") && rpc.includes("l.ticker IS DISTINCT FROM '$PCART'") &&
+  rpc.includes("l.token_name IS DISTINCT FROM 'PEPECARTEL'") && rpc.includes("46630, 'TESTNET'") &&
   rpc.includes("'pepecartel-token-v1', 'PEPECARTEL', 'PCART', 18") &&
   rpc.includes("1000000000000000000000000000") && rpc.includes("Invalid rehearsal recipient"),
-  "rehearsal RPC pins canonical identity, testnet, exact intent and nonzero recipient");
+  "no hardcoded UUID; rehearsal RPC pins exact semantic identity, testnet, intent, nonzero recipient");
+const helper = SQL.split("FUNCTION private.is_canonical_pcart_launch(")[1]?.split("$$;")[0] ?? "";
+check("D5b", /l\.public_slug = 'pepecartel-launch'\s*AND l\.launch_kind = 'PROJECT'\s*AND l\.token_name = 'PEPECARTEL'\s*AND l\.ticker = '\$PCART'/.test(helper) &&
+  !/\bOR\b/.test(helper), "DB helper requires ALL identity fields (never id OR slug)");
 check("D6", !/official_contract|launches\s+SET|UPDATE public\.launches|launch_events|notification|liquidity/i.test(rpc),
   "rehearsal RPC writes no official address, lifecycle, notification or liquidity state");
 const defs = SQL.match(/SECURITY DEFINER\s*\n\s*SET search_path = ''/g) ?? [];
-check("D7", defs.length === 6 && !/SET search_path = public/i.test(SQL) && !/SET search_path TO 'public'/.test(SQL),
-  "all six SECURITY DEFINER functions use an empty search_path");
+check("D7", defs.length === 7 && !/SET search_path = public/i.test(SQL) && !/SET search_path TO 'public'/.test(SQL),
+  "all seven SECURITY DEFINER functions use an empty search_path");
 check("D8", /REVOKE ALL ON FUNCTION public\.create_launch_chain_pcart_rehearsal_attempt\(uuid, text, text, text\)\s*FROM PUBLIC, anon;/.test(SQL) &&
   /GRANT EXECUTE ON FUNCTION public\.create_launch_chain_pcart_rehearsal_attempt\(uuid, text, text, text\)\s*TO authenticated;/.test(SQL),
   "rehearsal RPC: public/anon revoked, authenticated only");
@@ -140,6 +182,16 @@ check("D9", /apply_launch_chain_token_deployment_verification\(\s*uuid, text, in
 check("D10", !/runtime_control|emergency_stop|execution_control|MAINNET_LIQUIDITY/i.test(SQL),
   "staged SQL does not touch runtime control, emergency stop or liquidity switches");
 check("D11", /^BEGIN;/m.test(SQL) && /^COMMIT;/m.test(SQL), "staged SQL is a single transaction");
+
+const guard = SQL.split("FUNCTION public.enforce_canonical_pcart_no_production_deployment()")[1] ?? "";
+check("D12", /NEW\.network_environment = 'PRODUCTION' OR NEW\.chain_id = 4663/.test(guard) &&
+  /private\.is_canonical_pcart_launch\(NEW\.launch_id\)/.test(guard) && !/artifact_id\s*=/.test(guard.split("$$;")[0] ?? ""),
+  "table-boundary guard refuses canonical PRODUCTION/4663 rows regardless of artifact");
+check("D13", /BEFORE INSERT OR UPDATE OF launch_id, chain_id, network_environment, artifact_id\s*ON public\.launch_chain_deployments/.test(SQL) &&
+  /enforce_canonical_pcart_no_production_deployment\(\)\s*FROM PUBLIC, anon, authenticated;/.test(SQL),
+  "guard fires on insert + identity update; execute revoked from PUBLIC/anon/authenticated");
+check("D14", !/TESTNET/.test(guard.split("$$;")[0] ?? "") && /46630/.test(SQL),
+  "guard does not touch TESTNET rehearsal rows or noncanonical launches");
 
 // E. verifier + client
 check("E1", /isPcart\s*\?\s*PCART_FIXED_INTENT\.runtimeHash\s*:\s*CARTEL_FIXED_ERC20_RUNTIME_BYTECODE_HASH/.test(VERIFY),
@@ -157,6 +209,11 @@ check("E6", PANEL.indexOf("createPcartRehearsalAttempt(") < PANEL.indexOf("broad
 check("E7", /NOT the production treasury/.test(PANEL) && /not the official PEPECARTEL token/.test(PANEL),
   "panel labels testnet-only and not the treasury");
 const noComments = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/production treasury/gi, "");
+check("E9", ["artifact_id === PCART_FIXED_INTENT.artifactId", 'deployment_kind === "FIXED_SUPPLY_ERC20"',
+  "Number(row.chain_id) === 46630", 'network_environment === "TESTNET"', "token_name === PCART_FIXED_INTENT.name",
+  "token_symbol === PCART_FIXED_INTENT.symbol", "token_decimals) === PCART_FIXED_INTENT.decimals",
+  "supply === PCART_FIXED_INTENT.totalSupply", "token_recipient === recipient", 'status === "DRAFT"'].every((t) => CLIENT.includes(t)),
+  "client validates every frozen field of the returned row");
 check("E8", !/\b4663\b|PRODUCTION|mainnet/i.test(noComments(CLIENT) + noComments(PANEL)),
   "rehearsal client/panel have no mainnet path");
 
