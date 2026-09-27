@@ -151,6 +151,7 @@ function Fact({ label, value }: { label: string; value: string }) {
 
 function HqDashboard() {
   const { workspace, workspaceId, loading: workspaceLoading } = useWorkspace();
+  const [createOpen, setCreateOpen] = useState(false);
   const journeyQuery = useProjectJourney(workspaceId);
 
   const packsQuery = useQuery({
