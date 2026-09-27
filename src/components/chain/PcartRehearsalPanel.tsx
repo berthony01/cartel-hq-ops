@@ -4,12 +4,10 @@ import { FlaskConical, Loader2, RefreshCw } from "lucide-react";
 import { Section } from "@/components/cartel/Section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ROBINHOOD_TESTNET_CHAIN_ID } from "@/lib/chain-registry";
+import { ROBINHOOD_TESTNET_CHAIN_ID, explorerAddressUrl, explorerTxUrl } from "@/lib/chain-registry";
 import {
   abandonDeploymentAttempt,
   broadcastTokenDeployment,
-  explorerAddressUrl,
-  explorerTxUrl,
   isUserRejection,
   newClientRequestId,
   submitDeploymentTx,
