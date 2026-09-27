@@ -1130,6 +1130,90 @@ export const miniAppCancelMission = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<MiniAppLifecycleResult> => miniAppFinalize(data, "cancel"));
 
 /** Capability probe: reports exactly the mutations this bridge supports. */
+/* ------------------------------------------- C3 COMMERCIAL STATUS (READ-ONLY) */
+
+/**
+ * COMMERCIAL C3 — read-only plan visibility for the Mini App.
+ *
+ * Order of gates: validated initData -> UUID workspace -> workspace must be in
+ * the operator-scoped social_mission_control_workspaces set for the VALIDATED
+ * Telegram user -> linked platform user resolved server-side from
+ * telegram_connections (never from the client). Only then are the EXISTING
+ * authoritative DB functions called with that explicit actor; the service
+ * client has no auth.uid(), so their ACTOR_MISMATCH guard does not apply and
+ * their owner/unrestricted bypass and membership checks run unchanged.
+ * Returns bounded UI state only — no Stripe/provider identifiers. Any error
+ * fails closed. No provider API call, no write.
+ */
+export const MINIAPP_COMMERCIAL_RPC = {
+  billingStatus: "get_workspace_billing_status",
+  access: "evaluate_commercial_access",
+} as const;
+export const MINIAPP_COMMERCIAL_FEATURES = ["x_missions", "project_inbox", "sticker_drops"] as const;
+export type MiniAppCommercialFeature = (typeof MINIAPP_COMMERCIAL_FEATURES)[number];
+export type MiniAppCommercialStatus = {
+  ok: true;
+  plan: { code: string; name: string };
+  unrestricted: boolean;
+  canUpgrade: boolean;
+  features: Record<MiniAppCommercialFeature, boolean>;
+};
+
+export const miniAppCommercialStatus = createServerFn({ method: "POST" })
+  .inputValidator((input: { initData: string; workspaceId: string }) => input)
+  .handler(async ({ data }): Promise<MiniAppCommercialStatus | MiniAppFailure> => {
+    const auth = await validateTelegramInitData(data?.initData, botToken());
+    if (!auth.ok) return fail(auth.reason);
+    if (!isUuid(data?.workspaceId)) return fail("invalid_workspace_id");
+
+    const admin = await adminClient();
+    const { data: workspaceRows, error: workspaceError } = await admin.rpc(MINIAPP_RPC.workspaces, {
+      _telegram_user_id: auth.user.id,
+    });
+    if (workspaceError) return fail("unavailable");
+    const authorized = (Array.isArray(workspaceRows) ? workspaceRows : []).some(
+      (row) => String((row as Record<string, unknown>)["workspace_id"] ?? "") === data.workspaceId,
+    );
+    if (!authorized) return fail("not_found");
+
+    const { data: link, error: linkError } = await admin
+      .from("telegram_connections")
+      .select("user_id")
+      .eq("telegram_user_id", auth.user.id)
+      .maybeSingle();
+    const actorUserId = String((link as Record<string, unknown> | null)?.["user_id"] ?? "");
+    if (linkError || !isUuid(actorUserId)) return fail("unavailable");
+
+    const { data: statusData, error: statusError } = await admin.rpc(MINIAPP_COMMERCIAL_RPC.billingStatus, {
+      _workspace_id: data.workspaceId,
+      _user_id: actorUserId,
+    });
+    const status = (statusData ?? null) as Record<string, unknown> | null;
+    if (statusError || !status || status["ok"] !== true) return fail("unavailable");
+    const plan = (status["plan"] ?? null) as Record<string, unknown> | null;
+    const planCode = String(plan?.["code"] ?? "").trim();
+    if (!planCode) return fail("unavailable");
+
+    const features = {} as Record<MiniAppCommercialFeature, boolean>;
+    for (const feature of MINIAPP_COMMERCIAL_FEATURES) {
+      const { data: accessData, error: accessError } = await admin.rpc(MINIAPP_COMMERCIAL_RPC.access, {
+        _workspace_id: data.workspaceId,
+        _feature_key: feature,
+        _user_id: actorUserId,
+      });
+      if (accessError) return fail("unavailable");
+      features[feature] = (accessData as Record<string, unknown> | null)?.["allowed"] === true;
+    }
+
+    return {
+      ok: true,
+      plan: { code: planCode, name: String(plan?.["name"] ?? planCode) },
+      unrestricted: status["unrestricted"] === true,
+      canUpgrade: status["can_upgrade"] === true,
+      features,
+    };
+  });
+
 export const miniAppCapabilities = createServerFn({ method: "POST" })
   .inputValidator((input: { initData: string }) => input)
   .handler(async ({ data }) => {

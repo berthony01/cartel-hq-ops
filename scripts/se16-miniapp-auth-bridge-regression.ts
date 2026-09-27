@@ -363,6 +363,8 @@ const opts = { now: NOW_MS };
     // MINI-HQ-1C follow-up — non-LIVE-capable lifecycle resolver (read-only,
     // restricted to the validated operator's workspaces).
     "social_missions",
+    // COMMERCIAL C3 — linked platform user for the read-only plan status (select user_id only).
+    "telegram_connections",
   ];
   const rpcNames = [
     ...bridgeCode.matchAll(
