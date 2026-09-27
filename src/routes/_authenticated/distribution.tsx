@@ -172,6 +172,32 @@ function DistributionPage() {
       : "Not scheduled";
 
   const hasStatus = !!status && !statusQuery.isError;
+  const priorityGroup =
+    groups.find((group) => scheduleState(scheduleByGroup[group.id], false) === "auto_paused") ??
+    groups.find((group) => !scheduleByGroup[group.id]) ??
+    (failedEvents[0] ? groups.find((group) => group.id === failedEvents[0].group_connection_id) : undefined);
+  const operationTitle = killSwitch
+    ? "Resume or keep the emergency pause"
+    : autoPausedCount > 0
+      ? "Review auto-paused schedules"
+      : failedEvents.length > 0
+        ? "Review failed deliveries"
+        : groups.length === 0
+          ? "Connect a Telegram community"
+          : schedules.length === 0
+            ? "Configure your first schedule"
+            : "Sticker Drops are operational";
+  const operationBody = killSwitch
+    ? "Every automated drop is stopped. Only an owner or admin can resume delivery."
+    : autoPausedCount > 0
+      ? `${autoPausedCount} schedule${autoPausedCount === 1 ? " is" : "s are"} paused after repeated failures and need review.`
+      : failedEvents.length > 0
+        ? `${failedEvents.length} recent deliver${failedEvents.length === 1 ? "y needs" : "ies need"} attention.`
+        : groups.length === 0
+          ? "Sticker Drops need at least one connected Telegram community."
+          : schedules.length === 0
+            ? "Choose a community and assign a published pack, cadence, cap and active window."
+            : `Next automated post: ${nextLabel}.`;
 
   return (
     <div className="flex min-w-0 flex-col gap-6 sm:gap-8">
@@ -238,6 +264,27 @@ function DistributionPage() {
               />
               <HeroStat label="Sent today" value={String(todayCount)} hint="Your local day" />
               <HeroStat label="Next drop" value={nextLabel} />
+            </div>
+            <div className="mt-4 grid min-w-0 gap-3 border-t border-border-subtle pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <div className="min-w-0">
+                <p className="type-eyebrow text-gold">Recommended next action</p>
+                <p className="mt-1.5 text-base font-semibold text-foreground [overflow-wrap:anywhere]">{operationTitle}</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{operationBody}</p>
+              </div>
+              {groups.length === 0 ? (
+                <Button asChild className="min-h-11 w-full sm:w-auto">
+                  <Link to="/telegram">Open Community Command</Link>
+                </Button>
+              ) : killSwitch && canManage ? (
+                <Button className="min-h-11 w-full sm:w-auto" onClick={() => setConfirmKill(true)}>
+                  Review emergency pause
+                </Button>
+              ) : priorityGroup ? (
+                <Button className="min-h-11 w-full sm:w-auto" onClick={() => openEditor(priorityGroup)}>
+                  <Settings2 className="size-4" aria-hidden="true" />
+                  Review {priorityGroup.title}
+                </Button>
+              ) : null}
             </div>
             {!canManage ? (
               <p className="text-xs text-muted-foreground">

@@ -285,6 +285,51 @@ function TelegramPage() {
         status={groupCount > 0 ? "Connected · Live Beta" : "Live Beta"}
       />
 
+      <section
+        className="surface-command rise-in overflow-hidden rounded-lg border border-gold/35 p-4 shadow-[var(--shadow-cartel),var(--glow-gold)] sm:p-6"
+        aria-labelledby="community-command-state"
+      >
+        <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+          <div className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <p className="type-eyebrow text-gold">Live operations</p>
+              <StatusBadge tone={overallTone}>{overallLabel}</StatusBadge>
+            </div>
+            <h2 id="community-command-state" className="mt-2 font-display text-2xl uppercase leading-none text-foreground sm:text-3xl">
+              Community state
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">{primaryLine}</p>
+            <p className="mt-3 text-xs leading-relaxed text-foreground">{nextStepLine}</p>
+          </div>
+          <Button
+            className="min-h-11 w-full lg:w-auto"
+            disabled={checking}
+            onClick={() => {
+              if (serviceError) void setup.configQuery.refetch();
+              if (groupsError) void groupSetup.groupQuery.refetch();
+              if (!serviceError && !groupsError) setTab("communities");
+            }}
+          >
+            {checking
+              ? "Checking community state…"
+              : serviceError || groupsError
+                ? "Retry status"
+                : groupCount === 0
+                  ? "Connect a community"
+                  : attentionCount > 0
+                    ? "Resolve community setup"
+                    : "Review communities"}
+            {!checking ? <ArrowRight className="size-4" aria-hidden="true" /> : null}
+          </Button>
+        </div>
+        <dl className="mt-5 grid min-w-0 grid-cols-2 gap-2.5 sm:grid-cols-4">
+          <StateMetric label="Telegram service" value={serviceLabel} />
+          <StateMetric label="Connected" value={metricValue(groupCount)} />
+          <StateMetric label="Ready" value={metricValue(readyCount)} />
+          <StateMetric label="Needs attention" value={metricValue(attentionCount)} />
+        </dl>
+      </section>
+
 
       <RelatedLinks label="Go to">
         <Link to="/distribution" className={relatedLinkClass}>
@@ -374,20 +419,6 @@ function TelegramPage() {
           ) : null}
 
 
-          <Section
-            variant="hero"
-            title="Community state"
-            description={primaryLine}
-            actions={<StatusBadge tone={overallTone}>{overallLabel}</StatusBadge>}
-          >
-            <dl className="grid min-w-0 grid-cols-2 gap-2.5 sm:grid-cols-4">
-              <StateMetric label="Telegram service" value={serviceLabel} />
-              <StateMetric label="Connected" value={metricValue(groupCount)} />
-              <StateMetric label="Ready" value={metricValue(readyCount)} />
-              <StateMetric label="Needs attention" value={metricValue(attentionCount)} />
-            </dl>
-          </Section>
-
           {hasProblem ? (
             <Section variant="surface" title="Attention required">
               <ul className="list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-muted-foreground">
@@ -410,25 +441,6 @@ function TelegramPage() {
               </ul>
             </Section>
           ) : null}
-
-          <Section
-            variant="surface"
-            title="Next step"
-            description={nextStepLine}
-            leading={<ArrowRight className="size-4" aria-hidden="true" />}
-          >
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" onClick={() => setTab("communities")}>
-                Open Communities
-              </Button>
-              <Button size="sm" variant="outline" asChild>
-                <Link to="/launch-control">Launch Control</Link>
-              </Button>
-              <Button size="sm" variant="outline" asChild>
-                <Link to="/distribution">Sticker Drops</Link>
-              </Button>
-            </div>
-          </Section>
 
           {/* Read-only Social Mission strip. Same query as the Missions tab. */}
           <SocialMissionsSummary

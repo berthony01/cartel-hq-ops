@@ -2156,8 +2156,10 @@ function StickerLabBuilder() {
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const activeBuilderStep = BUILDER_STEPS[step - 1];
+
   return (
-    <div className="flex flex-col gap-6 pb-28 sm:gap-8 sm:pb-0">
+    <div className="flex min-w-0 flex-col gap-6 pb-28 sm:gap-8 sm:pb-0">
       <PageHeader
         eyebrow="Sticker Lab"
         title="New Sticker Pack"
@@ -2172,6 +2174,31 @@ function StickerLabBuilder() {
           </Button>
         }
       />
+
+      <section
+        className="surface-command rise-in grid min-w-0 gap-4 overflow-hidden rounded-lg border border-gold/35 p-4 shadow-[var(--shadow-cartel),var(--glow-gold)] lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end sm:p-6"
+        aria-labelledby="studio-stage-title"
+      >
+        <div className="min-w-0">
+          <p className="type-eyebrow text-gold">Active studio stage</p>
+          <h2 id="studio-stage-title" className="mt-2 font-display text-2xl uppercase leading-none text-foreground [overflow-wrap:anywhere] sm:text-3xl">
+            {activeBuilderStep?.title ?? "Sticker Studio"}
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+            {draft.packName.trim() || "Untitled sticker pack"} · {draft.concepts.length} planned stickers · {draft.packId ? "saved project pack" : "local draft"}
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 lg:min-w-72">
+          <div className="surface-quiet min-w-0 rounded-md p-3">
+            <p className="type-eyebrow text-muted-foreground">Progress</p>
+            <p className="mt-1.5 font-display text-xl leading-none text-gold">{step}/{BUILDER_STEPS.length}</p>
+          </div>
+          <div className="surface-quiet min-w-0 rounded-md p-3">
+            <p className="type-eyebrow text-muted-foreground">Pack state</p>
+            <p className="mt-1.5 break-words font-display text-xl leading-none text-foreground">{draft.packId ? "Saved" : "Draft"}</p>
+          </div>
+        </div>
+      </section>
 
       <Stepper current={step} onSelect={setStep} />
 
