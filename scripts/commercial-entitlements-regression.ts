@@ -29,10 +29,10 @@ function check(id: string, ok: boolean, detail = "") {
 }
 
 const migrations = readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort();
-check("C-1.1 migration count exactly 91", migrations.length === 91, String(migrations.length));
+check("C-1.1 migration count exactly 92", migrations.length === 92, String(migrations.length));
 const postGate = migrations.filter((f) => f >= "20260922");
-check("C-1.2 exact seven authorized post-gate migrations", JSON.stringify(postGate) === JSON.stringify(POST_GATE), postGate.join(","));
-check("C-1.3 commercial A, then Commercial Foundation B, then the Stripe/Free billing migration (last file)", migrations[migrations.length - 3] === COMMERCIAL && migrations[migrations.length - 2] === POST_GATE[5] && migrations[migrations.length - 1] === POST_GATE[6]);
+check("C-1.2 exact eight authorized post-gate migrations", JSON.stringify(postGate) === JSON.stringify(POST_GATE), postGate.join(","));
+check("C-1.3 commercial A, then Commercial Foundation B, then the Stripe/Free billing migration, then least-privilege (last file)", migrations[migrations.length - 4] === COMMERCIAL && migrations[migrations.length - 3] === POST_GATE[5] && migrations[migrations.length - 2] === POST_GATE[6] && migrations[migrations.length - 1] === LEAST_PRIVILEGE);
 
 const raw = readFileSync(`${MIGRATIONS}/${COMMERCIAL}`, "utf8");
 const sql = raw.replace(/^\s*--.*$/gm, "");
