@@ -139,6 +139,24 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
 
+  // A new build replaces hashed chunks; an open tab still pointing at the old
+  // ones fails to load them. Reload once to pick up the current build.
+  useEffect(() => {
+    const key = "cartel-hq-chunk-reload";
+    const onPreloadError = (event: Event) => {
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, "1");
+      event.preventDefault();
+      window.location.reload();
+    };
+    window.addEventListener("vite:preloadError", onPreloadError);
+    const clear = window.setTimeout(() => sessionStorage.removeItem(key), 10000);
+    return () => {
+      window.removeEventListener("vite:preloadError", onPreloadError);
+      window.clearTimeout(clear);
+    };
+  }, []);
+
   // Single global auth listener. The AppShell lives in the authenticated
   // layout so public routes such as /auth render standalone.
   useEffect(() => {
