@@ -29,6 +29,7 @@ import { useWorkspace } from "@/lib/workspace-context";
 import { getProjectProfile } from "@/lib/project-profile";
 
 import { listLaunches } from "@/lib/launch-control";
+import { isCanonicalPcartLaunch } from "@/lib/launch-artifact-registry";
 import {
   MAINNET_DEPLOYMENT_TX_ENABLED,
   MAINNET_LIQUIDITY_TX_ENABLED,
@@ -103,7 +104,11 @@ function CanaryConsole() {
 
   const launches = useQuery({
     queryKey: ["canary-launches", workspaceId, canaryProfileId],
-    queryFn: () => listLaunches(workspaceId as string, canaryProfileId as string),
+    // PCART-L3: the canonical PEPECARTEL launch is never a freeform canary option.
+    queryFn: async () =>
+      (await listLaunches(workspaceId as string, canaryProfileId as string)).filter(
+        (row) => !isCanonicalPcartLaunch(row),
+      ),
     enabled: !!workspaceId && !!canaryProfileId,
   });
 
