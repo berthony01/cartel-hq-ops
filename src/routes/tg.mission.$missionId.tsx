@@ -302,7 +302,7 @@ function MiniAppMission() {
         <BackLink />
         <MiniAppMessage
           title={
-            lifecycleRetry?.kind === "cancel" || lifecycleNotice.message.startsWith("Mission cancelled")
+            lifecycleNotice.message.startsWith("Mission cancelled")
               ? "Mission cancelled"
               : "Mission ended"
           }
