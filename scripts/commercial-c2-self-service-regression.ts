@@ -8,6 +8,14 @@ const read = (p: string) => readFileSync(p, "utf8");
 
 const sql = read("docs/sql/COMMERCIAL_C2_self_service_workspace.sql");
 const exec = sql.replace(/--.*$/gm, "");
+const MIG = "supabase/migrations/20260927171231_commercial_c2_self_service_workspace.sql";
+const mig = read(MIG);
+const migExec = mig.replace(/--.*$/gm, "");
+check("A0 exact applied migration 20260927171231 exists with the RPC", mig.includes("create_self_service_workspace") && mig.includes("BEGIN;") && mig.includes("COMMIT;"));
+check("A0b migration executable body identical to review SQL", migExec.replace(/\s+/g, " ").trim() === exec.replace(/\s+/g, " ").trim());
+check("A0c docs say APPLIED as migration 20260927171231", /APPLIED as Supabase migration 20260927171231 \/ commercial_c2_self_service_workspace/.test(sql) && !/STAGED FOR REVIEW|NOT APPLIED/.test(sql.split("BEGIN;")[0] ?? ""));
+const types = read("src/integrations/supabase/types.ts");
+check("A0d generated types include the RPC returning string", /create_self_service_workspace: \{\s*Args: \{ _name: string; _slug: string[^}]*\}\s*Returns: string/.test(types));
 check("A1 RPC defined", /create or replace function public\.create_self_service_workspace\(_name text, _slug text\)/i.test(exec));
 check("A2 SECURITY DEFINER + empty search_path", /security definer/i.test(exec) && /set search_path = ''/i.test(exec));
 check("A3 auth.uid required", /v_uid is null[\s\S]*AUTH_REQUIRED/i.test(exec));
