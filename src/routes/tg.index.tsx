@@ -12,7 +12,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { AlertTriangle, ChevronRight, Radio, Send, ShieldCheck, Target } from "lucide-react";
+import { AlertTriangle, ChevronRight, Lock, Radio, Send, ShieldCheck, Target } from "lucide-react";
 import {
   miniAppListMissionWorkspaces,
   miniAppListMissions,
