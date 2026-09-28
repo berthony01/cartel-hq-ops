@@ -12,7 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as DocsRouteImport } from './routes/docs'
 import { Route as NetworkRouteImport } from './routes/network'
+import { Route as PartnerProgramRouteImport } from './routes/partner-program'
 import { Route as TgRouteImport } from './routes/tg'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
@@ -63,9 +65,19 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DocsRoute = DocsRouteImport.update({
+  id: '/docs',
+  path: '/docs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NetworkRoute = NetworkRouteImport.update({
   id: '/network',
   path: '/network',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PartnerProgramRoute = PartnerProgramRouteImport.update({
+  id: '/partner-program',
+  path: '/partner-program',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TgRoute = TgRouteImport.update({
@@ -257,7 +269,9 @@ const TgMissionMissionIdRoute = TgMissionMissionIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/docs': typeof DocsRoute
   '/network': typeof NetworkRouteWithChildren
+  '/partner-program': typeof PartnerProgramRoute
   '/tg': typeof TgRouteWithChildren
   '/admin': typeof AuthenticatedAdminRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
@@ -297,6 +311,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/docs': typeof DocsRoute
+  '/partner-program': typeof PartnerProgramRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/assets': typeof AuthenticatedAssetsRoute
@@ -336,7 +352,9 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/docs': typeof DocsRoute
   '/network': typeof NetworkRouteWithChildren
+  '/partner-program': typeof PartnerProgramRoute
   '/tg': typeof TgRouteWithChildren
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
@@ -378,7 +396,9 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/docs'
     | '/network'
+    | '/partner-program'
     | '/tg'
     | '/admin'
     | '/analytics'
@@ -418,6 +438,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/docs'
+    | '/partner-program'
     | '/admin'
     | '/analytics'
     | '/assets'
@@ -456,7 +478,9 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/docs'
     | '/network'
+    | '/partner-program'
     | '/tg'
     | '/_authenticated/admin'
     | '/_authenticated/analytics'
@@ -498,7 +522,9 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  DocsRoute: typeof DocsRoute
   NetworkRoute: typeof NetworkRouteWithChildren
+  PartnerProgramRoute: typeof PartnerProgramRoute
   TgRoute: typeof TgRouteWithChildren
   AuthCallbackRoute: typeof AuthCallbackRoute
   LegalPartnerAgreementRoute: typeof LegalPartnerAgreementRoute
@@ -530,11 +556,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/docs': {
+      id: '/docs'
+      path: '/docs'
+      fullPath: '/docs'
+      preLoaderRoute: typeof DocsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/network': {
       id: '/network'
       path: '/network'
       fullPath: '/network'
       preLoaderRoute: typeof NetworkRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/partner-program': {
+      id: '/partner-program'
+      path: '/partner-program'
+      fullPath: '/partner-program'
+      preLoaderRoute: typeof PartnerProgramRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tg': {
@@ -885,7 +925,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  DocsRoute: DocsRoute,
   NetworkRoute: NetworkRouteWithChildren,
+  PartnerProgramRoute: PartnerProgramRoute,
   TgRoute: TgRouteWithChildren,
   AuthCallbackRoute: AuthCallbackRoute,
   LegalPartnerAgreementRoute: LegalPartnerAgreementRoute,
