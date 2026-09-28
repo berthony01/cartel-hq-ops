@@ -87,7 +87,7 @@ check("P-5.7 ledger inserted only by owner adjustment + mark paid", ledgerInsert
 check("P-5.8 mark paid idempotent", fnBody("owner_mark_partner_payout_paid").includes("already_paid") && fnBody("owner_mark_partner_payout_paid").includes("ON CONFLICT (payout_request_id) WHERE entry_type = 'payout' DO NOTHING"));
 const owner = fnBody("partner_require_owner");
 check("P-5.9 owner authority is is_platform_owner, no email/metadata", owner.includes("public.is_platform_owner(v)") && !/email|user_metadata|raw_user_meta|app_metadata/i.test(CODE));
-for (const f of ["owner_activate_partner_terms", "owner_retire_partner_terms", "owner_review_partner_application", "owner_set_partner_status", "owner_add_partner_ledger_adjustment", "owner_review_partner_payout", "owner_mark_partner_payout_paid"]) {
+for (const f of ["owner_activate_partner_terms", "owner_retire_partner_terms", "owner_review_partner_application", "owner_set_partner_status", "owner_add_partner_ledger_adjustment", "owner_review_partner_payout", "owner_mark_partner_payout_paid", "owner_reject_partner_referral_for_fraud", "owner_save_partner_terms_draft"]) {
   check(`P-5 ${f} owner-gated`, fnBody(f).includes("v_owner uuid := public.partner_require_owner()"));
 }
 
@@ -113,7 +113,7 @@ check("P-7.6 bind rejects partner membership conflict", bind.includes("public.is
 /* 8. Assignment marker cannot overwrite authority */
 const upd = (bind.match(/UPDATE public\.workspace_commercial_assignments[^;]+;/) ?? [""])[0];
 check("P-8.1 marker only on Free/direct/internal/active", ["pl.code = 'cartel_free'", "a.channel = 'direct'", "a.channel_partner_ref IS NULL", "a.assignment_source = 'internal'", "a.status = 'active'"].every((c) => upd.includes(c)));
-check("P-8.2 single assignment update site", (N.match(/UPDATE public\.workspace_commercial_assignments/g) ?? []).length === 1);
+check("P-8.2 exactly two assignment update sites (bind + fraud unmark)", (N.match(/UPDATE public\.workspace_commercial_assignments/g) ?? []).length === 2);
 
 /* 9. No workspace access grant */
 check("P-9.1 no workspace_members mutation", !/(INSERT INTO|UPDATE|DELETE FROM)\s+public\.workspace_members/i.test(CODE));
@@ -122,7 +122,7 @@ check("P-9.2 no service-partner access table/RPC", !/workspace_partner_access|in
 /* 10. Function privileges */
 const USER_FNS = ["submit_partner_application", "accept_partner_agreement", "record_referral_attribution", "bind_referral_to_workspace", "request_partner_payout", "get_my_partner_summary"];
 const fnDefs = N.match(/CREATE OR REPLACE FUNCTION public\.\w+\(.*?\$\$/g) ?? [];
-check("P-10.1 every function pins search_path", fnDefs.length === 19 && fnDefs.every((d) => d.includes("SET search_path = ''")));
+check("P-10.1 every function pins search_path", fnDefs.length === 20 && fnDefs.every((d) => d.includes("SET search_path = ''")));
 for (const f of USER_FNS) check(`P-10 ${f} revoked PUBLIC/anon + authenticated grant`, new RegExp(`REVOKE ALL ON FUNCTION public\\.${f}\\([^)]*\\) FROM PUBLIC, anon;`).test(N) && new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${f}\\([^)]*\\) TO authenticated;`).test(N));
 check("P-10.2 internal helpers not callable by authenticated", ["partner_require_owner()", "partner_active_terms()", "partner_available_balance(uuid, text)"].every((s) => N.includes(`REVOKE ALL ON FUNCTION public.${s} FROM PUBLIC, anon, authenticated;`)));
 check("P-10.3 applications require active terms", fnBody("submit_partner_application").includes("PROGRAM_NOT_OPEN"));
@@ -149,6 +149,31 @@ check("P-13.10 approval rechecks partner/tax/acceptance", ["PARTNER_NOT_APPROVED
 const paid = fnBody("owner_mark_partner_payout_paid");
 check("P-13.11 paid reference nonblank before state change", paid.includes("PAID_REFERENCE_REQUIRED") && paid.indexOf("PAID_REFERENCE_REQUIRED") < paid.indexOf("UPDATE public.partner_payout_requests") && paid.indexOf("PAID_REFERENCE_REQUIRED") < paid.indexOf("INSERT INTO public.partner_commission_ledger"));
 check("P-13.12 no internal_note; review_note documented applicant-visible", !/internal_note/.test(RAW) && N.includes("review_note text NULL") && /APPLICANT-VISIBLE/.test(RAW) && fnBody("owner_review_partner_application").includes("review_note = left(_note, 2000)"));
+
+/* 14. Final corrective review */
+const tv = fnBody("partner_terms_validate");
+check("P-14.1 active may only stay active or retire", tv.includes("OLD.status = 'active' AND NEW.status NOT IN ('active','retired')") && tv.includes("PARTNER_TERMS_INVALID_TRANSITION"));
+check("P-14.2 retired permanent + values frozen", tv.includes("OLD.status = 'retired' AND NEW.status <> 'retired'") && tv.includes("PARTNER_TERMS_FROZEN"));
+check("P-14.3 code only for affiliates (constraint)", N.includes("CONSTRAINT partners_code_only_for_affiliate CHECK (referral_code IS NULL OR is_affiliate)") && N.includes("CONSTRAINT partners_code_only_when_approved"));
+const ra = fnBody("owner_review_partner_application");
+check("P-14.4 code generated only for affiliate; service-only cleared", ra.includes("v_code := CASE WHEN v_a.wants_affiliate THEN") && ra.includes("ELSE NULL END;") && ra.includes("referral_code = CASE WHEN EXCLUDED.is_affiliate THEN coalesce(public.partners.referral_code, EXCLUDED.referral_code) ELSE NULL END"));
+const adj = fnBody("owner_add_partner_ledger_adjustment");
+check("P-14.5 ledger adjustment affiliate-only, no status gate", adj.includes("id = _partner_id AND is_affiliate") && adj.includes("PARTNER_NOT_AFFILIATE") && !/status = 'approved'/.test(adj));
+check("P-14.6 payout request requires affiliate", pay.includes("IF NOT v_p.is_affiliate THEN RAISE EXCEPTION 'PARTNER_NOT_AFFILIATE'"));
+const rv = fnBody("owner_review_partner_payout");
+const iApp = rv.indexOf("IF _approve THEN");
+const iUpd = rv.indexOf("UPDATE public.partner_payout_requests");
+check("P-14.7 approval rechecks affiliate", rv.includes("IF NOT v_p.is_affiliate THEN RAISE EXCEPTION 'PARTNER_NOT_AFFILIATE'") && rv.indexOf("PARTNER_NOT_AFFILIATE") > iApp && rv.indexOf("PARTNER_NOT_AFFILIATE") < iUpd);
+check("P-14.8 approval recomputes balance minus other reservations excluding current", rv.includes("public.partner_available_balance(v_req.partner_id, v_req.currency)") && rv.includes("status IN ('requested','approved') AND id <> v_req.id") && rv.includes("v_req.amount_cents > v_available - v_reserved") && rv.indexOf("INSUFFICIENT_AVAILABLE_BALANCE") > iApp && rv.indexOf("INSUFFICIENT_AVAILABLE_BALANCE") < iUpd);
+check("P-14.9 approval locks partner row", rv.includes("WHERE id = v_req.partner_id FOR UPDATE"));
+check("P-14.10 mark paid has no balance gate", !/partner_available_balance|INSUFFICIENT/.test(fnBody("owner_mark_partner_payout_paid")));
+const fr = fnBody("owner_reject_partner_referral_for_fraud");
+check("P-14.11 fraud RPC owner-gated + reason required", fr.includes("v_owner uuid := public.partner_require_owner()") && fr.includes("REASON_REQUIRED") && fr.indexOf("REASON_REQUIRED") < fr.indexOf("UPDATE"));
+check("P-14.12 fraud only from pending/qualified -> rejected_fraud with bounded reason", fr.includes("v_r.status NOT IN ('pending','qualified')") && fr.includes("SET status = 'rejected_fraud', reason = left(btrim(_reason), 500)"));
+const fu = (fr.match(/UPDATE public\.workspace_commercial_assignments[^;]+;/) ?? [""])[0];
+check("P-14.13 fraud marker removal exact-match only", fr.includes("v_r.status = 'qualified'") && ["a.workspace_id = v_r.workspace_id", "pl.code = 'cartel_free'", "a.channel = 'affiliate'", "a.channel_partner_ref = v_r.partner_id::text", "a.assignment_source = 'internal'"].every((c) => fu.includes(c)) && fu.includes("SET channel = 'direct', channel_partner_ref = NULL"));
+check("P-14.14 fraud keeps workspace_id for audit", !/workspace_id\s*=\s*NULL/.test(fr) && N.includes("partner_referrals_one_per_workspace ON public.partner_referrals (workspace_id) WHERE workspace_id IS NOT NULL"));
+check("P-14.15 fraud RPC grants", N.includes("REVOKE ALL ON FUNCTION public.owner_reject_partner_referral_for_fraud(uuid, text) FROM PUBLIC, anon;") && N.includes("GRANT EXECUTE ON FUNCTION public.owner_reject_partner_referral_for_fraud(uuid, text) TO authenticated, service_role;"));
 
 /* 11. Protected files untouched (hashes at start HEAD 2cbfd253) */
 const PROTECTED: Record<string, string> = {

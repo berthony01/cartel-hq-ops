@@ -63,6 +63,9 @@ BEGIN
       OR NEW.version IS DISTINCT FROM OLD.version THEN
       RAISE EXCEPTION 'PARTNER_TERMS_FROZEN' USING ERRCODE = '22023';
     END IF;
+    IF OLD.status = 'active' AND NEW.status NOT IN ('active','retired') THEN
+      RAISE EXCEPTION 'PARTNER_TERMS_INVALID_TRANSITION' USING ERRCODE = '22023';
+    END IF;
     IF OLD.status = 'retired' AND NEW.status <> 'retired' THEN
       RAISE EXCEPTION 'PARTNER_TERMS_RETIRED' USING ERRCODE = '22023';
     END IF;
@@ -90,7 +93,8 @@ CREATE TABLE IF NOT EXISTS public.partners (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT partners_has_kind CHECK (is_affiliate OR is_service_partner),
-  CONSTRAINT partners_code_only_when_approved CHECK (referral_code IS NULL OR approved_at IS NOT NULL)
+  CONSTRAINT partners_code_only_when_approved CHECK (referral_code IS NULL OR approved_at IS NOT NULL),
+  CONSTRAINT partners_code_only_for_affiliate CHECK (referral_code IS NULL OR is_affiliate)
 );
 CREATE OR REPLACE TRIGGER partners_set_updated_at
   BEFORE UPDATE ON public.partners FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
@@ -382,13 +386,16 @@ BEGIN
          review_note = left(_note, 2000), reviewed_at = now(), reviewed_by = v_owner
    WHERE id = v_a.id;
   IF _approve THEN
-    v_code := substr(replace(gen_random_uuid()::text, '-', ''), 1, 10);
+    -- Referral codes exist only for affiliates; service-only partners get NULL.
+    v_code := CASE WHEN v_a.wants_affiliate THEN substr(replace(gen_random_uuid()::text, '-', ''), 1, 10) ELSE NULL END;
     INSERT INTO public.partners (user_id, is_affiliate, is_service_partner, status, referral_code, approved_by, approved_at)
     VALUES (v_a.user_id, v_a.wants_affiliate, v_a.wants_service_partner, 'approved', v_code, v_owner, now())
     ON CONFLICT (user_id) DO UPDATE
       SET is_affiliate = EXCLUDED.is_affiliate, is_service_partner = EXCLUDED.is_service_partner,
           status = 'approved', approved_by = v_owner, approved_at = now(),
-          referral_code = coalesce(public.partners.referral_code, EXCLUDED.referral_code)
+          referral_code = CASE WHEN EXCLUDED.is_affiliate
+                               THEN coalesce(public.partners.referral_code, EXCLUDED.referral_code)
+                               ELSE NULL END
       WHERE public.partners.status NOT IN ('terminated');
   ELSE
     UPDATE public.partners SET status = 'rejected' WHERE user_id = v_a.user_id AND status = 'applied';
@@ -420,6 +427,10 @@ BEGIN
   IF _amount_cents IS NULL OR _amount_cents = 0 THEN RAISE EXCEPTION 'INVALID_AMOUNT' USING ERRCODE = '22023'; END IF;
   IF coalesce(btrim(_note), '') = '' THEN RAISE EXCEPTION 'NOTE_REQUIRED' USING ERRCODE = '22023'; END IF;
   IF NOT EXISTS (SELECT 1 FROM public.partners WHERE id = _partner_id) THEN RAISE EXCEPTION 'PARTNER_NOT_FOUND' USING ERRCODE = 'P0002'; END IF;
+  -- Ledger is affiliate-only. Suspended/terminated affiliates may still be corrected.
+  IF NOT EXISTS (SELECT 1 FROM public.partners WHERE id = _partner_id AND is_affiliate) THEN
+    RAISE EXCEPTION 'PARTNER_NOT_AFFILIATE' USING ERRCODE = '22023';
+  END IF;
   IF _referral_id IS NOT NULL THEN
     SELECT workspace_id, terms_version INTO v_ws, v_tv FROM public.partner_referrals WHERE id = _referral_id AND partner_id = _partner_id;
     IF NOT FOUND THEN RAISE EXCEPTION 'REFERRAL_MISMATCH' USING ERRCODE = '22023'; END IF;
@@ -432,19 +443,54 @@ BEGIN
   RETURN v_id;
 END $$;
 
+CREATE OR REPLACE FUNCTION public.owner_reject_partner_referral_for_fraud(_referral_id uuid, _reason text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE v_owner uuid := public.partner_require_owner(); v_r public.partner_referrals; v_unmarked boolean := false;
+BEGIN
+  IF coalesce(btrim(_reason), '') = '' THEN RAISE EXCEPTION 'REASON_REQUIRED' USING ERRCODE = '22023'; END IF;
+  SELECT * INTO v_r FROM public.partner_referrals WHERE id = _referral_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'REFERRAL_NOT_FOUND' USING ERRCODE = 'P0002'; END IF;
+  IF v_r.status NOT IN ('pending','qualified') THEN RAISE EXCEPTION 'REFERRAL_NOT_ACTIVE' USING ERRCODE = '22023'; END IF;
+  -- workspace_id is kept for audit; the one-referral-per-workspace guard then
+  -- blocks re-attribution gaming of a fraud-rejected qualified workspace.
+  UPDATE public.partner_referrals SET status = 'rejected_fraud', reason = left(btrim(_reason), 500) WHERE id = v_r.id;
+  IF v_r.status = 'qualified' AND v_r.workspace_id IS NOT NULL THEN
+    -- Remove only our exact Free affiliate marker. Never touches Stripe,
+    -- paid, reseller, manual, or unrelated assignment state.
+    UPDATE public.workspace_commercial_assignments a
+       SET channel = 'direct', channel_partner_ref = NULL
+      FROM public.commercial_plans pl
+     WHERE a.workspace_id = v_r.workspace_id
+       AND a.plan_id = pl.id AND pl.code = 'cartel_free'
+       AND a.channel = 'affiliate' AND a.channel_partner_ref = v_r.partner_id::text
+       AND a.assignment_source = 'internal';
+    v_unmarked := FOUND;
+  END IF;
+  RETURN jsonb_build_object('ok', true, 'previous_status', v_r.status, 'marker_removed', v_unmarked);
+END $$;
+
 CREATE OR REPLACE FUNCTION public.owner_review_partner_payout(_payout_id uuid, _approve boolean, _note text DEFAULT NULL)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
-DECLARE v_owner uuid := public.partner_require_owner(); v_req public.partner_payout_requests; v_p public.partners;
+DECLARE v_owner uuid := public.partner_require_owner(); v_req public.partner_payout_requests; v_p public.partners; v_available bigint; v_reserved bigint;
 BEGIN
   SELECT * INTO v_req FROM public.partner_payout_requests WHERE id = _payout_id FOR UPDATE;
   IF NOT FOUND OR v_req.status <> 'requested' THEN RAISE EXCEPTION 'PAYOUT_NOT_REQUESTED' USING ERRCODE = '22023'; END IF;
   IF _approve THEN
-    SELECT * INTO v_p FROM public.partners WHERE id = v_req.partner_id;
+    SELECT * INTO v_p FROM public.partners WHERE id = v_req.partner_id FOR UPDATE;  -- serializes with requests
     IF v_p.status <> 'approved' THEN RAISE EXCEPTION 'PARTNER_NOT_APPROVED' USING ERRCODE = '22023'; END IF;
+    IF NOT v_p.is_affiliate THEN RAISE EXCEPTION 'PARTNER_NOT_AFFILIATE' USING ERRCODE = '22023'; END IF;
     IF v_p.tax_doc_status <> 'verified' THEN RAISE EXCEPTION 'TAX_DOCS_NOT_VERIFIED' USING ERRCODE = '22023'; END IF;
     IF NOT EXISTS (SELECT 1 FROM public.partner_agreement_acceptances
                     WHERE partner_id = v_req.partner_id AND terms_version = v_req.terms_version) THEN
       RAISE EXCEPTION 'AGREEMENT_NOT_ACCEPTED' USING ERRCODE = '22023';
+    END IF;
+    -- Balance recheck: available now, minus OTHER open reservations (excluding this request).
+    v_available := public.partner_available_balance(v_req.partner_id, v_req.currency);
+    SELECT coalesce(sum(amount_cents), 0) INTO v_reserved FROM public.partner_payout_requests
+     WHERE partner_id = v_req.partner_id AND currency = v_req.currency
+       AND status IN ('requested','approved') AND id <> v_req.id;
+    IF v_req.amount_cents > v_available - v_reserved THEN
+      RAISE EXCEPTION 'INSUFFICIENT_AVAILABLE_BALANCE' USING ERRCODE = '22023';
     END IF;
   END IF;
   UPDATE public.partner_payout_requests
@@ -592,6 +638,7 @@ BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'AUTH_REQUIRED' USING ERRCODE = '42501'; END IF;
   SELECT * INTO v_p FROM public.partners WHERE user_id = v_uid FOR UPDATE;  -- serializes per partner
   IF v_p.id IS NULL OR v_p.status <> 'approved' THEN RAISE EXCEPTION 'PARTNER_NOT_APPROVED' USING ERRCODE = '42501'; END IF;
+  IF NOT v_p.is_affiliate THEN RAISE EXCEPTION 'PARTNER_NOT_AFFILIATE' USING ERRCODE = '42501'; END IF;
   IF v_p.tax_doc_status <> 'verified' THEN RAISE EXCEPTION 'TAX_DOCS_NOT_VERIFIED' USING ERRCODE = '42501'; END IF;
   v_t := public.partner_active_terms();
   IF v_t.id IS NULL THEN RAISE EXCEPTION 'PROGRAM_NOT_OPEN' USING ERRCODE = '22023'; END IF;
@@ -642,6 +689,7 @@ REVOKE ALL ON FUNCTION public.owner_retire_partner_terms(integer) FROM PUBLIC, a
 REVOKE ALL ON FUNCTION public.owner_review_partner_application(uuid, boolean, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.owner_set_partner_status(uuid, text, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.owner_add_partner_ledger_adjustment(uuid, integer, text, text, timestamptz, uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.owner_reject_partner_referral_for_fraud(uuid, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.owner_review_partner_payout(uuid, boolean, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.owner_mark_partner_payout_paid(uuid, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.submit_partner_application(boolean, boolean, text) FROM PUBLIC, anon;
@@ -657,6 +705,7 @@ GRANT EXECUTE ON FUNCTION public.owner_retire_partner_terms(integer) TO authenti
 GRANT EXECUTE ON FUNCTION public.owner_review_partner_application(uuid, boolean, text) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.owner_set_partner_status(uuid, text, text) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.owner_add_partner_ledger_adjustment(uuid, integer, text, text, timestamptz, uuid) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.owner_reject_partner_referral_for_fraud(uuid, text) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.owner_review_partner_payout(uuid, boolean, text) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.owner_mark_partner_payout_paid(uuid, text) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.submit_partner_application(boolean, boolean, text) TO authenticated;
