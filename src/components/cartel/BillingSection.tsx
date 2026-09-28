@@ -186,7 +186,7 @@ export function BillingSection() {
               </div>
               <p className="text-sm text-muted-foreground">
                 {isPro
-                  ? "Everything in Free plus AI stickers, motion, concepts, X reads and Missions, Sticker Drops, auto-posting, official broadcasts, Project Inbox and Launch Watch. Includes 100 static AI stickers, 10 motion AI stickers and 100 X Missions per month."
+                  ? "Everything in Free plus AI stickers, motion, concepts, X Missions, Sticker Drops, auto-posting, official broadcasts, Project Inbox and Launch Watch. Includes 100 static AI stickers, 10 motion AI stickers and 100 X Missions per month."
                   : "Project Identity and profile, 1 Telegram group, and welcome setup, testing and delivery."}
               </p>
 
@@ -250,6 +250,9 @@ export function BillingSection() {
                   </Button>
                 )}
               </div>
+              <p className="text-xs text-muted-foreground">
+                The Partner Program is preparing to open. <Link to="/partner-program" className="font-semibold text-gold hover:underline">Read the public program details.</Link>
+              </p>
             </>
           )}
         </div>

@@ -9,3 +9,4 @@
 - [ ] Partner G12a-B: validate reconciliation against non-production Supabase + Stripe test environment — BLOCKED / NOT DONE
 - [ ] Production activation — BLOCKED / NOT DONE (email DNS, attorney, CPA and privacy reviews; promotional email lacks a valid physical postal address; G12a-B non-production validation; explicit approvals for SQL, Edge, Stripe events, terms)
 - [ ] Publication — BLOCKED / NOT DONE (separate explicit owner approval)
+- [x] Public Partner Program discovery, CARTEL HQ documentation hub, and foundational SEO corrections (repository and preview only)

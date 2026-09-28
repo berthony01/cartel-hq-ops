@@ -90,14 +90,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         name: "description",
         content:
-          "The operating layer for PEPECARTEL creative tools, campaigns, creators, and distribution.",
+          "CARTEL HQ is the launch command center for project identity, Telegram community operations, branded creative tools, X Missions, Launch Watch, and public discovery.",
       },
       { property: "og:title", content: "CARTEL HQ" },
       {
         property: "og:description",
-        content: "The operating layer for the PEPECARTEL ecosystem.",
+        content: "The launch command center for project identity, community operations, creative tools, X Missions, Launch Watch, and public discovery.",
       },
       { property: "og:type", content: "website" },
+      { property: "og:site_name", content: "CARTEL HQ" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [

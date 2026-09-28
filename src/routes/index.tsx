@@ -41,6 +41,7 @@ export const Route = createFileRoute("/")({
       { name: "twitter:title", content: TITLE },
       { name: "twitter:description", content: DESC },
     ],
+    links: [{ rel: "canonical", href: "https://pepecartelhq.com/" }],
   }),
   component: LandingPage,
 });
@@ -154,6 +155,18 @@ function LandingPage() {
           </span>
         </Link>
         <nav className="flex shrink-0 items-center gap-1 sm:gap-2" aria-label="Primary">
+          <Link
+            to="/docs"
+            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "hidden min-h-11 sm:inline-flex")}
+          >
+            Docs
+          </Link>
+          <Link
+            to="/partner-program"
+            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "hidden min-h-11 lg:inline-flex")}
+          >
+            Partner Program
+          </Link>
           <Link
             to="/network"
             className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "hidden min-h-11 md:inline-flex")}
@@ -337,8 +350,8 @@ function LandingPage() {
                 </span>
               </div>
               <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                Everything in Free plus AI stickers, motion, concepts, X reads and
-                Missions, Sticker Drops, auto-posting, official broadcasts, Project Inbox
+                Everything in Free plus AI stickers, motion, concepts, X Missions,
+                Sticker Drops, auto-posting, official broadcasts, Project Inbox
                 and Launch Watch. Includes 100 static AI stickers, 10 motion AI stickers
                 and 100 X Missions per month.
               </p>
@@ -347,6 +360,31 @@ function LandingPage() {
           <p className="mt-4 text-xs text-muted-foreground">
             Start on Free with no credit card. Signed-in owners manage their plan from HQ.
           </p>
+          <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 text-xs font-semibold">
+            <Link to="/partner-program" className="inline-flex min-h-11 items-center text-gold hover:underline">Explore the Partner Program</Link>
+            <Link to="/docs" className="inline-flex min-h-11 items-center text-gold hover:underline">Read the documentation</Link>
+          </div>
+        </section>
+
+        {/* Partner Program */}
+        <section className="app-gutter mx-auto max-w-5xl pb-16">
+          <div className="flex flex-wrap items-end justify-between gap-3 border-b border-gold/25 pb-4">
+            <div>
+              <p className="type-eyebrow text-gold">Preparing to open</p>
+              <h2 className="mt-2 font-display text-3xl uppercase text-foreground sm:text-4xl">Partner Program</h2>
+            </div>
+            <Link to="/partner-program" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-gold hover:underline">See program details <ArrowRight className="size-4" aria-hidden="true" /></Link>
+          </div>
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <article className="cartel-panel rounded-lg p-6">
+              <h3 className="font-display text-2xl uppercase text-foreground">Affiliate</h3>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">Approved Affiliates refer customers. CARTEL HQ bills the customer, and only eligible collected subscription revenue can qualify under active terms.</p>
+            </article>
+            <article className="cartel-panel rounded-lg p-6">
+              <h3 className="font-display text-2xl uppercase text-foreground">Service Partner</h3>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">Service Partners charge clients separately for setup or management. The status alone grants no client workspace access or CARTEL HQ commission.</p>
+            </article>
+          </div>
         </section>
 
         {/* Final CTA */}

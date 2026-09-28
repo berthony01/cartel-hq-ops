@@ -14,6 +14,7 @@ import {
   Settings,
   ShieldHalf,
   Handshake,
+  BookOpen,
   type LucideIcon,
 } from "lucide-react";
 
@@ -91,6 +92,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "My Watchlist", to: "/watchlist", icon: Eye },
       { label: "Partners", to: "/partners", icon: Handshake },
       { label: "Cartel Network", to: "/network", icon: Globe, external: true },
+      { label: "Documentation", to: "/docs", icon: BookOpen, external: true },
     ],
   },
   {

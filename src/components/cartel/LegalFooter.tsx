@@ -1,6 +1,9 @@
 import { Link } from "@tanstack/react-router";
 
 const LINKS = [
+  { to: "/docs", label: "Documentation" },
+  { to: "/partner-program", label: "Partner Program" },
+  { to: "/network", label: "Cartel Network" },
   { to: "/legal/terms", label: "Terms" },
   { to: "/legal/privacy", label: "Privacy" },
   { to: "/legal/refunds", label: "Refunds & Cancellation" },
@@ -9,7 +12,7 @@ const LINKS = [
 
 export function LegalFooter({ className = "" }: { className?: string }) {
   return (
-    <nav aria-label="Legal" className={className}>
+    <nav aria-label="CARTEL HQ information and legal" className={className}>
       <ul className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
         {LINKS.map((l) => (
           <li key={l.to}>
