@@ -4,8 +4,8 @@
  * These are DRAFTS. They are not effective until an owner activates a
  * versioned, placeholder-free copy through the staged policy_documents
  * contract (docs/sql/PARTNER_1B_1_policy_acceptance.sql, NOT APPLIED).
- * Legal operator identity is unknown: every such field is a visible
- * [PLACEHOLDER]. "CARTEL HQ" is a product name, never a legal entity here.
+ * The confirmed operator identity and current U.S.-beta posture are stated
+ * below. These drafts still require legal review and separate owner activation.
  */
 
 export type PolicyType = "terms" | "privacy" | "refunds" | "partner_agreement";
@@ -20,24 +20,18 @@ export type PolicyDraft = {
   sections: PolicySection[];
 };
 
-export const REQUIRED_PLACEHOLDERS = [
-  "[LEGAL OPERATOR NAME]",
-  "[MAILING ADDRESS]",
-  "[LEGAL CONTACT EMAIL]",
-  "[STATE OF FORMATION]",
-  "[GOVERNING LAW]",
-] as const;
+export const REQUIRED_PLACEHOLDERS: readonly string[] = [];
 
 /** Any bracketed ALL-CAPS token counts as an unresolved placeholder. */
 export const PLACEHOLDER_RE = /\[[A-Z0-9][A-Z0-9 /&.,'-]*\]/g;
 
-const OPERATOR = "[LEGAL OPERATOR NAME]";
+const OPERATOR = "Berthony Petit Frere";
 
 const IDENTITY: PolicySection = {
   heading: "Who we are",
   body: [
-    `These documents are offered by ${OPERATOR}, a [ENTITY TYPE] formed under the laws of [STATE OF FORMATION] ("Operator", "we", "us"), which operates the CARTEL HQ software service.`,
-    "Mailing address: [MAILING ADDRESS]. Legal contact: [LEGAL CONTACT EMAIL].",
+    `These documents are offered by ${OPERATOR}, an individual operating as a Texas sole proprietor ("Operator", "we", "us"). Pepe Cartel and CARTEL HQ are brand and product names used by the Operator; they are not separate legal entities or registered DBAs.`,
+    "CARTEL HQ is currently offered as a limited United States beta. Customer, billing and refund support: support@pepecartelhq.com. Legal and privacy notices: legal@pepecartelhq.com.",
   ],
 };
 
@@ -68,7 +62,7 @@ const THIRD_PARTY: PolicySection = {
 const GOVERNING: PolicySection = {
   heading: "Governing law and disputes",
   body: [
-    "These terms are governed by [GOVERNING LAW], without regard to conflict-of-laws rules. Dispute resolution forum and procedure: [DISPUTE RESOLUTION FORUM AND PROCEDURE].",
+    "These terms are governed by the laws of the State of Texas, without regard to conflict-of-laws rules. Before filing a court action, the party raising a dispute must send a written notice to legal@pepecartelhq.com and allow 30 days for a good-faith informal resolution process. If the dispute is not resolved, either party may bring it in a court of competent jurisdiction in Texas. Nothing in this section removes rights or obligations that cannot lawfully be waived.",
   ],
 };
 
@@ -105,7 +99,7 @@ export const POLICY_DRAFTS: Record<PolicyType, PolicyDraft> = {
       {
         heading: "Disclaimers and limitation of liability",
         body: [
-          "To the extent permitted by law, the service is provided \"as is\" and \"as available\" without warranties of any kind. To the extent permitted by law, the Operator's total liability for any claim is limited to the amount you paid for the service in the [LIABILITY LOOKBACK PERIOD] before the claim, and the Operator is not liable for indirect, incidental, consequential or lost-profit damages, or for losses from digital assets, wallets or third-party services.",
+          "To the extent permitted by law, the service is provided \"as is\" and \"as available\" without warranties of any kind. To the extent permitted by law, the Operator's total liability for any claim is limited to the amount you paid for the service during the 12 months before the claim, and the Operator is not liable for indirect, incidental, consequential or lost-profit damages, or for losses from digital assets, wallets or third-party services. These limits do not apply where applicable law does not permit them.",
         ],
       },
       { heading: "Changes", body: ["We may update these terms. Material changes take effect when a new version is activated; where required you will be asked to accept it."] },
@@ -135,13 +129,13 @@ export const POLICY_DRAFTS: Record<PolicyType, PolicyDraft> = {
       {
         heading: "Service providers and processors",
         body: [
-          "We share information with service providers that process it on our behalf, such as hosting and database providers, authentication and email delivery providers, payment processors, messaging platforms (for example Telegram) and AI/model providers used for features you invoke. We may disclose information when required by law, to protect rights and safety, or in a business transfer. [LIST OF PROCESSORS AND SALE/SHARING DETERMINATION — PENDING LEGAL REVIEW].",
+          "We use service providers as needed to operate the features you choose, including Supabase for database, authentication and storage services; Lovable for application development and hosting services; Resend for transactional email; Stripe for payments; Telegram for connected messaging features; X for connected social features; and AI providers only when you invoke an AI-assisted feature. Each provider processes information under its own terms and data practices. We may also disclose information when required by law, to protect rights and safety, or in a business transfer. The legal classification of particular disclosures remains subject to legal review.",
         ],
       },
       {
         heading: "International transfers",
         body: [
-          "Our vendors may process information in countries other than yours, including the United States. Where required, transfers rely on appropriate safeguards. [TRANSFER MECHANISMS — PENDING LEGAL REVIEW].",
+          "CARTEL HQ is currently a limited United States beta. Service providers may process information in the United States or other countries where they operate. Where applicable law requires a transfer safeguard, the relevant provider's contractual or other lawful transfer mechanism applies; those arrangements remain subject to legal review.",
         ],
       },
       {
@@ -156,12 +150,12 @@ export const POLICY_DRAFTS: Record<PolicyType, PolicyDraft> = {
       },
       {
         heading: "Retention",
-        body: ["We keep information for as long as needed for the purposes above, including legal, tax, accounting and fraud-prevention obligations, then delete or de-identify it. [RETENTION SCHEDULE — PENDING LEGAL REVIEW]."],
+        body: ["We keep information for as long as reasonably needed to provide and secure the service and to meet legal, tax, accounting, dispute-resolution and fraud-prevention obligations. Retention varies by record type and provider. We do not promise a fixed deletion deadline that the service does not enforce."],
       },
       {
         heading: "Your rights",
         body: [
-          "Depending on where you live, you may have rights to access, correct, delete, or port your information, and to object to or restrict certain processing. Contact [LEGAL CONTACT EMAIL]. We will not discriminate against you for exercising these rights.",
+          "Depending on applicable law, you may have rights to access, correct, delete, or port your information, and to object to or restrict certain processing. Contact legal@pepecartelhq.com. We will not discriminate against you for exercising these rights.",
         ],
       },
       GOVERNING,
@@ -184,11 +178,11 @@ export const POLICY_DRAFTS: Record<PolicyType, PolicyDraft> = {
       {
         heading: "Refunds",
         body: [
-          "To the extent permitted by law, fees are generally non-refundable once billed, except: (a) duplicate charges; (b) unauthorized charges; (c) refunds required by applicable law; and (d) where the Operator fails to provide the purchased access and does not cure that failure after notice.",
+          "To the extent permitted by law, fees are generally non-refundable once billed, except: (a) duplicate charges; (b) unauthorized charges; (c) refunds required by applicable law; and (d) where the Operator fails to provide the purchased access after notice and a reasonable opportunity to cure.",
           "Any discretionary credit or refund we choose to give does not create an obligation or precedent for future requests.",
         ],
       },
-      { heading: "How to request", body: ["Contact [LEGAL CONTACT EMAIL] with your account email and the charge details."] },
+      { heading: "How to request", body: ["Contact support@pepecartelhq.com with your account email and the charge details."] },
       GOVERNING,
     ],
   },

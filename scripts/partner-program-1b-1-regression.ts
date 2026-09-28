@@ -12,23 +12,31 @@ let passed = 0, failed = 0;
 const check = (id: string, ok: boolean, d = "") => { if (ok) passed++; else { failed++; console.error(`FAIL ${id}${d ? ` — ${d}` : ""}`); } };
 const read = (p: string) => readFileSync(p, "utf8");
 
-/* 1. Drafts & placeholders */
+/* 1. Drafts, confirmed identity and policy terms */
 const all = POLICY_TYPES.map((t) => policyContent(POLICY_DRAFTS[t])).join("\n");
-for (const p of REQUIRED_PLACEHOLDERS) check(`L-1 placeholder ${p} present`, all.includes(p));
-for (const t of POLICY_TYPES) check(`L-2 ${t} activation blocked while placeholders remain`, !canActivatePolicy(policyContent(POLICY_DRAFTS[t])));
-check("L-3 placeholder-free text activatable", canActivatePolicy("Clean text with no brackets."));
+check("L-1 known placeholder list cleared", REQUIRED_PLACEHOLDERS.length === 0);
+for (const t of POLICY_TYPES) check(`L-2 ${t} has no unresolved placeholders`, canActivatePolicy(policyContent(POLICY_DRAFTS[t])) && findPlaceholders(policyContent(POLICY_DRAFTS[t])).length === 0);
+check("L-3 activation remains fail closed", !canActivatePolicy("Unresolved [LEGAL FIELD].") && canActivatePolicy("Clean text with no brackets."));
 check("L-4 detects arbitrary placeholder", findPlaceholders("x [FOO BAR] y").length === 1);
 check("L-5 confirm phrase exact", activationConfirmPhrase("terms", 2) === "ACTIVATE TERMS V2");
-check("L-6 no Cartel HQ as legal entity", !/CARTEL HQ,? (LLC|Inc|Ltd|Corp)/i.test(all));
+check("L-6 exact operator + Texas sole proprietor", /Berthony Petit Frere/.test(all) && /individual operating as a Texas sole proprietor/.test(all));
+check("L-6a brands are not legal entities or registered DBAs", /Pepe Cartel and CARTEL HQ are brand and product names/.test(all) && /not separate legal entities or registered DBAs/.test(all));
+check("L-6b no LLC/corporation claim", !/Berthony Petit Frere[^\n]*(LLC|Inc\.?|Ltd\.?|Corporation)|(?:Pepe Cartel|CARTEL HQ)[^\n]*(LLC|Inc\.?|Ltd\.?|Corporation)/i.test(all));
+check("L-6c limited U.S. beta", /limited United States beta/.test(all) && !/worldwide availability/i.test(all));
+check("L-6d exact support and legal contacts", /support@pepecartelhq\.com/.test(all) && /legal@pepecartelhq\.com/.test(all));
+check("L-6e no mailing address", !/mailing address|postal address/i.test(all));
+check("L-6f Texas dispute process", /laws of the State of Texas/.test(all) && /30 days for a good-faith informal resolution process/.test(all) && /court of competent jurisdiction in Texas/.test(all) && !/mandatory arbitration|class-action waiver/i.test(all));
 const refunds = policyContent(POLICY_DRAFTS.refunds);
-check("L-7 refund rules", /duplicate/.test(refunds) && /unauthorized/.test(refunds) && /required by applicable law/.test(refunds) && /fails to provide the purchased access/.test(refunds) && /end of the current billing period/.test(refunds) && /no prorated refunds or credits/.test(refunds) && /precedent/.test(refunds));
+check("L-7 refund rules", /duplicate/.test(refunds) && /unauthorized/.test(refunds) && /required by applicable law/.test(refunds) && /fails to provide the purchased access after notice and a reasonable opportunity to cure/.test(refunds) && /end of the current billing period/.test(refunds) && /no prorated refunds or credits/.test(refunds) && /precedent/.test(refunds) && /support@pepecartelhq\.com/.test(refunds));
 const terms = policyContent(POLICY_DRAFTS.terms);
 check("L-8 no advice/safety/uptime disclaimers", /financial, investment, legal, tax/.test(terms) && /safety/.test(terms) && /liquidity/.test(terms) && /uptime/.test(terms) && /private keys/.test(terms) && /own terms and data practices/.test(terms));
 check("L-9 pricing unchanged $49", /USD \$49 per month per workspace/.test(terms));
+check("L-9a 12-month liability lookback + non-waivable limits", /during the 12 months before the claim/.test(terms) && /where applicable law does not permit them/.test(terms));
 const privacy = policyContent(POLICY_DRAFTS.privacy);
 check("L-10 privacy: no unverified no-sell claim", !/we do not (sell|share)/i.test(privacy));
-check("L-11 privacy covers required topics", ["Categories","Purposes","processors","International","local storage","Security","Retention","rights"].every((k) => privacy.toLowerCase().includes(k.toLowerCase())));
+check("L-11 privacy covers required topics", ["Categories","Purposes","processors","International","local storage","Security","Retention","rights","Supabase","Lovable","Resend","Stripe","Telegram","X","AI providers"].every((k) => privacy.toLowerCase().includes(k.toLowerCase())));
 check("L-12 privacy: no IP for referral", /do not collect IP addresses/.test(privacy));
+check("L-12a privacy makes no unenforced deletion deadline", /do not promise a fixed deletion deadline/.test(privacy));
 const pa = policyContent(POLICY_DRAFTS.partner_agreement);
 for (const [k, re] of Object.entries({
   approval: /application and written approval/, firstValid: /first valid attribution wins/, window: /30 days/,
@@ -37,8 +45,10 @@ for (const [k, re] of Object.entries({
   brand: /brand terms/, ftc: /FTC/, excl: /sales tax, discounts, credits, refunds, chargebacks\/disputes and setup or service fees/,
   procFees: /Processor fees do not reduce/, w9: /W-9/, noTin: /does not collect or store taxpayer identification/,
   negCarry: /negative balance that carries forward/, contractor: /independent contractor/, indemn: /indemnify/,
-  svcZero: /earn no CARTEL HQ commission unless separately approved/, law: /\[GOVERNING LAW\]/,
+  svcZero: /earn no CARTEL HQ commission unless separately approved/, law: /laws of the State of Texas/,
 })) check(`L-13 partner agreement: ${k}`, re.test(pa));
+check("L-14 exact partner economics", /20% of qualifying revenue/.test(pa) && /first 12 successfully paid monthly invoices/.test(pa) && /attribution window of 30 days/.test(pa) && /held for 45 days/.test(pa) && /minimum payout is USD \$50/.test(pa) && /paid manually/.test(pa));
+check("L-15 source drafts make no effective/active claim", !/these documents are effective|these terms are active|status:\s*active/i.test(all));
 
 /* 2. Routes, footer, consent */
 for (const f of ["legal.terms","legal.privacy","legal.refunds","legal.partner-agreement"]) {

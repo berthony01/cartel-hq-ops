@@ -30,14 +30,14 @@ Required Edge modes (from repo headers): `partner-referral-capture` **verify_jwt
 
 | # | Gate | Status | Owner |
 |---|---|---|---|
-| G1 | Legal operator name | BLOCKED | Owner |
-| G2 | Mailing address | BLOCKED | Owner |
-| G3 | Formation jurisdiction | BLOCKED | Owner |
-| G4 | Support / legal email | BLOCKED | Owner |
-| G5 | U.S.-only launch confirmation | BLOCKED | Owner |
-| G6 | Attorney review: Terms, Privacy, Refund Policy, Partner Agreement, disclaimers | BLOCKED | Counsel |
-| G7 | CPA review: Texas sales-tax treatment and Stripe Tax decision | BLOCKED | CPA + Owner |
-| G8 | Privacy / subprocessor / data-transfer review | BLOCKED | Counsel |
+| G1 | Legal operator name | PASS — Berthony Petit Frere | Owner |
+| G2 | Mailing address | DEFERRED — not included in website policies; promotional email campaigns remain blocked until a valid physical postal address exists | Owner |
+| G3 | Jurisdiction / entity posture | PASS — individual Texas sole proprietor; not an LLC, corporation or registered DBA | Owner |
+| G4 | Support / legal email | PENDING DNS VERIFICATION — `support@pepecartelhq.com` and `legal@pepecartelhq.com` selected; inbound MX not verified | Owner/Operator |
+| G5 | Limited U.S. beta confirmation | PASS | Owner |
+| G6 | Attorney review: Terms, Privacy, Refund Policy, Partner Agreement, disclaimers | NOT OBTAINED | Counsel |
+| G7 | CPA review: Texas sales-tax treatment and Stripe Tax decision | PENDING | CPA + Owner |
+| G8 | Privacy / subprocessor / data-transfer review | NOT OBTAINED | Counsel |
 | G9 | Backups + production version/config record (no secrets) | NOT DONE | Owner/Operator |
 | G10 | SQL validated in non-production Supabase (1B-1, 1B-2, 1B-3) | NOT DONE | Operator |
 | G11 | Production SQL apply (explicit approval) | NOT DONE | Owner |
@@ -56,7 +56,7 @@ Legal note: broad "no refund" and "use at your own risk" wording does **not** re
 
 ## 3. Activation order (non-production first)
 
-1. Fill all legal placeholders; obtain counsel and CPA signoff (G1–G8).
+1. Confirm the completed identity and U.S.-beta policy text, verify inbound email DNS, obtain counsel and CPA signoff, and complete privacy/subprocessor review (G1–G8). Promotional email campaigns remain blocked until a valid physical postal address is available (G2).
 2. Create/verify backups; record current production Edge versions, webhook endpoint event list, cron jobs and relevant config — **no secret values** (G9).
 3. Validate SQL in a non-production Supabase project; then production only after explicit approval, strictly in order 1B-1, 1B-2, 1B-3 (G10, G11). Never reapply `20260927170206`, `20260927171231`, `20260927173127`, `20260928110628`.
 4. Verify RLS/grants, append-only ledger triggers, exact RPC signatures, `NOTIFY pgrst, 'reload schema'`, and zero unexpected rows in new tables (G12).

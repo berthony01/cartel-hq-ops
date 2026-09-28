@@ -13,8 +13,18 @@ const CL = read("docs/PARTNER_1B_RELEASE_CHECKLIST.md");
 const RB = read("docs/PARTNER_1B_ACTIVATION_ROLLBACK_RUNBOOK.md");
 check("R-1 checklist header", CL.includes("STAGED, NOT APPROVED FOR PRODUCTION. NOTHING IN THIS DOCUMENT HAS BEEN EXECUTED."));
 check("R-2 runbook staged-only", RB.includes("STAGED ONLY. NOT EXECUTED."));
-for (const g of ["Legal operator name", "Mailing address", "Formation jurisdiction", "Support / legal email", "U.S.-only launch", "Attorney review", "Texas sales-tax", "subprocessor"])
-  check(`R-3 gate BLOCKED: ${g}`, new RegExp(`${g.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}[^\\n]*\\| BLOCKED`).test(CL));
+for (const [gate, status] of [
+  ["Legal operator name", "PASS — Berthony Petit Frere"],
+  ["Mailing address", "DEFERRED"],
+  ["Jurisdiction / entity posture", "PASS — individual Texas sole proprietor"],
+  ["Support / legal email", "PENDING DNS VERIFICATION"],
+  ["Limited U.S. beta confirmation", "PASS"],
+  ["Attorney review: Terms, Privacy, Refund Policy, Partner Agreement, disclaimers", "NOT OBTAINED"],
+  ["CPA review: Texas sales-tax treatment and Stripe Tax decision", "PENDING"],
+  ["Privacy / subprocessor / data-transfer review", "NOT OBTAINED"],
+] as const) check(`R-3 gate status: ${gate}`, CL.split("\n").some((line) => line.includes(`| ${gate} | ${status}`)));
+check("R-3a mailing-address operational restriction", CL.includes("promotional email campaigns remain blocked until a valid physical postal address exists"));
+check("R-3b selected emails remain DNS-pending", CL.includes("support@pepecartelhq.com") && CL.includes("legal@pepecartelhq.com") && CL.includes("inbound MX not verified"));
 check("R-4 non-waivable note", CL.includes("does **not** remove non-waivable"));
 for (const cp of ["CP-SQL", "CP-EDGE", "CP-STRIPE", "CP-TERMS", "CP-PUBLISH"]) check(`R-5 checkpoint ${cp}`, CL.includes(cp));
 check("R-6 publication + activation not done", /Publication \(separate explicit approval\) \| NOT DONE/.test(CL));
@@ -27,6 +37,7 @@ check("R-17 balance call has two args", RB.includes("partner_balance_breakdown(<
 check("R-18 duplicate detector filters entry_type accrual", RB.includes("where entry_type = 'accrual' group by 1,2 having count(*) > 1") && !RB.includes("source_object = 'invoice'"));
 check("R-19 resend insufficient when commercial event already processed", RB.includes("already `processed` or `ignored`") && RB.includes("normal Stripe resend is **insufficient**") && RB.includes("NOT YET IMPLEMENTED OR VALIDATED") && !RB.includes("Idempotency makes duplicates safe"));
 check("R-20 reconciliation gate NOT DONE before Edge/Stripe", /\| G12a \| Rollback-gap reconciliation[^\n]*\| NOT DONE \| Engineering\/Operator \|/.test(CL) && CL.indexOf("| G12a |") < CL.indexOf("| G13 |") && CL.indexOf("4a. ") < CL.indexOf("5. Deploy") && /CP-EDGE[^\n]*G12a/.test(CL) && /CP-STRIPE[^\n]*G12a/.test(CL));
+check("R-21 runbook legal preflight matches unresolved gates", RB.includes("G1, G3 and G5 remain PASS") && RB.includes("resolve G4") && RB.includes("reviews required by G6–G8") && RB.includes("G2 promotional-email restriction"));
 
 // Staged-only: no Phase 1B SQL in migrations; migrations unchanged since baseline.
 const migs = readdirSync("supabase/migrations");
