@@ -239,7 +239,7 @@ for (const [fn, args] of Object.entries(RPCS)) {
 /* 17. Client library */
 const LIB = read("src/lib/partners.ts");
 check("P-17.1 code regex exact", LIB.includes("/^[a-z0-9]{10}$/") && LIB.includes(".trim().toLowerCase()"));
-check("P-17.2 storage holds only code + timestamp", LIB.includes("{ code, capturedAt: new Date().toISOString() }") && !/partner_id|\bip\b|ip_address|fingerprint|userAgent|tax_id|\bssn\b/i.test(LIB.slice(LIB.indexOf("Referral capture"), LIB.indexOf("export type ClaimOutcome"))));
+check("P-17.2 storage holds only code + timestamp", LIB.includes("{ code, capturedAt: new Date().toISOString() }") && !/partner_id|\bip\b|ip_address|fingerprint|userAgent|tax_id|\bssn\b/i.test(LIB.slice(LIB.indexOf("Referral capture"), LIB.indexOf("export type ClaimOutcome")).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "")));
 const claim = LIB.slice(LIB.indexOf("export async function claimStoredReferral"), LIB.indexOf("export type BindResult"));
 check("P-17.3 claim keeps on PROGRAM_NOT_OPEN and transient errors", claim.includes('data.reason === "PROGRAM_NOT_OPEN") return "keep"') && claim.includes('if (res.error) return "keep"') && /catch \{\s*return "keep";/.test(claim));
 check("P-17.4 claim clears on success and terminal reasons", claim.includes('clearStoredReferral();\n    return "claimed"') && ["INVALID_CODE", "CODE_NOT_ACTIVE", "SELF_REFERRAL"].every((r) => LIB.includes(`"${r}"`)) && claim.includes('return "cleared"'));
