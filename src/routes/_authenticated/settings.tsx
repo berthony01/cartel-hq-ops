@@ -121,6 +121,8 @@ function SettingsPage() {
         </div>
       </div>
 
+      <BillingSection />
+
       <Section
         variant="primary"
         className="rise-in"
@@ -153,8 +155,6 @@ function SettingsPage() {
           </Link>
         ))}
       </Section>
-
-      <BillingSection />
 
 
       <Section

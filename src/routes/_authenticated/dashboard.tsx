@@ -15,6 +15,7 @@ import {
   ShieldAlert,
   Sticker,
   Users,
+  CreditCard,
 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -301,12 +302,20 @@ function HqDashboard() {
           variant="surface"
           className="rise-in"
           title={workspaceLoading ? "Loading…" : "No project"}
-          description={workspaceLoading ? "Reading your project context." : "Create your free project to start using CARTEL HQ. Free includes 1 project and 1 Telegram community."}
+          description={workspaceLoading ? "Reading your project context." : "Create your free project to start using CARTEL HQ. Free includes 1 project and 1 Telegram community — no credit card required. Upgrading to Pro becomes available once your project is created and Project Identity is completed."}
           actions={workspaceLoading ? <StatusBadge tone="gold">Setup required</StatusBadge> : <Button className="min-h-11" onClick={() => setCreateOpen(true)}>Create free project</Button>}
           headerClassName="mb-0"
         />
       ) : (
         <>
+          <div className="flex justify-end">
+            <Button asChild variant="outline" className="min-h-11">
+              <Link to="/settings" hash="billing">
+                <CreditCard className="size-4" aria-hidden="true" />
+                Plan &amp; Billing
+              </Link>
+            </Button>
+          </div>
           <section className="rise-in overflow-hidden border border-gold/40 bg-surface shadow-[var(--shadow-cartel),var(--glow-gold)]" aria-labelledby="active-launch-heading">
             {launchLoading ? (
               <div className="flex min-h-64 items-center gap-2 px-5 py-8 text-sm text-muted-foreground sm:px-7">
