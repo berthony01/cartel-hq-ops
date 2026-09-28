@@ -162,8 +162,12 @@ async function gateRollbackGap(
 
 async function finish(req: ReconcileRequest, eventType: string, rpc: IntendedRpc, args: Record<string, unknown>, db: ReconciliationStore): Promise<ReconcileResult> {
   if (!req.execute) return result(req, eventType, "dry_run", "READY", rpc);
-  await db.invokeIngestion(rpc, args);
-  return result(req, eventType, "executed", "EXECUTED", rpc);
+  try {
+    await db.invokeIngestion(rpc, args);
+    return result(req, eventType, "executed", "EXECUTED", rpc);
+  } catch {
+    return result(req, eventType, "rejected", "INGESTION_RPC_FAILED", rpc);
+  }
 }
 
 export async function reconcileEvent(req: ReconcileRequest, stripe: StripeAdapter, db: ReconciliationStore): Promise<ReconcileResult> {
@@ -209,7 +213,7 @@ export async function reconcileEvent(req: ReconcileRequest, stripe: StripeAdapte
     const current = isRefund ? await stripe.retrieveRefund(objectRef) : await stripe.retrieveDispute(objectRef);
     const statusValid = isRefund ? isRefundStatus(current.status) : isDisputeStatus(current.status);
     if (current.id !== objectRef || current.livemode !== event.livemode || !statusValid || !(current.amount > 0) ||
-        !sameScalar(obj?.status, current.status) || !sameScalar(obj?.currency, current.currency) || !sameScalar(obj?.amount, current.amount)) {
+        typeof current.currency !== "string") {
       return result(req, eventType, "rejected", "MONEY_OBJECT_INVALID");
     }
     let chargeRef = refOf(current.charge);

@@ -35,9 +35,12 @@ check("R-10 STOP conditions", ["Duplicate accrual", "beyond an invoice", "PGRST2
 
 check("R-17 balance call has two args", RB.includes("partner_balance_breakdown(<PARTNER_ID>, '<CURRENCY>')") && !/partner_balance_breakdown\(<PARTNER_ID>\)/.test(RB));
 check("R-18 duplicate detector filters entry_type accrual", RB.includes("where entry_type = 'accrual' group by 1,2 having count(*) > 1") && !RB.includes("source_object = 'invoice'"));
-check("R-19 resend insufficient when commercial event already processed", RB.includes("already `processed` or `ignored`") && RB.includes("normal Stripe resend is **insufficient**") && RB.includes("NOT YET IMPLEMENTED OR VALIDATED") && !RB.includes("Idempotency makes duplicates safe"));
-check("R-20 reconciliation gate NOT DONE before Edge/Stripe", /\| G12a \| Rollback-gap reconciliation[^\n]*\| NOT DONE \| Engineering\/Operator \|/.test(CL) && CL.indexOf("| G12a |") < CL.indexOf("| G13 |") && CL.indexOf("4a. ") < CL.indexOf("5. Deploy") && /CP-EDGE[^\n]*G12a/.test(CL) && /CP-STRIPE[^\n]*G12a/.test(CL));
+check("R-19 resend insufficient when commercial event already processed", RB.includes("already `processed` or `ignored`") && RB.includes("normal Stripe resend is **insufficient**") && RB.includes("NOT BEEN VALIDATED") && !RB.includes("Idempotency makes duplicates safe"));
+check("R-20 reconciliation gates split before Edge/Stripe", /\| G12a-A \| Rollback-gap reconciliation[^\n]*\| PASS \| Engineering \|/.test(CL) && /\| G12a-B \| Rollback-gap reconciliation[^\n]*\| NOT DONE \| Engineering\/Operator \|/.test(CL) && CL.indexOf("| G12a-B |") < CL.indexOf("| G13 |") && CL.indexOf("4a. ") < CL.indexOf("5. Deploy") && /CP-EDGE[^\n]*G12a-B/.test(CL) && /CP-STRIPE[^\n]*G12a-B/.test(CL));
 check("R-21 runbook legal preflight matches unresolved gates", RB.includes("G1, G3 and G5 remain PASS") && RB.includes("resolve G4") && RB.includes("reviews required by G6–G8") && RB.includes("G2 promotional-email restriction"));
+const reconciliationRegression = execSync("bun scripts/partner-program-1b-reconcile-regression.ts", { encoding: "utf8" });
+check("R-22 G12a utility and mock regression exist and pass", ["scripts/partner-program-1b-reconcile.ts", "scripts/partner-program-1b-reconcile-core.ts", "scripts/partner-program-1b-reconcile-regression.ts"].every(existsSync) && /30 passed, 0 failed; mocks only, 0 external calls/.test(reconciliationRegression));
+check("R-23 safe CLI order and exact live gates", RB.includes("Dry-run first") && RB.includes("--environment test --event <EVENT_ID> --execute --confirm \"EXECUTE PARTNER RECONCILIATION TEST\"") && RB.includes("--execute --allow-live --confirm \"EXECUTE PARTNER RECONCILIATION LIVE\"") && RB.includes("separate explicit live approval"));
 
 // Staged-only: no Phase 1B SQL in migrations; migrations unchanged since baseline.
 const migs = readdirSync("supabase/migrations");

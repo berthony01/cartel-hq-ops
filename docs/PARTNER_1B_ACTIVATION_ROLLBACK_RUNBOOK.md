@@ -37,11 +37,12 @@
           (select count(*) from partner_invoice_commissions) invoices;
    ```
    Also confirm UPDATE/DELETE on `partner_commission_ledger` is rejected by the append-only guard (in non-production only).
-2. **Edge (CP-EDGE)** — deploy `partner-referral-capture` (verify_jwt=false) and `stripe-billing-webhook` (verify_jwt=false). Verify: unsigned POST to webhook returns 400; OPTIONS from a non-allowed origin to capture is refused.
-3. **Stripe (CP-STRIPE)** — on existing endpoint `<ENDPOINT_ID>` add only `refund.created`, `refund.updated`, `refund.failed`, `charge.dispute.created`, `charge.dispute.updated`, `charge.dispute.closed`; test mode first. No secret rotation, no URL change.
-4. **Terms (CP-TERMS)** — owner saves draft; review; activate with typed confirmation.
-5. **Smoke** — run checklist Section 4 in test mode.
-6. **Publish (CP-PUBLISH)** — separate approval.
+2. **G12a-B** — validate the built reconciliation utility against a non-production Supabase project and Stripe test environment. This is NOT DONE and must pass before Edge or Stripe activation.
+3. **Edge (CP-EDGE)** — deploy `partner-referral-capture` (verify_jwt=false) and `stripe-billing-webhook` (verify_jwt=false). Verify: unsigned POST to webhook returns 400; OPTIONS from a non-allowed origin to capture is refused.
+4. **Stripe (CP-STRIPE)** — on existing endpoint `<ENDPOINT_ID>` add only `refund.created`, `refund.updated`, `refund.failed`, `charge.dispute.created`, `charge.dispute.updated`, `charge.dispute.closed`; test mode first. No secret rotation, no URL change.
+5. **Terms (CP-TERMS)** — owner saves draft; review; activate with typed confirmation.
+6. **Smoke** — run checklist Section 4 in test mode.
+7. **Publish (CP-PUBLISH)** — separate approval.
 
 ## 3. Launch-day monitoring (read-only; do not run until approved)
 
@@ -83,13 +84,36 @@ Column names match the staged 1B-3 SQL; re-confirm against the applied schema be
 
 ## 6. Reconciliation before resuming
 
-> **BLOCKER:** the rollback-gap reconciliation/backfill job described in case (b) is
-> **NOT YET IMPLEMENTED OR VALIDATED**. It is a production activation blocker (checklist
-> gate G12a) and must pass in non-production before CP-EDGE and CP-STRIPE.
+> **BLOCKER:** the rollback-gap reconciliation utility described in case (b) is built and
+> mock-tested (G12a-A), but it has **NOT BEEN VALIDATED** against a non-production Supabase
+> project and Stripe test environment (G12a-B). G12a-B must pass before CP-EDGE and CP-STRIPE.
 
 1. List Stripe events for the gap window by type (`invoice.paid`, refund, dispute) and environment.
 2. For each, look up `commercial_billing_events` by `(event_ref)` and the partner state by `event_ref`, `invoice_ref`, `refund_ref`, `dispute_ref` (`partner_commission_events`, `partner_invoice_commissions`, `partner_refund_states`, `partner_dispute_states`).
 3. Case (a) — **no `commercial_billing_events` row**: resend the event from Stripe through the normal signed webhook. This is appropriate; the webhook and ingestion RPCs are idempotent.
-4. Case (b) — **`commercial_billing_events` already `processed` or `ignored`** (e.g. handled by the pre-1B-4 webhook) **but the matching partner event/invoice/refund/dispute state is missing**: a normal Stripe resend is **insufficient** — it is rejected as a top-level duplicate and cannot backfill commission. **STOP.** Use only a separately reviewed, non-production-tested service-role reconciliation job that retrieves the authoritative Stripe objects and invokes the existing ingestion RPCs (`partner_ingest_invoice_paid`, `partner_ingest_refund_state`, `partner_ingest_dispute_state`) idempotently, applying the same shared-account, environment and price-mapping validation as the webhook.
+4. Case (b) — **`commercial_billing_events` already `processed` or `ignored`** (e.g. handled by the pre-1B-4 webhook) **but the matching partner event/invoice/refund/dispute state is missing**: a normal Stripe resend is **insufficient** — it is rejected as a top-level duplicate and cannot backfill commission. **STOP.** Use only `scripts/partner-program-1b-reconcile.ts`, which retrieves authoritative Stripe objects and invokes the existing ingestion RPCs (`partner_ingest_invoice_paid`, `partner_ingest_refund_state`, `partner_ingest_dispute_state`) idempotently after the same shared-account, environment and price-mapping validation as the webhook.
 5. **Never hand-insert, update or delete ledger rows**, and never reset `commercial_billing_events` status to force a replay.
 6. Re-run Section 3 detectors; resume only when all return clean and the owner approves.
+
+### Safe CLI sequence for case (b)
+
+The command requires explicit event IDs and never discovers events by time window. Environment variables are supplied outside the command and are never printed. Repeat `--event <EVENT_ID>` for up to 100 distinct IDs.
+
+1. Dry-run first (default; no ingestion RPC mutation):
+   ```text
+   bun scripts/partner-program-1b-reconcile.ts --environment test --event <EVENT_ID>
+   ```
+2. After reviewing every redacted result, execute only in the Stripe test / non-production Supabase environment:
+   ```text
+   bun scripts/partner-program-1b-reconcile.ts --environment test --event <EVENT_ID> --execute --confirm "EXECUTE PARTNER RECONCILIATION TEST"
+   ```
+3. Live dry-run requires no mutation confirmation:
+   ```text
+   bun scripts/partner-program-1b-reconcile.ts --environment live --event <EVENT_ID>
+   ```
+4. Live execution is forbidden until G12a-B passes and a separate explicit live approval is recorded. Only then use all three live gates:
+   ```text
+   bun scripts/partner-program-1b-reconcile.ts --environment live --event <EVENT_ID> --execute --allow-live --confirm "EXECUTE PARTNER RECONCILIATION LIVE"
+   ```
+
+The utility stops an executing batch on the first rejection, returns nonzero when any event is rejected, never changes `commercial_billing_events`, and never directly edits partner ledger or state tables.
