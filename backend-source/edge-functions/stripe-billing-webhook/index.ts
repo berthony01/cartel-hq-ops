@@ -14,7 +14,6 @@ import {
   eligibleBaseCents,
   invoiceSubscriptionRef,
   isDisputeStatus,
-  isMissingContract,
   isRefundStatus,
   refOf,
   routeEvent,
@@ -39,9 +38,10 @@ import {
  *  - refund.* / charge.dispute.*: current refund/dispute retrieved, resolved through
  *    charge -> invoice -> subscription, Cartel-validated, then the state RPC.
  *  - checkout.session.completed NEVER creates a commission.
- *  - Accounting failures return 500 so Stripe retries; the entitlement re-apply on
- *    retry is idempotent state sync (never a double grant). An unapplied staged
- *    contract (function missing) is recorded and never blocks billing.
+ *  - ALL accounting failures — including a missing/unapplied commission contract
+ *    (PGRST202 / 42883 / schema-cache lag) — mark the event failed and return 500
+ *    so Stripe retries; an accrual or reversal is never silently lost. The
+ *    entitlement re-apply on retry is idempotent state sync (never a double grant).
  */
 
 const RELEVANT_EVENTS = new Set([
@@ -257,10 +257,8 @@ Deno.serve(async (req: Request) => {
       ? await admin.rpc("partner_ingest_refund_state", { ...args, _refund_ref: money.ref })
       : await admin.rpc("partner_ingest_dispute_state", { ...args, _dispute_ref: money.ref });
     if (accErr) {
-      if (isMissingContract(accErr)) {
-        await finish("processed", "COMMISSION_CONTRACT_UNAVAILABLE");
-        return text("ok", 200);
-      }
+      // Every failure retries, including missing-contract/schema-cache errors:
+      // a refund or dispute reversal must never be silently dropped.
       await finish("failed", "COMMISSION_FAILED");
       return text("processing failed", 500);
     }
@@ -332,12 +330,10 @@ Deno.serve(async (req: Request) => {
       _paid_at: paidAt,
     });
     if (accErr) {
-      if (isMissingContract(accErr)) {
-        await finish("processed", "COMMISSION_CONTRACT_UNAVAILABLE");
-        return text("ok", 200);
-      }
-      // Retry: entitlement re-apply on retry is idempotent state sync; the RPC is
-      // event- and invoice-idempotent, so no double grant or double accrual.
+      // Retry on EVERY failure, including missing-contract/schema-cache errors:
+      // an accrual must never be silently dropped. Entitlement re-apply on retry
+      // is idempotent state sync; the RPC is event- and invoice-idempotent, so
+      // no double grant or double accrual.
       await finish("failed", "COMMISSION_FAILED");
       return text("processing failed", 500);
     }
