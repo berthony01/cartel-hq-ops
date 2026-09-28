@@ -4,6 +4,9 @@ import { Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { normalizeReferralCode, storeReferralCode } from "@/lib/partners";
+import { fetchActivePolicies, recordAcceptances } from "@/lib/policy-acceptance";
+import { PolicyConsent } from "@/components/cartel/PolicyConsent";
+import { LegalFooter } from "@/components/cartel/LegalFooter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -68,6 +71,7 @@ function AuthPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [consent, setConsent] = useState(false);
 
   // Store a valid referral code locally (code + timestamp only; no partner id).
   useEffect(() => {
@@ -91,6 +95,8 @@ function AuthPage() {
 
     try {
       if (isSignup) {
+        // Unchecked consent blocks signup.
+        if (!consent) throw new Error("Please accept the Terms of Service to continue.");
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: email.trim(),
           password,
@@ -98,6 +104,14 @@ function AuthPage() {
         });
         if (signUpError) throw signUpError;
         if (data.session) {
+          // Record acceptance only of EFFECTIVE versions. With none active
+          // (current state) nothing is recorded; without a session the
+          // in-app prompt collects it after first sign-in.
+          try {
+            await recordAcceptances(await fetchActivePolicies(), "signup");
+          } catch {
+            /* prompt will re-ask; never blocks an already-created account */
+          }
           toast.success("Account created");
           navigate({ to: destination, replace: true });
         } else {
@@ -186,13 +200,15 @@ function AuthPage() {
               />
             </div>
 
+            {isSignup ? <PolicyConsent variant="signup" checked={consent} onChange={setConsent} /> : null}
+
             {error ? (
               <p role="alert" className="text-xs text-signal">
                 {error}
               </p>
             ) : null}
 
-            <Button type="submit" disabled={busy} className="min-h-11 w-full">
+            <Button type="submit" disabled={busy || (isSignup && !consent)} className="min-h-11 w-full">
               {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
               {isSignup ? "Create free account" : "Sign in"}
             </Button>
@@ -218,6 +234,7 @@ function AuthPage() {
             {isSignup ? "Sign in" : "Start free"}
           </button>
         </p>
+        <LegalFooter className="mt-4" />
       </div>
     </main>
   );
