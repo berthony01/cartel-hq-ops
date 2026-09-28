@@ -80,7 +80,7 @@ check("T-4 edge hash == SQL sha256(utf8) hex", (await sha256Hex(t0)) === createH
 
 /* 5. Browser flow */
 const LIB = read("src/lib/partners.ts");
-const refSec = LIB.slice(LIB.indexOf("Referral capture (Phase 1B-2)"), LIB.indexOf("export type BindResult"));
+const refSec = LIB.slice(LIB.indexOf("/* ---------------- Referral capture (Phase 1B-2)"), LIB.indexOf("export type BindResult"));
 const refCode = refSec.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
 check("B-1 stores only {token, expiresAt}", /JSON\.stringify\(\{ token: parsed\.token, expiresAt: parsed\.expiresAt \}\)/.test(refCode));
 check("B-2 no client capturedAt authority", !/capturedAt|new Date\(\)\.toISOString/.test(refCode));
