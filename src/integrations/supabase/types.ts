@@ -1684,6 +1684,420 @@ export type Database = {
           },
         ]
       }
+      partner_agreement_acceptances: {
+        Row: {
+          accepted_at: string
+          id: string
+          partner_id: string
+          terms_version: number
+        }
+        Insert: {
+          accepted_at?: string
+          id?: string
+          partner_id: string
+          terms_version: number
+        }
+        Update: {
+          accepted_at?: string
+          id?: string
+          partner_id?: string
+          terms_version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_agreement_acceptances_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_agreement_acceptances_terms_version_fkey"
+            columns: ["terms_version"]
+            isOneToOne: false
+            referencedRelation: "partner_program_terms"
+            referencedColumns: ["version"]
+          },
+        ]
+      }
+      partner_applications: {
+        Row: {
+          created_at: string
+          id: string
+          pitch: string
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          submitted_at: string
+          terms_version: number
+          updated_at: string
+          user_id: string
+          wants_affiliate: boolean
+          wants_service_partner: boolean
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          pitch: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string
+          terms_version: number
+          updated_at?: string
+          user_id: string
+          wants_affiliate?: boolean
+          wants_service_partner?: boolean
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          pitch?: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string
+          terms_version?: number
+          updated_at?: string
+          user_id?: string
+          wants_affiliate?: boolean
+          wants_service_partner?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_applications_terms_version_fkey"
+            columns: ["terms_version"]
+            isOneToOne: false
+            referencedRelation: "partner_program_terms"
+            referencedColumns: ["version"]
+          },
+        ]
+      }
+      partner_commission_ledger: {
+        Row: {
+          amount_cents: number
+          available_at: string
+          created_at: string
+          created_by: string | null
+          currency: string
+          entry_type: string
+          id: string
+          note: string | null
+          partner_id: string
+          payout_request_id: string | null
+          referral_id: string | null
+          source_event_ref: string | null
+          source_kind: string
+          terms_version: number | null
+          workspace_id: string | null
+        }
+        Insert: {
+          amount_cents: number
+          available_at?: string
+          created_at?: string
+          created_by?: string | null
+          currency: string
+          entry_type: string
+          id?: string
+          note?: string | null
+          partner_id: string
+          payout_request_id?: string | null
+          referral_id?: string | null
+          source_event_ref?: string | null
+          source_kind: string
+          terms_version?: number | null
+          workspace_id?: string | null
+        }
+        Update: {
+          amount_cents?: number
+          available_at?: string
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          entry_type?: string
+          id?: string
+          note?: string | null
+          partner_id?: string
+          payout_request_id?: string | null
+          referral_id?: string | null
+          source_event_ref?: string | null
+          source_kind?: string
+          terms_version?: number | null
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_commission_ledger_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_commission_ledger_payout_request_id_fkey"
+            columns: ["payout_request_id"]
+            isOneToOne: false
+            referencedRelation: "partner_payout_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_commission_ledger_referral_id_fkey"
+            columns: ["referral_id"]
+            isOneToOne: false
+            referencedRelation: "partner_referrals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_commission_ledger_terms_version_fkey"
+            columns: ["terms_version"]
+            isOneToOne: false
+            referencedRelation: "partner_program_terms"
+            referencedColumns: ["version"]
+          },
+          {
+            foreignKeyName: "partner_commission_ledger_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partner_payout_requests: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          currency: string
+          id: string
+          paid_at: string | null
+          paid_reference: string | null
+          partner_id: string
+          requested_at: string
+          review_note: string | null
+          reviewed_at: string | null
+          reviewer_id: string | null
+          status: string
+          terms_version: number
+          updated_at: string
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          currency: string
+          id?: string
+          paid_at?: string | null
+          paid_reference?: string | null
+          partner_id: string
+          requested_at?: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewer_id?: string | null
+          status?: string
+          terms_version: number
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          paid_at?: string | null
+          paid_reference?: string | null
+          partner_id?: string
+          requested_at?: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewer_id?: string | null
+          status?: string
+          terms_version?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_payout_requests_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_payout_requests_terms_version_fkey"
+            columns: ["terms_version"]
+            isOneToOne: false
+            referencedRelation: "partner_program_terms"
+            referencedColumns: ["version"]
+          },
+        ]
+      }
+      partner_program_terms: {
+        Row: {
+          activated_at: string | null
+          activated_by: string | null
+          agreement_text: string | null
+          attribution_window_days: number | null
+          commission_bps: number | null
+          created_at: string
+          created_by: string | null
+          currency: string | null
+          disclosure_text: string | null
+          hold_days: number | null
+          id: string
+          min_payout_cents: number | null
+          retired_at: string | null
+          status: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          activated_at?: string | null
+          activated_by?: string | null
+          agreement_text?: string | null
+          attribution_window_days?: number | null
+          commission_bps?: number | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string | null
+          disclosure_text?: string | null
+          hold_days?: number | null
+          id?: string
+          min_payout_cents?: number | null
+          retired_at?: string | null
+          status?: string
+          updated_at?: string
+          version: number
+        }
+        Update: {
+          activated_at?: string | null
+          activated_by?: string | null
+          agreement_text?: string | null
+          attribution_window_days?: number | null
+          commission_bps?: number | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string | null
+          disclosure_text?: string | null
+          hold_days?: number | null
+          id?: string
+          min_payout_cents?: number | null
+          retired_at?: string | null
+          status?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
+      partner_referrals: {
+        Row: {
+          attributed_at: string
+          bound_at: string | null
+          created_at: string
+          id: string
+          partner_id: string
+          reason: string | null
+          referred_user_id: string
+          source: string
+          status: string
+          terms_version: number
+          updated_at: string
+          workspace_id: string | null
+        }
+        Insert: {
+          attributed_at?: string
+          bound_at?: string | null
+          created_at?: string
+          id?: string
+          partner_id: string
+          reason?: string | null
+          referred_user_id: string
+          source: string
+          status?: string
+          terms_version: number
+          updated_at?: string
+          workspace_id?: string | null
+        }
+        Update: {
+          attributed_at?: string
+          bound_at?: string | null
+          created_at?: string
+          id?: string
+          partner_id?: string
+          reason?: string | null
+          referred_user_id?: string
+          source?: string
+          status?: string
+          terms_version?: number
+          updated_at?: string
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_referrals_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_referrals_terms_version_fkey"
+            columns: ["terms_version"]
+            isOneToOne: false
+            referencedRelation: "partner_program_terms"
+            referencedColumns: ["version"]
+          },
+          {
+            foreignKeyName: "partner_referrals_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partners: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          id: string
+          is_affiliate: boolean
+          is_service_partner: boolean
+          referral_code: string | null
+          status: string
+          tax_doc_status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          id?: string
+          is_affiliate?: boolean
+          is_service_partner?: boolean
+          referral_code?: string | null
+          status?: string
+          tax_doc_status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          id?: string
+          is_affiliate?: boolean
+          is_service_partner?: boolean
+          referral_code?: string | null
+          status?: string
+          tax_doc_status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       platform_message_templates: {
         Row: {
           created_at: string
@@ -4555,6 +4969,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      accept_partner_agreement: {
+        Args: { _terms_version: number }
+        Returns: Json
+      }
       acknowledge_project_inbox_delivery_uncertainty: {
         Args: {
           _conversation_id: string
@@ -4966,6 +5384,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      bind_referral_to_workspace: {
+        Args: { _workspace_id: string }
+        Returns: Json
       }
       bot_inbox_active_reply_session: {
         Args: { _telegram_user_id: number }
@@ -6022,6 +6444,7 @@ export type Database = {
           telegram_connected: boolean
         }[]
       }
+      get_my_partner_summary: { Args: never; Returns: Json }
       get_my_project_inbox_team_preferences: {
         Args: { _workspace_id: string }
         Returns: {
@@ -6604,6 +7027,87 @@ export type Database = {
         Args: { _launch_id: string; _registration_event_id: string }
         Returns: Json
       }
+      owner_activate_partner_terms: {
+        Args: { _version: number }
+        Returns: Json
+      }
+      owner_add_partner_ledger_adjustment: {
+        Args: {
+          _amount_cents: number
+          _available_at?: string
+          _currency: string
+          _note: string
+          _partner_id: string
+          _referral_id?: string
+        }
+        Returns: string
+      }
+      owner_mark_partner_payout_paid: {
+        Args: { _paid_reference: string; _payout_id: string }
+        Returns: Json
+      }
+      owner_reject_partner_referral_for_fraud: {
+        Args: { _reason: string; _referral_id: string }
+        Returns: Json
+      }
+      owner_retire_partner_terms: { Args: { _version: number }; Returns: Json }
+      owner_review_partner_application: {
+        Args: { _application_id: string; _approve: boolean; _note?: string }
+        Returns: Json
+      }
+      owner_review_partner_payout: {
+        Args: { _approve: boolean; _note?: string; _payout_id: string }
+        Returns: Json
+      }
+      owner_save_partner_terms_draft: {
+        Args: {
+          _agreement_text: string
+          _attribution_window_days: number
+          _commission_bps: number
+          _currency: string
+          _disclosure_text: string
+          _hold_days: number
+          _min_payout_cents: number
+          _version: number
+        }
+        Returns: Json
+      }
+      owner_set_partner_status: {
+        Args: { _partner_id: string; _status: string; _tax_doc_status?: string }
+        Returns: Json
+      }
+      partner_active_terms: {
+        Args: never
+        Returns: {
+          activated_at: string | null
+          activated_by: string | null
+          agreement_text: string | null
+          attribution_window_days: number | null
+          commission_bps: number | null
+          created_at: string
+          created_by: string | null
+          currency: string | null
+          disclosure_text: string | null
+          hold_days: number | null
+          id: string
+          min_payout_cents: number | null
+          retired_at: string | null
+          status: string
+          updated_at: string
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "partner_program_terms"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      partner_available_balance: {
+        Args: { _currency: string; _partner_id: string }
+        Returns: number
+      }
+      partner_require_owner: { Args: never; Returns: string }
       peek_social_mission_link_candidate: {
         Args: { _candidate_id: string; _telegram_user_id: number }
         Returns: Json
@@ -6622,6 +7126,10 @@ export type Database = {
           _subscription_id: string
         }
         Returns: undefined
+      }
+      record_referral_attribution: {
+        Args: { _code: string; _source?: string }
+        Returns: Json
       }
       record_social_mission_command_deleted: {
         Args: { _command_message_id: number; _target_id: string }
@@ -6700,6 +7208,10 @@ export type Database = {
       repair_and_expire_social_missions_for_metrics: {
         Args: { _limit?: number }
         Returns: Json
+      }
+      request_partner_payout: {
+        Args: { _amount_cents: number }
+        Returns: string
       }
       request_project_verification: {
         Args: { _project_profile_id: string }
@@ -7271,6 +7783,14 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      submit_partner_application: {
+        Args: {
+          _pitch: string
+          _wants_affiliate: boolean
+          _wants_service_partner: boolean
+        }
+        Returns: string
       }
       telegram_message_cleanup_scheduler_secret_matches: {
         Args: { p_secret: string }

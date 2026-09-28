@@ -26,6 +26,7 @@ import { Route as AuthenticatedLaunchControlRouteImport } from './routes/_authen
 import { Route as AuthenticatedMainnetCanaryRouteImport } from './routes/_authenticated/mainnet-canary'
 import { Route as AuthenticatedOperationsRouteImport } from './routes/_authenticated/operations'
 import { Route as AuthenticatedOperativesRouteImport } from './routes/_authenticated/operatives'
+import { Route as AuthenticatedPartnersRouteImport } from './routes/_authenticated/partners'
 import { Route as AuthenticatedProjectProfileRouteImport } from './routes/_authenticated/project-profile'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedStickerLabRouteImport } from './routes/_authenticated/sticker-lab'
@@ -131,6 +132,11 @@ const AuthenticatedOperationsRoute = AuthenticatedOperationsRouteImport.update({
 const AuthenticatedOperativesRoute = AuthenticatedOperativesRouteImport.update({
   id: '/operatives',
   path: '/operatives',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedPartnersRoute = AuthenticatedPartnersRouteImport.update({
+  id: '/partners',
+  path: '/partners',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedProjectProfileRoute =
@@ -241,6 +247,7 @@ export interface FileRoutesByFullPath {
   '/mainnet-canary': typeof AuthenticatedMainnetCanaryRoute
   '/operations': typeof AuthenticatedOperationsRoute
   '/operatives': typeof AuthenticatedOperativesRoute
+  '/partners': typeof AuthenticatedPartnersRoute
   '/project-profile': typeof AuthenticatedProjectProfileRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/sticker-lab': typeof AuthenticatedStickerLabRouteWithChildren
@@ -274,6 +281,7 @@ export interface FileRoutesByTo {
   '/mainnet-canary': typeof AuthenticatedMainnetCanaryRoute
   '/operations': typeof AuthenticatedOperationsRoute
   '/operatives': typeof AuthenticatedOperativesRoute
+  '/partners': typeof AuthenticatedPartnersRoute
   '/project-profile': typeof AuthenticatedProjectProfileRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/telegram': typeof AuthenticatedTelegramRoute
@@ -310,6 +318,7 @@ export interface FileRoutesById {
   '/_authenticated/mainnet-canary': typeof AuthenticatedMainnetCanaryRoute
   '/_authenticated/operations': typeof AuthenticatedOperationsRoute
   '/_authenticated/operatives': typeof AuthenticatedOperativesRoute
+  '/_authenticated/partners': typeof AuthenticatedPartnersRoute
   '/_authenticated/project-profile': typeof AuthenticatedProjectProfileRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/sticker-lab': typeof AuthenticatedStickerLabRouteWithChildren
@@ -347,6 +356,7 @@ export interface FileRouteTypes {
     | '/mainnet-canary'
     | '/operations'
     | '/operatives'
+    | '/partners'
     | '/project-profile'
     | '/settings'
     | '/sticker-lab'
@@ -380,6 +390,7 @@ export interface FileRouteTypes {
     | '/mainnet-canary'
     | '/operations'
     | '/operatives'
+    | '/partners'
     | '/project-profile'
     | '/settings'
     | '/telegram'
@@ -415,6 +426,7 @@ export interface FileRouteTypes {
     | '/_authenticated/mainnet-canary'
     | '/_authenticated/operations'
     | '/_authenticated/operatives'
+    | '/_authenticated/partners'
     | '/_authenticated/project-profile'
     | '/_authenticated/settings'
     | '/_authenticated/sticker-lab'
@@ -562,6 +574,13 @@ declare module '@tanstack/react-router' {
       path: '/operatives'
       fullPath: '/operatives'
       preLoaderRoute: typeof AuthenticatedOperativesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/partners': {
+      id: '/_authenticated/partners'
+      path: '/partners'
+      fullPath: '/partners'
+      preLoaderRoute: typeof AuthenticatedPartnersRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/project-profile': {
@@ -717,6 +736,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedMainnetCanaryRoute: typeof AuthenticatedMainnetCanaryRoute
   AuthenticatedOperationsRoute: typeof AuthenticatedOperationsRoute
   AuthenticatedOperativesRoute: typeof AuthenticatedOperativesRoute
+  AuthenticatedPartnersRoute: typeof AuthenticatedPartnersRoute
   AuthenticatedProjectProfileRoute: typeof AuthenticatedProjectProfileRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedStickerLabRoute: typeof AuthenticatedStickerLabRouteWithChildren
@@ -737,6 +757,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedMainnetCanaryRoute: AuthenticatedMainnetCanaryRoute,
   AuthenticatedOperationsRoute: AuthenticatedOperationsRoute,
   AuthenticatedOperativesRoute: AuthenticatedOperativesRoute,
+  AuthenticatedPartnersRoute: AuthenticatedPartnersRoute,
   AuthenticatedProjectProfileRoute: AuthenticatedProjectProfileRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedStickerLabRoute: AuthenticatedStickerLabRouteWithChildren,

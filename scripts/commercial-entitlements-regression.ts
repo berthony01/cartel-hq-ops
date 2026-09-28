@@ -18,6 +18,9 @@ const POST_GATE = [
   "20260927171231_commercial_c2_self_service_workspace.sql",
   "20260927173127_commercial_c3a_usage_free_record_fix.sql",
   "20260928110628_b2fff4d6-4c76-4505-8980-6e527123a82b.sql",
+  "20260928170228_partner_program_phase_1a_foundation.sql",
+  "20260928170613_partner_program_phase_1a_rls_fk_hardening.sql",
+  "20260928170917_partner_program_phase_1a_new_workspace_attribution.sql",
 ];
 const COMMERCIAL = POST_GATE[4];
 const LEAST_PRIVILEGE = POST_GATE[7];
@@ -33,10 +36,10 @@ function check(id: string, ok: boolean, detail = "") {
 }
 
 const migrations = readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort();
-check("C-1.1 migration count exactly 97", migrations.length === 97, String(migrations.length));
+check("C-1.1 migration count exactly 100", migrations.length === 100, String(migrations.length));
 const postGate = migrations.filter((f) => f >= "20260922");
-check("C-1.2 exact thirteen authorized post-gate migrations", JSON.stringify(postGate) === JSON.stringify(POST_GATE), postGate.join(","));
-check("C-1.3 commercial A, then Commercial Foundation B, then the Stripe/Free billing migration, then least-privilege, then authorized later migrations", migrations[migrations.length - 9] === COMMERCIAL && migrations[migrations.length - 8] === POST_GATE[5] && migrations[migrations.length - 7] === POST_GATE[6] && migrations[migrations.length - 6] === LEAST_PRIVILEGE && migrations[migrations.length - 1] === POST_GATE[12]);
+check("C-1.2 exact sixteen authorized post-gate migrations", JSON.stringify(postGate) === JSON.stringify(POST_GATE), postGate.join(","));
+check("C-1.3 commercial A, then Commercial Foundation B, then the Stripe/Free billing migration, then least-privilege, then authorized later migrations", migrations[migrations.length - 12] === COMMERCIAL && migrations[migrations.length - 11] === POST_GATE[5] && migrations[migrations.length - 10] === POST_GATE[6] && migrations[migrations.length - 9] === LEAST_PRIVILEGE && migrations[migrations.length - 1] === POST_GATE[15]);
 
 const raw = readFileSync(`${MIGRATIONS}/${COMMERCIAL}`, "utf8");
 const sql = raw.replace(/^\s*--.*$/gm, "");

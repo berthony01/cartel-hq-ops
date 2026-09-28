@@ -29,6 +29,9 @@ const POST_GATE = [
   "20260927171231_commercial_c2_self_service_workspace.sql",
   "20260927173127_commercial_c3a_usage_free_record_fix.sql",
   "20260928110628_b2fff4d6-4c76-4505-8980-6e527123a82b.sql",
+  "20260928170228_partner_program_phase_1a_foundation.sql",
+  "20260928170613_partner_program_phase_1a_rls_fk_hardening.sql",
+  "20260928170917_partner_program_phase_1a_new_workspace_attribution.sql",
 ];
 
 let passed = 0;
@@ -54,9 +57,9 @@ function fnBody(sql: string, name: string): string {
 
 /* 1. migrations */
 const migrations = readdirSync(MIG).filter((f) => f.endsWith(".sql")).sort();
-check("B-1.1 migration count exactly 97", migrations.length === 97, String(migrations.length));
-check("B-1.2 exact thirteen post-gate migrations", JSON.stringify(migrations.filter((f) => f >= "20260922")) === JSON.stringify(POST_GATE));
-check("B-1.3 billing migration immediately precedes least-privilege; authorized later migrations follow", migrations[migrations.length - 7] === BILLING_MIGRATION && migrations[migrations.length - 6] === POST_GATE[7] && migrations[migrations.length - 1] === POST_GATE[12]);
+check("B-1.1 migration count exactly 100", migrations.length === 100, String(migrations.length));
+check("B-1.2 exact sixteen post-gate migrations", JSON.stringify(migrations.filter((f) => f >= "20260922")) === JSON.stringify(POST_GATE));
+check("B-1.3 billing migration immediately precedes least-privilege; authorized later migrations follow", migrations[migrations.length - 10] === BILLING_MIGRATION && migrations[migrations.length - 9] === POST_GATE[7] && migrations[migrations.length - 1] === POST_GATE[15]);
 const raw = read(`${MIG}/${BILLING_MIGRATION}`);
 const sql = norm(raw);
 

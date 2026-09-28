@@ -1,6 +1,13 @@
 -- =====================================================================
--- PARTNER PROGRAM PHASE 1A — DATABASE CONTRACT (STAGED, NOT APPLIED)
--- Status: STAGED FOR REVIEW ONLY. Do not execute without explicit approval.
+-- PARTNER PROGRAM PHASE 1A — DATABASE CONTRACT (APPLIED, CONSOLIDATED)
+-- Status: APPLIED to Supabase ocoinbnjgstkmnwwvnhi. Reference only — do not re-run.
+-- Consolidates the three applied live migrations:
+--   20260928170228 partner_program_phase_1a_foundation
+--   20260928170613 partner_program_phase_1a_rls_fk_hardening
+--       (seven FK indexes; SELECT policies use (SELECT auth.uid()) initplan form)
+--   20260928170917 partner_program_phase_1a_new_workspace_attribution
+--       (bind_referral_to_workspace: WORKSPACE_PREDATES_REFERRAL acquisition guard)
+-- The exact applied SQL lives in supabase/migrations/ under those versions.
 --
 -- Scope:
 --   * Affiliate + Service Partner identity, applications, owner approval.
@@ -258,37 +265,54 @@ ALTER TABLE public.partner_referrals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.partner_payout_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.partner_commission_ledger ENABLE ROW LEVEL SECURITY;
 
+-- SELECT policies in final applied form (20260928170613 ALTER POLICY to initplan-optimized (SELECT auth.uid())).
 DO $policies$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='partner_program_terms' AND policyname='partner_terms_read_active_or_owner') THEN
     CREATE POLICY partner_terms_read_active_or_owner ON public.partner_program_terms FOR SELECT TO authenticated
-      USING (status = 'active' OR public.is_platform_owner(auth.uid()));
+      USING (status = 'active' OR public.is_platform_owner((SELECT auth.uid())));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='partners' AND policyname='partners_read_own_or_owner') THEN
     CREATE POLICY partners_read_own_or_owner ON public.partners FOR SELECT TO authenticated
-      USING (user_id = auth.uid() OR public.is_platform_owner(auth.uid()));
+      USING (user_id = (SELECT auth.uid()) OR public.is_platform_owner((SELECT auth.uid())));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='partner_applications' AND policyname='partner_applications_read_own_or_owner') THEN
     CREATE POLICY partner_applications_read_own_or_owner ON public.partner_applications FOR SELECT TO authenticated
-      USING (user_id = auth.uid() OR public.is_platform_owner(auth.uid()));
+      USING (user_id = (SELECT auth.uid()) OR public.is_platform_owner((SELECT auth.uid())));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='partner_agreement_acceptances' AND policyname='partner_acceptances_read_own_or_owner') THEN
     CREATE POLICY partner_acceptances_read_own_or_owner ON public.partner_agreement_acceptances FOR SELECT TO authenticated
-      USING (EXISTS (SELECT 1 FROM public.partners p WHERE p.id = partner_id AND p.user_id = auth.uid()) OR public.is_platform_owner(auth.uid()));
+      USING (EXISTS (SELECT 1 FROM public.partners p WHERE p.id = partner_id AND p.user_id = (SELECT auth.uid())) OR public.is_platform_owner((SELECT auth.uid())));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='partner_referrals' AND policyname='partner_referrals_read_own_or_owner') THEN
     CREATE POLICY partner_referrals_read_own_or_owner ON public.partner_referrals FOR SELECT TO authenticated
-      USING (EXISTS (SELECT 1 FROM public.partners p WHERE p.id = partner_id AND p.user_id = auth.uid()) OR public.is_platform_owner(auth.uid()));
+      USING (EXISTS (SELECT 1 FROM public.partners p WHERE p.id = partner_id AND p.user_id = (SELECT auth.uid())) OR public.is_platform_owner((SELECT auth.uid())));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='partner_payout_requests' AND policyname='partner_payouts_read_own_or_owner') THEN
     CREATE POLICY partner_payouts_read_own_or_owner ON public.partner_payout_requests FOR SELECT TO authenticated
-      USING (EXISTS (SELECT 1 FROM public.partners p WHERE p.id = partner_id AND p.user_id = auth.uid()) OR public.is_platform_owner(auth.uid()));
+      USING (EXISTS (SELECT 1 FROM public.partners p WHERE p.id = partner_id AND p.user_id = (SELECT auth.uid())) OR public.is_platform_owner((SELECT auth.uid())));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='partner_commission_ledger' AND policyname='partner_ledger_read_own_or_owner') THEN
     CREATE POLICY partner_ledger_read_own_or_owner ON public.partner_commission_ledger FOR SELECT TO authenticated
-      USING (EXISTS (SELECT 1 FROM public.partners p WHERE p.id = partner_id AND p.user_id = auth.uid()) OR public.is_platform_owner(auth.uid()));
+      USING (EXISTS (SELECT 1 FROM public.partners p WHERE p.id = partner_id AND p.user_id = (SELECT auth.uid())) OR public.is_platform_owner((SELECT auth.uid())));
   END IF;
 END $policies$;
+
+-- FK indexes (applied in 20260928170613).
+CREATE INDEX IF NOT EXISTS partner_applications_terms_version_idx
+  ON public.partner_applications (terms_version);
+CREATE INDEX IF NOT EXISTS partner_acceptances_terms_version_idx
+  ON public.partner_agreement_acceptances (terms_version);
+CREATE INDEX IF NOT EXISTS partner_referrals_terms_version_idx
+  ON public.partner_referrals (terms_version);
+CREATE INDEX IF NOT EXISTS partner_payout_requests_terms_version_idx
+  ON public.partner_payout_requests (terms_version);
+CREATE INDEX IF NOT EXISTS partner_ledger_referral_idx
+  ON public.partner_commission_ledger (referral_id);
+CREATE INDEX IF NOT EXISTS partner_ledger_workspace_idx
+  ON public.partner_commission_ledger (workspace_id);
+CREATE INDEX IF NOT EXISTS partner_ledger_terms_version_idx
+  ON public.partner_commission_ledger (terms_version);
 
 -- ---------------------------------------------------------------------
 -- Internal helpers
@@ -578,6 +602,7 @@ BEGIN
   RETURN jsonb_build_object('ok', true, 'already_attributed', false);
 END $$;
 
+-- Final applied form (20260928170917): includes WORKSPACE_PREDATES_REFERRAL guard.
 CREATE OR REPLACE FUNCTION public.bind_referral_to_workspace(_workspace_id uuid)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE v_uid uuid := auth.uid(); v_r public.partner_referrals; v_p public.partners; v_t public.partner_program_terms; v_assignment_id uuid;
@@ -591,6 +616,10 @@ BEGIN
     RETURN jsonb_build_object('ok', true, 'bound', v_r.workspace_id = _workspace_id, 'reason', 'ALREADY_BOUND');
   END IF;
   IF v_r.status <> 'pending' THEN RETURN jsonb_build_object('ok', true, 'bound', false, 'reason', 'REFERRAL_NOT_PENDING'); END IF;
+  -- Acquisition guard: an existing workspace cannot be retroactively attributed.
+  IF (SELECT w.created_at FROM public.workspaces w WHERE w.id = _workspace_id) < v_r.attributed_at THEN
+    RETURN jsonb_build_object('ok', true, 'bound', false, 'reason', 'WORKSPACE_PREDATES_REFERRAL');
+  END IF;
   SELECT * INTO v_p FROM public.partners WHERE id = v_r.partner_id;
   IF v_p.id IS NULL OR v_p.status <> 'approved' OR NOT v_p.is_affiliate THEN
     RETURN jsonb_build_object('ok', true, 'bound', false, 'reason', 'PARTNER_NOT_ACTIVE_AFFILIATE');

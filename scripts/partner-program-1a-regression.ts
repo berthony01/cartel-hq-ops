@@ -1,8 +1,8 @@
 /**
- * PARTNER PROGRAM PHASE 1A — static regression for the staged DB contract.
+ * PARTNER PROGRAM PHASE 1A — static regression: applied DB contract, repo sync, UI.
  * Zero network, zero database. Reads files from disk only.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { createHash } from "node:crypto";
 
 let passed = 0;
@@ -28,7 +28,7 @@ function fnBody(name: string): string {
 }
 
 /* 1. Staged / additive only */
-check("P-1.1 staged not applied", /STAGED FOR REVIEW ONLY/.test(RAW));
+check("P-1.1 docs marked APPLIED consolidated reference", /APPLIED, CONSOLIDATED/.test(RAW) && /do not re-run/i.test(RAW) && !/STAGED FOR REVIEW ONLY/.test(RAW));
 check("P-1.2 no DROP", !/\bDROP\b/i.test(CODE));
 check("P-1.3 no TRUNCATE/DELETE FROM", !/\bTRUNCATE\b|\bDELETE\s+FROM\b/i.test(CODE));
 check("P-1.4 no ALTER TABLE except ENABLE RLS", (N.match(/ALTER TABLE [^;]+;/g) ?? []).every((s) => /ENABLE ROW LEVEL SECURITY;$/.test(s)));
@@ -52,7 +52,7 @@ for (const t of TABLES) {
 }
 check("P-2.1 anon/PUBLIC revoked on all partner tables", /REVOKE ALL ON public\.partner_program_terms, [^;]+ FROM PUBLIC, anon, authenticated;/.test(N));
 check("P-2.2 only SELECT policies", (N.match(/CREATE POLICY \w+ ON public\.\w+ FOR (\w+)/g) ?? []).every((p) => p.endsWith("FOR SELECT")) && (N.match(/CREATE POLICY/g) ?? []).length === 7);
-check("P-2.3 policies scoped to own or platform owner", (N.match(/CREATE POLICY[^;]+;/g) ?? []).every((p) => p.includes("public.is_platform_owner(auth.uid())") && (p.includes("auth.uid()"))));
+check("P-2.3 policies scoped to own or platform owner (initplan-optimized)", (N.match(/CREATE POLICY[^;]+;/g) ?? []).every((p) => p.includes("public.is_platform_owner((SELECT auth.uid()))")) && !/is_platform_owner\(auth\.uid\(\)\)/.test(N.slice(N.indexOf("DO $policies$"), N.indexOf("END $policies$;"))));
 check("P-2.4 status checks", N.includes("status IN ('draft','active','retired')") && N.includes("status IN ('applied','approved','suspended','rejected','terminated')")
   && N.includes("tax_doc_status IN ('not_submitted','submitted','verified','rejected')") && N.includes("status IN ('pending','qualified','rejected_self','rejected_fraud','expired')")
   && N.includes("status IN ('requested','approved','rejected','paid','cancelled')") && N.includes("entry_type IN ('accrual','reversal','adjustment','payout')")
@@ -175,6 +175,129 @@ check("P-14.13 fraud marker removal exact-match only", fr.includes("v_r.status =
 check("P-14.14 fraud keeps workspace_id for audit", !/workspace_id\s*=\s*NULL/.test(fr) && N.includes("partner_referrals_one_per_workspace ON public.partner_referrals (workspace_id) WHERE workspace_id IS NOT NULL"));
 check("P-14.15 fraud RPC grants", N.includes("REVOKE ALL ON FUNCTION public.owner_reject_partner_referral_for_fraud(uuid, text) FROM PUBLIC, anon;") && N.includes("GRANT EXECUTE ON FUNCTION public.owner_reject_partner_referral_for_fraud(uuid, text) TO authenticated, service_role;"));
 
+
+/* 15. Repository sync of the three applied migrations */
+const MIGS = readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql")).sort();
+const PARTNER_MIGS = [
+  "20260928170228_partner_program_phase_1a_foundation.sql",
+  "20260928170613_partner_program_phase_1a_rls_fk_hardening.sql",
+  "20260928170917_partner_program_phase_1a_new_workspace_attribution.sql",
+];
+check("P-15.1 manifest count 100", MIGS.length === 100, String(MIGS.length));
+check("P-15.2 three partner migrations are the last three, sorted", JSON.stringify(MIGS.slice(-3)) === JSON.stringify(PARTNER_MIGS));
+const M1 = read(`supabase/migrations/${PARTNER_MIGS[0]}`);
+const M2 = read(`supabase/migrations/${PARTNER_MIGS[1]}`);
+const M3 = read(`supabase/migrations/${PARTNER_MIGS[2]}`);
+// Exact bytes applied live (md5 of schema_migrations.statements[1]).
+const md5 = (t: string) => createHash("md5").update(t).digest("hex");
+check("P-15.3 foundation byte-identical to applied", md5(M1) === "421323cd78c7847a25c3d8bebd5ad21c");
+check("P-15.4 hardening byte-identical to applied", md5(M2) === "f43c9f2ac3af4a1fbce6b864424278c2");
+check("P-15.5 new-workspace guard byte-identical to applied", md5(M3) === "7234c65486c2655ebb36dd3f98589c35");
+check("P-15.6 foundation predates hardening (non-optimized policies, no guard)", M1.includes("public.is_platform_owner(auth.uid())") && !M1.includes("WORKSPACE_PREDATES_REFERRAL") && !M1.includes("partner_ledger_referral_idx"));
+const FK_IDX = ["partner_applications_terms_version_idx", "partner_acceptances_terms_version_idx", "partner_referrals_terms_version_idx",
+  "partner_payout_requests_terms_version_idx", "partner_ledger_referral_idx", "partner_ledger_workspace_idx", "partner_ledger_terms_version_idx"];
+for (const i of FK_IDX) {
+  check(`P-15 hardening index ${i}`, M2.includes(`CREATE INDEX IF NOT EXISTS ${i}`));
+  check(`P-15 docs index ${i}`, N.includes(`CREATE INDEX IF NOT EXISTS ${i}`));
+}
+check("P-15.7 hardening alters exactly 7 policies, no drop/grant", (M2.match(/ALTER POLICY/g) ?? []).length === 7 && !/\bDROP\b|\bGRANT\b|\bREVOKE\b|CREATE POLICY/.test(M2));
+check("P-15.8 hardening every policy uses (SELECT auth.uid())", M2.split("ALTER POLICY").slice(1).every((b) => b.includes("(SELECT auth.uid())") && !/[^(]auth\.uid\(\)\)?\s*(OR|\))/.test(b.replace(/\(SELECT auth\.uid\(\)\)/g, ""))));
+check("P-15.9 guard migration is only bind_referral_to_workspace", (M3.match(/CREATE OR REPLACE FUNCTION/g) ?? []).length === 1 && M3.startsWith("CREATE OR REPLACE FUNCTION public.bind_referral_to_workspace(_workspace_id uuid)"));
+const M3N = M3.replace(/\s+/g, " ");
+const iGuard = M3N.indexOf("'WORKSPACE_PREDATES_REFERRAL'");
+check("P-15.10 guard compares workspace created_at to attributed_at", M3N.includes("(SELECT w.created_at FROM public.workspaces w WHERE w.id = _workspace_id) < v_r.attributed_at"));
+check("P-15.11 guard returns ok/bound=false before any mutation", iGuard > 0 && M3N.includes("'ok', true, 'bound', false, 'reason', 'WORKSPACE_PREDATES_REFERRAL'")
+  && iGuard < M3N.indexOf("UPDATE public.partner_referrals") && iGuard < M3N.indexOf("UPDATE public.workspace_commercial_assignments"));
+check("P-15.12 docs bind matches applied guard", bind.includes("'WORKSPACE_PREDATES_REFERRAL'") && N.includes(M3.replace(/^\s*--.*$/gm, "").replace(/\s+/g, " ").trim()));
+
+/* 16. Generated types */
+const TYPES = read("src/integrations/supabase/types.ts");
+for (const t of TABLES) check(`P-16 types table ${t}`, new RegExp(`\\n      ${t}: \\{\\n        Row:`).test(TYPES));
+const RPCS: Record<string, string[]> = {
+  submit_partner_application: ["_pitch: string", "_wants_affiliate: boolean", "_wants_service_partner: boolean"],
+  accept_partner_agreement: ["_terms_version: number"],
+  request_partner_payout: ["_amount_cents: number"],
+  record_referral_attribution: ["_code: string"],
+  bind_referral_to_workspace: ["_workspace_id: string"],
+  get_my_partner_summary: ["Args: never"],
+  owner_save_partner_terms_draft: ["_commission_bps: number", "_attribution_window_days: number", "_hold_days: number", "_min_payout_cents: number", "_currency: string", "_agreement_text: string", "_disclosure_text: string", "_version: number"],
+  owner_activate_partner_terms: ["_version: number"],
+  owner_retire_partner_terms: ["_version: number"],
+  owner_review_partner_application: ["_application_id: string", "_approve: boolean", "_note?: string"],
+  owner_set_partner_status: ["_partner_id: string", "_status: string", "_tax_doc_status?: string"],
+  owner_add_partner_ledger_adjustment: ["_amount_cents: number", "_currency: string", "_note: string", "_partner_id: string", "_referral_id?: string", "_available_at?: string"],
+  owner_reject_partner_referral_for_fraud: ["_reason: string", "_referral_id: string"],
+  owner_review_partner_payout: ["_approve: boolean", "_note?: string", "_payout_id: string"],
+  owner_mark_partner_payout_paid: ["_paid_reference: string", "_payout_id: string"],
+};
+for (const [fn, args] of Object.entries(RPCS)) {
+  const i = TYPES.indexOf(`      ${fn}: {`);
+  const block = i < 0 ? "" : TYPES.slice(i, TYPES.indexOf("Returns", i));
+  check(`P-16 types rpc ${fn}`, i > 0 && args.every((a) => block.includes(a)));
+}
+
+/* 17. Client library */
+const LIB = read("src/lib/partners.ts");
+check("P-17.1 code regex exact", LIB.includes("/^[a-z0-9]{10}$/") && LIB.includes(".trim().toLowerCase()"));
+check("P-17.2 storage holds only code + timestamp", LIB.includes("{ code, capturedAt: new Date().toISOString() }") && !/partner_id|\bip\b|ip_address|fingerprint|userAgent|tax_id|\bssn\b/i.test(LIB.slice(LIB.indexOf("export const REFERRAL_STORAGE_KEY"), LIB.indexOf("export type ClaimOutcome")).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "")));
+const claim = LIB.slice(LIB.indexOf("export async function claimStoredReferral"), LIB.indexOf("export type BindResult"));
+check("P-17.3 claim keeps on PROGRAM_NOT_OPEN and transient errors", claim.includes('data.reason === "PROGRAM_NOT_OPEN") return "keep"') && claim.includes('if (res.error) return "keep"') && /catch \{\s*return "keep";/.test(claim));
+check("P-17.4 claim clears on success and terminal reasons", claim.includes('clearStoredReferral();\n    return "claimed"') && ["INVALID_CODE", "CODE_NOT_ACTIVE", "SELF_REFERRAL"].every((r) => LIB.includes(`"${r}"`)) && claim.includes('return "cleared"'));
+check("P-17.5 claim via record_referral_attribution only", claim.includes('supabase.rpc("record_referral_attribution", { _code: stored.code, _source: "link" })'));
+check("P-17.6 bind via RPC only", LIB.includes('supabase.rpc("bind_referral_to_workspace", { _workspace_id: workspaceId })'));
+for (const fn of Object.keys(RPCS)) check(`P-17 lib calls ${fn}`, fn === "record_referral_attribution" || LIB.includes(`"${fn}"`));
+check("P-17.7 no direct table writes", !/\.from\("partner[^"]*"\)\s*\.(insert|update|upsert|delete)/.test(LIB) && !/\.from\("workspace_members"\)/.test(LIB));
+check("P-17.8 no program default values in formatting", !/commission_bps\s*\?\?\s*\d|min_payout_cents\s*\?\?\s*\d|hold_days\s*\?\?\s*\d|attribution_window_days\s*\?\?\s*\d|"usd"/i.test(LIB));
+
+/* 18. Auth capture + bridge */
+const AUTH = read("src/routes/auth.tsx");
+check("P-18.1 auth validates ref via normalizer", AUTH.includes("normalizeReferralCode(search['ref'])") && AUTH.includes("if (ref) out.ref = ref;"));
+check("P-18.2 auth stores ref locally", AUTH.includes("storeReferralCode(search.ref)"));
+check("P-18.3 redirect safety preserved", AUTH.includes('value.startsWith("//")') && AUTH.includes('if (value.startsWith("/auth")) return "/dashboard";'));
+check("P-18.4 signup/signin preserved", AUTH.includes("supabase.auth.signUp(") && AUTH.includes("supabase.auth.signInWithPassword(") && AUTH.includes("emailRedirectTo: `${window.location.origin}/auth/callback`"));
+const BR = read("src/components/cartel/ReferralAttributionBridge.tsx");
+check("P-18.5 bridge claims then binds only owned workspace", BR.includes("await claimStoredReferral()") && BR.includes("workspace.owner_id !== userId") && BR.includes("bindReferralToWorkspace(workspace.id)"));
+check("P-18.6 bridge idempotent per user/workspace", BR.includes("claimedFor.current !== userId") && BR.includes("boundKey.current === key"));
+check("P-18.7 bridge toast only on new bind", (BR.match(/toast\./g) ?? []).length === 1 && BR.includes("result?.bound === true && result.assignment_marked === true"));
+check("P-18.8 bridge grants no membership", !/workspace_members|insert|update\(/.test(BR));
+const LAYOUT = read("src/routes/_authenticated/route.tsx");
+check("P-18.9 bridge inside WorkspaceProvider", LAYOUT.indexOf("<WorkspaceProvider>") < LAYOUT.indexOf("<ReferralAttributionBridge />") && LAYOUT.indexOf("<ReferralAttributionBridge />") < LAYOUT.indexOf("</WorkspaceProvider>"));
+
+/* 19. /partners route + nav */
+const PG = read("src/routes/_authenticated/partners.tsx");
+check("P-19.1 route file", PG.includes('createFileRoute("/_authenticated/partners")') && read("src/routeTree.gen.ts").includes("/partners"));
+check("P-19.2 Phase 1B honesty banner", PG.includes("Phase 1B and is not enabled yet") && PG.includes("owner-reviewed and manual"));
+check("P-19.3 closed state copy", PG.includes("Applications are not open") && PG.includes("no active program terms"));
+check("P-19.4 service partner zero access copy", PG.includes("grants zero workspace access"));
+check("P-19.5 referral code shown only for affiliates", PG.includes("isAffiliate && partner.referral_code"));
+check("P-19.6 payout gated on affiliate/approved/verified/accepted/open", PG.includes('isAffiliate && approved && partner?.tax_doc_status === "verified" && accepted && programOpen'));
+check("P-19.7 terms display", ["formatBps(terms.commission_bps)", "terms.attribution_window_days", "terms.hold_days", "terms.min_payout_cents", "terms.agreement_text", "terms.disclosure_text"].every((x) => PG.includes(x)));
+check("P-19.8 no invented commission", PG.includes("No ledger entries yet.") && !/\d+%/.test(PG));
+const NAV = read("src/lib/nav.ts");
+const navLine = (NAV.match(/\{ label: "Partners"[^}]*\}/) ?? [""])[0];
+check("P-19.9 nav Partners /partners, not owner-only", navLine.includes('to: "/partners"') && navLine.includes("Handshake") && !navLine.includes("ownerOnly"));
+
+/* 20. Owner admin */
+const AD = read("src/components/cartel/PartnerAdminSection.tsx");
+check("P-20.1 owner gate via usePlatformAccess", AD.includes("const { isPlatformOwner, loading } = usePlatformAccess();") && AD.includes("if (loading || !isPlatformOwner) return null;"));
+for (const f of ["ownerSaveTermsDraft", "ownerActivateTerms", "ownerRetireTerms", "ownerReviewApplication", "ownerSetPartnerStatus", "ownerAddLedgerAdjustment", "ownerRejectReferralForFraud", "ownerReviewPayout", "ownerMarkPayoutPaid"])
+  check(`P-20 admin uses ${f}`, AD.includes(`${f}(`));
+check("P-20.2 terms form blank without draft", AD.includes('{ commission: "", window: "", hold: "", min: "", currency: "", agreement: "", disclosure: "" }'));
+check("P-20.3 activation confirmed via AlertDialog", AD.includes("AlertDialog") && AD.includes("Activation opens the Partner Program"));
+check("P-20.4 activation requires complete terms", AD.includes("!termsComplete"));
+check("P-20.5 fraud reason + paid reference required", AD.includes("Fraud reason (required)") && AD.includes("External payment reference (required)"));
+check("P-20.6 no tax/bank PII fields", !/\b(ssn|ein|tin|iban|routing|account number|bank account|card number|w-?9)\b/i.test(AD.replace(/No tax identifiers, documents, bank or card data/, "")));
+const ADMIN = read("src/routes/_authenticated/admin.tsx");
+check("P-20.7 admin renders section after unrestricted access", ADMIN.indexOf("<PartnerAdminSection />") > ADMIN.indexOf('title="Unrestricted Platform Access"') && ADMIN.includes('import { PartnerAdminSection }'));
+check("P-20.8 admin copy names Partner Program write exception", ADMIN.includes("except Partner Program controls") && ADMIN.includes("the only write exception"));
+
+/* 21. Boundaries across new UI */
+const UI = [LIB, BR, PG, AD, AUTH].join("\n");
+check("P-21.1 no service-partner workspace access in UI", !/workspace_partner_access|invite_service_partner|workspace_members/.test(UI));
+check("P-21.2 no Stripe/billing calls from partner UI", !/stripe\.|STRIPE_|billing-checkout|billing-portal|createCheckout/.test([LIB, BR, PG, AD].join("\n")));
+check("P-21.3 no Edge Function invoke", !/functions\.invoke/.test(UI));
+check("P-21.4 no publish/config files touched", !/preview_ui|publish/i.test([LIB, BR, AD].join("\n")));
+
 /* 11. Protected files untouched (hashes at start HEAD 2cbfd253) */
 const PROTECTED: Record<string, string> = {
   "backend-source/edge-functions/stripe-billing-webhook/index.ts": "a0121c8a0712f3616b65201b22b3117d01d87e1521829780d7e1063b5c1d04a1",
@@ -200,7 +323,7 @@ const iB = billing.indexOf("IF public.has_platform_unrestricted_access(v_effecti
 const iM = billing.indexOf("IF NOT public.is_workspace_member(", iB - 2000);
 check("P-12.1 unrestricted bypass precedes member check", iB > 0 && iM > iB);
 check("P-12.2 staged SQL does not redefine commercial authority", !/FUNCTION public\.(evaluate_commercial_access|has_platform_unrestricted_access|is_platform_owner|handle_new_workspace|apply_stripe_subscription_state)\(/.test(N));
-check("P-12.3 no migration file for partner program yet", !read("scripts/commercial-billing-regression.ts").includes("partner_program"));
+check("P-12.3 partner migrations listed in billing manifest", read("scripts/commercial-billing-regression.ts").includes("20260928170917_partner_program_phase_1a_new_workspace_attribution.sql"));
 
 console.log(`partner-program-1a-regression: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

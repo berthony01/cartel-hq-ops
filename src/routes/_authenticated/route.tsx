@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/cartel/AppShell";
 import { WorkspaceProvider } from "@/lib/workspace-context";
+import { ReferralAttributionBridge } from "@/components/cartel/ReferralAttributionBridge";
 
 /** Fail-safe against Supabase auth storage lock hangs. getSession() is local,
  *  so this should resolve almost instantly; the timeout guards pathological
@@ -57,6 +58,7 @@ function AuthPending() {
 function AuthenticatedLayout() {
   return (
     <WorkspaceProvider>
+      <ReferralAttributionBridge />
       <AppShell>
         <Outlet />
       </AppShell>

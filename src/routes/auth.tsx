@@ -3,12 +3,13 @@ import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router"
 import { Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { normalizeReferralCode, storeReferralCode } from "@/lib/partners";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 type AuthMode = "signin" | "signup";
-type AuthSearch = { redirect?: string; mode?: AuthMode };
+type AuthSearch = { redirect?: string; mode?: AuthMode; ref?: string };
 
 function safeRedirect(value: unknown): string {
   if (typeof value !== "string") return "/dashboard";
@@ -24,6 +25,9 @@ export const Route = createFileRoute("/auth")({
     const out: AuthSearch = {};
     if (typeof search['redirect'] === "string") out.redirect = search['redirect'];
     if (search['mode'] === "signup") out.mode = "signup";
+    // Optional partner referral code: only a normalized ^[a-z0-9]{10}$ value is kept.
+    const ref = normalizeReferralCode(search['ref']);
+    if (ref) out.ref = ref;
     return out;
   },
 
@@ -64,6 +68,11 @@ function AuthPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Store a valid referral code locally (code + timestamp only; no partner id).
+  useEffect(() => {
+    if (search.ref) storeReferralCode(search.ref);
+  }, [search.ref]);
 
   useEffect(() => {
     let active = true;
@@ -201,7 +210,7 @@ function AuthPage() {
               setConfirmSentTo(null);
               navigate({
                 to: "/auth",
-                search: { ...(search.redirect ? { redirect: search.redirect } : {}), ...(isSignup ? {} : { mode: "signup" as const }) },
+                search: { ...(search.redirect ? { redirect: search.redirect } : {}), ...(search.ref ? { ref: search.ref } : {}), ...(isSignup ? {} : { mode: "signup" as const }) },
                 replace: true,
               });
             }}
