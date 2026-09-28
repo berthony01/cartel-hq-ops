@@ -93,7 +93,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     label: "Settings",
-    items: [{ label: "Settings", to: "/settings", icon: Settings }],
+    items: [{ label: "Settings & Billing", to: "/settings", icon: Settings }],
   },
   {
     label: "Owner Tools",
