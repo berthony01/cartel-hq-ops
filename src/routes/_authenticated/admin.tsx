@@ -47,6 +47,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { usePlatformAccess } from "@/hooks/usePlatformAccess";
+import { PartnerAdminSection } from "@/components/cartel/PartnerAdminSection";
 
 import {
   TelegramConnectionCard,
@@ -967,7 +968,7 @@ function AdminPage() {
       <PageHeader
         eyebrow="Platform Owner"
         title="Owner Console"
-        description="Platform command center. Metrics and operational listings are read-only; platform Telegram system messages and the single pinned Social Mission live test are the only actions here. Owner identity is verified server-side on every load."
+        description="Platform command center. Metrics and operational listings are read-only, except Partner Program controls. Platform Telegram system messages, the single pinned Social Mission live test and Partner Program review are the actions here. Owner identity is verified server-side on every load."
         status="Owner Access"
       />
 
@@ -994,9 +995,10 @@ function AdminPage() {
               ? "Unrestricted access is granted by the platform service, not by this interface."
               : "The platform service did not report unrestricted access for this session."}{" "}
             Operational listings in this console are read-only: they never edit users, roles, plans
-            or Sticker Drop schedules. The only actions available here are editing the platform
-            Telegram system messages and running the single pinned Social Mission live test.
-
+            or Sticker Drop schedules. The actions available here are editing the platform Telegram
+            system messages, running the single pinned Social Mission live test, and the Partner
+            Program controls (terms, applications, partner status, manual ledger, referrals,
+            payouts) — the only write exception, each enforced server-side by owner-only functions.
           </p>
           {capabilities.length > 0 ? (
             <div className="flex min-w-0 flex-wrap gap-1.5">
@@ -1009,6 +1011,8 @@ function AdminPage() {
           ) : null}
         </div>
       </Section>
+
+      <PartnerAdminSection />
 
       <ProjectVerificationSection />
 
