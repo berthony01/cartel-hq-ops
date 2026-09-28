@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CreditCard, Crown, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/lib/workspace-context";
+import { fetchProjectToolAccess, projectToolAccessQueryKey } from "@/lib/project-identity";
+import { Link } from "@tanstack/react-router";
 import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -61,6 +63,15 @@ export function BillingSection() {
       return data as unknown as BillingStatus;
     },
   });
+
+  // Project Identity readiness (browser authority: can_use_project_tools). Fail closed:
+  // the Upgrade CTA is only enabled when this explicitly resolves true.
+  const identityQuery = useQuery({
+    queryKey: projectToolAccessQueryKey(workspaceId),
+    enabled: !!workspaceId,
+    queryFn: () => fetchProjectToolAccess(workspaceId!),
+  });
+  const identityReady = identityQuery.data === true;
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -123,7 +134,7 @@ export function BillingSection() {
         <div className="space-y-4">
           {notice === "success" && (
             <p className="rounded-md border border-pepe/30 bg-pepe/5 px-3 py-2 text-sm text-foreground">
-              Payment received. Pro activates as soon as Stripe confirms it — this can take a moment.
+              Checkout completed. Pro activates after Stripe confirms the subscription — this can take a moment.
             </p>
           )}
           {notice === "cancelled" && (
@@ -183,7 +194,9 @@ export function BillingSection() {
                         <li key={k} className="rounded-md border border-border/70 bg-surface-raised/40 px-3 py-2 text-sm">
                           <span className="block text-muted-foreground">{label}</span>
                           <span className="font-semibold text-foreground">
-                            {c.used} / {c.limit === null ? "Unlimited" : c.limit}
+                            {c.limit === 0
+                              ? "Not included on Free"
+                              : `${c.used} / ${c.limit === null ? "Unlimited" : c.limit}`}
                           </span>
                         </li>
                       );
@@ -193,7 +206,17 @@ export function BillingSection() {
 
               {actionError && <p className="text-sm text-destructive">{actionError}</p>}
               <div className="flex flex-wrap gap-2">
-                {s.can_upgrade && (
+                {s.can_upgrade && !identityReady && (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Complete your Project Identity before upgrading to Pro.
+                    </p>
+                    <Button asChild variant="outline">
+                      <Link to="/project-profile">Complete Project Identity</Link>
+                    </Button>
+                  </div>
+                )}
+                {s.can_upgrade && identityReady && (
                   <Button onClick={() => invoke("billing-checkout")} disabled={busy !== null}>
                     {busy === "upgrade" && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
                     Upgrade to Pro — $49/month
