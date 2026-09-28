@@ -1,74 +1,104 @@
-# Read-only audit: X read spend paths (no implementation)
+# Partner Program MVP (Affiliate + Service Partner) — Audit and Plan
 
-Everything below comes from reading the code. No files were edited, no SQL was run, nothing was deployed. If you approve, this plan still does nothing: it is a report. Any fix would need its own execution contract.
+Audit only. No edits, migrations, secrets, Stripe, auth or Edge Function changes were made.
 
-## 1. Runtime callers
+## Verified start state
+- HEAD `a06b2c1c2e7e7eae161096ece7fbf903837daa05`, working tree clean, 97 migrations (last `20260928110628`).
+- `workspace_commercial_assignments` has `channel` (direct|affiliate|reseller|internal), `channel_partner_ref` (free text), `assignment_source` (manual|stripe|reseller|internal), `billing_owner_user_id`.
+- `workspace_members.role` is owner|admin|member. `platform_user_roles.role` is owner|admin|support, with `granted_by`.
+- `commercial_billing_events` records Stripe event_ref/type/object_ref/workspace_id/subscription_ref/processing_status. It stores no amounts, currency, invoice or charge IDs.
+- `commercial_billing_subscriptions` maps workspace to billing owner and Stripe subscription.
+- There is no invitation table. Workspace membership comes only from the `handle_new_workspace` trigger.
+- Owner console is `/admin`, backed by the `platform-admin` Edge Function. Nav supports `ownerOnly`. Regression convention: `scripts/*-regression.ts` read files from disk and check migration lists.
 
-| Path | Caller (file:line) | Provider call |
-|---|---|---|
-| `socialRead` (src/lib/social-read.functions.ts:63) | **No runtime caller.** No route or component imports it. Only regression scripts reference it (se21-direct-first-provider, project-identity-gate-b). | `socialReadRouter.fetchPostByUrl` / `fetchPostMetrics` / `fetchSourceRecentPosts` (lines 125/128/132) |
-| `captureMissionMetrics` (src/lib/social-mission-metrics.functions.ts:62) | src/components/cartel/SocialMissionTestControl.tsx:205. It is rendered only on src/routes/_authenticated/admin.tsx:1494 | `socialReadRouter.fetchPostMetrics` (line 165), fixed to one URL |
-| `socialReadRouter` (src/lib/social-read-router.server.ts:112) | Only the two server functions above | Sends X URLs to `xReadProvider` in src/lib/social-read-x.server.ts (:410/:418/:429) and YouTube URLs to social-read-youtube.server.ts |
-| src/lib/social-read-x.server.ts | Imported only by social-read-router.server.ts:28 | Direct official X API |
-| social-read-refetcher.server.ts (a second provider with the same 3 methods) | No runtime importer | none |
-| `x_reads` entitlement | Checked only in social-read.functions.ts:110 and social-mission-metrics.functions.ts:103. It also appears in the feature list in supabase/functions/_shared/commercial-access.ts:34. | — |
+## Reuse
+- Owner authority: `is_platform_owner` / `has_platform_unrestricted_access`. No email checks.
+- Workspace ownership check: `is_workspace_owner`, `is_workspace_member`.
+- Attribution marker: `workspace_commercial_assignments.channel='affiliate'` plus `channel_partner_ref`. The ref is set only by a server RPC, never by client input.
+- Billing truth: `commercial_billing_subscriptions` and `commercial_billing_events`, read-only in Phase 1A.
+- UI: AppShell, SidebarNav and nav.ts patterns, `/admin` tab structure, existing design tokens.
 
-Separate X reads that do **not** use `socialRead` or `x_reads`. These are Edge Functions that call supabase/functions/_shared/x-metrics.ts `lookupXPostMetrics` (`GET api.x.com/2/tweets`):
-- supabase/functions/social-mission-telegram/index.ts:126 `attemptLaunchMetricsRead`: one lookup when a mission launches.
-- supabase/functions/social-mission-telegram/index.ts:198 `attemptFinalMetricsRead`: one lookup when a mission ends.
-- supabase/functions/social-mission-runner (cron, every minute): a batch refresh of metrics.
+## Gaps
+- Partner identity, applications and approval.
+- Versioned program terms with an inactive-by-default switch.
+- Referral codes, click/signup attribution, and self-referral controls.
+- Commission ledger, reversals, payout requests, YTD totals, and tax-document status.
+- Agreement/disclosure acceptance records.
+- Consent-based service-partner access to a client workspace. There is no invite mechanism today.
+- Money data on billing events (amount, currency, invoice/charge refs). Needed only for Phase 1B.
 
-## 2. What each call supports
+## Phase 1A — build now, Stripe webhook untouched
 
-- `socialRead`: no shipped feature. It is a generic read gateway (single post, metrics, recent posts from a source) with no UI.
-- `captureMissionMetrics`: a test tool on the admin page for the PEPE CARTEL live mission. The URL, group and marker are hard-coded, and the browser supplies nothing.
-- social-mission-telegram launch/final reads: the metrics shown on a mission card at launch and at the end, for X Missions.
-- social-mission-runner: live metric updates and milestone edits on LIVE mission cards.
+### Schema (one additive migration: `partner_program_1a_foundation`)
+Every table: RLS enabled, explicit GRANTs, `updated_at` trigger.
+- `partner_program_terms`: version, status (draft|active|retired), nullable fields `commission_bps`, `attribution_window_days`, `hold_days`, `min_payout_cents`, `currency`, and `agreement_text` / `disclosure_text`. Nothing is seeded active. A validation trigger blocks activation while any required field is null. Only one active version is allowed (partial unique index).
+- `partners`: user_id (unique), kind flags `is_affiliate` / `is_service_partner`, status (applied|approved|suspended|rejected|terminated), `referral_code` (unique, server-generated), approved_by/at, `tax_doc_status` (not_submitted|submitted|verified|rejected). No tax data is stored, only the status.
+- `partner_applications`: user, requested kinds, free-text pitch, status, reviewer, notes.
+- `partner_agreement_acceptances`: partner, terms_version, accepted_at, ip_hash optional. Append-only.
+- `partner_referrals`: partner, referred_user_id (unique: first valid attribution wins), workspace_id nullable, source (link|code), attributed_at, `terms_version`, status (pending|qualified|rejected_self|rejected_fraud|expired), reason.
+- `partner_commission_ledger`: append-only entries. partner, referral, workspace, entry_type (accrual|reversal|adjustment), amount_cents, currency, source_event_ref (unique per entry_type), terms_version, available_at, status (pending|available|in_payout|paid|reversed). Phase 1A writes only owner manual adjustments.
+- `partner_payout_requests`: partner, amount_cents, currency, status (requested|approved|rejected|paid|cancelled), reviewed_by, paid_reference (free text, manual), timestamps. Links to ledger entries through `partner_payout_items`.
+- `workspace_partner_access`: workspace, partner, status (invited|active|revoked), invited_by (the workspace owner), accepted_at, revoked_at.
 
-## 3. Would turning off x_reads for ordinary Pro break anything?
+### RLS / privilege matrix
+- Partner: reads only own `partners`, applications, referrals, ledger, payouts, acceptances. No direct writes. All writes go through RPCs.
+- Workspace owner: reads and revokes `workspace_partner_access` for own workspaces.
+- Platform owner/admin: everything through SECURITY DEFINER RPCs or the `platform-admin` Edge Function, gated by `is_platform_owner` / platform role.
+- anon: no access. Commission tables get no direct `authenticated` INSERT/UPDATE.
 
-No. X Mission creation, launch and final snapshots, and live metric polling all run through the Edge Functions, and none of them check `x_reads`. The only gated paths are:
-- `socialRead`, which has no caller;
-- `captureMissionMetrics`, which only works on the hard-coded PEPECARTEL test mission. The owner can still use it because of the unrestricted bypass inside `evaluate_commercial_access`.
+### RPCs (SECURITY DEFINER, `search_path=''`, revoke PUBLIC/anon)
+- `submit_partner_application(kinds, pitch)`. Requires an active terms version.
+- `accept_partner_agreement(terms_version)`.
+- `record_referral_attribution(code)`: called after signup. Rejects self-referral (same user, or partner is a member or billing owner of the target workspace). Idempotent. Honors the attribution window from active terms.
+- `bind_referral_to_workspace(workspace_id)`: caller must be the workspace owner. Sets `channel='affiliate'` and `channel_partner_ref` only while the assignment is Free/direct, so it never overwrites a Stripe or manual assignment.
+- `request_partner_payout(amount)`: amount must be ≤ available balance, at least the terms minimum, and `tax_doc_status='verified'`.
+- `get_my_partner_summary()`: balances by status and YTD accrued/reversed/paid.
+- Owner-only: `review_partner_application`, `set_partner_status`, `set_partner_tax_status`, `activate_partner_terms`, `review_payout_request`, `mark_payout_paid`, `add_commission_adjustment`.
+- Service partner: `invite_service_partner(workspace_id, partner_id)` (workspace owner only), `accept_workspace_partner_invite`, `revoke_workspace_partner_access`. On accept, the partner is inserted into `workspace_members` as role `admin`. It is never `owner` and never billing owner. On revoke, that row is removed. Existing tool, commercial and billing checks then apply unchanged. Service partners cannot start checkout, because `billing-checkout` already requires the owner.
 
-Current state: in migration 20260923170038, `cartel_49` has `x_reads` as a hidden feature that is turned on. C1 did not change this.
+### UI
+- `src/routes/_authenticated/partners.tsx`: apply, agreement/disclosure, referral link, referrals, ledger, payouts, YTD, tax-status banner. Shows "Program not yet open" while no terms are active.
+- `src/routes/auth.tsx`: capture the `?ref=` code in sessionStorage (sanitized) and call `record_referral_attribution` after the session is confirmed.
+- `src/routes/_authenticated/settings.tsx`: "Service partner access" card (invite, list, revoke) for workspace owners.
+- `src/routes/_authenticated/admin.tsx`: new "Partners" tab (applications, partners, terms editor/activation, payouts, adjustments). Server enforcement in `platform-admin` actions or owner RPCs.
+- `src/lib/partners.ts`: typed RPC client. `src/lib/nav.ts`: add a "Partners" entry.
+- Owner bypass is unchanged. The owner can see all partner data, but partner status never gates owner features.
 
-## 4. Background social-mission-runner
+### Tests: `scripts/partner-program-1a-regression.ts`
+- Migration exists, is additive only, and has GRANTs and RLS for every table.
+- No DROP, and no change to plans, entitlements, `stripe-billing-webhook`, `billing-checkout` or the Stripe helper (hash parity).
+- Terms cannot activate with null fields, and nothing is seeded active.
+- Self-referral is rejected. Attribution is idempotent. Binding never overwrites a non-direct assignment.
+- The payout RPC enforces balance, minimum and tax status.
+- Service-partner access is `admin` only, requires an owner invite, and revoke removes membership.
+- The owner bypass path remains first in `evaluate_commercial_access`.
+- Live RLS checks as two distinct non-owner test users: partner A cannot read partner B's rows, and a partner cannot read a workspace without accepted access.
+- Plus the existing commercial suites, tsgo, build, `diff --check`. Update the migration manifests in the existing suites.
 
-- It skips `x_reads` and every commercial check. It runs only on the cron schedule, is protected by the scheduler secret header, and uses the service role.
-- Limits per run, once a minute:
-  - worklist capped at `METRICS_WORKLIST_LIMIT = 300` LIVE missions;
-  - post IDs de-duplicated across missions;
-  - at most `METRICS_MAX_BATCHES = 3` lookups of up to 100 IDs each;
-  - so at most 3 X requests and 300 posts per minute across all workspaces;
-  - no retries.
-- It stops if `X_API_BEARER_TOKEN` is missing.
-- Spend is indirectly bounded per workspace by `x_missions` (quota 100 per month on Pro), because only LIVE missions are polled.
-- Each post read is logged to `usage_ledger` as `social_x_post_resource_read`, charged to one workspace (lowest workspace ID, then mission ID). That is accounting only; it never blocks.
-- Mission launch and final reads: at most one lookup each, no retry, no commercial check, triggered by the mission lifecycle.
+**Stop point 1A:** migration staged in `docs/sql` for review, applied only on explicit approval, then post-apply sync. No publish.
 
-## 5. Does socialRead track usage or have a quota?
+## Phase 1B — later, webhook integration
+How revenue will feed the ledger:
+1. Additive migration: nullable `amount_cents`, `currency`, `invoice_ref`, `charge_ref` on `commercial_billing_events`.
+2. Minimal webhook change: on `invoice.paid`, `charge.refunded` and `charge.dispute.created/closed`, store those fields. Then call a new service-role-only RPC `accrue_partner_commission_from_event(event_id)` after the existing state processing succeeds. A commission failure must never fail billing; it is logged and retried by a sweep.
+3. Accrual only when all hold: workspace has a qualified referral within the window, the invoice is paid, livemode matches the active environment, and the partner is approved. Amount = collected amount × `commission_bps` of the terms version stored on the referral. `available_at` = paid_at + `hold_days`. Idempotent on `source_event_ref`.
+4. A refund or chargeback creates a negative reversal linked to the original accrual. If the accrual was already paid, the balance goes negative and future payouts net against it.
+5. Alternative with no webhook change: an owner-triggered, service-role reconcile that GETs paid invoices from Stripe. This costs more API calls and is not recommended.
 
-No. It writes no `usage_ledger` row, and `x_reads` is a feature flag (`limit_value` NULL, `period` 'none'), so the only control is on or off. The only other checks are operator authorization and `can_use_project_tools`. It has no rate limit and no per-call counting. `captureMissionMetrics` also writes no ledger row, but it can only read one fixed URL.
+**Stop point 1B:** separate approval covering the webhook diff, deploy, and a test-mode invoice/refund QA.
 
-Exposure today: a Pro workspace operator could call the `socialRead` endpoint directly, even though no screen uses it. Each call is one X read, with no limit. `source_recent_posts` also accepts a `limit` from the client. Its upper bound inside the X adapter was not checked in this audit.
+## Risks
+- Adding `admin` membership gives service partners full workspace-admin tools. Review whether a narrower role is needed. That would be a schema change to the `workspace_members` CHECK and was not proposed.
+- Attribution depends on signup-time capture. Cross-device clicks are lost; accepted for the MVP.
+- Tax status is attestation only. No documents are stored, which avoids handling PII.
+- Several revenue events currently lack amounts, so no commission can be computed until 1B.
+- `channel_partner_ref` is free text. It will hold the partner UUID as text, and a code comment will document that.
 
-## 6. Smallest safe options (not implemented)
+## Files (proposed)
+- New: `docs/sql/PARTNER_1A_foundation.sql` (and later its synced migration), `src/lib/partners.ts`, `src/routes/_authenticated/partners.tsx`, `scripts/partner-program-1a-regression.ts`.
+- Edited: `src/routes/auth.tsx`, `src/routes/_authenticated/settings.tsx`, `src/routes/_authenticated/admin.tsx`, `src/lib/nav.ts`, `backend-source/edge-functions/platform-admin/index.ts` (owner actions, optional), existing regression migration manifests.
+- Untouched: all Stripe/billing Edge Functions, plans/entitlements, Telegram, PCART, launcher, chain, treasury, liquidity.
 
-Ranked from least to most change:
-
-A. **Set `cartel_49` v1 `x_reads` enabled=false.** This is a one-row reversible migration. Owner access still works through the unrestricted bypass. It breaks no shipped Pro workflow (see section 3). Free already has it off. This is the smallest fix and closes the direct spend path. Risk: the old commercial suites that count migrations need a count update, the same pre-existing issue as before.
-
-B. **Change `x_reads` to a hidden monthly quota** (for example `limit_value` N, `calendar_month_utc`), following the C1 pattern. This needs a new counting branch in `commercial_feature_usage` and a `usage_ledger` write inside `socialRead` for each successful call, otherwise the quota never counts. This is medium size: server function plus SQL.
-
-C. **Retire `socialRead`**: delete the unused server function, or make it owner-only. This is a source-only change with no database work, but the se21 and gate-b regressions would need updating.
-
-D. Defense in depth to add alongside A or B: cap `limit` on the server for `source_recent_posts`. Out of scope unless authorized.
-
-Recommendation: A, optionally followed later by C. B is only worth doing if a Pro feature will actually use `socialRead`.
-
-## Not verified
-
-- The live value of the `cartel_49` `x_reads` row. This report relies on the seed migration plus C1 saying it left `x_reads` alone.
-- The cron schedule of the live runner.
-- The upper bound on `limit` inside the X adapter.
+## Open decisions
+- Service partner role: `admin` (no schema change) or a new narrower role.
+- Whether payouts or terms also need `platform_user_roles.admin`, or the owner only.
