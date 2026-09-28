@@ -105,8 +105,10 @@ CREATE TABLE IF NOT EXISTS public.partner_applications (
   wants_service_partner boolean NOT NULL DEFAULT false,
   pitch text NOT NULL CHECK (char_length(btrim(pitch)) BETWEEN 1 AND 1000),
   status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
-  terms_version integer NOT NULL,
-  internal_note text NULL CHECK (internal_note IS NULL OR char_length(internal_note) <= 2000),
+  terms_version integer NOT NULL REFERENCES public.partner_program_terms(version),
+  -- APPLICANT-VISIBLE: the applicant can read this row (row-level RLS), so
+  -- review_note is not private. Never put internal-only remarks here.
+  review_note text NULL CHECK (review_note IS NULL OR char_length(review_note) <= 2000),
   submitted_at timestamptz NOT NULL DEFAULT now(),
   reviewed_at timestamptz NULL,
   reviewed_by uuid NULL,
@@ -125,7 +127,7 @@ CREATE OR REPLACE TRIGGER partner_applications_set_updated_at
 CREATE TABLE IF NOT EXISTS public.partner_agreement_acceptances (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   partner_id uuid NOT NULL REFERENCES public.partners(id),
-  terms_version integer NOT NULL,
+  terms_version integer NOT NULL REFERENCES public.partner_program_terms(version),
   accepted_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT partner_agreement_acceptances_unique UNIQUE (partner_id, terms_version)
 );
@@ -138,7 +140,7 @@ CREATE TABLE IF NOT EXISTS public.partner_referrals (
   partner_id uuid NOT NULL REFERENCES public.partners(id),
   referred_user_id uuid NOT NULL,
   workspace_id uuid NULL REFERENCES public.workspaces(id),
-  terms_version integer NOT NULL,
+  terms_version integer NOT NULL REFERENCES public.partner_program_terms(version),
   source text NOT NULL CHECK (source IN ('link','code')),
   attributed_at timestamptz NOT NULL DEFAULT now(),
   bound_at timestamptz NULL,
@@ -147,9 +149,10 @@ CREATE TABLE IF NOT EXISTS public.partner_referrals (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
--- First valid attribution wins: one referral per referred user.
-CREATE UNIQUE INDEX IF NOT EXISTS partner_referrals_first_attribution
-  ON public.partner_referrals (referred_user_id);
+-- First VALID attribution wins: at most one pending/qualified referral per
+-- referred user. Rejected/expired rows never block a later valid referral.
+CREATE UNIQUE INDEX IF NOT EXISTS partner_referrals_first_valid_attribution
+  ON public.partner_referrals (referred_user_id) WHERE status IN ('pending','qualified');
 CREATE UNIQUE INDEX IF NOT EXISTS partner_referrals_one_per_workspace
   ON public.partner_referrals (workspace_id) WHERE workspace_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS partner_referrals_partner_idx ON public.partner_referrals (partner_id);
@@ -164,6 +167,7 @@ CREATE TABLE IF NOT EXISTS public.partner_payout_requests (
   partner_id uuid NOT NULL REFERENCES public.partners(id),
   amount_cents integer NOT NULL CHECK (amount_cents > 0),
   currency text NOT NULL CHECK (currency ~ '^[a-z]{3}$'),
+  terms_version integer NOT NULL REFERENCES public.partner_program_terms(version),
   status text NOT NULL DEFAULT 'requested' CHECK (status IN ('requested','approved','rejected','paid','cancelled')),
   reviewer_id uuid NULL,
   review_note text NULL CHECK (review_note IS NULL OR char_length(review_note) <= 2000),
@@ -186,7 +190,7 @@ CREATE TABLE IF NOT EXISTS public.partner_commission_ledger (
   partner_id uuid NOT NULL REFERENCES public.partners(id),
   referral_id uuid NULL REFERENCES public.partner_referrals(id),
   workspace_id uuid NULL REFERENCES public.workspaces(id),
-  terms_version integer NULL,
+  terms_version integer NULL REFERENCES public.partner_program_terms(version),
   entry_type text NOT NULL CHECK (entry_type IN ('accrual','reversal','adjustment','payout')),
   amount_cents integer NOT NULL CHECK (amount_cents <> 0),
   currency text NOT NULL CHECK (currency ~ '^[a-z]{3}$'),
@@ -318,6 +322,31 @@ GRANT EXECUTE ON FUNCTION public.partner_available_balance(uuid, text) TO servic
 -- ---------------------------------------------------------------------
 -- Owner functions
 -- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.owner_save_partner_terms_draft(
+  _version integer, _commission_bps integer, _attribution_window_days integer, _hold_days integer,
+  _min_payout_cents integer, _currency text, _agreement_text text, _disclosure_text text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE v_owner uuid := public.partner_require_owner(); v_status text;
+BEGIN
+  IF _version IS NULL OR _version <= 0 THEN RAISE EXCEPTION 'INVALID_VERSION' USING ERRCODE = '22023'; END IF;
+  SELECT status INTO v_status FROM public.partner_program_terms WHERE version = _version FOR UPDATE;
+  IF v_status IS NULL THEN
+    -- All inputs are caller-supplied; NULLs stay NULL (no invented defaults).
+    INSERT INTO public.partner_program_terms (version, status, commission_bps, attribution_window_days, hold_days,
+      min_payout_cents, currency, agreement_text, disclosure_text, created_by)
+    VALUES (_version, 'draft', _commission_bps, _attribution_window_days, _hold_days,
+      _min_payout_cents, lower(_currency), _agreement_text, _disclosure_text, v_owner);
+    RETURN jsonb_build_object('ok', true, 'version', _version, 'created', true);
+  END IF;
+  IF v_status <> 'draft' THEN RAISE EXCEPTION 'TERMS_NOT_DRAFT' USING ERRCODE = '22023'; END IF;
+  UPDATE public.partner_program_terms
+     SET commission_bps = _commission_bps, attribution_window_days = _attribution_window_days,
+         hold_days = _hold_days, min_payout_cents = _min_payout_cents, currency = lower(_currency),
+         agreement_text = _agreement_text, disclosure_text = _disclosure_text
+   WHERE version = _version AND status = 'draft';
+  RETURN jsonb_build_object('ok', true, 'version', _version, 'created', false);
+END $$;
+
 CREATE OR REPLACE FUNCTION public.owner_activate_partner_terms(_version integer)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE v_owner uuid := public.partner_require_owner(); v_t public.partner_program_terms;
@@ -350,7 +379,7 @@ BEGIN
   IF v_a.status <> 'pending' THEN RAISE EXCEPTION 'APPLICATION_NOT_PENDING' USING ERRCODE = '22023'; END IF;
   UPDATE public.partner_applications
      SET status = CASE WHEN _approve THEN 'approved' ELSE 'rejected' END,
-         internal_note = left(_note, 2000), reviewed_at = now(), reviewed_by = v_owner
+         review_note = left(_note, 2000), reviewed_at = now(), reviewed_by = v_owner
    WHERE id = v_a.id;
   IF _approve THEN
     v_code := substr(replace(gen_random_uuid()::text, '-', ''), 1, 10);
@@ -405,13 +434,23 @@ END $$;
 
 CREATE OR REPLACE FUNCTION public.owner_review_partner_payout(_payout_id uuid, _approve boolean, _note text DEFAULT NULL)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
-DECLARE v_owner uuid := public.partner_require_owner();
+DECLARE v_owner uuid := public.partner_require_owner(); v_req public.partner_payout_requests; v_p public.partners;
 BEGIN
+  SELECT * INTO v_req FROM public.partner_payout_requests WHERE id = _payout_id FOR UPDATE;
+  IF NOT FOUND OR v_req.status <> 'requested' THEN RAISE EXCEPTION 'PAYOUT_NOT_REQUESTED' USING ERRCODE = '22023'; END IF;
+  IF _approve THEN
+    SELECT * INTO v_p FROM public.partners WHERE id = v_req.partner_id;
+    IF v_p.status <> 'approved' THEN RAISE EXCEPTION 'PARTNER_NOT_APPROVED' USING ERRCODE = '22023'; END IF;
+    IF v_p.tax_doc_status <> 'verified' THEN RAISE EXCEPTION 'TAX_DOCS_NOT_VERIFIED' USING ERRCODE = '22023'; END IF;
+    IF NOT EXISTS (SELECT 1 FROM public.partner_agreement_acceptances
+                    WHERE partner_id = v_req.partner_id AND terms_version = v_req.terms_version) THEN
+      RAISE EXCEPTION 'AGREEMENT_NOT_ACCEPTED' USING ERRCODE = '22023';
+    END IF;
+  END IF;
   UPDATE public.partner_payout_requests
      SET status = CASE WHEN _approve THEN 'approved' ELSE 'rejected' END,
          reviewer_id = v_owner, review_note = left(_note, 2000), reviewed_at = now()
-   WHERE id = _payout_id AND status = 'requested';
-  IF NOT FOUND THEN RAISE EXCEPTION 'PAYOUT_NOT_REQUESTED' USING ERRCODE = '22023'; END IF;
+   WHERE id = v_req.id;
   RETURN jsonb_build_object('ok', true, 'approved', _approve);
 END $$;
 
@@ -422,9 +461,10 @@ BEGIN
   SELECT * INTO v_p FROM public.partner_payout_requests WHERE id = _payout_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'PAYOUT_NOT_FOUND' USING ERRCODE = 'P0002'; END IF;
   IF v_p.status = 'paid' THEN RETURN jsonb_build_object('ok', true, 'already_paid', true); END IF;
+  IF coalesce(btrim(_paid_reference), '') = '' THEN RAISE EXCEPTION 'PAID_REFERENCE_REQUIRED' USING ERRCODE = '22023'; END IF;
   IF v_p.status <> 'approved' THEN RAISE EXCEPTION 'PAYOUT_NOT_APPROVED' USING ERRCODE = '22023'; END IF;
   UPDATE public.partner_payout_requests
-     SET status = 'paid', paid_at = now(), paid_reference = left(_paid_reference, 200), reviewer_id = v_owner
+     SET status = 'paid', paid_at = now(), paid_reference = left(btrim(_paid_reference), 200), reviewer_id = v_owner
    WHERE id = v_p.id;
   -- Exactly one negative payout entry per request (unique index enforces).
   INSERT INTO public.partner_commission_ledger (partner_id, entry_type, amount_cents, currency, available_at,
@@ -479,7 +519,7 @@ BEGIN
   IF v_code !~ '^[a-z0-9]{10}$' THEN RETURN jsonb_build_object('ok', false, 'reason', 'INVALID_CODE'); END IF;
   IF _source NOT IN ('link','code') THEN RETURN jsonb_build_object('ok', false, 'reason', 'INVALID_SOURCE'); END IF;
   -- First attribution wins (idempotent).
-  SELECT id INTO v_existing FROM public.partner_referrals WHERE referred_user_id = v_uid;
+  SELECT id INTO v_existing FROM public.partner_referrals WHERE referred_user_id = v_uid AND status IN ('pending','qualified');
   IF v_existing IS NOT NULL THEN RETURN jsonb_build_object('ok', true, 'already_attributed', true); END IF;
   v_t := public.partner_active_terms();
   IF v_t.id IS NULL THEN RETURN jsonb_build_object('ok', false, 'reason', 'PROGRAM_NOT_OPEN'); END IF;
@@ -488,39 +528,42 @@ BEGIN
   IF v_p.user_id = v_uid THEN RETURN jsonb_build_object('ok', false, 'reason', 'SELF_REFERRAL'); END IF;
   INSERT INTO public.partner_referrals (partner_id, referred_user_id, terms_version, source)
   VALUES (v_p.id, v_uid, v_t.version, _source)
-  ON CONFLICT (referred_user_id) DO NOTHING;
+  ON CONFLICT (referred_user_id) WHERE status IN ('pending','qualified') DO NOTHING;
   RETURN jsonb_build_object('ok', true, 'already_attributed', false);
 END $$;
 
 CREATE OR REPLACE FUNCTION public.bind_referral_to_workspace(_workspace_id uuid)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
-DECLARE v_uid uuid := auth.uid(); v_r public.partner_referrals; v_p public.partners; v_t public.partner_program_terms; v_marked boolean := false;
+DECLARE v_uid uuid := auth.uid(); v_r public.partner_referrals; v_p public.partners; v_t public.partner_program_terms; v_assignment_id uuid;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'AUTH_REQUIRED' USING ERRCODE = '42501'; END IF;
   IF NOT public.is_workspace_owner(_workspace_id, v_uid) THEN RAISE EXCEPTION 'WORKSPACE_OWNER_REQUIRED' USING ERRCODE = '42501'; END IF;
-  SELECT * INTO v_r FROM public.partner_referrals WHERE referred_user_id = v_uid FOR UPDATE;
+  SELECT * INTO v_r FROM public.partner_referrals
+   WHERE referred_user_id = v_uid AND status IN ('pending','qualified') FOR UPDATE;
   IF NOT FOUND THEN RETURN jsonb_build_object('ok', true, 'bound', false, 'reason', 'NO_REFERRAL'); END IF;
   IF v_r.workspace_id IS NOT NULL THEN
     RETURN jsonb_build_object('ok', true, 'bound', v_r.workspace_id = _workspace_id, 'reason', 'ALREADY_BOUND');
   END IF;
   IF v_r.status <> 'pending' THEN RETURN jsonb_build_object('ok', true, 'bound', false, 'reason', 'REFERRAL_NOT_PENDING'); END IF;
   SELECT * INTO v_p FROM public.partners WHERE id = v_r.partner_id;
+  IF v_p.id IS NULL OR v_p.status <> 'approved' OR NOT v_p.is_affiliate THEN
+    RETURN jsonb_build_object('ok', true, 'bound', false, 'reason', 'PARTNER_NOT_ACTIVE_AFFILIATE');
+  END IF;
   SELECT * INTO v_t FROM public.partner_program_terms WHERE version = v_r.terms_version;
   -- Self-referral: partner already owns/belongs to the target workspace.
   IF public.is_workspace_member(_workspace_id, v_p.user_id) OR public.is_workspace_owner(_workspace_id, v_p.user_id) THEN
     UPDATE public.partner_referrals SET status = 'rejected_self', reason = 'Partner is a member of the referred workspace' WHERE id = v_r.id;
     RETURN jsonb_build_object('ok', true, 'bound', false, 'reason', 'SELF_REFERRAL');
   END IF;
-  IF v_t.attribution_window_days IS NOT NULL AND v_r.attributed_at + make_interval(days => v_t.attribution_window_days) < now() THEN
+  IF v_t.attribution_window_days IS NULL OR v_r.attributed_at + make_interval(days => v_t.attribution_window_days) < now() THEN
     UPDATE public.partner_referrals SET status = 'expired', reason = 'Attribution window elapsed' WHERE id = v_r.id;
     RETURN jsonb_build_object('ok', true, 'bound', false, 'reason', 'EXPIRED');
   END IF;
   IF EXISTS (SELECT 1 FROM public.partner_referrals WHERE workspace_id = _workspace_id) THEN
     RETURN jsonb_build_object('ok', true, 'bound', false, 'reason', 'WORKSPACE_ALREADY_ATTRIBUTED');
   END IF;
-  UPDATE public.partner_referrals SET workspace_id = _workspace_id, bound_at = now() WHERE id = v_r.id;
-  -- Marker only on the current Free/direct assignment. Never overwrites
-  -- Stripe, reseller, manual, paid, or any non-direct authority.
+  -- Step 1: atomically mark ONLY the eligible current Cartel Free assignment.
+  -- Never overwrites Stripe, reseller, manual, paid, or any non-direct authority.
   UPDATE public.workspace_commercial_assignments a
      SET channel = 'affiliate', channel_partner_ref = v_p.id::text
     FROM public.commercial_plans pl
@@ -528,9 +571,17 @@ BEGIN
      AND a.plan_id = pl.id AND pl.code = 'cartel_free'
      AND a.channel = 'direct' AND a.channel_partner_ref IS NULL
      AND a.assignment_source = 'internal'
-     AND a.status = 'active' AND (a.ends_at IS NULL OR a.ends_at > now());
-  v_marked := FOUND;
-  RETURN jsonb_build_object('ok', true, 'bound', true, 'assignment_marked', v_marked);
+     AND a.status = 'active' AND a.starts_at <= now() AND (a.ends_at IS NULL OR a.ends_at > now())
+  RETURNING a.id INTO v_assignment_id;
+  IF v_assignment_id IS NULL THEN
+    RETURN jsonb_build_object('ok', true, 'bound', false, 'reason', 'ASSIGNMENT_NOT_ELIGIBLE');
+  END IF;
+  -- Step 2: only after the marker succeeded, bind and qualify the referral.
+  -- partner_referrals_one_per_workspace aborts (and rolls back step 1) on a race.
+  UPDATE public.partner_referrals
+     SET workspace_id = _workspace_id, bound_at = now(), status = 'qualified'
+   WHERE id = v_r.id;
+  RETURN jsonb_build_object('ok', true, 'bound', true, 'assignment_marked', true);
 END $$;
 
 CREATE OR REPLACE FUNCTION public.request_partner_payout(_amount_cents integer)
@@ -544,13 +595,16 @@ BEGIN
   IF v_p.tax_doc_status <> 'verified' THEN RAISE EXCEPTION 'TAX_DOCS_NOT_VERIFIED' USING ERRCODE = '42501'; END IF;
   v_t := public.partner_active_terms();
   IF v_t.id IS NULL THEN RAISE EXCEPTION 'PROGRAM_NOT_OPEN' USING ERRCODE = '22023'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.partner_agreement_acceptances WHERE partner_id = v_p.id AND terms_version = v_t.version) THEN
+    RAISE EXCEPTION 'AGREEMENT_NOT_ACCEPTED' USING ERRCODE = '42501';
+  END IF;
   IF _amount_cents IS NULL OR _amount_cents < v_t.min_payout_cents THEN RAISE EXCEPTION 'BELOW_MINIMUM' USING ERRCODE = '22023'; END IF;
   v_available := public.partner_available_balance(v_p.id, v_t.currency);
   SELECT coalesce(sum(amount_cents), 0) INTO v_reserved FROM public.partner_payout_requests
    WHERE partner_id = v_p.id AND currency = v_t.currency AND status IN ('requested','approved');
   IF _amount_cents > v_available - v_reserved THEN RAISE EXCEPTION 'INSUFFICIENT_AVAILABLE_BALANCE' USING ERRCODE = '22023'; END IF;
-  INSERT INTO public.partner_payout_requests (partner_id, amount_cents, currency)
-  VALUES (v_p.id, _amount_cents, v_t.currency) RETURNING id INTO v_id;
+  INSERT INTO public.partner_payout_requests (partner_id, amount_cents, currency, terms_version)
+  VALUES (v_p.id, _amount_cents, v_t.currency, v_t.version) RETURNING id INTO v_id;
   RETURN v_id;
 END $$;
 
@@ -582,6 +636,7 @@ END $$;
 -- ---------------------------------------------------------------------
 -- Function privileges: revoke PUBLIC/anon; grant only what is needed.
 -- ---------------------------------------------------------------------
+REVOKE ALL ON FUNCTION public.owner_save_partner_terms_draft(integer, integer, integer, integer, integer, text, text, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.owner_activate_partner_terms(integer) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.owner_retire_partner_terms(integer) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.owner_review_partner_application(uuid, boolean, text) FROM PUBLIC, anon;
@@ -596,6 +651,7 @@ REVOKE ALL ON FUNCTION public.bind_referral_to_workspace(uuid) FROM PUBLIC, anon
 REVOKE ALL ON FUNCTION public.request_partner_payout(integer) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.get_my_partner_summary() FROM PUBLIC, anon;
 
+GRANT EXECUTE ON FUNCTION public.owner_save_partner_terms_draft(integer, integer, integer, integer, integer, text, text, text) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.owner_activate_partner_terms(integer) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.owner_retire_partner_terms(integer) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.owner_review_partner_application(uuid, boolean, text) TO authenticated, service_role;
@@ -610,6 +666,7 @@ GRANT EXECUTE ON FUNCTION public.bind_referral_to_workspace(uuid) TO authenticat
 GRANT EXECUTE ON FUNCTION public.request_partner_payout(integer) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_my_partner_summary() TO authenticated;
 
+COMMENT ON COLUMN public.partner_applications.review_note IS 'Applicant-visible review note. Not private.';
 COMMENT ON TABLE public.partner_commission_ledger IS 'Append-only. Corrections via new adjustment/reversal. Phase 1A: owner manual adjustments + payouts only.';
 COMMENT ON COLUMN public.workspace_commercial_assignments.channel_partner_ref IS 'When channel=affiliate: partners.id as text. Durable attribution lives in partner_referrals.';
 COMMENT ON COLUMN public.partners.is_service_partner IS 'Identity flag only. Phase 1A grants zero workspace permissions.';
