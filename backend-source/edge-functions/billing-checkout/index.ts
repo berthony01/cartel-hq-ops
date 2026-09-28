@@ -131,6 +131,11 @@ Deno.serve(async (req: Request) => {
       plan_version: String(PRO_PLAN_VERSION),
       channel: "direct",
     };
+    // Stripe-hosted Terms consent: server flag, DEFAULT OFF. Enable only after
+    // the Stripe Dashboard public Terms URL is independently confirmed; Stripe
+    // rejects consent_collection when no Terms URL is configured. The flag is
+    // folded into the idempotency key so toggling never replays mismatched params.
+    const tosConsent = Deno.env.get("CARTEL_HQ_STRIPE_TERMS_CONSENT_ENABLED") === "true";
     const session = await stripe.checkout.sessions.create(
       {
         mode: "subscription",
@@ -142,10 +147,11 @@ Deno.serve(async (req: Request) => {
         allow_promotion_codes: false,
         automatic_tax: { enabled: false },
         billing_address_collection: "auto",
+        ...(tosConsent ? { consent_collection: { terms_of_service: "required" as const } } : {}),
         success_url: `${baseUrl}/settings?billing=success&session_id={CHECKOUT_SESSION_ID}#billing`,
         cancel_url: `${baseUrl}/settings?billing=cancelled#billing`,
       },
-      { idempotencyKey: `cartel_hq:checkout:${environment}:${workspaceId}:${assignmentKey}:${PRO_PLAN_CODE}:v${PRO_PLAN_VERSION}` },
+      { idempotencyKey: `cartel_hq:checkout:${environment}:${workspaceId}:${assignmentKey}:${PRO_PLAN_CODE}:v${PRO_PLAN_VERSION}${tosConsent ? ":tos" : ""}` },
     );
     if (!session.url) return respond({ error: "BILLING_UNAVAILABLE", message: "Checkout could not be started. Try again." }, 502);
     return respond({ url: session.url });

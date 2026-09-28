@@ -33,6 +33,10 @@ import { Route as AuthenticatedStickerLabRouteImport } from './routes/_authentic
 import { Route as AuthenticatedTelegramRouteImport } from './routes/_authenticated/telegram'
 import { Route as AuthenticatedWatchlistRouteImport } from './routes/_authenticated/watchlist'
 import { Route as AuthCallbackRouteImport } from './routes/auth_.callback'
+import { Route as LegalPartnerAgreementRouteImport } from './routes/legal.partner-agreement'
+import { Route as LegalPrivacyRouteImport } from './routes/legal.privacy'
+import { Route as LegalRefundsRouteImport } from './routes/legal.refunds'
+import { Route as LegalTermsRouteImport } from './routes/legal.terms'
 import { Route as NetworkIndexRouteImport } from './routes/network.index'
 import { Route as NetworkLaunchesRouteImport } from './routes/network.launches'
 import { Route as NetworkProjectsRouteImport } from './routes/network.projects'
@@ -170,6 +174,26 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LegalPartnerAgreementRoute = LegalPartnerAgreementRouteImport.update({
+  id: '/legal/partner-agreement',
+  path: '/legal/partner-agreement',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalPrivacyRoute = LegalPrivacyRouteImport.update({
+  id: '/legal/privacy',
+  path: '/legal/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalRefundsRoute = LegalRefundsRouteImport.update({
+  id: '/legal/refunds',
+  path: '/legal/refunds',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalTermsRoute = LegalTermsRouteImport.update({
+  id: '/legal/terms',
+  path: '/legal/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NetworkIndexRoute = NetworkIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -254,6 +278,10 @@ export interface FileRoutesByFullPath {
   '/telegram': typeof AuthenticatedTelegramRoute
   '/watchlist': typeof AuthenticatedWatchlistRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/legal/partner-agreement': typeof LegalPartnerAgreementRoute
+  '/legal/privacy': typeof LegalPrivacyRoute
+  '/legal/refunds': typeof LegalRefundsRoute
+  '/legal/terms': typeof LegalTermsRoute
   '/network/launches': typeof NetworkLaunchesRoute
   '/network/projects': typeof NetworkProjectsRoute
   '/network/signals': typeof NetworkSignalsRoute
@@ -287,6 +315,10 @@ export interface FileRoutesByTo {
   '/telegram': typeof AuthenticatedTelegramRoute
   '/watchlist': typeof AuthenticatedWatchlistRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/legal/partner-agreement': typeof LegalPartnerAgreementRoute
+  '/legal/privacy': typeof LegalPrivacyRoute
+  '/legal/refunds': typeof LegalRefundsRoute
+  '/legal/terms': typeof LegalTermsRoute
   '/network/launches': typeof NetworkLaunchesRoute
   '/network/projects': typeof NetworkProjectsRoute
   '/network/signals': typeof NetworkSignalsRoute
@@ -325,6 +357,10 @@ export interface FileRoutesById {
   '/_authenticated/telegram': typeof AuthenticatedTelegramRoute
   '/_authenticated/watchlist': typeof AuthenticatedWatchlistRoute
   '/auth_/callback': typeof AuthCallbackRoute
+  '/legal/partner-agreement': typeof LegalPartnerAgreementRoute
+  '/legal/privacy': typeof LegalPrivacyRoute
+  '/legal/refunds': typeof LegalRefundsRoute
+  '/legal/terms': typeof LegalTermsRoute
   '/network/launches': typeof NetworkLaunchesRoute
   '/network/projects': typeof NetworkProjectsRoute
   '/network/signals': typeof NetworkSignalsRoute
@@ -363,6 +399,10 @@ export interface FileRouteTypes {
     | '/telegram'
     | '/watchlist'
     | '/auth/callback'
+    | '/legal/partner-agreement'
+    | '/legal/privacy'
+    | '/legal/refunds'
+    | '/legal/terms'
     | '/network/launches'
     | '/network/projects'
     | '/network/signals'
@@ -396,6 +436,10 @@ export interface FileRouteTypes {
     | '/telegram'
     | '/watchlist'
     | '/auth/callback'
+    | '/legal/partner-agreement'
+    | '/legal/privacy'
+    | '/legal/refunds'
+    | '/legal/terms'
     | '/network/launches'
     | '/network/projects'
     | '/network/signals'
@@ -433,6 +477,10 @@ export interface FileRouteTypes {
     | '/_authenticated/telegram'
     | '/_authenticated/watchlist'
     | '/auth_/callback'
+    | '/legal/partner-agreement'
+    | '/legal/privacy'
+    | '/legal/refunds'
+    | '/legal/terms'
     | '/network/launches'
     | '/network/projects'
     | '/network/signals'
@@ -453,6 +501,10 @@ export interface RootRouteChildren {
   NetworkRoute: typeof NetworkRouteWithChildren
   TgRoute: typeof TgRouteWithChildren
   AuthCallbackRoute: typeof AuthCallbackRoute
+  LegalPartnerAgreementRoute: typeof LegalPartnerAgreementRoute
+  LegalPrivacyRoute: typeof LegalPrivacyRoute
+  LegalRefundsRoute: typeof LegalRefundsRoute
+  LegalTermsRoute: typeof LegalTermsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -623,6 +675,34 @@ declare module '@tanstack/react-router' {
       path: '/auth/callback'
       fullPath: '/auth/callback'
       preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/partner-agreement': {
+      id: '/legal/partner-agreement'
+      path: '/legal/partner-agreement'
+      fullPath: '/legal/partner-agreement'
+      preLoaderRoute: typeof LegalPartnerAgreementRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/privacy': {
+      id: '/legal/privacy'
+      path: '/legal/privacy'
+      fullPath: '/legal/privacy'
+      preLoaderRoute: typeof LegalPrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/refunds': {
+      id: '/legal/refunds'
+      path: '/legal/refunds'
+      fullPath: '/legal/refunds'
+      preLoaderRoute: typeof LegalRefundsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/terms': {
+      id: '/legal/terms'
+      path: '/legal/terms'
+      fullPath: '/legal/terms'
+      preLoaderRoute: typeof LegalTermsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/network/': {
@@ -808,6 +888,10 @@ const rootRouteChildren: RootRouteChildren = {
   NetworkRoute: NetworkRouteWithChildren,
   TgRoute: TgRouteWithChildren,
   AuthCallbackRoute: AuthCallbackRoute,
+  LegalPartnerAgreementRoute: LegalPartnerAgreementRoute,
+  LegalPrivacyRoute: LegalPrivacyRoute,
+  LegalRefundsRoute: LegalRefundsRoute,
+  LegalTermsRoute: LegalTermsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

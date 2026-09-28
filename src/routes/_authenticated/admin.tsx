@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { usePlatformAccess } from "@/hooks/usePlatformAccess";
 import { PartnerAdminSection } from "@/components/cartel/PartnerAdminSection";
+import { PolicyAdminSection } from "@/components/cartel/PolicyAdminSection";
 
 import {
   TelegramConnectionCard,
@@ -1013,6 +1014,8 @@ function AdminPage() {
       </Section>
 
       <PartnerAdminSection />
+
+      <PolicyAdminSection />
 
       <ProjectVerificationSection />
 
