@@ -63,7 +63,7 @@ const GATE_FILES = [
 ];
 for (const f of GATE_FILES) {
   const s = read(f);
-  check(`2.4 no email literal: ${f}`, !/[A-Za-z0-9._%+-]+(gmail|[a-z0-9-]+\.(com|xyz|io))/i.test(s));
+  check(`2.4 no email literal: ${f}`, !/[A-Za-z0-9._%+-]+@(gmail|[a-z0-9-]+\.(com|xyz|io))/i.test(s));
   check(`2.5 no second profile predicate: ${f}`, !/from\("project_profiles"\)[\s\S]{0,200}public_slug/.test(s) || f.includes("telegram-group"));
   check(`2.6 no plan/quota/stripe logic added: ${f}`, !/stripe|subscription_tier|quota_limit/i.test(s));
 }

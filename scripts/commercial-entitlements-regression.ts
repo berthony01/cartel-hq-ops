@@ -180,7 +180,7 @@ check("C-6.5 grants", norm.includes("REVOKE ALL ON FUNCTION public.get_workspace
 /* 7. assignment RPC */
 const sa = fnBody("set_workspace_commercial_assignment");
 check("C-7.1 authenticated caller must be unrestricted", sa.includes("IF NOT public.has_platform_unrestricted_access(v_caller) THEN RAISE EXCEPTION 'NOT_AUTHORIZED'"));
-check("C-7.2 service path without email", sa.includes("auth.role()") && !//.test(sa));
+check("C-7.2 service path without email", sa.includes("auth.role()") && !/@/.test(sa));
 for (const e of ["WORKSPACE_NOT_FOUND", "PLAN_NOT_FOUND", "INVALID_STATUS", "INVALID_ENFORCEMENT_MODE", "INVALID_CHANNEL", "INVALID_ASSIGNMENT_SOURCE"])
   check(`C-7v ${e}`, sa.includes(`'${e}'`));
 check("C-7.3 ends open assignment constraint-safe", sa.includes("SET status = 'ended'") && sa.includes("GREATEST(a.starts_at,"));
@@ -189,7 +189,7 @@ check("C-7.5 grants", /REVOKE ALL ON FUNCTION public\.set_workspace_commercial_a
   /GRANT EXECUTE ON FUNCTION public\.set_workspace_commercial_assignment\([^)]*\) TO authenticated, service_role, postgres;/.test(norm));
 
 /* 8. isolation / hygiene */
-check("C-8.1 no email literal", !/[A-Za-z0-9._%+-]+[A-Za-z0-9.-]+\.[a-z]{2,}/.test(raw));
+check("C-8.1 no email literal", !/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}/.test(raw));
 check("C-8.2 no stripe calls/imports", !/stripe\.|import .*stripe|stripe_customer|stripe_subscription|http_post|net\.http/i.test(sql));
 check("C-8.3 no PCART/chain/liquidity", !/pcart|launch_chain|liquidity|treasury|wallet|safe_|mainnet|token_deploy/i.test(sql));
 check("C-8.4 no partner payout/tax/white-label", !/payout|commission|tax|white_label|whitelabel/i.test(sql));

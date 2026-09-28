@@ -102,7 +102,7 @@ check("B-5.1 unrestricted bypass FIRST", iBypass > 0 && iBypass < iMember && iMe
 check("B-5.2 no-assignment => virtual cartel_free enforce", evalFn.includes("SELECT 'active'::text AS status, 'enforce'::text AS enforcement_mode"));
 check("B-5.3 missing Free => NO_COMMERCIAL_PLAN deny", evalFn.includes("'reason', 'NO_COMMERCIAL_PLAN', 'mode', 'enforce', 'would_block', true"));
 check("B-5.4 no observe-allow for unassigned", !evalFn.includes("'reason', 'NO_PLAN_ASSIGNED', 'mode', 'observe'"));
-check("B-5.5 no email authority", !/[a-z0-9-]+\.[a-z]{2,}/i.test(raw) && !/auth\.users[\s\S]{0,80}email/i.test(raw));
+check("B-5.5 no email authority", !/@[a-z0-9-]+\.[a-z]{2,}/i.test(raw) && !/auth\.users[\s\S]{0,80}email/i.test(raw));
 
 /* 6. workspace trigger + backfill */
 const hnw = norm(fnBody(raw, "handle_new_workspace"));
@@ -131,7 +131,7 @@ check("B-8.9 billing status not anon", sql.includes("REVOKE ALL ON FUNCTION publ
 
 /* 9. shared helper + deploy source */
 const helper = read(`${EF}/_shared/stripe-billing.ts`);
-check("B-9.1 pinned official Stripe SDK", helper.includes('import Stripe from "npm:stripe17.7.0";'));
+check("B-9.1 pinned official Stripe SDK", helper.includes('import Stripe from "npm:stripe@17.7.0";'));
 check("B-9.2 env derived from key prefix, else fail closed", helper.includes('key.startsWith("sk_test_") || key.startsWith("rk_test_")') && helper.includes('key.startsWith("sk_live_") || key.startsWith("rk_live_")') && helper.includes('return { ok: false, code: "BILLING_NOT_CONFIGURED" }'));
 check("B-9.3 app=cartel_hq, cartel_49 v1", helper.includes('CARTEL_APP = "cartel_hq"') && helper.includes('PRO_PLAN_CODE = "cartel_49"') && helper.includes("PRO_PLAN_VERSION = 1"));
 check("B-9.4 base URL from CARTEL_HQ_PUBLIC_BASE_URL https only", helper.includes('Deno.env.get("CARTEL_HQ_PUBLIC_BASE_URL")') && helper.includes('u.protocol !== "https:"'));
