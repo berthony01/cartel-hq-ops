@@ -2,13 +2,14 @@ import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useSession } from "@/hooks/useSession";
 import { useWorkspace } from "@/lib/workspace-context";
-import { bindReferralToWorkspace, claimStoredReferral } from "@/lib/partners";
+import { bindReferralToWorkspace, claimStoredReferralToken } from "@/lib/partners";
 
 /**
- * Invisible. Claims a locally stored referral code once per signed-in user,
- * then asks the database to bind the referral to the active workspace only
- * when the current user owns it. The database is the security boundary; this
- * never grants workspace permissions or memberships.
+ * Invisible. Atomically claims a locally stored server-issued referral token
+ * once per signed-in user (covers email-confirmation callback and later
+ * sign-in on the same browser), then asks the database to bind the referral
+ * to the active workspace only when the current user owns it. The database is
+ * the security boundary; this never grants workspace permissions/memberships.
  */
 export function ReferralAttributionBridge() {
   const { user } = useSession();
@@ -23,7 +24,7 @@ export function ReferralAttributionBridge() {
     (async () => {
       if (claimedFor.current !== userId) {
         claimedFor.current = userId;
-        await claimStoredReferral();
+        await claimStoredReferralToken();
       }
       if (cancelled || !workspace || workspace.owner_id !== userId) return;
       const key = `${userId}:${workspace.id}`;
