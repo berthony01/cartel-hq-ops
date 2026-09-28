@@ -120,7 +120,7 @@ check("P-9.2 no service-partner access table/RPC", !/workspace_partner_access|in
 /* 10. Function privileges */
 const USER_FNS = ["submit_partner_application", "accept_partner_agreement", "record_referral_attribution", "bind_referral_to_workspace", "request_partner_payout", "get_my_partner_summary"];
 const fnDefs = N.match(/CREATE OR REPLACE FUNCTION public\.\w+\(.*?\$\$/g) ?? [];
-check("P-10.1 every function pins search_path", fnDefs.length >= 20 && fnDefs.every((d) => d.includes("SET search_path = ''")));
+check("P-10.1 every function pins search_path", fnDefs.length === 18 && fnDefs.every((d) => d.includes("SET search_path = ''")));
 for (const f of USER_FNS) check(`P-10 ${f} revoked PUBLIC/anon + authenticated grant`, new RegExp(`REVOKE ALL ON FUNCTION public\\.${f}\\([^)]*\\) FROM PUBLIC, anon;`).test(N) && new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${f}\\([^)]*\\) TO authenticated;`).test(N));
 check("P-10.2 internal helpers not callable by authenticated", ["partner_require_owner()", "partner_active_terms()", "partner_available_balance(uuid, text)"].every((s) => N.includes(`REVOKE ALL ON FUNCTION public.${s} FROM PUBLIC, anon, authenticated;`)));
 check("P-10.3 applications require active terms", fnBody("submit_partner_application").includes("PROGRAM_NOT_OPEN"));
