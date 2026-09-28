@@ -21,6 +21,9 @@ import {
   formatMoney,
   partnerErrorMessage,
   partnerKeys,
+  DRAFT_ECONOMICS,
+  LEDGER_ENTRY_LABELS,
+  ledgerBreakdown,
   requestPartnerPayout,
   submitPartnerApplication,
   type PartnerTerms,
@@ -51,15 +54,38 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
+function DraftEconomicsPanel() {
+  const d = DRAFT_ECONOMICS;
+  return (
+    <Section title="Draft economics · not effective" leading={<Info className="size-4" aria-hidden="true" />}
+      actions={<StatusBadge tone="muted">Draft</StatusBadge>}
+      description="Proposed terms under review. Nothing is earned or payable until the platform owner activates a terms version.">
+      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <Stat label="Commission" value={d.commissionLabel} />
+        <Stat label="Duration" value={d.durationLabel} />
+        <Stat label="Attribution" value={d.attributionLabel} />
+        <Stat label="Hold" value={d.holdLabel} />
+        <Stat label="Minimum payout" value={d.minimumLabel} />
+        <Stat label="Currency" value={d.currencyLabel} />
+        <Stat label="Payout" value={d.payoutLabel} />
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">Applies only to eligible collected subscription revenue. Tax, discounts, credits, refunds, disputes, setup and service fees are excluded.</p>
+    </Section>
+  );
+}
+
 function TermsPanel({ terms }: { terms: PartnerTerms }) {
+  const duration = (terms as PartnerTerms & { commission_duration_invoices?: number | null }).commission_duration_invoices;
   return (
     <Section title={`Active terms · v${terms.version}`} leading={<Info className="size-4" aria-hidden="true" />}>
-      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <Stat label="Commission" value={formatBps(terms.commission_bps)} />
+        <Stat label="Duration" value={typeof duration === "number" ? `First ${duration} paid invoices` : "—"} />
         <Stat label="Attribution" value={formatDays(terms.attribution_window_days)} />
         <Stat label="Hold" value={formatDays(terms.hold_days)} />
         <Stat label="Minimum payout" value={formatMoney(terms.min_payout_cents, terms.currency)} />
         <Stat label="Currency" value={terms.currency ? terms.currency.toUpperCase() : "—"} />
+        <Stat label="Payout" value="Monthly, manual" />
       </div>
       {terms.agreement_text ? (
         <div className="mt-4">
@@ -123,6 +149,8 @@ function PartnersPage() {
   const accepted = s?.agreement_accepted === true;
   const payoutCents = Math.round(Number(payoutAmount) * 100);
   const canRequestPayout = isAffiliate && approved && partner?.tax_doc_status === "verified" && accepted && programOpen;
+  const reservedCents = (data?.payouts ?? []).filter((p) => p.status === "requested" || p.status === "approved").reduce((t, p) => t + p.amount_cents, 0);
+  const bd = ledgerBreakdown(data?.ledger ?? [], reservedCents);
   const referralLink = partner?.referral_code && typeof window !== "undefined"
     ? `${window.location.origin}/auth?mode=signup&ref=${partner.referral_code}` : null;
 
@@ -136,8 +164,8 @@ function PartnersPage() {
       />
 
       <div role="note" className="rounded-md border border-gold/35 bg-gold/5 px-4 py-3 text-xs leading-relaxed text-foreground sm:text-sm">
-        Automated Stripe commission accrual and refund ingestion is Phase 1B and is not enabled yet.
-        In Phase 1A, ledger adjustments and payouts are owner-reviewed and manual. No commission is shown
+        Automated Stripe commission accrual, refund and dispute handling is staged and not active yet.
+        Until it is enabled, ledger adjustments and payouts are owner-reviewed and manual. No commission is shown
         unless a ledger entry exists.
       </div>
 
@@ -148,7 +176,10 @@ function PartnersPage() {
       ) : (
         <>
           {!programOpen ? (
-            <Section variant="primary" title="Applications are not open" description="There are no active program terms yet, so new applications cannot be submitted. Existing partners can still review their status and history below." />
+            <>
+              <DraftEconomicsPanel />
+              <Section variant="primary" title="Applications are not open" description="There are no active program terms yet, so new applications cannot be submitted. Existing partners can still review their status and history below." />
+            </>
           ) : (
             <TermsPanel terms={activeTerms} />
           )}
@@ -214,6 +245,7 @@ function PartnersPage() {
                         <Button type="button" variant="outline" className="min-h-11" onClick={() => { void navigator.clipboard?.writeText(referralLink); toast.success("Link copied"); }}>Copy</Button>
                       </div>
                     ) : null}
+                    <p className="mt-2 text-xs text-muted-foreground">Share the code-based link. Visitors receive a short-lived server-issued token; no code or timestamp is trusted from the browser. Referral link capture is staged and not active in this preview.</p>
                   </div>
                 ) : null}
                 {programOpen && !accepted ? (
@@ -223,14 +255,28 @@ function PartnersPage() {
                 ) : null}
               </Section>
 
+              {!isAffiliate ? (
+                <Section variant="quiet" title="No Cartel commission"
+                  description="Service Partner only: you earn no CARTEL HQ commission. You bill your own clients separately for setup/management, and they pay CARTEL HQ directly. Commission requires separate approval as an Affiliate." />
+              ) : null}
+
               <Section title="Balances">
-                <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
-                  <Stat label="Available" value={formatMoney(s?.available_cents ?? 0, currency)} />
-                  <Stat label="Pending" value={formatMoney(s?.pending_cents ?? 0, currency)} />
-                  <Stat label="Reserved" value={formatMoney(s?.reserved_cents ?? 0, currency)} />
-                  <Stat label="YTD earned" value={formatMoney(s?.ytd_earned_cents ?? 0, currency)} />
-                  <Stat label="YTD paid" value={formatMoney(s?.ytd_paid_cents ?? 0, currency)} />
+                <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  <Stat label="Held (in hold period)" value={formatMoney(bd.held, currency)} />
+                  <Stat label="Available" value={formatMoney(bd.available, currency)} />
+                  <Stat label="Paid" value={formatMoney(bd.paid, currency)} />
+                  <Stat label="Reversed" value={formatMoney(bd.reversed, currency)} />
+                  <Stat label="Restored" value={formatMoney(bd.restored, currency)} />
+                  <Stat label="Reserved for requests" value={formatMoney(bd.reservedForPayouts, currency)} />
+                  <Stat label="Net payable" value={formatMoney(bd.netPayable, currency)} />
+                  <Stat label="Server available" value={formatMoney(s?.available_cents ?? 0, currency)} />
                 </div>
+                <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                  Balances above are shown from your ledger for transparency; the server validates every payout request.
+                  If refunds or disputes reverse commission already paid, the available balance can go negative. A negative
+                  balance is carried forward and offset against future commission; nothing is deleted.
+                  {bd.carryForward < 0 ? ` Current carry-forward: ${formatMoney(bd.carryForward, currency)}.` : ""}
+                </p>
                 {canRequestPayout ? (
                   <form className="mt-4 flex min-w-0 flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); if (payoutCents > 0) payout.mutate(payoutCents); }}>
                     <div className="min-w-0">
@@ -249,7 +295,11 @@ function PartnersPage() {
                   <ul className="divide-y divide-border-subtle text-sm">
                     {data.ledger.map((l) => (
                       <li key={l.id} className="flex min-w-0 flex-wrap justify-between gap-2 py-2">
-                        <span className={WRAP}>{l.entry_type} · {formatDate(l.created_at)}{l.note ? ` · ${l.note}` : ""}</span>
+                        <span className={WRAP}>
+                          {LEDGER_ENTRY_LABELS[l.entry_type] ?? l.entry_type} · {formatDate(l.created_at)}
+                          {l.amount_cents > 0 && new Date(l.available_at).getTime() > Date.now() ? ` · held until ${formatDate(l.available_at)}` : ""}
+                          {l.terms_version ? ` · terms v${l.terms_version}` : ""}
+                        </span>
                         <span className="font-mono">{formatMoney(l.amount_cents, l.currency)}</span>
                       </li>
                     ))}

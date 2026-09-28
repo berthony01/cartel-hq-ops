@@ -10,6 +10,16 @@ import {
   stripeCryptoProvider,
   type Stripe,
 } from "../_shared/stripe-billing.ts";
+import {
+  eligibleBaseCents,
+  invoiceSubscriptionRef,
+  isDisputeStatus,
+  isMissingContract,
+  isRefundStatus,
+  refOf,
+  routeEvent,
+  tsOrNull,
+} from "./commission.ts";
 
 /**
  * CARTEL HQ stripe-billing-webhook (verify_jwt=false).
@@ -22,6 +32,16 @@ import {
  *  - Stripe's current subscription object (retrieved) is the source of truth;
  *    the checkout success URL never grants anything.
  *  - Idempotent via commercial_billing_events. No raw payload is stored.
+ *
+ * Stage 1B-4 (source only, NOT deployed): partner commission ingestion.
+ *  - invoice.paid: entitlement apply first (unchanged), then eligible base from the
+ *    Stripe-retrieved invoice -> partner_ingest_invoice_paid.
+ *  - refund.* / charge.dispute.*: current refund/dispute retrieved, resolved through
+ *    charge -> invoice -> subscription, Cartel-validated, then the state RPC.
+ *  - checkout.session.completed NEVER creates a commission.
+ *  - Accounting failures return 500 so Stripe retries; the entitlement re-apply on
+ *    retry is idempotent state sync (never a double grant). An unapplied staged
+ *    contract (function missing) is recorded and never blocks billing.
  */
 
 const RELEVANT_EVENTS = new Set([
@@ -34,6 +54,12 @@ const RELEVANT_EVENTS = new Set([
   "invoice.paid",
   "invoice.payment_failed",
   "invoice.payment_action_required",
+  "refund.created",
+  "refund.updated",
+  "refund.failed",
+  "charge.dispute.created",
+  "charge.dispute.updated",
+  "charge.dispute.closed",
 ]);
 
 const PAYMENT_FAILURE_EVENTS = new Set(["invoice.payment_failed", "invoice.payment_action_required"]);
@@ -42,16 +68,6 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 function text(body: string, status: number) {
   return new Response(body, { status, headers: { "Content-Type": "text/plain" } });
-}
-
-function refOf(value: unknown): string | null {
-  if (typeof value === "string" && value) return value;
-  if (value && typeof value === "object" && typeof (value as { id?: unknown }).id === "string") return (value as { id: string }).id;
-  return null;
-}
-
-function tsOrNull(value: unknown): string | null {
-  return typeof value === "number" && Number.isFinite(value) ? new Date(value * 1000).toISOString() : null;
 }
 
 Deno.serve(async (req: Request) => {
@@ -83,11 +99,17 @@ Deno.serve(async (req: Request) => {
   }
   if (!event || !stripe || !environment) return text("invalid signature", 400);
   if (!RELEVANT_EVENTS.has(event.type)) return text("ignored", 200);
+  const route = routeEvent(event.type);
+  if (route === "ignore") return text("ignored", 200);
 
   // deno-lint-ignore no-explicit-any
   const obj = event.data.object as any;
   let subscriptionRef: string | null = null;
   let sessionWorkspace: string | null = null;
+  // Refund/dispute context, resolved from CURRENT Stripe objects (never event metadata alone).
+  // deno-lint-ignore no-explicit-any
+  let money: { kind: "refund" | "dispute"; ref: string; status: string; amount: number; currency: string; chargeRef: string; invoice: any } | null = null;
+
   if (event.type === "checkout.session.completed") {
     // Shared-account filter first; non-Cartel sessions are never touched.
     if (!isCartelMetadata(obj?.metadata) || obj?.mode !== "subscription") return text("ignored", 200);
@@ -95,6 +117,38 @@ Deno.serve(async (req: Request) => {
     sessionWorkspace = typeof obj.metadata?.workspace_id === "string" ? obj.metadata.workspace_id : null;
   } else if (event.type.startsWith("customer.subscription.")) {
     subscriptionRef = refOf(obj?.id);
+  } else if (route === "refund" || route === "dispute") {
+    const objRef = refOf(obj?.id);
+    if (!objRef) return text("ignored", 200);
+    try {
+      // deno-lint-ignore no-explicit-any
+      const current: any = route === "refund" ? await stripe.refunds.retrieve(objRef) : await stripe.disputes.retrieve(objRef);
+      let chargeRef = refOf(current?.charge);
+      if (!chargeRef && refOf(current?.payment_intent)) {
+        // deno-lint-ignore no-explicit-any
+        const pi: any = await stripe.paymentIntents.retrieve(refOf(current.payment_intent)!);
+        chargeRef = refOf(pi?.latest_charge);
+      }
+      if (!chargeRef) return text("ignored", 200);
+      // deno-lint-ignore no-explicit-any
+      const charge: any = await stripe.charges.retrieve(chargeRef);
+      const invoiceRef = refOf(charge?.invoice);
+      if (!invoiceRef) return text("ignored", 200); // not an invoice charge: unrelated
+      // deno-lint-ignore no-explicit-any
+      const invoice: any = await stripe.invoices.retrieve(invoiceRef);
+      subscriptionRef = invoiceSubscriptionRef(invoice);
+      money = {
+        kind: route,
+        ref: objRef,
+        status: String(current?.status ?? ""),
+        amount: typeof current?.amount === "number" ? current.amount : 0,
+        currency: String(current?.currency ?? "").toLowerCase(),
+        chargeRef,
+        invoice,
+      };
+    } catch {
+      return text("object lookup failed", 502);
+    }
   } else {
     subscriptionRef = refOf(obj?.subscription) ?? refOf(obj?.parent?.subscription_details?.subscription);
   }
@@ -179,6 +233,41 @@ Deno.serve(async (req: Request) => {
     return text("ignored", 200);
   }
 
+  // Refund / dispute: accounting only (no entitlement change).
+  if (money) {
+    const inv = money.invoice;
+    if (
+      inv?.livemode !== event.livemode || invoiceSubscriptionRef(inv) !== sub.id ||
+      String(inv?.currency ?? "").toLowerCase() !== money.currency || !(money.amount > 0) ||
+      (money.kind === "refund" ? !isRefundStatus(money.status) : !isDisputeStatus(money.status))
+    ) {
+      await finish("ignored", "COMMISSION_OBJECT_MISMATCH");
+      return text("ignored", 200);
+    }
+    const args = {
+      _environment: environment,
+      _event_ref: event.id,
+      _event_created: tsOrNull(event.created),
+      _invoice_ref: refOf(inv.id),
+      _charge_ref: money.chargeRef,
+      _amount_cents: money.amount,
+      _status: money.status,
+    };
+    const { error: accErr } = money.kind === "refund"
+      ? await admin.rpc("partner_ingest_refund_state", { ...args, _refund_ref: money.ref })
+      : await admin.rpc("partner_ingest_dispute_state", { ...args, _dispute_ref: money.ref });
+    if (accErr) {
+      if (isMissingContract(accErr)) {
+        await finish("processed", "COMMISSION_CONTRACT_UNAVAILABLE");
+        return text("ok", 200);
+      }
+      await finish("failed", "COMMISSION_FAILED");
+      return text("processing failed", 500);
+    }
+    await finish("processed", null);
+    return text("ok", 200);
+  }
+
   // deno-lint-ignore no-explicit-any
   const s = sub as any;
   const currentPeriodEnd = s.current_period_end ?? items[0]?.current_period_end;
@@ -207,6 +296,53 @@ Deno.serve(async (req: Request) => {
     await finish("failed", String(applyErr.message ?? "APPLY_FAILED").slice(0, 200));
     return text("processing failed", 500);
   }
+
+  // Commission: invoice.paid ONLY (never checkout.session.completed), after entitlement apply.
+  if (route === "invoice_paid") {
+    const invoiceRef = refOf(obj?.id);
+    // deno-lint-ignore no-explicit-any
+    let inv: any = null;
+    try {
+      inv = invoiceRef ? await stripe.invoices.retrieve(invoiceRef) : null;
+    } catch {
+      await finish("failed", "INVOICE_LOOKUP_FAILED");
+      return text("processing failed", 500);
+    }
+    const paidAt = tsOrNull(inv?.status_transitions?.paid_at);
+    if (
+      !inv || inv.status !== "paid" || inv.livemode !== event.livemode ||
+      invoiceSubscriptionRef(inv) !== sub.id || !paidAt || typeof inv.currency !== "string"
+    ) {
+      await finish("processed", "COMMISSION_INVOICE_INELIGIBLE");
+      return text("ok", 200);
+    }
+    const eligible = eligibleBaseCents(inv, priceRef);
+    const { error: accErr } = await admin.rpc("partner_ingest_invoice_paid", {
+      _environment: environment,
+      _event_ref: event.id,
+      _event_created: tsOrNull(event.created),
+      _invoice_ref: inv.id,
+      _charge_ref: refOf(inv.charge),
+      _subscription_ref: sub.id,
+      _price_ref: priceRef,
+      _workspace_id: workspaceId,
+      _currency: inv.currency.toLowerCase(),
+      _amount_paid_cents: eligible.amountPaid,
+      _eligible_base_cents: eligible.base,
+      _paid_at: paidAt,
+    });
+    if (accErr) {
+      if (isMissingContract(accErr)) {
+        await finish("processed", "COMMISSION_CONTRACT_UNAVAILABLE");
+        return text("ok", 200);
+      }
+      // Retry: entitlement re-apply on retry is idempotent state sync; the RPC is
+      // event- and invoice-idempotent, so no double grant or double accrual.
+      await finish("failed", "COMMISSION_FAILED");
+      return text("processing failed", 500);
+    }
+  }
+
   await finish("processed", null);
   return text("ok", 200);
 });

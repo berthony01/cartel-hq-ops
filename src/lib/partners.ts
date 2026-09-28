@@ -139,9 +139,17 @@ export type TermsDraftInput = {
   currency: string;
   agreementText: string;
   disclosureText: string;
+  commissionDurationInvoices: number;
 };
+export const COMMISSION_CONTRACT_UNAVAILABLE = "COMMISSION_CONTRACT_UNAVAILABLE";
+/**
+ * Stage 1B-3 staged 9-argument draft save (commission_duration_invoices).
+ * Untyped until the staged SQL is applied and types regenerate. Fails closed:
+ * if the staged contract is missing, nothing is written and a clear error is shown.
+ */
 export async function ownerSaveTermsDraft(t: TermsDraftInput) {
-  return unwrap(await supabase.rpc("owner_save_partner_terms_draft", {
+  const rpc = supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string; code?: string } | null }>;
+  const res = await rpc("owner_save_partner_terms_draft", {
     _version: t.version,
     _commission_bps: t.commissionBps,
     _attribution_window_days: t.attributionWindowDays,
@@ -150,7 +158,12 @@ export async function ownerSaveTermsDraft(t: TermsDraftInput) {
     _currency: t.currency,
     _agreement_text: t.agreementText,
     _disclosure_text: t.disclosureText,
-  }));
+    _commission_duration_invoices: t.commissionDurationInvoices,
+  });
+  if (res.error && (res.error.code === "PGRST202" || /Could not find the function/i.test(res.error.message))) {
+    throw new Error(COMMISSION_CONTRACT_UNAVAILABLE);
+  }
+  return unwrap(res);
 }
 export async function ownerActivateTerms(version: number) {
   return unwrap(await supabase.rpc("owner_activate_partner_terms", { _version: version }));
@@ -357,9 +370,75 @@ export function partnerErrorMessage(err: unknown): string {
     BELOW_MINIMUM: "Amount is below the minimum payout.",
     INSUFFICIENT_AVAILABLE_BALANCE: "Amount exceeds your available balance.",
     PARTNER_TERMS_INCOMPLETE: "All terms fields are required before activation.",
+    PARTNER_TERMS_PLACEHOLDERS_REMAIN: "Legal placeholders remain in the agreement. Activation is blocked.",
     PAID_REFERENCE_REQUIRED: "External payment reference is required.",
     REASON_REQUIRED: "A reason is required.",
+    [COMMISSION_CONTRACT_UNAVAILABLE]: "Commission terms contract is staged and not applied yet.",
   };
   for (const [k, v] of Object.entries(map)) if (msg.includes(k)) return v;
   return msg || "Request failed.";
 }
+
+/* ---------------- Stage 1B-4: draft economics, balances, confirmations ---------------- */
+/**
+ * Draft economics shown ONLY while no active terms exist. Display-only copy;
+ * never sent to the database and never used to compute any amount.
+ */
+export const DRAFT_ECONOMICS = {
+  commissionLabel: "20%",
+  durationLabel: "First 12 paid monthly invoices",
+  attributionLabel: "30 days",
+  holdLabel: "45 days",
+  minimumLabel: "$50",
+  currencyLabel: "USD (US dollars)",
+  payoutLabel: "Monthly, manual",
+} as const;
+
+export const LEDGER_ENTRY_LABELS: Record<string, string> = {
+  accrual: "Commission accrued",
+  reversal: "Reversed (refund/dispute)",
+  restoration: "Restored (refund failed / dispute won)",
+  adjustment: "Owner adjustment",
+  payout: "Paid out",
+};
+
+export type LedgerBreakdown = {
+  held: number; available: number; accrued: number; reversed: number; restored: number;
+  adjustments: number; paid: number; net: number; reservedForPayouts: number; netPayable: number; carryForward: number;
+};
+
+/**
+ * Display-only mirror of the staged partner_balance_breakdown SQL, computed
+ * from the caller's own RLS-scoped ledger rows. Never authoritative: payout
+ * requests are validated by the database.
+ */
+export function ledgerBreakdown(
+  entries: Array<Pick<PartnerLedgerEntry, "entry_type" | "amount_cents" | "available_at">>,
+  reservedPayoutCents: number,
+  now: number = Date.now(),
+): LedgerBreakdown {
+  const b: LedgerBreakdown = { held: 0, available: 0, accrued: 0, reversed: 0, restored: 0, adjustments: 0, paid: 0, net: 0, reservedForPayouts: reservedPayoutCents, netPayable: 0, carryForward: 0 };
+  for (const e of entries) {
+    const a = e.amount_cents;
+    const matured = new Date(e.available_at).getTime() <= now;
+    if (a > 0 && !matured) b.held += a;
+    if (matured || a < 0) b.available += a;
+    if (e.entry_type === "accrual") b.accrued += a;
+    if (e.entry_type === "reversal") b.reversed -= a;
+    if (e.entry_type === "restoration") b.restored += a;
+    if (e.entry_type === "adjustment") b.adjustments += a;
+    if (e.entry_type === "payout") b.paid -= a;
+    b.net += a;
+  }
+  b.netPayable = b.available - reservedPayoutCents;
+  b.carryForward = Math.min(b.available, 0);
+  return b;
+}
+
+/** Exact, case-sensitive typed confirmation (trimmed). */
+export function typedConfirmationMatches(input: string, expected: string): boolean {
+  return expected.length > 0 && input.trim() === expected;
+}
+export const activationPhrase = (version: number) => `ACTIVATE TERMS V${version}`;
+export const markPaidPhrase = (reference: string) => `MARK PAID ${reference.trim()}`;
+
