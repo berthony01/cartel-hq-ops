@@ -8,6 +8,8 @@ import { CartelMark, SidebarNav } from "@/components/cartel/SidebarNav";
 import { WorkspaceSwitcher } from "@/components/cartel/WorkspaceSwitcher";
 import { UserMenu } from "@/components/cartel/UserMenu";
 import { MobileTabBar } from "@/components/cartel/MobileTabBar";
+import { LegalFooter } from "@/components/cartel/LegalFooter";
+import { PolicyAcceptancePrompt } from "@/components/cartel/PolicyAcceptancePrompt";
 
 function TopBar({ onOpenMobileNav, dashboard }: { onOpenMobileNav: () => void; dashboard: boolean }) {
   return (
@@ -97,7 +99,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="lg:pl-64">
         <TopBar dashboard={dashboard} onOpenMobileNav={() => setMobileOpen(true)} />
         <main className="app-gutter app-scroll-pad mx-auto w-full max-w-7xl py-6 lg:py-9">
+          <PolicyAcceptancePrompt />
           {gated ? <ProjectIdentityGate>{children}</ProjectIdentityGate> : children}
+          <footer className="mt-12 border-t border-border-subtle pt-4">
+            <LegalFooter />
+          </footer>
         </main>
       </div>
 

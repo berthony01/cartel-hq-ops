@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { LegalFooter } from "@/components/cartel/LegalFooter";
 
 /**
  * PUBLIC landing page. Deliberately free of Supabase, workspace, and session
@@ -375,6 +376,7 @@ function LandingPage() {
         <p className="text-center text-[11px] text-muted-foreground/80">
           CARTEL HQ — launch command center for crypto project teams.
         </p>
+        <LegalFooter className="mt-2" />
       </footer>
     </div>
   );

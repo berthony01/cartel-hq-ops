@@ -8,6 +8,8 @@ import { Link } from "@tanstack/react-router";
 import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { Button } from "@/components/ui/button";
+import { PolicyConsent } from "@/components/cartel/PolicyConsent";
+import { fetchActivePolicies, recordAcceptances } from "@/lib/policy-acceptance";
 
 /**
  * Billing section. Display only: the plan shown here comes from
@@ -53,6 +55,7 @@ export function BillingSection() {
   const [busy, setBusy] = useState<"upgrade" | "manage" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<"success" | "cancelled" | null>(null);
+  const [checkoutConsent, setCheckoutConsent] = useState(false);
 
   const statusQuery = useQuery({
     queryKey: ["workspace-billing-status", workspaceId],
@@ -116,6 +119,21 @@ export function BillingSection() {
     } finally {
       setBusy(null);
     }
+  }
+
+  // Unchecked consent blocks checkout. If effective policy versions exist,
+  // acceptance must be recorded first (fail closed); with none active
+  // (current state) nothing is recorded.
+  async function startCheckout() {
+    if (!checkoutConsent) return;
+    setActionError(null);
+    try {
+      await recordAcceptances(await fetchActivePolicies(), "checkout");
+    } catch {
+      setActionError("Could not record your acceptance of the current terms. Try again.");
+      return;
+    }
+    await invoke("billing-checkout");
   }
 
   const s = statusQuery.data;
@@ -217,10 +235,13 @@ export function BillingSection() {
                   </div>
                 )}
                 {s.can_upgrade && identityReady && (
-                  <Button onClick={() => invoke("billing-checkout")} disabled={busy !== null}>
-                    {busy === "upgrade" && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
-                    Upgrade to Pro — $49/month
-                  </Button>
+                  <div className="w-full space-y-2">
+                    <PolicyConsent variant="checkout" checked={checkoutConsent} onChange={setCheckoutConsent} />
+                    <Button onClick={startCheckout} disabled={busy !== null || !checkoutConsent}>
+                      {busy === "upgrade" && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+                      Upgrade to Pro — $49/month
+                    </Button>
+                  </div>
                 )}
                 {s.can_manage_billing && (
                   <Button variant="outline" onClick={() => invoke("billing-portal")} disabled={busy !== null}>
