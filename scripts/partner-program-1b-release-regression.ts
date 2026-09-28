@@ -22,7 +22,7 @@ for (const [gate, status] of [
   ["Attorney review: Terms, Privacy, Refund Policy, Partner Agreement, disclaimers", "NOT OBTAINED"],
   ["CPA review: Texas sales-tax treatment and Stripe Tax decision", "PENDING"],
   ["Privacy / subprocessor / data-transfer review", "NOT OBTAINED"],
-] as const) check(`R-3 gate status: ${gate}`, CL.split("\n").some((line) => line.includes(`| ${gate} | ${status} |`)));
+] as const) check(`R-3 gate status: ${gate}`, CL.split("\n").some((line) => line.includes(`| ${gate} | ${status}`)));
 check("R-3a mailing-address operational restriction", CL.includes("promotional email campaigns remain blocked until a valid physical postal address exists"));
 check("R-3b selected emails remain DNS-pending", CL.includes("support@pepecartelhq.com") && CL.includes("legal@pepecartelhq.com") && CL.includes("inbound MX not verified"));
 check("R-4 non-waivable note", CL.includes("does **not** remove non-waivable"));
