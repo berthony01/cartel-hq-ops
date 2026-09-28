@@ -179,7 +179,7 @@ function PartnerAdminInner() {
           <Field label="Agreement"><Textarea rows={3} value={val("agreement")} onChange={set("agreement")} /></Field>
           <Field label="Disclosure"><Textarea rows={2} value={val("disclosure")} onChange={set("disclosure")} /></Field>
           <div className="flex flex-wrap gap-2">
-            <Button className="min-h-11" variant="outline" disabled={saveDraft.isPending || !!(active && !draft && false)} onClick={() => saveDraft.mutate(undefined)}>Save draft v{nextVersion}</Button>
+            <Button className="min-h-11" variant="outline" disabled={saveDraft.isPending} onClick={() => saveDraft.mutate(undefined)}>Save draft v{nextVersion}</Button>
             {draft ? (
               <Confirm trigger={<Button className="min-h-11" disabled={activate.isPending || !termsComplete || Object.keys(f).length > 0}>Activate v{draft.version}</Button>}
                 title={`Activate terms v${draft.version}?`}
