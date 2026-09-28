@@ -41,11 +41,12 @@ check("W-9 refund/dispute never touch entitlement", WH.indexOf("if (money) {") <
 check("W-10 accounting failure -> 500 retry", (WH.match(/finish\("failed", "COMMISSION_FAILED"\);\s*return text\("processing failed", 500\);/g) ?? []).length === 2);
 // Missing-contract (PGRST202/42883/schema-cache) must NEVER be treated as success:
 // no special-case, no processed/200 path — the event is marked failed and Stripe retries.
+const accErrBlocks = WH.match(/if \(accErr\) \{[\s\S]*?\n    \}/g) ?? [];
 check("W-11 missing contract is retryable failure, never processed/200",
   !/isMissingContract|COMMISSION_CONTRACT_UNAVAILABLE/.test(WH) &&
   !/Could not find the function|PGRST202|42883/.test(WH + CM) &&
-  (WH.match(/if \(accErr\) \{/g) ?? []).length === 2 &&
-  !/accErr[\s\S]{0,200}finish\("processed"/.test(WH));
+  accErrBlocks.length === 2 &&
+  accErrBlocks.every((b) => b.includes('finish("failed", "COMMISSION_FAILED")') && b.includes('return text("processing failed", 500)') && !/processed|200/.test(b)));
 check("W-12 idempotency claim/reclaim preserved", WH.includes('return text("duplicate", 200)') && WH.includes('return text("in progress", 409)') && WH.includes("STALE_PROCESSING_MS"));
 check("W-13 invoice must be paid, same subscription, same mode", WH.includes('inv.status !== "paid"') && WH.includes("invoiceSubscriptionRef(inv) !== sub.id") && WH.includes("inv.livemode !== event.livemode"));
 check("W-14 refund/dispute currency + status validation", WH.includes("COMMISSION_OBJECT_MISMATCH") && WH.includes("isRefundStatus(money.status)") && WH.includes("isDisputeStatus(money.status)"));
