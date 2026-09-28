@@ -29,6 +29,9 @@ const POST_GATE = [
   "20260927171231_commercial_c2_self_service_workspace.sql",
   "20260927173127_commercial_c3a_usage_free_record_fix.sql",
   "20260928110628_b2fff4d6-4c76-4505-8980-6e527123a82b.sql",
+  "20260928170228_partner_program_phase_1a_foundation.sql",
+  "20260928170613_partner_program_phase_1a_rls_fk_hardening.sql",
+  "20260928170917_partner_program_phase_1a_new_workspace_attribution.sql",
 ];
 
 let passed = 0;
@@ -54,9 +57,9 @@ function fnBody(sql: string, name: string): string {
 
 /* 1. migrations */
 const migrations = readdirSync(MIG).filter((f) => f.endsWith(".sql")).sort();
-check("B-1.1 migration count exactly 97", migrations.length === 97, String(migrations.length));
-check("B-1.2 exact thirteen post-gate migrations", JSON.stringify(migrations.filter((f) => f >= "20260922")) === JSON.stringify(POST_GATE));
-check("B-1.3 billing migration immediately precedes least-privilege; authorized later migrations follow", migrations[migrations.length - 7] === BILLING_MIGRATION && migrations[migrations.length - 6] === POST_GATE[7] && migrations[migrations.length - 1] === POST_GATE[12]);
+check("B-1.1 migration count exactly 100", migrations.length === 100, String(migrations.length));
+check("B-1.2 exact sixteen post-gate migrations", JSON.stringify(migrations.filter((f) => f >= "20260922")) === JSON.stringify(POST_GATE));
+check("B-1.3 billing migration immediately precedes least-privilege; authorized later migrations follow", migrations[migrations.length - 10] === BILLING_MIGRATION && migrations[migrations.length - 9] === POST_GATE[7] && migrations[migrations.length - 1] === POST_GATE[15]);
 const raw = read(`${MIG}/${BILLING_MIGRATION}`);
 const sql = norm(raw);
 
@@ -99,7 +102,7 @@ check("B-5.1 unrestricted bypass FIRST", iBypass > 0 && iBypass < iMember && iMe
 check("B-5.2 no-assignment => virtual cartel_free enforce", evalFn.includes("SELECT 'active'::text AS status, 'enforce'::text AS enforcement_mode"));
 check("B-5.3 missing Free => NO_COMMERCIAL_PLAN deny", evalFn.includes("'reason', 'NO_COMMERCIAL_PLAN', 'mode', 'enforce', 'would_block', true"));
 check("B-5.4 no observe-allow for unassigned", !evalFn.includes("'reason', 'NO_PLAN_ASSIGNED', 'mode', 'observe'"));
-check("B-5.5 no email authority", !/@[a-z0-9-]+\.[a-z]{2,}/i.test(raw) && !/auth\.users[\s\S]{0,80}email/i.test(raw));
+check("B-5.5 no email authority", !/[a-z0-9-]+\.[a-z]{2,}/i.test(raw) && !/auth\.users[\s\S]{0,80}email/i.test(raw));
 
 /* 6. workspace trigger + backfill */
 const hnw = norm(fnBody(raw, "handle_new_workspace"));
@@ -128,7 +131,7 @@ check("B-8.9 billing status not anon", sql.includes("REVOKE ALL ON FUNCTION publ
 
 /* 9. shared helper + deploy source */
 const helper = read(`${EF}/_shared/stripe-billing.ts`);
-check("B-9.1 pinned official Stripe SDK", helper.includes('import Stripe from "npm:stripe@17.7.0";'));
+check("B-9.1 pinned official Stripe SDK", helper.includes('import Stripe from "npm:stripe17.7.0";'));
 check("B-9.2 env derived from key prefix, else fail closed", helper.includes('key.startsWith("sk_test_") || key.startsWith("rk_test_")') && helper.includes('key.startsWith("sk_live_") || key.startsWith("rk_live_")') && helper.includes('return { ok: false, code: "BILLING_NOT_CONFIGURED" }'));
 check("B-9.3 app=cartel_hq, cartel_49 v1", helper.includes('CARTEL_APP = "cartel_hq"') && helper.includes('PRO_PLAN_CODE = "cartel_49"') && helper.includes("PRO_PLAN_VERSION = 1"));
 check("B-9.4 base URL from CARTEL_HQ_PUBLIC_BASE_URL https only", helper.includes('Deno.env.get("CARTEL_HQ_PUBLIC_BASE_URL")') && helper.includes('u.protocol !== "https:"'));

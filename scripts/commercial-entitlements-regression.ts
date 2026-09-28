@@ -18,6 +18,9 @@ const POST_GATE = [
   "20260927171231_commercial_c2_self_service_workspace.sql",
   "20260927173127_commercial_c3a_usage_free_record_fix.sql",
   "20260928110628_b2fff4d6-4c76-4505-8980-6e527123a82b.sql",
+  "20260928170228_partner_program_phase_1a_foundation.sql",
+  "20260928170613_partner_program_phase_1a_rls_fk_hardening.sql",
+  "20260928170917_partner_program_phase_1a_new_workspace_attribution.sql",
 ];
 const COMMERCIAL = POST_GATE[4];
 const LEAST_PRIVILEGE = POST_GATE[7];
@@ -33,10 +36,10 @@ function check(id: string, ok: boolean, detail = "") {
 }
 
 const migrations = readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort();
-check("C-1.1 migration count exactly 97", migrations.length === 97, String(migrations.length));
+check("C-1.1 migration count exactly 100", migrations.length === 100, String(migrations.length));
 const postGate = migrations.filter((f) => f >= "20260922");
-check("C-1.2 exact thirteen authorized post-gate migrations", JSON.stringify(postGate) === JSON.stringify(POST_GATE), postGate.join(","));
-check("C-1.3 commercial A, then Commercial Foundation B, then the Stripe/Free billing migration, then least-privilege, then authorized later migrations", migrations[migrations.length - 9] === COMMERCIAL && migrations[migrations.length - 8] === POST_GATE[5] && migrations[migrations.length - 7] === POST_GATE[6] && migrations[migrations.length - 6] === LEAST_PRIVILEGE && migrations[migrations.length - 1] === POST_GATE[12]);
+check("C-1.2 exact sixteen authorized post-gate migrations", JSON.stringify(postGate) === JSON.stringify(POST_GATE), postGate.join(","));
+check("C-1.3 commercial A, then Commercial Foundation B, then the Stripe/Free billing migration, then least-privilege, then authorized later migrations", migrations[migrations.length - 12] === COMMERCIAL && migrations[migrations.length - 11] === POST_GATE[5] && migrations[migrations.length - 10] === POST_GATE[6] && migrations[migrations.length - 9] === LEAST_PRIVILEGE && migrations[migrations.length - 1] === POST_GATE[15]);
 
 const raw = readFileSync(`${MIGRATIONS}/${COMMERCIAL}`, "utf8");
 const sql = raw.replace(/^\s*--.*$/gm, "");
@@ -177,7 +180,7 @@ check("C-6.5 grants", norm.includes("REVOKE ALL ON FUNCTION public.get_workspace
 /* 7. assignment RPC */
 const sa = fnBody("set_workspace_commercial_assignment");
 check("C-7.1 authenticated caller must be unrestricted", sa.includes("IF NOT public.has_platform_unrestricted_access(v_caller) THEN RAISE EXCEPTION 'NOT_AUTHORIZED'"));
-check("C-7.2 service path without email", sa.includes("auth.role()") && !/@/.test(sa));
+check("C-7.2 service path without email", sa.includes("auth.role()") && !//.test(sa));
 for (const e of ["WORKSPACE_NOT_FOUND", "PLAN_NOT_FOUND", "INVALID_STATUS", "INVALID_ENFORCEMENT_MODE", "INVALID_CHANNEL", "INVALID_ASSIGNMENT_SOURCE"])
   check(`C-7v ${e}`, sa.includes(`'${e}'`));
 check("C-7.3 ends open assignment constraint-safe", sa.includes("SET status = 'ended'") && sa.includes("GREATEST(a.starts_at,"));
@@ -186,7 +189,7 @@ check("C-7.5 grants", /REVOKE ALL ON FUNCTION public\.set_workspace_commercial_a
   /GRANT EXECUTE ON FUNCTION public\.set_workspace_commercial_assignment\([^)]*\) TO authenticated, service_role, postgres;/.test(norm));
 
 /* 8. isolation / hygiene */
-check("C-8.1 no email literal", !/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}/.test(raw));
+check("C-8.1 no email literal", !/[A-Za-z0-9._%+-]+[A-Za-z0-9.-]+\.[a-z]{2,}/.test(raw));
 check("C-8.2 no stripe calls/imports", !/stripe\.|import .*stripe|stripe_customer|stripe_subscription|http_post|net\.http/i.test(sql));
 check("C-8.3 no PCART/chain/liquidity", !/pcart|launch_chain|liquidity|treasury|wallet|safe_|mainnet|token_deploy/i.test(sql));
 check("C-8.4 no partner payout/tax/white-label", !/payout|commission|tax|white_label|whitelabel/i.test(sql));

@@ -26,7 +26,7 @@ function actionBlock(src: string, name: string): string {
 
 // 1 — migrations.
 const migrations = readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql")).sort();
-check("1.1 migration count exactly 97", migrations.length === 97, String(migrations.length));
+check("1.1 migration count exactly 100", migrations.length === 100, String(migrations.length));
 const POST_GATE = [
   "20260922070921_40548af2-4afe-4876-bcaa-f22868f5942d.sql",
   "20260922141917_c47c2384-73c4-4bbf-8cc2-495112d64990.sql",
@@ -40,6 +40,9 @@ const POST_GATE = [
   "20260927171231_commercial_c2_self_service_workspace.sql",
   "20260927173127_commercial_c3a_usage_free_record_fix.sql",
   "20260928110628_b2fff4d6-4c76-4505-8980-6e527123a82b.sql",
+  "20260928170228_partner_program_phase_1a_foundation.sql",
+  "20260928170613_partner_program_phase_1a_rls_fk_hardening.sql",
+  "20260928170917_partner_program_phase_1a_new_workspace_attribution.sql",
 ];
 const postGate = migrations.filter((f) => f >= "20260922");
 check("1.2 exact authorized post-gate migration set", JSON.stringify(postGate) === JSON.stringify(POST_GATE), postGate.join(","));
@@ -60,7 +63,7 @@ const GATE_FILES = [
 ];
 for (const f of GATE_FILES) {
   const s = read(f);
-  check(`2.4 no email literal: ${f}`, !/[A-Za-z0-9._%+-]+@(gmail|[a-z0-9-]+\.(com|xyz|io))/i.test(s));
+  check(`2.4 no email literal: ${f}`, !/[A-Za-z0-9._%+-]+(gmail|[a-z0-9-]+\.(com|xyz|io))/i.test(s));
   check(`2.5 no second profile predicate: ${f}`, !/from\("project_profiles"\)[\s\S]{0,200}public_slug/.test(s) || f.includes("telegram-group"));
   check(`2.6 no plan/quota/stripe logic added: ${f}`, !/stripe|subscription_tier|quota_limit/i.test(s));
 }
