@@ -10,7 +10,7 @@ import {
 let passed = 0, failed = 0;
 const check = (id: string, ok: boolean, d = "") => { if (ok) passed++; else { failed++; console.error(`FAIL ${id}${d ? ` — ${d}` : ""}`); } };
 const read = (p: string) => readFileSync(p, "utf8");
-const WH = read("backend-source/edge-functions/stripe-billing-webhook/index.ts");
+const WH = read("backend-source/edge-functions/stripe-billing-webhook/index.ts").replace(/^\s*(\*|\/\*\*|\/\/).*$/gm, "");
 const CM = read("backend-source/edge-functions/stripe-billing-webhook/commission.ts");
 const SQL = read("docs/sql/PARTNER_1B_3_commission_accounting.sql").replace(/\s+/g, " ");
 const LIB = read("src/lib/partners.ts");
