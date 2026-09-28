@@ -3,12 +3,13 @@ import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router"
 import { Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { normalizeReferralCode, storeReferralCode } from "@/lib/partners";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 type AuthMode = "signin" | "signup";
-type AuthSearch = { redirect?: string; mode?: AuthMode };
+type AuthSearch = { redirect?: string; mode?: AuthMode; ref?: string };
 
 function safeRedirect(value: unknown): string {
   if (typeof value !== "string") return "/dashboard";
@@ -24,6 +25,9 @@ export const Route = createFileRoute("/auth")({
     const out: AuthSearch = {};
     if (typeof search['redirect'] === "string") out.redirect = search['redirect'];
     if (search['mode'] === "signup") out.mode = "signup";
+    // Optional partner referral code: only a normalized ^[a-z0-9]{10}$ value is kept.
+    const ref = normalizeReferralCode(search['ref']);
+    if (ref) out.ref = ref;
     return out;
   },
 

@@ -13,6 +13,7 @@ import {
   Radiation,
   Settings,
   ShieldHalf,
+  Handshake,
   type LucideIcon,
 } from "lucide-react";
 
@@ -88,6 +89,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Network",
     items: [
       { label: "My Watchlist", to: "/watchlist", icon: Eye },
+      { label: "Partners", to: "/partners", icon: Handshake },
       { label: "Cartel Network", to: "/network", icon: Globe, external: true },
     ],
   },
