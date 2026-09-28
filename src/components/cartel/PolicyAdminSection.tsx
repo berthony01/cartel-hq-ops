@@ -66,8 +66,8 @@ function PolicyRow({ type, activeVersion }: { type: PolicyType; activeVersion: n
 
 export function PolicyAdminSection() {
   const access = usePlatformAccess();
-  const active = useQuery({ queryKey: policyKeys.active(), queryFn: fetchActivePolicies, enabled: access.isOwner === true });
-  if (access.isOwner !== true) return null;
+  const active = useQuery({ queryKey: policyKeys.active(), queryFn: fetchActivePolicies, enabled: access.isPlatformOwner === true });
+  if (access.isPlatformOwner !== true) return null;
   return (
     <Section
       title="Legal policies"
