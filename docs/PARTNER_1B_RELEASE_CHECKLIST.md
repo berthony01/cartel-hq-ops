@@ -21,7 +21,8 @@
 | 1B-3 Commission accounting | `docs/sql/PARTNER_1B_3_commission_accounting.sql` | Unapplied |
 | 1B-4 Webhook integration | `backend-source/edge-functions/stripe-billing-webhook/{index.ts,commission.ts}` | Undeployed; refund/dispute events not subscribed |
 | 1B-4 Partner/owner UI | `src/routes/_authenticated/partners.tsx`, `src/components/cartel/PartnerAdminSection.tsx`, `src/lib/partners.ts` | Unpublished; fails closed while contracts unapplied |
-| Tests | `scripts/partner-program-1b-{1,2,3,4}-regression.ts`, `scripts/partner-program-1b-release-regression.ts`, updated `scripts/partner-program-1a-regression.ts` | Repo |
+| G12a reconciliation utility | `scripts/partner-program-1b-reconcile.ts`, `scripts/partner-program-1b-reconcile-core.ts` | Repo only; dry-run default; no non-production validation |
+| Tests | `scripts/partner-program-1b-{1,2,3,4}-regression.ts`, `scripts/partner-program-1b-reconcile-regression.ts`, `scripts/partner-program-1b-release-regression.ts`, updated `scripts/partner-program-1a-regression.ts` | Repo; G12a regression uses pure mocks and zero external calls |
 | Docs | this file, `docs/PARTNER_1B_ACTIVATION_ROLLBACK_RUNBOOK.md`, `roadmap.md` | Repo |
 
 Required Edge modes (from repo headers): `partner-referral-capture` **verify_jwt=false** (pre-signup capture; CORS-restricted, uniform response, hash-only storage); `stripe-billing-webhook` **verify_jwt=false** (Stripe signature is the authentication). `billing-checkout` / `billing-portal` remain verify_jwt=true.
@@ -42,7 +43,8 @@ Required Edge modes (from repo headers): `partner-referral-capture` **verify_jwt
 | G10 | SQL validated in non-production Supabase (1B-1, 1B-2, 1B-3) | NOT DONE | Operator |
 | G11 | Production SQL apply (explicit approval) | NOT DONE | Owner |
 | G12 | Post-apply RLS/grants/append-only/RPC/schema-cache/zero-row checks | NOT DONE | Operator |
-| G12a | Rollback-gap reconciliation/backfill procedure built and validated in non-production (required before Edge/Stripe activation) | NOT DONE | Engineering/Operator |
+| G12a-A | Rollback-gap reconciliation utility built and tested with mocks | PASS | Engineering |
+| G12a-B | Rollback-gap reconciliation utility validated against non-production Supabase + Stripe test environment (required before Edge/Stripe activation) | NOT DONE | Engineering/Operator |
 | G13 | Edge deploy: referral capture + billing webhook (explicit approval) | NOT DONE | Owner |
 | G14 | Stripe refund/dispute event subscription — test, then live (explicit approval) | NOT DONE | Owner |
 | G15 | Draft terms seeded, previewed, activated via typed confirmation (explicit approval) | NOT DONE | Owner |
@@ -60,7 +62,7 @@ Legal note: broad "no refund" and "use at your own risk" wording does **not** re
 2. Create/verify backups; record current production Edge versions, webhook endpoint event list, cron jobs and relevant config — **no secret values** (G9).
 3. Validate SQL in a non-production Supabase project; then production only after explicit approval, strictly in order 1B-1, 1B-2, 1B-3 (G10, G11). Never reapply `20260927170206`, `20260927171231`, `20260927173127`, `20260928110628`.
 4. Verify RLS/grants, append-only ledger triggers, exact RPC signatures, `NOTIFY pgrst, 'reload schema'`, and zero unexpected rows in new tables (G12).
-4a. Build, review and validate in non-production the service-role rollback-gap reconciliation/backfill procedure (runbook Section 6, case b): normal Stripe resend cannot backfill commission for events already processed/ignored in `commercial_billing_events`. Must pass before steps 5 and 6 (G12a).
+4a. The local service-role rollback-gap reconciliation utility is built and mock-tested (G12a-A). Validate its dry-run and controlled execution against non-production Supabase + Stripe test data (G12a-B). Normal Stripe resend cannot backfill commission for events already processed/ignored in `commercial_billing_events`. G12a-B must pass before steps 5 and 6.
 5. Deploy `partner-referral-capture` (verify_jwt=false) and `stripe-billing-webhook` (verify_jwt=false) only after steps 4 and 4a pass. Webhook deploy **before** SQL would make every Cartel `invoice.paid` retry with 500 (entitlement still applied idempotently) — do not do it (G13).
 6. Add exactly `refund.created`, `refund.updated`, `refund.failed`, `charge.dispute.created`, `charge.dispute.updated`, `charge.dispute.closed` to the **existing** endpoint — test mode first, then live. Do not remove existing events. No secret rotation (G14).
 7. Seed a draft terms version with approved text and economics (20%, 12 invoices, 30-day attribution, 45-day hold, $50 min, USD, manual monthly); preview; activate only via typed owner confirmation (G15).
@@ -105,8 +107,8 @@ Legal note: broad "no refund" and "use at your own risk" wording does **not** re
 ## 5. Explicit approval checkpoints (one per live mutation class)
 
 - [ ] CP-SQL: Supabase SQL apply (non-production, then production separately)
-- [ ] CP-EDGE: Edge Function deploy (each function named) — requires G12a PASS
-- [ ] CP-STRIPE: Stripe webhook event subscription (test, then live separately) — requires G12a PASS
+- [ ] CP-EDGE: Edge Function deploy (each function named) — requires G12a-B PASS
+- [ ] CP-STRIPE: Stripe webhook event subscription (test, then live separately) — requires G12a-B PASS
 - [ ] CP-TERMS: Terms seed and, separately, activation
 - [ ] CP-PUBLISH: Publication
 

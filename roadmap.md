@@ -5,5 +5,7 @@
 - [x] Partner 1B-4: webhook commission source + partner/owner UI (accepted, staged, not deployed)
 - [x] Partner 1B-5: regression reconciliation, release checklist, rollback runbook (repository only)
 - [x] Legal identity + limited U.S.-beta policy drafts completed (repository only; not effective or activated)
-- [ ] Production activation — BLOCKED / NOT DONE (email DNS, attorney, CPA and privacy reviews; promotional email lacks a valid physical postal address; rollback-gap reconciliation/backfill procedure not built/validated; explicit approvals for SQL, Edge, Stripe events, terms)
+- [x] Partner G12a-A: local rollback-gap reconciliation utility built and mock-tested (repository only)
+- [ ] Partner G12a-B: validate reconciliation against non-production Supabase + Stripe test environment — BLOCKED / NOT DONE
+- [ ] Production activation — BLOCKED / NOT DONE (email DNS, attorney, CPA and privacy reviews; promotional email lacks a valid physical postal address; G12a-B non-production validation; explicit approvals for SQL, Edge, Stripe events, terms)
 - [ ] Publication — BLOCKED / NOT DONE (separate explicit owner approval)
