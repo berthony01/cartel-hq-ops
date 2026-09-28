@@ -169,7 +169,7 @@ export async function ownerSetPartnerStatus(partnerId: string, status: string, t
   }));
 }
 export async function ownerAddLedgerAdjustment(input: {
-  partnerId: string; amountCents: number; currency: string; note: string; referralId?: string; availableAt?: string;
+  partnerId: string; amountCents: number; currency: string; note: string; referralId?: string | undefined; availableAt?: string | undefined;
 }) {
   return unwrap(await supabase.rpc("owner_add_partner_ledger_adjustment", {
     _partner_id: input.partnerId,

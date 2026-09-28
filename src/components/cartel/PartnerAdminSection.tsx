@@ -129,11 +129,11 @@ function PartnerAdminInner() {
   }).then((r) => { setF({}); return r; }), "Draft saved"));
   const activate = useMutation(run((v: number) => ownerActivateTerms(v), "Terms activated — program open"));
   const retire = useMutation(run((v: number) => ownerRetireTerms(v), "Terms retired — program closed"));
-  const reviewApp = useMutation(run((a: { id: string; approve: boolean; note?: string }) => ownerReviewApplication(a.id, a.approve, a.note), "Application reviewed"));
+  const reviewApp = useMutation(run((a: { id: string; approve: boolean; note?: string | undefined }) => ownerReviewApplication(a.id, a.approve, a.note), "Application reviewed"));
   const setStatus = useMutation(run((a: { id: string; status: string; tax?: string }) => ownerSetPartnerStatus(a.id, a.status, a.tax), "Partner updated"));
   const addAdj = useMutation(run((a: Parameters<typeof ownerAddLedgerAdjustment>[0]) => ownerAddLedgerAdjustment(a), "Ledger adjustment added"));
   const fraud = useMutation(run((a: { id: string; reason: string }) => ownerRejectReferralForFraud(a.id, a.reason), "Referral rejected for fraud"));
-  const reviewPay = useMutation(run((a: { id: string; approve: boolean; note?: string }) => ownerReviewPayout(a.id, a.approve, a.note), "Payout reviewed"));
+  const reviewPay = useMutation(run((a: { id: string; approve: boolean; note?: string | undefined }) => ownerReviewPayout(a.id, a.approve, a.note), "Payout reviewed"));
   const markPaid = useMutation(run((a: { id: string; ref: string }) => ownerMarkPayoutPaid(a.id, a.ref), "Payout marked paid"));
 
   const [notes, setNotes] = useState<Record<string, string>>({});
