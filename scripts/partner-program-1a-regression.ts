@@ -34,7 +34,7 @@ check("P-1.3 no TRUNCATE/DELETE FROM", !/\bTRUNCATE\b|\bDELETE\s+FROM\b/i.test(C
 check("P-1.4 no ALTER TABLE except ENABLE RLS", (N.match(/ALTER TABLE [^;]+;/g) ?? []).every((s) => /ENABLE ROW LEVEL SECURITY;$/.test(s)));
 check("P-1.5 no plan/price/entitlement/provider mutation",
   !/(INSERT INTO|UPDATE)\s+public\.(commercial_plans|commercial_plan_entitlements|commercial_plan_provider_refs|commercial_billing_\w+)/i.test(CODE));
-check("P-1.6 no INSERT into partner_program_terms (no seed)", !/INSERT INTO public\.partner_program_terms/i.test(CODE));
+check("P-1.6 no terms seed: only owner_save_partner_terms_draft inserts terms", (N.match(/INSERT INTO public\.partner_program_terms/g) ?? []).length === 1 && fnBody("owner_save_partner_terms_draft").includes("INSERT INTO public.partner_program_terms"));
 const stmtStarts = (CODE.match(/^(?:[A-Z][A-Z ]+)/gm) ?? []).map((s) => s.trim().split(" ").slice(0, 2).join(" "));
 const allowedStarts = /^(CREATE TABLE|CREATE UNIQUE|CREATE INDEX|CREATE OR|ALTER TABLE|GRANT |GRANT EXECUTE|GRANT SELECT|GRANT ALL|REVOKE ALL|COMMENT ON|DO \$policies\$|BEGIN|END|DECLARE|RETURNS|IF |ELSE|RETURN|UPDATE|INSERT|SELECT|VALUES|WHERE|FROM|SET|ON |FOR |USING|RAISE|CREATE POLICY|AND |OR |LANGUAGE|PRIMARY|CONSTRAINT|CHECK)/;
 check("P-1.7 only additive statement kinds at column 0", stmtStarts.filter((s) => /^(CREATE|ALTER|GRANT|REVOKE|COMMENT|DROP|TRUNCATE|DELETE)/.test(s)).every((s) => allowedStarts.test(s)));
@@ -102,7 +102,9 @@ check("P-6.4 availability derived from available_at", fnBody("partner_available_
 const rec = fnBody("record_referral_attribution");
 check("P-7.1 auth + sanitized code + no partner id param", rec.includes("AUTH_REQUIRED") && rec.includes("'^[a-z0-9]{10}$'") && /record_referral_attribution\(_code text, _source text/.test(N) && !/record_referral_attribution\([^)]*partner/.test(N));
 check("P-7.2 approved affiliate + active terms", rec.includes("status = 'approved' AND is_affiliate") && rec.includes("PROGRAM_NOT_OPEN"));
-check("P-7.3 first attribution wins", N.includes("partner_referrals_first_attribution ON public.partner_referrals (referred_user_id)") && rec.includes("ON CONFLICT (referred_user_id) DO NOTHING") && rec.includes("already_attributed"));
+check("P-7.3 first VALID attribution wins (partial index + matching conflict)", N.includes("partner_referrals_first_valid_attribution ON public.partner_referrals (referred_user_id) WHERE status IN ('pending','qualified');")
+  && rec.includes("ON CONFLICT (referred_user_id) WHERE status IN ('pending','qualified') DO NOTHING") && rec.includes("referred_user_id = v_uid AND status IN ('pending','qualified')") && rec.includes("already_attributed"));
+check("P-7.3b no unconditional referred_user unique index", !/partner_referrals_first_attribution\b/.test(N) && !/UNIQUE INDEX[^;]*\(referred_user_id\);/.test(N));
 check("P-7.4 self-referral same user", rec.includes("v_p.user_id = v_uid") && rec.includes("SELF_REFERRAL"));
 const bind = fnBody("bind_referral_to_workspace");
 check("P-7.5 bind requires workspace owner", bind.includes("public.is_workspace_owner(_workspace_id, v_uid)") && bind.includes("WORKSPACE_OWNER_REQUIRED"));
@@ -120,10 +122,33 @@ check("P-9.2 no service-partner access table/RPC", !/workspace_partner_access|in
 /* 10. Function privileges */
 const USER_FNS = ["submit_partner_application", "accept_partner_agreement", "record_referral_attribution", "bind_referral_to_workspace", "request_partner_payout", "get_my_partner_summary"];
 const fnDefs = N.match(/CREATE OR REPLACE FUNCTION public\.\w+\(.*?\$\$/g) ?? [];
-check("P-10.1 every function pins search_path", fnDefs.length === 18 && fnDefs.every((d) => d.includes("SET search_path = ''")));
+check("P-10.1 every function pins search_path", fnDefs.length === 19 && fnDefs.every((d) => d.includes("SET search_path = ''")));
 for (const f of USER_FNS) check(`P-10 ${f} revoked PUBLIC/anon + authenticated grant`, new RegExp(`REVOKE ALL ON FUNCTION public\\.${f}\\([^)]*\\) FROM PUBLIC, anon;`).test(N) && new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${f}\\([^)]*\\) TO authenticated;`).test(N));
 check("P-10.2 internal helpers not callable by authenticated", ["partner_require_owner()", "partner_active_terms()", "partner_available_balance(uuid, text)"].every((s) => N.includes(`REVOKE ALL ON FUNCTION public.${s} FROM PUBLIC, anon, authenticated;`)));
 check("P-10.3 applications require active terms", fnBody("submit_partner_application").includes("PROGRAM_NOT_OPEN"));
+
+/* 13. Corrective review */
+const draft = fnBody("owner_save_partner_terms_draft");
+check("P-13.1 draft save owner-gated", draft.includes("v_owner uuid := public.partner_require_owner()"));
+check("P-13.2 draft save only inserts draft or updates draft", draft.includes("VALUES (_version, 'draft',") && draft.includes("IF v_status <> 'draft' THEN RAISE EXCEPTION 'TERMS_NOT_DRAFT'") && draft.includes("WHERE version = _version AND status = 'draft'"));
+check("P-13.3 draft save no invented defaults", !/coalesce\(_(commission_bps|attribution_window_days|hold_days|min_payout_cents|currency|agreement_text|disclosure_text)/.test(draft) && !/_\w+ \w+ DEFAULT/.test(N.slice(N.indexOf("FUNCTION public.owner_save_partner_terms_draft("), N.indexOf("RETURNS", N.indexOf("FUNCTION public.owner_save_partner_terms_draft(")))));
+check("P-13.4 draft save grants", N.includes("REVOKE ALL ON FUNCTION public.owner_save_partner_terms_draft(integer, integer, integer, integer, integer, text, text, text) FROM PUBLIC, anon;") && N.includes("GRANT EXECUTE ON FUNCTION public.owner_save_partner_terms_draft(integer, integer, integer, integer, integer, text, text, text) TO authenticated, service_role;"));
+const FK = "REFERENCES public.partner_program_terms(version)";
+check("P-13.5 terms_version FKs on 5 tables", (N.match(/terms_version integer (NOT NULL|NULL) REFERENCES public\.partner_program_terms\(version\)/g) ?? []).length === 5
+  && N.includes(`terms_version integer NULL ${FK}`));
+check("P-13.6 payout snapshots active terms version", N.includes("INSERT INTO public.partner_payout_requests (partner_id, amount_cents, currency, terms_version) VALUES (v_p.id, _amount_cents, v_t.currency, v_t.version)"));
+const b = fnBody("bind_referral_to_workspace");
+const iAssign = b.indexOf("UPDATE public.workspace_commercial_assignments");
+const iNotElig = b.indexOf("'ASSIGNMENT_NOT_ELIGIBLE'");
+const iQual = b.indexOf("status = 'qualified'");
+check("P-13.7 binding requires approved affiliate", b.includes("v_p.status <> 'approved' OR NOT v_p.is_affiliate"));
+check("P-13.8 assignment marked before referral bound; qualified only after", iAssign > 0 && iAssign < iNotElig && iNotElig < iQual && b.indexOf("SET workspace_id = _workspace_id") > iNotElig && b.includes("RETURNING a.id INTO v_assignment_id"));
+check("P-13.9 payout requires current agreement acceptance", pay.includes("AGREEMENT_NOT_ACCEPTED") && pay.includes("terms_version = v_t.version"));
+const rev = fnBody("owner_review_partner_payout");
+check("P-13.10 approval rechecks partner/tax/acceptance", ["PARTNER_NOT_APPROVED", "TAX_DOCS_NOT_VERIFIED", "AGREEMENT_NOT_ACCEPTED", "terms_version = v_req.terms_version"].every((x) => rev.includes(x)) && rev.indexOf("IF _approve THEN") < rev.indexOf("UPDATE public.partner_payout_requests"));
+const paid = fnBody("owner_mark_partner_payout_paid");
+check("P-13.11 paid reference nonblank before state change", paid.includes("PAID_REFERENCE_REQUIRED") && paid.indexOf("PAID_REFERENCE_REQUIRED") < paid.indexOf("UPDATE public.partner_payout_requests") && paid.indexOf("PAID_REFERENCE_REQUIRED") < paid.indexOf("INSERT INTO public.partner_commission_ledger"));
+check("P-13.12 no internal_note; review_note documented applicant-visible", !/internal_note/.test(RAW) && N.includes("review_note text NULL") && /APPLICANT-VISIBLE/.test(RAW) && fnBody("owner_review_partner_application").includes("review_note = left(_note, 2000)"));
 
 /* 11. Protected files untouched (hashes at start HEAD 2cbfd253) */
 const PROTECTED: Record<string, string> = {
