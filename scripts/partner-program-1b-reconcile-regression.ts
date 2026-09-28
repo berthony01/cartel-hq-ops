@@ -26,7 +26,7 @@ function fixtures(overrides: Record<string, any> = {}) {
   };
   const seen = new Set<string>();
   const db: ReconciliationStore = {
-    getBillingEventStatus: async () => overrides.billingStatus ?? "processed",
+    getBillingEventStatus: async () => Object.prototype.hasOwnProperty.call(overrides, "billingStatus") ? overrides.billingStatus : "processed",
     hasPartnerEvent: async () => overrides.partnerEvent ?? false,
     hasInvoiceState: async () => overrides.invoiceState ?? false,
     hasRefundState: async () => overrides.refundState ?? false,
@@ -97,7 +97,8 @@ const core = readFileSync("scripts/partner-program-1b-reconcile-core.ts", "utf8"
 const cli = readFileSync("scripts/partner-program-1b-reconcile.ts", "utf8");
 check("G-19 no direct mutation methods", !/insert\(|update\(|delete\(/.test(core + cli) && !/from\("partner_commission_ledger"\)/.test(core + cli));
 check("G-20 redacted output only", cli.includes("JSON.stringify(item)") && !/console\.(log|error)\([^\n]*(event|key|payload|metadata|email)/i.test(cli));
-check("G-21 mocks only zero external calls", !/fetch\(|createClient|api\.stripe|supabase\.co/.test(readFileSync(import.meta.path, "utf8")));
+const regressionSource = readFileSync(import.meta.path, "utf8").replace(/check\("G-21[\s\S]*?;\n\nconsole\.log/, "console.log");
+check("G-21 mocks only zero external calls", !/fetch\(|createClient|api\.stripe|supabase\.co/.test(regressionSource));
 
 console.log(`partner-program-1b-reconcile-regression: ${passed} passed, ${failed} failed; mocks only, 0 external calls`);
 if (failed) process.exit(1);
