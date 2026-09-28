@@ -51,7 +51,7 @@ check("R-3 footer on home/auth/shell", ["src/routes/index.tsx","src/routes/auth.
 check("R-4 footer accessible nav", /aria-label="Legal"/.test(read("src/components/cartel/LegalFooter.tsx")));
 const auth = read("src/routes/auth.tsx");
 check("R-5 signup blocked without consent", /disabled=\{busy \|\| \(isSignup && !consent\)\}/.test(auth) && /if \(!consent\) throw/.test(auth));
-check("R-6 auth ref capture preserved", /storeReferralCode\(search\.ref\)/.test(auth) && /safeRedirect/.test(auth));
+check("R-6 auth ref capture preserved (1B-2 token exchange)", /captureReferralCode\(search\.ref\)/.test(auth) && /safeRedirect/.test(auth));
 const bill = read("src/components/cartel/BillingSection.tsx");
 check("R-7 checkout blocked without consent", /disabled=\{busy !== null \|\| !checkoutConsent\}/.test(bill) && /if \(!checkoutConsent\) return/.test(bill));
 check("R-8 checkout records effective acceptance fail-closed", /recordAcceptances\(await fetchActivePolicies\(\), "checkout"\)/.test(bill) && /return;\s*\}\s*await invoke/.test(bill));

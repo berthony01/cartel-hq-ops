@@ -192,80 +192,129 @@ export async function ownerMarkPayoutPaid(payoutId: string, paidReference: strin
   return unwrap(await supabase.rpc("owner_mark_partner_payout_paid", { _payout_id: payoutId, _paid_reference: paidReference }));
 }
 
-/* ---------------- Referral capture ----------------
- * Local storage holds ONLY the normalized 10-char code and capture timestamp.
- * No partner id, tax data, credentials, IP or fingerprint. */
-export const REFERRAL_STORAGE_KEY = "cartel-hq:referral";
+/* ---------------- Referral capture (Phase 1B-2) ----------------
+ * The browser exchanges ?ref=CODE for a SERVER-ISSUED opaque token and stores
+ * ONLY { token, expiresAt }. There is no client capture timestamp: the server
+ * click time is the sole attribution authority. expiresAt is advisory (local
+ * cleanup only); the database re-checks expiry at claim time.
+ * No partner id, code, tax data, credentials, IP or fingerprint is stored. */
+export const REFERRAL_TOKEN_STORAGE_KEY = "cartel-hq:referral-token";
+/** Pre-1B-2 key that held a raw code + client timestamp; purged, never trusted. */
+export const LEGACY_REFERRAL_STORAGE_KEY = "cartel-hq:referral";
+export const REFERRAL_CAPTURE_FUNCTION = "partner-referral-capture";
 const CODE_RE = /^[a-z0-9]{10}$/;
+const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 
 export function normalizeReferralCode(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const code = value.trim().toLowerCase();
   return CODE_RE.test(code) ? code : null;
 }
-export type StoredReferral = { code: string; capturedAt: string };
-export function storeReferralCode(value: unknown): boolean {
-  const code = normalizeReferralCode(value);
-  if (!code || typeof window === "undefined") return false;
-  try {
-    const payload: StoredReferral = { code, capturedAt: new Date().toISOString() };
-    window.localStorage.setItem(REFERRAL_STORAGE_KEY, JSON.stringify(payload));
-    return true;
-  } catch {
-    return false;
-  }
-}
-export function readStoredReferral(): StoredReferral | null {
+export type StoredReferralToken = { token: string; expiresAt: string };
+
+function safeStorage(): Storage | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(REFERRAL_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<StoredReferral>;
-    const code = normalizeReferralCode(parsed.code);
-    if (!code) {
-      window.localStorage.removeItem(REFERRAL_STORAGE_KEY);
-      return null;
-    }
-    return { code, capturedAt: typeof parsed.capturedAt === "string" ? parsed.capturedAt : "" };
+    return window.localStorage;
   } catch {
     return null;
   }
 }
-export function clearStoredReferral() {
-  if (typeof window === "undefined") return;
+
+export function purgeLegacyReferral() {
   try {
-    window.localStorage.removeItem(REFERRAL_STORAGE_KEY);
+    safeStorage()?.removeItem(LEGACY_REFERRAL_STORAGE_KEY);
   } catch {
     /* storage unavailable */
   }
 }
 
-export type ClaimOutcome = "claimed" | "keep" | "cleared" | "none";
-/** Reasons after which retrying can never succeed for this code. */
-const TERMINAL_CLAIM_REASONS = new Set(["INVALID_CODE", "INVALID_SOURCE", "CODE_NOT_ACTIVE", "SELF_REFERRAL"]);
+export function parseReferralToken(value: unknown, now: number = Date.now()): StoredReferralToken | null {
+  if (!value || typeof value !== "object") return null;
+  const { token, expiresAt } = value as Partial<StoredReferralToken>;
+  if (typeof token !== "string" || !TOKEN_RE.test(token) || typeof expiresAt !== "string") return null;
+  const exp = Date.parse(expiresAt);
+  if (!Number.isFinite(exp) || exp <= now) return null;
+  return { token, expiresAt };
+}
 
-/** Idempotent. Keeps the code only if the program is closed or the request failed transiently. */
-export async function claimStoredReferral(): Promise<ClaimOutcome> {
-  const stored = readStoredReferral();
-  if (!stored) return "none";
-  let res;
+export function storeReferralToken(value: unknown): boolean {
+  const parsed = parseReferralToken(value);
+  const store = safeStorage();
+  if (!parsed || !store) return false;
   try {
-    res = await supabase.rpc("record_referral_attribution", { _code: stored.code, _source: "link" });
+    store.setItem(REFERRAL_TOKEN_STORAGE_KEY, JSON.stringify({ token: parsed.token, expiresAt: parsed.expiresAt }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function readStoredReferralToken(): StoredReferralToken | null {
+  const store = safeStorage();
+  if (!store) return null;
+  try {
+    const raw = store.getItem(REFERRAL_TOKEN_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = parseReferralToken(JSON.parse(raw));
+    if (!parsed) store.removeItem(REFERRAL_TOKEN_STORAGE_KEY);
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function clearStoredReferralToken() {
+  try {
+    safeStorage()?.removeItem(REFERRAL_TOKEN_STORAGE_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+/**
+ * Exchanges a referral code for an opaque server token. The capture endpoint
+ * answers uniformly for real and unknown codes; a non-issued token simply
+ * never claims. Keeps an existing unexpired token (first valid wins locally).
+ */
+export async function captureReferralCode(value: unknown): Promise<boolean> {
+  purgeLegacyReferral();
+  const code = normalizeReferralCode(value);
+  if (!code) return false;
+  if (readStoredReferralToken()) return false;
+  try {
+    const { data, error } = await supabase.functions.invoke(REFERRAL_CAPTURE_FUNCTION, { body: { code } });
+    if (error) return false;
+    return storeReferralToken(data);
+  } catch {
+    return false;
+  }
+}
+
+export type ClaimOutcome = "claimed" | "keep" | "cleared" | "none";
+type LooseRpc = (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
+
+/** Maps a claim_referral_click result to a local storage action. */
+export function claimOutcomeFor(res: { data: unknown; error: unknown } | null): ClaimOutcome {
+  if (!res || res.error) return "keep"; // transient or not yet deployed: retry later
+  const data = (res.data ?? {}) as { ok?: boolean };
+  return data.ok === true ? "claimed" : "cleared"; // any definitive rejection is terminal
+}
+
+/** Idempotent atomic claim via claim_referral_click (auth.uid(), server time). */
+export async function claimStoredReferralToken(): Promise<ClaimOutcome> {
+  purgeLegacyReferral();
+  const stored = readStoredReferralToken();
+  if (!stored) return "none";
+  let res: { data: unknown; error: unknown } | null = null;
+  try {
+    res = await (supabase.rpc.bind(supabase) as unknown as LooseRpc)("claim_referral_click", { _token: stored.token });
   } catch {
     return "keep";
   }
-  if (res.error) return "keep";
-  const data = (res.data ?? {}) as { ok?: boolean; reason?: string };
-  if (data.ok === true) {
-    clearStoredReferral();
-    return "claimed";
-  }
-  if (data.reason === "PROGRAM_NOT_OPEN") return "keep";
-  if (data.reason && TERMINAL_CLAIM_REASONS.has(data.reason)) {
-    clearStoredReferral();
-    return "cleared";
-  }
-  return "keep";
+  const outcome = claimOutcomeFor(res);
+  if (outcome !== "keep") clearStoredReferralToken();
+  return outcome;
 }
 
 export type BindResult = { ok?: boolean; bound?: boolean; reason?: string; assignment_marked?: boolean };

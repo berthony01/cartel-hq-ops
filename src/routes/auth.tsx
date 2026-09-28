@@ -3,7 +3,7 @@ import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router"
 import { Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { normalizeReferralCode, storeReferralCode } from "@/lib/partners";
+import { captureReferralCode, normalizeReferralCode } from "@/lib/partners";
 import { fetchActivePolicies, recordAcceptances } from "@/lib/policy-acceptance";
 import { PolicyConsent } from "@/components/cartel/PolicyConsent";
 import { LegalFooter } from "@/components/cartel/LegalFooter";
@@ -73,9 +73,10 @@ function AuthPage() {
   const [error, setError] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
 
-  // Store a valid referral code locally (code + timestamp only; no partner id).
+  // Exchange a valid referral code for a server-issued opaque token; only
+  // { token, expiresAt } is stored. No client timestamp is ever authority.
   useEffect(() => {
-    if (search.ref) storeReferralCode(search.ref);
+    if (search.ref) void captureReferralCode(search.ref);
   }, [search.ref]);
 
   useEffect(() => {
