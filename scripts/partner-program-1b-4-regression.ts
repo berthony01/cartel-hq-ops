@@ -80,7 +80,7 @@ check("E-17 missing contract detection", isMissingContract({ code: "PGRST202" })
 
 /* 5. UI */
 check("U-1 draft economics only when no active terms", PAGE.includes("<DraftEconomicsPanel />") && /!programOpen \? \(\s*<>\s*<DraftEconomicsPanel \/>/.test(PAGE));
-for (const s of ['"20%"', "First 12 paid monthly invoices", '"30 days"', '"45 days"', '"$50"', '"USD"', "Monthly, manual"]) check(`U-2 draft value ${s}`, LIB.includes(s));
+for (const s of ['"20%"', "First 12 paid monthly invoices", '"30 days"', '"45 days"', '"$50"', '"USD (US dollars)"', "Monthly, manual"]) check(`U-2 draft value ${s}`, LIB.includes(s));
 check("U-3 active version shown", PAGE.includes("Active terms · v${terms.version}") && PAGE.includes("First ${duration} paid invoices"));
 for (const s of ["Held (in hold period)", "Available", "Paid", "Reversed", "Restored", "Net payable"]) check(`U-4 balance ${s}`, PAGE.includes(`"${s}"`));
 check("U-5 negative carry-forward explained", /carried forward/.test(PAGE));

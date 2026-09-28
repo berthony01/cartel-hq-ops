@@ -390,7 +390,7 @@ export const DRAFT_ECONOMICS = {
   attributionLabel: "30 days",
   holdLabel: "45 days",
   minimumLabel: "$50",
-  currencyLabel: "USD",
+  currencyLabel: "USD (US dollars)",
   payoutLabel: "Monthly, manual",
 } as const;
 
