@@ -68,6 +68,8 @@ const allowed = new Set([
   "public/robots.txt",
   "public/sitemap.xml",
   "scripts/public-discovery-seo-regression.ts",
+  "scripts/partner-program-1a-regression.ts",
+  "scripts/partner-program-1b-1-regression.ts",
   "roadmap.md",
   "src/routeTree.gen.ts",
 ]);
