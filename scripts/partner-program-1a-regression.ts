@@ -273,9 +273,10 @@ check("P-19.5 referral code shown only for affiliates", PG.includes("isAffiliate
 check("P-19.6 payout gated on affiliate/approved/verified/accepted/open", PG.includes('isAffiliate && approved && partner?.tax_doc_status === "verified" && accepted && programOpen'));
 check("P-19.7 terms display", ["formatBps(terms.commission_bps)", "terms.attribution_window_days", "terms.hold_days", "terms.min_payout_cents", "terms.agreement_text", "terms.disclosure_text"].every((x) => PG.includes(x)));
 check("P-19.8 no invented commission", PG.includes("No ledger entries yet.") && !/\d+%/.test(PG));
+check("P-19.9 pitch textarea capped at 1000 matching SQL contract", PG.includes('id="partner-pitch"') && /maxLength=\{1000\}/.test(PG) && !/maxLength=\{2000\}/.test(PG) && N.includes("BETWEEN 1 AND 1000") && fnBody("submit_partner_application").includes("left(btrim(_pitch), 1000)"));
 const NAV = read("src/lib/nav.ts");
 const navLine = (NAV.match(/\{ label: "Partners"[^}]*\}/) ?? [""])[0];
-check("P-19.9 nav Partners /partners, not owner-only", navLine.includes('to: "/partners"') && navLine.includes("Handshake") && !navLine.includes("ownerOnly"));
+check("P-19.10 nav Partners /partners, not owner-only", navLine.includes('to: "/partners"') && navLine.includes("Handshake") && !navLine.includes("ownerOnly"));
 
 /* 20. Owner admin */
 const AD = read("src/components/cartel/PartnerAdminSection.tsx");

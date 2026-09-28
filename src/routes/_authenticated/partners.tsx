@@ -177,7 +177,7 @@ function PartnersPage() {
                       </label>
                       <div>
                         <label htmlFor="partner-pitch" className="text-sm font-semibold">Pitch (required)</label>
-                        <Textarea id="partner-pitch" required className="mt-2" rows={4} maxLength={2000} value={pitch} onChange={(e) => setPitch(e.target.value)} placeholder="Who you work with and how you would refer or serve projects." />
+                        <Textarea id="partner-pitch" required className="mt-2" rows={4} maxLength={1000} value={pitch} onChange={(e) => setPitch(e.target.value)} placeholder="Who you work with and how you would refer or serve projects." />
                       </div>
                       <Button type="submit" className="min-h-11 self-start" disabled={apply.isPending || !pitch.trim() || (!wantsAffiliate && !wantsService)}>
                         {apply.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}Submit application
