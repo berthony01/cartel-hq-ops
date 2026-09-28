@@ -69,6 +69,11 @@ function AuthPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Store a valid referral code locally (code + timestamp only; no partner id).
+  useEffect(() => {
+    if (search.ref) storeReferralCode(search.ref);
+  }, [search.ref]);
+
   useEffect(() => {
     let active = true;
     supabase.auth.getSession().then(({ data }) => {
@@ -205,7 +210,7 @@ function AuthPage() {
               setConfirmSentTo(null);
               navigate({
                 to: "/auth",
-                search: { ...(search.redirect ? { redirect: search.redirect } : {}), ...(isSignup ? {} : { mode: "signup" as const }) },
+                search: { ...(search.redirect ? { redirect: search.redirect } : {}), ...(search.ref ? { ref: search.ref } : {}), ...(isSignup ? {} : { mode: "signup" as const }) },
                 replace: true,
               });
             }}
