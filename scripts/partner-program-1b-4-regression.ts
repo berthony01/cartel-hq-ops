@@ -4,7 +4,7 @@
  */
 import { readFileSync, readdirSync } from "node:fs";
 import {
-  eligibleBaseCents, invoiceSubscriptionRef, isDisputeStatus, isMissingContract, isRefundStatus, routeEvent,
+  eligibleBaseCents, invoiceSubscriptionRef, isDisputeStatus, isRefundStatus, routeEvent,
 } from "../backend-source/edge-functions/stripe-billing-webhook/commission.ts";
 
 let passed = 0, failed = 0;
@@ -39,7 +39,14 @@ check("W-7 invoice commission after entitlement apply", WH.indexOf('admin.rpc("a
 check("W-8 commission only on invoice_paid route", /if \(route === "invoice_paid"\) \{/.test(WH) && (WH.match(/partner_ingest_invoice_paid/g) ?? []).length === 1);
 check("W-9 refund/dispute never touch entitlement", WH.indexOf("if (money) {") < WH.indexOf('admin.rpc("apply_stripe_subscription_state"'));
 check("W-10 accounting failure -> 500 retry", (WH.match(/finish\("failed", "COMMISSION_FAILED"\);\s*return text\("processing failed", 500\);/g) ?? []).length === 2);
-check("W-11 unapplied contract never blocks billing", (WH.match(/COMMISSION_CONTRACT_UNAVAILABLE/g) ?? []).length === 2);
+// Missing-contract (PGRST202/42883/schema-cache) must NEVER be treated as success:
+// no special-case, no processed/200 path — the event is marked failed and Stripe retries.
+const accErrBlocks = WH.match(/if \(accErr\) \{[\s\S]*?\n    \}/g) ?? [];
+check("W-11 missing contract is retryable failure, never processed/200",
+  !/isMissingContract|COMMISSION_CONTRACT_UNAVAILABLE/.test(WH) &&
+  !/Could not find the function|PGRST202|42883/.test(WH + CM) &&
+  accErrBlocks.length === 2 &&
+  accErrBlocks.every((b) => b.includes('finish("failed", "COMMISSION_FAILED")') && b.includes('return text("processing failed", 500)') && !/processed|200/.test(b)));
 check("W-12 idempotency claim/reclaim preserved", WH.includes('return text("duplicate", 200)') && WH.includes('return text("in progress", 409)') && WH.includes("STALE_PROCESSING_MS"));
 check("W-13 invoice must be paid, same subscription, same mode", WH.includes('inv.status !== "paid"') && WH.includes("invoiceSubscriptionRef(inv) !== sub.id") && WH.includes("inv.livemode !== event.livemode"));
 check("W-14 refund/dispute currency + status validation", WH.includes("COMMISSION_OBJECT_MISMATCH") && WH.includes("isRefundStatus(money.status)") && WH.includes("isDisputeStatus(money.status)"));
@@ -76,7 +83,7 @@ check("E-13 currency mismatch line excluded", eligibleBaseCents(invoice([line({ 
 check("E-14 never negative / never > paid ex tax", (() => { for (let i = 0; i < 500; i++) { const amt = (i * 37) % 9000; const paid = (i * 53) % 7000; const tax = (i * 11) % 800; const disc = (i * 7) % 6000; const r = eligibleBaseCents(invoice([line({ amount: amt, discount_amounts: [{ amount: disc }] })], { amount_paid: paid, tax }), P); if (r.base < 0 || r.base > Math.max(0, paid - tax) || !Number.isInteger(r.base)) return false; } return true; })());
 check("E-15 subscription ref resolver", invoiceSubscriptionRef({ subscription: "sub_a" }) === "sub_a" && invoiceSubscriptionRef({ parent: { subscription_details: { subscription: "sub_b" } } }) === "sub_b" && invoiceSubscriptionRef({}) === null);
 check("E-16 status sets match SQL", isRefundStatus("succeeded") && !isRefundStatus("bogus") && isDisputeStatus("won") && isDisputeStatus("lost") && !isDisputeStatus("charge_refunded"));
-check("E-17 missing contract detection", isMissingContract({ code: "PGRST202" }) && isMissingContract({ code: "42883" }) && !isMissingContract({ code: "23505" }) && !isMissingContract(null));
+check("E-17 isMissingContract removed (no success special-case)", !/isMissingContract/.test(CM));
 
 /* 5. UI */
 check("U-1 draft economics only when no active terms", PAGE.includes("<DraftEconomicsPanel />") && /!programOpen \? \(\s*<>\s*<DraftEconomicsPanel \/>/.test(PAGE));

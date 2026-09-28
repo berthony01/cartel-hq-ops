@@ -110,11 +110,5 @@ export function eligibleBaseCents(inv: Record<string, unknown>, mappedPriceRef: 
   return { base, amountPaid, paidExTax, reason: base > 0 ? null : "NO_ELIGIBLE_LINES" };
 }
 
-/** Supabase/PostgREST "function does not exist" — staged contract not applied yet. */
-export function isMissingContract(err: { code?: unknown; message?: unknown } | null | undefined): boolean {
-  if (!err) return false;
-  return err.code === "PGRST202" || err.code === "42883" || /Could not find the function/i.test(String(err.message ?? ""));
-}
-
 export const tsOrNull = (value: unknown): string | null =>
   typeof value === "number" && Number.isFinite(value) ? new Date(value * 1000).toISOString() : null;
