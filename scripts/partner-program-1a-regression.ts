@@ -239,11 +239,12 @@ for (const [fn, args] of Object.entries(RPCS)) {
 /* 17. Client library */
 const LIB = read("src/lib/partners.ts");
 check("P-17.1 code regex exact", LIB.includes("/^[a-z0-9]{10}$/") && LIB.includes(".trim().toLowerCase()"));
-check("P-17.2 storage holds only code + timestamp", LIB.includes("{ code, capturedAt: new Date().toISOString() }") && !/partner_id|\bip\b|ip_address|fingerprint|userAgent|tax_id|\bssn\b/i.test(LIB.slice(LIB.indexOf("export const REFERRAL_STORAGE_KEY"), LIB.indexOf("export type ClaimOutcome")).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "")));
+// Phase 1B-2 supersedes 1A browser code/timestamp storage with a short-lived server-issued token.
+check("P-17.2 storage holds only server token + expiry (1B-2)", LIB.includes('JSON.stringify({ token: parsed.token, expiresAt: parsed.expiresAt })') && LIB.includes("safeStorage()?.removeItem(LEGACY_REFERRAL_STORAGE_KEY)") && !/capturedAt|partner_id|\bip\b|ip_address|fingerprint|userAgent|tax_id|\bssn\b|email/i.test(LIB.slice(LIB.indexOf("export const REFERRAL_TOKEN_STORAGE_KEY"), LIB.indexOf("export type ClaimOutcome")).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "")));
 const claim = LIB.slice(LIB.indexOf("export async function claimStoredReferral"), LIB.indexOf("export type BindResult"));
-check("P-17.3 claim keeps on PROGRAM_NOT_OPEN and transient errors", claim.includes('data.reason === "PROGRAM_NOT_OPEN") return "keep"') && claim.includes('if (res.error) return "keep"') && /catch \{\s*return "keep";/.test(claim));
-check("P-17.4 claim clears on success and terminal reasons", claim.includes('clearStoredReferral();\n    return "claimed"') && ["INVALID_CODE", "CODE_NOT_ACTIVE", "SELF_REFERRAL"].every((r) => LIB.includes(`"${r}"`)) && claim.includes('return "cleared"'));
-check("P-17.5 claim via record_referral_attribution only", claim.includes('supabase.rpc("record_referral_attribution", { _code: stored.code, _source: "link" })'));
+check("P-17.3 claim keeps token on transient/undeployed errors (1B-2)", LIB.includes('if (!res || res.error) return "keep"') && /catch \{\s*return "keep";/.test(LIB.slice(LIB.indexOf("export async function claimStoredReferralToken"))));
+check("P-17.4 claim clears only on definitive server result (1B-2)", LIB.includes('return data.ok === true ? "claimed" : "cleared"') && LIB.includes('if (outcome !== "keep") clearStoredReferralToken();'));
+check("P-17.5 claim via claim_referral_click with token only; legacy code RPC unused (1B-2)", LIB.includes('("claim_referral_click", { _token: stored.token })') && !LIB.includes('"record_referral_attribution"') && read("docs/sql/PARTNER_1B_2_referral_click_tokens.sql").includes("record_referral_attribution"));
 check("P-17.6 bind via RPC only", LIB.includes('supabase.rpc("bind_referral_to_workspace", { _workspace_id: workspaceId })'));
 for (const fn of Object.keys(RPCS)) check(`P-17 lib calls ${fn}`, fn === "record_referral_attribution" || LIB.includes(`"${fn}"`));
 check("P-17.7 no direct table writes", !/\.from\("partner[^"]*"\)\s*\.(insert|update|upsert|delete)/.test(LIB) && !/\.from\("workspace_members"\)/.test(LIB));
@@ -252,11 +253,11 @@ check("P-17.8 no program default values in formatting", !/commission_bps\s*\?\?\
 /* 18. Auth capture + bridge */
 const AUTH = read("src/routes/auth.tsx");
 check("P-18.1 auth validates ref via normalizer", AUTH.includes("normalizeReferralCode(search['ref'])") && AUTH.includes("if (ref) out.ref = ref;"));
-check("P-18.2 auth stores ref locally", AUTH.includes("storeReferralCode(search.ref)"));
+check("P-18.2 auth exchanges ref for server token (1B-2)", AUTH.includes("void captureReferralCode(search.ref)") && !/localStorage|sessionStorage/.test(AUTH));
 check("P-18.3 redirect safety preserved", AUTH.includes('value.startsWith("//")') && AUTH.includes('if (value.startsWith("/auth")) return "/dashboard";'));
 check("P-18.4 signup/signin preserved", AUTH.includes("supabase.auth.signUp(") && AUTH.includes("supabase.auth.signInWithPassword(") && AUTH.includes("emailRedirectTo: `${window.location.origin}/auth/callback`"));
 const BR = read("src/components/cartel/ReferralAttributionBridge.tsx");
-check("P-18.5 bridge claims then binds only owned workspace", BR.includes("await claimStoredReferral()") && BR.includes("workspace.owner_id !== userId") && BR.includes("bindReferralToWorkspace(workspace.id)"));
+check("P-18.5 bridge claims token then binds only owned workspace (1B-2)", BR.includes("await claimStoredReferralToken()") && BR.includes("workspace.owner_id !== userId") && BR.includes("bindReferralToWorkspace(workspace.id)"));
 check("P-18.6 bridge idempotent per user/workspace", BR.includes("claimedFor.current !== userId") && BR.includes("boundKey.current === key"));
 check("P-18.7 bridge toast only on new bind", (BR.match(/toast\./g) ?? []).length === 1 && BR.includes("result?.bound === true && result.assignment_marked === true"));
 check("P-18.8 bridge grants no membership", !/workspace_members|insert|update\(/.test(BR));
@@ -266,7 +267,7 @@ check("P-18.9 bridge inside WorkspaceProvider", LAYOUT.indexOf("<WorkspaceProvid
 /* 19. /partners route + nav */
 const PG = read("src/routes/_authenticated/partners.tsx");
 check("P-19.1 route file", PG.includes('createFileRoute("/_authenticated/partners")') && read("src/routeTree.gen.ts").includes("/partners"));
-check("P-19.2 Phase 1B honesty banner", PG.includes("Phase 1B and is not enabled yet") && PG.includes("owner-reviewed and manual"));
+check("P-19.2 Phase 1B staged/manual honesty banner (1B-4)", PG.includes("staged and not active yet") && PG.includes("owner-reviewed and manual"));
 check("P-19.3 closed state copy", PG.includes("Applications are not open") && PG.includes("no active program terms"));
 check("P-19.4 service partner zero access copy", PG.includes("grants zero workspace access"));
 check("P-19.5 referral code shown only for affiliates", PG.includes("isAffiliate && partner.referral_code"));
@@ -283,7 +284,7 @@ const AD = read("src/components/cartel/PartnerAdminSection.tsx");
 check("P-20.1 owner gate via usePlatformAccess", AD.includes("const { isPlatformOwner, loading } = usePlatformAccess();") && AD.includes("if (loading || !isPlatformOwner) return null;"));
 for (const f of ["ownerSaveTermsDraft", "ownerActivateTerms", "ownerRetireTerms", "ownerReviewApplication", "ownerSetPartnerStatus", "ownerAddLedgerAdjustment", "ownerRejectReferralForFraud", "ownerReviewPayout", "ownerMarkPayoutPaid"])
   check(`P-20 admin uses ${f}`, AD.includes(`${f}(`));
-check("P-20.2 terms form blank without draft", AD.includes('{ commission: "", window: "", hold: "", min: "", currency: "", agreement: "", disclosure: "" }'));
+check("P-20.2 terms form blank without draft, incl. duration (1B-3/4)", AD.includes('{ commission: "", window: "", hold: "", min: "", currency: "", agreement: "", disclosure: "", duration: "" }') && AD.includes('intOrNaN(val("duration"))'));
 check("P-20.3 activation confirmed via AlertDialog", AD.includes("AlertDialog") && AD.includes("Activation opens the Partner Program"));
 check("P-20.4 activation requires complete terms", AD.includes("!termsComplete"));
 check("P-20.5 fraud reason + paid reference required", AD.includes("Fraud reason (required)") && AD.includes("External payment reference (required)"));
@@ -296,18 +297,15 @@ check("P-20.8 admin copy names Partner Program write exception", ADMIN.includes(
 const UI = [LIB, BR, PG, AD, AUTH].join("\n");
 check("P-21.1 no service-partner workspace access in UI", !/workspace_partner_access|invite_service_partner|workspace_members/.test(UI));
 check("P-21.2 no Stripe/billing calls from partner UI", !/stripe\.|STRIPE_|billing-checkout|billing-portal|createCheckout/.test([LIB, BR, PG, AD].join("\n")));
-check("P-21.3 no Edge Function invoke", !/functions\.invoke/.test(UI));
+check("P-21.3 only Edge invoke is referral capture (1B-2)", (UI.match(/functions\.invoke\(/g) ?? []).length === 1 && UI.includes("functions.invoke(REFERRAL_CAPTURE_FUNCTION"));
 check("P-21.4 no publish/config files touched", !/preview_ui|publish/i.test([LIB, BR, AD].join("\n")));
 
 /* 11. Protected files untouched (hashes at start HEAD 2cbfd253) */
 const PROTECTED: Record<string, string> = {
-  "backend-source/edge-functions/stripe-billing-webhook/index.ts": "a0121c8a0712f3616b65201b22b3117d01d87e1521829780d7e1063b5c1d04a1",
-  "backend-source/edge-functions/billing-checkout/index.ts": "d158c1fc6facf9dac7ec1d6c141d91e486662387ac15e421ec85ba5cd946ccc0",
   "backend-source/edge-functions/billing-portal/index.ts": "034834158d539e57397ef895ea954e53e67ce1eae3e1e255f7a53baa48c087ff",
   "backend-source/edge-functions/_shared/stripe-billing.ts": "f35274bc36f859af804adaa7ae15441260eca6ac6bb07511b5a0d7888888c23d",
   "backend-source/edge-functions/_shared/commercial-access.ts": "99ee49c8290b80329691705d7db7ec87deebb9b3f721636dd70a39d60f827716",
   "supabase/functions/telegram-webhook/index.ts": "a848a52168c0814974df55bb1d3fc2fed694d1cd714411c0a27608147921da2b",
-  "src/components/cartel/BillingSection.tsx": "e1053cb09c2a1899bdb7b0e3be52fb1258baac9a334c67307bd42bb8b4218d5a",
   "src/lib/pcart-rehearsal.ts": "ecfd944c44b722b86cba96104ab181f78e1b985f4632f1860d2609ebd70878b7",
   "src/lib/liquidity-plan.ts": "c5b8234aaeb41330a5f821883279cee58c574f922683500217009a374b8df7e3",
   "src/lib/chain-launcher.ts": "a6b49c39317b5e0c30113843541c9a5a6b01a333930115f7671919108800be80",
@@ -317,6 +315,21 @@ const PROTECTED: Record<string, string> = {
   "supabase/migrations/20260927173127_commercial_c3a_usage_free_record_fix.sql": "bec2390ffb20a53e1051ec6dc56370a3764113d0501125b130f5e6316c23cee2",
 };
 for (const [p, h] of Object.entries(PROTECTED)) check(`P-11 ${p} unchanged`, sha(p) === h);
+
+/* 11b. Intentionally changed by Phase 1B: semantic invariants replace fingerprints */
+const WH = read("backend-source/edge-functions/stripe-billing-webhook/index.ts");
+const WHC = read("backend-source/edge-functions/stripe-billing-webhook/commission.ts");
+const CO = read("backend-source/edge-functions/billing-checkout/index.ts");
+const BS = read("src/components/cartel/BillingSection.tsx");
+const iRaw = WH.indexOf("await req.text()"), iSig = WH.indexOf("constructEventAsync(rawBody"), iEnv = WH.indexOf("verifiedEvent.livemode"), iRoute = WH.indexOf('event.type === "checkout.session.completed"');
+check("P-11b.1 webhook raw-body signature verified before env check and routing", iRaw > 0 && iSig > iRaw && iEnv > iSig && iRoute > iEnv);
+check("P-11b.2 webhook idempotency via commercial_billing_events, no raw payload", WH.includes('from("commercial_billing_events")') && !/raw_payload|payload:\s*event|JSON\.stringify\(event\)/.test(WH));
+check("P-11b.3 webhook shared-account filter + exact price mapping", WH.includes("isCartelMetadata(") && WH.includes('.eq("environment", environment).eq("price_ref", priceRef).eq("active", true)') && WH.includes('"PRICE_NOT_MAPPED"'));
+check("P-11b.4 commission only on invoice.paid, never checkout", WH.includes("invoice.paid ONLY (never checkout.session.completed)") && (WH.match(/partner_ingest_invoice_paid/g) ?? []).length === 2 && WH.indexOf("partner_ingest_invoice_paid", WH.indexOf("admin.rpc")) > WH.indexOf("invoice.paid ONLY"));
+check("P-11b.5 every accounting failure retries (500), never marked processed", (WH.match(/finish\("failed", "COMMISSION_FAILED"\)/g) ?? []).length >= 1 && !/PGRST202|42883/.test(WH.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "")));
+check("P-11b.6 no secrets or PII logged by webhook", !/console\.(log|info|warn|error)\([^)]*(secret|signature|email|card|rawBody)/i.test(WH + WHC) && !/sk_(live|test)_[A-Za-z0-9]/.test(WH + WHC));
+check("P-11b.7 checkout: $49 Pro plan, tax off, promo off, consent default OFF", CO.includes('Deno.env.get("CARTEL_HQ_STRIPE_TERMS_CONSENT_ENABLED") === "true"') && CO.includes("allow_promotion_codes: false") && CO.includes("automatic_tax: { enabled: false }") && CO.includes('channel: "direct"') && !/partner|commission|referral/i.test(CO));
+check("P-11b.8 BillingSection: $49 label, consent required, acceptance fail-closed", BS.includes("Upgrade to Pro — $49/month") && BS.includes("disabled={busy !== null || !checkoutConsent}") && BS.includes("if (!checkoutConsent) return;") && BS.includes('isPro = s?.plan?.code === "cartel_49"') && !/partner|commission/i.test(BS));
 
 /* 12. Owner bypass ordering unchanged + untouched by staged SQL */
 const billing = read("supabase/migrations/20260924021801_e48c0c41-9053-4f77-a267-04fbba8d206d.sql");
