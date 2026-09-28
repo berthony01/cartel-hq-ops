@@ -285,7 +285,14 @@ const P1A = readFileSync(readdirSync("supabase/migrations").filter((f) => f.star
 check("I-1 Phase 1A append-only trigger exists (unchanged)", /partner_commission_ledger_append_only/.test(P1A));
 check("I-2 payout controls not redefined", !/FUNCTION public\.(request_partner_payout|owner_review_partner_payout|owner_mark_partner_payout_paid)\(/.test(N));
 check("I-3 available balance rule unchanged", !/FUNCTION public\.partner_available_balance\(/.test(N));
-check("I-4 webhook untouched this stage", !/partner_ingest/.test(readFileSync("backend-source/edge-functions/stripe-billing-webhook/index.ts", "utf8")));
+// Stage 1B-4 intentionally wired the three ingest RPCs into the webhook; the guard
+// now asserts no partner references beyond that approved contract appear there.
+check("I-4 webhook uses only the approved 1B-3 contract", (() => {
+  const wh = readFileSync("backend-source/edge-functions/stripe-billing-webhook/index.ts", "utf8");
+  const refs = wh.match(/partner_[a-z_]+/g) ?? [];
+  const allowed = new Set(["partner_ingest_invoice_paid", "partner_ingest_refund_state", "partner_ingest_dispute_state"]);
+  return refs.every((r) => allowed.has(r));
+})());
 check("I-5 owner bypass in checkout intact", /UNRESTRICTED_NO_BILLING/.test(readFileSync("backend-source/edge-functions/billing-checkout/index.ts", "utf8")));
 check("I-6 no hardcoded owner email", !/berthonyxyz/i.test(SQL));
 
