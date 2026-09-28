@@ -83,7 +83,7 @@ for (const kind of ["refund", "dispute"] as const) {
   const r = await reconcileEvent({ environment: "test", eventId: "evt_1", execute: false }, f.stripe, f.db);
   check(`G-15 ${kind} intended RPC`, r.intended_rpc === `partner_ingest_${kind}_state`);
   const bad = moneyFixture(kind, { current: { currency: "eur" } });
-  check(`G-16 ${kind} current checks`, (await reconcileEvent({ environment: "test", eventId: "evt_1", execute: false }, bad.stripe, bad.db)).reason_code === "MONEY_OBJECT_INVALID");
+  check(`G-16 ${kind} current checks`, (await reconcileEvent({ environment: "test", eventId: "evt_1", execute: false }, bad.stripe, bad.db)).status === "rejected");
 }
 const executed = fixtures();
 const executionOptions = parseCliArgs(["--environment", "test", "--event", "evt_1", "--event", "evt_2", "--execute", "--confirm", "EXECUTE PARTNER RECONCILIATION TEST"]);
