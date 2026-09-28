@@ -59,7 +59,7 @@ const page = read("src/components/cartel/LegalDocumentPage.tsx");
 check("R-2 draft banner fail-closed", /Draft — not effective/.test(page) && /!effective \|\| placeholders.length > 0/.test(page));
 check("R-3 footer on home/auth/shell", ["src/routes/index.tsx","src/routes/auth.tsx","src/components/cartel/AppShell.tsx"].every((p) => read(p).includes("<LegalFooter")));
 const LF = read("src/components/cartel/LegalFooter.tsx");
-check("R-4 footer accessible nav + public discovery links", /aria-label="CARTEL HQ information and legal"/.test(LF) && ["/legal/terms","/legal/privacy","/legal/refunds","/legal/partner-agreement","/docs","/partner-program"].every((to) => LF.includes(`to="${to}"`)));
+check("R-4 footer accessible nav + public discovery links", /aria-label="CARTEL HQ information and legal"/.test(LF) && ["/legal/terms","/legal/privacy","/legal/refunds","/legal/partner-agreement","/docs","/partner-program"].every((to) => LF.includes(`to: "${to}"`)));
 const auth = read("src/routes/auth.tsx");
 check("R-5 signup blocked without consent", /disabled=\{busy \|\| \(isSignup && !consent\)\}/.test(auth) && /if \(!consent\) throw/.test(auth));
 check("R-6 auth ref capture preserved (1B-2 token exchange)", /captureReferralCode\(search\.ref\)/.test(auth) && /safeRedirect/.test(auth));
