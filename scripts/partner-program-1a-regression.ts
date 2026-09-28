@@ -82,7 +82,7 @@ check("P-5.5 sign rules by entry type", N.includes("(entry_type = 'payout' AND a
 check("P-5.6 unique source_event_ref + one payout entry", N.includes("partner_commission_ledger_source_ref ON public.partner_commission_ledger (entry_type, source_event_ref) WHERE source_event_ref IS NOT NULL")
   && N.includes("partner_commission_ledger_one_payout ON public.partner_commission_ledger (payout_request_id) WHERE entry_type = 'payout'"));
 const ledgerInserts = (N.match(/INSERT INTO public\.partner_commission_ledger[^;]+;/g) ?? []);
-check("P-5.7 ledger inserted only by owner adjustment + mark paid", ledgerInserts.length === 2 && ledgerInserts.every((s) => /'manual'/.test(s)) && !/'accrual'[^;]*'stripe_event'/.test(N)
+check("P-5.7 ledger inserted only by owner adjustment + mark paid", ledgerInserts.length === 2 && ledgerInserts.every((s) => /'manual'/.test(s)) && !ledgerInserts.some((s) => /'accrual'|'reversal'|'stripe_event'/.test(s))
   && fnBody("owner_add_partner_ledger_adjustment").includes("public.partner_require_owner()") && fnBody("owner_mark_partner_payout_paid").includes("public.partner_require_owner()"));
 check("P-5.8 mark paid idempotent", fnBody("owner_mark_partner_payout_paid").includes("already_paid") && fnBody("owner_mark_partner_payout_paid").includes("ON CONFLICT (payout_request_id) WHERE entry_type = 'payout' DO NOTHING"));
 const owner = fnBody("partner_require_owner");
@@ -119,7 +119,7 @@ check("P-9.2 no service-partner access table/RPC", !/workspace_partner_access|in
 
 /* 10. Function privileges */
 const USER_FNS = ["submit_partner_application", "accept_partner_agreement", "record_referral_attribution", "bind_referral_to_workspace", "request_partner_payout", "get_my_partner_summary"];
-const fnDefs = N.match(/CREATE OR REPLACE FUNCTION public\.\w+\([^)]*\) RETURNS [^$]+\$\$/g) ?? [];
+const fnDefs = N.match(/CREATE OR REPLACE FUNCTION public\.\w+\(.*?\$\$/g) ?? [];
 check("P-10.1 every function pins search_path", fnDefs.length >= 20 && fnDefs.every((d) => d.includes("SET search_path = ''")));
 for (const f of USER_FNS) check(`P-10 ${f} revoked PUBLIC/anon + authenticated grant`, new RegExp(`REVOKE ALL ON FUNCTION public\\.${f}\\([^)]*\\) FROM PUBLIC, anon;`).test(N) && new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${f}\\([^)]*\\) TO authenticated;`).test(N));
 check("P-10.2 internal helpers not callable by authenticated", ["partner_require_owner()", "partner_active_terms()", "partner_available_balance(uuid, text)"].every((s) => N.includes(`REVOKE ALL ON FUNCTION public.${s} FROM PUBLIC, anon, authenticated;`)));
