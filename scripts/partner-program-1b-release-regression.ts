@@ -23,6 +23,11 @@ check("R-8 rollback preserves financial rows", RB.includes("Never delete or rewr
 check("R-9 runbook has no secrets", !/sk_(live|test)_|whsec_[A-Za-z0-9]|eyJ[A-Za-z0-9_-]{20,}/.test(CL + RB));
 check("R-10 STOP conditions", ["Duplicate accrual", "beyond an invoice", "PGRST202", "entitlement regression"].every((x) => RB.includes(x)));
 
+check("R-17 balance call has two args", RB.includes("partner_balance_breakdown(<PARTNER_ID>, '<CURRENCY>')") && !/partner_balance_breakdown\(<PARTNER_ID>\)/.test(RB));
+check("R-18 duplicate detector filters entry_type accrual", RB.includes("where entry_type = 'accrual' group by 1,2 having count(*) > 1") && !RB.includes("source_object = 'invoice'"));
+check("R-19 resend insufficient when commercial event already processed", RB.includes("already `processed` or `ignored`") && RB.includes("normal Stripe resend is **insufficient**") && RB.includes("NOT YET IMPLEMENTED OR VALIDATED") && !RB.includes("Idempotency makes duplicates safe"));
+check("R-20 reconciliation gate NOT DONE before Edge/Stripe", /\| G12a \| Rollback-gap reconciliation[^\n]*\| NOT DONE \| Engineering\/Operator \|/.test(CL) && CL.indexOf("| G12a |") < CL.indexOf("| G13 |") && CL.indexOf("4a. ") < CL.indexOf("5. Deploy") && /CP-EDGE[^\n]*G12a/.test(CL) && /CP-STRIPE[^\n]*G12a/.test(CL));
+
 // Staged-only: no Phase 1B SQL in migrations; migrations unchanged since baseline.
 const migs = readdirSync("supabase/migrations");
 check("R-11 no partner 1B migration files", !migs.some((m) => /partner[_-]?(program[_-])?1b|policy_accept|referral_click|commission_accounting/i.test(m)));

@@ -52,13 +52,13 @@ from commercial_billing_events where created_at > now() - interval '24 hours'
 group by 1,2,3 order by 4 desc;
 -- Duplicate accrual detector (must return 0 rows)
 select stripe_environment, stripe_invoice_ref, count(*) from partner_commission_ledger
-where source_object = 'invoice' group by 1,2 having count(*) > 1;
+where entry_type = 'accrual' group by 1,2 having count(*) > 1;
 -- Over-reversal detector (must return 0 rows)
 select environment, invoice_ref, commission_cents, applied_commission_cents
 from partner_invoice_commissions
 where applied_commission_cents < 0 or applied_commission_cents > commission_cents;
 -- Negative balances for review
-select * from partner_balance_breakdown(<PARTNER_ID>);
+select * from partner_balance_breakdown(<PARTNER_ID>, '<CURRENCY>');
 ```
 Column names match the staged 1B-3 SQL; re-confirm against the applied schema before use.
 
@@ -83,7 +83,13 @@ Column names match the staged 1B-3 SQL; re-confirm against the applied schema be
 
 ## 6. Reconciliation before resuming
 
+> **BLOCKER:** the rollback-gap reconciliation/backfill job described in case (b) is
+> **NOT YET IMPLEMENTED OR VALIDATED**. It is a production activation blocker (checklist
+> gate G12a) and must pass in non-production before CP-EDGE and CP-STRIPE.
+
 1. List Stripe events for the gap window by type (`invoice.paid`, refund, dispute) and environment.
-2. Match each by `event_ref`, `invoice_ref`, `refund_ref`, `dispute_ref` against `commercial_billing_events` and partner state tables.
-3. Replay missing events through the normal signed webhook path (Stripe resend) — never by hand-inserting ledger rows. Idempotency makes duplicates safe.
-4. Re-run Section 3 detectors; resume only when all return clean and the owner approves.
+2. For each, look up `commercial_billing_events` by `(event_ref)` and the partner state by `event_ref`, `invoice_ref`, `refund_ref`, `dispute_ref` (`partner_commission_events`, `partner_invoice_commissions`, `partner_refund_states`, `partner_dispute_states`).
+3. Case (a) — **no `commercial_billing_events` row**: resend the event from Stripe through the normal signed webhook. This is appropriate; the webhook and ingestion RPCs are idempotent.
+4. Case (b) — **`commercial_billing_events` already `processed` or `ignored`** (e.g. handled by the pre-1B-4 webhook) **but the matching partner event/invoice/refund/dispute state is missing**: a normal Stripe resend is **insufficient** — it is rejected as a top-level duplicate and cannot backfill commission. **STOP.** Use only a separately reviewed, non-production-tested service-role reconciliation job that retrieves the authoritative Stripe objects and invokes the existing ingestion RPCs (`partner_ingest_invoice_paid`, `partner_ingest_refund_state`, `partner_ingest_dispute_state`) idempotently, applying the same shared-account, environment and price-mapping validation as the webhook.
+5. **Never hand-insert, update or delete ledger rows**, and never reset `commercial_billing_events` status to force a replay.
+6. Re-run Section 3 detectors; resume only when all return clean and the owner approves.
