@@ -12,7 +12,7 @@
 - Record, without secret values: deployed Edge versions of `stripe-billing-webhook`; existence of `partner-referral-capture`; Stripe endpoint `<ENDPOINT_ID>` enabled event list; cron jobs; `commercial_billing_events` recent status counts.
 - Record known-good webhook source: pre-1B-4 revision = file at commit `4dee009a6efdf8d2e47b69535238aa08bbe4d948` (identical to `0286783a`), SHA-256 `a0121c8a0712f3616b65201b22b3117d01d87e1521829780d7e1063b5c1d04a1`.
 - Backups: verify a restorable point-in-time/backup exists and note its timestamp.
-- Confirm legal gates G1–G8 are PASS.
+- Confirm G1, G3 and G5 remain PASS; resolve G4; obtain the reviews required by G6–G8; and document the G2 promotional-email restriction before activation. Do not treat G2 as permission to send promotional email without a valid physical postal address.
 
 ## 2. Deployment order and verification
 

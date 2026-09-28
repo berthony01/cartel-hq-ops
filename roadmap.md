@@ -4,5 +4,6 @@
 - [x] Partner 1B-3: commission accounting SQL (accepted)
 - [x] Partner 1B-4: webhook commission source + partner/owner UI (accepted, staged, not deployed)
 - [x] Partner 1B-5: regression reconciliation, release checklist, rollback runbook (repository only)
-- [ ] Production activation — BLOCKED / NOT DONE (legal, CPA, privacy gates; rollback-gap reconciliation/backfill procedure not built/validated; explicit approvals for SQL, Edge, Stripe events, terms)
+- [x] Legal identity + limited U.S.-beta policy drafts completed (repository only; not effective or activated)
+- [ ] Production activation — BLOCKED / NOT DONE (email DNS, attorney, CPA and privacy reviews; promotional email lacks a valid physical postal address; rollback-gap reconciliation/backfill procedure not built/validated; explicit approvals for SQL, Edge, Stripe events, terms)
 - [ ] Publication — BLOCKED / NOT DONE (separate explicit owner approval)
