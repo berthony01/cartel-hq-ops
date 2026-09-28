@@ -41,6 +41,9 @@ import {
   ownerSetPartnerStatus,
   partnerErrorMessage,
   partnerKeys,
+  activationPhrase,
+  markPaidPhrase,
+  typedConfirmationMatches,
   type PartnerTerms,
 } from "@/lib/partners";
 
@@ -75,6 +78,36 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 const intOrNaN = (v: string) => (v.trim() === "" ? NaN : Number(v));
+/** Stage 1B-3 staged column; absent from generated types until applied. */
+const durationOf = (t: PartnerTerms): number | null => {
+  const v = (t as PartnerTerms & { commission_duration_invoices?: number | null }).commission_duration_invoices;
+  return typeof v === "number" ? v : null;
+};
+
+/** High-impact owner action: requires typing the exact phrase before Confirm enables. */
+function TypedConfirm({ trigger, title, body, phrase, onConfirm }: { trigger: ReactNode; title: string; body: string; phrase: string; onConfirm: () => void }) {
+  const [typed, setTyped] = useState("");
+  const ok = typedConfirmationMatches(typed, phrase);
+  return (
+    <AlertDialog onOpenChange={(open) => { if (!open) setTyped(""); }}>
+      <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{body}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <label className="flex min-w-0 flex-col gap-1 text-sm">
+          <span>Type <strong className={`font-mono text-foreground ${WRAP}`}>{phrase}</strong> to confirm</span>
+          <Input className="min-h-11 font-mono" autoComplete="off" value={typed} onChange={(e) => setTyped(e.target.value)} aria-label="Confirmation phrase" />
+        </label>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction disabled={!ok} onClick={() => { if (ok) onConfirm(); }}>Confirm</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 
 /**
  * Owner-only Partner Program controls. Visibility uses the server-verified
@@ -111,10 +144,11 @@ function PartnerAdminInner() {
     commission: draft.commission_bps?.toString() ?? "", window: draft.attribution_window_days?.toString() ?? "",
     hold: draft.hold_days?.toString() ?? "", min: draft.min_payout_cents?.toString() ?? "",
     currency: draft.currency ?? "", agreement: draft.agreement_text ?? "", disclosure: draft.disclosure_text ?? "",
-  } : { commission: "", window: "", hold: "", min: "", currency: "", agreement: "", disclosure: "" };
+    duration: durationOf(draft)?.toString() ?? "",
+  } : { commission: "", window: "", hold: "", min: "", currency: "", agreement: "", disclosure: "", duration: "" };
   const val = (k: keyof typeof seeded) => f[k] ?? seeded[k];
   const set = (k: string) => (e: { target: { value: string } }) => setF((p) => ({ ...p, [k]: e.target.value }));
-  const termsComplete = [intOrNaN(val("commission")), intOrNaN(val("window")), intOrNaN(val("hold")), intOrNaN(val("min"))].every(Number.isFinite)
+  const termsComplete = [intOrNaN(val("commission")), intOrNaN(val("window")), intOrNaN(val("hold")), intOrNaN(val("min")), intOrNaN(val("duration"))].every(Number.isFinite)
     && /^[a-z]{3}$/.test(val("currency").trim().toLowerCase()) && val("agreement").trim() !== "" && val("disclosure").trim() !== "";
 
   const saveDraft = useMutation(run(() => ownerSaveTermsDraft({
@@ -126,6 +160,7 @@ function PartnerAdminInner() {
     currency: val("currency").trim().toLowerCase(),
     agreementText: val("agreement"),
     disclosureText: val("disclosure"),
+    commissionDurationInvoices: intOrNaN(val("duration")),
   }).then((r) => { setF({}); return r; }), "Draft saved"));
   const activate = useMutation(run((v: number) => ownerActivateTerms(v), "Terms activated — program open"));
   const retire = useMutation(run((v: number) => ownerRetireTerms(v), "Terms retired — program closed"));
@@ -155,7 +190,7 @@ function PartnerAdminInner() {
             <ul className="divide-y divide-border-subtle text-sm">
               {allTerms.map((t: PartnerTerms) => (
                 <li key={t.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 py-2">
-                  <span className={WRAP}>v{t.version} · {formatBps(t.commission_bps)} · {formatDays(t.attribution_window_days)} attribution · {formatDays(t.hold_days)} hold · min {formatMoney(t.min_payout_cents, t.currency)}</span>
+                  <span className={WRAP}>v{t.version} · {formatBps(t.commission_bps)} · {durationOf(t) ? `first ${durationOf(t)} invoices` : "duration —"} · {formatDays(t.attribution_window_days)} attribution · {formatDays(t.hold_days)} hold · min {formatMoney(t.min_payout_cents, t.currency)}</span>
                   <span className="flex flex-wrap gap-2">
                     <StatusBadge tone={t.status === "active" ? "green" : t.status === "draft" ? "gold" : "muted"}>{t.status}</StatusBadge>
                     {t.status === "active" ? (
@@ -168,9 +203,10 @@ function PartnerAdminInner() {
               ))}
             </ul>
           ) : <p className="text-sm text-muted-foreground">No terms exist. The program is closed.</p>}
-          <p className="text-xs text-muted-foreground">{draft ? `Editing draft v${draft.version}.` : `New draft will be v${nextVersion}.`} All fields are blank until you enter them.</p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <p className="text-xs text-muted-foreground">{draft ? `Editing draft v${draft.version}.` : `New draft will be v${nextVersion}.`} All fields are blank until you enter them. Saving duration needs the staged commission contract; until it is applied, saving is refused with no write.</p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
             <Field label="Commission (bps)"><Input className="min-h-11" inputMode="numeric" value={val("commission")} onChange={set("commission")} /></Field>
+            <Field label="Paid invoices"><Input className="min-h-11" inputMode="numeric" value={val("duration")} onChange={set("duration")} /></Field>
             <Field label="Attribution days"><Input className="min-h-11" inputMode="numeric" value={val("window")} onChange={set("window")} /></Field>
             <Field label="Hold days"><Input className="min-h-11" inputMode="numeric" value={val("hold")} onChange={set("hold")} /></Field>
             <Field label="Min payout (cents)"><Input className="min-h-11" inputMode="numeric" value={val("min")} onChange={set("min")} /></Field>
@@ -181,9 +217,9 @@ function PartnerAdminInner() {
           <div className="flex flex-wrap gap-2">
             <Button className="min-h-11" variant="outline" disabled={saveDraft.isPending} onClick={() => saveDraft.mutate(undefined)}>Save draft v{nextVersion}</Button>
             {draft ? (
-              <Confirm trigger={<Button className="min-h-11" disabled={activate.isPending || !termsComplete || Object.keys(f).length > 0}>Activate v{draft.version}</Button>}
-                title={`Activate terms v${draft.version}?`}
-                body={`Activation opens the Partner Program: applications, referrals and payout requests become available under these terms.${active ? ` Active v${active.version} will be retired.` : ""} Active terms are frozen and cannot be edited.`}
+              <TypedConfirm trigger={<Button className="min-h-11" disabled={activate.isPending || !termsComplete || Object.keys(f).length > 0}>Activate v{draft.version}</Button>}
+                title={`Activate terms v${draft.version}?`} phrase={activationPhrase(draft.version)}
+                body={`Activation opens the Partner Program: applications, referrals and payout requests become available under these terms.${active ? ` Active v${active.version} will be retired.` : ""} Active terms are frozen and cannot be edited. The database refuses activation while legal placeholders remain.`}
                 onConfirm={() => activate.mutate(draft.version)} />
             ) : null}
           </div>
@@ -329,7 +365,10 @@ function PartnerAdminInner() {
                   ) : p.status === "approved" ? (
                     <div className="flex min-w-0 flex-wrap gap-2">
                       <Input className="min-h-11 min-w-0 flex-1" placeholder="External payment reference (required)" value={note(p.id)} onChange={setNote(p.id)} />
-                      <Button className="min-h-11" disabled={markPaid.isPending || !note(p.id).trim()} onClick={() => markPaid.mutate({ id: p.id, ref: note(p.id).trim() })}>Mark paid</Button>
+                      <TypedConfirm trigger={<Button className="min-h-11" disabled={markPaid.isPending || !note(p.id).trim()}>Mark paid</Button>}
+                        title="Mark payout paid?" phrase={markPaidPhrase(note(p.id))}
+                        body={`Records ${formatMoney(p.amount_cents, p.currency)} as paid externally with reference "${note(p.id).trim()}". This writes a permanent payout ledger entry.`}
+                        onConfirm={() => markPaid.mutate({ id: p.id, ref: note(p.id).trim() })} />
                     </div>
                   ) : null}
                 </li>
