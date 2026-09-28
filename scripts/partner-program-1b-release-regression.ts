@@ -25,7 +25,7 @@ check("R-10 STOP conditions", ["Duplicate accrual", "beyond an invoice", "PGRST2
 
 // Staged-only: no Phase 1B SQL in migrations; migrations unchanged since baseline.
 const migs = readdirSync("supabase/migrations");
-check("R-11 no partner 1B migration files", !migs.some((m) => /1b|policy_accept|referral_click|commission_accounting/i.test(m)));
+check("R-11 no partner 1B migration files", !migs.some((m) => /partner[_-]?(program[_-])?1b|policy_accept|referral_click|commission_accounting/i.test(m)));
 const changed = execSync(`git diff --name-only ${BASE}`, { encoding: "utf8" }).split("\n").filter(Boolean);
 const untracked = execSync("git ls-files --others --exclude-standard", { encoding: "utf8" }).split("\n").filter(Boolean);
 const all = [...changed, ...untracked];

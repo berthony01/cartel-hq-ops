@@ -51,16 +51,16 @@ select event_type, processing_status, last_error, count(*)
 from commercial_billing_events where created_at > now() - interval '24 hours'
 group by 1,2,3 order by 4 desc;
 -- Duplicate accrual detector (must return 0 rows)
-select environment, invoice_ref, count(*) from partner_commission_ledger
-where entry_kind = 'accrual' group by 1,2 having count(*) > 1;
+select stripe_environment, stripe_invoice_ref, count(*) from partner_commission_ledger
+where source_object = 'invoice' group by 1,2 having count(*) > 1;
 -- Over-reversal detector (must return 0 rows)
-select invoice_ref, original_commission_cents, current_commission_cents
+select environment, invoice_ref, commission_cents, applied_commission_cents
 from partner_invoice_commissions
-where current_commission_cents < 0 or current_commission_cents > original_commission_cents;
+where applied_commission_cents < 0 or applied_commission_cents > commission_cents;
 -- Negative balances for review
 select * from partner_balance_breakdown(<PARTNER_ID>);
 ```
-Column names must be re-confirmed against the applied schema before use.
+Column names match the staged 1B-3 SQL; re-confirm against the applied schema before use.
 
 ## 4. STOP conditions (halt rollout, escalate, do not proceed)
 
