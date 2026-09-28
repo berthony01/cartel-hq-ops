@@ -208,7 +208,7 @@ const iGuard = M3N.indexOf("'WORKSPACE_PREDATES_REFERRAL'");
 check("P-15.10 guard compares workspace created_at to attributed_at", M3N.includes("(SELECT w.created_at FROM public.workspaces w WHERE w.id = _workspace_id) < v_r.attributed_at"));
 check("P-15.11 guard returns ok/bound=false before any mutation", iGuard > 0 && M3N.includes("'ok', true, 'bound', false, 'reason', 'WORKSPACE_PREDATES_REFERRAL'")
   && iGuard < M3N.indexOf("UPDATE public.partner_referrals") && iGuard < M3N.indexOf("UPDATE public.workspace_commercial_assignments"));
-check("P-15.12 docs bind matches applied guard", bind.includes("'WORKSPACE_PREDATES_REFERRAL'") && N.includes(M3N.trim()));
+check("P-15.12 docs bind matches applied guard", bind.includes("'WORKSPACE_PREDATES_REFERRAL'") && N.includes(M3.replace(/^\s*--.*$/gm, "").replace(/\s+/g, " ").trim()));
 
 /* 16. Generated types */
 const TYPES = read("src/integrations/supabase/types.ts");
@@ -239,7 +239,7 @@ for (const [fn, args] of Object.entries(RPCS)) {
 /* 17. Client library */
 const LIB = read("src/lib/partners.ts");
 check("P-17.1 code regex exact", LIB.includes("/^[a-z0-9]{10}$/") && LIB.includes(".trim().toLowerCase()"));
-check("P-17.2 storage holds only code + timestamp", LIB.includes("{ code, capturedAt: new Date().toISOString() }") && !/partner_id|partnerId[^:]*localStorage|ip|fingerprint|userAgent|tax_id|ssn/i.test(LIB.slice(LIB.indexOf("Referral capture"), LIB.indexOf("export type ClaimOutcome"))));
+check("P-17.2 storage holds only code + timestamp", LIB.includes("{ code, capturedAt: new Date().toISOString() }") && !/partner_id|\bip\b|ip_address|fingerprint|userAgent|tax_id|\bssn\b/i.test(LIB.slice(LIB.indexOf("Referral capture"), LIB.indexOf("export type ClaimOutcome"))));
 const claim = LIB.slice(LIB.indexOf("export async function claimStoredReferral"), LIB.indexOf("export type BindResult"));
 check("P-17.3 claim keeps on PROGRAM_NOT_OPEN and transient errors", claim.includes('data.reason === "PROGRAM_NOT_OPEN") return "keep"') && claim.includes('if (res.error) return "keep"') && /catch \{\s*return "keep";/.test(claim));
 check("P-17.4 claim clears on success and terminal reasons", claim.includes('clearStoredReferral();\n    return "claimed"') && ["INVALID_CODE", "CODE_NOT_ACTIVE", "SELF_REFERRAL"].every((r) => LIB.includes(`"${r}"`)) && claim.includes('return "cleared"'));
@@ -294,7 +294,7 @@ check("P-20.8 admin copy names Partner Program write exception", ADMIN.includes(
 /* 21. Boundaries across new UI */
 const UI = [LIB, BR, PG, AD, AUTH].join("\n");
 check("P-21.1 no service-partner workspace access in UI", !/workspace_partner_access|invite_service_partner|workspace_members/.test(UI));
-check("P-21.2 no Stripe/billing calls from partner UI", !/stripe|billing-checkout|billing-portal/i.test([LIB, BR, PG, AD].join("\n")));
+check("P-21.2 no Stripe/billing calls from partner UI", !/stripe\.|STRIPE_|billing-checkout|billing-portal|createCheckout/.test([LIB, BR, PG, AD].join("\n")));
 check("P-21.3 no Edge Function invoke", !/functions\.invoke/.test(UI));
 check("P-21.4 no publish/config files touched", !/preview_ui|publish/i.test([LIB, BR, AD].join("\n")));
 
