@@ -29,6 +29,7 @@ import {
   submitPartnerApplication,
   type PartnerTerms,
 } from "@/lib/partners";
+import { ManagedProjectsSection } from "@/components/cartel/ServicePartnerAccessPanel";
 
 export const Route = createFileRoute("/_authenticated/partners")({
   head: () => ({
@@ -288,7 +289,7 @@ function PartnersPage() {
                   {isAffiliate ? <Stat label="Referrals" value={String(s?.referrals_total ?? data?.referrals.length ?? 0)} /> : null}
                 </div>
                 {partner.is_service_partner ? (
-                  <p className="mt-3 text-xs text-muted-foreground">Service Partner identity grants no access to any client workspace.</p>
+                  <p className="mt-3 text-xs text-muted-foreground">Service Partner status alone grants no access to any client project. Access starts only when a project owner invites you and you accept.</p>
                 ) : null}
                 {isAffiliate && partner.referral_code ? (
                   <div className="mt-4 min-w-0">
@@ -309,6 +310,8 @@ function PartnersPage() {
                   </Button>
                 ) : null}
               </Section>
+
+              {partner.is_service_partner && approved ? <ManagedProjectsSection /> : null}
 
               {partner.is_service_partner ? <ServicePartnerGuide /> : null}
 
