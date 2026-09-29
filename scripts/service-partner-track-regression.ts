@@ -73,6 +73,9 @@ const steps = ["1. **Read-only preflight and backup/PITR check**", "2. **Apply t
 const idx = steps.map((x) => RUNBOOK.indexOf(x));
 check("C-8 runbook safe production order (publish before save/activate)", idx.every((i, k) => i >= 0 && (k === 0 || i > idx[k - 1])), idx.join(","));
 check("C-9 runbook explains activation-before-publish hazard + Free-plan backup warning", RUNBOOK.includes("Activation must never precede the new frontend publication") && RUNBOOK.includes("predates the independent track gates") && RUNBOOK.includes("Free plan"));
+check("C-9a runbook security-advisor guidance: baseline compare, one allowed 0028 finding, others STOP", RUNBOOK.includes("compare against the recorded pre-migration baseline") && RUNBOOK.includes("Allow only that explicitly reviewed finding") && RUNBOOK.includes("STOP condition") && !RUNBOOK.includes("no new findings"));
+check("C-9b runbook documents why the get_partner_program_status finding is accepted", RUNBOOK.includes("no parameters") && RUNBOOK.includes("SHA-256 hashes") && RUNBOOK.includes("no PII") && RUNBOOK.includes("search_path TO ''") && RUNBOOK.includes("cannot call any other Partner RPC"));
+check("C-9c staged SQL safeguards: status RPC is parameterless, fixed SELECT, empty search_path, explicit grants", /CREATE OR REPLACE FUNCTION public\.get_partner_program_status\(\)/.test(SQL) && SQL.includes("SET search_path TO ''") && SQL.includes("REVOKE ALL ON FUNCTION public.get_partner_program_status() FROM PUBLIC;") && SQL.includes("GRANT EXECUTE ON FUNCTION public.get_partner_program_status() TO anon, authenticated, service_role;"));
 
 /* ---------- Executed: local throwaway Postgres ---------- */
 const hasPg = spawnSync("bash", ["-lc", "command -v initdb && command -v pg_ctl && command -v psql"]).status === 0;
