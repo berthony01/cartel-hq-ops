@@ -279,7 +279,7 @@ export function PartnerStickerDropsPanel() {
         )}
       </Section>
 
-      <Section variant="secondary" title="Recent drops">
+      <Section variant="surface" title="Recent drops">
         {(stateQ.data?.events ?? []).length === 0 ? (
           <p className="text-sm text-muted-foreground">No Sticker Drops have been posted yet.</p>
         ) : (
