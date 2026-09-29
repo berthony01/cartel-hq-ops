@@ -86,6 +86,8 @@ const allowed = new Set([
   "src/components/cartel/LegalDocumentPage.tsx",
   // Approved production copy fix: public agreement link label dropped "draft".
   "src/routes/partner-program.tsx",
+  // Required regenerated Supabase types after the approved production service-track migration.
+  "src/integrations/supabase/types.ts",
 ]);
 // Discovery task scope (529681aa..98bb3b44) plus the Service Partner staging scope (049aae3b..HEAD).
 // Intervening separately-approved tasks (MCP, favicon) are outside this check.
