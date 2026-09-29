@@ -27,6 +27,10 @@ export const PLACEHOLDER_RE = /\[[A-Z0-9][A-Z0-9 /&.,'-]*\]/g;
 
 const OPERATOR = "Berthony Petit Frere";
 
+/** Single canonical Service Partner disclosure. Used by every surface and by the staged DB activation gate. */
+export const SERVICE_PARTNER_DISCLOSURE =
+  "Independent CARTEL HQ Service Partner. Services are provided by [Partner Name], not by CARTEL HQ. Results and earnings are not guaranteed.";
+
 const IDENTITY: PolicySection = {
   heading: "Who we are",
   body: [
@@ -249,7 +253,7 @@ export const POLICY_DRAFTS: Record<PolicyType, PolicyDraft> = {
       {
         heading: "Required disclosure",
         body: [
-          "Place this disclosure clearly near every promotion of your services: \"Independent CARTEL HQ Service Partner. Services are provided by (your name or business name), not by CARTEL HQ. Results and earnings are not guaranteed.\"",
+          `Place this disclosure clearly near every promotion of your services, replacing [Partner Name] with your name or business name: "${SERVICE_PARTNER_DISCLOSURE}"`,
         ],
       },
       {
@@ -279,6 +283,7 @@ export const POLICY_DRAFTS: Record<PolicyType, PolicyDraft> = {
         heading: "Versions and changes",
         body: [
           "Acceptance is recorded against a specific agreement version. The Operator may update this agreement; material changes take effect when a new version is activated, and continued participation may require accepting it.",
+          "The Operator has not represented that this agreement received attorney review. The Operator recommends that you obtain independent legal advice where appropriate before accepting.",
         ],
       },
       GOVERNING,
@@ -393,3 +398,12 @@ export async function sha256Hex(text: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
+
+/**
+ * Canonical Service Partner Agreement v2 text. The owner launch preset and the
+ * staged database activation gate (SHA-256 below) both use exactly this value.
+ */
+export const SERVICE_PARTNER_AGREEMENT_V2_TEXT: string = policyContent(POLICY_DRAFTS.partner_agreement);
+/** SHA-256 (hex, UTF-8) of the canonical texts; embedded in the staged migration. */
+export const SERVICE_PARTNER_AGREEMENT_V2_SHA256 = "02e337dd2ae09436813e5d69ac402f9cc03d80fc79336d4cc7713e868cd7508e";
+export const SERVICE_PARTNER_DISCLOSURE_SHA256 = "2d8b74957f7f4d66dcd262a49d3ae8a331c8084b8b11390bddae40f7363df91e";

@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { SERVICE_PARTNER_DISCLOSURE } from "@/lib/legal-policies";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, BriefcaseBusiness, Check, Clock, ShieldAlert, X } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
@@ -159,7 +160,7 @@ function PartnerProgramPage() {
             </ol>
             <div className="mt-8 rounded-md border border-gold/30 bg-gold/5 p-4">
               <p className="type-eyebrow text-gold">Required disclosure near your promotions</p>
-              <p className="mt-2 text-sm leading-6 text-foreground">"Independent CARTEL HQ Service Partner. Services are provided by [Partner Name], not by CARTEL HQ. Results and earnings are not guaranteed."</p>
+              <p className="mt-2 text-sm leading-6 text-foreground">"{SERVICE_PARTNER_DISCLOSURE}"</p>
             </div>
           </div>
         </section>
