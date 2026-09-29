@@ -118,6 +118,7 @@ const allowed = new Set([
   "src/integrations/supabase/types.ts",
   // SP-B4 staged files (approved later phase).
   "docs/sql/SP_B4_partner_community_management.sql", "docs/SP_B4_PARTNER_COMMUNITY_RUNBOOK.md", "scripts/sp-b4-partner-community-management-regression.ts", "src/components/cartel/PartnerCommunityPanel.tsx", "src/lib/partner-community-management.ts",
+  "docs/sql/SP_B5_partner_sticker_tools.sql", "docs/SP_B5_PARTNER_STICKER_TOOLS_RUNBOOK.md", "scripts/sp-b5-partner-sticker-tools-regression.ts", "src/components/cartel/PartnerStickerDropsPanel.tsx", "src/lib/partner-sticker-drops.ts", "backend-source/edge-functions/sticker-drop-config/index.ts",
   // SP-A Managed Client Access staging (approved allowlist).
   // Plan-mode artifact acknowledged at the SP-A start gate (46bd6e71).
   ".lovable/plan.md",
