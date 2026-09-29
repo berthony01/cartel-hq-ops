@@ -19,4 +19,6 @@
 - [x] SP-B1 partner Project Inbox staged (docs/sql only, not applied): seven partner_inbox_* RPCs, partner-only /telegram Inbox, settings + block/unblock owner-only (repository only)
 - [x] SP-B0/SP-B1 production activation complete: migrations `20260929154656` (SP-B0) and `20260929154741` (SP-B1) applied; evaluator outputs identical pre/post; advisor 0028 unchanged (9), 0029 exactly +7 (112 → 119); transactional backend smoke 12/12 passed and rolled back; types regenerated
 - [ ] SP-B1 real two-account browser smoke — PENDING: needs an approved active Service Partner test account; production has none and partner status must not be altered to create one
-- [ ] SP-B2+: remaining partner scopes (launch watch comms, community, broadcasts, stickers, missions) — deferred / not started
+- [x] SP-B2 V1 partner Launch Watcher messages staged (docs/sql only, not applied): four partner RPCs (launch list, counts, history, send), managed /telegram panel, no commercial gate (matches owner), repository only
+- [ ] SP-B2 production activation — PENDING: CP-SPB2-PUBLISH then CP-SPB2-SQL approvals, then types, then two-account smoke
+- [ ] SP-B3+: remaining partner scopes (community, broadcasts, stickers, missions) — deferred / not started
