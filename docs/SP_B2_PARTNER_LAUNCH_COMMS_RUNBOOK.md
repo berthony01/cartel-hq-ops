@@ -38,5 +38,5 @@ Expected advisor lint delta: 0028 unchanged (9); 0029 +4 (119 → 123).
 ## Rollback
 `DROP FUNCTION` the four `partner_*` functions (or REVOKE EXECUTE from authenticated) and remove `launch_watcher_comms` from `ACTIVE_PARTNER_SCOPES`. Already-queued deliveries finish normally; no owner path depends on these functions.
 
-## Known conflict with an older phase-scoped check
-`scripts/sp-b1-partner-inbox-regression.ts` F-1 asserts that the only active scopes are project_identity and project_inbox ("other SP-B scopes still inactive"). Activating `launch_watcher_comms` makes that SP-B1-era assertion fail by design. The file is outside the SP-B2 allowlist and was not edited; a one-line update needs separate approval.
+## Older phase-scoped check (resolved)
+`scripts/sp-b1-partner-inbox-regression.ts` F-1 previously asserted that the only active scopes were project_identity and project_inbox. It was updated under separate approval to recognize project_identity, project_inbox and launch_watcher_comms as the active scopes; the SP-B2 F-8 allowlist was likewise updated under separate approval. All suites pass.
