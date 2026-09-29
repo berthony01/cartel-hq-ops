@@ -1936,9 +1936,11 @@ export type Database = {
         Row: {
           activated_at: string | null
           activated_by: string | null
+          affiliate_applications_open: boolean
           agreement_text: string | null
           attribution_window_days: number | null
           commission_bps: number | null
+          commission_duration_invoices: number | null
           created_at: string
           created_by: string | null
           currency: string | null
@@ -1947,6 +1949,7 @@ export type Database = {
           id: string
           min_payout_cents: number | null
           retired_at: string | null
+          service_partner_applications_open: boolean
           status: string
           updated_at: string
           version: number
@@ -1954,9 +1957,11 @@ export type Database = {
         Insert: {
           activated_at?: string | null
           activated_by?: string | null
+          affiliate_applications_open?: boolean
           agreement_text?: string | null
           attribution_window_days?: number | null
           commission_bps?: number | null
+          commission_duration_invoices?: number | null
           created_at?: string
           created_by?: string | null
           currency?: string | null
@@ -1965,6 +1970,7 @@ export type Database = {
           id?: string
           min_payout_cents?: number | null
           retired_at?: string | null
+          service_partner_applications_open?: boolean
           status?: string
           updated_at?: string
           version: number
@@ -1972,9 +1978,11 @@ export type Database = {
         Update: {
           activated_at?: string | null
           activated_by?: string | null
+          affiliate_applications_open?: boolean
           agreement_text?: string | null
           attribution_window_days?: number | null
           commission_bps?: number | null
+          commission_duration_invoices?: number | null
           created_at?: string
           created_by?: string | null
           currency?: string | null
@@ -1983,6 +1991,7 @@ export type Database = {
           id?: string
           min_payout_cents?: number | null
           retired_at?: string | null
+          service_partner_applications_open?: boolean
           status?: string
           updated_at?: string
           version?: number
@@ -6456,6 +6465,7 @@ export type Database = {
           workspace_id: string
         }[]
       }
+      get_partner_program_status: { Args: never; Returns: Json }
       get_platform_launch_analytics: {
         Args: never
         Returns: {
@@ -7072,6 +7082,14 @@ export type Database = {
         }
         Returns: Json
       }
+      owner_save_service_partner_terms_draft: {
+        Args: {
+          _agreement_text: string
+          _disclosure_text: string
+          _version: number
+        }
+        Returns: Json
+      }
       owner_set_partner_status: {
         Args: { _partner_id: string; _status: string; _tax_doc_status?: string }
         Returns: Json
@@ -7081,9 +7099,11 @@ export type Database = {
         Returns: {
           activated_at: string | null
           activated_by: string | null
+          affiliate_applications_open: boolean
           agreement_text: string | null
           attribution_window_days: number | null
           commission_bps: number | null
+          commission_duration_invoices: number | null
           created_at: string
           created_by: string | null
           currency: string | null
@@ -7092,6 +7112,7 @@ export type Database = {
           id: string
           min_payout_cents: number | null
           retired_at: string | null
+          service_partner_applications_open: boolean
           status: string
           updated_at: string
           version: number
