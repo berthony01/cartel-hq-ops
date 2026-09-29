@@ -61,7 +61,7 @@ if (!hasPg) {
   try {
     // initdb refuses root; run the server as an unprivileged user when needed.
     if (process.getuid?.() === 0) { sh(`chmod 777 ${dir}`); }
-    const asPg = process.getuid?.() === 0 ? "setpriv --reuid=65534 --regid=65534 --clear-groups " : "";
+    const asPg = process.getuid?.() === 0 ? "setpriv --reuid=1000 --regid=1000 --clear-groups " : "";
     sh(`${asPg}initdb -D ${dir}/data -U postgres -A trust >/dev/null`);
     sh(`${asPg}pg_ctl -D ${dir}/data -o "-k ${dir} -p ${port} -c listen_addresses=''" -l ${dir}/log -w start >/dev/null`);
     const psql = (sql: string) => {
@@ -142,7 +142,7 @@ if (!hasPg) {
   } catch (e) {
     check("DB-X harness error", false, String(e).slice(0, 400));
   } finally {
-    spawnSync("bash", ["-lc", `${process.getuid?.() === 0 ? "setpriv --reuid=65534 --regid=65534 --clear-groups " : ""}pg_ctl -D ${dir}/data -m immediate stop`], { env, stdio: "ignore" });
+    spawnSync("bash", ["-lc", `${process.getuid?.() === 0 ? "setpriv --reuid=1000 --regid=1000 --clear-groups " : ""}pg_ctl -D ${dir}/data -m immediate stop`], { env, stdio: "ignore" });
     rmSync(dir, { recursive: true, force: true });
   }
 }
