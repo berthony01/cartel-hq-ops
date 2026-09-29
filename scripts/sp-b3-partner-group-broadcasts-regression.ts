@@ -53,11 +53,11 @@ const edgeBase = execFileSync("git", ["show", `${PLAN_COMMIT}:backend-source/edg
 check("E-0 staging baseline equals start-gate md5 (deployed v48)", execFileSync("md5sum", { input: edgeBase, encoding: "utf8" }).startsWith(EDGE_BASELINE_MD5));
 const diffLines = execFileSync("git", ["diff", "--unified=0", PLAN_COMMIT, "--", "backend-source/edge-functions/telegram-group/index.ts"], { encoding: "utf8" }).split("\n").filter((l) => /^[+-][^+-]/.test(l));
 const removed = diffLines.filter((l) => l.startsWith("-"));
-check("E-1 only 6 baseline lines changed (2 imports, membership, canManage, gate, send guard)", removed.length === 6, String(removed.length));
-check("E-2 partner branch only for non-member + send_group_announcement", EDGE.includes('if (!membership) {\n    if (action !== "send_group_announcement") return respond({ error: "FORBIDDEN"'));
+check("E-1 only 7 baseline lines changed (SP-B3: 2 imports, membership, canManage, gate, send guard; SP-B4: non-member guard)", removed.length === 7, String(removed.length));
+check("E-2 partner branch only for non-member + send_group_announcement", EDGE.includes('if (!membership && !partnerCommunityAuthorized) {\n    if (action !== "send_group_announcement") return respond({ error: "FORBIDDEN"'));
 check("E-3 partner gate uses user-JWT client RPC", EDGE.includes('userClient.rpc("partner_authorize_group_broadcast"'));
 check("E-4 plain text forced", EDGE.includes("body.brandingEnabled = false;") && EDGE.includes("body.ctaEnabled = false;") && EDGE.includes("delete body.ctaLaunchId;"));
-check("E-5 owner identity/commercial gate skipped only for partner-authorized request", EDGE.includes("if (PROJECT_IDENTITY_GATED_ACTIONS.has(action) && !partnerBroadcastAuthorized) {"));
+check("E-5 owner identity/commercial gate skipped only for partner-authorized request", EDGE.includes("if (PROJECT_IDENTITY_GATED_ACTIONS.has(action) && !partnerBroadcastAuthorized && !partnerCommunityAuthorized) {"));
 check("E-6 only send_group_announcement guard widened; options/official guards unchanged", (EDGE.match(/!canManageCommunity && !partnerBroadcastAuthorized/g) ?? []).length === 1 && EDGE.indexOf("!canManageCommunity && !partnerBroadcastAuthorized") > EDGE.indexOf('if (action === "send_group_announcement") {'));
 check("E-7 single send engine: one ledger insert per announcement kind unchanged", (EDGE.match(/from\("telegram_group_announcements"\)\.insert\(/g) ?? []).length === (edgeBase.match(/from\("telegram_group_announcements"\)\.insert\(/g) ?? []).length);
 check("E-8 requested_by stays user.id; group lookup id+workspace", EDGE.includes("requested_by: user.id,") && EDGE.includes('.eq("id", id).eq("workspace_id", workspaceId)'));
@@ -65,7 +65,7 @@ check("E-9 denial mapping uses shared commercialDenialFor + identity body", EDGE
 check("E-10 3500 limit unchanged in shared path", EDGE.includes("messageText.length > 3500"));
 
 /* ---------- Static: frontend ---------- */
-check("F-1 broadcasts active; remaining scopes inactive", LIB.includes('ACTIVE_PARTNER_SCOPES: readonly PartnerClientScope[] = ["project_identity", "project_inbox", "launch_watcher_comms", "broadcasts"]'));
+check("F-1 broadcasts active (community_management added by SP-B4); sticker_tools/missions inactive", LIB.includes('ACTIVE_PARTNER_SCOPES: readonly PartnerClientScope[] = ["project_identity", "project_inbox", "launch_watcher_comms", "broadcasts", "community_management"]'));
 check("F-2 /telegram unlocked for broadcasts", LIB.includes('{ path: "/telegram", scope: "broadcasts" }'));
 check("F-3 browser: partner RPCs + plain-text send only", BLIB.includes('"partner_list_broadcast_groups"') && BLIB.includes('"partner_list_group_broadcasts"') && BLIB.includes("brandingEnabled: false") && BLIB.includes("ctaEnabled: false") && !/ctaLaunchId|reviewedLogo|from\("telegram_group/.test(BLIB + PANEL));
 check("F-4 panel: preview confirm, per-draft UUID, 3500 counter, no ids", PANEL.includes("AlertDialog") && PANEL.includes("crypto.randomUUID()") && PANEL.includes("PARTNER_BROADCAST_MAX") && !/telegram_chat_id|requested_by|telegram_message_id/.test(PANEL + BLIB));
@@ -82,6 +82,8 @@ const ALLOW = new Set([
   "scripts/public-discovery-seo-regression.ts", "roadmap.md", ".lovable/plan.md",
   // Approved post-production generated-types sync (SP-B3 activation).
   "src/integrations/supabase/types.ts",
+  // SP-B4 staged files (approved later phase).
+  "docs/sql/SP_B4_partner_community_management.sql", "docs/SP_B4_PARTNER_COMMUNITY_RUNBOOK.md", "scripts/sp-b4-partner-community-management-regression.ts", "src/components/cartel/PartnerCommunityPanel.tsx", "src/lib/partner-community-management.ts",
 ]);
 const changed = [
   ...execFileSync("git", ["diff", "--name-only", PLAN_COMMIT], { encoding: "utf8" }).split("\n"),
