@@ -59,8 +59,11 @@ if (!hasPg) {
   const env = { ...process.env, PGHOST: dir, PGPORT: String(port), PGUSER: "postgres", PGDATABASE: "postgres", PGPASSWORD: "" };
   const sh = (cmd: string) => execSync(cmd, { env, stdio: "pipe", encoding: "utf8" });
   try {
-    sh(`initdb -D ${dir}/data -U postgres -A trust >/dev/null`);
-    sh(`pg_ctl -D ${dir}/data -o "-k ${dir} -p ${port} -c listen_addresses=''" -l ${dir}/log -w start >/dev/null`);
+    // initdb refuses root; run the server as an unprivileged user when needed.
+    if (process.getuid?.() === 0) { sh(`chmod 777 ${dir}`); }
+    const asPg = process.getuid?.() === 0 ? "setpriv --reuid=65534 --regid=65534 --clear-groups " : "";
+    sh(`${asPg}initdb -D ${dir}/data -U postgres -A trust >/dev/null`);
+    sh(`${asPg}pg_ctl -D ${dir}/data -o "-k ${dir} -p ${port} -c listen_addresses=''" -l ${dir}/log -w start >/dev/null`);
     const psql = (sql: string) => {
       const f = join(dir, `q${Math.random().toString(36).slice(2)}.sql`);
       writeFileSync(f, sql);
@@ -139,7 +142,7 @@ if (!hasPg) {
   } catch (e) {
     check("DB-X harness error", false, String(e).slice(0, 400));
   } finally {
-    spawnSync("pg_ctl", ["-D", `${dir}/data`, "-m", "immediate", "stop"], { env, stdio: "ignore" });
+    spawnSync("bash", ["-lc", `${process.getuid?.() === 0 ? "setpriv --reuid=65534 --regid=65534 --clear-groups " : ""}pg_ctl -D ${dir}/data -m immediate stop`], { env, stdio: "ignore" });
     rmSync(dir, { recursive: true, force: true });
   }
 }
