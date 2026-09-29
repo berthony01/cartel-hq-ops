@@ -206,7 +206,7 @@ if (!hasPg) {
     check("DB-27 exactly one client settings row upserted", row === "LAUNCH,false,LIKES,250,1", row);
     check("DB-28 save mutated no mission/target/snapshot/schedule/usage row", counts() === before);
     check("DB-29 list reflects saved defaults", JSON.parse(as(SP, `SELECT public.partner_list_mission_state('${WS}')::text;`).out).settings.saved === true);
-    psql(`UPDATE public.project_profiles SET project_name = NULL WHERE workspace_id='${WS}';`);
+    psql(`UPDATE public.project_profiles SET project_name = ' ' WHERE workspace_id='${WS}';`);
     check("DB-30 Project Identity required to save", err(save(v({})), "PROJECT_IDENTITY_REQUIRED"));
     psql(`UPDATE public.project_profiles SET project_name = 'Client One' WHERE workspace_id='${WS}';`);
     psql(`INSERT INTO public.platform_unrestricted VALUES ('${SP}');`);
@@ -220,15 +220,16 @@ if (!hasPg) {
     check("DB-34 non-operator member stays read-only", as(MEM, `SELECT count(*) FROM public.social_mission_settings;`).out === "1" && as(MEM, `UPDATE public.social_mission_settings SET default_preset='QUICK' WHERE workspace_id='${WS}' RETURNING 1;`).out === "" && err(as(MEM, `SELECT public.partner_list_mission_state('${WS}');`), "Not authorized"));
     check("DB-35 partner stays outside workspace_members", psql(`SELECT count(*) FROM public.workspace_members WHERE user_id='${SP}';`).out === "0");
 
-    as(OWNER, `SELECT public.owner_revoke_partner_access('${accessId}');`);
-    check("DB-36 revoke immediately blocks next read + save", allDenied(SP, "Not authorized"));
-    psql(`UPDATE public.partner_client_access SET status='active', revoked_at=NULL WHERE id='${accessId}';`);
     const susp = psql(`UPDATE public.partners SET status='suspended' WHERE user_id='${SP}';`);
-    check("DB-37 suspended partner denied", susp.ok && allDenied(SP, "Not authorized"));
+    check("DB-36 suspended partner denied", susp.ok && allDenied(SP, "Not authorized"));
+    psql(`UPDATE public.partners SET status='approved' WHERE user_id='${SP}';`);
+    check("DB-37 reinstated partner allowed again (control)", as(SP, `SELECT public.partner_list_mission_state('${WS}');`).ok);
+    as(OWNER, `SELECT public.owner_revoke_service_partner('${accessId}');`);
+    check("DB-38 revoke immediately blocks next read + save", allDenied(SP, "Not authorized"));
 
     const mcFns = ["create_social_mission_from_telegram_link", "close_social_mission_from_telegram", "end_social_mission_from_control", "cancel_social_mission_from_control", "social_mission_apply_target_override", "social_mission_apply_duration_override", "record_social_mission_metric_snapshot"];
-    check("DB-38 SP-B6 grants no Mission Control / start / close / snapshot function", !mcFns.some((f) => code.includes(f)));
-    check("DB-39 exactly 2 new authenticated-executable definer RPCs (advisor 0029 +2)", psql(`SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname LIKE 'partner_%mission%' AND p.prosecdef AND has_function_privilege('authenticated', p.oid, 'EXECUTE') AND NOT has_function_privilege('anon', p.oid, 'EXECUTE');`).out === "2");
+    check("DB-39 SP-B6 grants no Mission Control / start / close / snapshot function", !mcFns.some((f) => code.includes(f)));
+    check("DB-40 exactly 2 new authenticated-executable definer RPCs (advisor 0029 +2)", psql(`SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname LIKE 'partner_%mission%' AND p.prosecdef AND has_function_privilege('authenticated', p.oid, 'EXECUTE') AND NOT has_function_privilege('anon', p.oid, 'EXECUTE');`).out === "2");
   } finally {
     try { sh(`${asPg}pg_ctl -D ${dir}/data -m immediate stop >/dev/null`); } catch { /* ignore */ }
     rmSync(dir, { recursive: true, force: true });
