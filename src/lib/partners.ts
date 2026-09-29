@@ -426,6 +426,7 @@ export function partnerErrorMessage(err: unknown): string {
     AFFILIATE_PROGRAM_CLOSED: "The Affiliate Program is not open, so payouts are unavailable.",
     PARTNER_TERMS_NO_TRACK_OPEN: "Terms must open the Service Partner track before activation.",
     PARTNER_NOT_AFFILIATE: "Service Partners do not receive payouts from CARTEL HQ.",
+    partner_applications_one_pending: "You already have a pending application.",
     ALREADY_PARTNER: "You already have a partner record.",
     AUTH_REQUIRED: "Sign in to continue.",
     ROLE_REQUIRED: "Choose a program track.",
