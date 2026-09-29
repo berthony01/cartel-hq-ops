@@ -61,7 +61,8 @@ export function PartnerLaunchCommsPanel() {
   useEffect(() => {
     if (launches.length === 0) return;
     if (!launchId || !launches.some((l) => l.launch_id === launchId)) {
-      setLaunchId((launches.find((l) => l.can_send) ?? launches[0]).launch_id);
+      const next = launches.find((l) => l.can_send) ?? launches[0];
+      if (next) setLaunchId(next.launch_id);
     }
   }, [launches, launchId]);
 
@@ -132,7 +133,7 @@ export function PartnerLaunchCommsPanel() {
           <div className="flex flex-col gap-4">
             <div className="grid gap-2">
               <Label htmlFor="partner-comms-launch">Launch</Label>
-              <Select value={launchId ?? undefined} onValueChange={(v) => { setLaunchId(v); setRequestId(crypto.randomUUID()); }}>
+              <Select value={launchId ?? ""} onValueChange={(v) => { setLaunchId(v); setRequestId(crypto.randomUUID()); }}>
                 <SelectTrigger id="partner-comms-launch" className="min-h-11"><SelectValue placeholder="Choose a launch" /></SelectTrigger>
                 <SelectContent>
                   {launches.map((l) => (
@@ -197,11 +198,11 @@ export function PartnerLaunchCommsPanel() {
                   </div>
                   <p className="mt-1 line-clamp-3 whitespace-pre-wrap break-words text-sm text-muted-foreground">{u.body}</p>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                    <StatusBadge tone="success">{u.sent_count} sent</StatusBadge>
-                    {u.pending_count ? <StatusBadge tone="neutral">{u.pending_count} pending</StatusBadge> : null}
-                    {u.failed_count ? <StatusBadge tone="danger">{u.failed_count} failed</StatusBadge> : null}
-                    {u.ambiguous_count ? <StatusBadge tone="warning">{u.ambiguous_count} uncertain</StatusBadge> : null}
-                    {u.skipped_count ? <StatusBadge tone="neutral">{u.skipped_count} skipped</StatusBadge> : null}
+                    <StatusBadge tone="green">{u.sent_count} sent</StatusBadge>
+                    {u.pending_count ? <StatusBadge tone="muted">{u.pending_count} pending</StatusBadge> : null}
+                    {u.failed_count ? <StatusBadge tone="red">{u.failed_count} failed</StatusBadge> : null}
+                    {u.ambiguous_count ? <StatusBadge tone="gold">{u.ambiguous_count} uncertain</StatusBadge> : null}
+                    {u.skipped_count ? <StatusBadge tone="muted">{u.skipped_count} skipped</StatusBadge> : null}
                   </div>
                 </li>
               ))}
