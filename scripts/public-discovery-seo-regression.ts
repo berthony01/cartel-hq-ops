@@ -89,6 +89,8 @@ const allowed = new Set([
   // Required regenerated Supabase types after the approved production service-track migration.
   "src/integrations/supabase/types.ts",
   // SP-A Managed Client Access staging (approved allowlist).
+  // Plan-mode artifact acknowledged at the SP-A start gate (46bd6e71).
+  ".lovable/plan.md",
   "docs/sql/SP_A_partner_client_access.sql",
   "docs/SP_A_MANAGED_CLIENT_ACCESS_RUNBOOK.md",
   "src/lib/partner-client-access.ts",
