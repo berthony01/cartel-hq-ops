@@ -29,9 +29,9 @@ No table, RLS, constraint, trigger, owner-function, membership-helper or Edge Fu
 
 ## Activation order
 1. ~~CP-SPB2-PUBLISH — publish frontend~~ DONE: authorized and initiated; deployment request `7187debc-aff1-4a59-8ce9-94973d105e3a`; project reports published=true, status=ready. Browser propagation not yet independently verified.
-2. CP-SPB2-SQL — apply the SQL file as one migration. Verify: 4 functions, prosecdef, owner postgres, `search_path=""`, ACL authenticated+service_role only; owner watcher functions byte-identical to pre-apply; transactional smoke (grant partner, list, stats, history, send, replay, cooldown, revoke denies) then ROLLBACK so no DM is sent; advisor lint.
-3. Regenerate Supabase types (separate turn).
-4. Real two-account browser smoke (needs an approved active Service Partner test account).
+2. ~~CP-SPB2-SQL — apply the SQL file as one migration~~ DONE: applied as `20260929161346`, all verifications and the rolled-back 12/12 transactional smoke passed.
+3. ~~Regenerate Supabase types~~ DONE: platform regenerated types; runbook synced.
+4. Real two-account browser + committed Telegram DM rendering smoke — PENDING (needs an approved active Service Partner test account); browser propagation of the frontend publish also not yet independently verified.
 
 Expected advisor lint delta: 0028 unchanged (9); 0029 +4 (119 → 123).
 
