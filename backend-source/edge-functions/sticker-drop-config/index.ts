@@ -58,8 +58,42 @@ Deno.serve(async (req: Request) => {
     .eq("user_id", authData.user.id)
     .maybeSingle();
   if (membershipError) return respond({ error: "MEMBERSHIP_CHECK_FAILED", message: "Could not verify workspace access." }, 500);
-  if (!membership) return respond({ error: "FORBIDDEN", message: "You do not have access to this workspace." }, 403);
-  const canManage = membership.role === "owner" || membership.role === "admin";
+  /**
+   * SP-B5 V1 — Service Partner Sticker Drops management. ONLY for a non-member
+   * and ONLY for save_schedule / set_schedule_enabled / delete_schedule:
+   * authorized by partner_authorize_sticker_drop_action under the PARTNER's own
+   * JWT (scope first; group, pack and schedule in workspace; client Project
+   * Identity + client sticker_drops for save/enable; no owner bypass). Falls
+   * through into the one existing implementation. status, set_kill_switch and
+   * every other action stay FORBIDDEN for non-members.
+   */
+  let partnerStickerAuthorized = false;
+  if (!membership) {
+    if (action !== "save_schedule" && action !== "set_schedule_enabled" && action !== "delete_schedule") return respond({ error: "FORBIDDEN", message: "You do not have access to this workspace." }, 403);
+    const optId = (v: unknown) => (typeof v === "string" && v ? v : null);
+    const { data: gate, error: gateError } = await userClient.rpc("partner_authorize_sticker_drop_action", {
+      _workspace_id: workspaceId,
+      _action: action,
+      _group_connection_id: action === "save_schedule" ? optId(body.groupConnectionId) : null,
+      _pack_id: action === "save_schedule" ? optId(body.packId) : null,
+      _schedule_id: optId(body.scheduleId),
+      _enabled: action === "set_schedule_enabled" ? body.enabled === true : null,
+    });
+    if (gateError) return respond({ error: "FORBIDDEN", message: "You do not have access to this workspace." }, 403);
+    if (!gate || typeof gate !== "object" || typeof (gate as any).allowed !== "boolean") return respond({ error: "COMMERCIAL_ACCESS_UNAVAILABLE", code: "COMMERCIAL_ACCESS_UNAVAILABLE", message: "Plan access could not be verified. Try again." }, 503);
+    if ((gate as any).allowed !== true) {
+      const code = String((gate as any).code ?? "");
+      if (code === "GROUP_NOT_FOUND" || code === "PACK_NOT_FOUND" || code === "SCHEDULE_NOT_FOUND") return respond({ error: code, code, message: "That item is not available in this project." }, 404);
+      if (code === "PACK_NOT_PUBLISHED" || code === "GROUP_AND_PACK_REQUIRED" || code === "SCHEDULE_REQUIRED") return respond({ error: code, code, message: "Choose a connected group and a published sticker pack." }, 400);
+      if (code === "PROJECT_IDENTITY_REQUIRED") return respond({ error: code, code, message: "The project owner needs to finish the Project Profile first." }, 403);
+      if (code === "PLAN_LIMIT_REACHED") return respond({ error: code, code, message: "Monthly plan limit reached." }, 429);
+      if (code === "COMMERCIAL_ACCESS_UNAVAILABLE") return respond({ error: code, code, message: "Plan access could not be verified. Try again." }, 503);
+      if (code === "FEATURE_NOT_INCLUDED" || code === "PLAN_ACCESS_INACTIVE" || code === "COMMERCIAL_ACCESS_DENIED") return respond({ error: code, code, message: "Sticker Drops are not available on this project's plan." }, 403);
+      return respond({ error: "FORBIDDEN", message: "You do not have access to this workspace." }, 403);
+    }
+    partnerStickerAuthorized = true;
+  }
+  const canManage = partnerStickerAuthorized || membership?.role === "owner" || membership?.role === "admin";
 
   async function loadState() {
     const [groupsRes, packsRes, schedulesRes, controlRes, eventsRes] = await Promise.all([
@@ -90,7 +124,7 @@ Deno.serve(async (req: Request) => {
 
     return {
       canManage,
-      role: membership.role,
+      role: membership?.role,
       control: controlRes.data ?? { workspace_id: workspaceId, kill_switch: false, updated_at: null, updated_by: null },
       groups: groupsRes.data ?? [],
       packs: packsRes.data ?? [],
@@ -105,7 +139,7 @@ Deno.serve(async (req: Request) => {
     if (!canManage) return respond({ error: "MANAGER_REQUIRED", message: "Only workspace owners and admins can manage Sticker Drops." }, 403);
     // Project Identity Gate B — create/update and ENABLE only. Disabling,
     // delete_schedule and set_kill_switch are safety stops and stay ungated.
-    if (action === "save_schedule" || (action === "set_schedule_enabled" && body.enabled === true)) {
+    if (!partnerStickerAuthorized && (action === "save_schedule" || (action === "set_schedule_enabled" && body.enabled === true))) {
       const identityGate = await requireProjectToolAccess(admin, authData.user.id, workspaceId);
       if (!identityGate.allowed) return respond(identityGate.body, identityGate.status);
       const commercialGate = await requireCommercialAccess(admin, authData.user.id, workspaceId, "sticker_drops");
@@ -185,6 +219,7 @@ Deno.serve(async (req: Request) => {
           saved = data;
         }
       }
+      if (partnerStickerAuthorized) return respond({ saved: true, scheduleId: saved.id });
       return respond({ saved: true, schedule: saved, state: await loadState() });
     }
 
@@ -195,6 +230,7 @@ Deno.serve(async (req: Request) => {
       const { data, error } = await admin.from("sticker_drop_schedules").update({ enabled, paused_reason: enabled ? null : "Paused by workspace admin" }).eq("id", scheduleId).eq("workspace_id", workspaceId).select("*").maybeSingle();
       if (error) throw error;
       if (!data) return respond({ error: "SCHEDULE_NOT_FOUND", message: "That Sticker Drop schedule no longer exists." }, 404);
+      if (partnerStickerAuthorized) return respond({ updated: true, scheduleId: data.id, enabled: data.enabled === true });
       return respond({ updated: true, schedule: data, state: await loadState() });
     }
 
@@ -203,6 +239,7 @@ Deno.serve(async (req: Request) => {
       if (!scheduleId) return respond({ error: "SCHEDULE_REQUIRED", message: "Schedule is required." }, 400);
       const { error } = await admin.from("sticker_drop_schedules").delete().eq("id", scheduleId).eq("workspace_id", workspaceId);
       if (error) throw error;
+      if (partnerStickerAuthorized) return respond({ deleted: true, scheduleId });
       return respond({ deleted: true, state: await loadState() });
     }
 
