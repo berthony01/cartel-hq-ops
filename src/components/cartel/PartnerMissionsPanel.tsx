@@ -128,7 +128,7 @@ function MissionCard({ m }: { m: PartnerMission }) {
             </a>
           ) : null}
         </div>
-        <StatusBadge tone={m.status === "LIVE" ? "success" : "neutral"}>{m.status}</StatusBadge>
+        <StatusBadge tone={m.status === "LIVE" ? "green" : "muted"}>{m.status}</StatusBadge>
       </div>
       <dl className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
         {(["views", "likes", "replies", "reposts", "bookmarks"] as const).map((k) => (

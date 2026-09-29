@@ -19,6 +19,7 @@ import { PartnerLaunchCommsPanel } from "@/components/cartel/PartnerLaunchCommsP
 import { PartnerGroupBroadcastPanel } from "@/components/cartel/PartnerGroupBroadcastPanel";
 import { PartnerCommunityPanel } from "@/components/cartel/PartnerCommunityPanel";
 import { PartnerStickerDropsPanel } from "@/components/cartel/PartnerStickerDropsPanel";
+import { PartnerMissionsPanel } from "@/components/cartel/PartnerMissionsPanel";
 import {
   SocialMissionsPanel,
   SocialMissionsSummary,
@@ -173,12 +174,15 @@ function TelegramRoute() {
   const community = scopes.includes("community_management");
   // SP-B5: Sticker Drops management for already-published packs.
   const stickers = scopes.includes("sticker_tools");
-  const count = [inbox, comms, broadcasts, community, stickers].filter(Boolean).length;
-  if (count > 1) return <PartnerManagedCommsPage inbox={inbox} comms={comms} broadcasts={broadcasts} community={community} stickers={stickers} />;
+  // SP-B6: read-only mission history + future mission defaults.
+  const missions = scopes.includes("missions");
+  const count = [inbox, comms, broadcasts, community, stickers, missions].filter(Boolean).length;
+  if (count > 1) return <PartnerManagedCommsPage inbox={inbox} comms={comms} broadcasts={broadcasts} community={community} stickers={stickers} missions={missions} />;
   if (comms) return <PartnerLaunchCommsPage />;
   if (broadcasts) return <PartnerBroadcastPage />;
   if (community) return <PartnerCommunityPage />;
   if (stickers) return <PartnerStickerDropsPage />;
+  if (missions) return <PartnerMissionsPage />;
   return <PartnerInboxPage />;
 }
 
@@ -234,9 +238,22 @@ function PartnerStickerDropsPage() {
   );
 }
 
-type PartnerTab = "inbox" | "audience" | "broadcasts" | "communities" | "stickers";
+function PartnerMissionsPage() {
+  return (
+    <div className="flex min-w-0 flex-col gap-6">
+      <PageHeader
+        eyebrow="Managed client project"
+        title="Missions"
+        description="Review this client's X missions and set defaults for future missions."
+      />
+      <PartnerMissionsPanel />
+    </div>
+  );
+}
 
-function PartnerManagedCommsPage({ inbox, comms, broadcasts, community, stickers }: { inbox: boolean; comms: boolean; broadcasts: boolean; community: boolean; stickers: boolean }) {
+type PartnerTab = "inbox" | "audience" | "broadcasts" | "communities" | "stickers" | "missions";
+
+function PartnerManagedCommsPage({ inbox, comms, broadcasts, community, stickers, missions }: { inbox: boolean; comms: boolean; broadcasts: boolean; community: boolean; stickers: boolean; missions: boolean }) {
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
   const available: PartnerTab[] = [
@@ -245,6 +262,7 @@ function PartnerManagedCommsPage({ inbox, comms, broadcasts, community, stickers
     ...(broadcasts ? (["broadcasts"] as const) : []),
     ...(community ? (["communities"] as const) : []),
     ...(stickers ? (["stickers"] as const) : []),
+    ...(missions ? (["missions"] as const) : []),
   ];
   const tab: PartnerTab = (available as string[]).includes(String(search.tab)) ? (search.tab as PartnerTab) : (available[0] ?? "inbox");
   return (
@@ -259,12 +277,14 @@ function PartnerManagedCommsPage({ inbox, comms, broadcasts, community, stickers
         {broadcasts ? <TabsTrigger value="broadcasts" className="min-h-11">Broadcasts</TabsTrigger> : null}
         {community ? <TabsTrigger value="communities" className="min-h-11">Community</TabsTrigger> : null}
         {stickers ? <TabsTrigger value="stickers" className="min-h-11">Sticker Drops</TabsTrigger> : null}
+        {missions ? <TabsTrigger value="missions" className="min-h-11">Missions</TabsTrigger> : null}
       </TabsList>
       {inbox ? <TabsContent value="inbox"><PartnerInboxPage /></TabsContent> : null}
       {comms ? <TabsContent value="audience"><PartnerLaunchCommsPage /></TabsContent> : null}
       {broadcasts ? <TabsContent value="broadcasts"><PartnerBroadcastPage /></TabsContent> : null}
       {community ? <TabsContent value="communities"><PartnerCommunityPage /></TabsContent> : null}
       {stickers ? <TabsContent value="stickers"><PartnerStickerDropsPage /></TabsContent> : null}
+      {missions ? <TabsContent value="missions"><PartnerMissionsPage /></TabsContent> : null}
     </Tabs>
   );
 }
