@@ -7238,6 +7238,14 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      partner_authorize_community_action: {
+        Args: {
+          _action: string
+          _group_connection_id: string
+          _workspace_id: string
+        }
+        Returns: Json
+      }
       partner_authorize_group_broadcast: {
         Args: { _group_connection_id: string; _workspace_id: string }
         Returns: Json
@@ -7270,6 +7278,10 @@ export type Database = {
       }
       partner_get_project_profile: {
         Args: { _workspace_id: string }
+        Returns: Json
+      }
+      partner_get_welcome_settings: {
+        Args: { _group_connection_id: string; _workspace_id: string }
         Returns: Json
       }
       partner_has_scope: {
@@ -7391,6 +7403,17 @@ export type Database = {
         }[]
       }
       partner_list_broadcast_groups: {
+        Args: { _workspace_id: string }
+        Returns: {
+          bot_is_admin: boolean
+          chat_type: string
+          group_connection_id: string
+          operational: boolean
+          title: string
+          verified_at: string
+        }[]
+      }
+      partner_list_community_groups: {
         Args: { _workspace_id: string }
         Returns: {
           bot_is_admin: boolean
