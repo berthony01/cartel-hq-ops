@@ -18,6 +18,10 @@ export type PartnerSummary = {
   ok: boolean;
   is_partner: boolean;
   program_open: boolean;
+  /** Service-only track switch (staged track-separation contract). Absent => closed. */
+  service_partner_applications_open?: boolean;
+  /** Affiliate track switch. Deferred: absent/false => closed. */
+  affiliate_applications_open?: boolean;
   status?: string;
   is_affiliate?: boolean;
   is_service_partner?: boolean;
@@ -35,6 +39,7 @@ export type PartnerSummary = {
 
 export const partnerKeys = {
   all: ["partners"] as const,
+  status: () => ["partners", "status"] as const,
   activeTerms: () => ["partners", "terms", "active"] as const,
   allTerms: () => ["partners", "terms", "all"] as const,
   summary: (userId: string | null) => ["partners", "summary", userId ?? "anon"] as const,
@@ -57,6 +62,43 @@ export async function fetchActiveTerms(): Promise<PartnerTerms | null> {
 export async function fetchAllTerms(): Promise<PartnerTerms[]> {
   const res = await supabase.from("partner_program_terms").select("*").order("version", { ascending: false });
   return unwrap(res) ?? [];
+}
+
+/* ---------------- Track status (database authority) ---------------- */
+export type PartnerProgramStatus = {
+  service_partner_applications_open: boolean;
+  affiliate_applications_open: boolean;
+  active_version: number | null;
+  /** false when the staged track-separation contract is not applied yet. */
+  contract_available: boolean;
+};
+export const CLOSED_PROGRAM_STATUS: PartnerProgramStatus = {
+  service_partner_applications_open: false, affiliate_applications_open: false, active_version: null, contract_available: false,
+};
+type LooseRpcCall = (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string; code?: string } | null }>;
+/**
+ * Public, read-only track status via get_partner_program_status (staged).
+ * Fails closed: any error or missing contract reports both tracks closed.
+ */
+export async function fetchPartnerProgramStatus(): Promise<PartnerProgramStatus> {
+  try {
+    const res = await (supabase.rpc.bind(supabase) as unknown as LooseRpcCall)("get_partner_program_status");
+    if (res.error || !res.data || typeof res.data !== "object") return CLOSED_PROGRAM_STATUS;
+    const d = res.data as Record<string, unknown>;
+    return {
+      service_partner_applications_open: d.service_partner_applications_open === true,
+      affiliate_applications_open: d.affiliate_applications_open === true,
+      active_version: typeof d.active_version === "number" ? d.active_version : null,
+      contract_available: true,
+    };
+  } catch {
+    return CLOSED_PROGRAM_STATUS;
+  }
+}
+/** Track flags from an active terms row; missing columns => closed (fail closed). */
+export function termsTrackFlags(t: PartnerTerms | null | undefined): { service: boolean; affiliate: boolean } {
+  const r = (t ?? {}) as { service_partner_applications_open?: unknown; affiliate_applications_open?: unknown };
+  return { service: r.service_partner_applications_open === true, affiliate: r.affiliate_applications_open === true };
 }
 
 /* ---------------- Current user ---------------- */
@@ -165,6 +207,21 @@ export async function ownerSaveTermsDraft(t: TermsDraftInput) {
   }
   return unwrap(res);
 }
+/**
+ * Service-only draft (staged owner_save_service_partner_terms_draft). The
+ * database forces affiliate_applications_open=false and every affiliate
+ * financial field NULL. Fails closed while the contract is unapplied.
+ */
+export async function ownerSaveServiceTermsDraft(t: { version: number; agreementText: string; disclosureText: string }) {
+  const res = await (supabase.rpc.bind(supabase) as unknown as LooseRpcCall)("owner_save_service_partner_terms_draft", {
+    _version: t.version, _agreement_text: t.agreementText, _disclosure_text: t.disclosureText,
+  });
+  if (res.error && (res.error.code === "PGRST202" || /Could not find the function/i.test(res.error.message))) {
+    throw new Error(TRACK_CONTRACT_UNAVAILABLE);
+  }
+  return unwrap(res as { data: unknown; error: { message: string } | null });
+}
+export const TRACK_CONTRACT_UNAVAILABLE = "TRACK_CONTRACT_UNAVAILABLE";
 export async function ownerActivateTerms(version: number) {
   return unwrap(await supabase.rpc("owner_activate_partner_terms", { _version: version }));
 }
@@ -363,6 +420,16 @@ export function formatDate(value: string | null | undefined): string {
 export function partnerErrorMessage(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err ?? "");
   const map: Record<string, string> = {
+    SERVICE_PARTNER_APPLICATIONS_CLOSED: "Service Partner applications are closed right now.",
+    AFFILIATE_APPLICATIONS_CLOSED: "The Affiliate Program is not open. Only the Service Partner track can be selected.",
+    AFFILIATE_PROGRAM_DEFERRED: "The Affiliate Program is deferred and cannot be opened in this release.",
+    AFFILIATE_PROGRAM_CLOSED: "The Affiliate Program is not open, so payouts are unavailable.",
+    PARTNER_TERMS_NO_TRACK_OPEN: "Terms must open the Service Partner track before activation.",
+    PARTNER_NOT_AFFILIATE: "Service Partners do not receive payouts from CARTEL HQ.",
+    ALREADY_PARTNER: "You already have a partner record.",
+    AUTH_REQUIRED: "Sign in to continue.",
+    ROLE_REQUIRED: "Choose a program track.",
+    [TRACK_CONTRACT_UNAVAILABLE]: "Service Partner track controls are staged and not applied yet. Nothing was saved.",
     PROGRAM_NOT_OPEN: "The partner program is not open.",
     PLATFORM_OWNER_REQUIRED: "Owner access required.",
     TAX_DOCS_NOT_VERIFIED: "Tax readiness must be verified first.",
@@ -439,6 +506,7 @@ export function ledgerBreakdown(
 export function typedConfirmationMatches(input: string, expected: string): boolean {
   return expected.length > 0 && input.trim() === expected;
 }
+export const serviceActivationPhrase = (version: number) => `OPEN SERVICE PARTNER APPLICATIONS V${version}`;
 export const activationPhrase = (version: number) => `ACTIVATE TERMS V${version}`;
 export const markPaidPhrase = (reference: string) => `MARK PAID ${reference.trim()}`;
 
