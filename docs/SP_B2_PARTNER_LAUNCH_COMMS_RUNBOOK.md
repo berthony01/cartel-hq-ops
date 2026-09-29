@@ -1,6 +1,6 @@
 # SP-B2 V1 — Partner Launch Watcher Communications Runbook
 
-Status: LIVE IN PRODUCTION. Migration `20260929161346 sp_b2_partner_launch_watcher_comms` applied to `ocoinbnjgstkmnwwvnhi`; all four RPCs verified SECURITY DEFINER, postgres owner, empty search_path, authenticated+service_role execute only. Backend transactional smoke passed 12/12 and rolled back (no DM committed). Real two-account browser + committed Telegram DM rendering test remains pending (no approved active Service Partner account). Frontend not published.
+Status: LIVE IN PRODUCTION. Migration `20260929161346 sp_b2_partner_launch_watcher_comms` applied to `ocoinbnjgstkmnwwvnhi`; all four RPCs verified SECURITY DEFINER, postgres owner, empty search_path, authenticated+service_role execute only. Backend transactional smoke passed 12/12 and rolled back (no DM committed). CP-SPB2-PUBLISH was authorized and initiated (deployment request `7187debc-aff1-4a59-8ce9-94973d105e3a`); the Lovable project reports published=true, status=ready. Browser propagation of that deployment and the real two-account browser + committed Telegram DM rendering test remain unverified/pending (no approved active Service Partner account).
 Plan commit: `780f5e1ebaea8a603503a06823618e861aaa8f05`.
 
 ## What it enables
@@ -28,10 +28,10 @@ Four additive functions, all SECURITY DEFINER, owner postgres, `SET search_path 
 No table, RLS, constraint, trigger, owner-function, membership-helper or Edge Function changes.
 
 ## Activation order
-1. CP-SPB2-PUBLISH — publish frontend (fails closed: without the RPCs the panel shows "not available yet"). Explicit approval required.
-2. CP-SPB2-SQL — apply the SQL file as one migration. Verify: 4 functions, prosecdef, owner postgres, `search_path=""`, ACL authenticated+service_role only; owner watcher functions byte-identical to pre-apply; transactional smoke (grant partner, list, stats, history, send, replay, cooldown, revoke denies) then ROLLBACK so no DM is sent; advisor lint.
-3. Regenerate Supabase types (separate turn).
-4. Real two-account browser smoke (needs an approved active Service Partner test account).
+1. ~~CP-SPB2-PUBLISH — publish frontend~~ DONE: authorized and initiated; deployment request `7187debc-aff1-4a59-8ce9-94973d105e3a`; project reports published=true, status=ready. Browser propagation not yet independently verified.
+2. ~~CP-SPB2-SQL — apply the SQL file as one migration~~ DONE: applied as `20260929161346`, all verifications and the rolled-back 12/12 transactional smoke passed.
+3. ~~Regenerate Supabase types~~ DONE: platform regenerated types; runbook synced.
+4. Real two-account browser + committed Telegram DM rendering smoke — PENDING (needs an approved active Service Partner test account); browser propagation of the frontend publish also not yet independently verified.
 
 Expected advisor lint delta: 0028 unchanged (9); 0029 +4 (119 → 123).
 

@@ -20,6 +20,6 @@
 - [x] SP-B0/SP-B1 production activation complete: migrations `20260929154656` (SP-B0) and `20260929154741` (SP-B1) applied; evaluator outputs identical pre/post; advisor 0028 unchanged (9), 0029 exactly +7 (112 → 119); transactional backend smoke 12/12 passed and rolled back; types regenerated
 - [ ] SP-B1 real two-account browser smoke — PENDING: needs an approved active Service Partner test account; production has none and partner status must not be altered to create one
 - [x] SP-B2 V1 partner Launch Watcher messages LIVE in production (migration 20260929161346): four partner RPCs (launch list, counts, history, send), managed /telegram panel, no commercial gate (matches owner); backend transactional smoke 12/12 rolled back, owner function md5 unchanged, advisor 0028=9 / 0029=123 as expected
-- [ ] SP-B2 real two-account browser + committed Telegram DM rendering test — PENDING: needs an approved active Service Partner test account; frontend publish (CP-SPB2-PUBLISH) still requires explicit approval
+- [ ] SP-B2 real two-account browser + committed Telegram DM rendering test — PENDING: needs an approved active Service Partner test account; CP-SPB2-PUBLISH was authorized and initiated (deployment request `7187debc-aff1-4a59-8ce9-94973d105e3a`, project reports published=true/ready), but browser propagation of that deployment is not yet independently verified
 - [ ] SP-B3+ — DEFERRED, not started
 - [ ] SP-B3+: remaining partner scopes (community, broadcasts, stickers, missions) — deferred / not started
