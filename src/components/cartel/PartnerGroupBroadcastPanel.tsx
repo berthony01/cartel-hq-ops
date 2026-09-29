@@ -160,7 +160,7 @@ export function PartnerGroupBroadcastPanel() {
             {(historyQ.data ?? []).map((h) => (
               <li key={h.announcement_id} className="rounded-md border border-border p-3">
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <StatusBadge tone={h.status === "SENT" ? "success" : h.status === "FAILED" ? "danger" : "warning"}>{h.status}</StatusBadge>
+                  <StatusBadge tone={h.status === "SENT" ? "green" : h.status === "FAILED" ? "red" : "gold"}>{h.status}</StatusBadge>
                   <span>{h.group_title}</span>
                   <span>· {ACTOR_LABEL[h.actor_kind] ?? "Team"}</span>
                   <span>· {new Date(h.sent_at ?? h.requested_at).toLocaleString()}</span>
