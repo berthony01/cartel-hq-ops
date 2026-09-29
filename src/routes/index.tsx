@@ -163,9 +163,10 @@ function LandingPage() {
           </Link>
           <Link
             to="/partner-program"
-            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "hidden min-h-11 lg:inline-flex")}
+            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "min-h-11 px-2 sm:px-3")}
           >
-            Partner Program
+            <span className="lg:hidden">Partners</span>
+            <span className="hidden lg:inline">Partner Program</span>
           </Link>
           <Link
             to="/network"
@@ -361,7 +362,7 @@ function LandingPage() {
             Start on Free with no credit card. Signed-in owners manage their plan from HQ.
           </p>
           <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 text-xs font-semibold">
-            <Link to="/partner-program" className="inline-flex min-h-11 items-center text-gold hover:underline">Explore the Partner Program</Link>
+            <Link to="/partner-program" className="inline-flex min-h-11 items-center text-gold hover:underline">Offer services with CARTEL HQ</Link>
             <Link to="/docs" className="inline-flex min-h-11 items-center text-gold hover:underline">Read the documentation</Link>
           </div>
         </section>
@@ -370,19 +371,20 @@ function LandingPage() {
         <section className="app-gutter mx-auto max-w-5xl pb-16">
           <div className="flex flex-wrap items-end justify-between gap-3 border-b border-gold/25 pb-4">
             <div>
-              <p className="type-eyebrow text-gold">Preparing to open</p>
-              <h2 className="mt-2 font-display text-3xl uppercase text-foreground sm:text-4xl">Partner Program</h2>
+              <p className="type-eyebrow text-gold">Offer services with CARTEL HQ</p>
+              <h2 className="mt-2 font-display text-3xl uppercase text-foreground sm:text-4xl">Service Partner Program</h2>
             </div>
             <Link to="/partner-program" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-gold hover:underline">See program details <ArrowRight className="size-4" aria-hidden="true" /></Link>
           </div>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
             <article className="cartel-panel rounded-lg p-6">
-              <h3 className="font-display text-2xl uppercase text-foreground">Affiliate</h3>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">Approved Affiliates refer customers. CARTEL HQ bills the customer, and only eligible collected subscription revenue can qualify under active terms.</p>
-            </article>
-            <article className="cartel-panel rounded-lg p-6">
               <h3 className="font-display text-2xl uppercase text-foreground">Service Partner</h3>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">Service Partners charge clients separately for setup or management. The status alone grants no client workspace access or CARTEL HQ commission.</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">Independent businesses can charge their own clients for setup, configuration, creative, training or operational services using CARTEL HQ. No fee to apply. CARTEL HQ pays partners nothing, provides no leads and guarantees no earnings; each client pays CARTEL HQ directly for its own plan.</p>
+            </article>
+            <article className="rounded-lg border border-border-subtle bg-surface/50 p-6">
+              <p className="type-eyebrow text-muted-foreground">Not open · planned later</p>
+              <h3 className="mt-2 font-display text-2xl uppercase text-muted-foreground">Affiliate Program</h3>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">There is no active Affiliate or commission offer. Any future Affiliate Program will be announced separately.</p>
             </article>
           </div>
         </section>

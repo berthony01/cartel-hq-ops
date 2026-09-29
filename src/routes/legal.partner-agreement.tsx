@@ -4,10 +4,10 @@ import { LegalDocumentPage } from "@/components/cartel/LegalDocumentPage";
 export const Route = createFileRoute("/legal/partner-agreement")({
   head: () => ({
     meta: [
-      { title: "Partner / Affiliate Agreement (Draft) — CARTEL HQ" },
-      { name: "description", content: "Draft CARTEL HQ Partner and Affiliate Agreement. Not effective until legal review and activation." },
-      { property: "og:title", content: "Partner / Affiliate Agreement (Draft) — CARTEL HQ" },
-      { property: "og:description", content: "Draft CARTEL HQ partner program terms, pending legal review." },
+      { title: "Service Partner Agreement (Draft) — CARTEL HQ" },
+      { name: "description", content: "Draft CARTEL HQ Service Partner Agreement for independent service businesses. Not effective until legal review and activation." },
+      { property: "og:title", content: "Service Partner Agreement (Draft) — CARTEL HQ" },
+      { property: "og:description", content: "Draft CARTEL HQ Service Partner terms, pending legal review. The Affiliate Program is not open." },
       { property: "og:type", content: "article" },
       { name: "twitter:card", content: "summary" },
       { name: "robots", content: "noindex" },

@@ -2,7 +2,8 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Handshake, Info, Loader2 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Handshake, Info, Loader2, ShieldCheck } from "lucide-react";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
@@ -21,7 +22,6 @@ import {
   formatMoney,
   partnerErrorMessage,
   partnerKeys,
-  DRAFT_ECONOMICS,
   LEDGER_ENTRY_LABELS,
   ledgerBreakdown,
   requestPartnerPayout,
@@ -32,10 +32,10 @@ import {
 export const Route = createFileRoute("/_authenticated/partners")({
   head: () => ({
     meta: [
-      { title: "Partner Program — CARTEL HQ" },
-      { name: "description", content: "Apply to the CARTEL HQ Affiliate and Service Partner program and track your status." },
-      { property: "og:title", content: "Partner Program — CARTEL HQ" },
-      { property: "og:description", content: "Affiliate and Service Partner program for CARTEL HQ." },
+      { title: "Service Partner Program — CARTEL HQ" },
+      { name: "description", content: "Apply to the CARTEL HQ Service Partner Program and track your status. The Affiliate Program is not open." },
+      { property: "og:title", content: "Service Partner Program — CARTEL HQ" },
+      { property: "og:description", content: "Independent Service Partner applications and status for CARTEL HQ." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -54,22 +54,56 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function DraftEconomicsPanel() {
-  const d = DRAFT_ECONOMICS;
+const SERVICE_RULES = [
+  "You are an independent business. CARTEL HQ pays you nothing under this track: no commission, referral credit, wages, leads or guaranteed earnings.",
+  "You find your own clients and set, invoice and collect your own service fees. You contract with and support your clients directly.",
+  "Each client keeps its own CARTEL HQ account and pays CARTEL HQ directly for any plan. Do not resell, mark up or collect payment for CARTEL HQ subscriptions.",
+  "Service Partner status grants no access to any client workspace. Use only product features the client explicitly authorizes.",
+  "Never request or store seed phrases, private keys, CARTEL HQ passwords or payment-card data.",
+  "Market only features that are actually available, and use the required disclosure near every promotion.",
+] as const;
+const SERVICE_DISCLOSURE = "Independent CARTEL HQ Service Partner. Services are provided by [Partner Name], not by CARTEL HQ. Results and earnings are not guaranteed.";
+const CLIENT_WORKFLOW = [
+  "Agree scope, price and responsibilities with your client in your own written agreement.",
+  "The client creates or signs in to its own CARTEL HQ account and project, and chooses its own plan.",
+  "Work only through access the client grants inside the product; never share or request credentials.",
+  "Deliver setup, configuration, creative, training or operational help, then hand control back to the client.",
+] as const;
+
+function ServiceTermsPanel({ terms }: { terms: PartnerTerms }) {
   return (
-    <Section title="Draft economics · not effective" leading={<Info className="size-4" aria-hidden="true" />}
-      actions={<StatusBadge tone="muted">Draft</StatusBadge>}
-      description="Proposed terms under review. Nothing is earned or payable until the platform owner activates a terms version.">
-      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        <Stat label="Commission" value={d.commissionLabel} />
-        <Stat label="Duration" value={d.durationLabel} />
-        <Stat label="Attribution" value={d.attributionLabel} />
-        <Stat label="Hold" value={d.holdLabel} />
-        <Stat label="Minimum payout" value={d.minimumLabel} />
-        <Stat label="Currency" value={d.currencyLabel} />
-        <Stat label="Payout" value={d.payoutLabel} />
-      </div>
-      <p className="mt-3 text-xs text-muted-foreground">Applies only to eligible collected subscription revenue. Tax, discounts, credits, refunds, disputes, setup and service fees are excluded.</p>
+    <Section title={`Service Partner terms · v${terms.version}`} leading={<Info className="size-4" aria-hidden="true" />}
+      description="Service Partner track only. No commission, payout or financial obligation is created by these terms.">
+      {terms.agreement_text ? (
+        <div>
+          <p className="type-eyebrow text-gold">Agreement</p>
+          <p className={`mt-1 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground ${WRAP}`}>{terms.agreement_text}</p>
+        </div>
+      ) : null}
+      {terms.disclosure_text ? (
+        <div className="mt-4">
+          <p className="type-eyebrow text-gold">Disclosure</p>
+          <p className={`mt-1 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground ${WRAP}`}>{terms.disclosure_text}</p>
+        </div>
+      ) : null}
+      <Link to="/legal/partner-agreement" className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-gold hover:underline">Read the Service Partner Agreement</Link>
+    </Section>
+  );
+}
+
+function ServicePartnerGuide() {
+  return (
+    <Section title="Service Partner rules and client workflow" leading={<ShieldCheck className="size-4" aria-hidden="true" />}>
+      <ul className="list-disc space-y-2 pl-5 text-sm leading-relaxed text-muted-foreground">
+        {SERVICE_RULES.map((r) => <li key={r}>{r}</li>)}
+      </ul>
+      <p className="type-eyebrow mt-5 text-gold">Required disclosure</p>
+      <p className={`mt-1 rounded-md border border-gold/30 bg-gold/5 px-3 py-2 text-sm text-foreground ${WRAP}`}>{SERVICE_DISCLOSURE}</p>
+      <p className="type-eyebrow mt-5 text-gold">Recommended client workflow</p>
+      <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-muted-foreground">
+        {CLIENT_WORKFLOW.map((r) => <li key={r}>{r}</li>)}
+      </ol>
+      <Link to="/docs" hash="partner-program" className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-gold hover:underline">Full Service Partner guide</Link>
     </Section>
   );
 }
@@ -114,12 +148,41 @@ function PartnersPage() {
   const mine = useQuery({ queryKey: partnerKeys.mine(userId), queryFn: () => fetchMyPartnerData(userId!), enabled: !!userId });
 
   const [wantsAffiliate, setWantsAffiliate] = useState(false);
-  const [wantsService, setWantsService] = useState(false);
   const [pitch, setPitch] = useState("");
   const [payoutAmount, setPayoutAmount] = useState("");
 
+  const loading = terms.isPending || summary.isPending || mine.isPending;
+  const loadError = terms.error || summary.error || mine.error;
+  const activeTerms = terms.data ?? null;
+  const programOpen = activeTerms !== null;
+  const s = summary.data;
+  // Database authority: independent track switches. Missing flags => closed.
+  const serviceOpen = programOpen && s?.service_partner_applications_open === true;
+  const affiliateOpen = programOpen && s?.affiliate_applications_open === true;
+  const data = mine.data;
+  const partner = data?.partner ?? null;
+  const latestApp = data?.applications[0] ?? null;
+  const pendingApp = data?.applications.find((a) => a.status === "pending") ?? null;
+  const currency = s?.currency ?? null;
+  const isAffiliate = partner?.is_affiliate === true;
+  // Dormant Affiliate UI renders only when the track is open or an Affiliate record already exists.
+  const showAffiliate = affiliateOpen || isAffiliate;
+  const approved = partner?.status === "approved";
+  const accepted = s?.agreement_accepted === true;
+  const payoutCents = Math.round(Number(payoutAmount) * 100);
+  const canRequestPayout = isAffiliate && approved && partner?.tax_doc_status === "verified" && accepted && programOpen && affiliateOpen;
+  const reservedCents = (data?.payouts ?? []).filter((p) => p.status === "requested" || p.status === "approved").reduce((t, p) => t + p.amount_cents, 0);
+  const bd = ledgerBreakdown(data?.ledger ?? [], reservedCents);
+  const referralLink = partner?.referral_code && typeof window !== "undefined"
+    ? `${window.location.origin}/auth?mode=signup&ref=${partner.referral_code}` : null;
+  const canApply = serviceOpen || affiliateOpen;
+
   const apply = useMutation({
-    mutationFn: () => submitPartnerApplication({ wantsAffiliate, wantsServicePartner: wantsService, pitch: pitch.trim() }),
+    mutationFn: () => submitPartnerApplication({
+      wantsAffiliate: affiliateOpen && wantsAffiliate,
+      wantsServicePartner: serviceOpen,
+      pitch: pitch.trim(),
+    }),
     onSuccess: () => { toast.success("Application submitted"); setPitch(""); invalidate(); },
     onError: (e) => toast.error(partnerErrorMessage(e)),
   });
@@ -134,40 +197,27 @@ function PartnersPage() {
     onError: (e) => toast.error(partnerErrorMessage(e)),
   });
 
-  const loading = terms.isPending || summary.isPending || mine.isPending;
-  const loadError = terms.error || summary.error || mine.error;
-  const activeTerms = terms.data ?? null;
-  const programOpen = activeTerms !== null;
-  const s = summary.data;
-  const data = mine.data;
-  const partner = data?.partner ?? null;
-  const latestApp = data?.applications[0] ?? null;
-  const pendingApp = data?.applications.find((a) => a.status === "pending") ?? null;
-  const currency = s?.currency ?? null;
-  const isAffiliate = partner?.is_affiliate === true;
-  const approved = partner?.status === "approved";
-  const accepted = s?.agreement_accepted === true;
-  const payoutCents = Math.round(Number(payoutAmount) * 100);
-  const canRequestPayout = isAffiliate && approved && partner?.tax_doc_status === "verified" && accepted && programOpen;
-  const reservedCents = (data?.payouts ?? []).filter((p) => p.status === "requested" || p.status === "approved").reduce((t, p) => t + p.amount_cents, 0);
-  const bd = ledgerBreakdown(data?.ledger ?? [], reservedCents);
-  const referralLink = partner?.referral_code && typeof window !== "undefined"
-    ? `${window.location.origin}/auth?mode=signup&ref=${partner.referral_code}` : null;
-
   return (
     <div className="flex min-w-0 flex-col gap-5 sm:gap-6">
       <PageHeader
         eyebrow="Network"
-        title="Partner Program"
-        description="Affiliates refer customers. Service Partners run setup and management for their own clients. CARTEL HQ always bills the customer directly."
-        status={programOpen ? "Open" : "Closed"}
+        title="Service Partner Program"
+        description="Independent businesses can offer their own setup, configuration, creative, training or operational services to CARTEL HQ customers. Clients always pay CARTEL HQ directly for their own plan."
+        status={serviceOpen ? "Service Partner applications open" : "Closed"}
       />
 
-      <div role="note" className="rounded-md border border-gold/35 bg-gold/5 px-4 py-3 text-xs leading-relaxed text-foreground sm:text-sm">
-        Automated Stripe commission accrual, refund and dispute handling is staged and not active yet.
-        Until it is enabled, ledger adjustments and payouts are owner-reviewed and manual. No commission is shown
-        unless a ledger entry exists.
+      <div role="note" className="flex min-w-0 flex-wrap items-center gap-2 rounded-md border border-border-subtle bg-surface/60 px-4 py-3 text-xs leading-relaxed text-muted-foreground sm:text-sm">
+        <StatusBadge tone="muted">Affiliate · {affiliateOpen ? "Open" : "Deferred / Closed"}</StatusBadge>
+        <span>The Affiliate Program is {affiliateOpen ? "open under the active terms." : "not open and is planned for a later phase. No commission or referral offer is active."}</span>
       </div>
+
+      {showAffiliate ? (
+        <div role="note" className="rounded-md border border-gold/35 bg-gold/5 px-4 py-3 text-xs leading-relaxed text-foreground sm:text-sm">
+          Automated Stripe commission accrual, refund and dispute handling is staged and not active yet.
+          Until it is enabled, ledger adjustments and payouts are owner-reviewed and manual. No commission is shown
+          unless a ledger entry exists.
+        </div>
+      ) : null}
 
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin text-gold" aria-hidden="true" />Loading partner status…</div>
@@ -175,14 +225,15 @@ function PartnersPage() {
         <Section variant="quiet" title="Partner status unavailable" description={partnerErrorMessage(loadError)} />
       ) : (
         <>
-          {!programOpen ? (
-            <>
-              <DraftEconomicsPanel />
-              <Section variant="primary" title="Applications are not open" description="There are no active program terms yet, so new applications cannot be submitted. Existing partners can still review their status and history below." />
-            </>
-          ) : (
+          {!canApply ? (
+            <Section variant="primary" title="Applications are not open" description={programOpen
+              ? "No program track is accepting applications right now. Existing partners can still review their status below."
+              : "There are no active program terms yet, so new applications cannot be submitted. Existing partners can still review their status and history below."} />
+          ) : showAffiliate && activeTerms ? (
             <TermsPanel terms={activeTerms} />
-          )}
+          ) : activeTerms ? (
+            <ServiceTermsPanel terms={activeTerms} />
+          ) : null}
 
           {!partner ? (
             pendingApp ? (
@@ -195,22 +246,25 @@ function PartnersPage() {
                     actions={<StatusBadge tone={latestApp.status === "rejected" ? "red" : "muted"}>{latestApp.status}</StatusBadge>}
                     description={latestApp.review_note ? `Review note: ${latestApp.review_note}` : `Reviewed ${formatDate(latestApp.reviewed_at)}`} />
                 ) : null}
-                {programOpen ? (
-                  <Section variant="primary" title="Apply" leading={<Handshake className="size-4" aria-hidden="true" />}>
+                {canApply ? (
+                  <Section variant="primary" title={serviceOpen && !affiliateOpen ? "Apply as a Service Partner" : "Apply"} leading={<Handshake className="size-4" aria-hidden="true" />}
+                    description="No fee to apply or be approved, and no CARTEL HQ purchase is required for approval. CARTEL HQ provides no leads and guarantees no earnings.">
                     <form className="flex min-w-0 flex-col gap-4" onSubmit={(e) => { e.preventDefault(); apply.mutate(); }}>
-                      <label className="flex min-h-11 items-start gap-3 text-sm">
-                        <input type="checkbox" className="mt-1 size-4 accent-[var(--gold)]" checked={wantsAffiliate} onChange={(e) => setWantsAffiliate(e.target.checked)} />
-                        <span><strong className="text-foreground">Affiliate</strong> — refer customers. CARTEL HQ bills the customer; commission applies only to eligible collected subscription revenue, once Phase 1B is enabled.</span>
-                      </label>
-                      <label className="flex min-h-11 items-start gap-3 text-sm">
-                        <input type="checkbox" className="mt-1 size-4 accent-[var(--gold)]" checked={wantsService} onChange={(e) => setWantsService(e.target.checked)} />
-                        <span><strong className="text-foreground">Service Partner</strong> — charge your client separately for setup/management. The client still pays CARTEL HQ directly. Service Partner identity grants zero workspace access.</span>
-                      </label>
+                      {serviceOpen ? (
+                        <p className="text-sm text-muted-foreground"><strong className="text-foreground">Service Partner</strong> — you charge your own clients for your own services. Each client pays CARTEL HQ directly for its own plan. Service Partner identity grants zero workspace access.</p>
+                      ) : null}
+                      {affiliateOpen ? (
+                        <label className="flex min-h-11 items-start gap-3 text-sm">
+                          <input type="checkbox" className="mt-1 size-4 accent-[var(--gold)]" checked={wantsAffiliate} onChange={(e) => setWantsAffiliate(e.target.checked)} />
+                          <span><strong className="text-foreground">Affiliate</strong> — refer customers under the active Affiliate terms.</span>
+                        </label>
+                      ) : null}
                       <div>
-                        <label htmlFor="partner-pitch" className="text-sm font-semibold">Pitch (required)</label>
-                        <Textarea id="partner-pitch" required className="mt-2" rows={4} maxLength={1000} value={pitch} onChange={(e) => setPitch(e.target.value)} placeholder="Who you work with and how you would refer or serve projects." />
+                        <label htmlFor="partner-pitch" className="text-sm font-semibold">About your services (required)</label>
+                        <Textarea id="partner-pitch" required className="mt-2" rows={5} maxLength={1000} value={pitch} onChange={(e) => setPitch(e.target.value)} placeholder="Briefly describe the services you offer, your relevant experience, the customers you intend to serve, and how you promote your services." />
+                        <p className="mt-1 text-xs text-muted-foreground">{pitch.length}/1000</p>
                       </div>
-                      <Button type="submit" className="min-h-11 self-start" disabled={apply.isPending || !pitch.trim() || (!wantsAffiliate && !wantsService)}>
+                      <Button type="submit" className="min-h-11 self-start" disabled={apply.isPending || !pitch.trim() || (!serviceOpen && !(affiliateOpen && wantsAffiliate))}>
                         {apply.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}Submit application
                       </Button>
                     </form>
@@ -227,10 +281,10 @@ function PartnersPage() {
                   <StatusBadge tone={approved ? "green" : "red"}>{partner.status}</StatusBadge>
                 </>}>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <Stat label="Tax readiness" value={partner.tax_doc_status.replace(/_/g, " ")} />
+                  <Stat label="Status" value={partner.status} />
                   <Stat label="Agreement" value={programOpen ? (accepted ? `Accepted v${activeTerms.version}` : "Not accepted") : "No active terms"} />
-                  <Stat label="Referrals" value={String(s?.referrals_total ?? data?.referrals.length ?? 0)} />
-                  <Stat label="Currency" value={currency ? currency.toUpperCase() : "—"} />
+                  {isAffiliate ? <Stat label="Tax readiness" value={partner.tax_doc_status.replace(/_/g, " ")} /> : null}
+                  {isAffiliate ? <Stat label="Referrals" value={String(s?.referrals_total ?? data?.referrals.length ?? 0)} /> : null}
                 </div>
                 {partner.is_service_partner ? (
                   <p className="mt-3 text-xs text-muted-foreground">Service Partner identity grants no access to any client workspace.</p>
@@ -255,70 +309,76 @@ function PartnersPage() {
                 ) : null}
               </Section>
 
+              {partner.is_service_partner ? <ServicePartnerGuide /> : null}
+
               {!isAffiliate ? (
-                <Section variant="quiet" title="No Cartel commission"
-                  description="Service Partner only: you earn no CARTEL HQ commission. You bill your own clients separately for setup/management, and they pay CARTEL HQ directly. Commission requires separate approval as an Affiliate." />
+                <Section variant="quiet" title="No payments from CARTEL HQ"
+                  description="Service Partner only: CARTEL HQ pays you nothing under this track. You bill your own clients for your own services, and they pay CARTEL HQ directly for their own plan." />
               ) : null}
 
-              <Section title="Balances">
-                <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                  <Stat label="Held (in hold period)" value={formatMoney(bd.held, currency)} />
-                  <Stat label="Available" value={formatMoney(bd.available, currency)} />
-                  <Stat label="Paid" value={formatMoney(bd.paid, currency)} />
-                  <Stat label="Reversed" value={formatMoney(bd.reversed, currency)} />
-                  <Stat label="Restored" value={formatMoney(bd.restored, currency)} />
-                  <Stat label="Reserved for requests" value={formatMoney(bd.reservedForPayouts, currency)} />
-                  <Stat label="Net payable" value={formatMoney(bd.netPayable, currency)} />
-                  <Stat label="Server available" value={formatMoney(s?.available_cents ?? 0, currency)} />
-                </div>
-                <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                  Balances above are shown from your ledger for transparency; the server validates every payout request.
-                  If refunds or disputes reverse commission already paid, the available balance can go negative. A negative
-                  balance is carried forward and offset against future commission; nothing is deleted.
-                  {bd.carryForward < 0 ? ` Current carry-forward: ${formatMoney(bd.carryForward, currency)}.` : ""}
-                </p>
-                {canRequestPayout ? (
-                  <form className="mt-4 flex min-w-0 flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); if (payoutCents > 0) payout.mutate(payoutCents); }}>
-                    <div className="min-w-0">
-                      <label htmlFor="payout-amount" className="text-sm font-semibold">Request payout ({activeTerms?.currency?.toUpperCase()})</label>
-                      <Input id="payout-amount" type="number" min="0" step="0.01" inputMode="decimal" className="mt-2 min-h-11 w-40" value={payoutAmount} onChange={(e) => setPayoutAmount(e.target.value)} />
+              {isAffiliate ? (
+                <>
+                  <Section title="Balances">
+                    <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                      <Stat label="Held (in hold period)" value={formatMoney(bd.held, currency)} />
+                      <Stat label="Available" value={formatMoney(bd.available, currency)} />
+                      <Stat label="Paid" value={formatMoney(bd.paid, currency)} />
+                      <Stat label="Reversed" value={formatMoney(bd.reversed, currency)} />
+                      <Stat label="Restored" value={formatMoney(bd.restored, currency)} />
+                      <Stat label="Reserved for requests" value={formatMoney(bd.reservedForPayouts, currency)} />
+                      <Stat label="Net payable" value={formatMoney(bd.netPayable, currency)} />
+                      <Stat label="Server available" value={formatMoney(s?.available_cents ?? 0, currency)} />
                     </div>
-                    <Button type="submit" className="min-h-11" disabled={payout.isPending || !(payoutCents > 0)}>Request payout</Button>
-                  </form>
-                ) : isAffiliate ? (
-                  <p className="mt-3 text-xs text-muted-foreground">Payout requests need approved affiliate status, verified tax readiness, accepted current terms and an open program.</p>
-                ) : null}
-              </Section>
+                    <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                      Balances above are shown from your ledger for transparency; the server validates every payout request.
+                      If refunds or disputes reverse commission already paid, the available balance can go negative. A negative
+                      balance is carried forward and offset against future commission; nothing is deleted.
+                      {bd.carryForward < 0 ? ` Current carry-forward: ${formatMoney(bd.carryForward, currency)}.` : ""}
+                    </p>
+                    {canRequestPayout ? (
+                      <form className="mt-4 flex min-w-0 flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); if (payoutCents > 0) payout.mutate(payoutCents); }}>
+                        <div className="min-w-0">
+                          <label htmlFor="payout-amount" className="text-sm font-semibold">Request payout ({activeTerms?.currency?.toUpperCase()})</label>
+                          <Input id="payout-amount" type="number" min="0" step="0.01" inputMode="decimal" className="mt-2 min-h-11 w-40" value={payoutAmount} onChange={(e) => setPayoutAmount(e.target.value)} />
+                        </div>
+                        <Button type="submit" className="min-h-11" disabled={payout.isPending || !(payoutCents > 0)}>Request payout</Button>
+                      </form>
+                    ) : (
+                      <p className="mt-3 text-xs text-muted-foreground">Payout requests need approved affiliate status, verified tax readiness, accepted current terms and an open Affiliate Program.</p>
+                    )}
+                  </Section>
 
-              <Section title="Ledger">
-                {data && data.ledger.length > 0 ? (
-                  <ul className="divide-y divide-border-subtle text-sm">
-                    {data.ledger.map((l) => (
-                      <li key={l.id} className="flex min-w-0 flex-wrap justify-between gap-2 py-2">
-                        <span className={WRAP}>
-                          {LEDGER_ENTRY_LABELS[l.entry_type] ?? l.entry_type} · {formatDate(l.created_at)}
-                          {l.amount_cents > 0 && new Date(l.available_at).getTime() > Date.now() ? ` · held until ${formatDate(l.available_at)}` : ""}
-                          {l.terms_version ? ` · terms v${l.terms_version}` : ""}
-                        </span>
-                        <span className="font-mono">{formatMoney(l.amount_cents, l.currency)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : <p className="text-sm text-muted-foreground">No ledger entries yet.</p>}
-              </Section>
+                  <Section title="Ledger">
+                    {data && data.ledger.length > 0 ? (
+                      <ul className="divide-y divide-border-subtle text-sm">
+                        {data.ledger.map((l) => (
+                          <li key={l.id} className="flex min-w-0 flex-wrap justify-between gap-2 py-2">
+                            <span className={WRAP}>
+                              {LEDGER_ENTRY_LABELS[l.entry_type] ?? l.entry_type} · {formatDate(l.created_at)}
+                              {l.amount_cents > 0 && new Date(l.available_at).getTime() > Date.now() ? ` · held until ${formatDate(l.available_at)}` : ""}
+                              {l.terms_version ? ` · terms v${l.terms_version}` : ""}
+                            </span>
+                            <span className="font-mono">{formatMoney(l.amount_cents, l.currency)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : <p className="text-sm text-muted-foreground">No ledger entries yet.</p>}
+                  </Section>
 
-              <Section title="Payout history">
-                {data && data.payouts.length > 0 ? (
-                  <ul className="divide-y divide-border-subtle text-sm">
-                    {data.payouts.map((p) => (
-                      <li key={p.id} className="flex min-w-0 flex-wrap justify-between gap-2 py-2">
-                        <span className={WRAP}>{formatDate(p.requested_at)} · {p.status}{p.review_note ? ` · ${p.review_note}` : ""}</span>
-                        <span className="font-mono">{formatMoney(p.amount_cents, p.currency)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : <p className="text-sm text-muted-foreground">No payout requests yet.</p>}
-              </Section>
+                  <Section title="Payout history">
+                    {data && data.payouts.length > 0 ? (
+                      <ul className="divide-y divide-border-subtle text-sm">
+                        {data.payouts.map((p) => (
+                          <li key={p.id} className="flex min-w-0 flex-wrap justify-between gap-2 py-2">
+                            <span className={WRAP}>{formatDate(p.requested_at)} · {p.status}{p.review_note ? ` · ${p.review_note}` : ""}</span>
+                            <span className="font-mono">{formatMoney(p.amount_cents, p.currency)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : <p className="text-sm text-muted-foreground">No payout requests yet.</p>}
+                  </Section>
+                </>
+              ) : null}
             </>
           )}
         </>

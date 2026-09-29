@@ -37,11 +37,12 @@ import {
   ownerRetireTerms,
   ownerReviewApplication,
   ownerReviewPayout,
-  ownerSaveTermsDraft,
+  ownerSaveServiceTermsDraft,
   ownerSetPartnerStatus,
   partnerErrorMessage,
   partnerKeys,
-  activationPhrase,
+  serviceActivationPhrase,
+  termsTrackFlags,
   markPaidPhrase,
   typedConfirmationMatches,
   type PartnerTerms,
@@ -77,7 +78,6 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-const intOrNaN = (v: string) => (v.trim() === "" ? NaN : Number(v));
 /** Stage 1B-3 staged column; absent from generated types until applied. */
 const durationOf = (t: PartnerTerms): number | null => {
   const v = (t as PartnerTerms & { commission_duration_invoices?: number | null }).commission_duration_invoices;
@@ -138,32 +138,23 @@ function PartnerAdminInner() {
   const active = allTerms.find((t) => t.status === "active") ?? null;
   const nextVersion = draft ? draft.version : (allTerms.reduce((m, t) => Math.max(m, t.version), 0) + 1);
 
-  // Terms form: blank unless a draft already exists. No invented defaults.
+  // Service-only terms form: agreement + disclosure only. The database forces
+  // Affiliate closed and every affiliate financial field NULL.
   const [f, setF] = useState<Record<string, string>>({});
-  const seeded = draft ? {
-    commission: draft.commission_bps?.toString() ?? "", window: draft.attribution_window_days?.toString() ?? "",
-    hold: draft.hold_days?.toString() ?? "", min: draft.min_payout_cents?.toString() ?? "",
-    currency: draft.currency ?? "", agreement: draft.agreement_text ?? "", disclosure: draft.disclosure_text ?? "",
-    duration: durationOf(draft)?.toString() ?? "",
-  } : { commission: "", window: "", hold: "", min: "", currency: "", agreement: "", disclosure: "", duration: "" };
+  const seeded = draft ? { agreement: draft.agreement_text ?? "", disclosure: draft.disclosure_text ?? "" } : { agreement: "", disclosure: "" };
   const val = (k: keyof typeof seeded) => f[k] ?? seeded[k];
   const set = (k: string) => (e: { target: { value: string } }) => setF((p) => ({ ...p, [k]: e.target.value }));
-  const termsComplete = [intOrNaN(val("commission")), intOrNaN(val("window")), intOrNaN(val("hold")), intOrNaN(val("min")), intOrNaN(val("duration"))].every(Number.isFinite)
-    && /^[a-z]{3}$/.test(val("currency").trim().toLowerCase()) && val("agreement").trim() !== "" && val("disclosure").trim() !== "";
+  const draftFlags = termsTrackFlags(draft);
+  const activeFlags = termsTrackFlags(active);
+  const termsComplete = val("agreement").trim() !== "" && val("disclosure").trim() !== "" && draftFlags.service && !draftFlags.affiliate;
 
-  const saveDraft = useMutation(run(() => ownerSaveTermsDraft({
+  const saveDraft = useMutation(run(() => ownerSaveServiceTermsDraft({
     version: nextVersion,
-    commissionBps: intOrNaN(val("commission")),
-    attributionWindowDays: intOrNaN(val("window")),
-    holdDays: intOrNaN(val("hold")),
-    minPayoutCents: intOrNaN(val("min")),
-    currency: val("currency").trim().toLowerCase(),
     agreementText: val("agreement"),
     disclosureText: val("disclosure"),
-    commissionDurationInvoices: intOrNaN(val("duration")),
-  }).then((r) => { setF({}); return r; }), "Draft saved"));
-  const activate = useMutation(run((v: number) => ownerActivateTerms(v), "Terms activated — program open"));
-  const retire = useMutation(run((v: number) => ownerRetireTerms(v), "Terms retired — program closed"));
+  }).then((r) => { setF({}); return r; }), "Service Partner draft saved"));
+  const activate = useMutation(run((v: number) => ownerActivateTerms(v), "Service Partner applications opened"));
+  const retire = useMutation(run((v: number) => ownerRetireTerms(v), "Terms retired — Service Partner applications closed"));
   const reviewApp = useMutation(run((a: { id: string; approve: boolean; note?: string | undefined }) => ownerReviewApplication(a.id, a.approve, a.note), "Application reviewed"));
   const setStatus = useMutation(run((a: { id: string; status: string; tax?: string }) => ownerSetPartnerStatus(a.id, a.status, a.tax), "Partner updated"));
   const addAdj = useMutation(run((a: Parameters<typeof ownerAddLedgerAdjustment>[0]) => ownerAddLedgerAdjustment(a), "Ledger adjustment added"));
@@ -181,7 +172,10 @@ function PartnerAdminInner() {
   return (
     <Section variant="primary" leading={<Handshake className="size-4" aria-hidden="true" />} title="Partner Program"
       description="Owner-only write controls. Each action is enforced server-side. No tax identifiers, documents, bank or card data are collected here. Stripe accrual is Phase 1B and not enabled."
-      actions={<StatusBadge tone={active ? "green" : "muted"}>{active ? `Open · v${active.version}` : "Closed"}</StatusBadge>}>
+      actions={<>
+        <StatusBadge tone={activeFlags.service ? "green" : "muted"}>Service · {activeFlags.service && active ? `Open v${active.version}` : "Closed"}</StatusBadge>
+        <StatusBadge tone="muted">Affiliate · {activeFlags.affiliate ? "Open" : "Deferred / Closed"}</StatusBadge>
+      </>}>
       <div className="flex min-w-0 flex-col gap-6">
         {/* Terms */}
         <div className="flex min-w-0 flex-col gap-3">
@@ -190,12 +184,12 @@ function PartnerAdminInner() {
             <ul className="divide-y divide-border-subtle text-sm">
               {allTerms.map((t: PartnerTerms) => (
                 <li key={t.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 py-2">
-                  <span className={WRAP}>v{t.version} · {formatBps(t.commission_bps)} · {durationOf(t) ? `first ${durationOf(t)} invoices` : "duration —"} · {formatDays(t.attribution_window_days)} attribution · {formatDays(t.hold_days)} hold · min {formatMoney(t.min_payout_cents, t.currency)}</span>
+                  <span className={WRAP}>v{t.version} · Service {termsTrackFlags(t).service ? "open" : "closed"} · Affiliate {termsTrackFlags(t).affiliate ? "open" : "closed"}{t.commission_bps !== null ? ` · ${formatBps(t.commission_bps)} · ${durationOf(t) ? `first ${durationOf(t)} invoices` : "duration —"} · ${formatDays(t.attribution_window_days)} attribution · ${formatDays(t.hold_days)} hold · min ${formatMoney(t.min_payout_cents, t.currency)}` : ""}</span>
                   <span className="flex flex-wrap gap-2">
                     <StatusBadge tone={t.status === "active" ? "green" : t.status === "draft" ? "gold" : "muted"}>{t.status}</StatusBadge>
                     {t.status === "active" ? (
                       <Confirm trigger={<Button size="sm" variant="outline" className="min-h-11" disabled={retire.isPending}>Retire</Button>}
-                        title={`Retire terms v${t.version}?`} body="Retiring is permanent and closes the program to new applications, referrals and payout requests until another version is activated."
+                        title={`Retire terms v${t.version}?`} body="Retiring is permanent and closes Service Partner applications until another version is activated. Existing partner records are kept."
                         onConfirm={() => retire.mutate(t.version)} />
                     ) : null}
                   </span>
@@ -203,23 +197,19 @@ function PartnerAdminInner() {
               ))}
             </ul>
           ) : <p className="text-sm text-muted-foreground">No terms exist. The program is closed.</p>}
-          <p className="text-xs text-muted-foreground">{draft ? `Editing draft v${draft.version}.` : `New draft will be v${nextVersion}.`} All fields are blank until you enter them. Saving duration needs the staged commission contract; until it is applied, saving is refused with no write.</p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-            <Field label="Commission (bps)"><Input className="min-h-11" inputMode="numeric" value={val("commission")} onChange={set("commission")} /></Field>
-            <Field label="Paid invoices"><Input className="min-h-11" inputMode="numeric" value={val("duration")} onChange={set("duration")} /></Field>
-            <Field label="Attribution days"><Input className="min-h-11" inputMode="numeric" value={val("window")} onChange={set("window")} /></Field>
-            <Field label="Hold days"><Input className="min-h-11" inputMode="numeric" value={val("hold")} onChange={set("hold")} /></Field>
-            <Field label="Min payout (cents)"><Input className="min-h-11" inputMode="numeric" value={val("min")} onChange={set("min")} /></Field>
-            <Field label="Currency (ISO)"><Input className="min-h-11" maxLength={3} value={val("currency")} onChange={set("currency")} /></Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="surface-quiet rounded-md p-3 text-sm"><p className="type-eyebrow text-gold">Service Partner track</p><p className="mt-1 text-foreground">{activeFlags.service ? "Open" : "Closed"}</p><p className="mt-1 text-xs text-muted-foreground">Opened only by activating service-only terms below.</p></div>
+            <div className="surface-quiet rounded-md p-3 text-sm"><p className="type-eyebrow text-gold">Affiliate track</p><p className="mt-1 text-foreground">Deferred / Closed</p><p className="mt-1 text-xs text-muted-foreground">Cannot be opened in this release. The database rejects any Affiliate activation.</p></div>
           </div>
-          <Field label="Agreement"><Textarea rows={3} value={val("agreement")} onChange={set("agreement")} /></Field>
-          <Field label="Disclosure"><Textarea rows={2} value={val("disclosure")} onChange={set("disclosure")} /></Field>
+          <p className="text-xs text-muted-foreground">{draft ? `Editing draft v${draft.version}.` : `New draft will be v${nextVersion}.`} Service-only terms need only the agreement and disclosure text. No commission, attribution, hold, payout minimum, currency or invoice duration is required or stored. Until the staged track contract is applied, saving is refused with no write.</p>
+          <Field label="Service Partner agreement"><Textarea rows={4} value={val("agreement")} onChange={set("agreement")} /></Field>
+          <Field label="Required disclosure"><Textarea rows={2} value={val("disclosure")} onChange={set("disclosure")} /></Field>
           <div className="flex flex-wrap gap-2">
-            <Button className="min-h-11" variant="outline" disabled={saveDraft.isPending} onClick={() => saveDraft.mutate(undefined)}>Save draft v{nextVersion}</Button>
+            <Button className="min-h-11" variant="outline" disabled={saveDraft.isPending || !val("agreement").trim() || !val("disclosure").trim()} onClick={() => saveDraft.mutate(undefined)}>Save service-only draft v{nextVersion}</Button>
             {draft ? (
-              <TypedConfirm trigger={<Button className="min-h-11" disabled={activate.isPending || !termsComplete || Object.keys(f).length > 0}>Activate v{draft.version}</Button>}
-                title={`Activate terms v${draft.version}?`} phrase={activationPhrase(draft.version)}
-                body={`Activation opens the Partner Program: applications, referrals and payout requests become available under these terms.${active ? ` Active v${active.version} will be retired.` : ""} Active terms are frozen and cannot be edited. The database refuses activation while legal placeholders remain.`}
+              <TypedConfirm trigger={<Button className="min-h-11" disabled={activate.isPending || !termsComplete || Object.keys(f).length > 0}>Open Service Partner applications (v{draft.version})</Button>}
+                title={`Open Service Partner applications under v${draft.version}?`} phrase={serviceActivationPhrase(draft.version)}
+                body={`This opens Service Partner applications only. It does not open the Affiliate Program and creates no commission, referral, payout or other financial obligation.${active ? ` Active v${active.version} will be retired.` : ""} Active terms are frozen and cannot be edited.`}
                 onConfirm={() => activate.mutate(draft.version)} />
             ) : null}
           </div>
