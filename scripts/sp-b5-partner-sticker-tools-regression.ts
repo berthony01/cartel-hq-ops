@@ -82,6 +82,8 @@ const ALLOW = new Set([
   "scripts/sp-a-managed-client-access-regression.ts", "scripts/sp-b1-partner-inbox-regression.ts", "scripts/sp-b2-partner-launch-comms-regression.ts",
   "scripts/sp-b3-partner-group-broadcasts-regression.ts", "scripts/sp-b4-partner-community-management-regression.ts",
   "scripts/public-discovery-seo-regression.ts", "roadmap.md", ".lovable/plan.md",
+  // Post-activation types/status sync: generated types file is regenerated from live production schema.
+  "src/integrations/supabase/types.ts",
 ]);
 const changed = [
   ...execFileSync("git", ["diff", "--name-only", PLAN_COMMIT], { encoding: "utf8" }).split("\n"),
