@@ -7250,6 +7250,17 @@ export type Database = {
         Args: { _group_connection_id: string; _workspace_id: string }
         Returns: Json
       }
+      partner_authorize_sticker_drop_action: {
+        Args: {
+          _action: string
+          _enabled?: boolean
+          _group_connection_id?: string
+          _pack_id?: string
+          _schedule_id?: string
+          _workspace_id: string
+        }
+        Returns: Json
+      }
       partner_available_balance: {
         Args: { _currency: string; _partner_id: string }
         Returns: number
@@ -7461,6 +7472,14 @@ export type Database = {
           ticker: string
           token_name: string
         }[]
+      }
+      partner_list_sticker_drop_packs: {
+        Args: { _workspace_id: string }
+        Returns: Json
+      }
+      partner_list_sticker_drop_state: {
+        Args: { _workspace_id: string }
+        Returns: Json
       }
       partner_require_owner: { Args: never; Returns: string }
       partner_respond_client_invite: {
