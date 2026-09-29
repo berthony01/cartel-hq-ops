@@ -83,6 +83,8 @@ const allowed = new Set([
   "src/routes/_authenticated/partners.tsx",
   "src/routes/legal.partner-agreement.tsx",
   "src/components/cartel/LegalDocumentPage.tsx",
+  // Approved production copy fix: public agreement link label dropped "draft".
+  "src/routes/partner-program.tsx",
 ]);
 // Discovery task scope (529681aa..98bb3b44) plus the Service Partner staging scope (049aae3b..HEAD).
 // Intervening separately-approved tasks (MCP, favicon) are outside this check.
