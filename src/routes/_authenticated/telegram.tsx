@@ -15,6 +15,7 @@ import { LaunchReadinessCallout } from "@/components/cartel/LaunchReadiness";
 import { BroadcastsPanel } from "@/components/cartel/BroadcastsPanel";
 import { AudiencePanel } from "@/components/cartel/AudiencePanel";
 import { ProjectInboxPanel } from "@/components/cartel/ProjectInboxPanel";
+import { PartnerLaunchCommsPanel } from "@/components/cartel/PartnerLaunchCommsPanel";
 import {
   SocialMissionsPanel,
   SocialMissionsSummary,
@@ -148,15 +149,56 @@ function StateMetric({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * SP-B1: a Service Partner in a managed client project sees ONLY the partner
- * Inbox here (reachable only with an active project_inbox grant; the managed
- * access guard blocks it otherwise). No group setup, community settings,
- * broadcasts, stickers, missions or Telegram admin surfaces mount, and none of
- * their owner data hooks run. Owner/member behavior is unchanged.
+ * SP-B1/SP-B2: a Service Partner in a managed client project sees ONLY the
+ * partner surfaces its grant allows here: the partner Inbox (project_inbox)
+ * and/or partner Launch Watch messages (launch_watcher_comms). The managed
+ * access guard blocks the route without either scope. No group setup,
+ * community settings, broadcasts, stickers, missions, Launch Control or
+ * Telegram admin surfaces mount, and none of their owner data hooks run.
+ * Owner/member behavior is unchanged.
  */
 function TelegramRoute() {
-  const { isManaged } = useWorkspace();
-  return isManaged ? <PartnerInboxPage /> : <TelegramPage />;
+  const { isManaged, workspace } = useWorkspace();
+  if (!isManaged) return <TelegramPage />;
+  const scopes = workspace?.scopes ?? [];
+  const inbox = scopes.includes("project_inbox");
+  const comms = scopes.includes("launch_watcher_comms");
+  if (inbox && comms) return <PartnerManagedCommsPage />;
+  if (comms) return <PartnerLaunchCommsPage />;
+  return <PartnerInboxPage />;
+}
+
+function PartnerLaunchCommsPage() {
+  return (
+    <div className="flex min-w-0 flex-col gap-6">
+      <PageHeader
+        eyebrow="Managed client project"
+        title="Launch Watch messages"
+        description="Send updates to this client's opted-in launch watchers."
+      />
+      <PartnerLaunchCommsPanel />
+    </div>
+  );
+}
+
+function PartnerManagedCommsPage() {
+  const search = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
+  const tab = search.tab === "audience" ? "audience" : "inbox";
+  return (
+    <Tabs
+      value={tab}
+      onValueChange={(v) => void navigate({ search: () => ({ tab: v === "audience" ? ("audience" as const) : ("inbox" as const) }), replace: true })}
+      className="flex min-w-0 flex-col gap-6"
+    >
+      <TabsList className="self-start">
+        <TabsTrigger value="inbox" className="min-h-11">Inbox</TabsTrigger>
+        <TabsTrigger value="audience" className="min-h-11">Launch Watch messages</TabsTrigger>
+      </TabsList>
+      <TabsContent value="inbox"><PartnerInboxPage /></TabsContent>
+      <TabsContent value="audience"><PartnerLaunchCommsPage /></TabsContent>
+    </Tabs>
+  );
 }
 
 function PartnerInboxPage() {
