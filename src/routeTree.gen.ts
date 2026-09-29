@@ -13,9 +13,11 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as DocsRouteImport } from './routes/docs'
+import { Route as McpRouteImport } from './routes/mcp'
 import { Route as NetworkRouteImport } from './routes/network'
 import { Route as PartnerProgramRouteImport } from './routes/partner-program'
 import { Route as TgRouteImport } from './routes/tg'
+import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as AuthenticatedAssetsRouteImport } from './routes/_authenticated/assets'
@@ -44,6 +46,7 @@ import { Route as NetworkLaunchesRouteImport } from './routes/network.launches'
 import { Route as NetworkProjectsRouteImport } from './routes/network.projects'
 import { Route as NetworkSignalsRouteImport } from './routes/network.signals'
 import { Route as TgIndexRouteImport } from './routes/tg.index'
+import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 import { Route as AuthenticatedStickerLabIndexRouteImport } from './routes/_authenticated/sticker-lab.index'
 import { Route as AuthenticatedStickerLabPackIdRouteImport } from './routes/_authenticated/sticker-lab.$packId'
 import { Route as AuthenticatedStickerLabNewRouteImport } from './routes/_authenticated/sticker-lab.new'
@@ -70,6 +73,11 @@ const DocsRoute = DocsRouteImport.update({
   path: '/docs',
   getParentRoute: () => rootRouteImport,
 } as any)
+const McpRoute = McpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NetworkRoute = NetworkRouteImport.update({
   id: '/network',
   path: '/network',
@@ -85,6 +93,12 @@ const TgRoute = TgRouteImport.update({
   path: '/tg',
   getParentRoute: () => rootRouteImport,
 } as any)
+const Char91DotwellKnownChar93OauthProtectedResourceRoute =
+  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
+    id: '/.well-known/oauth-protected-resource',
+    path: '/.well-known/oauth-protected-resource',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -231,6 +245,11 @@ const TgIndexRoute = TgIndexRouteImport.update({
   path: '/',
   getParentRoute: () => TgRoute,
 } as any)
+const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
+  id: '/.lovable/oauth/consent',
+  path: '/.lovable/oauth/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedStickerLabIndexRoute =
   AuthenticatedStickerLabIndexRouteImport.update({
     id: '/',
@@ -270,9 +289,11 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/docs': typeof DocsRoute
+  '/mcp': typeof McpRoute
   '/network': typeof NetworkRouteWithChildren
   '/partner-program': typeof PartnerProgramRoute
   '/tg': typeof TgRouteWithChildren
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/assets': typeof AuthenticatedAssetsRoute
@@ -301,6 +322,7 @@ export interface FileRoutesByFullPath {
   '/network/signals': typeof NetworkSignalsRoute
   '/network/': typeof NetworkIndexRoute
   '/tg/': typeof TgIndexRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
   '/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
   '/network/launch/$launchSlug': typeof NetworkLaunchLaunchSlugRoute
@@ -312,7 +334,9 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/docs': typeof DocsRoute
+  '/mcp': typeof McpRoute
   '/partner-program': typeof PartnerProgramRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/assets': typeof AuthenticatedAssetsRoute
@@ -340,6 +364,7 @@ export interface FileRoutesByTo {
   '/network/signals': typeof NetworkSignalsRoute
   '/network': typeof NetworkIndexRoute
   '/tg': typeof TgIndexRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
   '/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
   '/network/launch/$launchSlug': typeof NetworkLaunchLaunchSlugRoute
@@ -353,9 +378,11 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/docs': typeof DocsRoute
+  '/mcp': typeof McpRoute
   '/network': typeof NetworkRouteWithChildren
   '/partner-program': typeof PartnerProgramRoute
   '/tg': typeof TgRouteWithChildren
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/assets': typeof AuthenticatedAssetsRoute
@@ -384,6 +411,7 @@ export interface FileRoutesById {
   '/network/signals': typeof NetworkSignalsRoute
   '/network/': typeof NetworkIndexRoute
   '/tg/': typeof TgIndexRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/_authenticated/sticker-lab/$packId': typeof AuthenticatedStickerLabPackIdRoute
   '/_authenticated/sticker-lab/new': typeof AuthenticatedStickerLabNewRoute
   '/network/launch/$launchSlug': typeof NetworkLaunchLaunchSlugRoute
@@ -397,9 +425,11 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/docs'
+    | '/mcp'
     | '/network'
     | '/partner-program'
     | '/tg'
+    | '/.well-known/oauth-protected-resource'
     | '/admin'
     | '/analytics'
     | '/assets'
@@ -428,6 +458,7 @@ export interface FileRouteTypes {
     | '/network/signals'
     | '/network/'
     | '/tg/'
+    | '/.lovable/oauth/consent'
     | '/sticker-lab/$packId'
     | '/sticker-lab/new'
     | '/network/launch/$launchSlug'
@@ -439,7 +470,9 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/docs'
+    | '/mcp'
     | '/partner-program'
+    | '/.well-known/oauth-protected-resource'
     | '/admin'
     | '/analytics'
     | '/assets'
@@ -467,6 +500,7 @@ export interface FileRouteTypes {
     | '/network/signals'
     | '/network'
     | '/tg'
+    | '/.lovable/oauth/consent'
     | '/sticker-lab/$packId'
     | '/sticker-lab/new'
     | '/network/launch/$launchSlug'
@@ -479,9 +513,11 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/docs'
+    | '/mcp'
     | '/network'
     | '/partner-program'
     | '/tg'
+    | '/.well-known/oauth-protected-resource'
     | '/_authenticated/admin'
     | '/_authenticated/analytics'
     | '/_authenticated/assets'
@@ -510,6 +546,7 @@ export interface FileRouteTypes {
     | '/network/signals'
     | '/network/'
     | '/tg/'
+    | '/.lovable/oauth/consent'
     | '/_authenticated/sticker-lab/$packId'
     | '/_authenticated/sticker-lab/new'
     | '/network/launch/$launchSlug'
@@ -523,14 +560,17 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   DocsRoute: typeof DocsRoute
+  McpRoute: typeof McpRoute
   NetworkRoute: typeof NetworkRouteWithChildren
   PartnerProgramRoute: typeof PartnerProgramRoute
   TgRoute: typeof TgRouteWithChildren
+  Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   LegalPartnerAgreementRoute: typeof LegalPartnerAgreementRoute
   LegalPrivacyRoute: typeof LegalPrivacyRoute
   LegalRefundsRoute: typeof LegalRefundsRoute
   LegalTermsRoute: typeof LegalTermsRoute
+  DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -563,6 +603,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/network': {
       id: '/network'
       path: '/network'
@@ -582,6 +629,13 @@ declare module '@tanstack/react-router' {
       path: '/tg'
       fullPath: '/tg'
       preLoaderRoute: typeof TgRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/oauth-protected-resource': {
+      id: '/.well-known/oauth-protected-resource'
+      path: '/.well-known/oauth-protected-resource'
+      fullPath: '/.well-known/oauth-protected-resource'
+      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/admin': {
@@ -780,6 +834,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TgIndexRouteImport
       parentRoute: typeof TgRoute
     }
+    '/.lovable/oauth/consent': {
+      id: '/.lovable/oauth/consent'
+      path: '/.lovable/oauth/consent'
+      fullPath: '/.lovable/oauth/consent'
+      preLoaderRoute: typeof DotlovableOauthConsentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/sticker-lab/': {
       id: '/_authenticated/sticker-lab/'
       path: '/'
@@ -926,14 +987,18 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   DocsRoute: DocsRoute,
+  McpRoute: McpRoute,
   NetworkRoute: NetworkRouteWithChildren,
   PartnerProgramRoute: PartnerProgramRoute,
   TgRoute: TgRouteWithChildren,
+  Char91DotwellKnownChar93OauthProtectedResourceRoute:
+    Char91DotwellKnownChar93OauthProtectedResourceRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   LegalPartnerAgreementRoute: LegalPartnerAgreementRoute,
   LegalPrivacyRoute: LegalPrivacyRoute,
   LegalRefundsRoute: LegalRefundsRoute,
   LegalTermsRoute: LegalTermsRoute,
+  DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
