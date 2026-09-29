@@ -33,4 +33,6 @@
 - [ ] SP-B4 browser propagation + real two-account/test-group welcome test — BLOCKED: needs an approved active Service Partner account
 - [x] SP-B5 V1 partner Sticker Drops management STAGED (repository only): 3 partner RPCs (docs/sql), sticker-drop-config save/enable/disable/delete fall-through, managed /telegram Sticker Drops tab; AI, pack publish/test-send, uploads and kill switch stay owner-only
 - [x] SP-B5 production activation complete: migration `20260929192440` live (three authenticated RPCs incl. `_enabled` discriminator); transactional DB smoke 15/15 rolled back with no side effects; advisor 0028=9 / 0029 129→132, mutable search path 1; Edge `sticker-drop-config` v30 ACTIVE (verify_jwt=true, exact staged source); frontend publish `a7635945-3bc9-4cbc-9091-ed682e04f5a3` initiated, project reports published/ready; types synced and grants verified
+- [x] SP-B6 V1 partner Missions STAGED (repository only): 2 partner RPCs (read-only mission state + future defaults save), managed /telegram Missions tab; start/close/end/resurface/Mission Control deferred to SP-B6.1; no Edge change
+- [ ] SP-B6 activation: CP-SPB6-SQL → CP-SPB6-PUBLISH → types sync — awaiting approval
 - [ ] SP-B5 browser propagation + real two-account scheduled-drop test — BLOCKED: needs an approved active Service Partner account; missions remains inactive/deferred

@@ -46,7 +46,7 @@ check("S-12 no commercial gate added (matches owner) and decision recorded", !/e
 check("S-13 history clamp 1..20, WATCHER_UPDATE only", bodyOf("partner_list_launch_watcher_updates").includes("LEAST(GREATEST(COALESCE(_limit, 10), 1), 20)") && bodyOf("partner_list_launch_watcher_updates").includes("e.event_type = 'WATCHER_UPDATE'"));
 
 /* ---------- Static: frontend + scope ---------- */
-check("F-1 launch_watcher_comms active", LIB.includes('"project_identity", "project_inbox", "launch_watcher_comms", "broadcasts", "community_management", "sticker_tools"]'));
+check("F-1 launch_watcher_comms active", LIB.includes('"project_identity", "project_inbox", "launch_watcher_comms", "broadcasts", "community_management", "sticker_tools", "missions"]'));
 check("F-2 /telegram unlocked for launch_watcher_comms", LIB.includes('{ path: "/telegram", scope: "launch_watcher_comms" }') && LIB.includes('{ path: "/telegram", scope: "project_inbox" }'));
 check("F-3 browser calls only partner launch comms RPCs", FNS.every((f) => COMMS.includes(`"${f}"`)) && !/"create_launch_watcher_update"|"get_launch_watcher_update_stats"|"list_launch_watcher_updates"|from\("launch/.test(COMMS + PANEL));
 check("F-4 panel has preview confirm + per-draft request id + no identities", PANEL.includes("AlertDialog") && PANEL.includes("crypto.randomUUID()") && !/telegram_user_id|subscription_id/.test(PANEL));
@@ -62,7 +62,7 @@ const ALLOW = new Set([
   "src/integrations/supabase/types.ts", // approved post-production generated-types sync for SP-B2
   // SP-B4 staged files (approved later phase).
   "docs/sql/SP_B4_partner_community_management.sql", "docs/SP_B4_PARTNER_COMMUNITY_RUNBOOK.md", "scripts/sp-b4-partner-community-management-regression.ts", "src/components/cartel/PartnerCommunityPanel.tsx", "src/lib/partner-community-management.ts",
-  "docs/sql/SP_B5_partner_sticker_tools.sql", "docs/SP_B5_PARTNER_STICKER_TOOLS_RUNBOOK.md", "scripts/sp-b5-partner-sticker-tools-regression.ts", "src/components/cartel/PartnerStickerDropsPanel.tsx", "src/lib/partner-sticker-drops.ts", "backend-source/edge-functions/sticker-drop-config/index.ts",
+  "docs/sql/SP_B6_partner_missions.sql", "docs/SP_B6_PARTNER_MISSIONS_RUNBOOK.md", "scripts/sp-b6-partner-missions-regression.ts", "src/lib/partner-missions.ts", "src/components/cartel/PartnerMissionsPanel.tsx", "docs/sql/SP_B5_partner_sticker_tools.sql", "docs/SP_B5_PARTNER_STICKER_TOOLS_RUNBOOK.md", "scripts/sp-b5-partner-sticker-tools-regression.ts", "src/components/cartel/PartnerStickerDropsPanel.tsx", "src/lib/partner-sticker-drops.ts", "backend-source/edge-functions/sticker-drop-config/index.ts",
   // Approved SP-B3 V1 staging allowlist (later phase).
   "docs/sql/SP_B3_partner_group_broadcasts.sql", "docs/SP_B3_PARTNER_BROADCASTS_RUNBOOK.md", "scripts/sp-b3-partner-group-broadcasts-regression.ts",
   "src/lib/partner-group-broadcasts.ts", "src/components/cartel/PartnerGroupBroadcastPanel.tsx", "backend-source/edge-functions/telegram-group/index.ts",

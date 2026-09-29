@@ -21,7 +21,7 @@ export const PARTNER_CLIENT_SCOPES = [
 export type PartnerClientScope = (typeof PARTNER_CLIENT_SCOPES)[number];
 
 /** Only scopes listed here are enforced end-to-end. Others grant nothing yet (later SP-B phases). */
-export const ACTIVE_PARTNER_SCOPES: readonly PartnerClientScope[] = ["project_identity", "project_inbox", "launch_watcher_comms", "broadcasts", "community_management", "sticker_tools"];
+export const ACTIVE_PARTNER_SCOPES: readonly PartnerClientScope[] = ["project_identity", "project_inbox", "launch_watcher_comms", "broadcasts", "community_management", "sticker_tools", "missions"];
 
 export const PARTNER_SCOPE_LABELS: Record<PartnerClientScope, string> = {
   project_identity: "Project identity",
@@ -51,6 +51,7 @@ const MANAGED_SCOPED_PATHS: ReadonlyArray<{ path: string; scope: PartnerClientSc
   { path: "/telegram", scope: "broadcasts" },
   { path: "/telegram", scope: "community_management" },
   { path: "/telegram", scope: "sticker_tools" },
+  { path: "/telegram", scope: "missions" },
 ];
 const matchesPath = (pathname: string, p: string) => pathname === p || pathname.startsWith(`${p}/`);
 export function isManagedAllowedPath(pathname: string, scopes: readonly PartnerClientScope[] = []): boolean {

@@ -68,7 +68,7 @@ check("E-11 denial mapping uses shared commercialDenialFor(community_basic) + id
 check("E-12 status/welcome_settings/sticker/broadcast actions stay member-only for partner", !/partnerCommunityAuthorized[^\n]*(status|assign_pack|distribute_pack|send_group_test|broadcast_launch_options|official_contract)/.test(EDGE));
 
 /* ---------- Static: frontend ---------- */
-check("F-1 community_management active (sticker_tools added by SP-B5); missions inactive", LIB.includes('ACTIVE_PARTNER_SCOPES: readonly PartnerClientScope[] = ["project_identity", "project_inbox", "launch_watcher_comms", "broadcasts", "community_management", "sticker_tools"]'));
+check("F-1 community_management active (sticker_tools added by SP-B5); missions active (SP-B6)", LIB.includes('ACTIVE_PARTNER_SCOPES: readonly PartnerClientScope[] = ["project_identity", "project_inbox", "launch_watcher_comms", "broadcasts", "community_management", "sticker_tools", "missions"]'));
 check("F-2 /telegram unlocked for community_management", LIB.includes('{ path: "/telegram", scope: "community_management" }'));
 check("F-3 browser: partner RPCs + five editable fields only", CLIB.includes('"partner_list_community_groups"') && CLIB.includes('"partner_get_welcome_settings"') && !/launchWatch[A-Z]\w*:/.test(CLIB) && !/from\("telegram_/.test(CLIB + PANEL));
 check("F-4 panel: no ids, no owner/group-management/sticker/broadcast controls", !/telegram_chat_id|requested_by|messageId|TelegramGroupCard|CommunityWelcomeDialog|disconnect|reconnect|sticker|Broadcast/i.test(PANEL.replace(/\/\*[\s\S]*?\*\//g, "").replace(/Launch Watch card/g, "")));
@@ -82,7 +82,7 @@ const ALLOW = new Set([
   "src/components/cartel/ManagedAccessGuard.tsx", "src/components/cartel/SidebarNav.tsx", "src/components/cartel/ServicePartnerAccessPanel.tsx",
   "scripts/sp-b4-partner-community-management-regression.ts", "docs/SP_B4_PARTNER_COMMUNITY_RUNBOOK.md",
   // SP-B5 staged files (approved later phase).
-  "docs/sql/SP_B5_partner_sticker_tools.sql", "docs/SP_B5_PARTNER_STICKER_TOOLS_RUNBOOK.md", "scripts/sp-b5-partner-sticker-tools-regression.ts", "src/components/cartel/PartnerStickerDropsPanel.tsx", "src/lib/partner-sticker-drops.ts", "backend-source/edge-functions/sticker-drop-config/index.ts",
+  "docs/sql/SP_B6_partner_missions.sql", "docs/SP_B6_PARTNER_MISSIONS_RUNBOOK.md", "scripts/sp-b6-partner-missions-regression.ts", "src/lib/partner-missions.ts", "src/components/cartel/PartnerMissionsPanel.tsx", "docs/sql/SP_B5_partner_sticker_tools.sql", "docs/SP_B5_PARTNER_STICKER_TOOLS_RUNBOOK.md", "scripts/sp-b5-partner-sticker-tools-regression.ts", "src/components/cartel/PartnerStickerDropsPanel.tsx", "src/lib/partner-sticker-drops.ts", "backend-source/edge-functions/sticker-drop-config/index.ts",
   "scripts/sp-a-managed-client-access-regression.ts", "scripts/sp-b1-partner-inbox-regression.ts", "scripts/sp-b2-partner-launch-comms-regression.ts",
   "scripts/sp-b3-partner-group-broadcasts-regression.ts", "scripts/public-discovery-seo-regression.ts", "roadmap.md", ".lovable/plan.md",
   // Approved post-production generated-types sync (platform-regenerated from the live schema).
