@@ -5,6 +5,13 @@ import { Eye, Globe2, IdCard, Loader2, Plus, Rocket, Save, ShieldCheck, Trash2, 
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/lib/workspace-context";
+import {
+  fetchManagedProfile,
+  partnerClientErrorMessage,
+  partnerClientKeys,
+  saveManagedProfile,
+  type ManagedProfileInput,
+} from "@/lib/partner-client-access";
 import { listWorkspaceAssets, signedUrlMap, type MediaAsset } from "@/lib/media";
 import {
   ABOUT_LONG_MAX,
@@ -182,6 +189,12 @@ function WorkingView({
 }
 
 function ProjectProfilePage() {
+  // SP-A: a Service Partner managed client project uses the scoped partner editor.
+  const { isManaged } = useWorkspace();
+  return isManaged ? <ManagedProjectProfile /> : <OwnerProjectProfilePage />;
+}
+
+function OwnerProjectProfilePage() {
   const { workspaceId, workspace, loading: workspaceLoading } = useWorkspace();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -1548,6 +1561,98 @@ function ProjectProfilePage() {
           }
         />
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * SP-A managed editor. Reads/writes ONLY through partner_get_project_profile /
+ * partner_update_project_profile, which require the project_identity scope.
+ * No slug, discovery status, logo, verification, or profile creation controls.
+ */
+const MANAGED_FIELDS: { key: keyof ManagedProfileInput; label: string; max: number; multiline?: boolean }[] = [
+  { key: "project_name", label: "Project name", max: PROJECT_NAME_MAX },
+  { key: "ticker", label: "Ticker", max: TICKER_MAX },
+  { key: "primary_chain", label: "Primary chain", max: PRIMARY_CHAIN_MAX },
+  { key: "tagline", label: "Tagline", max: TAGLINE_MAX },
+  { key: "description", label: "Description", max: DESCRIPTION_MAX, multiline: true },
+  { key: "website_url", label: "Website", max: 2048 },
+  { key: "telegram_url", label: "Telegram", max: 2048 },
+  { key: "x_url", label: "X", max: 2048 },
+];
+
+function ManagedProjectProfile() {
+  const { workspaceId, workspace } = useWorkspace();
+  const queryClient = useQueryClient();
+  const allowed = workspace?.scopes?.includes("project_identity") === true;
+  const [form, setForm] = useState<ManagedProfileInput | null>(null);
+  const q = useQuery({
+    queryKey: partnerClientKeys.profile(workspaceId),
+    queryFn: () => fetchManagedProfile(workspaceId!),
+    enabled: !!workspaceId && allowed,
+  });
+  useEffect(() => {
+    if (q.data) {
+      const { discovery_status: _d, updated_at: _u, ...rest } = q.data;
+      setForm(rest);
+    }
+  }, [q.data]);
+  const save = useMutation({
+    mutationFn: () => saveManagedProfile(workspaceId!, form!),
+    onSuccess: () => {
+      toast.success("Project identity saved");
+      queryClient.invalidateQueries({ queryKey: partnerClientKeys.profile(workspaceId) });
+    },
+    onError: (e) => toast.error(partnerClientErrorMessage(e)),
+  });
+
+  return (
+    <div className="flex min-w-0 flex-col gap-5 sm:gap-6">
+      <PageHeader
+        eyebrow="Managed client project"
+        title="Project Profile"
+        description={`You are editing ${workspace?.name ?? "this project"} as a Service Partner. The client owns this project; publishing, the public address and verification stay with the owner.`}
+        status="Managed"
+      />
+      {!allowed ? (
+        <Section variant="quiet" title="Not included in your access" description="The project owner has not given you the Project identity permission." />
+      ) : q.isPending ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin text-gold" aria-hidden="true" />Loading…</div>
+      ) : q.isError ? (
+        <Section variant="quiet" title="Project Profile unavailable" description={partnerClientErrorMessage(q.error)} />
+      ) : !q.data || !form ? (
+        <Section variant="quiet" title="No Project Profile yet" description="The project owner needs to create the Project Profile first." />
+      ) : (
+        <Section variant="primary" title="Project identity" leading={<IdCard className="size-4" aria-hidden="true" />}>
+          <form
+            className="grid gap-4"
+            onSubmit={(e) => { e.preventDefault(); if (!save.isPending && form.project_name.trim()) save.mutate(); }}
+          >
+            {MANAGED_FIELDS.map((f) => {
+              const id = `managed-${f.key}`;
+              const value = (form[f.key] as string | null) ?? "";
+              const onChange = (v: string) => setForm({ ...form, [f.key]: v });
+              return (
+                <div key={f.key} className="min-w-0">
+                  <Label htmlFor={id}>{f.label}</Label>
+                  {f.multiline ? (
+                    <Textarea id={id} className="mt-2" maxLength={f.max} value={value} onChange={(e) => onChange(e.target.value)} rows={5} />
+                  ) : (
+                    <Input id={id} className="mt-2 min-h-11" maxLength={f.max} value={value} onChange={(e) => onChange(e.target.value)} required={f.key === "project_name"} />
+                  )}
+                </div>
+              );
+            })}
+            <p className="text-xs text-muted-foreground">Discovery status: {q.data.discovery_status}. Only the owner can publish or hide the profile.</p>
+            <div>
+              <Button type="submit" className="min-h-11" disabled={save.isPending || !form.project_name.trim()}>
+                {save.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}
+                Save
+              </Button>
+            </div>
+          </form>
+        </Section>
+      )}
     </div>
   );
 }

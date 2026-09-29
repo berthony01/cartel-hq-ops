@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { BillingSection } from "@/components/cartel/BillingSection";
+import { ServicePartnerAccessPanel } from "@/components/cartel/ServicePartnerAccessPanel";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
@@ -122,6 +123,8 @@ function SettingsPage() {
       </div>
 
       <BillingSection />
+
+      <ServicePartnerAccessPanel />
 
       <Section
         variant="primary"

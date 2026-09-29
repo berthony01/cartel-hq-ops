@@ -1,15 +1,23 @@
 import { Link } from "@tanstack/react-router";
 import { NAV_SECTIONS } from "@/lib/nav";
 import { usePlatformAccess } from "@/hooks/usePlatformAccess";
+import { useWorkspace } from "@/lib/workspace-context";
+import { isManagedAllowedPath } from "@/lib/partner-client-access";
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   // Presentation-only gate. Route + Edge Function remain the security boundary.
   const { isPlatformOwner } = usePlatformAccess();
+  // SP-A: a managed client project shows only the areas partner access supports.
+  const { isManaged } = useWorkspace();
 
   return (
     <nav aria-label="Primary" className="flex flex-col gap-5">
       {NAV_SECTIONS.map((section) => {
-        const items = section.items.filter((item) => !item.ownerOnly || isPlatformOwner);
+        const items = section.items.filter(
+          (item) =>
+            (!item.ownerOnly || isPlatformOwner) &&
+            (!isManaged || item.external || isManagedAllowedPath(item.to)),
+        );
         if (items.length === 0) return null;
         return (
         <div
