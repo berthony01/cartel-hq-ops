@@ -51,7 +51,7 @@ check("F-1 project_inbox active; other SP-B scopes still inactive", /ACTIVE_PART
 check("F-2 /telegram allowed for managed only with project_inbox scope", LIB.includes('"/telegram"') && LIB.includes("project_inbox") && /isManagedAllowedPath\(pathname: string, scopes/.test(LIB));
 check("F-3 partner wrappers call only partner_inbox_* RPCs", FNS.every((f) => INBOX.includes(`"${f}"`)));
 check("F-4 panel partner mode hides settings + block", PANEL.includes('mode === "partner"') && /isPartner \? null|!isPartner &&/.test(PANEL));
-check("F-5 /telegram renders only partner inbox for managed projects", TG.includes('<ProjectInboxPanel mode="partner"') && TG.includes("isManaged"));
+check("F-5 /telegram renders only partner inbox for managed projects", TG.includes('mode="partner"') && TG.includes("<PartnerInboxPage />") && TG.includes("isManaged"));
 check("F-6 nav + guard are scope-aware", NAV.includes("workspace?.scopes") && GUARD.includes("workspace?.scopes"));
 check("F-7 runbook orders B0 before B1 and publish before SQL", (() => { const a = RUNBOOK.indexOf("CP-SPB1-PUBLISH"), b = RUNBOOK.indexOf("CP-SPB0-SQL"), c = RUNBOOK.indexOf("CP-SPB1-SQL"); return a >= 0 && b > a && c > b; })());
 

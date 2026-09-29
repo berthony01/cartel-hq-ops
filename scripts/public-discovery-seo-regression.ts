@@ -58,6 +58,21 @@ check("D-22 robots advertises the public sitemap", robots.includes("Sitemap: htt
 check("D-23 public discovery uses crawlable links", !/onClick=.*(docs|partner-program)/s.test(home + footer + nav) && (home + footer + nav).includes('to="/docs"'));
 
 const allowed = new Set([
+  // Approved SP-B0 + SP-B1 staging allowlist.
+  "docs/sql/SP_B0_commercial_workspace_entitlement_core.sql",
+  "docs/sql/SP_B1_partner_project_inbox.sql",
+  "docs/SP_B1_PARTNER_INBOX_RUNBOOK.md",
+  "scripts/sp-b0-commercial-core-regression.ts",
+  "scripts/sp-b1-partner-inbox-regression.ts",
+  "scripts/sp-a-managed-client-access-regression.ts",
+  "scripts/public-discovery-seo-regression.ts",
+  "src/lib/partner-client-access.ts",
+  "src/lib/project-inbox.ts",
+  "src/components/cartel/ProjectInboxPanel.tsx",
+  "src/components/cartel/ManagedAccessGuard.tsx",
+  "src/components/cartel/SidebarNav.tsx",
+  "src/routes/_authenticated/telegram.tsx",
+  "roadmap.md",
   "src/routes/index.tsx",
   // Approved production copy fix: public agreement link label dropped "draft".
   "src/routes/partner-program.tsx",
