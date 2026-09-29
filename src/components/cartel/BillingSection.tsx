@@ -251,7 +251,7 @@ export function BillingSection() {
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
-                The Partner Program is preparing to open. <Link to="/partner-program" className="font-semibold text-gold hover:underline">Read the public program details.</Link>
+                Independent businesses can offer their own services to CARTEL HQ customers through the Service Partner Program. <Link to="/partner-program" className="font-semibold text-gold hover:underline">Read the public program details.</Link>
               </p>
             </>
           )}
