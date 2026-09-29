@@ -1,6 +1,14 @@
 # SP-B0 + SP-B1 Partner Project Inbox — Runbook
 
-Status: STAGED ONLY. Nothing here has been applied to production (`ocoinbnjgstkmnwwvnhi`) or published.
+Status: PRODUCTION ACTIVE (2026-09-29) on `ocoinbnjgstkmnwwvnhi`.
+- SP-B0 applied as migration `20260929154656` (sp_b0_commercial_workspace_entitlement_core). Evaluator outputs identical pre/post for platform owner, normal member and non-member.
+- SP-B1 applied as migration `20260929154741` (sp_b1_partner_project_inbox).
+- `commercial_evaluate_workspace_feature`: SECURITY DEFINER, postgres owner, search_path=public, service_role execute only. `partner_evaluate_commercial_access`: SECURITY DEFINER, postgres owner, empty search_path, service_role execute only.
+- Seven `partner_inbox_*` RPCs: SECURITY DEFINER, postgres owner, empty search_path, authenticated + service_role execute, no PUBLIC/anon.
+- Advisor 0028 unchanged (9); 0029 exactly +7 (112 → 119).
+- Transactional backend smoke 12/12 passed and rolled back (partner outside workspace_members, summary, list, get, reply, idempotent replay, messages, resolve, resolved reply blocked, acknowledge uncertainty, revoke denies). Conversation/contact/delivery counts back to 3/3/6; partner_client_access rows 0.
+- Supabase types regenerated.
+- PENDING: real two-account browser smoke (step 6) — no approved active Service Partner account exists; partner status must not be altered to create one.
 
 ## What this enables
 A Service Partner with an owner-accepted, active grant that includes `project_inbox`, on an approved Service Partner record while the Service Partner track is active, can in that client project only:
@@ -20,7 +28,7 @@ Inbox settings (reply capture, new member conversations), block/unblock members,
 - `docs/sql/SP_B1_partner_project_inbox.sql`: seven `partner_inbox_*` RPCs (authenticated + service_role; PUBLIC/anon revoked; `search_path ''`).
 - Regressions: `scripts/sp-b0-commercial-core-regression.ts`, `scripts/sp-b1-partner-inbox-regression.ts`.
 
-## Production order (each step needs explicit owner approval)
+## Production order (steps 1–5 COMPLETE; step 6 pending)
 1. Read-only preflight: confirm the live `evaluate_commercial_access` body still equals migration `20260924021801`, and that the owner inbox RPC bodies are unchanged. Record the md5 of each function definition.
 2. **CP-SPB1-PUBLISH**: publish the frontend. Until the SQL exists, the partner Inbox fails closed with an error state. Owners and members are unaffected.
 3. **CP-SPB0-SQL**: apply SP-B0. Then read-only checks:
