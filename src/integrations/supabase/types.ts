@@ -7250,6 +7250,16 @@ export type Database = {
         Args: { _scopes: string[] }
         Returns: boolean
       }
+      partner_create_launch_watcher_update: {
+        Args: {
+          _body: string
+          _client_request_id: string
+          _launch_id: string
+          _title: string
+          _workspace_id: string
+        }
+        Returns: string
+      }
       partner_evaluate_commercial_access: {
         Args: { _feature_key: string; _workspace_id: string }
         Returns: Json
@@ -7366,6 +7376,39 @@ export type Database = {
           resolved_at: string
           status: string
           updated_at: string
+        }[]
+      }
+      partner_launch_watcher_stats: {
+        Args: { _launch_id: string; _workspace_id: string }
+        Returns: {
+          active_watchers: number
+          updates_enabled_watchers: number
+          updates_muted_watchers: number
+        }[]
+      }
+      partner_list_launch_watcher_updates: {
+        Args: { _launch_id: string; _limit?: number; _workspace_id: string }
+        Returns: {
+          ambiguous_count: number
+          body: string
+          created_at: string
+          event_id: string
+          failed_count: number
+          pending_count: number
+          sent_count: number
+          skipped_count: number
+          title: string
+        }[]
+      }
+      partner_list_launches_for_comms: {
+        Args: { _workspace_id: string }
+        Returns: {
+          can_send: boolean
+          launch_at: string
+          launch_id: string
+          status: string
+          ticker: string
+          token_name: string
         }[]
       }
       partner_require_owner: { Args: never; Returns: string }
