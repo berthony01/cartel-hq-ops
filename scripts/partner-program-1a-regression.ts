@@ -282,10 +282,10 @@ check("P-19.10 nav Partners /partners, not owner-only", navLine.includes('to: "/
 /* 20. Owner admin */
 const AD = read("src/components/cartel/PartnerAdminSection.tsx");
 check("P-20.1 owner gate via usePlatformAccess", AD.includes("const { isPlatformOwner, loading } = usePlatformAccess();") && AD.includes("if (loading || !isPlatformOwner) return null;"));
-for (const f of ["ownerSaveTermsDraft", "ownerActivateTerms", "ownerRetireTerms", "ownerReviewApplication", "ownerSetPartnerStatus", "ownerAddLedgerAdjustment", "ownerRejectReferralForFraud", "ownerReviewPayout", "ownerMarkPayoutPaid"])
+for (const f of ["ownerSaveServiceTermsDraft", "ownerActivateTerms", "ownerRetireTerms", "ownerReviewApplication", "ownerSetPartnerStatus", "ownerAddLedgerAdjustment", "ownerRejectReferralForFraud", "ownerReviewPayout", "ownerMarkPayoutPaid"])
   check(`P-20 admin uses ${f}`, AD.includes(`${f}(`));
-check("P-20.2 terms form blank without draft, incl. duration (1B-3/4)", AD.includes('{ commission: "", window: "", hold: "", min: "", currency: "", agreement: "", disclosure: "", duration: "" }') && AD.includes('intOrNaN(val("duration"))'));
-check("P-20.3 activation confirmed via AlertDialog", AD.includes("AlertDialog") && AD.includes("Activation opens the Partner Program"));
+check("P-20.2 service-only terms form: blank without draft, no financial fields (service track separation)", AD.includes('{ agreement: "", disclosure: "" }') && AD.includes("ownerSaveServiceTermsDraft({") && !/commissionBps|intOrNaN/.test(AD) && LIB.includes("export async function ownerSaveTermsDraft("));
+check("P-20.3 activation confirmed via AlertDialog, service-only wording", AD.includes("AlertDialog") && AD.includes("This opens Service Partner applications only"));
 check("P-20.4 activation requires complete terms", AD.includes("!termsComplete"));
 check("P-20.5 fraud reason + paid reference required", AD.includes("Fraud reason (required)") && AD.includes("External payment reference (required)"));
 check("P-20.6 no tax/bank PII fields", !/\b(ssn|ein|tin|iban|routing|account number|bank account|card number|w-?9)\b/i.test(AD.replace(/No tax identifiers, documents, bank or card data/, "")));

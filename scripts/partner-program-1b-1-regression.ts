@@ -6,6 +6,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import {
   activationConfirmPhrase, canActivatePolicy, findPlaceholders, policyContent,
   POLICY_DRAFTS, POLICY_TYPES, REQUIRED_PLACEHOLDERS,
+  DORMANT_AFFILIATE_AGREEMENT_DRAFT,
 } from "../src/lib/legal-policies";
 
 let passed = 0, failed = 0;
@@ -37,7 +38,18 @@ check("L-10 privacy: no unverified no-sell claim", !/we do not (sell|share)/i.te
 check("L-11 privacy covers required topics", ["Categories","Purposes","processors","International","local storage","Security","Retention","rights","Supabase","Lovable","Resend","Stripe","Telegram","X","AI providers"].every((k) => privacy.toLowerCase().includes(k.toLowerCase())));
 check("L-12 privacy: no IP for referral", /do not collect IP addresses/.test(privacy));
 check("L-12a privacy makes no unenforced deletion deadline", /do not promise a fixed deletion deadline/.test(privacy));
-const pa = policyContent(POLICY_DRAFTS.partner_agreement);
+const pa = policyContent(DORMANT_AFFILIATE_AGREEMENT_DRAFT); // dormant Affiliate terms preserved (not published)
+const spa = policyContent(POLICY_DRAFTS.partner_agreement);
+for (const [k, re] of Object.entries({
+  operator: /Berthony Petit Frere/, soleProp: /Texas sole proprietor/, brand: /brand and product names/, usBeta: /United States beta/,
+  noFee: /no fee to apply or to be approved/i, noPurchase: /no CARTEL HQ purchase is required for approval/, independent: /independent business/,
+  noEmployment: /employment, agency, legal partnership, joint venture, franchise or fiduciary/, noPay: /does not pay Service Partners/,
+  noLeads: /lead, client, sales territory or earnings guarantee/, direct: /pays the Operator directly/, noResell: /may not resell, sublicense, bundle, mark up/,
+  claims: /investment returns, token safety, token price, guaranteed results or earnings/, disclosure: /Independent CARTEL HQ Service Partner\. Services are provided by/,
+  seed: /seed phrases or private keys/, noAccess: /grants no access to any client workspace/, brandStop: /stop using CARTEL HQ brand assets/,
+  indemn: /indemnify/, law: /laws of the State of Texas/, notice: /30 days/, versions: /specific agreement version/, jurisdiction: /not a promise that every jurisdiction permits every service/,
+})) check(`L-16 service partner agreement: ${k}`, re.test(spa));
+check("L-17 service agreement has no affiliate economics", !/20%|commission is|held for 45|minimum payout|referral link/i.test(spa));
 for (const [k, re] of Object.entries({
   approval: /application and written approval/, firstValid: /first valid attribution wins/, window: /30 days/,
   rate: /20% of qualifying revenue/, cap: /first 12 successfully paid/, hold: /45 days/, min: /USD \$50/,

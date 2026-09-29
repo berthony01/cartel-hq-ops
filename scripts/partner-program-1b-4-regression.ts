@@ -86,17 +86,17 @@ check("E-16 status sets match SQL", isRefundStatus("succeeded") && !isRefundStat
 check("E-17 isMissingContract removed (no success special-case)", !/isMissingContract/.test(CM));
 
 /* 5. UI */
-check("U-1 draft economics only when no active terms", PAGE.includes("<DraftEconomicsPanel />") && /!programOpen \? \(\s*<>\s*<DraftEconomicsPanel \/>/.test(PAGE));
+check("U-1 no draft economics on dashboard (service-only launch)", !PAGE.includes("DraftEconomicsPanel") && PAGE.includes("showAffiliate && activeTerms ? ("));
 for (const s of ['"20%"', "First 12 paid monthly invoices", '"30 days"', '"45 days"', '"$50"', '"USD (US dollars)"', "Monthly, manual"]) check(`U-2 draft value ${s}`, LIB.includes(s));
 check("U-3 active version shown", PAGE.includes("Active terms · v${terms.version}") && PAGE.includes("First ${duration} paid invoices"));
 for (const s of ["Held (in hold period)", "Available", "Paid", "Reversed", "Restored", "Net payable"]) check(`U-4 balance ${s}`, PAGE.includes(`"${s}"`));
 check("U-5 negative carry-forward explained", /carried forward/.test(PAGE));
-check("U-6 service-only no commission", PAGE.includes('title="No Cartel commission"') && PAGE.includes("{!isAffiliate ? ("));
+check("U-6 service-only no commission", PAGE.includes('title="No payments from CARTEL HQ"') && PAGE.includes("{!isAffiliate ? ("));
 check("U-7 referral link stays code-based, staged note", PAGE.includes("ref=${partner.referral_code}") && /staged and not active/.test(PAGE) && !/referral_token|claim_referral_click/.test(PAGE));
 check("U-8 ledger labels transparent, no PII fields", LIB.includes("LEDGER_ENTRY_LABELS") && !/workspace_id|stripe_invoice_ref|stripe_charge_ref|email/.test(PAGE));
 check("U-9 no writes on page load", !/useEffect/.test(PAGE) && !/useEffect/.test(ADMIN));
-check("U-10 owner draft duration field", ADMIN.includes('label="Paid invoices"') && ADMIN.includes('commissionDurationInvoices: intOrNaN(val("duration"))'));
-check("U-11 typed confirm activation + mark paid", ADMIN.includes("phrase={activationPhrase(draft.version)}") && ADMIN.includes("phrase={markPaidPhrase(note(p.id))}") && !/onClick=\{\(\) => markPaid\.mutate/.test(ADMIN));
+check("U-10 owner draft is service-only; dormant 9-arg duration contract preserved in lib", !ADMIN.includes('label="Paid invoices"') && read("src/lib/partners.ts").includes("_commission_duration_invoices: t.commissionDurationInvoices"));
+check("U-11 typed confirm activation + mark paid", ADMIN.includes("phrase={serviceActivationPhrase(draft.version)}") && ADMIN.includes("phrase={markPaidPhrase(note(p.id))}") && !/onClick=\{\(\) => markPaid\.mutate/.test(ADMIN));
 check("U-12 owner gate preserved", ADMIN.includes("if (loading || !isPlatformOwner) return null;"));
 check("U-13 payout gates preserved", PAGE.includes('isAffiliate && approved && partner?.tax_doc_status === "verified" && accepted && programOpen'));
 check("U-14 contract-missing fails closed", LIB.includes("throw new Error(COMMISSION_CONTRACT_UNAVAILABLE)"));

@@ -35,18 +35,18 @@ check("D-04 documentation has unique canonical and social metadata", docs.includ
 check("D-05 homepage has self-referencing canonical", home.includes('rel: "canonical", href: "https://pepecartelhq.com/"'));
 check("D-06 root fallback describes CARTEL HQ and names the site", root.includes('property: "og:site_name", content: "CARTEL HQ"') && root.includes("launch command center"));
 
-const economics = ["20%", "First 12 paid monthly invoices", "30 days", "45 days", "$50 USD", "Monthly, manual"];
-check("D-07 exact draft economics are present", economics.every((value) => partner.includes(value)));
-check("D-08 draft economics remain inactive", partner.includes("Draft economics, not active") && partner.includes("No one earns or is owed commission"));
-check("D-09 applications are not represented as open", partner.includes("Applications are not open") && !/applications are open[.!]/i.test(partner));
-check("D-10 Affiliate and Service Partner rules are distinct", partner.includes("Affiliate") && partner.includes("Service Partner status alone grants zero client workspace access") && partner.includes("separately approved as an Affiliate"));
-check("D-11 commission exclusions are complete", ["Taxes", "discounts", "credits", "refunds", "disputes", "setup or service fees", "high-cost usage purchases"].every((value) => partner.includes(value)));
-check("D-12 public routes contain no Supabase access", !/supabase|useQuery|createServerFn/i.test(partner + docs));
+// Service Partner-only launch: affiliate economics must NOT be presented as active.
+check("D-07 no affiliate economics on public page", !/20%|First 12 paid|45 days|\$50/.test(partner));
+check("D-08 no-earnings, no-fee, no-purchase facts", partner.includes("No fee to apply") && partner.includes("No CARTEL HQ purchase is required") && partner.includes("Results and earnings are not guaranteed"));
+check("D-09 status is database-backed and fails closed", partner.includes("fetchPartnerProgramStatus") && partner.includes("Applications not open yet"));
+check("D-10 Affiliate card not open, service rules distinct", partner.includes("Not open · planned later") && partner.includes("Service Partner status alone grants no access to any client account or workspace"));
+check("D-11 no earnings hype", !/make \$|replace your income|guaranteed side hustle|easy money/i.test(partner));
+check("D-12 public routes use only the read-only status helper", !/supabase|createServerFn/i.test(partner + docs) && !/useQuery/.test(docs));
 
 check("D-13 homepage links to both public resources", home.includes('to="/docs"') && home.includes('to="/partner-program"'));
 check("D-14 footer links to documentation, program, and network", footer.includes('to: "/docs"') && footer.includes('to: "/partner-program"') && footer.includes('to: "/network"') && !footer.includes('aria-label="Legal"'));
 check("D-15 authenticated navigation includes public documentation", nav.includes('{ label: "Documentation", to: "/docs"') && nav.includes('label: "Partners", to: "/partners"'));
-check("D-16 billing links truthfully to preparing program", billing.includes("The Partner Program is preparing to open") && billing.includes('to="/partner-program"'));
+check("D-16 billing links truthfully to Service Partner Program", billing.includes("through the Service Partner Program") && billing.includes('to="/partner-program"'));
 check("D-17 X reads removed from public pricing and billing", !/X reads/i.test(home) && !/X reads/i.test(billing));
 check("D-18 shipped Pro limits remain exact", [home, billing, docs].every((source) => source.includes("100 static AI stickers") && source.includes("10 motion AI stickers") && source.includes("100 X Missions")));
 check("D-19 documentation marks restricted work unavailable", docs.includes("not available public product features") && docs.includes("not documented here as live"));
@@ -73,7 +73,7 @@ const allowed = new Set([
   "roadmap.md",
   "src/routeTree.gen.ts",
 ]);
-const changed = execFileSync("git", ["diff", "--name-only", "529681aa1d073b70946f7b5934bf9b1fcc2b6be7...HEAD"], { encoding: "utf8" })
+const changed = execFileSync("git", ["diff", "--name-only", "529681aa1d073b70946f7b5934bf9b1fcc2b6be7...049aae3b398bfe9cf49e9834a9c2706fadbd3c51"], { encoding: "utf8" })
   .split("\n")
   .map((line) => line.trim())
   .filter(Boolean);
