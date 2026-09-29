@@ -1,6 +1,13 @@
 # SP-B6 V1 — Service Partner Missions (read + future defaults)
 
-Status: STAGED (repository only). Not applied, not deployed, not published.
+Status: SQL ACTIVE IN PRODUCTION.
+- Migration `20260929194609` sp_b6_partner_missions live; two authenticated RPCs (SECURITY DEFINER, postgres owner, empty search_path, authenticated+service_role execute, no PUBLIC/anon).
+- Advisor: 0028=9 unchanged, 0029=134, mutable search path=1.
+- Transactional smoke 10/10 passed and rolled back; production counts unchanged (missions 13, targets 13, snapshots 13684, schedule_events 67, settings 0).
+- NO Edge change; NO X or Telegram call; no mission create/close, snapshot insert or x_missions usage.
+- All seven Service Partner scopes implemented. Types synced.
+- Pending: frontend publish final deployment alignment (explicit approval); real two-account E2E blocked on 0 approved active Service Partners.
+- SP-B6.1 (web start/close/end/resurface/Mission Control) remains deferred, owner-only.
 
 ## Scope
 Activates the final partner scope `missions` with a safe V1:
