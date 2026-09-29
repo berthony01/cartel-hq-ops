@@ -82,6 +82,8 @@ const ALLOW = new Set([
   "scripts/sp-a-managed-client-access-regression.ts", "scripts/sp-b1-partner-inbox-regression.ts", "scripts/sp-b2-partner-launch-comms-regression.ts",
   "scripts/sp-b3-partner-group-broadcasts-regression.ts", "scripts/sp-b4-partner-community-management-regression.ts",
   "scripts/public-discovery-seo-regression.ts", "roadmap.md", ".lovable/plan.md",
+  // Post-activation types/status sync: generated types file is regenerated from live production schema.
+  "src/integrations/supabase/types.ts",
 ]);
 const changed = [
   ...execFileSync("git", ["diff", "--name-only", PLAN_COMMIT], { encoding: "utf8" }).split("\n"),
@@ -89,7 +91,7 @@ const changed = [
 ].filter(Boolean);
 const outside = changed.filter((f) => !ALLOW.has(f));
 check("F-8 changed files within SP-B5 allowlist", outside.length === 0, outside.join(", "));
-check("F-9 no migrations / supabase integration / other Edge function edits", !changed.some((f) => f.startsWith("supabase/") || f.includes("integrations/supabase") || (f.startsWith("backend-source/") && f !== EDGE_PATH)));
+check("F-9 no migrations / supabase integration / other Edge function edits", !changed.some((f) => f.startsWith("supabase/") || (f.includes("integrations/supabase") && f !== "src/integrations/supabase/types.ts") || (f.startsWith("backend-source/") && f !== EDGE_PATH)));
 
 /* ---------- Local Postgres ---------- */
 const hasPg = spawnSync("sh", ["-c", "command -v initdb && command -v pg_ctl && command -v psql"]).status === 0;

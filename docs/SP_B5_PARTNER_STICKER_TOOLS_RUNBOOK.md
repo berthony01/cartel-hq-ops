@@ -1,6 +1,6 @@
 # SP-B5 V1 — Service Partner Sticker Tools (Sticker Drops management)
 
-Status: STAGED (repository only). Not applied, not deployed, not published.
+Status: PRODUCTION ACTIVE. Migration `20260929192440 sp_b5_partner_sticker_tools` live; Edge v30 active; frontend published.
 
 ## Scope
 Activates ONLY the stored partner scope `sticker_tools`. A Service Partner with an accepted, active client grant containing `sticker_tools` may, for that client project only:
@@ -23,11 +23,11 @@ save_schedule: group + pack required; interval integer 15..720; daily cap intege
 ## Commercial
 Save and enable evaluate the CLIENT workspace `sticker_drops` via the SP-B0 core. Production: `cartel_49` v1 includes it (no quota); the current free plan does not, so a partner on a free client is denied save/enable (FEATURE_NOT_INCLUDED, 403) while disable/delete stay allowed. Denials: PLAN_LIMIT_REACHED 429; FEATURE_NOT_INCLUDED / PLAN_ACCESS_INACTIVE / COMMERCIAL_ACCESS_DENIED 403; PROJECT_IDENTITY_REQUIRED 403; GROUP/PACK/SCHEDULE_NOT_FOUND 404; PACK_NOT_PUBLISHED 400; unavailable 503.
 
-## Activation order
-1. CP-SPB5-SQL — apply the SQL file; run the rolled-back smoke below; expect advisor 0028 = 9, 0029 = 129 → 132, mutable search path = 1.
-2. CP-SPB5-EDGE — confirm deployed `sticker-drop-config` v29 still equals the pre-change repo source (11,879 chars), deploy staged source, then test an owner schedule save first.
-3. CP-SPB5-PUBLISH — frontend publish.
-4. Types sync.
+## Activation (COMPLETE)
+1. CP-SPB5-SQL — DONE: migration `20260929192440` live. Three authenticated RPCs verified (SECURITY DEFINER, empty search_path, authenticated+service_role execute, anon/PUBLIC revoked). Transactional DB smoke 15/15 passed and rolled back (no event-count mutation of its own). Advisor: 0028 = 9 unchanged, 0029 129 → 132, mutable search path = 1.
+2. CP-SPB5-EDGE — DONE: `sticker-drop-config` v30 ACTIVE, verify_jwt=true, SHA `6830315d10a6d37b6d8c26c916a1db92e9f58de8659c7a6a4a7c0ba28b09f3e0`; deployed v30 index is EXACT staged source. No real sticker was sent.
+3. CP-SPB5-PUBLISH — DONE: publish `a7635945-3bc9-4cbc-9091-ed682e04f5a3` initiated; project reports published/ready.
+4. Types sync — DONE: generated types contain `partner_list_sticker_drop_packs`, `partner_list_sticker_drop_state` and `partner_authorize_sticker_drop_action` (including `_enabled boolean`) and match the live schema; grants verified against production.
 
 ## Production smoke (one transaction, ROLLBACK, no Edge call, no real sticker)
 Temporary approved partner + access with `sticker_tools`; list packs/state (safe keys only); authorize save on current client plan (expect FEATURE_NOT_INCLUDED on free); disable/delete allowed; wrong group, wrong pack, unpublished pack, wrong schedule, cross-workspace and invalid action (incl. set_kill_switch) denied; revoke then deny; ROLLBACK; verify counts unchanged (packs 2, stickers 24, schedules 1, events 745, partner_client_access 0).
@@ -36,4 +36,4 @@ Temporary approved partner + access with `sticker_tools`; list packs/state (safe
 Redeploy `sticker-drop-config` v29; DROP the three functions; revert the frontend (remove `sticker_tools` from ACTIVE_PARTNER_SCOPES).
 
 ## Pending
-Real two-account test with a scheduled drop in a committed test group needs an approved active Service Partner account.
+Real two-account test with a scheduled drop in a committed test group needs an approved active Service Partner account. Browser propagation of the published frontend is also not yet independently verified.
