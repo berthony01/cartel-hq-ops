@@ -59,6 +59,7 @@ check("D-23 public discovery uses crawlable links", !/onClick=.*(docs|partner-pr
 
 const allowed = new Set([
   "src/routes/index.tsx",
+  // Approved production copy fix: public agreement link label dropped "draft".
   "src/routes/partner-program.tsx",
   "src/routes/docs.tsx",
   "src/routes/__root.tsx",
