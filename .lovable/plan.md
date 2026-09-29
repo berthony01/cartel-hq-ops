@@ -101,7 +101,9 @@ Stop if any of these is true:
 - the partner save cannot keep the Launch Watch fields without restructuring the save code;
 - live `telegram_community_settings` or its policies differ from the generated types.
 
-## Decisions to confirm
+## Decisions (locked)
 
-1. The partner welcome test posts the owner-configured Launch Watch card too (same as owner behaviour). Alternative: always test without the card.
-2. The partner cannot change the Launch Watch button settings in V1; that is deferred.
+1. The partner welcome test mirrors owner behaviour and includes the owner's already-configured eligible Launch Watch card (confirmed).
+2. The partner cannot change any Launch Watch button settings in V1; the server keeps the stored values, and changing them is deferred (confirmed).
+
+The live schema, commercial gate and Edge start gates were independently verified as stated in the build specification.
