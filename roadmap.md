@@ -26,7 +26,8 @@
 - [x] SP-B3 Edge telegram-group v49 ACTIVE (verify_jwt=true)
 - [x] SP-B3 frontend publish authorized/initiated; project reports published/ready; types synced
 - [ ] SP-B3 browser propagation + real two-account/test-group broadcast — BLOCKED: needs an approved active Service Partner account
-- [ ] Scopes community_management, sticker_tools, missions — inactive/deferred (not started)
-- [ ] SP-B4+: remaining partner scopes (community management, stickers, missions) — deferred / not started
+- [ ] Scopes sticker_tools, missions — inactive/deferred (not started)
 - [x] SP-B4 V1 partner community management STAGED (repository only): 3 partner RPCs (docs/sql), telegram-group save/test fall-through with forced owner Launch Watch values, managed /telegram Community tab
-- [ ] SP-B4 production activation — awaiting CP-SPB4-SQL, CP-SPB4-EDGE, CP-SPB4-PUBLISH approvals; real welcome test needs an approved active Service Partner + test group
+- [x] SP-B4 SQL live (migration 20260929180205): three authenticated partner RPCs, transactional backend smoke 12/12 rolled back, advisor 0028=9 / 0029 126→129, mutable search path 1; types regenerated at `83335e24`
+- [x] SP-B4 Edge telegram-group v50 ACTIVE (verify_jwt=true); frontend publish authorized/initiated (deployment `a14e3113-6ef9-4197-a97e-bec6d5c8b67a`), project reports published/ready
+- [ ] SP-B4 browser propagation + real two-account/test-group welcome test — BLOCKED: needs an approved active Service Partner account
