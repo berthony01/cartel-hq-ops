@@ -225,11 +225,10 @@ export function PartnerCommunityPanel() {
                   <Button className="min-h-11" disabled={!canSave || save.isPending} onClick={() => save.mutate()}>
                     {save.isPending ? "Saving…" : "Save welcome"}
                   </Button>
-                  <Button variant="outline" className="min-h-11" disabled={!selected?.operational || !s?.has_saved_settings || test.isPending} onClick={() => setConfirmOpen(true)}>
+                  <Button variant="outline" className="min-h-11" disabled={!selected?.operational || test.isPending} onClick={() => setConfirmOpen(true)}>
                     Send welcome test
                   </Button>
                 </div>
-                {!s?.has_saved_settings ? <p className="text-xs text-muted-foreground">Save the welcome once before sending a test.</p> : null}
               </>
             )}
           </div>
@@ -241,7 +240,7 @@ export function PartnerCommunityPanel() {
           <AlertDialogHeader>
             <AlertDialogTitle>Send a welcome test to {selected?.title ?? "community"}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This posts the saved welcome publicly in the group as @PepeCartelHQBot, marked as a preview.
+              This posts the saved welcome (or the default welcome if none is saved yet) publicly in the group as @PepeCartelHQBot, marked as a preview.
               {s?.launch_watch_cta_enabled && s.launch_watch_available ? " The owner's Launch Watch card is included." : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
