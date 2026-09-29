@@ -485,6 +485,8 @@ Deno.serve(async (req: Request) => {
           updated_at: now,
         }, { onConflict: "group_connection_id" }).select("*").maybeSingle();
         if (error) throw error;
+        // SP-B4 — partner response carries only the five editable welcome fields.
+        if (partnerCommunityAuthorized) return respond({ saved: true, settings: { welcome_enabled: saved?.welcome_enabled, welcome_message: saved?.welcome_message, mention_member: saved?.mention_member, auto_delete_enabled: saved?.auto_delete_enabled, auto_delete_seconds: saved?.auto_delete_seconds } });
         let eligibleLaunches: any[] = [];
         try { eligibleLaunches = (await loadEligibleLaunchRows()).map(toOption); }
         catch (e) { console.error("[telegram-group] eligible launches", e instanceof Error ? e.message : "unknown"); }
