@@ -7238,6 +7238,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      partner_authorize_group_broadcast: {
+        Args: { _group_connection_id: string; _workspace_id: string }
+        Returns: Json
+      }
       partner_available_balance: {
         Args: { _currency: string; _partner_id: string }
         Returns: number
@@ -7386,6 +7390,30 @@ export type Database = {
           updates_muted_watchers: number
         }[]
       }
+      partner_list_broadcast_groups: {
+        Args: { _workspace_id: string }
+        Returns: {
+          bot_is_admin: boolean
+          chat_type: string
+          group_connection_id: string
+          operational: boolean
+          title: string
+          verified_at: string
+        }[]
+      }
+      partner_list_group_broadcasts: {
+        Args: { _limit?: number; _workspace_id: string }
+        Returns: {
+          actor_kind: string
+          announcement_id: string
+          delivery_kind: string
+          group_title: string
+          message_text: string
+          requested_at: string
+          sent_at: string
+          status: string
+        }[]
+      }
       partner_list_launch_watcher_updates: {
         Args: { _launch_id: string; _limit?: number; _workspace_id: string }
         Returns: {
@@ -7433,6 +7461,10 @@ export type Database = {
       peek_social_mission_link_candidate: {
         Args: { _candidate_id: string; _telegram_user_id: number }
         Returns: Json
+      }
+      project_identity_ready: {
+        Args: { _workspace_id: string }
+        Returns: boolean
       }
       project_inbox_delivery_scheduler_secret_matches: {
         Args: { p_secret: string }

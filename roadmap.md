@@ -21,6 +21,10 @@
 - [ ] SP-B1 real two-account browser smoke — PENDING: needs an approved active Service Partner test account; production has none and partner status must not be altered to create one
 - [x] SP-B2 V1 partner Launch Watcher messages LIVE in production (migration 20260929161346): four partner RPCs (launch list, counts, history, send), managed /telegram panel, no commercial gate (matches owner); backend transactional smoke 12/12 rolled back, owner function md5 unchanged, advisor 0028=9 / 0029=123 as expected
 - [ ] SP-B2 real two-account browser + committed Telegram DM rendering test — PENDING: needs an approved active Service Partner test account; CP-SPB2-PUBLISH was authorized and initiated (deployment request `7187debc-aff1-4a59-8ce9-94973d105e3a`, project reports published=true/ready), but browser propagation of that deployment is not yet independently verified
-- [x] SP-B3 V1 partner community broadcasts STAGED (repository only): identity core extraction, 3 partner RPCs, telegram-group partner fall-through, managed /telegram Broadcasts panel
-- [ ] SP-B3 activation — BLOCKED: needs CP-SPB3-SQL, CP-SPB3-EDGE, CP-SPB3-PUBLISH approvals; two-account smoke needs an approved active Service Partner account
+- [x] SP-B3 V1 partner community broadcasts STAGED: identity core extraction, 3 partner RPCs, telegram-group partner fall-through, managed /telegram Broadcasts panel
+- [x] SP-B3 SQL live (migration 20260929172116); backend smoke 11/11 rolled back; advisor 0029 123→126, 0028 9
+- [x] SP-B3 Edge telegram-group v49 ACTIVE (verify_jwt=true)
+- [x] SP-B3 frontend publish authorized/initiated; project reports published/ready; types synced
+- [ ] SP-B3 browser propagation + real two-account/test-group broadcast — BLOCKED: needs an approved active Service Partner account
+- [ ] Scopes community_management, sticker_tools, missions — inactive/deferred (not started)
 - [ ] SP-B4+: remaining partner scopes (community management, stickers, missions) — deferred / not started

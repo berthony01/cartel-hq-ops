@@ -80,13 +80,15 @@ const ALLOW = new Set([
   "scripts/sp-b3-partner-group-broadcasts-regression.ts", "docs/SP_B3_PARTNER_BROADCASTS_RUNBOOK.md",
   "scripts/sp-a-managed-client-access-regression.ts", "scripts/sp-b1-partner-inbox-regression.ts", "scripts/sp-b2-partner-launch-comms-regression.ts",
   "scripts/public-discovery-seo-regression.ts", "roadmap.md", ".lovable/plan.md",
+  // Approved post-production generated-types sync (SP-B3 activation).
+  "src/integrations/supabase/types.ts",
 ]);
 const changed = [
   ...execFileSync("git", ["diff", "--name-only", PLAN_COMMIT], { encoding: "utf8" }).split("\n"),
   ...execFileSync("git", ["status", "--short"], { encoding: "utf8" }).split("\n").map((l) => l.slice(3)),
 ].map((s) => s.trim()).filter(Boolean);
 check("F-8 only allowlisted files changed since plan commit", changed.every((f) => ALLOW.has(f)), changed.filter((f) => !ALLOW.has(f)).join(","));
-check("F-9 no deployed-function dir / migration / types change", !changed.some((f) => f.startsWith("supabase/") || f.includes("integrations/supabase")));
+check("F-9 no deployed-function dir / migration / non-generated supabase integration change", !changed.some((f) => f.startsWith("supabase/") || (f.includes("integrations/supabase") && f !== "src/integrations/supabase/types.ts")));
 
 /* ---------- Local DB ---------- */
 // Captured LIVE pre-SP-B3 definition (read-only query at audit time).

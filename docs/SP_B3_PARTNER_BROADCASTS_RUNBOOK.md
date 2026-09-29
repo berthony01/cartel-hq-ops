@@ -1,6 +1,16 @@
 # SP-B3 V1 — Service Partner Community Broadcasts Runbook
 
-Status: STAGED IN REPOSITORY ONLY. No SQL applied, no Edge deploy, no publish.
+Status: LIVE IN PRODUCTION (backend + Edge). Frontend publish authorized/initiated. Real two-account browser smoke PENDING.
+
+## Production activation record
+- CP-SPB3-SQL DONE: migration `20260929172116 sp_b3_partner_group_broadcasts`. Live: `partner_list_broadcast_groups`, `partner_list_group_broadcasts`, `partner_authorize_group_broadcast` (authenticated + service_role), `project_identity_ready(uuid)` (service_role only). `can_use_project_tools` pre/post output matrix md5 identical (`8e5b55dfc55e53793d049f045fbdd515`, 6 production workspace/user cases); ACL and search_path unchanged.
+- Advisor: 0028 unchanged at 9; 0029 123 → 126 (+3 as expected); mutable-search-path count unchanged at 1.
+- Backend transactional smoke DONE: 11/11 passed and rolled back (partner outside workspace_members; broadcasts scope active; safe group list; safe COMMUNITY history; SENDING normalized; cartel_free denied FEATURE_NOT_INCLUDED; fake/mismatched group denied; cross-workspace denied scope-first; transaction-only cartel_49 allowed with minimal response; revocation immediately denied; no announcement/launch/watcher side effects). Post-rollback counts verified unchanged; no real Telegram broadcast sent.
+- CP-SPB3-EDGE DONE: `telegram-group` ACTIVE v49, verify_jwt=true, ezbr sha `0734e4c39a055c161410fbc6ab63a2217ec9bb2cc2982984d8a26694959fd5bd`; deployed index equals staged source (112,554 bytes); shared project-identity and commercial-access files unchanged from v48.
+- CP-SPB3-PUBLISH authorized and initiated: deployment `4210ded4-bd47-47cd-9530-5b940c335e8b`; project reports published/ready. Browser propagation NOT independently verified.
+- Types sync DONE (platform-regenerated; contains the 4 new functions).
+- PENDING: browser propagation check and real two-account browser smoke with a committed test-group broadcast — requires an approved active Service Partner account.
+- Remaining scopes `community_management`, `sticker_tools`, `missions` stay INACTIVE/deferred.
 
 ## Scope
 Activates only the stored partner scope `broadcasts`. A Service Partner with an active, accepted client grant that includes `broadcasts` can:
