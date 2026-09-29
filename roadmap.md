@@ -17,5 +17,6 @@
 - [ ] SP-A real two-account UI smoke (S1–S8) — PENDING: needs an approved active Service Partner test account; production has none and partner status must not be altered to create one
 - [x] SP-B0 commercial workspace entitlement core staged (docs/sql only, not applied): steps 5–10 extracted verbatim, evaluator output proven byte-equal in local equivalence regression
 - [x] SP-B1 partner Project Inbox staged (docs/sql only, not applied): seven partner_inbox_* RPCs, partner-only /telegram Inbox, settings + block/unblock owner-only (repository only)
-- [ ] SP-B0/SP-B1 production activation — PENDING owner approvals: CP-SPB1-PUBLISH, CP-SPB0-SQL, CP-SPB1-SQL, then types regeneration and two-account smoke
+- [x] SP-B0/SP-B1 production activation complete: migrations `20260929154656` (SP-B0) and `20260929154741` (SP-B1) applied; evaluator outputs identical pre/post; advisor 0028 unchanged (9), 0029 exactly +7 (112 → 119); transactional backend smoke 12/12 passed and rolled back; types regenerated
+- [ ] SP-B1 real two-account browser smoke — PENDING: needs an approved active Service Partner test account; production has none and partner status must not be altered to create one
 - [ ] SP-B2+: remaining partner scopes (launch watch comms, community, broadcasts, stickers, missions) — deferred / not started
