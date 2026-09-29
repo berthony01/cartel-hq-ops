@@ -7473,6 +7473,10 @@ export type Database = {
           token_name: string
         }[]
       }
+      partner_list_mission_state: {
+        Args: { _workspace_id: string }
+        Returns: Json
+      }
       partner_list_sticker_drop_packs: {
         Args: { _workspace_id: string }
         Returns: Json
@@ -7485,6 +7489,10 @@ export type Database = {
       partner_respond_client_invite: {
         Args: { _accept: boolean; _access_id: string }
         Returns: undefined
+      }
+      partner_save_mission_settings: {
+        Args: { _settings: Json; _workspace_id: string }
+        Returns: Json
       }
       partner_update_project_profile: {
         Args: {

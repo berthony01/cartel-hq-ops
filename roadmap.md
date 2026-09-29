@@ -26,7 +26,7 @@
 - [x] SP-B3 Edge telegram-group v49 ACTIVE (verify_jwt=true)
 - [x] SP-B3 frontend publish authorized/initiated; project reports published/ready; types synced
 - [ ] SP-B3 browser propagation + real two-account/test-group broadcast — BLOCKED: needs an approved active Service Partner account
-- [ ] Scope missions — inactive/deferred (not started)
+- [x] Scope missions — implemented (SP-B6 V1); all seven Service Partner scopes implemented
 - [x] SP-B4 V1 partner community management STAGED (repository only): 3 partner RPCs (docs/sql), telegram-group save/test fall-through with forced owner Launch Watch values, managed /telegram Community tab
 - [x] SP-B4 SQL live (migration 20260929180205): three authenticated partner RPCs, transactional backend smoke 12/12 rolled back, advisor 0028=9 / 0029 126→129, mutable search path 1; types regenerated at `83335e24`
 - [x] SP-B4 Edge telegram-group v50 ACTIVE (verify_jwt=true); frontend publish authorized/initiated (deployment `a14e3113-6ef9-4197-a97e-bec6d5c8b67a`), project reports published/ready
@@ -34,5 +34,8 @@
 - [x] SP-B5 V1 partner Sticker Drops management STAGED (repository only): 3 partner RPCs (docs/sql), sticker-drop-config save/enable/disable/delete fall-through, managed /telegram Sticker Drops tab; AI, pack publish/test-send, uploads and kill switch stay owner-only
 - [x] SP-B5 production activation complete: migration `20260929192440` live (three authenticated RPCs incl. `_enabled` discriminator); transactional DB smoke 15/15 rolled back with no side effects; advisor 0028=9 / 0029 129→132, mutable search path 1; Edge `sticker-drop-config` v30 ACTIVE (verify_jwt=true, exact staged source); frontend publish `a7635945-3bc9-4cbc-9091-ed682e04f5a3` initiated, project reports published/ready; types synced and grants verified
 - [x] SP-B6 V1 partner Missions STAGED (repository only): 2 partner RPCs (read-only mission state + future defaults save), managed /telegram Missions tab; start/close/end/resurface/Mission Control deferred to SP-B6.1; no Edge change
-- [ ] SP-B6 activation: CP-SPB6-SQL → CP-SPB6-PUBLISH → types sync — awaiting approval
-- [ ] SP-B5 browser propagation + real two-account scheduled-drop test — BLOCKED: needs an approved active Service Partner account; missions remains inactive/deferred
+- [x] SP-B6 SQL activation complete: migration `20260929194609` live (partner_list_mission_state, partner_save_mission_settings; authenticated+service_role only); transactional smoke 10/10 rolled back; advisor 0028=9 / 0029=134 / mutable search path 1; NO Edge change, NO X or Telegram call; types synced
+- [ ] SP-B6 frontend publish — final deployment alignment after this sync (needs explicit approval)
+- [ ] SP-B6 real two-account E2E — BLOCKED: 0 approved active Service Partners
+- [ ] SP-B6.1 web mission start/close/end/resurface/Mission Control — DEFERRED (owner-only)
+- [ ] SP-B5 browser propagation + real two-account scheduled-drop test — BLOCKED: needs an approved active Service Partner account
