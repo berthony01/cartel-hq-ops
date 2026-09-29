@@ -5734,6 +5734,10 @@ export type Database = {
         Args: { _telegram_chat_id: number; _telegram_user_id: number }
         Returns: Json
       }
+      commercial_evaluate_workspace_feature: {
+        Args: { _base: Json; _feature_key: string; _workspace_id: string }
+        Returns: Json
+      }
       commercial_feature_usage: {
         Args: {
           _feature_key: string
@@ -7246,6 +7250,10 @@ export type Database = {
         Args: { _scopes: string[] }
         Returns: boolean
       }
+      partner_evaluate_commercial_access: {
+        Args: { _feature_key: string; _workspace_id: string }
+        Returns: Json
+      }
       partner_get_project_profile: {
         Args: { _workspace_id: string }
         Returns: Json
@@ -7253,6 +7261,112 @@ export type Database = {
       partner_has_scope: {
         Args: { _scope: string; _workspace_id: string }
         Returns: boolean
+      }
+      partner_inbox_ack_uncertainty: {
+        Args: {
+          _conversation_id: string
+          _message_id: string
+          _workspace_id: string
+        }
+        Returns: {
+          delivery_status: string
+          message_id: string
+          uncertainty_acknowledged_at: string
+        }[]
+      }
+      partner_inbox_create_reply: {
+        Args: {
+          _body: string
+          _client_request_id: string
+          _conversation_id: string
+          _workspace_id: string
+        }
+        Returns: {
+          conversation_status: string
+          created_at: string
+          delivery_status: string
+          idempotent_replay: boolean
+          message_id: string
+        }[]
+      }
+      partner_inbox_get_conversation: {
+        Args: { _conversation_id: string; _workspace_id: string }
+        Returns: {
+          assigned_display_name: string
+          assigned_to: string
+          category: string
+          contact_status: string
+          conversation_id: string
+          last_message_at: string
+          member_ref: string
+          opened_at: string
+          origin_text_snapshot: string
+          origin_title_snapshot: string
+          origin_type: string
+          priority: string
+          resolved_at: string
+          status: string
+        }[]
+      }
+      partner_inbox_list_conversations: {
+        Args: { _limit?: number; _status?: string; _workspace_id: string }
+        Returns: {
+          assigned_display_name: string
+          assigned_to: string
+          category: string
+          contact_status: string
+          conversation_id: string
+          last_message_at: string
+          latest_message_preview: string
+          member_ref: string
+          opened_at: string
+          origin_title_snapshot: string
+          origin_type: string
+          priority: string
+          status: string
+        }[]
+      }
+      partner_inbox_list_messages: {
+        Args: {
+          _conversation_id: string
+          _limit?: number
+          _workspace_id: string
+        }
+        Returns: {
+          author_type: string
+          body: string
+          channel: string
+          created_at: string
+          delivery_sent_at: string
+          delivery_status: string
+          delivery_uncertainty_acknowledged_at: string
+          message_id: string
+          reply_to_message_id: string
+          team_display_name: string
+        }[]
+      }
+      partner_inbox_summary: {
+        Args: { _workspace_id: string }
+        Returns: {
+          blocked_contact_count: number
+          open_count: number
+          resolved_count: number
+          waiting_on_member_count: number
+          waiting_on_team_count: number
+        }[]
+      }
+      partner_inbox_update_status: {
+        Args: {
+          _conversation_id: string
+          _status: string
+          _workspace_id: string
+        }
+        Returns: {
+          conversation_id: string
+          resolved_at: string
+          status: string
+          updated_at: string
+        }[]
       }
       partner_require_owner: { Args: never; Returns: string }
       partner_respond_client_invite: {
