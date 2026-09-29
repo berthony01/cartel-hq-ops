@@ -55,7 +55,7 @@ check("F-6 panel mounts no owner Launch Control / status / contract controls", !
 check("F-7 runbook orders publish before SQL", (() => { const a = RUNBOOK.indexOf("CP-SPB2-PUBLISH"), b = RUNBOOK.indexOf("CP-SPB2-SQL"); return a >= 0 && b > a; })());
 
 const ALLOW = new Set([
-  "docs/sql/SP_B2_partner_launch_watcher_comms.sql", "docs/SP_B2_PARTNER_LAUNCH_COMMS_RUNBOOK.md", "scripts/sp-b2-partner-launch-comms-regression.ts",
+  "docs/sql/SP_B2_partner_launch_watcher_comms.sql", "docs/SP_B2_PARTNER_LAUNCH_COMMS_RUNBOOK.md", "scripts/sp-b2-partner-launch-comms-regression.ts", "scripts/sp-b1-partner-inbox-regression.ts",
   "scripts/sp-a-managed-client-access-regression.ts", "scripts/public-discovery-seo-regression.ts", "src/lib/partner-launch-comms.ts",
   "src/components/cartel/PartnerLaunchCommsPanel.tsx", "src/routes/_authenticated/telegram.tsx", "src/components/cartel/ManagedAccessGuard.tsx",
   "src/components/cartel/SidebarNav.tsx", "src/lib/partner-client-access.ts", "src/components/cartel/ServicePartnerAccessPanel.tsx", "roadmap.md", ".lovable/plan.md",
