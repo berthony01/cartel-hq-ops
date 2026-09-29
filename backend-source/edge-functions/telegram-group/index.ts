@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { requireProjectToolAccess } from "../_shared/project-identity.ts";
-import { requireCommercialAccess, type CommercialFeatureKey } from "../_shared/commercial-access.ts";
+import { requireProjectToolAccess, PROJECT_IDENTITY_DENIAL_BODY } from "../_shared/project-identity.ts";
+import { requireCommercialAccess, commercialDenialFor, type CommercialFeatureKey } from "../_shared/commercial-access.ts";
 
 const TG_BASE = "https://api.telegram.org";
 const MAX_BATCH_GROUPS = 50;
@@ -98,7 +98,8 @@ Deno.serve(async (req: Request) => {
     send_official_contract_broadcast: "official_broadcasts",
     send_official_contract_correction_broadcast: "official_broadcasts",
   };
-  if (PROJECT_IDENTITY_GATED_ACTIONS.has(action)) {
+  // A partner broadcast already passed the partner-specific identity + client-plan gate above.
+  if (PROJECT_IDENTITY_GATED_ACTIONS.has(action) && !partnerBroadcastAuthorized) {
     const identityGate = await requireProjectToolAccess(admin, user.id, workspaceId);
     if (!identityGate.allowed) return respond(identityGate.body, identityGate.status);
     const featureKey = COMMERCIAL_ACTION_FEATURES[action];
@@ -557,7 +558,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === "send_group_announcement") {
-      if (!canManageCommunity) return respond({ error: "FORBIDDEN", message: "Only workspace owners and admins can post official community broadcasts." }, 403);
+      if (!canManageCommunity && !partnerBroadcastAuthorized) return respond({ error: "FORBIDDEN", message: "Only workspace owners and admins can post official community broadcasts." }, 403);
       if (!groupConnectionId) return respond({ error: "GROUP_REQUIRED", message: "Choose a connected Telegram community." }, 400);
 
       const clientRequestId = String(body.clientRequestId ?? "").trim();
