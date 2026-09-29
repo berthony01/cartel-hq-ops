@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "sdk_version": "3.0.4",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://ocoinbnjgstkmnwwvnhi.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "cartel-command-center",
+      "version": "0.1.0",
+      "title": "Cartel Command Center"
+    },
+    "tools": [
+      {
+        "name": "list_workspaces",
+        "title": "List workspaces",
+        "description": "List the CARTEL HQ workspaces the signed-in user belongs to, with their role.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_project_profile",
+        "title": "Get project profile",
+        "description": "Read the Project Profile (name, ticker, chain, links, discovery status) for one workspace.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "workspace_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Workspace ID from list_workspaces."
+            }
+          },
+          "required": [
+            "workspace_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_launches",
+        "title": "List launches",
+        "description": "List launches and their lifecycle status for one workspace. Status is a literal state, not a safety claim.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "workspace_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Workspace ID from list_workspaces."
+            }
+          },
+          "required": [
+            "workspace_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
