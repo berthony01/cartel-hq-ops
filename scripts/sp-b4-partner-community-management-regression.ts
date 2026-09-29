@@ -241,8 +241,7 @@ if (!hasPg) {
     const snap = () => psql(`SELECT md5(coalesce((SELECT string_agg(row_to_json(g)::text,'|' ORDER BY id) FROM public.telegram_group_connections g),'')) || md5(coalesce((SELECT string_agg(row_to_json(s)::text,'|' ORDER BY group_connection_id) FROM public.telegram_community_settings s),'')) || md5(coalesce((SELECT string_agg(row_to_json(l)::text,'|' ORDER BY id) FROM public.launches l),'')) || (SELECT count(*) FROM public.telegram_group_announcements) || (SELECT count(*) FROM public.launch_events) || (SELECT count(*) FROM public.launch_notification_deliveries) || (SELECT count(*) FROM public.sticker_pack_group_targets) || (SELECT count(*) FROM public.telegram_message_cleanup_jobs) || (SELECT count(*) FROM public.workspace_members);`).out;
     const s0 = snap();
     for (const q of [...calls(WS, G), `SELECT public.partner_authorize_community_action('${WS}','${G}','send_welcome_test');`]) as(SP, q);
-    check("DB-32 partner RPCs mutate nothing" , s0.length > 60 && snap() === s0);
-    if (false) check("x (groups, settings, launches, announcements, events, deliveries, stickers, cleanup, members)", snap() === s0);
+    check("DB-32 partner RPCs mutate nothing (groups, settings, launches, announcements, events, deliveries, stickers, cleanup, members)", s0.length > 96 && snap() === s0);
 
     as(OWNER, `SELECT public.owner_revoke_service_partner('${accessId}');`);
     check("DB-33 revoke immediately blocks next read + authorization", allDenied(SP, "Not authorized"));
