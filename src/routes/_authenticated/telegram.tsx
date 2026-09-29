@@ -54,6 +54,7 @@ const TAB_KEYS = [
   "inbox",
   "audience",
   "analytics",
+  "stickers",
 ] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
@@ -305,7 +306,8 @@ function TelegramPage() {
   const { workspaceId } = useWorkspace();
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
-  const tab = search.tab ?? "overview";
+  // `stickers` is a partner-only (SP-B5) tab key; owners fall back to Overview.
+  const tab = search.tab && search.tab !== "stickers" ? search.tab : "overview";
   const setTab = (next: TabKey) =>
     void navigate({
       search: (prev: TelegramSearch) => ({ ...prev, tab: next }),
