@@ -161,6 +161,10 @@ if (!hasPg) {
     check("DB-20 service partner: no referral code, not affiliate", p.out === "t|f|null|approved", p.out);
     check("DB-21 service partner accepts agreement", as(U1, `SELECT public.accept_partner_agreement(1);`).ok);
     check("DB-22 service partner cannot request payout", expectErr(as(U1, `SELECT public.request_partner_payout(5000);`), "PARTNER_NOT_AFFILIATE"));
+    const pid = psql(`SELECT id FROM public.partners WHERE user_id = '${U1}';`).out;
+    check("DB-22a non-owner cannot suspend a partner", expectErr(as(U2, `SELECT public.owner_set_partner_status('${pid}', 'suspended');`), "PLATFORM_OWNER_REQUIRED"));
+    const sus = as(OWNER, `SELECT public.owner_set_partner_status('${pid}', 'suspended');`);
+    check("DB-22b owner suspends service partner", sus.ok && psql(`SELECT status FROM public.partners WHERE id = '${pid}';`).out === "suspended", sus.err);
     const attr = as(U2, `SELECT public.record_referral_attribution('abcdefghij')::text;`);
     check("DB-23 referral attribution closed while affiliate closed", attr.ok && attr.out.includes("PROGRAM_NOT_OPEN"), attr.out || attr.err);
     psql(`INSERT INTO public.partner_applications (user_id, wants_affiliate, wants_service_partner, pitch, terms_version) VALUES ('${U3}', true, false, 'legacy affiliate app', 1);`);
