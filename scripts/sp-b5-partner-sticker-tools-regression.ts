@@ -66,7 +66,7 @@ const WORKER = read("backend-source/edge-functions/sticker-drops/index.ts");
 check("E-10 worker still sends via sendSticker; no sendDocument fallback", WORKER.includes('"sendSticker"') && !WORKER.includes("sendDocument"));
 
 /* ---------- Static: frontend ---------- */
-check("F-1 sticker_tools active; missions inactive", LIB.includes('ACTIVE_PARTNER_SCOPES: readonly PartnerClientScope[] = ["project_identity", "project_inbox", "launch_watcher_comms", "broadcasts", "community_management", "sticker_tools"]'));
+check("F-1 sticker_tools active; missions active (SP-B6)", LIB.includes('ACTIVE_PARTNER_SCOPES: readonly PartnerClientScope[] = ["project_identity", "project_inbox", "launch_watcher_comms", "broadcasts", "community_management", "sticker_tools", "missions"]'));
 check("F-2 /telegram unlocked for sticker_tools", LIB.includes('{ path: "/telegram", scope: "sticker_tools" }'));
 check("F-3 browser: partner RPCs + existing Edge actions only; no direct table/storage access", SLIB.includes('"partner_list_sticker_drop_packs"') && SLIB.includes('"partner_list_sticker_drop_state"') && SLIB.includes('invoke("sticker-drop-config"') && !/from\(|storage\.|set_kill_switch|"status"/.test(SLIB + PANEL));
 check("F-4 panel: no AI/publish/upload/test-send/kill-switch/images/raw ids", !/sticker-ai|motion|concept|generate|publish\(|upload|send_test|killSwitch|set_kill_switch|<img|image_asset|telegram_file_id|telegram_chat_id|signedUrl/i.test(PANEL.replace(/\/\*[\s\S]*?\*\//g, "")));
@@ -79,6 +79,8 @@ const ALLOW = new Set([
   "src/components/cartel/PartnerStickerDropsPanel.tsx", "src/routes/_authenticated/telegram.tsx", "src/lib/partner-client-access.ts",
   "src/components/cartel/ManagedAccessGuard.tsx", "src/components/cartel/SidebarNav.tsx", "src/components/cartel/ServicePartnerAccessPanel.tsx",
   "scripts/sp-b5-partner-sticker-tools-regression.ts", "docs/SP_B5_PARTNER_STICKER_TOOLS_RUNBOOK.md",
+  // SP-B6 staged files.
+  "docs/sql/SP_B6_partner_missions.sql", "docs/SP_B6_PARTNER_MISSIONS_RUNBOOK.md", "scripts/sp-b6-partner-missions-regression.ts", "src/lib/partner-missions.ts", "src/components/cartel/PartnerMissionsPanel.tsx", 
   "scripts/sp-a-managed-client-access-regression.ts", "scripts/sp-b1-partner-inbox-regression.ts", "scripts/sp-b2-partner-launch-comms-regression.ts",
   "scripts/sp-b3-partner-group-broadcasts-regression.ts", "scripts/sp-b4-partner-community-management-regression.ts",
   "scripts/public-discovery-seo-regression.ts", "roadmap.md", ".lovable/plan.md",

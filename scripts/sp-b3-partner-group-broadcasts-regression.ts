@@ -65,7 +65,7 @@ check("E-9 denial mapping uses shared commercialDenialFor + identity body", EDGE
 check("E-10 3500 limit unchanged in shared path", EDGE.includes("messageText.length > 3500"));
 
 /* ---------- Static: frontend ---------- */
-check("F-1 broadcasts active (community_management SP-B4, sticker_tools SP-B5); missions inactive", LIB.includes('ACTIVE_PARTNER_SCOPES: readonly PartnerClientScope[] = ["project_identity", "project_inbox", "launch_watcher_comms", "broadcasts", "community_management", "sticker_tools"]'));
+check("F-1 broadcasts active (community_management SP-B4, sticker_tools SP-B5); missions active (SP-B6)", LIB.includes('ACTIVE_PARTNER_SCOPES: readonly PartnerClientScope[] = ["project_identity", "project_inbox", "launch_watcher_comms", "broadcasts", "community_management", "sticker_tools", "missions"]'));
 check("F-2 /telegram unlocked for broadcasts", LIB.includes('{ path: "/telegram", scope: "broadcasts" }'));
 check("F-3 browser: partner RPCs + plain-text send only", BLIB.includes('"partner_list_broadcast_groups"') && BLIB.includes('"partner_list_group_broadcasts"') && BLIB.includes("brandingEnabled: false") && BLIB.includes("ctaEnabled: false") && !/ctaLaunchId|reviewedLogo|from\("telegram_group/.test(BLIB + PANEL));
 check("F-4 panel: preview confirm, per-draft UUID, 3500 counter, no ids", PANEL.includes("AlertDialog") && PANEL.includes("crypto.randomUUID()") && PANEL.includes("PARTNER_BROADCAST_MAX") && !/telegram_chat_id|requested_by|telegram_message_id/.test(PANEL + BLIB));
@@ -84,7 +84,7 @@ const ALLOW = new Set([
   "src/integrations/supabase/types.ts",
   // SP-B4 staged files (approved later phase).
   "docs/sql/SP_B4_partner_community_management.sql", "docs/SP_B4_PARTNER_COMMUNITY_RUNBOOK.md", "scripts/sp-b4-partner-community-management-regression.ts", "src/components/cartel/PartnerCommunityPanel.tsx", "src/lib/partner-community-management.ts",
-  "docs/sql/SP_B5_partner_sticker_tools.sql", "docs/SP_B5_PARTNER_STICKER_TOOLS_RUNBOOK.md", "scripts/sp-b5-partner-sticker-tools-regression.ts", "src/components/cartel/PartnerStickerDropsPanel.tsx", "src/lib/partner-sticker-drops.ts", "backend-source/edge-functions/sticker-drop-config/index.ts",
+  "docs/sql/SP_B6_partner_missions.sql", "docs/SP_B6_PARTNER_MISSIONS_RUNBOOK.md", "scripts/sp-b6-partner-missions-regression.ts", "src/lib/partner-missions.ts", "src/components/cartel/PartnerMissionsPanel.tsx", "docs/sql/SP_B5_partner_sticker_tools.sql", "docs/SP_B5_PARTNER_STICKER_TOOLS_RUNBOOK.md", "scripts/sp-b5-partner-sticker-tools-regression.ts", "src/components/cartel/PartnerStickerDropsPanel.tsx", "src/lib/partner-sticker-drops.ts", "backend-source/edge-functions/sticker-drop-config/index.ts",
 ]);
 const changed = [
   ...execFileSync("git", ["diff", "--name-only", PLAN_COMMIT], { encoding: "utf8" }).split("\n"),

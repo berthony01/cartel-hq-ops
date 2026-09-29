@@ -47,7 +47,7 @@ check("S-11 status limited to the four operational statuses", bodyOf("partner_in
 check("S-12 ack only for ambiguous deliveries", bodyOf("partner_inbox_ack_uncertainty").includes("IF v_status <> 'ambiguous'"));
 
 /* ---------- Static: frontend ---------- */
-check("F-1 project_inbox active alongside approved scopes", /ACTIVE_PARTNER_SCOPES: readonly PartnerClientScope\[\] = \["project_identity", "project_inbox", "launch_watcher_comms", "broadcasts", "community_management", "sticker_tools"\]/.test(LIB));
+check("F-1 project_inbox active alongside approved scopes", /ACTIVE_PARTNER_SCOPES: readonly PartnerClientScope\[\] = \["project_identity", "project_inbox", "launch_watcher_comms", "broadcasts", "community_management", "sticker_tools", "missions"\]/.test(LIB));
 check("F-2 /telegram allowed for managed only with project_inbox scope", LIB.includes('"/telegram"') && LIB.includes("project_inbox") && /isManagedAllowedPath\(pathname: string, scopes/.test(LIB));
 check("F-3 partner wrappers call only partner_inbox_* RPCs", FNS.every((f) => INBOX.includes(`"${f}"`)));
 check("F-4 panel partner mode hides settings + block", PANEL.includes('mode === "partner"') && /isPartner \? null|!isPartner &&/.test(PANEL));
