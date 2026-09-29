@@ -20,8 +20,8 @@ export const PARTNER_CLIENT_SCOPES = [
 ] as const;
 export type PartnerClientScope = (typeof PARTNER_CLIENT_SCOPES)[number];
 
-/** Only scopes listed here are enforced end-to-end. Others grant nothing yet (SP-B). */
-export const ACTIVE_PARTNER_SCOPES: readonly PartnerClientScope[] = ["project_identity"];
+/** Only scopes listed here are enforced end-to-end. Others grant nothing yet (later SP-B phases). */
+export const ACTIVE_PARTNER_SCOPES: readonly PartnerClientScope[] = ["project_identity", "project_inbox"];
 
 export const PARTNER_SCOPE_LABELS: Record<PartnerClientScope, string> = {
   project_identity: "Project identity",
@@ -42,10 +42,18 @@ export const PARTNER_DENIED_AREAS = [
   "Platform owner and admin controls",
 ] as const;
 
-/** Routes a managed (partner) project may open in SP-A. Everything else shows no-access. */
+/** Routes a managed (partner) project may always open. Everything else shows no-access. */
 export const MANAGED_ALLOWED_PATHS = ["/project-profile", "/partners"] as const;
-export function isManagedAllowedPath(pathname: string): boolean {
-  return MANAGED_ALLOWED_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+/** SP-B1: routes unlocked only when the owner granted the matching ACTIVE scope. */
+const MANAGED_SCOPED_PATHS: ReadonlyArray<{ path: string; scope: PartnerClientScope }> = [
+  { path: "/telegram", scope: "project_inbox" },
+];
+const matchesPath = (pathname: string, p: string) => pathname === p || pathname.startsWith(`${p}/`);
+export function isManagedAllowedPath(pathname: string, scopes: readonly PartnerClientScope[] = []): boolean {
+  if (MANAGED_ALLOWED_PATHS.some((p) => matchesPath(pathname, p))) return true;
+  return MANAGED_SCOPED_PATHS.some(
+    (r) => matchesPath(pathname, r.path) && scopes.includes(r.scope) && ACTIVE_PARTNER_SCOPES.includes(r.scope),
+  );
 }
 
 export const partnerClientKeys = {

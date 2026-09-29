@@ -8,7 +8,8 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   // Presentation-only gate. Route + Edge Function remain the security boundary.
   const { isPlatformOwner } = usePlatformAccess();
   // SP-A: a managed client project shows only the areas partner access supports.
-  const { isManaged } = useWorkspace();
+  const { isManaged, workspace } = useWorkspace();
+  const managedScopes = workspace?.scopes ?? [];
 
   return (
     <nav aria-label="Primary" className="flex flex-col gap-5">
@@ -16,7 +17,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         const items = section.items.filter(
           (item) =>
             (!item.ownerOnly || isPlatformOwner) &&
-            (!isManaged || item.external || isManagedAllowedPath(item.to)),
+            (!isManaged || item.external || isManagedAllowedPath(item.to, managedScopes)),
         );
         if (items.length === 0) return null;
         return (
