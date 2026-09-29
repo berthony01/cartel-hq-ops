@@ -86,9 +86,9 @@ export async function fetchPartnerProgramStatus(): Promise<PartnerProgramStatus>
     if (res.error || !res.data || typeof res.data !== "object") return CLOSED_PROGRAM_STATUS;
     const d = res.data as Record<string, unknown>;
     return {
-      service_partner_applications_open: d.service_partner_applications_open === true,
-      affiliate_applications_open: d.affiliate_applications_open === true,
-      active_version: typeof d.active_version === "number" ? d.active_version : null,
+      service_partner_applications_open: d['service_partner_applications_open'] === true,
+      affiliate_applications_open: d['affiliate_applications_open'] === true,
+      active_version: typeof d['active_version'] === "number" ? d['active_version'] : null,
       contract_available: true,
     };
   } catch {
