@@ -150,7 +150,7 @@ export function PartnerGroupBroadcastPanel() {
         )}
       </Section>
 
-      <Section variant="secondary" title="Recent community broadcasts">
+      <Section variant="surface" title="Recent community broadcasts">
         {historyQ.isLoading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (historyQ.data ?? []).length === 0 ? (

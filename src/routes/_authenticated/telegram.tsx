@@ -16,6 +16,7 @@ import { BroadcastsPanel } from "@/components/cartel/BroadcastsPanel";
 import { AudiencePanel } from "@/components/cartel/AudiencePanel";
 import { ProjectInboxPanel } from "@/components/cartel/ProjectInboxPanel";
 import { PartnerLaunchCommsPanel } from "@/components/cartel/PartnerLaunchCommsPanel";
+import { PartnerGroupBroadcastPanel } from "@/components/cartel/PartnerGroupBroadcastPanel";
 import {
   SocialMissionsPanel,
   SocialMissionsSummary,
@@ -149,13 +150,14 @@ function StateMetric({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * SP-B1/SP-B2: a Service Partner in a managed client project sees ONLY the
- * partner surfaces its grant allows here: the partner Inbox (project_inbox)
- * and/or partner Launch Watch messages (launch_watcher_comms). The managed
- * access guard blocks the route without either scope. No group setup,
- * community settings, broadcasts, stickers, missions, Launch Control or
- * Telegram admin surfaces mount, and none of their owner data hooks run.
- * Owner/member behavior is unchanged.
+ * SP-B1/SP-B2/SP-B3: a Service Partner in a managed client project sees ONLY
+ * the partner surfaces its grant allows here: the partner Inbox (project_inbox),
+ * partner Launch Watch messages (launch_watcher_comms) and/or partner community
+ * broadcasts (broadcasts, plain text). The managed access guard blocks the
+ * route without any of these scopes. No group setup, community settings,
+ * branding, stickers, missions, Launch Control or Telegram admin surfaces
+ * mount, and none of their owner data hooks run. Owner/member behavior is
+ * unchanged.
  */
 function TelegramRoute() {
   const { isManaged, workspace } = useWorkspace();
@@ -163,8 +165,11 @@ function TelegramRoute() {
   const scopes = workspace?.scopes ?? [];
   const inbox = scopes.includes("project_inbox");
   const comms = scopes.includes("launch_watcher_comms");
-  if (inbox && comms) return <PartnerManagedCommsPage />;
+  const broadcasts = scopes.includes("broadcasts");
+  const count = [inbox, comms, broadcasts].filter(Boolean).length;
+  if (count > 1) return <PartnerManagedCommsPage inbox={inbox} comms={comms} broadcasts={broadcasts} />;
   if (comms) return <PartnerLaunchCommsPage />;
+  if (broadcasts) return <PartnerBroadcastPage />;
   return <PartnerInboxPage />;
 }
 
@@ -181,22 +186,44 @@ function PartnerLaunchCommsPage() {
   );
 }
 
-function PartnerManagedCommsPage() {
+function PartnerBroadcastPage() {
+  return (
+    <div className="flex min-w-0 flex-col gap-6">
+      <PageHeader
+        eyebrow="Managed client project"
+        title="Community broadcasts"
+        description="Post plain-text updates to this client's connected Telegram communities."
+      />
+      <PartnerGroupBroadcastPanel />
+    </div>
+  );
+}
+
+type PartnerTab = "inbox" | "audience" | "broadcasts";
+
+function PartnerManagedCommsPage({ inbox, comms, broadcasts }: { inbox: boolean; comms: boolean; broadcasts: boolean }) {
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
-  const tab = search.tab === "audience" ? "audience" : "inbox";
+  const available: PartnerTab[] = [
+    ...(inbox ? (["inbox"] as const) : []),
+    ...(comms ? (["audience"] as const) : []),
+    ...(broadcasts ? (["broadcasts"] as const) : []),
+  ];
+  const tab: PartnerTab = (available as string[]).includes(String(search.tab)) ? (search.tab as PartnerTab) : available[0];
   return (
     <Tabs
       value={tab}
-      onValueChange={(v) => void navigate({ search: () => ({ tab: v === "audience" ? ("audience" as const) : ("inbox" as const) }), replace: true })}
+      onValueChange={(v) => void navigate({ search: () => ({ tab: v as PartnerTab }), replace: true })}
       className="flex min-w-0 flex-col gap-6"
     >
       <TabsList className="self-start">
-        <TabsTrigger value="inbox" className="min-h-11">Inbox</TabsTrigger>
-        <TabsTrigger value="audience" className="min-h-11">Launch Watch messages</TabsTrigger>
+        {inbox ? <TabsTrigger value="inbox" className="min-h-11">Inbox</TabsTrigger> : null}
+        {comms ? <TabsTrigger value="audience" className="min-h-11">Launch Watch messages</TabsTrigger> : null}
+        {broadcasts ? <TabsTrigger value="broadcasts" className="min-h-11">Broadcasts</TabsTrigger> : null}
       </TabsList>
-      <TabsContent value="inbox"><PartnerInboxPage /></TabsContent>
-      <TabsContent value="audience"><PartnerLaunchCommsPage /></TabsContent>
+      {inbox ? <TabsContent value="inbox"><PartnerInboxPage /></TabsContent> : null}
+      {comms ? <TabsContent value="audience"><PartnerLaunchCommsPage /></TabsContent> : null}
+      {broadcasts ? <TabsContent value="broadcasts"><PartnerBroadcastPage /></TabsContent> : null}
     </Tabs>
   );
 }
