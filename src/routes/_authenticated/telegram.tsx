@@ -18,6 +18,7 @@ import { ProjectInboxPanel } from "@/components/cartel/ProjectInboxPanel";
 import { PartnerLaunchCommsPanel } from "@/components/cartel/PartnerLaunchCommsPanel";
 import { PartnerGroupBroadcastPanel } from "@/components/cartel/PartnerGroupBroadcastPanel";
 import { PartnerCommunityPanel } from "@/components/cartel/PartnerCommunityPanel";
+import { PartnerStickerDropsPanel } from "@/components/cartel/PartnerStickerDropsPanel";
 import {
   SocialMissionsPanel,
   SocialMissionsSummary,
