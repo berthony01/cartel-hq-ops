@@ -197,7 +197,7 @@ if (!hasPg) {
     const ev1 = s1.out.split("\n").pop() ?? "";
     check("DB-20 boundary send (120/2200) queued", s1.ok && /^[0-9a-f-]{36}$/.test(ev1), s1.err);
     const dl = psql(`SELECT string_agg(telegram_user_id::text, ',' ORDER BY telegram_user_id) || '|' || count(*) || '|' || bool_and(status='pending') FROM public.launch_notification_deliveries WHERE event_id='${ev1}';`);
-    check("DB-21 exactly one delivery per eligible watcher; muted/inactive excluded", dl.out === "900001,900002|2|t", dl.out);
+    check("DB-21 exactly one delivery per eligible watcher; muted/inactive excluded", dl.out === "900001,900002|2|true", dl.out);
     const ev = psql(`SELECT concat_ws('|', event_type, source, payload->>'actor', (payload->>'partner_access_id') = '${accessId}', payload->>'title', launch_id) FROM public.launch_events WHERE id='${ev1}';`);
     check("DB-22 event WATCHER_UPDATE/operator with partner audit, trimmed title, client launch", ev.out === `WATCHER_UPDATE|operator|service_partner|t|Title|${L}`, ev.out);
     const rp = as(SP, `SELECT public.partner_create_launch_watcher_update('${WS}','${L}','${R(4)}','other','other');`);
