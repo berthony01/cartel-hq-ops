@@ -82,6 +82,7 @@ const allowed = new Set([
   "src/lib/partners.ts",
   "src/routes/_authenticated/partners.tsx",
   "src/routes/legal.partner-agreement.tsx",
+  "src/components/cartel/LegalDocumentPage.tsx",
 ]);
 // Discovery task scope (529681aa..98bb3b44) plus the Service Partner staging scope (049aae3b..HEAD).
 // Intervening separately-approved tasks (MCP, favicon) are outside this check.

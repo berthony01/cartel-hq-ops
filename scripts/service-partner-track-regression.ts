@@ -11,6 +11,13 @@ import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { execSync, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
+import {
+  SERVICE_PARTNER_AGREEMENT_V2_TEXT as AGREEMENT,
+  SERVICE_PARTNER_DISCLOSURE as DISCLOSURE,
+  SERVICE_PARTNER_AGREEMENT_V2_SHA256 as AGREEMENT_SHA,
+  SERVICE_PARTNER_DISCLOSURE_SHA256 as DISCLOSURE_SHA,
+} from "../src/lib/legal-policies";
 
 let passed = 0, failed = 0;
 function check(id: string, ok: boolean, detail = "") {
@@ -48,6 +55,24 @@ check("U-11 no earnings hype", !/make \$|replace your income|guaranteed side hus
 check("U-12 public status is database-backed and fails closed", PUB.includes("fetchPartnerProgramStatus") && LIB.includes("return CLOSED_PROGRAM_STATUS"));
 check("U-13 docs FAQ: no commission, no leads, affiliate closed", DOCS.includes("There is no commission, referral credit or payout") && DOCS.includes("You find your own clients") && DOCS.includes("The Affiliate Program is closed"));
 check("U-14 homepage mobile Partners link is visible", /to="\/partner-program"\s*className=\{cn\(buttonVariants\(\{ variant: "ghost", size: "sm" \}\), "min-h-11 px-2 sm:px-3"\)\}/.test(HOME));
+
+/* ---------- Static: canonical text, draft-to-effective, safe order ---------- */
+const sha = (t: string) => createHash("sha256").update(t, "utf8").digest("hex");
+const AGREE_PAGE = read("src/routes/legal.partner-agreement.tsx");
+const LEGAL_PAGE = read("src/components/cartel/LegalDocumentPage.tsx");
+const RUNBOOK = read("docs/SERVICE_PARTNER_PROGRAM_LAUNCH_RUNBOOK.md");
+const srcFiles = execSync("rg -l --fixed-strings 'Services are provided by' src", { encoding: "utf8" }).trim().split("\n").filter(Boolean);
+check("C-1 one canonical disclosure source (only legal-policies.ts holds the literal)", srcFiles.length === 1 && srcFiles[0] === "src/lib/legal-policies.ts", srcFiles.join(","));
+check("C-2 surfaces import the canonical disclosure", ["src/routes/partner-program.tsx", "src/routes/_authenticated/partners.tsx", "src/components/cartel/PartnerAdminSection.tsx"].every((f) => read(f).includes("SERVICE_PARTNER_DISCLOSURE")));
+check("C-3 embedded hashes equal SHA-256 of canonical texts", sha(AGREEMENT) === AGREEMENT_SHA && sha(DISCLOSURE) === DISCLOSURE_SHA);
+check("C-4 staged SQL gate embeds the same hashes", SQL.includes(`'${AGREEMENT_SHA}'`) && SQL.includes(`'${DISCLOSURE_SHA}'`) && SQL.includes("PARTNER_TERMS_NOT_CANONICAL"));
+check("C-5 owner form preset is exactly the canonical text", ADMIN.includes("{ agreement: SERVICE_PARTNER_AGREEMENT_V2_TEXT, disclosure: SERVICE_PARTNER_DISCLOSURE }") && ADMIN.includes("draft.agreement_text === SERVICE_PARTNER_AGREEMENT_V2_TEXT && draft.disclosure_text === SERVICE_PARTNER_DISCLOSURE"));
+check("C-6 agreement contains no unresolved ALL-CAPS placeholders", !/\[[A-Z0-9][A-Z0-9 /&.,'-]*\]/.test(AGREEMENT));
+check("C-7 draft-to-effective: effective only via verified hashes, fails closed", LIB.includes("s.agreement_sha256 !== SERVICE_PARTNER_AGREEMENT_V2_SHA256 || s.disclosure_sha256 !== SERVICE_PARTNER_DISCLOSURE_SHA256) return null") && LIB.includes("s.affiliate_applications_open) return null") && AGREE_PAGE.includes("effectiveServiceAgreementVersion(status.data) : null") && LEGAL_PAGE.includes("effectiveVersion === null") && LEGAL_PAGE.includes("Draft — not effective"));
+const steps = ["1. **Read-only preflight and backup/PITR check**", "2. **Apply the service-track migration while both tracks remain closed**", "3. **Verify schema, RLS, RPC permissions, security advisors, and generated types.**", "4. **Publish the new service-only frontend while both tracks remain closed**", "5. **Smoke-test that Service Partner is closed and Affiliate is deferred**", "6. **Save the exact canonical Service Partner Agreement and disclosure**", "7. **Activate Service Partner applications only**", "8. **Run live application, approval, agreement-acceptance, suspension, and Affiliate-closed tests**", "9. **Retire active terms immediately if any critical test fails**"];
+const idx = steps.map((x) => RUNBOOK.indexOf(x));
+check("C-8 runbook safe production order (publish before save/activate)", idx.every((i, k) => i >= 0 && (k === 0 || i > idx[k - 1])), idx.join(","));
+check("C-9 runbook explains activation-before-publish hazard + Free-plan backup warning", RUNBOOK.includes("Activation must never precede the new frontend publication") && RUNBOOK.includes("predates the independent track gates") && RUNBOOK.includes("Free plan"));
 
 /* ---------- Executed: local throwaway Postgres ---------- */
 const hasPg = spawnSync("bash", ["-lc", "command -v initdb && command -v pg_ctl && command -v psql"]).status === 0;
@@ -102,13 +127,25 @@ if (!hasPg) {
     check("DB-3 both closed: affiliate application rejected", expectErr(as(U1, `SELECT public.submit_partner_application(true, false, ${PITCH});`), "AFFILIATE_APPLICATIONS_CLOSED"));
     check("DB-4 non-owner cannot save terms", expectErr(as(U1, `SELECT public.owner_save_service_partner_terms_draft(1, 'x', 'y');`), "PLATFORM_OWNER_REQUIRED"));
     check("DB-5 anon cannot call owner draft", expectErr(as(null, `SELECT public.owner_save_service_partner_terms_draft(1, 'x', 'y');`), "permission denied"));
-    check("DB-6 owner saves service-only draft (null economics)", as(OWNER, `SELECT public.owner_save_service_partner_terms_draft(1, 'Service Partner Agreement v1', 'Independent CARTEL HQ Service Partner.');`).ok);
+    const q = (s: string) => `$cq$${s}$cq$`;
+    check("DB-6 owner saves service-only draft (null economics, modified text)", as(OWNER, `SELECT public.owner_save_service_partner_terms_draft(1, ${q(AGREEMENT + " Extra clause.")}, ${q(DISCLOSURE)});`).ok);
     const row = psql(`SELECT concat_ws('|', service_partner_applications_open, affiliate_applications_open, coalesce(commission_bps::text,'null'), coalesce(currency,'null'), coalesce(commission_duration_invoices::text,'null')) FROM public.partner_program_terms WHERE version = 1;`);
     check("DB-7 draft forces affiliate closed + economics null", row.out === "t|f|null|null|null", row.out);
     check("DB-8 non-owner cannot activate", expectErr(as(U1, `SELECT public.owner_activate_partner_terms(1);`), "PLATFORM_OWNER_REQUIRED"));
-    check("DB-9 service-only activation permits null affiliate economics", as(OWNER, `SELECT public.owner_activate_partner_terms(1);`).ok);
+    check("DB-8a modified agreement rejected at activation", expectErr(as(OWNER, `SELECT public.owner_activate_partner_terms(1);`), "PARTNER_TERMS_NOT_CANONICAL"));
+    as(OWNER, `SELECT public.owner_save_service_partner_terms_draft(1, ${q(AGREEMENT.slice(0, Math.floor(AGREEMENT.length / 2)))}, ${q(DISCLOSURE)});`);
+    check("DB-8b incomplete agreement rejected at activation", expectErr(as(OWNER, `SELECT public.owner_activate_partner_terms(1);`), "PARTNER_TERMS_NOT_CANONICAL"));
+    as(OWNER, `SELECT public.owner_save_service_partner_terms_draft(1, ${q(AGREEMENT)}, ${q(DISCLOSURE.replace("not guaranteed", "guaranteed"))});`);
+    check("DB-8c modified disclosure rejected at activation", expectErr(as(OWNER, `SELECT public.owner_activate_partner_terms(1);`), "PARTNER_TERMS_NOT_CANONICAL"));
+    as(OWNER, `SELECT public.owner_save_service_partner_terms_draft(1, '   ', ${q(DISCLOSURE)});`);
+    check("DB-8d blank agreement rejected at activation", expectErr(as(OWNER, `SELECT public.owner_activate_partner_terms(1);`), "PARTNER_TERMS_INCOMPLETE"));
+    const pre = as(null, `SELECT public.get_partner_program_status()::text;`);
+    check("DB-8e public status closed and no effective version before activation", pre.ok && pre.out.includes('"active_version": null') && pre.out.includes('"service_partner_applications_open": false'), pre.out || pre.err);
+    check("DB-8f owner saves exact canonical agreement + disclosure", as(OWNER, `SELECT public.owner_save_service_partner_terms_draft(1, ${q(AGREEMENT)}, ${q(DISCLOSURE)});`).ok);
+    check("DB-9 exact canonical service-only activation succeeds", as(OWNER, `SELECT public.owner_activate_partner_terms(1);`).ok);
     const st = as(null, `SELECT public.get_partner_program_status()::text;`);
     check("DB-10 anon public status shows service open, affiliate closed", st.ok && st.out.includes('"service_partner_applications_open": true') && st.out.includes('"affiliate_applications_open": false'), st.out || st.err);
+    check("DB-10b public status exposes canonical hashes (=> agreement effective)", st.out.includes(`"agreement_sha256": "${AGREEMENT_SHA}"`) && st.out.includes(`"disclosure_sha256": "${DISCLOSURE_SHA}"`) && st.out.includes('"active_version": 1'));
     check("DB-11 anon cannot read terms table or summary", expectErr(as(null, `SELECT count(*) FROM public.partner_program_terms;`), "permission denied") && expectErr(as(null, `SELECT public.get_my_partner_summary();`), "permission denied"));
     check("DB-12 unauthenticated cannot apply", expectErr(as(null, `SELECT public.submit_partner_application(false, true, ${PITCH});`), "permission denied"));
     check("DB-13 affiliate application rejected while affiliate closed", expectErr(as(U1, `SELECT public.submit_partner_application(true, false, ${PITCH});`), "AFFILIATE_APPLICATIONS_CLOSED"));
@@ -124,6 +161,10 @@ if (!hasPg) {
     check("DB-20 service partner: no referral code, not affiliate", p.out === "t|f|null|approved", p.out);
     check("DB-21 service partner accepts agreement", as(U1, `SELECT public.accept_partner_agreement(1);`).ok);
     check("DB-22 service partner cannot request payout", expectErr(as(U1, `SELECT public.request_partner_payout(5000);`), "PARTNER_NOT_AFFILIATE"));
+    const pid = psql(`SELECT id FROM public.partners WHERE user_id = '${U1}';`).out;
+    check("DB-22a non-owner cannot suspend a partner", expectErr(as(U2, `SELECT public.owner_set_partner_status('${pid}', 'suspended');`), "PLATFORM_OWNER_REQUIRED"));
+    const sus = as(OWNER, `SELECT public.owner_set_partner_status('${pid}', 'suspended');`);
+    check("DB-22b owner suspends service partner", sus.ok && psql(`SELECT status FROM public.partners WHERE id = '${pid}';`).out === "suspended", sus.err);
     const attr = as(U2, `SELECT public.record_referral_attribution('abcdefghij')::text;`);
     check("DB-23 referral attribution closed while affiliate closed", attr.ok && attr.out.includes("PROGRAM_NOT_OPEN"), attr.out || attr.err);
     psql(`INSERT INTO public.partner_applications (user_id, wants_affiliate, wants_service_partner, pitch, terms_version) VALUES ('${U3}', true, false, 'legacy affiliate app', 1);`);

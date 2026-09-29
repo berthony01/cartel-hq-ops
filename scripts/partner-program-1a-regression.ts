@@ -284,7 +284,7 @@ const AD = read("src/components/cartel/PartnerAdminSection.tsx");
 check("P-20.1 owner gate via usePlatformAccess", AD.includes("const { isPlatformOwner, loading } = usePlatformAccess();") && AD.includes("if (loading || !isPlatformOwner) return null;"));
 for (const f of ["ownerSaveServiceTermsDraft", "ownerActivateTerms", "ownerRetireTerms", "ownerReviewApplication", "ownerSetPartnerStatus", "ownerAddLedgerAdjustment", "ownerRejectReferralForFraud", "ownerReviewPayout", "ownerMarkPayoutPaid"])
   check(`P-20 admin uses ${f}`, AD.includes(`${f}(`));
-check("P-20.2 service-only terms form: blank without draft, no financial fields (service track separation)", AD.includes('{ agreement: "", disclosure: "" }') && AD.includes("ownerSaveServiceTermsDraft({") && !/commissionBps|intOrNaN/.test(AD) && LIB.includes("export async function ownerSaveTermsDraft("));
+check("P-20.2 service-only terms form: canonical v2 preset without draft, no financial fields (service track separation)", AD.includes("{ agreement: SERVICE_PARTNER_AGREEMENT_V2_TEXT, disclosure: SERVICE_PARTNER_DISCLOSURE }") && AD.includes("ownerSaveServiceTermsDraft({") && !/commissionBps|intOrNaN/.test(AD) && LIB.includes("export async function ownerSaveTermsDraft("));
 check("P-20.3 activation confirmed via AlertDialog, service-only wording", AD.includes("AlertDialog") && AD.includes("This opens Service Partner applications only"));
 check("P-20.4 activation requires complete terms", AD.includes("!termsComplete"));
 check("P-20.5 fraud reason + paid reference required", AD.includes("Fraud reason (required)") && AD.includes("External payment reference (required)"));
