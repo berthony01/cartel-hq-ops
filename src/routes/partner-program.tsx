@@ -1,28 +1,40 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, BriefcaseBusiness, Check, Handshake, Users } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowRight, BriefcaseBusiness, Check, Clock, ShieldAlert, X } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { LegalFooter } from "@/components/cartel/LegalFooter";
+import { fetchPartnerProgramStatus, partnerKeys } from "@/lib/partners";
 import { cn } from "@/lib/utils";
 
-const TITLE = "Partner Program — Affiliates & Service Partners | CARTEL HQ";
+const TITLE = "Service Partner Program — Offer Services with CARTEL HQ";
 const DESCRIPTION =
-  "Learn how the CARTEL HQ Partner Program will distinguish approved Affiliates from Service Partners, including draft economics and eligibility requirements.";
+  "Independent businesses can offer setup, configuration, creative, training and operational services to CARTEL HQ customers. No fee to apply. No earnings guaranteed. Affiliate Program not open.";
 
-const ECONOMICS = [
-  ["Commission", "20%"],
-  ["Duration", "First 12 paid monthly invoices"],
-  ["Attribution", "30 days"],
-  ["Hold", "45 days"],
-  ["Minimum", "$50 USD"],
-  ["Payouts", "Monthly, manual"],
+const FACTS = [
+  "No fee to apply or to be approved.",
+  "No CARTEL HQ purchase is required for approval.",
+  "You find your own clients and set and collect your own service fees.",
+  "CARTEL HQ provides no leads, employment, wages, commissions or guaranteed earnings.",
+  "You, not CARTEL HQ, contract with and support your client for your independent service.",
+  "Every client controls its own account and pays CARTEL HQ directly for any CARTEL HQ plan.",
+  "Service Partner status alone grants no access to any client account or workspace.",
+  "Never share or request credentials, wallet private keys, seed phrases or payment-card data.",
+] as const;
+
+const SERVICES = [
+  ["Setup", "Creating the client's project, completing Project Identity and connecting its Telegram community."],
+  ["Configuration", "Configuring welcome onboarding, Launch Control stages and Launch Watch for the client."],
+  ["Creative", "Producing brand-consistent stickers and visual assets with the client's own plan features."],
+  ["Training", "Teaching the client's team to run Community Command, launches and missions themselves."],
+  ["Operations", "Helping operate day-to-day workflows the client authorizes inside the product."],
 ] as const;
 
 const STEPS = [
-  ["01", "Application", "Apply for the Affiliate track, Service Partner track, or both when applications open."],
-  ["02", "Owner review", "CARTEL HQ reviews the applicant, intended services, and program fit."],
-  ["03", "Agreement and tax readiness", "Approved applicants must accept the active agreement and complete required tax readiness."],
-  ["04", "Approved activity", "Affiliates use an approved referral link. Service Partners provide client services independently."],
-  ["05", "Owner-reviewed payout", "Eligible Affiliate ledger entries follow the hold period and monthly manual payout process."],
+  ["01", "Create or sign in", "Use a free CARTEL HQ account. No purchase is needed to apply."],
+  ["02", "Apply", "Describe your services, experience, intended customers and promotion channels."],
+  ["03", "Owner review", "CARTEL HQ reviews every application and approves or declines in writing."],
+  ["04", "Accept the agreement", "Approved partners accept the current Service Partner Agreement version."],
+  ["05", "Serve your clients", "Work under your own client agreements, with the required disclosure on your promotions."],
 ] as const;
 
 export const Route = createFileRoute("/partner-program")({
@@ -51,10 +63,39 @@ function PublicHeader() {
         <span className="truncate font-display text-lg uppercase tracking-widest text-gold">CARTEL HQ</span>
       </Link>
       <nav aria-label="Public" className="flex items-center gap-1">
-        <Link to="/docs" className="inline-flex min-h-11 items-center px-3 text-xs font-semibold text-muted-foreground hover:text-gold">Documentation</Link>
-        <Link to="/auth" className={cn(buttonVariants({ size: "sm" }), "min-h-11")}>Create account / Sign in</Link>
+        <Link to="/docs" hash="partner-program" className="inline-flex min-h-11 items-center px-3 text-xs font-semibold text-muted-foreground hover:text-gold">Guide</Link>
+        <Link to="/auth" search={{ redirect: "/partners" }} className={cn(buttonVariants({ size: "sm" }), "min-h-11")}>Sign in</Link>
       </nav>
     </header>
+  );
+}
+
+/** Database-backed track status (public read of two booleans). Fails closed. */
+function useProgramStatus() {
+  return useQuery({ queryKey: partnerKeys.status(), queryFn: fetchPartnerProgramStatus, staleTime: 60_000 });
+}
+
+function ServiceStatusBadge() {
+  const status = useProgramStatus();
+  const open = status.data?.service_partner_applications_open === true;
+  const label = status.isPending ? "Checking status" : open ? "Applications open" : "Applications not open yet";
+  return (
+    <p className={cn("inline-flex min-h-8 items-center rounded-sm border px-3 text-[10px] font-bold uppercase tracking-[0.16em]", open ? "border-pepe/50 bg-pepe/10 text-pepe" : "border-gold/40 bg-gold/8 text-gold")} aria-live="polite">
+      Service Partner · {label}
+    </p>
+  );
+}
+
+function PrimaryCta() {
+  const status = useProgramStatus();
+  const open = status.data?.service_partner_applications_open === true;
+  return (
+    <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+      <Link to="/auth" search={{ mode: "signup", redirect: "/partners" }} className={cn(buttonVariants({ size: "lg" }), "min-h-11 gap-2")}>
+        {open ? "Apply as a Service Partner" : "Create a free account"} <ArrowRight className="size-4" aria-hidden="true" />
+      </Link>
+      <Link to="/auth" search={{ redirect: "/partners" }} className={cn(buttonVariants({ variant: "outline", size: "lg" }), "min-h-11")}>Already have an account? Sign in</Link>
+    </div>
   );
 }
 
@@ -65,74 +106,87 @@ function PartnerProgramPage() {
       <main>
         <section className="app-gutter mx-auto max-w-6xl py-14 sm:py-20">
           <div className="max-w-4xl">
-            <p className="inline-flex min-h-8 items-center rounded-sm border border-gold/40 bg-gold/8 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-gold">Preparing to open</p>
-            <h1 className="mt-5 font-display text-5xl uppercase leading-[0.95] text-foreground sm:text-7xl">CARTEL HQ Partner Program</h1>
+            <ServiceStatusBadge />
+            <h1 className="mt-5 font-display text-5xl uppercase leading-[0.95] text-foreground sm:text-7xl">CARTEL HQ Service Partner Program</h1>
             <p className="mt-6 max-w-3xl text-base leading-7 text-muted-foreground sm:text-lg">
-              One program, two distinct tracks for people who refer customers or help project teams operate CARTEL HQ. Applications are not open yet.
+              Approved Service Partners can build an independent service business by charging their own clients for legitimate setup, configuration, creative, training or operational work using features available in CARTEL HQ.
             </p>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
+              Results and earnings are not guaranteed. CARTEL HQ pays Service Partners nothing under this program.
+            </p>
+            <PrimaryCta />
           </div>
         </section>
 
         <section className="border-y border-border-subtle bg-surface/50">
-          <div className="app-gutter mx-auto grid max-w-6xl gap-5 py-12 md:grid-cols-2">
-            <article className="cartel-panel rounded-lg p-6">
-              <Users className="size-6 text-gold" aria-hidden="true" />
-              <h2 className="mt-4 font-display text-3xl uppercase text-foreground">Affiliate</h2>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                Refers customers through an approved referral link. CARTEL HQ bills the customer directly. Commission applies only to eligible collected subscription revenue after Affiliate approval and active terms.
-              </p>
-            </article>
-            <article className="cartel-panel rounded-lg p-6">
-              <BriefcaseBusiness className="size-6 text-pepe" aria-hidden="true" />
-              <h2 className="mt-4 font-display text-3xl uppercase text-foreground">Service Partner</h2>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                Charges clients separately for setup or management while the client pays CARTEL HQ directly. Service Partner status alone grants zero client workspace access and earns no CARTEL HQ commission unless the partner is separately approved as an Affiliate.
-              </p>
-            </article>
+          <div className="app-gutter mx-auto max-w-6xl py-12">
+            <h2 className="font-display text-4xl uppercase text-foreground">What to know first</h2>
+            <ul className="mt-6 grid gap-3 md:grid-cols-2">
+              {FACTS.map((fact) => (
+                <li key={fact} className="flex gap-3 rounded-md border border-border-subtle bg-surface-raised p-4 text-sm leading-6 text-foreground">
+                  <Check className="mt-1 size-4 shrink-0 text-gold" aria-hidden="true" />{fact}
+                </li>
+              ))}
+            </ul>
           </div>
         </section>
 
         <section className="app-gutter mx-auto max-w-6xl py-14 sm:py-20">
-          <p className="type-eyebrow text-gold">The review path</p>
-          <h2 className="mt-3 font-display text-4xl uppercase text-foreground">How joining will work</h2>
-          <ol className="mt-8 grid gap-3 lg:grid-cols-5">
-            {STEPS.map(([number, title, body]) => (
-              <li key={number} className="border-t border-gold/35 pt-4">
-                <span className="font-mono text-xs text-gold">{number}</span>
-                <h3 className="mt-2 text-sm font-semibold text-foreground">{title}</h3>
-                <p className="mt-2 text-xs leading-5 text-muted-foreground">{body}</p>
-              </li>
+          <div className="flex items-center gap-3"><BriefcaseBusiness className="size-6 text-gold" aria-hidden="true" /><h2 className="font-display text-4xl uppercase text-foreground">Example services</h2></div>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">Examples only, tied to features available today. You decide what you offer and what you charge.</p>
+          <dl className="mt-7 grid gap-px overflow-hidden rounded-lg border border-border-subtle bg-border-subtle sm:grid-cols-2 lg:grid-cols-5">
+            {SERVICES.map(([term, body]) => (
+              <div key={term} className="bg-surface-raised p-5">
+                <dt className="type-eyebrow text-gold">{term}</dt>
+                <dd className="mt-2 text-sm leading-6 text-muted-foreground">{body}</dd>
+              </div>
             ))}
-          </ol>
+          </dl>
         </section>
 
         <section className="border-y border-gold/25 bg-surface">
           <div className="app-gutter mx-auto max-w-6xl py-14">
-            <div className="flex flex-wrap items-center gap-3">
-              <Handshake className="size-6 text-gold" aria-hidden="true" />
-              <h2 className="font-display text-4xl uppercase text-foreground">Draft economics, not active</h2>
-            </div>
-            <dl className="mt-7 grid gap-px overflow-hidden rounded-lg border border-border-subtle bg-border-subtle sm:grid-cols-2 lg:grid-cols-3">
-              {ECONOMICS.map(([term, value]) => (
-                <div key={term} className="bg-surface-raised p-5">
-                  <dt className="type-eyebrow text-muted-foreground">{term}</dt>
-                  <dd className="mt-2 text-base font-semibold text-foreground">{value}</dd>
-                </div>
+            <p className="type-eyebrow text-gold">The review path</p>
+            <h2 className="mt-3 font-display text-4xl uppercase text-foreground">How joining works</h2>
+            <ol className="mt-8 grid gap-3 lg:grid-cols-5">
+              {STEPS.map(([number, title, body]) => (
+                <li key={number} className="border-t border-gold/35 pt-4">
+                  <span className="font-mono text-xs text-gold">{number}</span>
+                  <h3 className="mt-2 text-sm font-semibold text-foreground">{title}</h3>
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">{body}</p>
+                </li>
               ))}
-            </dl>
-            <p className="mt-6 max-w-4xl text-sm leading-6 text-muted-foreground">
-              Taxes, discounts, credits, refunds, disputes, setup or service fees, and high-cost usage purchases are excluded. No one earns or is owed commission until active terms exist, the applicant is approved, the current agreement is accepted, tax readiness is verified, and an eligible ledger entry exists.
-            </p>
+            </ol>
+            <div className="mt-8 rounded-md border border-gold/30 bg-gold/5 p-4">
+              <p className="type-eyebrow text-gold">Required disclosure near your promotions</p>
+              <p className="mt-2 text-sm leading-6 text-foreground">"Independent CARTEL HQ Service Partner. Services are provided by [Partner Name], not by CARTEL HQ. Results and earnings are not guaranteed."</p>
+            </div>
           </div>
         </section>
 
-        <section className="app-gutter mx-auto max-w-4xl py-16 text-center">
-          <Check className="mx-auto size-6 text-pepe" aria-hidden="true" />
-          <h2 className="mt-4 font-display text-4xl uppercase text-foreground">Build your CARTEL HQ foundation</h2>
-          <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">Create a free account or sign in today. Partner applications will be announced separately when the program is ready.</p>
+        <section className="app-gutter mx-auto max-w-6xl py-14">
+          <div className="grid gap-5 md:grid-cols-2">
+            <article className="cartel-panel rounded-lg p-6">
+              <ShieldAlert className="size-6 text-gold" aria-hidden="true" />
+              <h2 className="mt-4 font-display text-3xl uppercase text-foreground">Security rules</h2>
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">Partner status is not access. Work only through permissions your client grants inside the product, keep client information confidential, and never handle seed phrases, private keys, CARTEL HQ passwords or payment cards.</p>
+            </article>
+            <article className="rounded-lg border border-border-subtle bg-surface/50 p-6" aria-labelledby="affiliate-heading">
+              <Clock className="size-6 text-muted-foreground" aria-hidden="true" />
+              <p className="type-eyebrow mt-4 text-muted-foreground">Not open · planned later</p>
+              <h2 id="affiliate-heading" className="mt-2 font-display text-3xl uppercase text-muted-foreground">Affiliate Program</h2>
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">The Affiliate Program is not open. There is no active commission or referral offer and no Affiliate application. Any future Affiliate Program will have separate terms and will be announced separately.</p>
+              <p className="mt-3 inline-flex items-center gap-2 text-xs text-muted-foreground"><X className="size-3.5" aria-hidden="true" />No application available</p>
+            </article>
+          </div>
+        </section>
+
+        <section className="app-gutter mx-auto max-w-4xl pb-16 text-center">
+          <h2 className="font-display text-4xl uppercase text-foreground">Read before you apply</h2>
+          <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">The Service Partner Agreement and guide explain responsibilities, brand rules, security and termination.</p>
           <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-            <Link to="/auth" search={{ mode: "signup" }} className={cn(buttonVariants({ size: "lg" }), "min-h-11 gap-2")}>Create account / Sign in <ArrowRight className="size-4" aria-hidden="true" /></Link>
-            <Link to="/legal/partner-agreement" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "min-h-11")}>Read the draft Partner Agreement</Link>
+            <Link to="/legal/partner-agreement" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "min-h-11")}>Read the draft Service Partner Agreement</Link>
+            <Link to="/docs" hash="partner-program" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "min-h-11")}>Service Partner guide</Link>
           </div>
         </section>
       </main>
