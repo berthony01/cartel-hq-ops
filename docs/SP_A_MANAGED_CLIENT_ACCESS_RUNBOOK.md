@@ -31,7 +31,7 @@ Status: STAGED. SQL is in `docs/sql/SP_A_partner_client_access.sql`. It has NOT 
 ## Rollback / close
 - One partner: the owner revokes (`owner_revoke_service_partner`).
 - All partners at once: retire the active Service Partner terms. Every managed access check then fails closed.
-- Never delete rows from `partner_client_access`. History is preserved.
+- Rows in `partner_client_access` are never deleted — never delete them. History is preserved.
 - A frontend-only rollback is safe: the table stays and grants nothing without the UI.
 
 ## Known risks
