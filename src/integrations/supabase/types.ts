@@ -1776,6 +1776,69 @@ export type Database = {
           },
         ]
       }
+      partner_client_access: {
+        Row: {
+          created_at: string
+          id: string
+          invited_at: string
+          invited_by: string
+          partner_id: string
+          partner_user_id: string
+          responded_at: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          scopes: string[]
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          invited_at?: string
+          invited_by: string
+          partner_id: string
+          partner_user_id: string
+          responded_at?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          scopes?: string[]
+          status?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          invited_at?: string
+          invited_by?: string
+          partner_id?: string
+          partner_user_id?: string
+          responded_at?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          scopes?: string[]
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_client_access_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_client_access_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       partner_commission_ledger: {
         Row: {
           amount_cents: number
@@ -6853,6 +6916,25 @@ export type Database = {
           title: string
         }[]
       }
+      list_my_managed_workspaces: {
+        Args: never
+        Returns: {
+          access_id: string
+          created_at: string
+          scopes: string[]
+          workspace_id: string
+          workspace_name: string
+        }[]
+      }
+      list_my_partner_invites: {
+        Args: never
+        Returns: {
+          access_id: string
+          invited_at: string
+          scopes: string[]
+          workspace_name: string
+        }[]
+      }
       list_project_conversation_messages: {
         Args: { _conversation_id: string; _limit?: number }
         Returns: {
@@ -7052,6 +7134,26 @@ export type Database = {
         }
         Returns: string
       }
+      owner_invite_service_partner: {
+        Args: {
+          _partner_email: string
+          _scopes: string[]
+          _workspace_id: string
+        }
+        Returns: string
+      }
+      owner_list_partner_access: {
+        Args: { _workspace_id: string }
+        Returns: {
+          access_id: string
+          invited_at: string
+          partner_reference: string
+          responded_at: string
+          revoked_at: string
+          scopes: string[]
+          status: string
+        }[]
+      }
       owner_mark_partner_payout_paid: {
         Args: { _paid_reference: string; _payout_id: string }
         Returns: Json
@@ -7068,6 +7170,10 @@ export type Database = {
       owner_review_partner_payout: {
         Args: { _approve: boolean; _note?: string; _payout_id: string }
         Returns: Json
+      }
+      owner_revoke_service_partner: {
+        Args: { _access_id: string }
+        Returns: undefined
       }
       owner_save_partner_terms_draft: {
         Args: {
@@ -7093,6 +7199,10 @@ export type Database = {
       owner_set_partner_status: {
         Args: { _partner_id: string; _status: string; _tax_doc_status?: string }
         Returns: Json
+      }
+      owner_update_partner_scopes: {
+        Args: { _access_id: string; _scopes: string[] }
+        Returns: undefined
       }
       partner_active_terms: {
         Args: never
@@ -7128,7 +7238,41 @@ export type Database = {
         Args: { _currency: string; _partner_id: string }
         Returns: number
       }
+      partner_client_access_eligible: {
+        Args: { _partner_id: string }
+        Returns: boolean
+      }
+      partner_client_scopes_valid: {
+        Args: { _scopes: string[] }
+        Returns: boolean
+      }
+      partner_get_project_profile: {
+        Args: { _workspace_id: string }
+        Returns: Json
+      }
+      partner_has_scope: {
+        Args: { _scope: string; _workspace_id: string }
+        Returns: boolean
+      }
       partner_require_owner: { Args: never; Returns: string }
+      partner_respond_client_invite: {
+        Args: { _accept: boolean; _access_id: string }
+        Returns: undefined
+      }
+      partner_update_project_profile: {
+        Args: {
+          _description: string
+          _primary_chain: string
+          _project_name: string
+          _tagline: string
+          _telegram_url: string
+          _ticker: string
+          _website_url: string
+          _workspace_id: string
+          _x_url: string
+        }
+        Returns: undefined
+      }
       peek_social_mission_link_candidate: {
         Args: { _candidate_id: string; _telegram_user_id: number }
         Returns: Json
