@@ -88,6 +88,19 @@ const allowed = new Set([
   "src/routes/partner-program.tsx",
   // Required regenerated Supabase types after the approved production service-track migration.
   "src/integrations/supabase/types.ts",
+  // SP-A Managed Client Access staging (approved allowlist).
+  "docs/sql/SP_A_partner_client_access.sql",
+  "docs/SP_A_MANAGED_CLIENT_ACCESS_RUNBOOK.md",
+  "src/lib/partner-client-access.ts",
+  "src/components/cartel/ServicePartnerAccessPanel.tsx",
+  "src/components/cartel/ManagedAccessGuard.tsx",
+  "src/lib/workspace-context.tsx",
+  "src/components/cartel/WorkspaceSwitcher.tsx",
+  "src/components/cartel/SidebarNav.tsx",
+  "src/components/cartel/AppShell.tsx",
+  "src/routes/_authenticated/settings.tsx",
+  "src/routes/_authenticated/project-profile.tsx",
+  "scripts/sp-a-managed-client-access-regression.ts",
 ]);
 // Discovery task scope (529681aa..98bb3b44) plus the Service Partner staging scope (049aae3b..HEAD).
 // Intervening separately-approved tasks (MCP, favicon) are outside this check.

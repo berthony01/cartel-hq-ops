@@ -12,3 +12,6 @@
 - [x] Service Partner-only launch staging: track-separation SQL staged, UI/legal/docs/tests (repository only; Affiliate closed)
 - [ ] Service Partner production activation — BLOCKED: needs CP-SVC-SQL, CP-SVC-TERMS, CP-SVC-PUBLISH owner approvals
 - [x] Public Partner Program discovery, CARTEL HQ documentation hub, and foundational SEO corrections (repository and preview only)
+- [x] SP-A Managed Client Access staged: separate partner access table + RPCs (docs/sql only, not applied), owner panel, partner invites/managed projects, managed switcher, project_identity editor, guard, regression (repository only)
+- [ ] SP-A production activation — BLOCKED: needs CP-SPA-PUBLISH and CP-SPA-SQL owner approvals
+- [ ] SP-B: enforce remaining partner scopes (community, broadcasts, launch watch comms, stickers, missions, inbox) — not started
