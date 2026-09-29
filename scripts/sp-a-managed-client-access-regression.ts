@@ -46,10 +46,10 @@ check("S-13 partner profile update excludes slug/status/logo", !/public_slug|dis
 
 /* ---------- Static: frontend ---------- */
 check("F-1 managed list fails closed to []", /fetchManagedWorkspaces[\s\S]*?if \(error \|\| !Array\.isArray\(data\)\) return \[\];[\s\S]*?catch \{\s*return \[\];/.test(LIB));
-check("F-2 only project_identity active", LIB.includes('ACTIVE_PARTNER_SCOPES: readonly PartnerClientScope[] = ["project_identity"]'));
+check("F-2 active scopes: project_identity (SP-A) + project_inbox (SP-B1) only", LIB.includes('ACTIVE_PARTNER_SCOPES: readonly PartnerClientScope[] = ["project_identity", "project_inbox"]'));
 check("F-3 workspace list: members first, managed separate and labelled", CTX.includes("[...own, ...managed]") && CTX.includes('access: "managed" as const') && CTX.includes(".from(\"workspaces\")"));
 check("F-4 switcher separates Managed client projects", SWITCH.includes("Managed client projects") && SWITCH.includes('w.access === "managed"'));
-check("F-5 nav filtered for managed projects", NAV.includes("isManagedAllowedPath(item.to)"));
+check("F-5 nav filtered for managed projects", NAV.includes("isManagedAllowedPath(item.to, managedScopes)"));
 check("F-6 guard shows no-access and lists denied areas", GUARD.includes("doesn't include this area") && GUARD.includes("PARTNER_DENIED_AREAS"));
 check("F-7 managed allowed paths limited", LIB.includes('MANAGED_ALLOWED_PATHS = ["/project-profile", "/partners"] as const'));
 check("F-8 owner panel owner-only, invite by email, revoke confirmation", PANEL.includes("workspace.owner_id === user.id") && PANEL.includes('type="email"') && PANEL.includes("Revoke Service Partner access?"));

@@ -434,3 +434,71 @@ export async function acknowledgeProjectInboxDeliveryUncertainty(
   );
 }
 
+
+// ---------------------------------------------------------------------------
+// SP-B1 — Service Partner wrappers (managed client projects only).
+// Call ONLY the partner_inbox_* RPCs, which require an accepted, active grant
+// with the `project_inbox` scope. No settings or block/unblock wrappers exist
+// for partners. Not yet in generated types until CP-SPB1-SQL, so a loose rpc
+// call is used; a missing RPC surfaces as an error (fails closed).
+// ---------------------------------------------------------------------------
+
+type LooseRpc = (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
+const partnerRpc: LooseRpc = (fn, args) => (supabase.rpc.bind(supabase) as unknown as LooseRpc)(fn, args);
+
+async function callPartner(fn: string, args: Record<string, unknown>): Promise<unknown> {
+  const { data, error } = await partnerRpc(fn, args);
+  if (error) throw error instanceof Error ? error : new Error((error as { message?: string })?.message ?? "The request failed.");
+  return data;
+}
+
+export const partnerInbox = {
+  summary: async (workspaceId: string) =>
+    oneRow<ProjectInboxSummary>(await callPartner("partner_inbox_summary", { _workspace_id: workspaceId }), "Inbox summary"),
+  listConversations: async (workspaceId: string, status: ConversationStatus | null, limit = 100) => {
+    const args: Record<string, unknown> = { _workspace_id: workspaceId, _limit: Math.min(Math.max(limit, 1), 100) };
+    if (status) args["_status"] = status;
+    return manyRows<ProjectInboxConversationListItem>(await callPartner("partner_inbox_list_conversations", args));
+  },
+  getConversation: async (workspaceId: string, conversationId: string) =>
+    oneRow<ProjectInboxConversationDetail>(
+      await callPartner("partner_inbox_get_conversation", { _workspace_id: workspaceId, _conversation_id: conversationId }),
+      "Conversation",
+    ),
+  listMessages: async (workspaceId: string, conversationId: string, limit = 200) =>
+    manyRows<ProjectConversationMessage>(
+      await callPartner("partner_inbox_list_messages", {
+        _workspace_id: workspaceId,
+        _conversation_id: conversationId,
+        _limit: Math.min(Math.max(limit, 1), 200),
+      }),
+    ),
+  sendReply: async (workspaceId: string, conversationId: string, body: string, clientRequestId: string) =>
+    oneRow<ProjectInboxTeamReplyResult>(
+      await callPartner("partner_inbox_create_reply", {
+        _workspace_id: workspaceId,
+        _conversation_id: conversationId,
+        _body: body,
+        _client_request_id: clientRequestId,
+      }),
+      "Team reply",
+    ),
+  updateStatus: async (workspaceId: string, conversationId: string, status: ConversationStatus) =>
+    oneRow<ProjectConversationStatusResult>(
+      await callPartner("partner_inbox_update_status", {
+        _workspace_id: workspaceId,
+        _conversation_id: conversationId,
+        _status: status,
+      }),
+      "Conversation status update",
+    ),
+  ackUncertainty: async (workspaceId: string, conversationId: string, messageId: string) =>
+    oneRow<ProjectInboxDeliveryUncertaintyAckResult>(
+      await callPartner("partner_inbox_ack_uncertainty", {
+        _workspace_id: workspaceId,
+        _conversation_id: conversationId,
+        _message_id: messageId,
+      }),
+      "Delivery uncertainty acknowledgement",
+    ),
+};

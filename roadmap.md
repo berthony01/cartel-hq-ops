@@ -15,5 +15,7 @@
 - [x] SP-A Managed Client Access staged: separate partner access table + RPCs (docs/sql only, not applied), owner panel, partner invites/managed projects, managed switcher, project_identity editor, guard, regression (repository only)
 - [x] SP-A production migration `20260929130813` applied and security verified: table live with RLS, SELECT-only for authenticated, anon EXECUTE revoked, service_role-only helpers, advisor lint 0028 unchanged (9) / 0029 exactly +10 (102 → 112), types regenerated, transactional backend smoke passed and rolled back clean
 - [ ] SP-A real two-account UI smoke (S1–S8) — PENDING: needs an approved active Service Partner test account; production has none and partner status must not be altered to create one
-- [ ] SP-B: enforce remaining partner scopes (community, broadcasts, launch watch comms, stickers, missions, inbox) — deferred / not started
-- [ ] SP-B1 partner Project Inbox — BLOCKED at prebuild: create_project_inbox_team_reply's commercial gate (evaluate_commercial_access) requires workspace membership; needs owner decision on entitlement path before build
+- [x] SP-B0 commercial workspace entitlement core staged (docs/sql only, not applied): steps 5–10 extracted verbatim, evaluator output proven byte-equal in local equivalence regression
+- [x] SP-B1 partner Project Inbox staged (docs/sql only, not applied): seven partner_inbox_* RPCs, partner-only /telegram Inbox, settings + block/unblock owner-only (repository only)
+- [ ] SP-B0/SP-B1 production activation — PENDING owner approvals: CP-SPB1-PUBLISH, CP-SPB0-SQL, CP-SPB1-SQL, then types regeneration and two-account smoke
+- [ ] SP-B2+: remaining partner scopes (launch watch comms, community, broadcasts, stickers, missions) — deferred / not started

@@ -39,6 +39,7 @@ import {
   setProjectInboxNewConversationsEnabled,
   setProjectInboxRepliesEnabled,
   updateProjectConversationStatus,
+  partnerInbox,
   type ConversationStatus,
 } from "@/lib/project-inbox";
 
@@ -86,6 +87,11 @@ type ProjectInboxPanelProps = {
   selectedConversationId: string | null;
   onConversationChange: (conversationId: string) => void;
   onConversationClear: () => void;
+  /**
+   * SP-B1: "partner" = Service Partner in a managed client project. Uses only
+   * the partner_inbox_* RPCs and hides inbox settings and block/unblock.
+   */
+  mode?: "owner" | "partner";
 };
 
 function formatWhen(value: string | null | undefined): string {
@@ -130,8 +136,10 @@ export function ProjectInboxPanel({
   selectedConversationId,
   onConversationChange,
   onConversationClear,
+  mode = "owner",
 }: ProjectInboxPanelProps) {
   const { workspaceId } = useWorkspace();
+  const isPartner = mode === "partner";
   const queryClient = useQueryClient();
 
   const [filter, setFilter] = useState<ConversationStatus | null>(null);
@@ -172,7 +180,7 @@ export function ProjectInboxPanel({
   // ------------------------------------------------------------------ queries
   const settingsQuery = useQuery({
     queryKey: projectInboxKeys.settings(workspaceId),
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && !isPartner,
     queryFn: () => getProjectInboxSettings(workspaceId!),
   });
   const settings = settingsQuery.data ?? null;
@@ -180,13 +188,17 @@ export function ProjectInboxPanel({
   const summaryQuery = useQuery({
     queryKey: projectInboxKeys.summary(workspaceId),
     enabled: !!workspaceId,
-    queryFn: () => getProjectInboxSummary(workspaceId!),
+    queryFn: () =>
+      isPartner ? partnerInbox.summary(workspaceId!) : getProjectInboxSummary(workspaceId!),
   });
 
   const conversationsQuery = useQuery({
     queryKey: projectInboxKeys.conversations(workspaceId, filter),
     enabled: !!workspaceId,
-    queryFn: () => listProjectInboxConversations(workspaceId!, filter, 100),
+    queryFn: () =>
+      isPartner
+        ? partnerInbox.listConversations(workspaceId!, filter, 100)
+        : listProjectInboxConversations(workspaceId!, filter, 100),
   });
   const conversations = conversationsQuery.data ?? [];
 
@@ -198,7 +210,10 @@ export function ProjectInboxPanel({
   const detailQuery = useQuery({
     queryKey: projectInboxKeys.conversation(workspaceId, selectedConversationId),
     enabled: !!workspaceId && !!selectedConversationId,
-    queryFn: () => getProjectInboxConversation(workspaceId!, selectedConversationId!),
+    queryFn: () =>
+      isPartner
+        ? partnerInbox.getConversation(workspaceId!, selectedConversationId!)
+        : getProjectInboxConversation(workspaceId!, selectedConversationId!),
   });
   const detail = detailQuery.data ?? null;
 
@@ -215,7 +230,10 @@ export function ProjectInboxPanel({
   const messagesQuery = useQuery({
     queryKey: projectInboxKeys.messages(workspaceId, selectedConversationId),
     enabled: detailConfirmedForSelection,
-    queryFn: () => listProjectConversationMessages(selectedConversationId!, 200),
+    queryFn: () =>
+      isPartner
+        ? partnerInbox.listMessages(workspaceId!, selectedConversationId!, 200)
+        : listProjectConversationMessages(selectedConversationId!, 200),
     // Delivery happens out of band in a background worker, so poll only while
     // this thread actually has a reply still in flight.
     refetchInterval: (query) =>
@@ -272,7 +290,9 @@ export function ProjectInboxPanel({
 
   const statusMutation = useMutation({
     mutationFn: (vars: { conversationId: string; status: ConversationStatus }) =>
-      updateProjectConversationStatus(vars.conversationId, vars.status),
+      isPartner
+        ? partnerInbox.updateStatus(workspaceId!, vars.conversationId, vars.status)
+        : updateProjectConversationStatus(vars.conversationId, vars.status),
     onSuccess: (_row, vars) => {
       // Internal Inbox state only — nothing is sent to Telegram. Messages are
       // not invalidated because a status change adds no message row.
@@ -315,7 +335,7 @@ export function ProjectInboxPanel({
 
   const replyMutation = useMutation({
     mutationFn: (vars: { conversationId: string; body: string; requestId: string }) =>
-      sendProjectInboxTeamReply(
+      (isPartner ? partnerInbox.sendReply : sendProjectInboxTeamReply)(
         workspaceId!,
         vars.conversationId,
         vars.body,
@@ -352,7 +372,7 @@ export function ProjectInboxPanel({
 
   const ackMutation = useMutation({
     mutationFn: (vars: { messageId: string }) =>
-      acknowledgeProjectInboxDeliveryUncertainty(
+      (isPartner ? partnerInbox.ackUncertainty : acknowledgeProjectInboxDeliveryUncertainty)(
         workspaceId!,
         selectedConversationId!,
         vars.messageId,
@@ -430,7 +450,13 @@ export function ProjectInboxPanel({
         title="Project Inbox"
         leading={<InboxIcon className="size-4" aria-hidden="true" />}
         description="Private Telegram messages from members, captured into one place your team can triage."
-        actions={<StatusBadge tone={headerTone}>{headerLabel}</StatusBadge>}
+        actions={
+          isPartner ? (
+            <StatusBadge tone="gold">Service Partner access</StatusBadge>
+          ) : (
+            <StatusBadge tone={headerTone}>{headerLabel}</StatusBadge>
+          )
+        }
       >
         <div className="space-y-3">
           <div className="rounded-lg border border-border/60 bg-background/40 p-3">
@@ -449,7 +475,12 @@ export function ProjectInboxPanel({
             </p>
           </div>
 
-          {settingsUnavailable ? (
+          {isPartner ? (
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              You are replying on behalf of this client project as a Service Partner. Inbox
+              settings and blocking members stay with the project owner.
+            </p>
+          ) : settingsUnavailable ? (
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-xs leading-relaxed text-muted-foreground">
                 The Inbox setting could not be loaded. This is not a confirmation that reply
@@ -492,7 +523,7 @@ export function ProjectInboxPanel({
             </div>
           ) : null}
 
-          {settings ? (
+          {settings && !isPartner ? (
             <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border/60 bg-background/40 p-3">
               <div className="min-w-0 space-y-1">
                 <label
@@ -782,6 +813,7 @@ export function ProjectInboxPanel({
                         </Button>
                       );
                     })}
+                    {!isPartner && (
                     <Button
                       type="button"
                       size="sm"
@@ -794,6 +826,7 @@ export function ProjectInboxPanel({
                     >
                       {detail.contact_status === "BLOCKED" ? "Unblock member" : "Block member"}
                     </Button>
+                    )}
                   </div>
                   <p className="text-[11px] leading-relaxed text-muted-foreground">
                     Status is internal Inbox state — changing it does not send anything to the

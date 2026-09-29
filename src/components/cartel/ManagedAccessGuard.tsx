@@ -7,7 +7,7 @@ import { Section } from "@/components/cartel/Section";
 import { Button } from "@/components/ui/button";
 
 /**
- * SP-A presentation guard. When the active project is a Service Partner managed
+ * SP-A/SP-B1 presentation guard (scope-aware). When the active project is a Service Partner managed
  * client project, only SP-A-supported routes render; everything else shows a
  * clear no-access state instead of empty or broken screens. The database (RLS +
  * SP-A RPCs) remains the security boundary: partners are never workspace members.
@@ -16,7 +16,7 @@ export function ManagedAccessGuard({ children }: { children: ReactNode }) {
   const { isManaged, workspace } = useWorkspace();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
-  if (!isManaged || isManagedAllowedPath(pathname)) return <>{children}</>;
+  if (!isManaged || isManagedAllowedPath(pathname, workspace?.scopes ?? [])) return <>{children}</>;
 
   return (
     <Section
