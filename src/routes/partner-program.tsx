@@ -186,7 +186,7 @@ function PartnerProgramPage() {
           <h2 className="font-display text-4xl uppercase text-foreground">Read before you apply</h2>
           <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">The Service Partner Agreement and guide explain responsibilities, brand rules, security and termination.</p>
           <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-            <Link to="/legal/partner-agreement" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "min-h-11")}>Read the draft Service Partner Agreement</Link>
+            <Link to="/legal/partner-agreement" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "min-h-11")}>Read the Service Partner Agreement</Link>
             <Link to="/docs" hash="partner-program" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "min-h-11")}>Service Partner guide</Link>
           </div>
         </section>
