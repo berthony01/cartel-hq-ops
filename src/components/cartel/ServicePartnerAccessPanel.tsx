@@ -9,7 +9,9 @@ import {
   PARTNER_CLIENT_SCOPES,
   PARTNER_DENIED_AREAS,
   PARTNER_SCOPE_LABELS,
+  fetchMyPartnerInvites,
   fetchOwnerPartnerAccess,
+  respondToInvite,
   invitePartner,
   partnerClientErrorMessage,
   partnerClientKeys,
@@ -186,5 +188,71 @@ export function ServicePartnerAccessPanel() {
         </div>
       )}
     </Section>
+  );
+}
+
+/** Partner dashboard: pending invitations (accept/decline) + active managed projects. */
+export function ManagedProjectsSection() {
+  const { user } = useSession();
+  const userId = user?.id ?? null;
+  const qc = useQueryClient();
+  const { workspaces, selectWorkspace } = useWorkspace();
+  const managed = workspaces.filter((w) => w.access === "managed");
+  const invites = useQuery({
+    queryKey: partnerClientKeys.invites(userId),
+    queryFn: fetchMyPartnerInvites,
+    enabled: !!userId,
+  });
+  const respond = useMutation({
+    mutationFn: (v: { id: string; accept: boolean }) => respondToInvite(v.id, v.accept),
+    onSuccess: (_d, v) => {
+      toast.success(v.accept ? "Invitation accepted" : "Invitation declined");
+      qc.invalidateQueries({ queryKey: partnerClientKeys.all });
+    },
+    onError: (e) => toast.error(partnerClientErrorMessage(e)),
+  });
+  const scopeText = (s: PartnerClientScope[]) =>
+    PARTNER_CLIENT_SCOPES.filter((x) => s.includes(x))
+      .map((x) => PARTNER_SCOPE_LABELS[x] + (ACTIVE_PARTNER_SCOPES.includes(x) ? "" : " (coming soon)"))
+      .join(", ") || "No permissions";
+
+  return (
+    <>
+      <Section title="Pending invitations" description="Project owners who want your help. Nothing is shared until you accept.">
+        {(invites.data ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground">No pending invitations.</p>
+        ) : (
+          <div className="space-y-3">
+            {(invites.data ?? []).map((inv) => (
+              <div key={inv.access_id} className="rounded-md border border-border-subtle p-3">
+                <p className="font-medium text-foreground [overflow-wrap:anywhere]">{inv.workspace_name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{scopeText(inv.scopes)}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button className="min-h-11" disabled={respond.isPending} onClick={() => respond.mutate({ id: inv.access_id, accept: true })}>Accept</Button>
+                  <Button variant="outline" className="min-h-11" disabled={respond.isPending} onClick={() => respond.mutate({ id: inv.access_id, accept: false })}>Decline</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+      <Section title="Managed projects" description="Client projects you can help with. Each one stays owned by the client, who can change or revoke your access at any time.">
+        {managed.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No managed projects yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {managed.map((w) => (
+              <div key={w.id} className="flex flex-wrap items-center gap-3 rounded-md border border-border-subtle p-3">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-foreground [overflow-wrap:anywhere]">{w.name}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{scopeText(w.scopes ?? [])}</p>
+                </div>
+                <Button variant="outline" className="min-h-11" onClick={() => selectWorkspace(w.id)}>Switch to project</Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+    </>
   );
 }
