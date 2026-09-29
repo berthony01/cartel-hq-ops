@@ -1,6 +1,16 @@
 # SP-A Managed Client Access — Runbook
 
-Status: STAGED. SQL is in `docs/sql/SP_A_partner_client_access.sql`. It has NOT been applied to production. Nothing has been published.
+Status: PRODUCTION MIGRATION APPLIED / BACKEND VERIFIED. The SP-A migration was applied to production Supabase project `ocoinbnjgstkmnwwvnhi` as migration version `20260929130813`. `partner_client_access` exists with RLS enabled; `authenticated` has SELECT only (no anon access, no direct writes); all SP-A authenticated SECURITY DEFINER RPCs have anon EXECUTE revoked; internal eligibility/scope helpers are service_role-only. The production security advisor baseline moved exactly as reviewed: lint 0028 unchanged at 9, lint 0029 +10 (102 → 112) for the ten SP-A signed-in functions. A transactional backend smoke test passed in production and rolled back completely (wrong-email generic failure, pending invite, accept, managed workspace visibility, scoped project identity read/update, scope removal, suspension fail-closed, revoke removal) with no persisted data. Types regenerated and verified.
+
+**Pending:** the real two-account browser/UI smoke (S1–S8) below — production currently has no approved active Service Partner account, and partner status must not be altered to create one. UI smoke is deferred until an approved active Service Partner test account is available. The SP-A frontend was deployed through Lovable after staging and after the type sync; no browser-verified UI smoke is claimed.
+
+The original procedure below is preserved as historical/reference: it documents how production was reached and remains the reference for the pending UI smoke and any future SP-A re-verification.
+
+---
+---
+# Historical / reference procedure (as staged)
+
+Status at staging: STAGED. SQL was in `docs/sql/SP_A_partner_client_access.sql`. It had NOT been applied to production at that time. Nothing had been published.
 
 ## What SP-A does
 - A project owner invites an approved, active Service Partner using that partner's sign-in email.

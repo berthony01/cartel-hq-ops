@@ -13,5 +13,6 @@
 - [ ] Service Partner production activation — BLOCKED: needs CP-SVC-SQL, CP-SVC-TERMS, CP-SVC-PUBLISH owner approvals
 - [x] Public Partner Program discovery, CARTEL HQ documentation hub, and foundational SEO corrections (repository and preview only)
 - [x] SP-A Managed Client Access staged: separate partner access table + RPCs (docs/sql only, not applied), owner panel, partner invites/managed projects, managed switcher, project_identity editor, guard, regression (repository only)
-- [ ] SP-A production activation — BLOCKED: needs CP-SPA-PUBLISH and CP-SPA-SQL owner approvals
-- [ ] SP-B: enforce remaining partner scopes (community, broadcasts, launch watch comms, stickers, missions, inbox) — not started
+- [x] SP-A production migration `20260929130813` applied and security verified: table live with RLS, SELECT-only for authenticated, anon EXECUTE revoked, service_role-only helpers, advisor lint 0028 unchanged (9) / 0029 exactly +10 (102 → 112), types regenerated, transactional backend smoke passed and rolled back clean
+- [ ] SP-A real two-account UI smoke (S1–S8) — PENDING: needs an approved active Service Partner test account; production has none and partner status must not be altered to create one
+- [ ] SP-B: enforce remaining partner scopes (community, broadcasts, launch watch comms, stickers, missions, inbox) — deferred / not started
