@@ -169,11 +169,14 @@ function TelegramRoute() {
   const broadcasts = scopes.includes("broadcasts");
   // SP-B4: routine welcome settings for already-connected communities.
   const community = scopes.includes("community_management");
-  const count = [inbox, comms, broadcasts, community].filter(Boolean).length;
-  if (count > 1) return <PartnerManagedCommsPage inbox={inbox} comms={comms} broadcasts={broadcasts} community={community} />;
+  // SP-B5: Sticker Drops management for already-published packs.
+  const stickers = scopes.includes("sticker_tools");
+  const count = [inbox, comms, broadcasts, community, stickers].filter(Boolean).length;
+  if (count > 1) return <PartnerManagedCommsPage inbox={inbox} comms={comms} broadcasts={broadcasts} community={community} stickers={stickers} />;
   if (comms) return <PartnerLaunchCommsPage />;
   if (broadcasts) return <PartnerBroadcastPage />;
   if (community) return <PartnerCommunityPage />;
+  if (stickers) return <PartnerStickerDropsPage />;
   return <PartnerInboxPage />;
 }
 
@@ -216,9 +219,22 @@ function PartnerCommunityPage() {
   );
 }
 
-type PartnerTab = "inbox" | "audience" | "broadcasts" | "communities";
+function PartnerStickerDropsPage() {
+  return (
+    <div className="flex min-w-0 flex-col gap-6">
+      <PageHeader
+        eyebrow="Managed client project"
+        title="Sticker Drops"
+        description="Schedule this client's published stickers into its connected Telegram communities."
+      />
+      <PartnerStickerDropsPanel />
+    </div>
+  );
+}
 
-function PartnerManagedCommsPage({ inbox, comms, broadcasts, community }: { inbox: boolean; comms: boolean; broadcasts: boolean; community: boolean }) {
+type PartnerTab = "inbox" | "audience" | "broadcasts" | "communities" | "stickers";
+
+function PartnerManagedCommsPage({ inbox, comms, broadcasts, community, stickers }: { inbox: boolean; comms: boolean; broadcasts: boolean; community: boolean; stickers: boolean }) {
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
   const available: PartnerTab[] = [
@@ -226,6 +242,7 @@ function PartnerManagedCommsPage({ inbox, comms, broadcasts, community }: { inbo
     ...(comms ? (["audience"] as const) : []),
     ...(broadcasts ? (["broadcasts"] as const) : []),
     ...(community ? (["communities"] as const) : []),
+    ...(stickers ? (["stickers"] as const) : []),
   ];
   const tab: PartnerTab = (available as string[]).includes(String(search.tab)) ? (search.tab as PartnerTab) : (available[0] ?? "inbox");
   return (
@@ -239,11 +256,13 @@ function PartnerManagedCommsPage({ inbox, comms, broadcasts, community }: { inbo
         {comms ? <TabsTrigger value="audience" className="min-h-11">Launch Watch messages</TabsTrigger> : null}
         {broadcasts ? <TabsTrigger value="broadcasts" className="min-h-11">Broadcasts</TabsTrigger> : null}
         {community ? <TabsTrigger value="communities" className="min-h-11">Community</TabsTrigger> : null}
+        {stickers ? <TabsTrigger value="stickers" className="min-h-11">Sticker Drops</TabsTrigger> : null}
       </TabsList>
       {inbox ? <TabsContent value="inbox"><PartnerInboxPage /></TabsContent> : null}
       {comms ? <TabsContent value="audience"><PartnerLaunchCommsPage /></TabsContent> : null}
       {broadcasts ? <TabsContent value="broadcasts"><PartnerBroadcastPage /></TabsContent> : null}
       {community ? <TabsContent value="communities"><PartnerCommunityPage /></TabsContent> : null}
+      {stickers ? <TabsContent value="stickers"><PartnerStickerDropsPage /></TabsContent> : null}
     </Tabs>
   );
 }
