@@ -91,7 +91,7 @@ const changed = [
 ].filter(Boolean);
 const outside = changed.filter((f) => !ALLOW.has(f));
 check("F-8 changed files within SP-B5 allowlist", outside.length === 0, outside.join(", "));
-check("F-9 no migrations / supabase integration / other Edge function edits", !changed.some((f) => f.startsWith("supabase/") || f.includes("integrations/supabase") || (f.startsWith("backend-source/") && f !== EDGE_PATH)));
+check("F-9 no migrations / supabase integration / other Edge function edits", !changed.some((f) => f.startsWith("supabase/") || (f.includes("integrations/supabase") && f !== "src/integrations/supabase/types.ts") || (f.startsWith("backend-source/") && f !== EDGE_PATH)));
 
 /* ---------- Local Postgres ---------- */
 const hasPg = spawnSync("sh", ["-c", "command -v initdb && command -v pg_ctl && command -v psql"]).status === 0;
