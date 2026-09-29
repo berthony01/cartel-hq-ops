@@ -1,131 +1,107 @@
-# SP-A: Managed Client Access (Service Partner) — Plan
+# SP-B Audit and Plan — Scoped Service Partner Permissions
 
-Start gate verified: HEAD `92daddfc2e1a45707acfa95bbb3ce3f2b9aa7b27`.
+Start gate: HEAD `7c2fe7cd8e5c01756a3b7004f58f45bdf5feef8e` confirmed. Plan only; no edits, no SQL, no publish.
 
-## Decision: separate access table only, NOT `workspace_members` role='service_partner'
+## Findings from the audit (verified this turn)
 
-Live read-only audit shows:
-- `is_workspace_member(ws, uid)` = any row in `workspace_members` (no role filter). It is used by 16 RLS policies (including direct write policies) and 14 DB functions.
-- `is_workspace_operator` = owner/admin; used by 46 functions.
-- The only role in use today is `owner`.
+Every existing backend check for these six areas uses `is_workspace_operator` (owner/admin) or `is_workspace_member`. None of them call `partner_has_scope`. So today a partner is correctly denied everywhere, and **no existing function can be reused just by adding "OR partner_has_scope"** without editing owner/admin functions. That edit would be risky, so every scope needs its own new partner-only wrapper.
 
-A `service_partner` row in `workspace_members` would instantly pass `is_workspace_member` everywhere: read access to every workspace table plus the direct member write policies (project_profiles, brand_kits, media_assets, project_profile_videos, sticker_packs) and all 14 member-gated functions. Closing that would mean rewriting ~30 surfaces in one turn. That is the high-risk path.
+| Scope | Screens | How it works today | Current check | Dangerous parts (stay owner-only) | Can it be a wrapper? |
+|---|---|---|---|---|---|
+| project_inbox | `/telegram` Inbox (`ProjectInboxPanel`, `src/lib/project-inbox.ts`) | Only database functions (`list_project_inbox_conversations`, `get_project_inbox_conversation`, `list_project_conversation_messages`, `create_project_inbox_team_reply`, `update_project_conversation_status`, `acknowledge_project_inbox_delivery_uncertainty`, summary/settings, block/unblock). Messages go out through the existing `project-inbox-delivery` queue worker (service role). | operator | Settings changes (`set_project_inbox_*`), blocking members | **Yes.** Only database functions, and the worker reads the queue without depending on who wrote it. |
+| launch_watcher_comms | Launch Control audience/updates (`src/lib/launch-control.ts`) | `get_launch_*_summary` (member check), `create_launch_watcher_update`, `dismiss_launch_schedule_communication`, `notify_launch_watchers_official_contract` (operator) | member / operator | Registering or correcting the contract, changing launch status, anything to do with production or the chain | Reads yes. Sending is a live DM to all watchers, so it needs an approval step |
+| broadcasts | `BroadcastsPanel`, `GroupAnnouncementComposer`, `OfficialContractGroupBroadcastPanel` | Tables `telegram_group_announcements` plus the `telegram-group` Edge Function (requires sign-in) | operator, checked inside the Edge Function | Contract broadcasts, sending to every group | No. The Edge Function would have to change |
+| community_management | `/telegram` group cards, `CommunityWelcomeDialog`, `TelegramConnectionCard` | `telegram_community_settings` / `telegram_group_connections` plus the `telegram-group` Edge Function | operator | Connecting or removing groups, bot admin rights, removing the bot, choosing the Launch Watch launch | Partly, but needs the Edge Function |
+| sticker_tools | `/sticker-lab/*`, `StickerDropScheduleDialog` | Tables with member write policies, `archive/delete/restore_sticker_pack`, Edge Functions `sticker-ai`, `sticker-concepts`, `sticker-motion-ai`, `sticker-motion-telegram`, `sticker-drop-config` | member policies / operator / inside Edge Functions | Paid AI generation (usage cost), deleting packs, Telegram pack publishing | No. Several Edge Functions and member write policies are involved |
+| missions | `SocialMissionsPanel`, mission control, `social-mission-telegram` | `social_*` tables, `social-mission-telegram` Edge Function, server functions using `is_workspace_operator` | operator | X account connection, provider settings, paid metric reads | No. Needs the Edge Function and server functions |
 
-A separate table leaves every existing policy and function untouched: partners get **zero** access by default. Each scope then grants access on purpose, one surface at a time. Owner/admin/member behavior and the platform-owner bypass stay the same.
+## Recommended phase order
 
-## What SP-A delivers (the smallest safe unit)
+1. **SP-B1: project_inbox (reply, assign status, acknowledge)**. It is the smallest change (database only, no Edge Function), the most useful to resellers every day, and it keeps member privacy (the opaque member reference only).
+2. **SP-B2: launch_watcher_comms read-only** (audience and watch counts, update stats). Sending watcher updates follows as B2b with an owner-approval queue.
+3. **SP-B3: community_management safe settings** (welcome text, auto-delete timing, turning the welcome card on or off). Needs a partner check inside `telegram-group`, so a separate Edge Function review is required.
+4. **SP-B4: broadcasts**, staged as partner drafts first. Sending live requires owner approval (or an explicit per-grant "may send" flag in a later phase).
+5. **SP-B5: sticker_tools** without paid AI (pack metadata and drop scheduling). AI generation stays owner-only until partner usage accounting is designed.
+6. **SP-B6: missions content**. X connection and provider credentials stay owner-only permanently.
 
-1. The access relation: invite, accept, decline, revoke, and edit scopes.
-2. The Partner dashboard's "Managed Projects" and "Pending invitations" lists.
-3. The owner's "Service Partner access" panel in Settings.
-4. The project switcher lists managed projects, with a "Managed" badge, once access is accepted.
-5. One scope actually enforced end-to-end: `project_identity`. The partner can read and edit the Project Profile only through a server function.
-6. A single server helper that every later scope reuses.
+Live Telegram sending: none in B1 other than inbox replies, which are one-to-one answers to a member who started the conversation and use the existing queue with its idempotency. Mass sends (B2b and B4) stay behind owner approval.
 
-The other six scopes can be stored and edited in SP-A but grant nothing yet. The UI labels them "Coming soon". Each gets its own SP-B slice.
+## SP-B1 exact scope
 
-## Database (one additive migration)
+Partner with an active, accepted grant that includes `project_inbox` can:
+- see the summary counts, the conversation list and a conversation's details and messages
+- send a team reply (same duplicate-safe `client_request_id`, same blocked/resolved/unresolved-delivery guards)
+- change status (open / waiting / resolved)
+- acknowledge an uncertain delivery
 
-Table `public.partner_client_access`:
-- id, workspace_id (FK workspaces), partner_id (FK partners), partner_user_id
-- status: `pending | active | declined | revoked`
-- scopes `text[]`, checked by a validation trigger against the 7 allowed values
-- invited_by, invited_at, responded_at, revoked_at, revoked_by, created_at, updated_at
-- Partial unique index on (workspace_id, partner_id) where status in (pending, active)
-- Grants: SELECT to authenticated, ALL to service_role. No INSERT/UPDATE/DELETE grant to authenticated, so all writes go through RPCs.
-- RLS SELECT: the workspace owner (`workspaces.owner_id = auth.uid()`) or `partner_user_id = auth.uid()`.
-- No history is ever deleted. Revoke only changes status.
+Partner cannot: change inbox settings, block or unblock members, or see Telegram identifiers (already never returned).
 
-Helper functions (SECURITY DEFINER, `SET search_path TO ''`, fail closed):
-- `partner_has_scope(_workspace_id, _scope, _user_id default auth.uid())`: true only when the row is active, the scope is in `scopes`, the partner is still approved and not suspended, and Service Partner is enabled.
-- `partner_is_denied_area(_area)`: a constant deny list (billing, ownership, wallet_treasury, chain_deployment, platform_admin). It returns true for all partner callers, whatever their scopes.
+### Database (staged in `docs/sql/SP_B1_partner_project_inbox.sql`, not applied)
+New SECURITY DEFINER functions, each with `SET search_path TO ''`. Each one checks `auth.uid()` is not null, requires `partner_has_scope(auth.uid(), _workspace_id, 'project_inbox')`, and resolves the conversation using both `id` and `workspace_id`. PUBLIC and anon access is revoked; only `authenticated` can run them:
+- `partner_inbox_summary(_workspace_id)`
+- `partner_inbox_list_conversations(_workspace_id, _status, _limit)`
+- `partner_inbox_get_conversation(_workspace_id, _conversation_id)`
+- `partner_inbox_list_messages(_workspace_id, _conversation_id, _limit)`. Takes the workspace, unlike the owner version.
+- `partner_inbox_create_reply(_workspace_id, _conversation_id, _body, _client_request_id)`
+- `partner_inbox_update_status(_workspace_id, _conversation_id, _status)`
+- `partner_inbox_ack_uncertainty(_workspace_id, _conversation_id, _message_id)`
 
-RPCs (authenticated only, no anon grant, REVOKE from PUBLIC):
-- `owner_invite_service_partner(_workspace_id, _partner_ref, _scopes)`: caller must be `workspaces.owner_id`. The target must be an approved, active Service Partner. Rejects self-invites and duplicate pending/active invites.
-- `partner_respond_client_invite(_access_id, _accept boolean)`: caller must be the invited partner, and the invite must be pending.
-- `owner_revoke_service_partner(_access_id)`: owner only. Takes effect at once (status revoked). Touches no other table.
-- `owner_update_partner_scopes(_access_id, _scopes)`: owner only, for pending or active rows.
-- `list_my_managed_workspaces()`: returns id, name, and scopes for the caller's active rows only.
-- `list_my_partner_invites()` / `owner_list_partner_access(_workspace_id)`: return a display name only, with no emails or other personal data.
-- `partner_get_project_profile(_ws)` / `partner_update_project_profile(_ws, fields)`: require `partner_has_scope(_ws,'project_identity')`. They reuse the existing profile validation. They cannot publish or hide the profile or change its slug (owner-only, deferred).
+Implementation: move each owner function's core into a private internal helper (no grant to authenticated), then call it from a partner wrapper. **Do not change existing owner function bodies or grants.** If sharing code would mean editing the owner functions, copy the logic into the partner wrappers instead. The author display name for a partner reply is "Service Partner", without their email. No table, RLS, `workspace_members` or helper changes. The existing `partner_has_scope` already checks for an active partner, an active Service Partner track and a non-revoked grant.
 
-Partner suspension (existing owner-only suspend): `partner_has_scope` checks partner status, so a suspended partner loses all access at once without any row being deleted.
+Pre-build check (read-only): read the exact definitions of the 7 owner inbox functions and `partner_has_scope`. Also confirm that `project_conversation_messages` can record a team author that is not a workspace member (a foreign key or NOT NULL on the author could block it). If it cannot, STOP and report.
 
-**Unchanged:** `is_workspace_member`, `is_workspace_operator`, `can_use_project_tools`, `is_platform_owner`, `has_platform_unrestricted_access`, and all existing RLS policies. No existing policy needs tightening because partners are never added to `workspace_members`.
+### Frontend
+- `src/lib/partner-client-access.ts`: add `"project_inbox"` to `ACTIVE_PARTNER_SCOPES`, and add `/telegram` to allowed paths only when the grant has the scope (a scope-aware `isManagedAllowedPath(pathname, scopes)`).
+- `src/lib/project-inbox.ts`: add partner-mode wrappers that call the `partner_inbox_*` functions. Owner calls are unchanged.
+- `src/components/cartel/ProjectInboxPanel.tsx`: a `mode="partner"` prop that hides the settings toggles and the block/unblock control.
+- `src/routes/_authenticated/telegram.tsx`: when the workspace is managed, render only the partner Inbox panel (no groups, stickers, broadcasts or settings).
+- `src/components/cartel/ManagedAccessGuard.tsx`, `SidebarNav.tsx`: show nav items based on scope.
+- `src/components/cartel/ServicePartnerAccessPanel.tsx`: show "Project inbox" as active, not "coming soon".
 
-## Frontend
+Edge Functions: none changed. `project-inbox-delivery` is left as is.
 
-- `src/lib/partner-client-access.ts` (new): typed RPC wrappers and query keys.
-- `src/lib/workspace-context.tsx`: merge `list_my_managed_workspaces()` into the list as `{ ..., access: 'member' | 'managed', scopes }`. Owned projects come first. Stored selection is still checked against this merged list.
-- `src/components/cartel/WorkspaceSwitcher.tsx`: separate "Managed client projects" group with a badge.
-- `src/components/cartel/SidebarNav.tsx`: when the active project is managed, show only scope-backed items. In SP-A that is Project Profile plus an overview.
-- `src/routes/_authenticated/partners.tsx`: Managed Projects and Pending Invitations sections (accept/decline), for approved Service Partners only.
-- `src/components/cartel/ServicePartnerAccessPanel.tsx` (new), mounted in `src/routes/_authenticated/settings.tsx` for the owner only: invite by partner reference, scope checkboxes, edit, revoke with confirmation.
-- `src/routes/_authenticated/project-profile.tsx` (or its current file): when managed, read and save through the partner RPCs, with publish, hide and slug controls hidden.
-- Other gated pages, if a managed project is active: show "Your access to this project doesn't include this area" instead of empty or broken screens.
-
-## Flows
-
-```text
-Owner invites (scopes) -> pending -> Partner accepts -> active -> appears in switcher
-                                   -> Partner declines -> declined
-Owner edits scopes (pending/active) -> takes effect on next request
-Owner revokes -> revoked -> removed from switcher; server checks fail at once
-```
-
-## Backward-compatibility risks
-
-- Workspace list merge: owner-only users must see an identical list, so managed rows are added only from a separate RPC.
-- `selectWorkspace` invalidates all queries. Member-only pages may hit empty RLS results for managed projects, so they get guard components.
-- Existing partner summary and applications are unchanged.
-- The advisor baseline gains new SECURITY DEFINER findings (authenticated only). The migration notes must list them as reviewed.
-
-## Deferred to SP-B (intentionally)
-
-- Enforcing each remaining scope: community_management, broadcasts, launch_watcher_comms, sticker_tools, missions, project_inbox. Each needs its own RPC/Edge path and review.
-- Partner access to Edge Functions (telegram-group, sticker-ai, etc.).
-- Profile publish/hide and slug changes by partners.
-- Email or Telegram invite notifications, partner search directory, an audit log UI, expiring invites.
-- Any usage/billing attribution for work partners do.
-
-## Migration order
-
-1. Build turn: write the SQL as `docs/sql/SP_A_partner_client_access.sql` (staged, not applied) and put the frontend behind a feature check: if `list_my_managed_workspaces` is missing, fall back to today's behavior.
-2. Run the regressions on a throwaway local DB.
-3. With separate owner approval: apply the migration to production, verify grants/RLS/advisors, regenerate types.
-4. Publishing is a separate approval. The frontend is safe either way because it fails closed when the RPCs are absent.
-
-## Regression tests (`scripts/sp-a-managed-client-access-regression.ts`, local DB)
-
-- Only the owner can invite. An admin, member, stranger or the partner itself is rejected. Non-approved, suspended or affiliate-only partners are rejected.
-- Pending grants nothing. Accept only by the invited partner. A second accept or a replayed decline is rejected.
-- After accept: `partner_has_scope` is true only for granted scopes. `is_workspace_member` and `is_workspace_operator` stay false for the partner.
-- The partner cannot select or write projects, brand_kits, media_assets, sticker_packs, launches or billing tables directly (RLS still denies).
-- Denied areas stay false even with every scope granted. The partner cannot call any `is_workspace_operator`-gated RPC.
-- Revoke works at once, leaves the other tables' row counts unchanged, and does not re-grant.
-- Scope edits apply. Invalid scopes are rejected.
-- Suspending the partner removes access.
-- The platform-owner bypass is unchanged. anon cannot run any SP-A RPC.
-- Existing suites still pass: Service Partner 75/0, Partner 1A/1B, public discovery (D-24 allowlist update), commercial entitlements.
-
-Smoke tests (after approval, live): owner invites the test partner, the partner accepts, the project appears as Managed, the profile edit saves, the partner is blocked from billing and Launch Control, the owner revokes, and the project disappears.
-
-## Build-turn file allowlist
-
-- docs/sql/SP_A_partner_client_access.sql (new)
-- docs/SP_A_MANAGED_CLIENT_ACCESS_RUNBOOK.md (new)
-- src/lib/partner-client-access.ts (new)
-- src/components/cartel/ServicePartnerAccessPanel.tsx (new)
-- src/components/cartel/ManagedAccessGuard.tsx (new)
-- src/lib/workspace-context.tsx
-- src/components/cartel/WorkspaceSwitcher.tsx
+## Strict allowlist for SP-B1
+- docs/sql/SP_B1_partner_project_inbox.sql
+- docs/SP_B1_PARTNER_INBOX_RUNBOOK.md
+- src/lib/partner-client-access.ts
+- src/lib/project-inbox.ts
+- src/components/cartel/ProjectInboxPanel.tsx
+- src/components/cartel/ManagedAccessGuard.tsx
 - src/components/cartel/SidebarNav.tsx
-- src/components/cartel/AppShell.tsx (guard mount only)
-- src/routes/_authenticated/partners.tsx
-- src/routes/_authenticated/settings.tsx
-- Project Profile route/component file (exact path confirmed at build start)
-- scripts/sp-a-managed-client-access-regression.ts (new)
+- src/components/cartel/ServicePartnerAccessPanel.tsx
+- src/routes/_authenticated/telegram.tsx
+- scripts/sp-b1-partner-inbox-regression.ts
+- scripts/sp-a-managed-client-access-regression.ts (update only the "project_inbox inactive" assertion)
 - scripts/public-discovery-seo-regression.ts (D-24 allowlist only)
 - roadmap.md
+- src/integrations/supabase/types.ts only after migration, via regeneration
 
-Forbidden: Stripe/billing, affiliate, launcher/chain/treasury, Edge Functions, existing RLS/helpers, owner bypass, publish.
+## Regression and smoke tests
+Regression (throwaway local Postgres, same as SP-A):
+- a partner with the scope can list, read, reply, change status and acknowledge; the reply is queued once, and replaying with the same request id returns the original
+- a partner without the scope, a revoked, declined or pending grant, a suspended partner, or a closed Service Partner track gets denied on every function
+- a conversation from another workspace is denied
+- no function returns a Telegram id, chat id, username or contact_id
+- partners cannot call settings or block functions (denied by operator check)
+- owner functions are byte-identical to the baseline definitions
+- anon has no execute; PUBLIC is revoked; `search_path` is empty
+- `is_workspace_member` and `is_workspace_operator` are unchanged; `workspace_members` gets no rows added
+- owner bypass: platform owner inbox is unaffected
+
+Also run: typecheck, build, SP-A, Service Partner, public discovery, Partner 1A/1B suites, `git diff --check`.
+
+Live smoke (two accounts, after approval): partner sees only the Inbox for the managed project → replies → the member receives it once → owner revokes → partner is denied immediately and the history is kept.
+
+## Production activation order
+1. Build and stage (repo only), then independent diff review.
+2. CP-SPB1-PUBLISH: publish the frontend. It fails closed while the functions are missing: the partner Inbox shows as unavailable.
+3. CP-SPB1-SQL: apply the staged SQL. Then check the advisor delta (only the 7 new authenticated SECURITY DEFINER findings), grants and function definitions.
+4. Regenerate types (types-only turn).
+5. Two-account browser smoke.
+Rollback: revoke execute on the `partner_inbox_*` functions. The owner Inbox is unaffected.
+
+## Permanently owner-only (every phase)
+Billing and subscriptions, workspace ownership or transfer, invites and scope edits for Service Partners, wallets/treasury/signers/private keys, production chain deployment and launch execution, contract registration and correction, launch status changes, platform admin and owner controls, Telegram group connection and removal and bot admin, inbox settings and member blocking, X account and provider credentials, paid AI generation (until designed), Affiliate program.
+
+## STOP conditions
+Stop if SP-B1 needs any of these: an edit to an owner inbox function, a change to `is_workspace_*`, a `workspace_members` row, an Edge Function change, or a table or constraint change to record a partner author.
