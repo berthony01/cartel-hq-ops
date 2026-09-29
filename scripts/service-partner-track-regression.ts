@@ -85,6 +85,7 @@ if (!hasPg) {
       CREATE FUNCTION public.is_workspace_member(w uuid, u uuid) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
       GRANT EXECUTE ON FUNCTION public.is_platform_owner(uuid) TO authenticated;
       INSERT INTO auth.users VALUES ('00000000-0000-0000-0000-00000000000a'),('00000000-0000-0000-0000-00000000000b'),('00000000-0000-0000-0000-00000000000c'),('00000000-0000-0000-0000-00000000000d');
+      CREATE FUNCTION public.set_updated_at() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.updated_at := now(); RETURN NEW; END $$;
       INSERT INTO public.owners VALUES ('00000000-0000-0000-0000-00000000000a');`;
     const s1 = psql(shim);
     const s2 = s1.ok ? psql(read("docs/sql/PARTNER_1A_foundation.sql")) : s1;
@@ -93,7 +94,7 @@ if (!hasPg) {
     check("DB-1 staged track separation applies cleanly", s3.ok, s3.err.slice(0, 400));
 
     const OWNER = "00000000-0000-0000-0000-00000000000a", U1 = "00000000-0000-0000-0000-00000000000b", U2 = "00000000-0000-0000-0000-00000000000c", U3 = "00000000-0000-0000-0000-00000000000d";
-    const as = (uid: string | null, sql: string) => psql(`BEGIN; SET LOCAL ROLE ${uid ? "authenticated" : "anon"}; SELECT set_config('request.jwt.claims', '${uid ? JSON.stringify({ sub: uid, role: "authenticated" }) : "{}"}', true);\n${sql}\nCOMMIT;`);
+    const as = (uid: string | null, sql: string) => psql(`BEGIN; SET LOCAL ROLE ${uid ? "authenticated" : "anon"}; SET LOCAL request.jwt.claims = '${uid ? JSON.stringify({ sub: uid, role: "authenticated" }) : "{}"}';\n${sql}\nCOMMIT;`);
     const expectErr = (r: { ok: boolean; err: string }, code: string) => !r.ok && r.err.includes(code);
     const PITCH = "'Setup and training for launch teams; five years community ops; small projects; X and Telegram.'";
 
