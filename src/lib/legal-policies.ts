@@ -236,7 +236,7 @@ export const POLICY_DRAFTS: Record<PolicyType, PolicyDraft> = {
       {
         heading: "Marketing and prohibited conduct",
         body: [
-          "You may market only capabilities that are actually available in CARTEL HQ. You must not make false, misleading or unsubstantiated claims, including claims about investment returns, token safety, token price, guaranteed results or earnings.",
+          "You may market only capabilities that are actually available in CARTEL HQ. You must not make false, misleading or unsubstantiated claims, such as claims about investment returns, token safety, token price, guaranteed results or earnings.",
           "Prohibited: spam or unsolicited messages; impersonation; fake engagement; market manipulation or wash trading; sanctions evasion; and any unlawful conduct.",
         ],
       },
