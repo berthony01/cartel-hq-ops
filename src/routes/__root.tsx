@@ -113,12 +113,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: "https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Sora:wght@400;500;600;700&display=swap",
       },
       { rel: "icon", href: "/favicon.svg?v=2", type: "image/svg+xml" },
-      {
-        rel: "icon",
-        type: "image/png",
-        sizes: "32x32",
-        href: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAsTAAALEwEAmpwYAAAC60lEQVRYhcVXTU8TURSd3RtKHShtBdECbamdN7HBiIkREVQ2gImRygrdmPgRIzEmRjdGwZjwYdIQo0YlUbDadkRYCOwQiu4kIpaO8Rf4L5hcc4dWKNP5gAztS+6q03vOe/e++85hmC1rdYJvlRLCiCTSmXRCmLMiMBfmxNyM1voTD1an4nRREgX4EeXlT0M++c0DL1gRmAtzYu5UnCYRKwd8ZSKwPxWjf5fG+bWedjdwe1gghFgamLOnww2IgVg5JFJxuog/HKrnLAfeGqEAt04iThc2ai4KgDvfbfBsXOxwA2L+FmkLg82B9TE69lIbC2ebnfDkVg3MjtTDz/cUVuMCfH0dhLE+L9zorgLfAbvpcixHeTkt0ggjicIsNoneHy60ueDLi4MKa71AQkO9HtjnthmSmBzyy1KCTjOSSJPv+r15PyrjSuDZ3VpD4K3xbTQITQ3lugQQE7E1CXB2FmKPfdsGz8ZylEIj5XZOYLDXYwiSilHN30bv1ymb2BGB1kaHZuLn92rhxOFycFXYwGZjlca7cr4Ski+DpsENCUwMqo9+5QOF9qYKzYRORwlE+32mwHUJhAJc3p2HzzhNXS8z4LoEroUrVeCTw35gWWuHkSaByO0aFYHL5/ZaCq5LYKzPqyJw6qijcATePiwygUixS3C1S92EU4VswpDGNexucxXmGhJC4OOAehD9ipkYRI8sGESEEGg5Up73FNIJQdEDx0JlYC9lFY3g92RG8SsLRzEhBAZueky9/7vyGJHMc4xHWrTnmGSa6ukd9bU0CpRpxxvKTJdgBuWR3sddp50wZ0KSoT7A0lW5jCXZ1LB/LS3Sz9sSpZ3NTkXzTUfqlSP+PsYrzYfm43q4CuqqS7cvSlezsryjcLL8UmdGlifoyawxSaJZwCFUMGMSo/O5vjBjzdA07JY1w50vjfOyypoxG+Z0Yf0K8fLksN8yc4q5MGemUedV4JsX2iVsDjQNltlzzCXSyP+ab1r/ANUJhtYN+JfqAAAAAElFTkSuQmCC",
-      },
+{ rel: "icon", href: "/favicon.svg?v=2", type: "image/svg+xml" },
+      { rel: "icon", href: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQBAMAAADt3eJSAAAAMFBMVEW1kCTWqCi7lCZMaXG6kyYHBwfTpykgGwuFaRxnUheSdB4TEAk1Kw6uiiNOPxNpVBjvFO0ZAAAABXRSTlPfLMAAwV7mmtkAAAAJcEhZcwAACxMAAAsTAQCanBgAAABaSURBVAiZYzB0YGBgYGARZhAoDQ0NDQ1nZHAPjX75PDS0iIE19FtaWndoAANrRFpaWj6IcSz3aFUriNGWDlIdwMB6bSk6Ay4FVwzXDjNQHWYF3FJDBZAzmIQBTjAri4paDsEAAAAASUVORK5CYII=", type: "image/png", sizes: "16x16" },
     ],
   }),
 
