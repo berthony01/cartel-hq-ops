@@ -1,57 +1,131 @@
-# CARTEL HQ Partner Program Phase 1B — Staging Plan (repo only)
+# SP-A: Managed Client Access (Service Partner) — Plan
 
-## Scope and hard boundaries
-Repository and preview build only. No publish, no Supabase apply or write, no Edge deploy, no Stripe calls, no changes to secrets, webhooks, prices, products, subscriptions or the customer portal. No PCART, launcher, liquidity or Telegram changes. The owner bypass stays in place. No active terms seed. Legal operator fields stay as placeholders.
+Start gate verified: HEAD `92daddfc2e1a45707acfa95bbb3ce3f2b9aa7b27`.
 
-This request touches legal, schema/RLS, financial ingestion, the webhook and UI, so it is HIGH RISK. It is split into five atomic stages. Each stage ends with its own verification and a checkpoint, so every diff can be reviewed on its own. I run the stages in order and stop at each checkpoint for acceptance.
+## Decision: separate access table only, NOT `workspace_members` role='service_partner'
 
-## Stage 1B-1: Legal pages and policy acceptance foundation
-- New public pages `/legal/terms`, `/legal/privacy`, `/legal/refunds` and `/legal/partner-agreement`, in the noir/gold system, each with its own head().
-- A "DRAFT — NOT EFFECTIVE" banner shows whenever no active policy version exists.
-- Visible placeholders: [LEGAL OPERATOR NAME], [MAILING ADDRESS], [LEGAL CONTACT EMAIL], [STATE OF FORMATION], [GOVERNING LAW]. "Cartel HQ" is never used as a legal entity.
-- Content follows the brief: refund rules, crypto and third-party risk, privacy categories without an unverified "no sale" claim, and the full partner agreement (20% for 12 invoices, 30-day window, 45-day hold, $50 minimum, W-9 handled externally, negative carry-forward).
-- Footer links on the homepage, auth pages and app shell.
-- Staged migration file (not applied): `policy_documents` (type, version, sha256 content hash, status draft/active/retired, placeholder_free flag) and `policy_acceptances` (user, document type, version, hash, accepted_at, source; no IP). Includes RLS, grants, and owner-only `owner_activate_policy_version(_type,_version,_confirm)`. That function refuses activation if the content contains `[` placeholders or the confirmation string does not match.
-- Signup and pre-checkout consent checkboxes block the action until checked. Existing users are prompted only when the effective version differs from the version they accepted. The UI fails closed: no active policy means the draft notice shows and acceptance is recorded as draft-free.
-- Stripe Checkout terms consent sits behind a server flag `CARTEL_HQ_STRIPE_TERMS_CONSENT_ENABLED` in the staged billing-checkout source. It defaults to off. No secret is set.
+Live read-only audit shows:
+- `is_workspace_member(ws, uid)` = any row in `workspace_members` (no role filter). It is used by 16 RLS policies (including direct write policies) and 14 DB functions.
+- `is_workspace_operator` = owner/admin; used by 46 functions.
+- The only role in use today is `owner`.
 
-## Stage 1B-2: Referral click token integrity
-- Staged migration: `partner_referral_clicks` (sha256 hash of the token only, partner_id, terms_version, created_at/expires_at from server time, claimed_by/claimed_at). No IP, fingerprint or PII. RLS is on with no client policies. Includes indexes on expires_at and on unclaimed rows.
-- New RPC `claim_referral_click(_token)` uses auth.uid(), server time and an atomic `UPDATE … WHERE claimed_at IS NULL AND expires_at > now()`. First valid claim wins, and self-referral is rejected.
-- EXECUTE on legacy `record_referral_attribution` is revoked from PUBLIC, anon and authenticated.
-- `bind_referral_to_workspace` semantics are preserved.
-- Edge source `backend-source/edge-functions/partner-referral-capture/` (verify_jwt=false) has narrow CORS, strict validation of the 10-character code, generic responses, a per-code bucket rate-limit design, and never logs tokens. It is not deployed.
-- The browser stores only `{token, expiresAt}`. Client timestamps are ignored.
+A `service_partner` row in `workspace_members` would instantly pass `is_workspace_member` everywhere: read access to every workspace table plus the direct member write policies (project_profiles, brand_kits, media_assets, project_profile_videos, sticker_packs) and all 14 member-gated functions. Closing that would mean rewriting ~30 surfaces in one turn. That is the high-risk path.
 
-## Stage 1B-3: Commission accounting (database)
-- Staged migration adds these ledger columns: stripe_environment, source_kind (invoice/refund/dispute/manual), invoice_ref, charge_ref, refund_ref, dispute_ref, source_event_ref, entry_kind (accrual/reversal/restoration/adjustment), and amounts in integer cents plus currency. Unique idempotency keys cover (environment, source_kind, source ref, entry_kind).
-- The table stays append-only through the existing immutability triggers.
-- New SECURITY DEFINER functions, all service_role only with pinned search_path and PUBLIC/anon/authenticated revoked:
-  - `partner_accrue_invoice_commission`: base is the mapped subscription-line amount after discounts, excluding tax, credits and non-subscription lines. Accrues 20% using the snapshotted terms, capped at 12 paid invoices per referred workspace.
-  - `partner_apply_refund_state`: creates a proportional reversal when a refund is pending or succeeded, and a restoration when a refund fails or is canceled.
-  - `partner_apply_dispute_state`: reverses on created, restores only when won.
-- Overlap guard: total reversals per invoice are capped at the original accrual, so a refund and a dispute on the same dollars cannot reverse twice.
-- A negative balance carries forward and nothing is deleted.
+A separate table leaves every existing policy and function untouched: partners get **zero** access by default. Each scope then grants access on purpose, one surface at a time. Owner/admin/member behavior and the platform-owner bypass stay the same.
 
-## Stage 1B-4: Webhook source and UI
-- `stripe-billing-webhook` source adds invoice.paid (commission), refund.created/updated/failed and charge.dispute.created/closed.
-- Unchanged: signature verification, live/test separation, the shared-account filter, entitlement apply and event idempotency.
-- Commission runs after the entitlement apply, and a commission failure never fails billing.
-- checkout.session.completed never creates commission.
-- Not deployed; the URL and secret are unchanged.
-- `/partners` shows draft economics, the active terms version, token status, and held/available/paid/reversed balances with transparent ledger entry kinds. Service-only partners see "No Cartel commission".
-- Owner console requires typed confirmation for terms activation, policy activation and mark-paid.
+## What SP-A delivers (the smallest safe unit)
 
-## Stage 1B-5: Tests and release checklist
-- `scripts/partner-program-1b-regression.ts` is a deterministic pure-logic simulator that mirrors the SQL math. It also runs static SQL and security checks.
-- It covers duplicate and out-of-order events, partial and multiple refunds, failed refunds, disputes won and lost, refund-plus-dispute overlap, negative balance after payout, direct/service-only/no attribution, self-referral, stale or claimed tokens, environment/price/metadata mismatch, the 12-invoice cap, the placeholder activation block, acceptance versioning, and the owner bypass.
-- The existing four regressions' manifests are unchanged, because the new migrations live only as staged docs SQL until applied.
-- `docs/PARTNER_1B_RELEASE_CHECKLIST.md` marks each of these BLOCKED/NOT DONE: legal review, legal operator fields, geography, Texas sales tax/Stripe Tax, Stripe Terms URL, webhook event subscription update, DB migrations, Edge deploys, active terms seed, smoke tests and publish approval.
+1. The access relation: invite, accept, decline, revoke, and edit scopes.
+2. The Partner dashboard's "Managed Projects" and "Pending invitations" lists.
+3. The owner's "Service Partner access" panel in Settings.
+4. The project switcher lists managed projects, with a "Managed" badge, once access is accepted.
+5. One scope actually enforced end-to-end: `project_identity`. The partner can read and edit the Project Profile only through a server function.
+6. A single server helper that every later scope reuses.
 
-## Technical details
-- Staged SQL goes to `docs/sql/PARTNER_1B_*.sql`, not `supabase/migrations/`, to avoid accidental apply, matching the C1/C2/C3A pattern.
-- UI that depends on the new tables uses untyped RPC wrappers with fail-closed handling until the types regenerate after an approved apply.
-- Verification for each stage: git diff --check, tsgo, build, the new 1B regression, the partner 1A regression, and the three commercial regressions.
+The other six scopes can be stored and edited in SP-A but grant nothing yet. The UI labels them "Coming soon". Each gets its own SP-B slice.
 
-## Stop point
-Stop after each stage checkpoint. Nothing is published or applied live.
+## Database (one additive migration)
+
+Table `public.partner_client_access`:
+- id, workspace_id (FK workspaces), partner_id (FK partners), partner_user_id
+- status: `pending | active | declined | revoked`
+- scopes `text[]`, checked by a validation trigger against the 7 allowed values
+- invited_by, invited_at, responded_at, revoked_at, revoked_by, created_at, updated_at
+- Partial unique index on (workspace_id, partner_id) where status in (pending, active)
+- Grants: SELECT to authenticated, ALL to service_role. No INSERT/UPDATE/DELETE grant to authenticated, so all writes go through RPCs.
+- RLS SELECT: the workspace owner (`workspaces.owner_id = auth.uid()`) or `partner_user_id = auth.uid()`.
+- No history is ever deleted. Revoke only changes status.
+
+Helper functions (SECURITY DEFINER, `SET search_path TO ''`, fail closed):
+- `partner_has_scope(_workspace_id, _scope, _user_id default auth.uid())`: true only when the row is active, the scope is in `scopes`, the partner is still approved and not suspended, and Service Partner is enabled.
+- `partner_is_denied_area(_area)`: a constant deny list (billing, ownership, wallet_treasury, chain_deployment, platform_admin). It returns true for all partner callers, whatever their scopes.
+
+RPCs (authenticated only, no anon grant, REVOKE from PUBLIC):
+- `owner_invite_service_partner(_workspace_id, _partner_ref, _scopes)`: caller must be `workspaces.owner_id`. The target must be an approved, active Service Partner. Rejects self-invites and duplicate pending/active invites.
+- `partner_respond_client_invite(_access_id, _accept boolean)`: caller must be the invited partner, and the invite must be pending.
+- `owner_revoke_service_partner(_access_id)`: owner only. Takes effect at once (status revoked). Touches no other table.
+- `owner_update_partner_scopes(_access_id, _scopes)`: owner only, for pending or active rows.
+- `list_my_managed_workspaces()`: returns id, name, and scopes for the caller's active rows only.
+- `list_my_partner_invites()` / `owner_list_partner_access(_workspace_id)`: return a display name only, with no emails or other personal data.
+- `partner_get_project_profile(_ws)` / `partner_update_project_profile(_ws, fields)`: require `partner_has_scope(_ws,'project_identity')`. They reuse the existing profile validation. They cannot publish or hide the profile or change its slug (owner-only, deferred).
+
+Partner suspension (existing owner-only suspend): `partner_has_scope` checks partner status, so a suspended partner loses all access at once without any row being deleted.
+
+**Unchanged:** `is_workspace_member`, `is_workspace_operator`, `can_use_project_tools`, `is_platform_owner`, `has_platform_unrestricted_access`, and all existing RLS policies. No existing policy needs tightening because partners are never added to `workspace_members`.
+
+## Frontend
+
+- `src/lib/partner-client-access.ts` (new): typed RPC wrappers and query keys.
+- `src/lib/workspace-context.tsx`: merge `list_my_managed_workspaces()` into the list as `{ ..., access: 'member' | 'managed', scopes }`. Owned projects come first. Stored selection is still checked against this merged list.
+- `src/components/cartel/WorkspaceSwitcher.tsx`: separate "Managed client projects" group with a badge.
+- `src/components/cartel/SidebarNav.tsx`: when the active project is managed, show only scope-backed items. In SP-A that is Project Profile plus an overview.
+- `src/routes/_authenticated/partners.tsx`: Managed Projects and Pending Invitations sections (accept/decline), for approved Service Partners only.
+- `src/components/cartel/ServicePartnerAccessPanel.tsx` (new), mounted in `src/routes/_authenticated/settings.tsx` for the owner only: invite by partner reference, scope checkboxes, edit, revoke with confirmation.
+- `src/routes/_authenticated/project-profile.tsx` (or its current file): when managed, read and save through the partner RPCs, with publish, hide and slug controls hidden.
+- Other gated pages, if a managed project is active: show "Your access to this project doesn't include this area" instead of empty or broken screens.
+
+## Flows
+
+```text
+Owner invites (scopes) -> pending -> Partner accepts -> active -> appears in switcher
+                                   -> Partner declines -> declined
+Owner edits scopes (pending/active) -> takes effect on next request
+Owner revokes -> revoked -> removed from switcher; server checks fail at once
+```
+
+## Backward-compatibility risks
+
+- Workspace list merge: owner-only users must see an identical list, so managed rows are added only from a separate RPC.
+- `selectWorkspace` invalidates all queries. Member-only pages may hit empty RLS results for managed projects, so they get guard components.
+- Existing partner summary and applications are unchanged.
+- The advisor baseline gains new SECURITY DEFINER findings (authenticated only). The migration notes must list them as reviewed.
+
+## Deferred to SP-B (intentionally)
+
+- Enforcing each remaining scope: community_management, broadcasts, launch_watcher_comms, sticker_tools, missions, project_inbox. Each needs its own RPC/Edge path and review.
+- Partner access to Edge Functions (telegram-group, sticker-ai, etc.).
+- Profile publish/hide and slug changes by partners.
+- Email or Telegram invite notifications, partner search directory, an audit log UI, expiring invites.
+- Any usage/billing attribution for work partners do.
+
+## Migration order
+
+1. Build turn: write the SQL as `docs/sql/SP_A_partner_client_access.sql` (staged, not applied) and put the frontend behind a feature check: if `list_my_managed_workspaces` is missing, fall back to today's behavior.
+2. Run the regressions on a throwaway local DB.
+3. With separate owner approval: apply the migration to production, verify grants/RLS/advisors, regenerate types.
+4. Publishing is a separate approval. The frontend is safe either way because it fails closed when the RPCs are absent.
+
+## Regression tests (`scripts/sp-a-managed-client-access-regression.ts`, local DB)
+
+- Only the owner can invite. An admin, member, stranger or the partner itself is rejected. Non-approved, suspended or affiliate-only partners are rejected.
+- Pending grants nothing. Accept only by the invited partner. A second accept or a replayed decline is rejected.
+- After accept: `partner_has_scope` is true only for granted scopes. `is_workspace_member` and `is_workspace_operator` stay false for the partner.
+- The partner cannot select or write projects, brand_kits, media_assets, sticker_packs, launches or billing tables directly (RLS still denies).
+- Denied areas stay false even with every scope granted. The partner cannot call any `is_workspace_operator`-gated RPC.
+- Revoke works at once, leaves the other tables' row counts unchanged, and does not re-grant.
+- Scope edits apply. Invalid scopes are rejected.
+- Suspending the partner removes access.
+- The platform-owner bypass is unchanged. anon cannot run any SP-A RPC.
+- Existing suites still pass: Service Partner 75/0, Partner 1A/1B, public discovery (D-24 allowlist update), commercial entitlements.
+
+Smoke tests (after approval, live): owner invites the test partner, the partner accepts, the project appears as Managed, the profile edit saves, the partner is blocked from billing and Launch Control, the owner revokes, and the project disappears.
+
+## Build-turn file allowlist
+
+- docs/sql/SP_A_partner_client_access.sql (new)
+- docs/SP_A_MANAGED_CLIENT_ACCESS_RUNBOOK.md (new)
+- src/lib/partner-client-access.ts (new)
+- src/components/cartel/ServicePartnerAccessPanel.tsx (new)
+- src/components/cartel/ManagedAccessGuard.tsx (new)
+- src/lib/workspace-context.tsx
+- src/components/cartel/WorkspaceSwitcher.tsx
+- src/components/cartel/SidebarNav.tsx
+- src/components/cartel/AppShell.tsx (guard mount only)
+- src/routes/_authenticated/partners.tsx
+- src/routes/_authenticated/settings.tsx
+- Project Profile route/component file (exact path confirmed at build start)
+- scripts/sp-a-managed-client-access-regression.ts (new)
+- scripts/public-discovery-seo-regression.ts (D-24 allowlist only)
+- roadmap.md
+
+Forbidden: Stripe/billing, affiliate, launcher/chain/treasury, Edge Functions, existing RLS/helpers, owner bypass, publish.
