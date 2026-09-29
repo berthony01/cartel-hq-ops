@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { SERVICE_PARTNER_DISCLOSURE } from "@/lib/legal-policies";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -62,7 +63,7 @@ const SERVICE_RULES = [
   "Never request or store seed phrases, private keys, CARTEL HQ passwords or payment-card data.",
   "Market only features that are actually available, and use the required disclosure near every promotion.",
 ] as const;
-const SERVICE_DISCLOSURE = "Independent CARTEL HQ Service Partner. Services are provided by [Partner Name], not by CARTEL HQ. Results and earnings are not guaranteed.";
+const SERVICE_DISCLOSURE = SERVICE_PARTNER_DISCLOSURE;
 const CLIENT_WORKFLOW = [
   "Agree scope, price and responsibilities with your client in your own written agreement.",
   "The client creates or signs in to its own CARTEL HQ account and project, and chooses its own plan.",

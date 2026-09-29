@@ -405,5 +405,5 @@ export async function sha256Hex(text: string): Promise<string> {
  */
 export const SERVICE_PARTNER_AGREEMENT_V2_TEXT: string = policyContent(POLICY_DRAFTS.partner_agreement);
 /** SHA-256 (hex, UTF-8) of the canonical texts; embedded in the staged migration. */
-export const SERVICE_PARTNER_AGREEMENT_V2_SHA256 = "__AGREEMENT_HASH__";
-export const SERVICE_PARTNER_DISCLOSURE_SHA256 = "__DISCLOSURE_HASH__";
+export const SERVICE_PARTNER_AGREEMENT_V2_SHA256 = "02e337dd2ae09436813e5d69ac402f9cc03d80fc79336d4cc7713e868cd7508e";
+export const SERVICE_PARTNER_DISCLOSURE_SHA256 = "2d8b74957f7f4d66dcd262a49d3ae8a331c8084b8b11390bddae40f7363df91e";
