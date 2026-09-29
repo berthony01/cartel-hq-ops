@@ -232,7 +232,7 @@ if (!hasPg) {
     check("DB-11 removed-bot group marked not operational", groups.out.split("\n").some((l) => l.includes("Client Removed") && l.includes('"operational":false')) && groups.out.split("\n").some((l) => l.includes("Client Main") && l.includes('"operational":true')));
     const hist = as(SP, `SELECT row_to_json(x)::text FROM public.partner_list_group_broadcasts('${WS}', 10) x;`);
     check("DB-12 history: OPERATOR_TEXT only, own workspace only", hist.ok && hist.out.includes("owner post") && hist.out.includes("partner post") && !hist.out.includes("contract post") && !hist.out.includes("other post"));
-    check("DB-13 history hides chat id, message id, requested_by UUID", hist.ok && !/-100|"telegram_message_id"|42|requested_by|00000000-0000-0000-0000-00000000000/.test(hist.out));
+    check("DB-13 history hides chat id, message id, requested_by UUID", hist.ok && !/-100|telegram_message_id|telegram_chat_id|requested_by|00000000-0000-0000-0000-00000000000/.test(hist.out) && hist.out.split("\n").every((l) => Object.keys(JSON.parse(l)).sort().join(",") === "actor_kind,announcement_id,delivery_kind,group_title,message_text,requested_at,sent_at,status"));
     check("DB-14 history actor_kind derived, SENDING shown as AMBIGUOUS", hist.out.includes('"actor_kind":"project_team"') && hist.out.includes('"actor_kind":"you"') && hist.out.includes('"status":"AMBIGUOUS"'));
     check("DB-15 history limit clamp", as(SP, `SELECT count(*) FROM public.partner_list_group_broadcasts('${WS}', 0);`).out === "1" && as(SP, `SELECT count(*) FROM public.partner_list_group_broadcasts('${WS}', 500);`).out === "2");
 
