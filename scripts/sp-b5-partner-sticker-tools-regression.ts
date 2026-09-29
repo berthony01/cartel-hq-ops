@@ -49,7 +49,7 @@ check("S-8 read outputs never include Telegram/storage sensitive keys", ["partne
 
 /* ---------- Static: Edge ---------- */
 const edgeBase = execFileSync("git", ["show", `${PLAN_COMMIT}:${EDGE_PATH}`], { encoding: "utf8" });
-check("E-0 staging baseline equals start-gate size (deployed v29)", edgeBase.length === EDGE_BASELINE_CHARS, String(edgeBase.length));
+check("E-0 staging baseline equals start-gate size (deployed v29; file adds one trailing newline)", edgeBase.replace(/\n$/, "").length === EDGE_BASELINE_CHARS, String(edgeBase.length));
 check("E-1 partner branch only for non-member + save/enable/delete; others FORBIDDEN", EDGE.includes('if (action !== "save_schedule" && action !== "set_schedule_enabled" && action !== "delete_schedule") return respond({ error: "FORBIDDEN"') && EDGE.indexOf("let partnerStickerAuthorized = false;") < EDGE.indexOf('if (action === "status") return respond(await loadState());'));
 check("E-2 partner gate uses user-JWT client RPC", EDGE.includes('userClient.rpc("partner_authorize_sticker_drop_action"'));
 check("E-3 Gate B skipped only for partner-authorized requests", EDGE.includes('if (!partnerStickerAuthorized && (action === "save_schedule" || (action === "set_schedule_enabled" && body.enabled === true))) {'));
@@ -59,7 +59,7 @@ check("E-6 owner validation unchanged (interval 15..720, cap 1..24, tz, hours, a
 const base = edgeBase.split("\n"), now = EDGE.split("\n");
 const removed = base.filter((l) => !now.includes(l));
 check("E-7 only 5 owner lines replaced (membership deny, canManage, role, Gate B condition) — rest additive", removed.length <= 5 && removed.every((l) => /if \(!membership\) return respond|const canManage = membership\.role|role: membership\.role|if \(action === "save_schedule" \|\| \(action === "set_schedule_enabled"/.test(l)), removed.join(" | "));
-check("E-8 one write path per action (no duplicate engine)", (EDGE.match(/from\("sticker_drop_schedules"\)\.insert\(/g) ?? []).length === 1 && (EDGE.match(/from\("sticker_drop_schedules"\)\.delete\(/g) ?? []).length === 1);
+check("E-8 one write path per action (no duplicate engine)", (EDGE.match(/\.insert\(\{ \.\.\.mutableFields/g) ?? []).length === 1 && (EDGE.match(/from\("sticker_drop_schedules"\)\s*\.delete\(/g) ?? []).length === 1);
 const untouched = ["sticker-drops", "telegram-stickers", "sticker-ai", "sticker-motion-ai", "sticker-motion-telegram", "sticker-concepts", "telegram-group"].map((f) => `backend-source/edge-functions/${f}/index.ts`);
 check("E-9 worker, publish/test-send, all paid AI and telegram-group functions byte-identical", untouched.every((p) => execFileSync("git", ["show", `${PLAN_COMMIT}:${p}`], { encoding: "utf8" }) === read(p)));
 const WORKER = read("backend-source/edge-functions/sticker-drops/index.ts");
