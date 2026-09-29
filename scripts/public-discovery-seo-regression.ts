@@ -72,8 +72,21 @@ const allowed = new Set([
   "scripts/partner-program-1b-1-regression.ts",
   "roadmap.md",
   "src/routeTree.gen.ts",
+  // Service Partner-only launch staging (approved follow-up scope)
+  "docs/sql/SERVICE_PARTNER_track_separation.sql",
+  "docs/SERVICE_PARTNER_PROGRAM_LAUNCH_RUNBOOK.md",
+  "scripts/service-partner-track-regression.ts",
+  "scripts/partner-program-1b-4-regression.ts",
+  "src/components/cartel/PartnerAdminSection.tsx",
+  "src/lib/legal-policies.ts",
+  "src/lib/partners.ts",
+  "src/routes/_authenticated/partners.tsx",
+  "src/routes/legal.partner-agreement.tsx",
 ]);
-const changed = execFileSync("git", ["diff", "--name-only", "529681aa1d073b70946f7b5934bf9b1fcc2b6be7...049aae3b398bfe9cf49e9834a9c2706fadbd3c51"], { encoding: "utf8" })
+// Discovery task scope (529681aa..98bb3b44) plus the Service Partner staging scope (049aae3b..HEAD).
+// Intervening separately-approved tasks (MCP, favicon) are outside this check.
+const gitNames = (range: string) => execFileSync("git", ["diff", "--name-only", range], { encoding: "utf8" });
+const changed = (gitNames("529681aa1d073b70946f7b5934bf9b1fcc2b6be7...98bb3b44daf7e0d9588a909158096c62ec179d66") + "\n" + gitNames("049aae3b398bfe9cf49e9834a9c2706fadbd3c51"))
   .split("\n")
   .map((line) => line.trim())
   .filter(Boolean);
