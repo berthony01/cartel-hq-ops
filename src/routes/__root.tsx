@@ -112,7 +112,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Sora:wght@400;500;600;700&display=swap",
       },
-{ rel: "icon", href: "/favicon.svg?v=2", type: "image/svg+xml" },
+      { rel: "icon", href: "/favicon.svg?v=2", type: "image/svg+xml" },
       { rel: "icon", href: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQBAMAAADt3eJSAAAAMFBMVEW1kCTWqCi7lCZMaXG6kyYHBwfTpykgGwuFaRxnUheSdB4TEAk1Kw6uiiNOPxNpVBjvFO0ZAAAABXRSTlPfLMAAwV7mmtkAAAAJcEhZcwAACxMAAAsTAQCanBgAAABaSURBVAiZYzB0YGBgYGARZhAoDQ0NDQ1nZHAPjX75PDS0iIE19FtaWndoAANrRFpaWj6IcSz3aFUriNGWDlIdwMB6bSk6Ay4FVwzXDjNQHWYF3FJDBZAzmIQBTjAri4paDsEAAAAASUVORK5CYII=", type: "image/png", sizes: "16x16" },
     ],
   }),
