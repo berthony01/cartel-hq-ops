@@ -559,6 +559,8 @@ Deno.serve(async (req: Request) => {
           ctaMessageId = null;
         }
       }
+      // SP-B4 — partner response omits Telegram message ids.
+      if (partnerCommunityAuthorized) return respond({ sent: true, autoDeleteSeconds: settings.auto_delete_enabled ? settings.auto_delete_seconds : null, groupTitle: group.title, launchWatchCtaIncluded: ctaCleanupScheduled });
       return respond({ sent: true, messageId, autoDeleteSeconds: settings.auto_delete_enabled ? settings.auto_delete_seconds : null, groupTitle: group.title, launchWatchCtaIncluded: ctaCleanupScheduled, launchWatchCtaMessageId: ctaCleanupScheduled ? ctaMessageId : null, launchWatchCtaAutoDeleteSeconds: ctaCleanupScheduled ? ctaLifetime : null });
 
 
