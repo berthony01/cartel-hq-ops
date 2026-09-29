@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { requireProjectToolAccess } from "../_shared/project-identity.ts";
-import { requireCommercialAccess, type CommercialFeatureKey } from "../_shared/commercial-access.ts";
+import { requireProjectToolAccess, PROJECT_IDENTITY_DENIAL_BODY } from "../_shared/project-identity.ts";
+import { requireCommercialAccess, commercialDenialFor, type CommercialFeatureKey } from "../_shared/commercial-access.ts";
 
 const TG_BASE = "https://api.telegram.org";
 const MAX_BATCH_GROUPS = 50;
@@ -47,8 +47,42 @@ Deno.serve(async (req: Request) => {
   let body: Record<string, unknown> = {}; try { body = await req.json(); } catch { return respond({ error: "INVALID_BODY", message: "Invalid request." }, 400); }
   const action = String(body.action ?? ""), workspaceId = String(body.workspaceId ?? ""), groupConnectionId = String(body.groupConnectionId ?? "");
   if (!workspaceId) return respond({ error: "WORKSPACE_REQUIRED", message: "Workspace is required." }, 400);
-  const { data: membership } = await admin.from("workspace_members").select("user_id,role").eq("workspace_id", workspaceId).eq("user_id", user.id).maybeSingle(); if (!membership) return respond({ error: "FORBIDDEN", message: "You do not have access to this workspace." }, 403);
-  const canManageCommunity = membership.role === "owner" || membership.role === "admin";
+  const { data: membership } = await admin.from("workspace_members").select("user_id,role").eq("workspace_id", workspaceId).eq("user_id", user.id).maybeSingle();
+  /**
+   * SP-B3 V1 — Service Partner community broadcast. ONLY for a non-member and
+   * ONLY for send_group_announcement: authorization is decided by
+   * partner_authorize_group_broadcast under the PARTNER's own JWT (scope first,
+   * group in workspace, client Project Identity, client official_broadcasts
+   * entitlement, no owner bypass). The request then falls through into the one
+   * existing send implementation as plain text only. Members are unaffected.
+   */
+  let partnerBroadcastAuthorized = false;
+  if (!membership) {
+    if (action !== "send_group_announcement") return respond({ error: "FORBIDDEN", message: "You do not have access to this workspace." }, 403);
+    if (!groupConnectionId) return respond({ error: "GROUP_REQUIRED", message: "Choose a connected Telegram community." }, 400);
+    const { data: gate, error: gateError } = await userClient.rpc("partner_authorize_group_broadcast", { _workspace_id: workspaceId, _group_connection_id: groupConnectionId });
+    if (gateError) return respond({ error: "FORBIDDEN", message: "You do not have access to this workspace." }, 403);
+    if (!gate || typeof gate !== "object" || typeof (gate as any).allowed !== "boolean") return respond({ error: "COMMERCIAL_ACCESS_UNAVAILABLE", code: "COMMERCIAL_ACCESS_UNAVAILABLE", message: "Plan access could not be verified. Try again." }, 503);
+    if ((gate as any).allowed !== true) {
+      const code = String((gate as any).code ?? "");
+      if (code === "GROUP_NOT_FOUND") return respond({ error: "GROUP_NOT_FOUND", message: "That Telegram community is no longer connected." }, 404);
+      if (code === "PROJECT_IDENTITY_REQUIRED") return respond(PROJECT_IDENTITY_DENIAL_BODY, 403);
+      if (code === "COMMERCIAL_ACCESS_UNAVAILABLE") return respond({ error: code, code, message: "Plan access could not be verified. Try again." }, 503);
+      const denial = commercialDenialFor(code === "PLAN_ACCESS_INACTIVE" ? "ASSIGNMENT_INACTIVE" : code, "official_broadcasts");
+      if (!denial.allowed) return respond(denial.body, denial.status);
+      return respond({ error: "FORBIDDEN", message: "You do not have access to this workspace." }, 403);
+    }
+    partnerBroadcastAuthorized = true;
+    // Plain text only: no branding, no Launch Watch CTA, no official-contract mode.
+    body.brandingEnabled = false;
+    body.ctaEnabled = false;
+    delete body.ctaLaunchId;
+    delete body.reviewedProjectName;
+    delete body.reviewedTicker;
+    delete body.reviewedLogoAssetId;
+    delete body.reviewedTemplateVersion;
+  }
+  const canManageCommunity = !!membership && (membership.role === "owner" || membership.role === "admin");
   // Project Identity Gate B — user-initiated mutating/Telegram-send actions only.
   // Read-only actions (status, distribution_status, welcome_settings,
   // broadcast_launch_options) stay ungated.
@@ -64,7 +98,8 @@ Deno.serve(async (req: Request) => {
     send_official_contract_broadcast: "official_broadcasts",
     send_official_contract_correction_broadcast: "official_broadcasts",
   };
-  if (PROJECT_IDENTITY_GATED_ACTIONS.has(action)) {
+  // A partner broadcast already passed the partner-specific identity + client-plan gate above.
+  if (PROJECT_IDENTITY_GATED_ACTIONS.has(action) && !partnerBroadcastAuthorized) {
     const identityGate = await requireProjectToolAccess(admin, user.id, workspaceId);
     if (!identityGate.allowed) return respond(identityGate.body, identityGate.status);
     const featureKey = COMMERCIAL_ACTION_FEATURES[action];
@@ -523,7 +558,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === "send_group_announcement") {
-      if (!canManageCommunity) return respond({ error: "FORBIDDEN", message: "Only workspace owners and admins can post official community broadcasts." }, 403);
+      if (!canManageCommunity && !partnerBroadcastAuthorized) return respond({ error: "FORBIDDEN", message: "Only workspace owners and admins can post official community broadcasts." }, 403);
       if (!groupConnectionId) return respond({ error: "GROUP_REQUIRED", message: "Choose a connected Telegram community." }, 400);
 
       const clientRequestId = String(body.clientRequestId ?? "").trim();

@@ -46,11 +46,11 @@ check("S-12 no commercial gate added (matches owner) and decision recorded", !/e
 check("S-13 history clamp 1..20, WATCHER_UPDATE only", bodyOf("partner_list_launch_watcher_updates").includes("LEAST(GREATEST(COALESCE(_limit, 10), 1), 20)") && bodyOf("partner_list_launch_watcher_updates").includes("e.event_type = 'WATCHER_UPDATE'"));
 
 /* ---------- Static: frontend + scope ---------- */
-check("F-1 launch_watcher_comms active", LIB.includes('"project_identity", "project_inbox", "launch_watcher_comms"]'));
+check("F-1 launch_watcher_comms active", LIB.includes('"project_identity", "project_inbox", "launch_watcher_comms", "broadcasts"]'));
 check("F-2 /telegram unlocked for launch_watcher_comms", LIB.includes('{ path: "/telegram", scope: "launch_watcher_comms" }') && LIB.includes('{ path: "/telegram", scope: "project_inbox" }'));
 check("F-3 browser calls only partner launch comms RPCs", FNS.every((f) => COMMS.includes(`"${f}"`)) && !/"create_launch_watcher_update"|"get_launch_watcher_update_stats"|"list_launch_watcher_updates"|from\("launch/.test(COMMS + PANEL));
 check("F-4 panel has preview confirm + per-draft request id + no identities", PANEL.includes("AlertDialog") && PANEL.includes("crypto.randomUUID()") && !/telegram_user_id|subscription_id/.test(PANEL));
-check("F-5 managed /telegram routes by scope; owner page unchanged path", TG.includes("<PartnerInboxPage />") && TG.includes("<PartnerLaunchCommsPage />") && TG.includes("<PartnerManagedCommsPage />") && TG.includes("if (!isManaged) return <TelegramPage />;"));
+check("F-5 managed /telegram routes by scope; owner page unchanged path", TG.includes("<PartnerInboxPage />") && TG.includes("<PartnerLaunchCommsPage />") && TG.includes("<PartnerManagedCommsPage ") && TG.includes("if (!isManaged) return <TelegramPage />;"));
 check("F-6 panel mounts no owner Launch Control / status / contract controls", !/transitionLaunch|registerContract|BroadcastsPanel|LaunchControl|sendLaunchScheduleCommunication/.test(PANEL));
 check("F-7 runbook orders publish before SQL", (() => { const a = RUNBOOK.indexOf("CP-SPB2-PUBLISH"), b = RUNBOOK.indexOf("CP-SPB2-SQL"); return a >= 0 && b > a; })());
 
@@ -60,6 +60,9 @@ const ALLOW = new Set([
   "src/components/cartel/PartnerLaunchCommsPanel.tsx", "src/routes/_authenticated/telegram.tsx", "src/components/cartel/ManagedAccessGuard.tsx",
   "src/components/cartel/SidebarNav.tsx", "src/lib/partner-client-access.ts", "src/components/cartel/ServicePartnerAccessPanel.tsx", "roadmap.md", ".lovable/plan.md",
   "src/integrations/supabase/types.ts", // approved post-production generated-types sync for SP-B2
+  // Approved SP-B3 V1 staging allowlist (later phase).
+  "docs/sql/SP_B3_partner_group_broadcasts.sql", "docs/SP_B3_PARTNER_BROADCASTS_RUNBOOK.md", "scripts/sp-b3-partner-group-broadcasts-regression.ts",
+  "src/lib/partner-group-broadcasts.ts", "src/components/cartel/PartnerGroupBroadcastPanel.tsx", "backend-source/edge-functions/telegram-group/index.ts",
 ]);
 const since = "780f5e1ebaea8a603503a06823618e861aaa8f05";
 const changed = [
