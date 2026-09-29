@@ -104,7 +104,7 @@ if (!hasPg) {
     check("DB-5 anon cannot call owner draft", expectErr(as(null, `SELECT public.owner_save_service_partner_terms_draft(1, 'x', 'y');`), "permission denied"));
     check("DB-6 owner saves service-only draft (null economics)", as(OWNER, `SELECT public.owner_save_service_partner_terms_draft(1, 'Service Partner Agreement v1', 'Independent CARTEL HQ Service Partner.');`).ok);
     const row = psql(`SELECT concat_ws('|', service_partner_applications_open, affiliate_applications_open, coalesce(commission_bps::text,'null'), coalesce(currency,'null'), coalesce(commission_duration_invoices::text,'null')) FROM public.partner_program_terms WHERE version = 1;`);
-    check("DB-7 draft forces affiliate closed + economics null", row.out === "true|false|null|null|null", row.out);
+    check("DB-7 draft forces affiliate closed + economics null", row.out === "t|f|null|null|null", row.out);
     check("DB-8 non-owner cannot activate", expectErr(as(U1, `SELECT public.owner_activate_partner_terms(1);`), "PLATFORM_OWNER_REQUIRED"));
     check("DB-9 service-only activation permits null affiliate economics", as(OWNER, `SELECT public.owner_activate_partner_terms(1);`).ok);
     const st = as(null, `SELECT public.get_partner_program_status()::text;`);
@@ -121,7 +121,7 @@ if (!hasPg) {
     check("DB-18 non-owner cannot review applications", expectErr(as(U2, `SELECT public.owner_review_partner_application('${appId}', true);`), "PLATFORM_OWNER_REQUIRED"));
     check("DB-19 owner approves service-only application", as(OWNER, `SELECT public.owner_review_partner_application('${appId}', true, 'ok');`).ok);
     const p = psql(`SELECT concat_ws('|', is_service_partner, is_affiliate, coalesce(referral_code,'null'), status) FROM public.partners WHERE user_id = '${U1}';`);
-    check("DB-20 service partner: no referral code, not affiliate", p.out === "true|false|null|approved", p.out);
+    check("DB-20 service partner: no referral code, not affiliate", p.out === "t|f|null|approved", p.out);
     check("DB-21 service partner accepts agreement", as(U1, `SELECT public.accept_partner_agreement(1);`).ok);
     check("DB-22 service partner cannot request payout", expectErr(as(U1, `SELECT public.request_partner_payout(5000);`), "PARTNER_NOT_AFFILIATE"));
     const attr = as(U2, `SELECT public.record_referral_attribution('abcdefghij')::text;`);
