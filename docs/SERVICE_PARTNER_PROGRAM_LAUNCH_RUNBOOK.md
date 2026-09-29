@@ -23,11 +23,26 @@ Scope: open the Service Partner track only. The Affiliate Program stays closed. 
 ## 2. Why the migration is a staged file
 The Lovable platform applies every file under `supabase/migrations/` automatically, and the Supabase CLI is not installed in the sandbox. To honor "do not apply", the body is staged at `docs/sql/SERVICE_PARTNER_track_separation.sql`. At CP-SVC-SQL, the operator runs `supabase migration new service_partner_track_separation` and pastes the file body.
 
-## 3. Preflight (read-only)
+## 3. Production order (exact; each step needs explicit owner approval)
+
+**Why activation cannot happen before publishing:** the currently published frontend predates the independent track gates. It may treat any active terms row as "the general program is open" and may expose retired Affiliate/economics behavior (commission, referral, payout surfaces). Therefore the new service-only frontend must be published while BOTH tracks are still closed, and terms may only be activated afterwards. Activation must never precede the new frontend publication.
+
+1. **Read-only preflight and backup/PITR check** (Section 4). WARNING: the organization is on the Supabase Free plan, so managed PITR or a downloadable backup cannot be confirmed. Record this warning and the owner's explicit acceptance of it; do not change plan or backup settings as part of this release.
+2. **Apply the service-track migration while both tracks remain closed** (CP-SVC-SQL). Apply the staged body as migration `service_partner_track_separation`. No terms row is saved or activated in this step.
+3. **Verify schema, RLS, RPC permissions, security advisors, and generated types.** New columns present; RLS enabled on all 7 partner tables; `anon` executes only `get_partner_program_status`; security advisor/linter run with no new findings; PostgREST schema cache reloaded; types regenerated. `get_partner_program_status()` must return both tracks `false`.
+4. **Publish the new service-only frontend while both tracks remain closed** (CP-SVC-PUBLISH, separate approval). No Edge Function deploy. No Stripe change.
+5. **Smoke-test that Service Partner is closed and Affiliate is deferred** (S1–S3 in Section 5).
+6. **Save the exact canonical Service Partner Agreement and disclosure** (CP-SVC-TERMS). Admin → Partner Program uses the canonical preset; any modified or incomplete text is rejected at activation (`PARTNER_TERMS_NOT_CANONICAL` / `PARTNER_TERMS_INCOMPLETE`).
+7. **Activate Service Partner applications only** by typing `OPEN SERVICE PARTNER APPLICATIONS V<n>`. Affiliate activation fails closed (`AFFILIATE_PROGRAM_DEFERRED`).
+8. **Run live application, approval, agreement-acceptance, suspension, and Affiliate-closed tests** (S4–S10 in Section 5).
+9. **Retire active terms immediately if any critical test fails** (Admin → Retire active terms). Applications close at once; rows are preserved.
+
+## 4. Preflight (read-only)
 ```sql
 select count(*) from public.partner_program_terms;              -- expect 0
 select count(*) from public.partner_applications;               -- expect 0
 select count(*) from public.partners;                           -- expect 0
+select count(*) from public.partner_agreement_acceptances;      -- expect 0
 select count(*) from public.partner_referrals;                  -- expect 0
 select count(*) from public.partner_commission_ledger;          -- expect 0
 select count(*) from public.partner_payout_requests;            -- expect 0
@@ -37,24 +52,23 @@ select column_name from information_schema.columns
 select proname from pg_proc where pronamespace='public'::regnamespace
  and proname in ('owner_save_service_partner_terms_draft','get_partner_program_status');  -- expect 0 rows
 ```
-Stop if any count is not zero or a column/function already exists.
-
-## 4. Production order (each step needs explicit owner approval)
-1. **CP-SVC-SQL**: backup/PITR point recorded; apply the staged body as migration `service_partner_track_separation`; re-run `bun scripts/service-partner-track-regression.ts` locally; verify columns, grants (`anon` only on `get_partner_program_status`), RLS enabled on all 7 partner tables, PostgREST schema cache reload.
-2. Regenerate types; confirm the dashboard reads both flags.
-3. No Edge Function deploy. No Stripe change.
-4. **CP-SVC-TERMS**: owner saves a service-only draft in Admin → Partner Program (agreement + disclosure text), types `OPEN SERVICE PARTNER APPLICATIONS V<n>`.
-5. Smoke tests (Section 5) in preview.
-6. **CP-SVC-PUBLISH**: publish only after separate explicit approval.
+Stop if any count is not zero or a column/function already exists. Backup warning: Free plan, PITR/downloadable backup unconfirmed (see step 1).
 
 ## 5. Smoke tests
-- S1 Anon: `/partner-program` shows "Applications open"; Affiliate card "Not open · planned later"; no 20%/hold/$50.
-- S2 Signed-in non-partner: `/partners` shows only the Service Partner form (no Affiliate checkbox, economics, tax, ledger, payouts).
-- S3 Submit service application succeeds; second submit shows "You already have a pending application."
-- S4 Owner approves; partner shows Service Partner badge, no referral code, rules + workflow, accept agreement works.
-- S5 `select public.request_partner_payout(5000)` as that partner → `PARTNER_NOT_AFFILIATE`.
-- S6 Affiliate application via RPC → `AFFILIATE_APPLICATIONS_CLOSED`.
-- S7 Owner unrestricted access and billing/checkout unchanged.
+Closed-state (after step 4, before step 6):
+- S1 Anon: `/partner-program` shows "Applications not open yet"; Affiliate card "Not open · planned later"; no 20%/hold/$50.
+- S2 `/legal/partner-agreement` shows "Draft — not effective".
+- S3 Signed-in user: service application via RPC → `SERVICE_PARTNER_APPLICATIONS_CLOSED`; Affiliate → `AFFILIATE_APPLICATIONS_CLOSED`.
+
+Live (after step 7):
+- S4 Anon: `/partner-program` shows applications open; agreement page shows "Effective v<n>".
+- S5 Signed-in non-partner: `/partners` shows only the Service Partner form (no Affiliate checkbox, economics, tax, ledger, payouts). Submit succeeds; second submit shows "You already have a pending application."
+- S6 Owner approves; partner shows Service Partner badge, no referral code; accept agreement works.
+- S7 `select public.request_partner_payout(5000)` as that partner → `PARTNER_NOT_AFFILIATE`.
+- S8 Affiliate-only and dual applications via RPC → `AFFILIATE_APPLICATIONS_CLOSED`.
+- S9 Owner suspends the test partner (`owner_set_partner_status(<id>,'suspended')`); status reflects suspended.
+- S10 Owner unrestricted access and billing/checkout unchanged.
+Any critical failure → step 9.
 
 ## 6. Close program / rollback (non-destructive; never auto-executed)
 - **Close Service applications**: Admin → Retire active terms (typed confirm). Applications stop immediately (`SERVICE_PARTNER_APPLICATIONS_CLOSED`); partner, application and acceptance rows are kept.
@@ -68,4 +82,4 @@ Stop if any count is not zero or a column/function already exists.
 - Existing 8-arg `owner_save_partner_terms_draft` stays callable by the owner but creates rows with both tracks closed, which cannot activate.
 
 ## STOP
-Nothing in this runbook has been executed. Stop before CP-SVC-SQL.
+Nothing in this runbook has been executed. Stop before step 1 / CP-SVC-SQL.
