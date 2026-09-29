@@ -53,7 +53,7 @@ const edgeBase = execFileSync("git", ["show", `${PLAN_COMMIT}:backend-source/edg
 check("E-0 staging baseline equals start-gate md5 (deployed v48)", execFileSync("md5sum", { input: edgeBase, encoding: "utf8" }).startsWith(EDGE_BASELINE_MD5));
 const diffLines = execFileSync("git", ["diff", "--unified=0", PLAN_COMMIT, "--", "backend-source/edge-functions/telegram-group/index.ts"], { encoding: "utf8" }).split("\n").filter((l) => /^[+-][^+-]/.test(l));
 const removed = diffLines.filter((l) => l.startsWith("-"));
-check("E-1 only 5 baseline lines changed (imports, membership, canManage, gate, send guard)", removed.length === 5, String(removed.length));
+check("E-1 only 6 baseline lines changed (2 imports, membership, canManage, gate, send guard)", removed.length === 6, String(removed.length));
 check("E-2 partner branch only for non-member + send_group_announcement", EDGE.includes('if (!membership) {\n    if (action !== "send_group_announcement") return respond({ error: "FORBIDDEN"'));
 check("E-3 partner gate uses user-JWT client RPC", EDGE.includes('userClient.rpc("partner_authorize_group_broadcast"'));
 check("E-4 plain text forced", EDGE.includes("body.brandingEnabled = false;") && EDGE.includes("body.ctaEnabled = false;") && EDGE.includes("delete body.ctaLaunchId;"));
