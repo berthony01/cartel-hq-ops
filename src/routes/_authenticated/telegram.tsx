@@ -118,7 +118,7 @@ export const Route = createFileRoute("/_authenticated/telegram")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: TelegramPage,
+  component: TelegramRoute,
 });
 
 
@@ -143,6 +143,50 @@ function StateMetric({ label, value }: { label: string; value: string }) {
       <dd className="mt-1.5 min-w-0 truncate font-display text-xl leading-none text-foreground">
         {value}
       </dd>
+    </div>
+  );
+}
+
+/**
+ * SP-B1: a Service Partner in a managed client project sees ONLY the partner
+ * Inbox here (reachable only with an active project_inbox grant; the managed
+ * access guard blocks it otherwise). No group setup, community settings,
+ * broadcasts, stickers, missions or Telegram admin surfaces mount, and none of
+ * their owner data hooks run. Owner/member behavior is unchanged.
+ */
+function TelegramRoute() {
+  const { isManaged } = useWorkspace();
+  return isManaged ? <PartnerInboxPage /> : <TelegramPage />;
+}
+
+function PartnerInboxPage() {
+  const search = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
+  const setConversation = useCallback(
+    (conversationId: string) =>
+      void navigate({
+        search: () => ({ tab: "inbox" as const, conversation: conversationId }),
+        replace: true,
+      }),
+    [navigate],
+  );
+  const clearConversation = useCallback(
+    () => void navigate({ search: () => ({ tab: "inbox" as const }), replace: true }),
+    [navigate],
+  );
+  return (
+    <div className="flex min-w-0 flex-col gap-6">
+      <PageHeader
+        eyebrow="Managed client project"
+        title="Project Inbox"
+        description="Reply to members on behalf of this client project."
+      />
+      <ProjectInboxPanel
+        mode="partner"
+        selectedConversationId={search.conversation ?? null}
+        onConversationChange={setConversation}
+        onConversationClear={clearConversation}
+      />
     </div>
   );
 }
