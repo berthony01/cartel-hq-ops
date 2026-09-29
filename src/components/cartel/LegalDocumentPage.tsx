@@ -17,14 +17,15 @@ function withPlaceholders(text: string) {
   );
 }
 
-export function LegalDocumentPage({ type }: { type: PolicyType }) {
+export function LegalDocumentPage({ type, effectiveVersion = null }: { type: PolicyType; effectiveVersion?: number | null }) {
   const draft = POLICY_DRAFTS[type];
   const active = useQuery({ queryKey: policyKeys.active(), queryFn: fetchActivePolicies, staleTime: 60_000 });
   const placeholders = findPlaceholders(policyContent(draft));
   // Fail closed: the in-app text is always the draft. Even if a version is
   // active server-side, this copy is labelled draft while placeholders remain.
   const effective = active.data?.find((p) => p.document_type === type);
-  const isDraft = !effective || placeholders.length > 0;
+  // Partner agreement: effective only via the verified canonical service-only terms (passed in).
+  const isDraft = type === "partner_agreement" ? effectiveVersion === null || placeholders.length > 0 : !effective || placeholders.length > 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -46,7 +47,13 @@ export function LegalDocumentPage({ type }: { type: PolicyType }) {
             </div>
           </div>
         )}
-        <p className="type-eyebrow text-muted-foreground">Legal · Draft v{draft.draftVersion}</p>
+        {!isDraft && type === "partner_agreement" ? (
+          <div role="note" className="mb-8 rounded-lg border border-gold/40 bg-gold/5 px-4 py-3">
+            <p className="font-display text-xl uppercase tracking-widest text-gold">Effective v{effectiveVersion}</p>
+            <p className="mt-1 text-sm text-foreground">This version binds only Service Partners who accepted active version v{effectiveVersion}. It has not been represented as attorney-reviewed; independent legal review is recommended where appropriate.</p>
+          </div>
+        ) : null}
+        <p className="type-eyebrow text-muted-foreground">Legal · {isDraft ? `Draft v${draft.draftVersion}` : `Effective v${effectiveVersion}`}</p>
         <h1 className="mt-2 font-display text-4xl uppercase tracking-wider text-foreground sm:text-5xl">{draft.title}</h1>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{draft.summary}</p>
         <div className="mt-8 space-y-8">

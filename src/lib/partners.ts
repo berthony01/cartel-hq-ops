@@ -456,6 +456,7 @@ export function partnerErrorMessage(err: unknown): string {
     BELOW_MINIMUM: "Amount is below the minimum payout.",
     INSUFFICIENT_AVAILABLE_BALANCE: "Amount exceeds your available balance.",
     PARTNER_TERMS_INCOMPLETE: "All terms fields are required before activation.",
+    PARTNER_TERMS_NOT_CANONICAL: "Activation requires the exact canonical Service Partner Agreement v2 and disclosure text.",
     PARTNER_TERMS_PLACEHOLDERS_REMAIN: "Legal placeholders remain in the agreement. Activation is blocked.",
     PAID_REFERENCE_REQUIRED: "External payment reference is required.",
     REASON_REQUIRED: "A reason is required.",

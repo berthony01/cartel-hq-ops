@@ -47,6 +47,7 @@ import {
   typedConfirmationMatches,
   type PartnerTerms,
 } from "@/lib/partners";
+import { SERVICE_PARTNER_AGREEMENT_V2_TEXT, SERVICE_PARTNER_DISCLOSURE } from "@/lib/legal-policies";
 
 const WRAP = "[overflow-wrap:anywhere]";
 const short = (id: string | null | undefined) => (id ? id.slice(0, 8) : "—");
@@ -141,12 +142,18 @@ function PartnerAdminInner() {
   // Service-only terms form: agreement + disclosure only. The database forces
   // Affiliate closed and every affiliate financial field NULL.
   const [f, setF] = useState<Record<string, string>>({});
-  const seeded = draft ? { agreement: draft.agreement_text ?? "", disclosure: draft.disclosure_text ?? "" } : { agreement: "", disclosure: "" };
+  // Existing draft: stored text shown unchanged. No draft: owner-approved
+  // canonical Service Partner v2 launch preset (no economics).
+  const seeded = draft
+    ? { agreement: draft.agreement_text ?? "", disclosure: draft.disclosure_text ?? "" }
+    : { agreement: SERVICE_PARTNER_AGREEMENT_V2_TEXT, disclosure: SERVICE_PARTNER_DISCLOSURE };
   const val = (k: keyof typeof seeded) => f[k] ?? seeded[k];
   const set = (k: string) => (e: { target: { value: string } }) => setF((p) => ({ ...p, [k]: e.target.value }));
   const draftFlags = termsTrackFlags(draft);
   const activeFlags = termsTrackFlags(active);
-  const termsComplete = val("agreement").trim() !== "" && val("disclosure").trim() !== "" && draftFlags.service && !draftFlags.affiliate;
+  // Activation requires the SAVED draft to match canonical v2 exactly (also enforced by the database).
+  const draftCanonical = !!draft && draft.agreement_text === SERVICE_PARTNER_AGREEMENT_V2_TEXT && draft.disclosure_text === SERVICE_PARTNER_DISCLOSURE;
+  const termsComplete = draftCanonical && draftFlags.service && !draftFlags.affiliate;
 
   const saveDraft = useMutation(run(() => ownerSaveServiceTermsDraft({
     version: nextVersion,
@@ -202,9 +209,12 @@ function PartnerAdminInner() {
             <div className="surface-quiet rounded-md p-3 text-sm"><p className="type-eyebrow text-gold">Affiliate track</p><p className="mt-1 text-foreground">Deferred / Closed</p><p className="mt-1 text-xs text-muted-foreground">Cannot be opened in this release. The database rejects any Affiliate activation.</p></div>
           </div>
           <p className="text-xs text-muted-foreground">{draft ? `Editing draft v${draft.version}.` : `New draft will be v${nextVersion}.`} Service-only terms need only the agreement and disclosure text. No commission, attribution, hold, payout minimum, currency or invoice duration is required or stored. Until the staged track contract is applied, saving is refused with no write.</p>
-          <Field label="Service Partner agreement"><Textarea rows={4} value={val("agreement")} onChange={set("agreement")} /></Field>
+          <Field label="Service Partner agreement"><Textarea rows={10} value={val("agreement")} onChange={set("agreement")} /></Field>
           <Field label="Required disclosure"><Textarea rows={2} value={val("disclosure")} onChange={set("disclosure")} /></Field>
           <div className="flex flex-wrap gap-2">
+            <Confirm trigger={<Button className="min-h-11" variant="outline">Restore canonical Service Partner v2 text</Button>}
+              title="Restore canonical Service Partner v2 text?" body="Replaces the text in the form fields only. Nothing is saved until you choose Save."
+              onConfirm={() => setF({ agreement: SERVICE_PARTNER_AGREEMENT_V2_TEXT, disclosure: SERVICE_PARTNER_DISCLOSURE })} />
             <Button className="min-h-11" variant="outline" disabled={saveDraft.isPending || !val("agreement").trim() || !val("disclosure").trim()} onClick={() => saveDraft.mutate(undefined)}>Save service-only draft v{nextVersion}</Button>
             {draft ? (
               <TypedConfirm trigger={<Button className="min-h-11" disabled={activate.isPending || !termsComplete || Object.keys(f).length > 0}>Open Service Partner applications (v{draft.version})</Button>}
@@ -213,6 +223,7 @@ function PartnerAdminInner() {
                 onConfirm={() => activate.mutate(draft.version)} />
             ) : null}
           </div>
+          {draft && !draftCanonical ? <p className="text-xs text-signal">Saved draft differs from the canonical Service Partner v2 text or disclosure. Activation is blocked.</p> : null}
           {draft && Object.keys(f).length > 0 ? <p className="text-xs text-muted-foreground">Save the draft before activating.</p> : null}
         </div>
 
