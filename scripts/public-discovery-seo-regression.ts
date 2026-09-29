@@ -83,7 +83,10 @@ const allowed = new Set([
   "src/routes/_authenticated/partners.tsx",
   "src/routes/legal.partner-agreement.tsx",
 ]);
-const changed = execFileSync("git", ["diff", "--name-only", "529681aa1d073b70946f7b5934bf9b1fcc2b6be7...049aae3b398bfe9cf49e9834a9c2706fadbd3c51"], { encoding: "utf8" })
+// Discovery task scope (529681aa..98bb3b44) plus the Service Partner staging scope (049aae3b..HEAD).
+// Intervening separately-approved tasks (MCP, favicon) are outside this check.
+const gitNames = (range: string) => execFileSync("git", ["diff", "--name-only", range], { encoding: "utf8" });
+const changed = (gitNames("529681aa1d073b70946f7b5934bf9b1fcc2b6be7...98bb3b44daf7e0d9588a909158096c62ec179d66") + "\n" + gitNames("049aae3b398bfe9cf49e9834a9c2706fadbd3c51"))
   .split("\n")
   .map((line) => line.trim())
   .filter(Boolean);
