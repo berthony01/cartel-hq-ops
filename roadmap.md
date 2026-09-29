@@ -28,3 +28,5 @@
 - [ ] SP-B3 browser propagation + real two-account/test-group broadcast — BLOCKED: needs an approved active Service Partner account
 - [ ] Scopes community_management, sticker_tools, missions — inactive/deferred (not started)
 - [ ] SP-B4+: remaining partner scopes (community management, stickers, missions) — deferred / not started
+- [x] SP-B4 V1 partner community management STAGED (repository only): 3 partner RPCs (docs/sql), telegram-group save/test fall-through with forced owner Launch Watch values, managed /telegram Community tab
+- [ ] SP-B4 production activation — awaiting CP-SPB4-SQL, CP-SPB4-EDGE, CP-SPB4-PUBLISH approvals; real welcome test needs an approved active Service Partner + test group

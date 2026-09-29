@@ -116,6 +116,8 @@ const allowed = new Set([
   "src/routes/partner-program.tsx",
   // Required regenerated Supabase types after the approved production service-track migration.
   "src/integrations/supabase/types.ts",
+  // SP-B4 staged files (approved later phase).
+  "docs/sql/SP_B4_partner_community_management.sql", "docs/SP_B4_PARTNER_COMMUNITY_RUNBOOK.md", "scripts/sp-b4-partner-community-management-regression.ts", "src/components/cartel/PartnerCommunityPanel.tsx", "src/lib/partner-community-management.ts",
   // SP-A Managed Client Access staging (approved allowlist).
   // Plan-mode artifact acknowledged at the SP-A start gate (46bd6e71).
   ".lovable/plan.md",

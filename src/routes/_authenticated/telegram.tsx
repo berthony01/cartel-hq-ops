@@ -17,6 +17,7 @@ import { AudiencePanel } from "@/components/cartel/AudiencePanel";
 import { ProjectInboxPanel } from "@/components/cartel/ProjectInboxPanel";
 import { PartnerLaunchCommsPanel } from "@/components/cartel/PartnerLaunchCommsPanel";
 import { PartnerGroupBroadcastPanel } from "@/components/cartel/PartnerGroupBroadcastPanel";
+import { PartnerCommunityPanel } from "@/components/cartel/PartnerCommunityPanel";
 import {
   SocialMissionsPanel,
   SocialMissionsSummary,
@@ -166,10 +167,13 @@ function TelegramRoute() {
   const inbox = scopes.includes("project_inbox");
   const comms = scopes.includes("launch_watcher_comms");
   const broadcasts = scopes.includes("broadcasts");
-  const count = [inbox, comms, broadcasts].filter(Boolean).length;
-  if (count > 1) return <PartnerManagedCommsPage inbox={inbox} comms={comms} broadcasts={broadcasts} />;
+  // SP-B4: routine welcome settings for already-connected communities.
+  const community = scopes.includes("community_management");
+  const count = [inbox, comms, broadcasts, community].filter(Boolean).length;
+  if (count > 1) return <PartnerManagedCommsPage inbox={inbox} comms={comms} broadcasts={broadcasts} community={community} />;
   if (comms) return <PartnerLaunchCommsPage />;
   if (broadcasts) return <PartnerBroadcastPage />;
+  if (community) return <PartnerCommunityPage />;
   return <PartnerInboxPage />;
 }
 
@@ -199,15 +203,29 @@ function PartnerBroadcastPage() {
   );
 }
 
-type PartnerTab = "inbox" | "audience" | "broadcasts";
+function PartnerCommunityPage() {
+  return (
+    <div className="flex min-w-0 flex-col gap-6">
+      <PageHeader
+        eyebrow="Managed client project"
+        title="Community welcome"
+        description="Manage the welcome message for this client's connected Telegram communities."
+      />
+      <PartnerCommunityPanel />
+    </div>
+  );
+}
 
-function PartnerManagedCommsPage({ inbox, comms, broadcasts }: { inbox: boolean; comms: boolean; broadcasts: boolean }) {
+type PartnerTab = "inbox" | "audience" | "broadcasts" | "communities";
+
+function PartnerManagedCommsPage({ inbox, comms, broadcasts, community }: { inbox: boolean; comms: boolean; broadcasts: boolean; community: boolean }) {
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
   const available: PartnerTab[] = [
     ...(inbox ? (["inbox"] as const) : []),
     ...(comms ? (["audience"] as const) : []),
     ...(broadcasts ? (["broadcasts"] as const) : []),
+    ...(community ? (["communities"] as const) : []),
   ];
   const tab: PartnerTab = (available as string[]).includes(String(search.tab)) ? (search.tab as PartnerTab) : (available[0] ?? "inbox");
   return (
@@ -220,10 +238,12 @@ function PartnerManagedCommsPage({ inbox, comms, broadcasts }: { inbox: boolean;
         {inbox ? <TabsTrigger value="inbox" className="min-h-11">Inbox</TabsTrigger> : null}
         {comms ? <TabsTrigger value="audience" className="min-h-11">Launch Watch messages</TabsTrigger> : null}
         {broadcasts ? <TabsTrigger value="broadcasts" className="min-h-11">Broadcasts</TabsTrigger> : null}
+        {community ? <TabsTrigger value="communities" className="min-h-11">Community</TabsTrigger> : null}
       </TabsList>
       {inbox ? <TabsContent value="inbox"><PartnerInboxPage /></TabsContent> : null}
       {comms ? <TabsContent value="audience"><PartnerLaunchCommsPage /></TabsContent> : null}
       {broadcasts ? <TabsContent value="broadcasts"><PartnerBroadcastPage /></TabsContent> : null}
+      {community ? <TabsContent value="communities"><PartnerCommunityPage /></TabsContent> : null}
     </Tabs>
   );
 }
