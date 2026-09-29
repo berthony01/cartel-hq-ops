@@ -57,7 +57,31 @@ Deno.serve(async (req: Request) => {
    * existing send implementation as plain text only. Members are unaffected.
    */
   let partnerBroadcastAuthorized = false;
-  if (!membership) {
+  /**
+   * SP-B4 V1 — Service Partner community management. ONLY for a non-member and
+   * ONLY for save_welcome_settings / send_welcome_test: authorized by
+   * partner_authorize_community_action under the PARTNER's own JWT (scope first,
+   * group in workspace, client Project Identity, client community_basic, no
+   * owner bypass). Falls through into the one existing save/test implementation.
+   */
+  let partnerCommunityAuthorized = false;
+  if (!membership && (action === "save_welcome_settings" || action === "send_welcome_test")) {
+    if (!groupConnectionId) return respond({ error: "GROUP_REQUIRED", message: "Choose a connected Telegram community." }, 400);
+    const { data: gate, error: gateError } = await userClient.rpc("partner_authorize_community_action", { _workspace_id: workspaceId, _group_connection_id: groupConnectionId, _action: action });
+    if (gateError) return respond({ error: "FORBIDDEN", message: "You do not have access to this workspace." }, 403);
+    if (!gate || typeof gate !== "object" || typeof (gate as any).allowed !== "boolean") return respond({ error: "COMMERCIAL_ACCESS_UNAVAILABLE", code: "COMMERCIAL_ACCESS_UNAVAILABLE", message: "Plan access could not be verified. Try again." }, 503);
+    if ((gate as any).allowed !== true) {
+      const code = String((gate as any).code ?? "");
+      if (code === "GROUP_NOT_FOUND") return respond({ error: "GROUP_NOT_FOUND", message: "That Telegram community is no longer connected." }, 404);
+      if (code === "PROJECT_IDENTITY_REQUIRED") return respond(PROJECT_IDENTITY_DENIAL_BODY, 403);
+      if (code === "COMMERCIAL_ACCESS_UNAVAILABLE") return respond({ error: code, code, message: "Plan access could not be verified. Try again." }, 503);
+      const denial = commercialDenialFor(code === "PLAN_ACCESS_INACTIVE" ? "ASSIGNMENT_INACTIVE" : code, "community_basic");
+      if (!denial.allowed) return respond(denial.body, denial.status);
+      return respond({ error: "FORBIDDEN", message: "You do not have access to this workspace." }, 403);
+    }
+    partnerCommunityAuthorized = true;
+  }
+  if (!membership && !partnerCommunityAuthorized) {
     if (action !== "send_group_announcement") return respond({ error: "FORBIDDEN", message: "You do not have access to this workspace." }, 403);
     if (!groupConnectionId) return respond({ error: "GROUP_REQUIRED", message: "Choose a connected Telegram community." }, 400);
     const { data: gate, error: gateError } = await userClient.rpc("partner_authorize_group_broadcast", { _workspace_id: workspaceId, _group_connection_id: groupConnectionId });
