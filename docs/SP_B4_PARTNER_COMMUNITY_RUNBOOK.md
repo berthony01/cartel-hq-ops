@@ -1,7 +1,6 @@
 # SP-B4 V1 — Service Partner Community Management Runbook
 
-Status: STAGED (repository only). Not applied, not deployed, not published.
-Baseline: app `76c5df41`, audit plan `688b085b`. Deployed `telegram-group` v49 == repo baseline (md5 `3ea60946a4125e6d78623c49e82f53ad`).
+Status: LIVE (SP-B4 V1 activated in production — see the activation record below). Staged build baseline: app `76c5df41`, audit plan `688b085b`. Pre-change deployed `telegram-group` v49 == repo baseline (md5 `3ea60946a4125e6d78623c49e82f53ad`).
 
 ## Production activation record (2026-09-29)
 - CP-SPB4-SQL COMPLETE: migration `20260929180205 sp_b4_partner_community_management` applied. Three authenticated partner RPCs live (`partner_list_community_groups`, `partner_get_welcome_settings`, `partner_authorize_community_action`), all SECURITY DEFINER, postgres owner, empty search_path, authenticated+service_role execute only, no PUBLIC/anon.
