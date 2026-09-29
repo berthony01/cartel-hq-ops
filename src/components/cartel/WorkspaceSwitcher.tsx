@@ -98,6 +98,8 @@ export function CreateWorkspaceDialog({
 export function WorkspaceSwitcher({ fullWidth = false }: { fullWidth?: boolean }) {
   const { workspaces, workspace, loading, selectWorkspace } = useWorkspace();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const ownWorkspaces = workspaces.filter((w) => w.access !== "managed");
+  const managedWorkspaces = workspaces.filter((w) => w.access === "managed");
 
   return (
     <>
@@ -116,6 +118,11 @@ export function WorkspaceSwitcher({ fullWidth = false }: { fullWidth?: boolean }
             <span className={cn("min-w-0 flex-1 truncate text-left font-medium text-foreground", !fullWidth && "lg:max-w-40 lg:flex-none")}>
               {loading ? "Loading…" : (workspace?.name ?? "No project")}
             </span>
+            {!loading && workspace?.access === "managed" ? (
+              <span className="shrink-0 rounded-sm border border-gold/30 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-gold">
+                Managed
+              </span>
+            ) : null}
             <ChevronDown className="size-4 shrink-0" aria-hidden="true" />
           </Button>
 
@@ -124,10 +131,10 @@ export function WorkspaceSwitcher({ fullWidth = false }: { fullWidth?: boolean }
           <DropdownMenuLabel className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
             Projects
           </DropdownMenuLabel>
-          {workspaces.length === 0 ? (
+          {ownWorkspaces.length === 0 ? (
             <DropdownMenuItem disabled>No projects yet</DropdownMenuItem>
           ) : (
-            workspaces.map((w) => (
+            ownWorkspaces.map((w) => (
               <DropdownMenuItem key={w.id} onSelect={() => selectWorkspace(w.id)}>
                 <span className="min-w-0 flex-1 truncate">{w.name}</span>
                 {w.id === workspace?.id ? (
@@ -136,6 +143,25 @@ export function WorkspaceSwitcher({ fullWidth = false }: { fullWidth?: boolean }
               </DropdownMenuItem>
             ))
           )}
+          {managedWorkspaces.length > 0 ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                Managed client projects
+              </DropdownMenuLabel>
+              {managedWorkspaces.map((w) => (
+                <DropdownMenuItem key={w.id} onSelect={() => selectWorkspace(w.id)}>
+                  <span className="min-w-0 flex-1 truncate">{w.name}</span>
+                  <span className="shrink-0 rounded-sm border border-gold/30 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-gold">
+                    Managed
+                  </span>
+                  {w.id === workspace?.id ? (
+                    <Check className="size-4 text-gold" aria-hidden="true" />
+                  ) : null}
+                </DropdownMenuItem>
+              ))}
+            </>
+          ) : null}
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setDialogOpen(true)}>
             <Plus className="size-4" aria-hidden="true" />
