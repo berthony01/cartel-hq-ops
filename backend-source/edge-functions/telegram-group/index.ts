@@ -123,7 +123,7 @@ Deno.serve(async (req: Request) => {
     send_official_contract_correction_broadcast: "official_broadcasts",
   };
   // A partner broadcast already passed the partner-specific identity + client-plan gate above.
-  if (PROJECT_IDENTITY_GATED_ACTIONS.has(action) && !partnerBroadcastAuthorized) {
+  if (PROJECT_IDENTITY_GATED_ACTIONS.has(action) && !partnerBroadcastAuthorized && !partnerCommunityAuthorized) {
     const identityGate = await requireProjectToolAccess(admin, user.id, workspaceId);
     if (!identityGate.allowed) return respond(identityGate.body, identityGate.status);
     const featureKey = COMMERCIAL_ACTION_FEATURES[action];
@@ -431,10 +431,20 @@ Deno.serve(async (req: Request) => {
         catch (e) { console.error("[telegram-group] eligible launches", e instanceof Error ? e.message : "unknown"); }
         return respond({ settings: await loadSettings(), canManage: canManageCommunity, eligibleLaunches });
       }
-      if (!canManageCommunity) return respond({ error: "FORBIDDEN", message: "Only workspace owners and admins can change community welcome settings." }, 403);
+      if (!canManageCommunity && !partnerCommunityAuthorized) return respond({ error: "FORBIDDEN", message: "Only workspace owners and admins can change community welcome settings." }, 403);
 
       if (action === "save_welcome_settings") {
         const raw = (body.settings && typeof body.settings === "object" ? body.settings : {}) as Record<string, unknown>;
+        // SP-B4 — a partner can never change any launch_watch_* value: force the stored values (or defaults).
+        if (partnerCommunityAuthorized) {
+          const { data: storedCta } = await admin.from("telegram_community_settings").select("launch_watch_cta_enabled,launch_watch_launch_id,launch_watch_show_website,launch_watch_show_telegram,launch_watch_show_x,launch_watch_cta_auto_delete_seconds").eq("group_connection_id", group.id).eq("workspace_id", workspaceId).maybeSingle();
+          raw.launchWatchCtaEnabled = storedCta ? storedCta.launch_watch_cta_enabled === true : false;
+          raw.launchWatchLaunchId = storedCta?.launch_watch_launch_id ? String(storedCta.launch_watch_launch_id) : "";
+          raw.launchWatchShowWebsite = storedCta ? storedCta.launch_watch_show_website !== false : true;
+          raw.launchWatchShowTelegram = storedCta ? storedCta.launch_watch_show_telegram === true : false;
+          raw.launchWatchShowX = storedCta ? storedCta.launch_watch_show_x !== false : true;
+          raw.launchWatchCtaAutoDeleteSeconds = storedCta ? Number(storedCta.launch_watch_cta_auto_delete_seconds) : LW_CTA_LIFETIME_DEFAULT;
+        }
         const welcomeMessage = typeof raw.welcomeMessage === "string" ? raw.welcomeMessage.trim() : "";
         if (!welcomeMessage) return respond({ error: "INVALID_MESSAGE", message: "Enter a welcome message." }, 400);
         if (welcomeMessage.length > 3500) return respond({ error: "INVALID_MESSAGE", message: "Welcome messages are limited to 3500 characters." }, 400);
