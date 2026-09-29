@@ -90,6 +90,7 @@ export const POLICY_DRAFTS: Record<PolicyType, PolicyDraft> = {
       {
         heading: "Acceptable use",
         body: [
+          "Independent Service Partners are separate businesses, not CARTEL HQ staff or agents. Any service you buy from a Service Partner is between you and that partner; your CARTEL HQ plan remains directly with the Operator. Never share your credentials, seed phrases or private keys with anyone.",
           "You may not use the service for fraud, market manipulation, wash trading, fake engagement, spam, impersonation, malware, unlawful content, sanctions evasion, or to infringe others' rights. We may suspend or terminate accounts that violate these terms.",
         ],
       },
@@ -117,7 +118,7 @@ export const POLICY_DRAFTS: Record<PolicyType, PolicyDraft> = {
       {
         heading: "Categories of information",
         body: [
-          "Account data (email address, authentication identifiers); workspace and project data you enter (project identity, launch details, links, media); Telegram identifiers and group information when you connect Telegram; billing records (plan, subscription status and payment-processor references — card details are handled by the payment processor, not stored by us); usage and technical logs; partner-program records if you apply (application, role, referral records, ledger and payout records).",
+          "Account data (email address, authentication identifiers); workspace and project data you enter (project identity, launch details, links, media); Telegram identifiers and group information when you connect Telegram; billing records (plan, subscription status and payment-processor references — card details are handled by the payment processor, not stored by us); usage and technical logs; partner-program records if you apply (your application and service description, selected track, review decision, partner status and versioned agreement acceptances; referral, ledger and payout records exist only if a future Affiliate Program opens).",
         ],
       },
       {
@@ -188,18 +189,122 @@ export const POLICY_DRAFTS: Record<PolicyType, PolicyDraft> = {
   },
   partner_agreement: {
     type: "partner_agreement",
-    title: "Partner / Affiliate Agreement",
+    title: "Service Partner Agreement",
     path: "/legal/partner-agreement",
-    summary: "Terms for approved CARTEL HQ affiliates and service partners.",
-    draftVersion: 1,
+    summary: "Terms for approved independent CARTEL HQ Service Partners. The Affiliate Program is not open and is governed by separate future terms.",
+    draftVersion: 2,
     sections: [
       IDENTITY,
       {
-        heading: "Application and approval",
+        heading: "Scope of this agreement",
         body: [
-          "Participation requires an application and written approval by the Operator. Affiliate and Service Partner are distinct roles. Service Partners charge their own clients separately, gain no access to client workspaces through this program, and earn no CARTEL HQ commission unless separately approved as an Affiliate.",
+          "This agreement covers only the CARTEL HQ Service Partner Program. It does not cover any affiliate, referral or commission program. The Affiliate Program is not open; any future affiliate terms will be a separate agreement.",
+          "The program is part of the limited United States beta. You must be at least 18 years old (or the age of majority where you live), have legal capacity to contract, and, if you act for a business, have authority to bind it.",
         ],
       },
+      {
+        heading: "Application and approval",
+        body: [
+          "Participation requires an application and written approval by the Operator, which the Operator may grant or refuse at its discretion. There is no fee to apply or to be approved, and no CARTEL HQ purchase is required for approval. Paid CARTEL HQ features still require the ordinary applicable subscription, but a purchase is never a condition of program approval.",
+        ],
+      },
+      {
+        heading: "Independent business relationship",
+        body: [
+          "You are an independent business. Nothing in this agreement creates an employment, agency, legal partnership, joint venture, franchise or fiduciary relationship. You have no territory and no authority to bind the Operator or to make promises on its behalf.",
+        ],
+      },
+      {
+        heading: "No payments from the Operator",
+        body: [
+          "The Operator does not pay Service Partners under this program. There is no commission, referral credit, wage, reimbursement, benefit, lead, client, sales territory or earnings guarantee. The Operator does not collect or share in any fee you charge your clients.",
+        ],
+      },
+      {
+        heading: "Your services and your clients",
+        body: [
+          "You independently choose your clients, scope, schedule, pricing, invoicing, taxes, refund policy and support. You are solely responsible for your contracts with your clients and for the services you provide. The partner, not the Operator, contracts with and supports the partner's client for the independent service.",
+          "These documents are not a promise that every jurisdiction permits every service. You are responsible for complying with the laws that apply to you and to your clients.",
+        ],
+      },
+      {
+        heading: "Client CARTEL HQ subscriptions",
+        body: [
+          "Each client maintains its own CARTEL HQ account and workspace and pays the Operator directly for any CARTEL HQ plan. You may not resell, sublicense, bundle, mark up or collect payment for CARTEL HQ subscriptions unless the Operator later gives you separate written authorization.",
+        ],
+      },
+      {
+        heading: "Marketing and prohibited conduct",
+        body: [
+          "You may market only capabilities that are actually available in CARTEL HQ. You must not make false, misleading or unsubstantiated claims, including claims about investment returns, token safety, token price, guaranteed results or earnings.",
+          "Prohibited: spam or unsolicited messages; impersonation; fake engagement; market manipulation or wash trading; sanctions evasion; and any unlawful conduct.",
+        ],
+      },
+      {
+        heading: "Brand use",
+        body: [
+          "You receive a limited, revocable, non-exclusive license to use only brand assets the Operator approves, solely to describe your independent services. You acquire no ownership of any brand. You may not register domains or social handles containing CARTEL HQ or Pepe Cartel names, bid on those brand terms in paid search, or suggest that you are CARTEL HQ staff or acting on its behalf.",
+        ],
+      },
+      {
+        heading: "Required disclosure",
+        body: [
+          "Place this disclosure clearly near every promotion of your services: \"Independent CARTEL HQ Service Partner. Services are provided by (your name or business name), not by CARTEL HQ. Results and earnings are not guaranteed.\"",
+        ],
+      },
+      {
+        heading: "Client data, access and security",
+        body: [
+          "Obtain your client's authorization before acting for it. Keep client information confidential, use the least access necessary, handle data securely, and comply with applicable privacy laws and platform rules.",
+          "Never request, store or transmit a client's seed phrases or private keys. Do not share CARTEL HQ credentials or payment-card data. Service Partner status by itself grants no access to any client workspace; any access must use an authorized product feature and the client's explicit permission.",
+        ],
+      },
+      {
+        heading: "Records and compliance review",
+        body: ["Keep honest records of your promotions and client engagements related to CARTEL HQ, and cooperate with reasonable compliance review by the Operator."],
+      },
+      {
+        heading: "Suspension and termination",
+        body: [
+          "Either party may end participation at any time, and the Operator may suspend or terminate participation for any reason allowed by law. After termination you must stop using CARTEL HQ brand assets and the Service Partner designation. Your existing obligations to your clients remain your responsibility.",
+        ],
+      },
+      {
+        heading: "Disclaimers, limitation and indemnity",
+        body: [
+          "To the extent permitted by law, the program is provided \"as is\" without warranties, and the Operator is not liable for indirect, incidental, consequential or lost-profit damages arising from the program. You will indemnify the Operator against claims arising from your services, your promotions, your breach of this agreement or your violation of law. Nothing in this agreement removes rights or obligations that cannot lawfully be waived.",
+        ],
+      },
+      {
+        heading: "Versions and changes",
+        body: [
+          "Acceptance is recorded against a specific agreement version. The Operator may update this agreement; material changes take effect when a new version is activated, and continued participation may require accepting it.",
+        ],
+      },
+      GOVERNING,
+    ],
+  },
+};
+
+/**
+ * DORMANT — future Affiliate Program terms. Not published, not effective and
+ * not part of the Service Partner Agreement. Preserved so a later, separately
+ * approved Affiliate phase does not need to rebuild the draft.
+ */
+export const DORMANT_AFFILIATE_AGREEMENT_DRAFT: PolicyDraft = {
+  type: "partner_agreement",
+  title: "Affiliate Agreement (dormant draft)",
+  path: "/legal/partner-agreement",
+  summary: "Deferred future Affiliate terms. Not open, not published, not effective.",
+  draftVersion: 1,
+  sections: [
+    IDENTITY,
+    {
+      heading: "Application and approval",
+      body: [
+        "Participation requires an application and written approval by the Operator. Affiliate and Service Partner are distinct roles. Service Partners charge their own clients separately, gain no access to client workspaces through this program, and earn no CARTEL HQ commission unless separately approved as an Affiliate.",
+      ],
+    },
       {
         heading: "Eligible referrals and attribution",
         body: [
@@ -260,9 +365,8 @@ export const POLICY_DRAFTS: Record<PolicyType, PolicyDraft> = {
           "The program is provided \"as is\" to the extent permitted by law. The Operator's liability is limited to unpaid commission properly owed. You will indemnify the Operator against claims arising from your promotions, breach or violation of law.",
         ],
       },
-      GOVERNING,
-    ],
-  },
+    GOVERNING,
+  ],
 };
 
 export const POLICY_TYPES: PolicyType[] = ["terms", "privacy", "refunds", "partner_agreement"];

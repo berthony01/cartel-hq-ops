@@ -78,7 +78,6 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-const intOrNaN = (v: string) => (v.trim() === "" ? NaN : Number(v));
 /** Stage 1B-3 staged column; absent from generated types until applied. */
 const durationOf = (t: PartnerTerms): number | null => {
   const v = (t as PartnerTerms & { commission_duration_invoices?: number | null }).commission_duration_invoices;
