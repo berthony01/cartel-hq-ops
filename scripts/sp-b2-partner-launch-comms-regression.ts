@@ -59,6 +59,7 @@ const ALLOW = new Set([
   "scripts/sp-a-managed-client-access-regression.ts", "scripts/public-discovery-seo-regression.ts", "src/lib/partner-launch-comms.ts",
   "src/components/cartel/PartnerLaunchCommsPanel.tsx", "src/routes/_authenticated/telegram.tsx", "src/components/cartel/ManagedAccessGuard.tsx",
   "src/components/cartel/SidebarNav.tsx", "src/lib/partner-client-access.ts", "src/components/cartel/ServicePartnerAccessPanel.tsx", "roadmap.md", ".lovable/plan.md",
+  "src/integrations/supabase/types.ts", // approved post-production generated-types sync for SP-B2
 ]);
 const since = "780f5e1ebaea8a603503a06823618e861aaa8f05";
 const changed = [
@@ -66,7 +67,7 @@ const changed = [
   ...execFileSync("git", ["status", "--short"], { encoding: "utf8" }).split("\n").map((l) => l.slice(3)),
 ].map((s) => s.trim()).filter(Boolean);
 check("F-8 only allowlisted files changed since plan commit", changed.every((f) => ALLOW.has(f)), changed.filter((f) => !ALLOW.has(f)).join(","));
-check("F-9 no Edge Function / migration / types change", !changed.some((f) => f.startsWith("supabase/") || f.includes("integrations/supabase")));
+check("F-9 no Edge Function / migration / types change (only generated types.ts allowed)", !changed.some((f) => f.startsWith("supabase/") || (f.includes("integrations/supabase") && f !== "src/integrations/supabase/types.ts")));
 
 /* ---------- Local DB ---------- */
 const hasPg = spawnSync("sh", ["-c", "command -v initdb && command -v pg_ctl && command -v psql"]).status === 0;
