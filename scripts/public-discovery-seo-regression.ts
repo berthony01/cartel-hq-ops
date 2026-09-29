@@ -58,6 +58,12 @@ check("D-22 robots advertises the public sitemap", robots.includes("Sitemap: htt
 check("D-23 public discovery uses crawlable links", !/onClick=.*(docs|partner-program)/s.test(home + footer + nav) && (home + footer + nav).includes('to="/docs"'));
 
 const allowed = new Set([
+  // Approved SP-B2 V1 staging allowlist.
+  "docs/sql/SP_B2_partner_launch_watcher_comms.sql",
+  "docs/SP_B2_PARTNER_LAUNCH_COMMS_RUNBOOK.md",
+  "scripts/sp-b2-partner-launch-comms-regression.ts",
+  "src/lib/partner-launch-comms.ts",
+  "src/components/cartel/PartnerLaunchCommsPanel.tsx",
   // Approved SP-B0 + SP-B1 staging allowlist.
   "docs/sql/SP_B0_commercial_workspace_entitlement_core.sql",
   "docs/sql/SP_B1_partner_project_inbox.sql",
