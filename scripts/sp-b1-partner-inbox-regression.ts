@@ -183,9 +183,9 @@ if (!hasPg) {
     check("DB-12 messages readable, no Telegram ids", msgs.ok && msgs.out.includes("gm team") && !/111111|telegram_chat/.test(msgs.out), msgs.out || msgs.err);
 
     const rep = as(SP, `SELECT concat_ws('|', delivery_status, conversation_status, idempotent_replay) FROM public.partner_inbox_create_reply('${WS}','${CV}','  Hello from the team  ','${R1}');`);
-    check("DB-13 partner reply queued once", rep.out === "pending|WAITING_ON_TEAM|false", rep.out || rep.err);
+    check("DB-13 partner reply queued once", rep.out === "pending|WAITING_ON_TEAM|f", rep.out || rep.err);
     const replay = as(SP, `SELECT concat_ws('|', delivery_status, idempotent_replay) FROM public.partner_inbox_create_reply('${WS}','${CV}','Hello from the team','${R1}');`);
-    check("DB-14 same request id replays original, no second send", replay.out === "pending|true" && psql(`SELECT count(*) FROM public.project_inbox_deliveries;`).out === "1", replay.out || replay.err);
+    check("DB-14 same request id replays original, no second send", replay.out === "pending|t" && psql(`SELECT count(*) FROM public.project_inbox_deliveries;`).out === "1", replay.out || replay.err);
     check("DB-15 same id different body rejected", err(as(SP, `SELECT * FROM public.partner_inbox_create_reply('${WS}','${CV}','changed','${R1}');`), "different reply"));
     check("DB-16 unsettled earlier delivery blocks new reply", err(as(SP, `SELECT * FROM public.partner_inbox_create_reply('${WS}','${CV}','again','${R2}');`), "not settled yet"));
     const dv = psql(`SELECT concat_ws('|', m.author_type, m.channel, m.team_user_id, d.telegram_user_id, d.delivered_text_snapshot LIKE 'Client One · CLI%OFFICIAL PROJECT RESPONSE%Hello from the team%') FROM public.project_conversation_messages m JOIN public.project_inbox_deliveries d ON d.message_id=m.id;`);
