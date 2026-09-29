@@ -1,6 +1,6 @@
 # SP-B2 V1 — Partner Launch Watcher Communications Runbook
 
-Status: STAGED IN REPOSITORY ONLY. Not applied to production `ocoinbnjgstkmnwwvnhi`. Not published.
+Status: LIVE IN PRODUCTION. Migration `20260929161346 sp_b2_partner_launch_watcher_comms` applied to `ocoinbnjgstkmnwwvnhi`; all four RPCs verified SECURITY DEFINER, postgres owner, empty search_path, authenticated+service_role execute only. Backend transactional smoke passed 12/12 and rolled back (no DM committed). Real two-account browser + committed Telegram DM rendering test remains pending (no approved active Service Partner account). Frontend not published.
 Plan commit: `780f5e1ebaea8a603503a06823618e861aaa8f05`.
 
 ## What it enables
