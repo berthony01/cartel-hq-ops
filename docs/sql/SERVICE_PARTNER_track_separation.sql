@@ -21,9 +21,13 @@
 --    Affiliate is closed; service-only approval => is_affiliate=false,
 --    referral_code=NULL, no tax/payout prerequisite.
 --  * Payout requests and legacy referral attribution require Affiliate open.
+--  * Canonical-text gate: service-only activation requires agreement_text
+--    and disclosure_text to match the canonical Service Partner Agreement v2
+--    and disclosure EXACTLY (SHA-256 of UTF-8 text, hashes embedded below and
+--    derived from src/lib/legal-policies.ts). Otherwise PARTNER_TERMS_NOT_CANONICAL.
 --  * get_my_partner_summary returns both flags; program_open = either.
---  * get_partner_program_status(): public read of the two booleans + active
---    version only (anon + authenticated). No other anon capability added.
+--  * get_partner_program_status(): public read of the two booleans, active
+--    version and active text hashes only (anon + authenticated). No other anon capability added.
 --  * RLS, row-ownership/owner policies, append-only ledger guard unchanged.
 -- Additive: no DROP, no data rewrite. All 7 partner tables have 0 rows.
 -- =====================================================================
@@ -54,6 +58,11 @@ BEGIN
       -- Affiliate production prerequisites (Phase 1B SQL/Edge/Stripe, legal,
       -- CPA, G12a-B) are NOT satisfied. Fail closed unconditionally.
       RAISE EXCEPTION 'AFFILIATE_PROGRAM_DEFERRED' USING ERRCODE = '22023';
+    END IF;
+    -- Canonical Service Partner Agreement v2 + exact disclosure only.
+    IF encode(sha256(convert_to(NEW.agreement_text, 'UTF8')), 'hex') <> '02e337dd2ae09436813e5d69ac402f9cc03d80fc79336d4cc7713e868cd7508e'
+      OR encode(sha256(convert_to(NEW.disclosure_text, 'UTF8')), 'hex') <> '2d8b74957f7f4d66dcd262a49d3ae8a331c8084b8b11390bddae40f7363df91e' THEN
+      RAISE EXCEPTION 'PARTNER_TERMS_NOT_CANONICAL' USING ERRCODE = '22023';
     END IF;
   END IF;
   IF TG_OP = 'UPDATE' AND OLD.status IN ('active','retired') THEN
@@ -288,7 +297,9 @@ BEGIN
 END $function$;
 
 -- ---------------------------------------------------------------------
--- Public status: two booleans + active version only.
+-- Public status: two booleans, active version, and SHA-256 of the active
+-- agreement/disclosure text (lets the public agreement page verify it is
+-- showing the effective canonical text). No PII.
 -- ---------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.get_partner_program_status()
  RETURNS jsonb
@@ -299,7 +310,9 @@ AS $function$
   SELECT jsonb_build_object(
     'service_partner_applications_open', coalesce((SELECT t.service_partner_applications_open FROM public.partner_program_terms t WHERE t.status = 'active' LIMIT 1), false),
     'affiliate_applications_open', coalesce((SELECT t.affiliate_applications_open FROM public.partner_program_terms t WHERE t.status = 'active' LIMIT 1), false),
-    'active_version', (SELECT t.version FROM public.partner_program_terms t WHERE t.status = 'active' LIMIT 1)
+    'active_version', (SELECT t.version FROM public.partner_program_terms t WHERE t.status = 'active' LIMIT 1),
+    'agreement_sha256', (SELECT encode(sha256(convert_to(t.agreement_text, 'UTF8')), 'hex') FROM public.partner_program_terms t WHERE t.status = 'active' LIMIT 1),
+    'disclosure_sha256', (SELECT encode(sha256(convert_to(t.disclosure_text, 'UTF8')), 'hex') FROM public.partner_program_terms t WHERE t.status = 'active' LIMIT 1)
   )
 $function$;
 REVOKE ALL ON FUNCTION public.get_partner_program_status() FROM PUBLIC;

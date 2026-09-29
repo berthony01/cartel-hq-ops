@@ -4,6 +4,7 @@
  * helpers never decide eligibility, owner status, balances or commissions.
  */
 import { supabase } from "@/integrations/supabase/client";
+import { SERVICE_PARTNER_AGREEMENT_V2_SHA256, SERVICE_PARTNER_DISCLOSURE_SHA256 } from "@/lib/legal-policies";
 import type { Tables } from "@/integrations/supabase/types";
 
 export type PartnerTerms = Tables<"partner_program_terms">;
@@ -69,11 +70,14 @@ export type PartnerProgramStatus = {
   service_partner_applications_open: boolean;
   affiliate_applications_open: boolean;
   active_version: number | null;
+  /** SHA-256 hex of the active row's agreement/disclosure text (null when none). */
+  agreement_sha256: string | null;
+  disclosure_sha256: string | null;
   /** false when the staged track-separation contract is not applied yet. */
   contract_available: boolean;
 };
 export const CLOSED_PROGRAM_STATUS: PartnerProgramStatus = {
-  service_partner_applications_open: false, affiliate_applications_open: false, active_version: null, contract_available: false,
+  service_partner_applications_open: false, affiliate_applications_open: false, active_version: null, agreement_sha256: null, disclosure_sha256: null, contract_available: false,
 };
 type LooseRpcCall = (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string; code?: string } | null }>;
 /**
@@ -89,11 +93,25 @@ export async function fetchPartnerProgramStatus(): Promise<PartnerProgramStatus>
       service_partner_applications_open: d['service_partner_applications_open'] === true,
       affiliate_applications_open: d['affiliate_applications_open'] === true,
       active_version: typeof d['active_version'] === "number" ? d['active_version'] : null,
+      agreement_sha256: typeof d['agreement_sha256'] === "string" ? d['agreement_sha256'] : null,
+      disclosure_sha256: typeof d['disclosure_sha256'] === "string" ? d['disclosure_sha256'] : null,
       contract_available: true,
     };
   } catch {
     return CLOSED_PROGRAM_STATUS;
   }
+}
+/**
+ * Effective Service Partner Agreement version, or null (=> Draft). Effective
+ * only when the active row is service-only and its stored agreement and
+ * disclosure exactly match the canonical v2 text (hash comparison). Any
+ * error, missing contract or divergence fails closed to Draft.
+ */
+export function effectiveServiceAgreementVersion(s: PartnerProgramStatus): number | null {
+  if (!s.contract_available || !s.service_partner_applications_open || s.affiliate_applications_open) return null;
+  if (typeof s.active_version !== "number") return null;
+  if (s.agreement_sha256 !== SERVICE_PARTNER_AGREEMENT_V2_SHA256 || s.disclosure_sha256 !== SERVICE_PARTNER_DISCLOSURE_SHA256) return null;
+  return s.active_version;
 }
 /** Track flags from an active terms row; missing columns => closed (fail closed). */
 export function termsTrackFlags(t: PartnerTerms | null | undefined): { service: boolean; affiliate: boolean } {
