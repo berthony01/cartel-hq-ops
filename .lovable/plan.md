@@ -1,102 +1,146 @@
-# SP-B2 — Partner Launch Watcher Messages (audit + plan only)
+# SP-B3 Partner Broadcasts — Audit and Plan (plan only, no edits)
 
-Baseline: HEAD `13e5e4d5` (on top of `77c58130`). Production `ocoinbnjgstkmnwwvnhi` was read-only. Nothing was edited, applied, published or deployed.
+HEAD at audit: `d2c2cf3b`. Production `ocoinbnjgstkmnwwvnhi` inspected read-only.
 
-## 1. Current architecture (checked against live definitions)
+## 1. Current broadcast architecture (verified)
 
 ```text
-Owner UI  BroadcastsPanel (/telegram, owner branch only)
-  -> create_launch_watcher_update(launch, client_request_id, title, body)   [operator only]
-       INSERT launch_events (event_type WATCHER_UPDATE, source 'operator', payload {version,client_request_id,title,body})
-         -> trigger enqueue_launch_event_deliveries  (active AND updates_enabled watchers only)
-              -> launch_notification_deliveries (pending, one row per subscription)
-                   -> claim_launch_notification_deliveries (service_role) -> Edge launch-notifications (cron) -> Telegram DM
+BroadcastsPanel / GroupAnnouncementComposer (browser)
+  -> src/lib/telegram-group.ts  sendGroupAnnouncement()
+  -> Edge "telegram-group" action send_group_announcement   (verify_jwt=true)
+       1. auth.getUser()
+       2. workspace_members row required; owner/admin only (canManageCommunity)
+       3. requireProjectToolAccess -> can_use_project_tools(ws, user)
+       4. requireCommercialAccess -> evaluate_commercial_access(ws,'official_broadcasts',user)
+       5. idempotency lookup on (workspace_id, client_request_id)
+       6. INSERT telegram_group_announcements status SENDING (ledger claim)
+       7. verifyGroup(): live getChat/getChatMember, UPDATEs group row status fields
+       8. ONE sendMessage / sendPhoto, synchronous
+       9. UPDATE ledger -> SENT / FAILED / AMBIGUOUS
 ```
 
-- **Watcher privacy:** `launch_watch_subscriptions` holds `telegram_user_id`. The browser gets counts only (`get_launch_watcher_update_stats`, `get_launch_audience_summary`, `get_launch_watch_summary`). `list_launch_watcher_updates` returns the event title, body and per-status counts. None of these return Telegram IDs or subscription IDs.
-- **Owner send checks (`create_launch_watcher_update`):** client_request_id required; `FOR UPDATE` lock on the launch row (the row is locked, never changed); `is_workspace_operator`; status must be WATCHLIST_OPEN, LAUNCH_APPROACHING, CONTRACT_PENDING, OFFICIAL_CONTRACT_REGISTERED or LIVE; Project Profile must be published; replaying the same request returns the original event (backed by the unique index `launch_events_watcher_update_request_uniq` plus a unique_violation handler); title up to 120 characters; body 1–2200 characters; at least 1 eligible watcher; at most 1 update per 60 seconds and 20 per 24 hours per launch.
-- **Opt-out:** enforced in the enqueue trigger (`is_active`, `updates_enabled`). The send function cannot get around it.
-- **Commercial:** the owner send path has **no commercial check**. The only live function that checks `'launch_watch'` is `transition_launch_status`.
-- **Read helpers** use `is_workspace_member`, so partners cannot call them today.
-- **Other communication actions:** `notify_launch_watchers_official_contract[_correction]` (tied to contract registration), `send_launch_schedule_communication` / `dismiss_launch_schedule_communication` (tied to schedule-change detection), and reminder or lifecycle events produced by triggers on `launches`.
-- **Constraints:** `launch_events.source` must be one of reminder_runner, lifecycle or operator. `event_type` must be one of a fixed set that includes WATCHER_UPDATE.
-- **Edge Function:** `launch-notifications` is deployed but its source is **not in this repository**. It reads trusted queue rows through a service_role claim.
+- No queue and no worker: the send happens synchronously inside `telegram-group`. Source is in the repo at `backend-source/edge-functions/telegram-group/index.ts` (not in `supabase/functions/`).
+- `telegram_group_announcements` has RLS with no policies (service role only). `announcement_kind` separates community posts from official-contract and correction posts.
+- `telegram_group_connections` SELECT policy is `is_workspace_member` and returns `telegram_chat_id`. The owner UI gets raw chat IDs; a partner cannot read this table.
+- Other owner actions in the same function: `broadcast_launch_options`, `send_official_contract_broadcast`, `send_official_contract_correction_broadcast`, welcome settings, sticker assign/distribute, group test.
 
-## 2. Classification
+## 2. Limits, rate, idempotency, commercial (verified)
 
-| Action | Class |
+- **Length:** plain text is 1..3500 characters after trimming. Branded photo caption max is 1024 (`BRANDED_CAPTION_MAX`), including the header and footer. **The 1024 you expected applies only to branded posts.** Both limits are enforced only in the Edge function.
+- **Rate limit:** none. No cooldown and no daily cap on owner community broadcasts.
+- **Idempotency:** `client_request_id` must be a UUID. The key is (workspace_id, client_request_id). A repeated id never sends again, in any state. A different intent with the same id returns 409. A concurrent 23505 error is resolved to the recorded row.
+- **Commercial:** owner broadcasts ARE gated, with feature key `official_broadcasts`. Owner bypass lives only in `evaluate_commercial_access` / `can_use_project_tools`. Both use `is_workspace_member`, so a partner fails them.
+- **SP-B0 adapter** `partner_evaluate_commercial_access` is service-role only, hard-limited to `project_inbox`, and reads `auth.uid()`. It cannot be reused for broadcasts unchanged.
+- `partner_has_scope` reads `auth.uid()`. It works only under a user-JWT client, not the service-role client.
+
+## 3. Classification
+
+| Owner action | Class |
 |---|---|
-| Watcher counts (active / updates on / muted) | B — partner wrapper |
-| Past watcher-update history (title, body, status counts) | B — partner wrapper |
-| Send custom watcher update | B — partner wrapper |
-| Full audience delivery breakdown | D — defer (counts are enough for v1) |
-| Official contract packet / correction notices | C — owner only (tied to contract authority) |
-| Schedule-change send / dismiss | D — defer (needs a separate comms-only approval) |
-| Reminders and lifecycle alerts | C — automatic, driven by launch status |
-| Launch status, contract, schedule, deploy, treasury | C — owner only, never exposed |
-| Watcher list or export | C — never |
+| List connected groups (display-safe fields) | B, new partner wrapper |
+| Send plain-text community broadcast | B, new partner Edge action |
+| Community broadcast history (aggregate/status) | B, new partner wrapper |
+| Branded photo broadcast (logo/profile) | D |
+| Launch Watch CTA button on broadcast | D (reads the private launch token) |
+| Official contract / correction broadcast | C |
+| Connect/disconnect/re-verify group, bot admin, sticker assign/distribute, welcome settings, group test | C |
+| Templates / platform messages | C |
 
-Nothing is class A: every existing function checks workspace membership or operator status.
+Nothing is class A: every owner path needs workspace membership.
 
-## 3. Recommended SP-B2 V1
+## 4. SP-B3 V1 recommendation
 
-A partner with an active `launch_watcher_comms` grant opens a managed client, picks one of that client's launches, sees the watcher counts and recent update history, writes a title and body, confirms a preview, and sends. Delivery reuses the existing event, trigger, queue, worker path unchanged. History stays with the client's launch. No watcher identities are shown.
+A partner with an active `broadcasts` scope can:
+- list the client's connected groups: `id` (uuid reference), title, chat type, operational flag. No chat ID or username.
+- write a plain-text message (1..3500), preview it, confirm, then send to ONE selected group.
+- see history of `COMMUNITY` announcements for that workspace: status, group title, time, text, and an actor kind (owner team or partner). No member data.
 
-No STOP condition is triggered. This needs no operator or member widening, no impersonation, no watcher export, and no launcher or wallet changes.
+Behavior is the same as the owner path. The same UUID idempotency, ledger and SENT/FAILED/AMBIGUOUS rules apply. No invented cooldown, because the owner path has none. The client workspace's own `official_broadcasts` entitlement is checked through the SP-B0 core, with no partner owner-bypass.
 
-## 4. Database work (new SQL file, additive)
+**Documented side effect (owner-equivalent):** before sending, `verifyGroup` refreshes the group row's status fields. If the bot was removed, it also pauses that group's enabled Sticker Drops. This is lifecycle bookkeeping, not group management. A partner send would trigger it exactly as an owner send does. If you do not accept this, V1 must STOP, because avoiding it means forking the verification logic.
 
-`docs/sql/SP_B2_partner_launch_watcher_comms.sql` adds three functions. Each is SECURITY DEFINER, uses `SET search_path = ''` with fully qualified names, reads `auth.uid()` explicitly, revokes PUBLIC and anon, and grants authenticated and service_role.
+## 5. Required DB changes (staged SQL `docs/sql/SP_B3_partner_group_broadcasts.sql`)
 
-1. `partner_launch_watcher_stats(_workspace_id, _launch_id)` — checks `partner_has_scope(_workspace_id,'launch_watcher_comms')` first, then that the launch exists **and** `launch.workspace_id = _workspace_id`. Returns the same three counts as the owner version.
-2. `partner_list_launch_watcher_updates(_workspace_id, _launch_id, _limit)` — same checks first. Same columns as the owner version, limit clamped to 1–20.
-3. `partner_create_launch_watcher_update(_workspace_id, _launch_id, _client_request_id, _title, _body)` — same scope check, then lock the launch row and require its workspace to match, then **copy the owner checks line for line**: status allow-list, published profile, replay lookup, validation (120 / 2200 characters), at least 1 eligible watcher, 60-second gap, 20 per day, and the unique_violation replay handler. It inserts `WATCHER_UPDATE` with `source 'operator'`, because the constraint allows nothing else and changing it is out of scope. The payload adds `actor:'service_partner'` and `partner_access_id` for audit. The partner shares the owner's rate limits because both count all events on the launch.
+1. `partner_list_broadcast_groups(_workspace_id)`: authenticated, SECURITY DEFINER, `search_path ''`. Checks `auth.uid()`, then `partner_has_scope(ws,'broadcasts')` first. Returns safe fields only.
+2. `partner_list_group_broadcasts(_workspace_id, _limit)`: same posture. Limit clamped to 1..20. Filters `announcement_kind` = the community kind (exact value confirmed at build). Returns no chat ID, requester UUID or message ID.
+3. `partner_authorize_group_broadcast(_workspace_id, _group_connection_id)`: authenticated. The Edge function calls it with the partner's user-JWT client. In order it checks:
+   - scope
+   - the group belongs to `_workspace_id`
+   - the Project Identity predicate for the client workspace
+   - `commercial_evaluate_workspace_feature(ws,'official_broadcasts', base)`
 
-**Shared internal core:** not needed. The send logic is about 100 lines with no billing engine inside, so a reviewed line-for-line wrapper (the SP-B1 pattern) carries less risk than extracting from a live owner function. Owner functions stay unchanged.
+   It returns only `{allowed, reason_code}`, never plan internals.
+4. Project Identity check without duplication: extract the workspace predicate from `can_use_project_tools` into a service-role-only core, `project_identity_ready(_workspace_id)`. `can_use_project_tools` would then call it, with output proven equivalent SP-B0-style. **Decision needed:** approve this extraction, or skip the identity gate for partners (not recommended).
 
-**No** table, RLS, grant, trigger, constraint, or owner-function changes. **No** direct table permissions.
+No table, column, RLS, grant, trigger, or membership/operator helper changes. Owner functions stay byte-identical except the optional `can_use_project_tools` extraction in item 4.
 
-### Open decision: commercial gate
-The owner path has no commercial gate, so v1 matches the owner exactly (no gate). If you want partner sends gated, the option is a separate additive `partner_evaluate_launch_watch_access` adapter. It would use the SP-B0 core with `'launch_watch'` against the **client** workspace, behind the scope check, and would not give partners the owner bypass. This adds a gate the owner doesn't have, so it needs your explicit approval. The default is no gate.
+## 6. Edge change: REQUIRED
 
-## 5. Edge Function
-No changes. The worker consumes queue rows that are indistinguishable from owner sends, and the extra payload keys are additive. **Caveat:** the `launch-notifications` source is not in the repo, so "ignores extra payload keys" can only be proven by a live smoke that confirms the DM renders.
+Sending exists only inside `telegram-group`, and that function denies anyone without a membership row. Add a separate branch before the membership check, for the actions `partner_list_groups`, `partner_send_group_announcement` and `partner_group_history`:
+- the membership check and the owner/admin role stay unchanged for every existing action.
+- the partner branch runs the checks in item 3, forces `brandingEnabled=false`, `ctaEnabled=false`, `announcement_kind` = community, and sets `requested_by` to the partner's user id.
+- it then reuses the existing plain-text idempotency, ledger, verification and send code as one internal function. This is a local refactor inside the file, with no behavior change to the owner path.
+- **Shared send primitive:** yes, one internal plain-text send function inside the Edge file only. No new DB send primitive.
+- **Start gate:** confirm the deployed `telegram-group` (v13) matches the repo source before editing. If it does not match, STOP.
 
-## 6. Frontend
-- `src/lib/partner-launch-comms.ts` (new) — wrappers for the three RPCs; a missing RPC fails closed.
-- `src/components/cartel/PartnerLaunchCommsPanel.tsx` (new) — launch picker (the client's launches in allowed statuses, through the existing partner-readable launch list if one exists; otherwise step 1 must add a fourth read RPC that returns only id, name and status for this workspace), counts, history, compose with the 120/2200 limits, a preview confirm dialog, one client_request_id per draft, and 44px+ touch targets.
-- `src/routes/_authenticated/telegram.tsx` — the managed branch shows Inbox and/or Launch Watch messages based on scopes.
-- `src/components/cartel/ManagedAccessGuard.tsx`, `SidebarNav.tsx` — allow `/telegram` when the grant has project_inbox **or** launch_watcher_comms.
-- `src/lib/partner-client-access.ts` — scope helper only.
+## 7. Frontend
 
-## 7. Strict allowlist
-The SQL file above, `docs/SP_B2_PARTNER_LAUNCH_COMMS_RUNBOOK.md`, `scripts/sp-b2-partner-launch-comms-regression.ts`, the six frontend files above, `roadmap.md`, `.lovable/plan.md`, and the D-24 allowlist entry in `scripts/public-discovery-seo-regression.ts` only if required. Types are regenerated in a separate turn after activation. Forbidden: owner functions, membership and operator helpers, launches/contract/status/schedule/treasury/deploy, Edge Functions, Stripe, plans and prices, Affiliate, partner statuses, and production SQL.
+- New `src/lib/partner-group-broadcasts.ts` and `src/components/cartel/PartnerGroupBroadcastPanel.tsx`.
+- Update `src/routes/_authenticated/telegram.tsx` so the managed view composes the Inbox, Launch Watcher messages and Broadcasts panels by scope.
+- Update `src/lib/partner-client-access.ts` to add `broadcasts` to the active scopes and unlock `/telegram` for it.
+- Owner panels and components are not touched.
 
-## 8. Test matrix (static + local DB + production smoke rolled back)
-- Cross-workspace: scope on workspace A with a launch from B → denied. A mismatched `_workspace_id` → denied before any data is read.
-- Scope missing, grant pending, declined, revoked or suspended partner, anon → denied. Revoking mid-session blocks the next send.
-- Output columns contain no telegram_user_id, chat_id or subscription_id. No function returns per-watcher rows.
-- Opt-out: a muted or inactive watcher gets no delivery row. An unmuted watcher gets exactly one.
-- Idempotency: the same client_request_id returns the same event id with no second delivery set. A concurrent duplicate is handled by the unique index.
-- Queue: delivery rows equal the eligible count, status pending, event workspace equals the client workspace.
-- Rate limits: a second send within 60 seconds is rejected; the 21st send in 24 hours is rejected (shared with the owner).
-- Length: empty body, 2201 characters and a 121-character title are rejected; boundary values are accepted.
-- Status and profile: DRAFT, ANNOUNCED and COMPLETED are rejected; an unpublished profile is rejected.
-- No launch-state change: a before/after hash of the `launches` row shows no difference; no other event types are created.
-- Commercial: none in v1. If the adapter is approved, test deny and allow on the client plan and confirm partners get no owner bypass.
-- Owner unchanged: the owner function definitions match live byte for byte; owner send still works; `is_workspace_member` and `is_workspace_operator` are unchanged.
-- Existing suites: SP-B0, SP-B1, SP-A, Service Partner, commercial-entitlements, Partner 1A and 1B-1 through 1B-4 plus reconcile, public discovery, typecheck, build, `git diff --check`.
+## 8. Strict allowlist
 
-## 9. Activation order and rollback
-1. CP-SPB2-STAGE: build in the repo only, run the tests above.
-2. CP-SPB2-SQL: apply the single additive migration → check ACLs, search_path and owner → run the production transactional smoke (sends inside a transaction that is rolled back, so no DM goes out) → confirm counts are unchanged.
-3. Regenerate types (separate turn).
-4. CP-SPB2-PUBLISH: frontend, only with explicit approval.
-5. Real two-account smoke (needs an approved, active Service Partner test account; still pending).
+- `docs/sql/SP_B3_partner_group_broadcasts.sql`
+- `backend-source/edge-functions/telegram-group/index.ts`
+- `src/lib/partner-group-broadcasts.ts`
+- `src/components/cartel/PartnerGroupBroadcastPanel.tsx`
+- `src/routes/_authenticated/telegram.tsx`
+- `src/lib/partner-client-access.ts`
+- `scripts/sp-b3-partner-group-broadcasts-regression.ts`
+- `docs/SP_B3_PARTNER_BROADCASTS_RUNBOOK.md`
+- test-expectation-only updates: `scripts/sp-a-...`, `sp-b1-...`, `sp-b2-...` (active scope sets / phase allowlists), `scripts/public-discovery-seo-regression.ts` (D-24)
+- `roadmap.md`
 
-Rollback: `DROP FUNCTION` the three (or four) partner functions and hide the panel. No data or owner path depends on them. Any events already queued deliver normally.
+## 9. Regression + transactional smoke matrix
 
-## 10. Expected advisor lint changes
-- 0028 (anon SECURITY DEFINER): unchanged at 9.
-- 0029 (authenticated SECURITY DEFINER): +3 (+4 if the launch-list read is needed, +0 for a service_role-only commercial adapter), from 119 to 122 or 123.
-- Search-path lint: no new findings.
+- **Isolation:** a partner of workspace A cannot list, read history, authorize, or send to groups of workspace B. A group id from B passed with `_workspace_id`=A is denied.
+- **Scope states:** no scope, pending, declined, revoked or suspended partner, and anon are all denied. Revoking access blocks the next send.
+- **Privacy:** outputs contain no `telegram_chat_id`, user IDs, `requested_by` UUID, or member counts beyond the owner-visible aggregate.
+- **Boundaries:** empty and whitespace messages are rejected; 3500 passes; 3501 is rejected. Branding and CTA flags are ignored or rejected on the partner path.
+- **Commercial:** the client plan without `official_broadcasts` gives 403. Monthly limit reached gives 429. The partner never inherits platform-owner bypass.
+- **Idempotency:** the same request id returns the same row with no second send. The same id with a different message or group returns 409.
+- **Ledger:** exactly one row with `announcement_kind` = community, `requested_by` = partner. It appears in owner and partner history.
+- **No mutation:** no change to group connect/admin/sticker/welcome rows beyond the documented verification refresh. No watcher DMs, `launch_events` or deliveries created.
+- **Owner path:** owner actions give identical results. Owner function md5s unchanged, except the approved identity extraction with an equivalence proof.
+- **Production smoke:** runs in a rolled-back transaction for the RPCs. The Edge send is proven only in the later two-account test. A real send needs an approved active Service Partner account and a test group.
+
+## 10. Activation order and rollback
+
+1. CP-SPB3-PUBLISH (frontend, fails closed until the RPCs and Edge function exist).
+2. CP-SPB3-SQL (apply the migration, rolled-back smoke).
+3. CP-SPB3-EDGE (deploy `telegram-group`; owner regression on the live function first).
+4. Types sync.
+5. Two-account smoke.
+
+Rollback: redeploy the prior `telegram-group` source; `DROP FUNCTION` the three partner RPCs; restore the `can_use_project_tools` body if it was extracted; remove the scope from `ACTIVE_PARTNER_SCOPES`.
+
+## 11. Expected advisor delta
+
+- 0028 unchanged at 9.
+- 0029 +3 (123 -> 126) for the three authenticated SECURITY DEFINER partner RPCs.
+- The service-role-only identity core adds no 0029 finding.
+
+## 12. STOP conditions (none triggered by this audit, subject to the decisions below)
+
+- The deployed Edge function differs from the repo source.
+- The owner does not accept the verification-refresh side effect.
+- The identity gate cannot be satisfied without duplicating the predicate or broadening membership.
+
+## Decisions needed before build
+
+1. Partner V1 text limit: owner-equal 3500 (recommended), or a stricter 1024 cap for partners.
+2. Approve the `can_use_project_tools` core extraction (recommended), or no identity gate for partners.
+3. Accept the owner-equivalent verification side effect.
+4. Branding and Launch Watch CTA are deferred to a later phase.
