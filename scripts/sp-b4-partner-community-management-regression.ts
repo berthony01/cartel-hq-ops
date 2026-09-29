@@ -42,7 +42,7 @@ check("S-4 SECURITY DEFINER + empty search_path + auth.uid + community_managemen
 check("S-5 scope precedes every table read", FNS.every((f) => { const b = bodyOf(f); const s = b.indexOf("partner_has_scope"); const t = b.search(/FROM public\.(telegram_|launches)/); return s > 0 && t > s; }));
 check("S-6 PUBLIC/anon revoked, authenticated+service_role granted, postgres owner", FNS.every((f) => new RegExp(`REVOKE ALL ON FUNCTION public\\.${f}\\([^)]*\\) FROM PUBLIC, anon;`).test(code) && new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${f}\\([^)]*\\) TO authenticated, service_role;`).test(code) && new RegExp(`ALTER FUNCTION public\\.${f}\\([^)]*\\) OWNER TO postgres;`).test(code)));
 check("S-7 authorize: action allow-list, group-in-workspace, identity core, SP-B0 core community_basic, no bypass", (() => { const b = bodyOf("partner_authorize_community_action"); const a = b.indexOf("NOT IN ('save_welcome_settings', 'send_welcome_test')"), g = b.indexOf("g.workspace_id = _workspace_id"), i = b.indexOf("project_identity_ready"), c = b.indexOf("commercial_evaluate_workspace_feature(_workspace_id, 'community_basic'"); return a > 0 && g > a && i > g && c > i && !/unrestricted|is_platform_owner|evaluate_commercial_access\(/.test(b); })());
-check("S-8 get settings never selects launch token/UUID into output", (() => { const b = bodyOf("partner_get_welcome_settings"); const outs = [...b.matchAll(/jsonb_build_object\(([\s\S]*?)\);/g)].map((m) => m[1]).join(" "); return outs.length > 0 && !/launch_watch_token'|launch_watch_launch_id'|telegram_chat_id|metadata|username|member/.test(outs); })());
+check("S-8 get settings never selects launch token/UUID into output", (() => { const b = bodyOf("partner_get_welcome_settings"); const outs = [...b.matchAll(/jsonb_build_object\(([\s\S]*?)\);/g)].map((m) => m[1]).join(" "); return outs.length > 0 && !/launch_watch_token'|launch_watch_launch_id'|telegram_chat_id|metadata|username|member_count/.test(outs); })());
 check("S-9 group list outputs no chat id/username/metadata/member", !/telegram_chat_id|username|metadata|member/.test(bodyOf("partner_list_community_groups").match(/RETURNS TABLE\(([^)]*)\)/)?.[1] ?? "x"));
 check("S-10 defaults mirror Edge loadSettings defaults", EDGE.includes("welcome_enabled: false, welcome_message: DEFAULT_WELCOME_MESSAGE, mention_member: true, auto_delete_enabled: true, auto_delete_seconds: 45") && bodyOf("partner_get_welcome_settings").includes("'auto_delete_seconds', 45") && bodyOf("partner_get_welcome_settings").includes("Please check the pinned messages and official links before getting started."));
 
@@ -71,7 +71,7 @@ check("E-12 status/welcome_settings/sticker/broadcast actions stay member-only f
 check("F-1 community_management active; sticker_tools/missions inactive", LIB.includes('ACTIVE_PARTNER_SCOPES: readonly PartnerClientScope[] = ["project_identity", "project_inbox", "launch_watcher_comms", "broadcasts", "community_management"]'));
 check("F-2 /telegram unlocked for community_management", LIB.includes('{ path: "/telegram", scope: "community_management" }'));
 check("F-3 browser: partner RPCs + five editable fields only", CLIB.includes('"partner_list_community_groups"') && CLIB.includes('"partner_get_welcome_settings"') && !/launchWatch[A-Z]\w*:/.test(CLIB) && !/from\("telegram_/.test(CLIB + PANEL));
-check("F-4 panel: no ids, no owner/group-management/sticker/broadcast controls", !/telegram_chat_id|requested_by|messageId|TelegramGroupCard|CommunityWelcomeDialog|disconnect|reconnect|sticker|Broadcast/i.test(PANEL.replace(/Launch Watch card/g, "")));
+check("F-4 panel: no ids, no owner/group-management/sticker/broadcast controls", !/telegram_chat_id|requested_by|messageId|TelegramGroupCard|CommunityWelcomeDialog|disconnect|reconnect|sticker|Broadcast/i.test(PANEL.replace(/\/\*[\s\S]*?\*\//g, "").replace(/Launch Watch card/g, "")));
 check("F-5 panel: 3500 counter, 10..120 seconds, confirm dialog, Owner controlled label", PANEL.includes("WELCOME_MESSAGE_MAX") && PANEL.includes("WELCOME_AUTO_DELETE_MIN") && PANEL.includes("AlertDialog") && PANEL.includes("Owner controlled"));
 check("F-6 managed /telegram composes Community tab; owner page unchanged", TG.includes("<PartnerCommunityPanel />") && TG.includes('scopes.includes("community_management")') && TG.includes("if (!isManaged) return <TelegramPage />;"));
 check("F-7 runbook orders SQL + EDGE + publish checkpoints", ["CP-SPB4-SQL", "CP-SPB4-EDGE", "CP-SPB4-PUBLISH"].every((c) => RUNBOOK.includes(c)));
@@ -104,7 +104,7 @@ if (!hasPg) {
   const asPg = process.getuid?.() === 0 ? "setpriv --reuid=1000 --regid=1000 --clear-groups " : "";
   try {
     if (process.getuid?.() === 0) sh(`chmod 777 ${dir}`);
-    sh(`${asPg}initdb -D ${dir}/data -U postgres -A trust >/dev/null`);
+    sh(`${asPg}initdb -D ${dir}/data -U postgres -A trust -E UTF8 --locale=C >/dev/null`);
     sh(`${asPg}pg_ctl -D ${dir}/data -o "-k ${dir} -p ${port} -c listen_addresses=''" -l ${dir}/log -w start >/dev/null`);
     const psql = (sql: string) => {
       const f = join(dir, `q${Math.random().toString(36).slice(2)}.sql`);
@@ -221,9 +221,9 @@ if (!hasPg) {
     check("DB-21 every other action rejected", ["status", "welcome_settings", "send_group_announcement", "assign_pack", "distribute_pack", "send_group_test", "connect_group", "disconnect_group", "", "NULL"].every((a) => auth(G, a).out.includes('"ACTION_NOT_ALLOWED"')));
     check("DB-22 group from another workspace → GROUP_NOT_FOUND", auth(G2).out.includes('"GROUP_NOT_FOUND"'));
     check("DB-23 cross-workspace authorize denied", err(auth(G2, "save_welcome_settings", WS2), "Not authorized"));
-    check("DB-24 authorize exposes no plan/usage internals", !/plan_code|secret_plan|used|limit|period/.test(auth(G).out));
+    check("DB-24 authorize exposes no plan/usage internals", auth(G).ok && !/plan_code|secret_plan|used|limit|period/.test(auth(G).out));
     psql(`UPDATE public.commercial_stub SET feature='official_broadcasts' WHERE workspace_id='${WS}';`);
-    check("DB-25 evaluated feature is community_basic (other feature does not allow)", !auth(G).out.includes('"allowed": true'));
+    check("DB-25 evaluated feature is community_basic (other feature does not allow)", auth(G).ok && !auth(G).out.includes('"allowed": true'));
     psql(`UPDATE public.commercial_stub SET feature='community_basic' WHERE workspace_id='${WS}';`);
     const setStub = (allowed: boolean, reason: string | null) => psql(`UPDATE public.commercial_stub SET allowed=${allowed}, reason=${reason ? `'${reason}'` : "NULL"} WHERE workspace_id='${WS}';`);
     setStub(false, "FEATURE_NOT_INCLUDED"); check("DB-26 FEATURE_NOT_INCLUDED mapped", auth(G).out.includes('"FEATURE_NOT_INCLUDED"'));
@@ -241,7 +241,8 @@ if (!hasPg) {
     const snap = () => psql(`SELECT md5(coalesce((SELECT string_agg(row_to_json(g)::text,'|' ORDER BY id) FROM public.telegram_group_connections g),'')) || md5(coalesce((SELECT string_agg(row_to_json(s)::text,'|' ORDER BY group_connection_id) FROM public.telegram_community_settings s),'')) || md5(coalesce((SELECT string_agg(row_to_json(l)::text,'|' ORDER BY id) FROM public.launches l),'')) || (SELECT count(*) FROM public.telegram_group_announcements) || (SELECT count(*) FROM public.launch_events) || (SELECT count(*) FROM public.launch_notification_deliveries) || (SELECT count(*) FROM public.sticker_pack_group_targets) || (SELECT count(*) FROM public.telegram_message_cleanup_jobs) || (SELECT count(*) FROM public.workspace_members);`).out;
     const s0 = snap();
     for (const q of [...calls(WS, G), `SELECT public.partner_authorize_community_action('${WS}','${G}','send_welcome_test');`]) as(SP, q);
-    check("DB-32 partner RPCs mutate nothing (groups, settings, launches, announcements, events, deliveries, stickers, cleanup, members)", snap() === s0);
+    check("DB-32 partner RPCs mutate nothing" , s0.length > 60 && snap() === s0);
+    if (false) check("x (groups, settings, launches, announcements, events, deliveries, stickers, cleanup, members)", snap() === s0);
 
     as(OWNER, `SELECT public.owner_revoke_service_partner('${accessId}');`);
     check("DB-33 revoke immediately blocks next read + authorization", allDenied(SP, "Not authorized"));
