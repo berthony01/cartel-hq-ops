@@ -2,7 +2,8 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Handshake, Info, Loader2 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Handshake, Info, Loader2, ShieldCheck } from "lucide-react";
 import { PageHeader } from "@/components/cartel/PageHeader";
 import { Section } from "@/components/cartel/Section";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
@@ -21,7 +22,6 @@ import {
   formatMoney,
   partnerErrorMessage,
   partnerKeys,
-  DRAFT_ECONOMICS,
   LEDGER_ENTRY_LABELS,
   ledgerBreakdown,
   requestPartnerPayout,
@@ -32,10 +32,10 @@ import {
 export const Route = createFileRoute("/_authenticated/partners")({
   head: () => ({
     meta: [
-      { title: "Partner Program — CARTEL HQ" },
-      { name: "description", content: "Apply to the CARTEL HQ Affiliate and Service Partner program and track your status." },
-      { property: "og:title", content: "Partner Program — CARTEL HQ" },
-      { property: "og:description", content: "Affiliate and Service Partner program for CARTEL HQ." },
+      { title: "Service Partner Program — CARTEL HQ" },
+      { name: "description", content: "Apply to the CARTEL HQ Service Partner Program and track your status. The Affiliate Program is not open." },
+      { property: "og:title", content: "Service Partner Program — CARTEL HQ" },
+      { property: "og:description", content: "Independent Service Partner applications and status for CARTEL HQ." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -54,22 +54,56 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function DraftEconomicsPanel() {
-  const d = DRAFT_ECONOMICS;
+const SERVICE_RULES = [
+  "You are an independent business. CARTEL HQ pays you nothing under this track: no commission, referral credit, wages, leads or guaranteed earnings.",
+  "You find your own clients and set, invoice and collect your own service fees. You contract with and support your clients directly.",
+  "Each client keeps its own CARTEL HQ account and pays CARTEL HQ directly for any plan. Do not resell, mark up or collect payment for CARTEL HQ subscriptions.",
+  "Service Partner status grants no access to any client workspace. Use only product features the client explicitly authorizes.",
+  "Never request or store seed phrases, private keys, CARTEL HQ passwords or payment-card data.",
+  "Market only features that are actually available, and use the required disclosure near every promotion.",
+] as const;
+export const SERVICE_DISCLOSURE = "Independent CARTEL HQ Service Partner. Services are provided by [Partner Name], not by CARTEL HQ. Results and earnings are not guaranteed.";
+const CLIENT_WORKFLOW = [
+  "Agree scope, price and responsibilities with your client in your own written agreement.",
+  "The client creates or signs in to its own CARTEL HQ account and project, and chooses its own plan.",
+  "Work only through access the client grants inside the product; never share or request credentials.",
+  "Deliver setup, configuration, creative, training or operational help, then hand control back to the client.",
+] as const;
+
+function ServiceTermsPanel({ terms }: { terms: PartnerTerms }) {
   return (
-    <Section title="Draft economics · not effective" leading={<Info className="size-4" aria-hidden="true" />}
-      actions={<StatusBadge tone="muted">Draft</StatusBadge>}
-      description="Proposed terms under review. Nothing is earned or payable until the platform owner activates a terms version.">
-      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        <Stat label="Commission" value={d.commissionLabel} />
-        <Stat label="Duration" value={d.durationLabel} />
-        <Stat label="Attribution" value={d.attributionLabel} />
-        <Stat label="Hold" value={d.holdLabel} />
-        <Stat label="Minimum payout" value={d.minimumLabel} />
-        <Stat label="Currency" value={d.currencyLabel} />
-        <Stat label="Payout" value={d.payoutLabel} />
-      </div>
-      <p className="mt-3 text-xs text-muted-foreground">Applies only to eligible collected subscription revenue. Tax, discounts, credits, refunds, disputes, setup and service fees are excluded.</p>
+    <Section title={`Service Partner terms · v${terms.version}`} leading={<Info className="size-4" aria-hidden="true" />}
+      description="Service Partner track only. No commission, payout or financial obligation is created by these terms.">
+      {terms.agreement_text ? (
+        <div>
+          <p className="type-eyebrow text-gold">Agreement</p>
+          <p className={`mt-1 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground ${WRAP}`}>{terms.agreement_text}</p>
+        </div>
+      ) : null}
+      {terms.disclosure_text ? (
+        <div className="mt-4">
+          <p className="type-eyebrow text-gold">Disclosure</p>
+          <p className={`mt-1 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground ${WRAP}`}>{terms.disclosure_text}</p>
+        </div>
+      ) : null}
+      <Link to="/legal/partner-agreement" className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-gold hover:underline">Read the Service Partner Agreement</Link>
+    </Section>
+  );
+}
+
+function ServicePartnerGuide() {
+  return (
+    <Section title="Service Partner rules and client workflow" leading={<ShieldCheck className="size-4" aria-hidden="true" />}>
+      <ul className="list-disc space-y-2 pl-5 text-sm leading-relaxed text-muted-foreground">
+        {SERVICE_RULES.map((r) => <li key={r}>{r}</li>)}
+      </ul>
+      <p className="type-eyebrow mt-5 text-gold">Required disclosure</p>
+      <p className={`mt-1 rounded-md border border-gold/30 bg-gold/5 px-3 py-2 text-sm text-foreground ${WRAP}`}>{SERVICE_DISCLOSURE}</p>
+      <p className="type-eyebrow mt-5 text-gold">Recommended client workflow</p>
+      <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-muted-foreground">
+        {CLIENT_WORKFLOW.map((r) => <li key={r}>{r}</li>)}
+      </ol>
+      <Link to="/docs" hash="partner-program" className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-gold hover:underline">Full Service Partner guide</Link>
     </Section>
   );
 }
