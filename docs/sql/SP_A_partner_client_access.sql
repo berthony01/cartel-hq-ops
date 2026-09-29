@@ -333,12 +333,11 @@ BEGIN
   IF NOT public.partner_has_scope(_workspace_id, 'project_identity') THEN
     RAISE EXCEPTION 'PARTNER_SCOPE_REQUIRED';
   END IF;
-  IF (_website_url IS NOT NULL AND btrim(_website_url) <> '' AND btrim(_website_url) !~* '^https://')
-     OR (_telegram_url IS NOT NULL AND btrim(_telegram_url) <> '' AND btrim(_telegram_url) !~* '^https://')
-     OR (_x_url IS NOT NULL AND btrim(_x_url) <> '' AND btrim(_x_url) !~* '^https://') THEN
+  IF (_website_url IS NOT NULL AND btrim(_website_url) <> '' AND btrim(_website_url) !~* '^https?://[^[:space:]]+$')
+     OR (_telegram_url IS NOT NULL AND btrim(_telegram_url) <> '' AND btrim(_telegram_url) !~* '^https?://[^[:space:]]+$')
+     OR (_x_url IS NOT NULL AND btrim(_x_url) <> '' AND btrim(_x_url) !~* '^https?://[^[:space:]]+$') THEN
     RAISE EXCEPTION 'INVALID_URL';
   END IF;
-  IF _tagline IS NOT NULL AND char_length(btrim(_tagline)) > 140 THEN RAISE EXCEPTION 'TAGLINE_TOO_LONG'; END IF;
   UPDATE public.project_profiles SET
     project_name = btrim(_project_name),
     ticker = nullif(btrim(_ticker), ''),
