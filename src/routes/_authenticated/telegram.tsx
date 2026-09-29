@@ -209,7 +209,7 @@ function PartnerManagedCommsPage({ inbox, comms, broadcasts }: { inbox: boolean;
     ...(comms ? (["audience"] as const) : []),
     ...(broadcasts ? (["broadcasts"] as const) : []),
   ];
-  const tab: PartnerTab = (available as string[]).includes(String(search.tab)) ? (search.tab as PartnerTab) : available[0];
+  const tab: PartnerTab = (available as string[]).includes(String(search.tab)) ? (search.tab as PartnerTab) : (available[0] ?? "inbox");
   return (
     <Tabs
       value={tab}
