@@ -112,7 +112,7 @@ check(
 const identifierPattern = /telegram_user_id|telegram_chat_id|chat_id|provider_message_id|telegram_message_id|username|contact_id/i;
 const returnClauses = sqlCode.match(/RETURNS TABLE\([\s\S]*?\)\s*\n/g) ?? [];
 check("wrapper return shapes carry no provider identifiers", returnClauses.length === 8 && returnClauses.every((r) => !identifierPattern.test(r)));
-const inboxSection = bridge.slice(bridge.indexOf("MINI-HQ-1B PROJECT INBOX"));
+const inboxSection = (() => { const rest = bridge.slice(bridge.indexOf("MINI-HQ-1B PROJECT INBOX")); const b1 = rest.indexOf("MINI-HQ B1 — prepared custom message media"); return b1 >= 0 ? rest.slice(0, b1) : rest; })(); // B1 media section is tested by mini-hq-b1-custom-media-regression
 const typeSection = inboxSection.slice(0, inboxSection.indexOf("const MINIAPP_INBOX_SAFE_ERRORS"));
 check("bridge result types carry no provider identifiers", !identifierPattern.test(typeSection.replace(/_telegram_user_id/g, "")));
 check("UI never renders provider identifiers", !identifierPattern.test(inbox) && !/telegram_user_id|chat_id|contact_id/.test(home));

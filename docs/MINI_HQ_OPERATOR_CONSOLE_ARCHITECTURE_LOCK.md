@@ -92,3 +92,9 @@ This is a separate future phase for community-facing project identity, mission p
 ## Forward scope (not yet approved for build)
 - Pro-only, server-enforced custom static/motion media for owner-composed content where the transport supports it: mission cards (same-message edits preserved), broadcasts, watcher updates, inbox replies. Platform owner bypass via existing unrestricted-access checks first. Free/standard behavior unchanged. System/operator alerts stay compact and are not customizable.
 - Full website remains deep administration. Member Mini App remains deferred.
+
+## MINI-HQ B1 — prepared custom message media (staged, not live)
+- Brand tab panel "Custom message media · Pro": upload PNG/JPEG/GIF (<=2 MiB, <=4096 px; decoded magic bytes, SVG/WebP/remote URLs rejected) to existing private `workspace-assets` at generated `<workspace>/custom-message-media/<asset>.<ext>`; `media_assets` row asset_type `other`, metadata.purpose `custom_message_media`, animated flag.
+- Authority: signed initData -> `social_mission_control_workspaces` operator set -> linked user (existing `miniAppCommercialActor`). Entitlement: `evaluate_commercial_access(official_broadcasts)` must be UNRESTRICTED or allowed cartel_49 without would_block; errors/malformed fail closed. Checked on upload and select, and again inside the SQL helper.
+- Selection stored via staged service-only `set_workspace_custom_message_media` (atomic jsonb_set of `brand_kits.metadata.custom_message_media` only). Requires an existing Brand Kit row.
+- PREPARED ONLY: no mission/broadcast sender reads the selection. Sending integration = B2 (website broadcasts), B3 (Mini App composer), B4 (ANIMATION mission cards). Watcher updates and Inbox replies remain later scope.
