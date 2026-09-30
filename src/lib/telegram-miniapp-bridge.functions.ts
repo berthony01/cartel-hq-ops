@@ -172,7 +172,7 @@ export type MiniAppPanel = {
   capabilities: { endNow: "supported"; cancel: "supported" };
 };
 
-function fail(reason: string): MiniAppFailure {
+export function fail(reason: string): MiniAppFailure {
   return { ok: false, reason };
 }
 
@@ -204,17 +204,17 @@ function panelStatus(raw: unknown): string {
 }
 
 /** Bot token is read per-request from server env only, never at module scope. */
-function botToken(): string {
+export function botToken(): string {
   return process.env["TELEGRAM_BOT_TOKEN"] ?? "";
 }
 
-type AdminClient = {
+export type AdminClient = {
   rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
   from: (table: string) => any;
   storage: { from: (bucket: string) => any };
 };
 
-async function adminClient(): Promise<AdminClient> {
+export async function adminClient(): Promise<AdminClient> {
   // Loaded inside the handler: a top-level import of the service-role client
   // from a *.functions.ts module would enter the client graph.
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -1170,7 +1170,7 @@ export type MiniAppCommercialStatus = {
  * Workspace must be in the operator-scoped set for the VALIDATED Telegram user
  * before the linked platform user is resolved server-side. Never client input.
  */
-async function miniAppCommercialActor(
+export async function miniAppCommercialActor(
   admin: AdminClient,
   telegramUserId: number,
   workspaceId: string,

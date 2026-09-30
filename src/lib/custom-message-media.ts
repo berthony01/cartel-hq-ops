@@ -144,6 +144,5 @@ export function customMediaEntitled(result: unknown): boolean {
   if (r["allowed"] !== true) return false;
   if (r["reason"] === "UNRESTRICTED" && r["mode"] === "unrestricted") return true;
   if (r["would_block"] === true) return false;
-  if (r["mode"] === "observe") return false;
   return r["plan_code"] === CUSTOM_MEDIA_PRO_PLAN;
 }
