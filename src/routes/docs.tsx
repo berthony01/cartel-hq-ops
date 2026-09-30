@@ -5,8 +5,14 @@ import { LegalFooter } from '@/components/cartel/LegalFooter';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { articleById, categoryHref, docs, docsHref, searchDocs, type DocArticle } from '@/lib/docs-content';
 
+type DocsSearch = {
+  article?: string;
+  category?: string;
+  q?: string;
+};
+
 export const Route = createFileRoute('/docs')({
-  validateSearch: (search: Record<string,unknown>) => ({
+  validateSearch: (search: Record<string,unknown>): DocsSearch => ({
     article: typeof search['article'] === 'string' ? search['article'] : undefined,
     category: typeof search['category'] === 'string' ? search['category'] : undefined,
     q: typeof search['q'] === 'string' ? search['q'] : undefined,
@@ -103,7 +109,7 @@ function DocsPage() {
               {section.steps?<ol className="mt-4 list-decimal space-y-4 pl-6 text-sm leading-7 text-muted-foreground marker:font-semibold marker:text-gold">{section.steps.map((step,j)=><li key={j} className="pl-1 [overflow-wrap:anywhere]">{step}</li>)}</ol>:null}
               {section.rows?<div className="mt-4 overflow-x-auto rounded-md border border-border-subtle"><table className="w-full text-left text-sm leading-6"><thead className="bg-surface-raised"><tr><th scope="col" className="px-3 py-3 font-semibold">Item</th><th scope="col" className="px-3 py-3 font-semibold">Details</th></tr></thead><tbody>{section.rows.map((row,j)=><tr key={j} className="border-t border-border-subtle"><th scope="row" className="w-1/3 min-w-28 px-3 py-3 align-top font-medium text-foreground [overflow-wrap:anywhere]">{row[0]}</th><td className="px-3 py-3 align-top text-muted-foreground [overflow-wrap:anywhere]">{row[1]}</td></tr>)}</tbody></table></div>:null}
               {section.notice?<p className="mt-4 rounded-md border border-gold/30 bg-gold/5 p-4 text-sm leading-6">{section.notice}</p>:null}
-              {section.image?<figure className="mt-5 min-w-0"><button type="button" onClick={()=>setZoom(section.image!)} className="block w-full overflow-hidden rounded-lg border border-border-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold" aria-label={`Enlarge screenshot: ${section.image.alt}`}><img src={section.image.src} alt={section.image.alt} loading="lazy" className="h-auto w-full"/></button><figcaption className="mt-2 text-xs leading-5 text-muted-foreground">{section.image.caption} Select the image to enlarge.</figcaption></figure>:null}
+              {section.image?<figure className="mt-5 min-w-0"><button type="button" onClick={()=>setZoom(section.image ?? null)} className="block w-full overflow-hidden rounded-lg border border-border-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold" aria-label={`Enlarge screenshot: ${section.image.alt}`}><img src={section.image.src} alt={section.image.alt} loading="lazy" className="h-auto w-full"/></button><figcaption className="mt-2 text-xs leading-5 text-muted-foreground">{section.image.caption} Select the image to enlarge.</figcaption></figure>:null}
             </section>)}</div>
             <section className="mt-10 border-t border-border-subtle pt-6" aria-labelledby="related-title"><h3 id="related-title" className="font-display text-2xl uppercase">Related guides</h3><div className="mt-3 grid gap-3 sm:grid-cols-2">{article.related.map(id=>articleById[id]?<ArticleCard key={id} article={articleById[id]}/>:null)}</div></section>
             <nav aria-label="Previous and next guides" className="mt-7 grid gap-3 sm:grid-cols-2">{previous?<a href={docsHref(previous.id)} className="rounded-lg border border-border-subtle p-4 hover:border-gold/50"><span className="flex items-center gap-2 text-xs text-gold"><ArrowLeft className="size-4" aria-hidden="true"/>Previous guide</span><span className="mt-2 block text-sm leading-6">{previous.title}</span></a>:<a href={category?categoryHref(category.id):'/docs'} className={`${linkClass} p-4`}>Back to category</a>}{next?<a href={docsHref(next.id)} className="rounded-lg border border-border-subtle p-4 hover:border-gold/50"><span className="flex items-center gap-2 text-xs text-gold">Next guide<ArrowRight className="size-4" aria-hidden="true"/></span><span className="mt-2 block text-sm leading-6">{next.title}</span></a>:<a href="/docs" className={`${linkClass} p-4`}>Browse all documentation<ArrowRight className="size-4" aria-hidden="true"/></a>}</nav>
