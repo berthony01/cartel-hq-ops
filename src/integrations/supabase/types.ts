@@ -6068,6 +6068,7 @@ export type Database = {
         }
         Returns: Json
       }
+      custom_media_gate_ok: { Args: { _g: Json }; Returns: boolean }
       delete_sticker_pack_if_eligible: {
         Args: { _pack_id: string }
         Returns: Json
@@ -7864,6 +7865,15 @@ export type Database = {
           _plan_code: string
           _plan_version: number
           _status?: string
+          _workspace_id: string
+        }
+        Returns: Json
+      }
+      set_workspace_custom_message_media: {
+        Args: {
+          _actor_user_id: string
+          _asset_id: string
+          _slot: string
           _workspace_id: string
         }
         Returns: Json
