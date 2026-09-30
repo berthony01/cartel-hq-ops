@@ -44,52 +44,142 @@ function detect(b: Uint8Array): CustomMediaKind | null {
   return null;
 }
 
-function jpegSize(b: Uint8Array): { w: number; h: number } | null {
+const CRC_TABLE: number[] = (() => {
+  const t: number[] = [];
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t.push(c >>> 0);
+  }
+  return t;
+})();
+function crc32(b: Uint8Array, from: number, to: number): number {
+  let c = 0xffffffff;
+  for (let i = from; i < to; i += 1) c = (CRC_TABLE[(c ^ (b[i] ?? 0)) & 0xff] ?? 0) ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+/**
+ * STRUCTURAL PNG check (not a full pixel decode): signature, IHDR first
+ * (13 bytes), every chunk in bounds with a valid CRC, at least one non-empty
+ * IDAT, IEND last with nothing after it.
+ */
+function pngStructure(b: Uint8Array): { w: number; h: number } | null {
+  let i = 8;
+  let w = 0;
+  let h = 0;
+  let first = true;
+  let idatBytes = 0;
+  while (i + 12 <= b.length) {
+    const len = u32be(b, i);
+    const type = String.fromCharCode(b[i + 4] ?? 0, b[i + 5] ?? 0, b[i + 6] ?? 0, b[i + 7] ?? 0);
+    const dataEnd = i + 8 + len;
+    if (len > b.length || dataEnd + 4 > b.length) return null;
+    if (crc32(b, i + 4, dataEnd) !== u32be(b, dataEnd)) return null;
+    if (first) {
+      if (type !== "IHDR" || len !== 13) return null;
+      w = u32be(b, i + 8);
+      h = u32be(b, i + 12);
+      first = false;
+    } else if (type === "IHDR") return null;
+    if (type === "IDAT") idatBytes += len;
+    if (type === "IEND") {
+      if (len !== 0 || dataEnd + 4 !== b.length || idatBytes === 0) return null;
+      return { w, h };
+    }
+    i = dataEnd + 4;
+  }
+  return null;
+}
+
+/**
+ * STRUCTURAL JPEG check (not a full decode): marker segments in bounds, a
+ * baseline/progressive SOF with components, an SOS after the SOF, non-empty
+ * entropy-coded data, and an EOI marker ending the file.
+ */
+function jpegStructure(b: Uint8Array): { w: number; h: number } | null {
   let i = 2;
-  while (i + 9 < b.length) {
+  let size: { w: number; h: number } | null = null;
+  while (i + 4 <= b.length) {
     if (b[i] !== 0xff) return null;
     const marker = b[i + 1] ?? 0;
-    if (marker === 0xd9 || marker === 0xda) return null;
+    if (marker === 0xff) { i += 1; continue; }
+    if (marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7) || marker === 0x01) return null;
     const len = u16be(b, i + 2);
-    if (len < 2) return null;
+    if (len < 2 || i + 2 + len > b.length) return null;
     const isSof = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
-    if (isSof) return { h: u16be(b, i + 5), w: u16be(b, i + 7) };
+    if (isSof) {
+      if (len < 8 || size) return null;
+      const comps = b[i + 9] ?? 0;
+      if (comps < 1 || len !== 8 + 3 * comps) return null;
+      size = { h: u16be(b, i + 5), w: u16be(b, i + 7) };
+    }
+    if (marker === 0xda) {
+      if (!size) return null;
+      const dataStart = i + 2 + len;
+      // Entropy data must be non-empty and the file must end with EOI.
+      if (b.length - 2 <= dataStart) return null;
+      if (b[b.length - 2] !== 0xff || b[b.length - 1] !== 0xd9) return null;
+      return size;
+    }
     i += 2 + len;
   }
   return null;
 }
 
-/** Counts GIF image descriptors (0x2C) by walking blocks; >1 frame = animated. */
-function gifFrames(b: Uint8Array): number | null {
-  let i = 13;
+/**
+ * STRUCTURAL GIF walk (not an LZW decode): logical screen + optional global
+ * table in bounds, every block in bounds, each frame has non-zero size within
+ * the logical screen, a colour table, and non-empty image data; trailer 0x3B
+ * required. Returns frame count (>=1) or null.
+ */
+function gifStructure(b: Uint8Array, sw: number, sh: number): number | null {
   const flags = b[10] ?? 0;
-  if (flags & 0x80) i += 3 * (1 << ((flags & 0x07) + 1));
+  const hasGlobal = (flags & 0x80) !== 0;
+  let i = 13;
+  if (hasGlobal) i += 3 * (1 << ((flags & 0x07) + 1));
+  if (i > b.length) return null;
   let frames = 0;
-  const skipSub = () => {
+  const skipSub = (): number | null => {
+    let total = 0;
     while (i < b.length) {
       const n = b[i] ?? 0;
       i += 1;
-      if (n === 0) return true;
+      if (n === 0) return total;
+      if (i + n > b.length) return null;
+      total += n;
       i += n;
     }
-    return false;
+    return null;
   };
   while (i < b.length) {
     const t = b[i];
-    if (t === 0x3b) return frames;
+    if (t === 0x3b) return frames > 0 ? frames : null;
     if (t === 0x21) {
+      if (i + 2 > b.length) return null;
       i += 2;
-      if (!skipSub()) return null;
+      if (skipSub() === null) return null;
     } else if (t === 0x2c) {
-      frames += 1;
+      if (i + 10 > b.length) return null;
+      const left = u16le(b, i + 1);
+      const top = u16le(b, i + 3);
+      const fw = u16le(b, i + 5);
+      const fh = u16le(b, i + 7);
       const lf = b[i + 9] ?? 0;
+      if (fw === 0 || fh === 0 || left + fw > sw || top + fh > sh) return null;
+      if (!(lf & 0x80) && !hasGlobal) return null;
       i += 10;
       if (lf & 0x80) i += 3 * (1 << ((lf & 0x07) + 1));
-      i += 1; // LZW min code size
-      if (!skipSub()) return null;
+      if (i >= b.length) return null;
+      const lzw = b[i] ?? 0;
+      if (lzw < 2 || lzw > 11) return null;
+      i += 1;
+      const data = skipSub();
+      if (data === null || data === 0) return null;
+      frames += 1;
     } else return null;
   }
-  return frames > 0 ? frames : null;
+  return null; // missing trailer
 }
 
 export function inspectCustomMedia(b: Uint8Array): CustomMediaInspection {
@@ -101,11 +191,12 @@ export function inspectCustomMedia(b: Uint8Array): CustomMediaInspection {
   let h = 0;
   let animated = false;
   if (kind === "png") {
-    if (b.length < 24 || String.fromCharCode(b[12] ?? 0, b[13] ?? 0, b[14] ?? 0, b[15] ?? 0) !== "IHDR") return { ok: false, reason: "corrupt" };
-    w = u32be(b, 16);
-    h = u32be(b, 20);
+    const s = pngStructure(b);
+    if (!s) return { ok: false, reason: "corrupt" };
+    w = s.w;
+    h = s.h;
   } else if (kind === "jpeg") {
-    const s = jpegSize(b);
+    const s = jpegStructure(b);
     if (!s) return { ok: false, reason: "corrupt" };
     w = s.w;
     h = s.h;
@@ -113,7 +204,8 @@ export function inspectCustomMedia(b: Uint8Array): CustomMediaInspection {
     if (b.length < 14) return { ok: false, reason: "corrupt" };
     w = u16le(b, 6);
     h = u16le(b, 8);
-    const frames = gifFrames(b);
+    if (!(w > 0 && h > 0 && w <= CUSTOM_MEDIA_MAX_DIMENSION && h <= CUSTOM_MEDIA_MAX_DIMENSION)) return { ok: false, reason: "bad_dimensions" };
+    const frames = gifStructure(b, w, h);
     if (frames === null) return { ok: false, reason: "corrupt" };
     animated = frames > 1;
   }
@@ -131,10 +223,16 @@ export function isWorkspaceCustomMediaPath(workspaceId: string, path: string): b
 }
 
 /**
- * Pro gate from the authoritative evaluate_commercial_access result.
- * Allowed only for explicit UNRESTRICTED (platform owner) or an enforced,
- * allowed cartel_49 (Pro) result. Observe-mode would_block, errors and
- * malformed payloads fail closed.
+ * Pro gate from the authoritative LIVE evaluate_commercial_access result
+ * (commercial_evaluate_workspace_feature schema). Positive-only predicate:
+ *  - UNRESTRICTED: allowed===true, reason 'UNRESTRICTED', mode 'unrestricted'
+ *    (platform owner bypass, evaluated first by the RPC), or
+ *  - Pro: allowed===true, would_block===false, reason 'FEATURE_INCLUDED',
+ *    feature_key 'official_broadcasts', plan_code 'cartel_49', kind 'feature',
+ *    enabled===true, assignment_status active|trialing, mode===enforcement_mode
+ *    in enforce|observe.
+ * Anything else (errors, missing/extra-typed fields, observe would_block) fails closed.
+ * Keep IDENTICAL to custom_media_gate_ok() in the staged SQL.
  */
 export const CUSTOM_MEDIA_FEATURE_KEY = "official_broadcasts";
 export const CUSTOM_MEDIA_PRO_PLAN = "cartel_49";
@@ -143,6 +241,15 @@ export function customMediaEntitled(result: unknown): boolean {
   const r = result as Record<string, unknown>;
   if (r["allowed"] !== true) return false;
   if (r["reason"] === "UNRESTRICTED" && r["mode"] === "unrestricted") return true;
-  if (r["would_block"] === true) return false;
-  return r["plan_code"] === CUSTOM_MEDIA_PRO_PLAN;
+  return (
+    r["would_block"] === false &&
+    r["reason"] === "FEATURE_INCLUDED" &&
+    r["feature_key"] === CUSTOM_MEDIA_FEATURE_KEY &&
+    r["plan_code"] === CUSTOM_MEDIA_PRO_PLAN &&
+    r["kind"] === "feature" &&
+    r["enabled"] === true &&
+    (r["assignment_status"] === "active" || r["assignment_status"] === "trialing") &&
+    (r["mode"] === "enforce" || r["mode"] === "observe") &&
+    r["enforcement_mode"] === r["mode"]
+  );
 }
