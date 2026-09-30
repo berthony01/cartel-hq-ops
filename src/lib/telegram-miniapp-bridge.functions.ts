@@ -1681,20 +1681,43 @@ export const miniAppCustomMediaState = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<MiniAppCustomMediaState | MiniAppFailure> => {
     const g = await customMediaGate(data?.initData, data?.workspaceId);
     if (!g.ok) return g;
-    const [{ data: rows, error: assetError }, { data: kit, error: kitError }] = await Promise.all([
+    const { data: kit, error: kitError } = await g.admin
+      .from("brand_kits")
+      .select("metadata")
+      .eq("workspace_id", g.workspaceId)
+      .maybeSingle();
+    if (kitError) return fail("unavailable");
+    const media = (((kit as Record<string, unknown> | null)?.["metadata"] ?? {}) as Record<string, unknown>)[
+      "custom_message_media"
+    ] as Record<string, { asset_id?: unknown }> | undefined;
+    const pick = (slot: CustomMediaSlot) => {
+      const id = String(media?.[slot]?.asset_id ?? "");
+      return isUuid(id) ? id : null;
+    };
+    const selection = { mission: pick("mission"), broadcast: pick("broadcast") };
+    const base = () =>
       g.admin
         .from("media_assets")
         .select("id, storage_path, mime_type, width, height, file_size_bytes, metadata")
         .eq("workspace_id", g.workspaceId)
         .eq("asset_type", CUSTOM_MEDIA_ASSET_TYPE)
-        .eq("metadata->>purpose", CUSTOM_MEDIA_PURPOSE)
-        .order("created_at", { ascending: false })
-        .limit(CUSTOM_MEDIA_LIST_LIMIT),
-      g.admin.from("brand_kits").select("metadata").eq("workspace_id", g.workspaceId).maybeSingle(),
-    ]);
-    if (assetError || kitError) return fail("unavailable");
+        .eq("metadata->>purpose", CUSTOM_MEDIA_PURPOSE);
+    const { data: recent, error: assetError } = await base().order("created_at", { ascending: false }).limit(CUSTOM_MEDIA_LIST_LIMIT);
+    if (assetError) return fail("unavailable");
+    const recentRows = (Array.isArray(recent) ? recent : []) as Record<string, unknown>[];
+    // Selected assets are ALWAYS included even when older than the recent window.
+    const missing = [selection.mission, selection.broadcast].filter(
+      (id): id is string => id !== null && !recentRows.some((r) => String(r["id"]) === id),
+    );
+    let selectedRows: Record<string, unknown>[] = [];
+    if (missing.length > 0) {
+      const { data: extra, error: extraError } = await base().in("id", Array.from(new Set(missing)));
+      if (extraError) return fail("unavailable");
+      selectedRows = (Array.isArray(extra) ? extra : []) as Record<string, unknown>[];
+    }
+    const rows = [...selectedRows, ...recentRows];
     const assets: MiniAppCustomMediaAsset[] = [];
-    for (const row of (Array.isArray(rows) ? rows : []) as Record<string, unknown>[]) {
+    for (const row of rows) {
       const path = String(row["storage_path"] ?? "");
       const bytes = Number(row["file_size_bytes"] ?? 0);
       if (!isWorkspaceCustomMediaPath(g.workspaceId, path) || !(bytes > 0 && bytes <= CUSTOM_MEDIA_MAX_BYTES)) continue;
@@ -1716,18 +1739,11 @@ export const miniAppCustomMediaState = createServerFn({ method: "POST" })
         previewDataUrl,
       });
     }
-    const media = (((kit as Record<string, unknown> | null)?.["metadata"] ?? {}) as Record<string, unknown>)[
-      "custom_message_media"
-    ] as Record<string, { asset_id?: unknown }> | undefined;
-    const pick = (slot: CustomMediaSlot) => {
-      const id = String(media?.[slot]?.asset_id ?? "");
-      return isUuid(id) ? id : null;
-    };
     return {
       ok: true,
       entitled: g.entitled,
       assets,
-      selection: { mission: pick("mission"), broadcast: pick("broadcast") },
+      selection,
       brandKitReady: Boolean(kit),
     };
   });

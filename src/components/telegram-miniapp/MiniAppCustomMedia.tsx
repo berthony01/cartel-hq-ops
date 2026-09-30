@@ -10,6 +10,7 @@ import {
   miniAppCustomMediaSelect,
   miniAppCustomMediaState,
   miniAppCustomMediaUpload,
+  type MiniAppCustomMediaState,
 } from "@/lib/telegram-miniapp-bridge.functions";
 import { CUSTOM_MEDIA_MAX_BYTES, type CustomMediaSlot } from "@/lib/custom-message-media";
 import { MiniAppMessage, MiniAppPanel, MiniAppSkeleton } from "@/components/telegram-miniapp/MiniAppPieces";
@@ -35,16 +36,34 @@ function readBase64(file: File): Promise<string> {
   });
 }
 
+type Failure = { ok: false; reason: string };
+/** Transport seam. Production uses the signed-initData server functions; the
+ * test harness injects mocks. No auth decision is made in the browser. */
+export type CustomMediaAdapter = {
+  load: () => Promise<MiniAppCustomMediaState | Failure>;
+  upload: (fileBase64: string) => Promise<{ ok: true; assetId: string } | Failure>;
+  select: (slot: CustomMediaSlot, assetId: string | null) => Promise<{ ok: true } | Failure>;
+};
+
 export function MiniAppCustomMedia({ initData, workspaceId }: { initData: string; workspaceId: string }) {
-  const qc = useQueryClient();
   const loadState = useServerFn(miniAppCustomMediaState);
   const upload = useServerFn(miniAppCustomMediaUpload);
   const select = useServerFn(miniAppCustomMediaSelect);
+  const adapter: CustomMediaAdapter = {
+    load: () => loadState({ data: { initData, workspaceId } }),
+    upload: (fileBase64) => upload({ data: { initData, workspaceId, fileBase64 } }),
+    select: (slot, assetId) => select({ data: { initData, workspaceId, slot, assetId } }),
+  };
+  return <MiniAppCustomMediaView key={workspaceId} workspaceId={workspaceId} adapter={adapter} />;
+}
+
+export function MiniAppCustomMediaView({ workspaceId, adapter }: { workspaceId: string; adapter: CustomMediaAdapter }) {
+  const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const key = ["miniapp-custom-media", workspaceId];
-  const query = useQuery({ queryKey: key, queryFn: () => loadState({ data: { initData, workspaceId } }) });
+  const query = useQuery({ queryKey: key, queryFn: () => adapter.load() });
   const state = query.data && query.data.ok ? query.data : null;
 
   const onFile = async (file: File | undefined) => {
@@ -53,7 +72,7 @@ export function MiniAppCustomMedia({ initData, workspaceId }: { initData: string
     if (file.size > CUSTOM_MEDIA_MAX_BYTES) return setNotice(REASONS["too_large"] ?? null);
     setBusy("upload");
     try {
-      const res = await upload({ data: { initData, workspaceId, fileBase64: await readBase64(file) } });
+      const res = await adapter.upload(await readBase64(file));
       setNotice(res.ok ? "Uploaded." : REASONS[res.reason] ?? "Upload failed. Try again.");
       await qc.invalidateQueries({ queryKey: key });
     } catch {
@@ -68,7 +87,7 @@ export function MiniAppCustomMedia({ initData, workspaceId }: { initData: string
     setNotice(null);
     setBusy(`${slot}:${assetId ?? "none"}`);
     try {
-      const res = await select({ data: { initData, workspaceId, slot, assetId } });
+      const res = await adapter.select(slot, assetId);
       setNotice(res.ok ? "Saved as prepared media." : REASONS[res.reason] ?? "Could not save. Try again.");
       await qc.invalidateQueries({ queryKey: key });
     } catch {
@@ -84,7 +103,14 @@ export function MiniAppCustomMedia({ initData, workspaceId }: { initData: string
       note="Prepared media only. Sending with missions and broadcasts is coming later — nothing you pick here is used in messages yet."
     >
       {query.isLoading ? <MiniAppSkeleton label="Loading media…" /> : null}
-      {query.data && !query.data.ok ? <MiniAppMessage title="Media unavailable" description="Could not load custom media. Try again later." /> : null}
+      {query.isError || (query.data && !query.data.ok) ? (
+        <div className="flex min-w-0 flex-col gap-2">
+          <MiniAppMessage title="Media unavailable" description="Could not load custom media. Try again." />
+          <Button size="sm" variant="outline" className="min-h-11 self-start" onClick={() => void query.refetch()}>
+            Retry
+          </Button>
+        </div>
+      ) : null}
       {state && !state.entitled ? (
         <MiniAppMessage title="Pro feature" description="Upgrade to Pro in CARTEL HQ Settings to upload custom message media." />
       ) : null}
@@ -107,6 +133,32 @@ export function MiniAppCustomMedia({ initData, workspaceId }: { initData: string
             {busy === "upload" ? <p className="text-xs text-muted-foreground" role="status">Uploading…</p> : null}
           </div>
           {!state.brandKitReady ? <p className="text-xs text-muted-foreground">Save your Brand Kit in CARTEL HQ before choosing prepared media.</p> : null}
+          <div className="flex min-w-0 flex-col gap-2 rounded-md border border-border/60 p-2">
+            <p className="text-sm font-medium text-foreground">Prepared selections</p>
+            {(["mission", "broadcast"] as const).map((slot) => {
+              const id = state.selection[slot];
+              const pos = id ? state.assets.findIndex((a) => a.id === id) : -1;
+              return (
+                <div key={slot} className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                  <p className="min-w-0 text-xs text-muted-foreground">
+                    {slot === "mission" ? "Missions" : "Broadcasts"}: {id ? (pos >= 0 ? `Custom media ${pos + 1}` : "Selected image (unavailable)") : "None"}
+                  </p>
+                  {id ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="min-h-11"
+                      aria-label={`Clear prepared ${slot} media`}
+                      disabled={busy !== null}
+                      onClick={() => void onSelect(slot, null)}
+                    >
+                      Clear
+                    </Button>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
           {state.assets.length === 0 ? <p className="text-sm text-muted-foreground">No custom media yet.</p> : null}
           <ul className="grid min-w-0 grid-cols-1 gap-3">
             {state.assets.map((asset, index) => (
