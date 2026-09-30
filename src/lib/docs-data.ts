@@ -320,6 +320,12 @@ export default {
           "body": [
             "Using an expired link, selecting the wrong group, adding the bot without administrator rights, or connecting a group under the wrong Cartel HQ project can prevent the intended setup. Re-check the group and project before repeating the flow."
           ]
+        },
+        {
+          "title": "Service Partner boundary",
+          "body": [
+            "Delegated Community management covers basic welcome controls for groups the client has already connected. It does not allow bot connect, reconnect or disconnect, Telegram administrator-permission setup or Launch Watch CTA settings; those remain with the project owner."
+          ]
         }
       ],
       "related": [
@@ -367,6 +373,12 @@ export default {
           "title": "Next step",
           "body": [
             "Save the welcome settings and, if you choose, send a real test to a group you control."
+          ]
+        },
+        {
+          "title": "Service Partner boundary",
+          "body": [
+            "Delegated Community management covers basic welcome controls for groups the client has already connected. It does not allow bot connect, reconnect or disconnect, Telegram administrator-permission setup or Launch Watch CTA settings; those remain with the project owner."
           ]
         }
       ],
@@ -421,6 +433,12 @@ export default {
           "title": "If a button or link is missing",
           "body": [
             "Save the official link in Project Profile first. Confirm the selected launch is eligible and the bot is Ready in this group. Plain text does not interpret HTML or Markdown tags as formatting."
+          ]
+        },
+        {
+          "title": "Service Partner boundary",
+          "body": [
+            "Delegated Community management covers basic welcome controls for groups the client has already connected. It does not allow bot connect, reconnect or disconnect, Telegram administrator-permission setup or Launch Watch CTA settings; those remain with the project owner."
           ]
         }
       ],
@@ -598,6 +616,12 @@ export default {
           "body": [
             "Connecting one additional group does not remove previous groups. Free includes one group. Being a Service Partner does not itself create access to any group or project; the client must grant the appropriate scope."
           ]
+        },
+        {
+          "title": "Service Partner boundary",
+          "body": [
+            "Delegated Community management covers basic welcome controls for groups the client has already connected. It does not allow bot connect, reconnect or disconnect, Telegram administrator-permission setup or Launch Watch CTA settings; those remain with the project owner."
+          ]
         }
       ],
       "related": [
@@ -724,7 +748,7 @@ export default {
       "category": "communications",
       "title": "Post an official broadcast to a Telegram community",
       "summary": "Send one immediate official project message to the group you select.",
-      "audience": "Owners or operators with Broadcasts permission and the required plan",
+      "audience": "Project owners and authorized operators with Broadcasts permission and the required plan; Service Partners get plain-text posting only",
       "location": "Community Command → Broadcasts → Official Community Broadcast",
       "prerequisites": [
         "A verified connected group",
@@ -754,6 +778,12 @@ export default {
           "title": "Common mistakes",
           "body": [
             "A long branded message can exceed the caption limit even if your own text is under 1,024 characters. Leave room for the official identity wrapper. Do not paste formatting tags expecting rich formatting. Check the audience instead of assuming all groups will receive the post."
+          ]
+        },
+        {
+          "title": "Service Partner boundary",
+          "body": [
+            "A Service Partner with Broadcasts scope posts plain text to a client’s connected group: write the message, choose Review broadcast, check it, then choose Post broadcast. Branded logo posts, Launch Watch CTA and group setup controls described above are owner tools and are not delegated."
           ]
         },
         {
@@ -810,6 +840,12 @@ export default {
           "title": "If no one receives it",
           "body": [
             "Confirm the correct launch, active eligible audience and returned delivery status. Zero eligible recipients can differ from zero group members. If an outcome is unconfirmed, do not assume failure and resend blindly."
+          ]
+        },
+        {
+          "title": "Service Partner boundary",
+          "body": [
+            "With Launch Watch communications scope, a partner sends updates for existing eligible launches: choose Preview and send, review, then Send update. The client owner creates and publishes the launch and opens its watchlist. This scope does not allow lifecycle, schedule, contract or launcher administration."
           ]
         }
       ],
@@ -906,7 +942,7 @@ export default {
         {
           "title": "Troubleshooting",
           "body": [
-            "No thread can mean capture is off, the message was a command/group message, or the member belongs to multiple projects so the bot cannot safely choose one. Ask the member to reply to the project’s official private bot message. For an uncertain send, inspect its status and use the provided safe retry behavior instead of writing the same message as a new send."
+            "No thread can mean capture is off, the message was a command/group message, or the member belongs to multiple projects so the bot cannot safely choose one. Ask the member to reply to the project’s official private bot message. An uncertain delivery may already have reached the member, so do not resend automatically. Acknowledge uncertainty records that you reviewed it and unlocks another deliberate reply; it does not prove the send failed and does not resend the message."
           ]
         },
         {
@@ -1109,7 +1145,7 @@ export default {
           "steps": [
             "Open the intended connected Telegram group and confirm you are using the correct project community.",
             "Send /mission followed by the X post link, for example /mission https://x.com/account/status/1234567890. Replace the example with the real post URL.",
-            "Review the mission card created by the bot. Its duration and defaults come from the group’s saved settings.",
+            "Review the mission card created by the bot. Its duration and goal come from the project’s saved mission defaults at the moment it starts; later changes do not alter it.",
             "Open Community Command → Missions to inspect the recorded lifecycle, history and metrics. This web list does not start or close missions.",
             "When authorized and ready, send /mission close in the connected group to close the active mission. Check the returned result and stored state."
           ]
@@ -1137,9 +1173,9 @@ export default {
       "id": "mission-defaults",
       "category": "missions",
       "title": "Configure mission defaults and official-post suggestions",
-      "summary": "Save settings for future missions without changing an already running mission.",
+      "summary": "Save project-wide settings for future missions without starting one or changing a running mission.",
       "audience": "Owners and authorized Missions operators",
-      "location": "Community Command → Missions → Mission defaults",
+      "location": "Community Command → Missions → Mission defaults (project-wide)",
       "prerequisites": [
         "A connected community",
         "Pro access or an appropriately authorized role"
@@ -1149,13 +1185,13 @@ export default {
           "title": "Set future defaults",
           "body": [],
           "steps": [
-            "Open Missions and locate Mission defaults for the intended community.",
+            "Open Missions and locate Mission defaults. These defaults apply to the whole project, not to a single group.",
             "Choose Mission length. The standard option shown is 45 minutes.",
             "Choose Primary goal or No goal as appropriate. Supporting targets can be derived from the initial X snapshot.",
             "Choose Live results on mission card if desired.",
             "Choose Suggest missions for official posts if you want private admin suggestions. These offer Start or Ignore; they do not start missions automatically.",
             "Choose Tidy up command message and Pin mission card only when the bot has the relevant group permissions.",
-            "Press Save defaults. Future missions use the saved settings; a running mission keeps its original configuration."
+            "Press Save defaults. Saving only stores settings for future missions; it does not start a mission or use a paid mission. A running mission keeps the settings snapshotted when it started."
           ]
         },
         {
@@ -1193,7 +1229,7 @@ export default {
       "category": "sticker-tools",
       "title": "Prepare your Brand Kit and Character Lock",
       "summary": "Store creative direction separately from official public identity.",
-      "audience": "Project operators with access to creative settings",
+      "audience": "Project owners and authorized project administrators",
       "location": "Brand Kit",
       "prerequisites": [
         "A selected project",
@@ -1224,6 +1260,12 @@ export default {
           "body": [
             "Project Profile and Brand Kit serve different purposes. Filling empty profile fields from Brand Kit is a one-time copy. Deleting a referenced Asset Vault file can remove its availability for creative work."
           ]
+        },
+        {
+          "title": "Service Partner boundary",
+          "body": [
+            "This is an owner creative tool. The delegated Sticker tools scope does not grant Sticker Lab generation, uploads, pack publishing or native send tests. The project owner prepares and publishes packs first; a partner can then only schedule drops from published packs in the managed Sticker Drops panel."
+          ]
         }
       ],
       "related": [
@@ -1237,7 +1279,7 @@ export default {
       "category": "sticker-tools",
       "title": "Upload and manage files in Asset Vault",
       "summary": "Store actual project artwork once and reuse applicable references.",
-      "audience": "Project operators with asset access",
+      "audience": "Project owners and authorized project administrators",
       "location": "Assets / Asset Vault",
       "prerequisites": [
         "A selected project",
@@ -1273,6 +1315,12 @@ export default {
           "body": [
             "For a missing preview, allow the link to refresh and reopen the page. For an upload error, check type, size and selected project. A 25MB vault limit does not override the stricter PNG/JPEG 10MB logo requirement for branded broadcasts."
           ]
+        },
+        {
+          "title": "Service Partner boundary",
+          "body": [
+            "This is an owner creative tool. The delegated Sticker tools scope does not grant Sticker Lab generation, uploads, pack publishing or native send tests. The project owner prepares and publishes packs first; a partner can then only schedule drops from published packs in the managed Sticker Drops panel."
+          ]
         }
       ],
       "related": [
@@ -1287,7 +1335,7 @@ export default {
       "category": "sticker-tools",
       "title": "Plan and generate a sticker pack",
       "summary": "Use the five-step builder and test one sticker before generating a batch.",
-      "audience": "Operators with Sticker tools permission; AI generation requires Pro",
+      "audience": "Project owners and authorized project administrators; AI generation requires Pro",
       "location": "Sticker Lab → new pack or existing pack → Continue editing",
       "prerequisites": [
         "A selected project",
@@ -1326,6 +1374,12 @@ export default {
           "body": [
             "Do not start a whole batch before confirming the character and reference. Do not click generation again just because a background task is still processing. Provider configuration, remaining allowance and project access can disable generation."
           ]
+        },
+        {
+          "title": "Service Partner boundary",
+          "body": [
+            "This is an owner creative tool. The delegated Sticker tools scope does not grant Sticker Lab generation, uploads, pack publishing or native send tests. The project owner prepares and publishes packs first; a partner can then only schedule drops from published packs in the managed Sticker Drops panel."
+          ]
         }
       ],
       "related": [
@@ -1341,7 +1395,7 @@ export default {
       "category": "sticker-tools",
       "title": "Review, export and publish a sticker pack to Telegram",
       "summary": "Finish quality checks, select communities and confirm a real Telegram release.",
-      "audience": "Authorized Sticker tools operators with the required plan",
+      "audience": "Project owners and authorized project administrators",
       "location": "Sticker Lab → saved pack → Quality & Release",
       "prerequisites": [
         "Generated and verified stickers",
@@ -1390,6 +1444,12 @@ export default {
           "body": [
             "Wait until checks finish, review failed stickers, verify selected group readiness and refresh Telegram status. Do not regard transient Loading, Not published or Bot not configured text during initial loading as a final state. Follow the loaded result."
           ]
+        },
+        {
+          "title": "Service Partner boundary",
+          "body": [
+            "This is an owner creative tool. The delegated Sticker tools scope does not grant Sticker Lab generation, uploads, pack publishing or native send tests. The project owner prepares and publishes packs first; a partner can then only schedule drops from published packs in the managed Sticker Drops panel."
+          ]
         }
       ],
       "related": [
@@ -1404,7 +1464,7 @@ export default {
       "category": "sticker-tools",
       "title": "Use versions and review replacements for live stickers",
       "summary": "Keep the live Telegram sticker working while assessing a candidate.",
-      "audience": "Authorized Sticker tools operators",
+      "audience": "Project owners and authorized project administrators",
       "location": "Sticker Lab → Sticker Studio → sticker card",
       "prerequisites": [
         "A saved pack and an existing sticker"
@@ -1438,6 +1498,12 @@ export default {
           "body": [
             "Use the reported failure stage and Refresh status. Do not start repeated candidates while one is still running. Keep existing versions and the live set intact when investigating a failed candidate."
           ]
+        },
+        {
+          "title": "Service Partner boundary",
+          "body": [
+            "This is an owner creative tool. The delegated Sticker tools scope does not grant Sticker Lab generation, uploads, pack publishing or native send tests. The project owner prepares and publishes packs first; a partner can then only schedule drops from published packs in the managed Sticker Drops panel."
+          ]
         }
       ],
       "related": [
@@ -1452,7 +1518,7 @@ export default {
       "category": "sticker-tools",
       "title": "Create, approve and release animated stickers",
       "summary": "Follow the three motion stages and keep creation separate from release.",
-      "audience": "Authorized Sticker tools operators; Pro and available motion allowance required",
+      "audience": "Project owners and authorized project administrators; Pro and available motion allowance required",
       "location": "Sticker Studio or Quality & Release → Open Motion Studio",
       "prerequisites": [
         "An approved current static sticker",
@@ -1489,6 +1555,12 @@ export default {
           "body": [
             "The confirmations explain billable provider work and no automatic retry. A normalization-only retry is different from generating another motion version or repeating background removal. Follow the specific offered recovery; do not restart the entire pipeline unnecessarily."
           ]
+        },
+        {
+          "title": "Service Partner boundary",
+          "body": [
+            "This is an owner creative tool. The delegated Sticker tools scope does not grant Sticker Lab generation, uploads, pack publishing or native send tests. The project owner prepares and publishes packs first; a partner can then only schedule drops from published packs in the managed Sticker Drops panel."
+          ]
         }
       ],
       "related": [
@@ -1503,7 +1575,7 @@ export default {
       "category": "sticker-tools",
       "title": "Schedule recurring Sticker Drops",
       "summary": "Configure a per-group schedule, then deliberately enable it.",
-      "audience": "Authorized Sticker tools operators; Pro required",
+      "audience": "Project owners and authorized administrators; Service Partners with Sticker tools scope for published packs only. Pro required for saving or enabling",
       "location": "Sticker Drops",
       "prerequisites": [
         "A published project sticker pack",
@@ -1551,6 +1623,12 @@ export default {
           "title": "Next step",
           "body": [
             "Review Delivery history instead of repeatedly saving the same configuration to force delivery."
+          ]
+        },
+        {
+          "title": "Service Partner boundary",
+          "body": [
+            "In a delegated client workspace, Sticker tools is the published-pack Sticker Drops panel in /telegram. Partners can save, enable, disable and delete schedules for already published packs and connected groups. They cannot generate or upload stickers, publish packs, run native send tests or use the project emergency pause, which stays with the owner."
           ]
         }
       ],
@@ -1802,27 +1880,27 @@ export default {
             ],
             [
               "Community management",
-              "Connected community and welcome controls."
+              "Basic welcome controls for groups the client already connected; no bot connect, reconnect or disconnect, admin-permission setup or Launch Watch CTA settings."
             ],
             [
               "Broadcasts",
-              "Official community broadcast work."
+              "Plain-text posts to connected groups: Review broadcast, then Post broadcast. No branded media, logo, CTA or setup controls."
             ],
             [
               "Launch Watch communications",
-              "Eligible watcher communications."
+              "Updates for existing eligible launches: Preview and send, then Send update. No lifecycle, schedule, contract or launcher administration."
             ],
             [
               "Sticker tools",
-              "Supported Sticker Lab, release and drop work."
+              "The published-pack Sticker Drops panel in /telegram. No Sticker Lab generation, uploads, pack publishing, native send tests or emergency pause."
             ],
             [
               "Missions",
-              "History, metrics, timeline and future defaults; no delegated start, close, resurface or advanced controls."
+              "Read history, metrics and timeline, and edit project-wide future defaults. No delegated start, close, resurface or advanced controls."
             ],
             [
               "Project inbox",
-              "Supported member Inbox and reply work."
+              "Read and reply to member conversations; uncertain deliveries are acknowledged, never resent automatically."
             ]
           ],
           "image": {
@@ -1830,6 +1908,12 @@ export default {
             "alt": "Service Partner access: partner sign-in email, seven permission scopes and Send invitation.",
             "caption": "Service Partner access: partner sign-in email, seven permission scopes and Send invitation. Production example captured 30 September 2026. Your project, counts and status will differ."
           }
+        },
+        {
+          "title": "Managed workspace versus the owner’s workspace",
+          "body": [
+            "A partner works in a delegated managed workspace: only the panels for granted scopes appear, and each action is checked against the client’s plan and the partner’s current scopes. The owner’s full workspace keeps every other tool, including Sticker Lab, launch administration, bot connection, billing and settings. Revoking a scope removes the matching managed panel immediately."
+          ]
         },
         {
           "title": "Change or remove access",
