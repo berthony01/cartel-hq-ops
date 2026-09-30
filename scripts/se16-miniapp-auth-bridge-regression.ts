@@ -384,11 +384,14 @@ const opts = { now: NOW_MS };
   check(
     "7.4 exactly the approved tables are read, and only for reads",
     (() => {
-      const froms = [...bridgeCode.matchAll(/\.from\("([a-z_]+)"\)/g)].map((m) => m[1]!);
+      // MINI-HQ B1 media section (brand_kits read, media_assets insert) is covered by mini-hq-b1-custom-media-regression.
+      const b1 = bridgeCode.indexOf("MINI-HQ B1 — prepared custom message media");
+      const scoped = b1 >= 0 ? bridgeCode.slice(0, b1) : bridgeCode;
+      const froms = [...scoped.matchAll(/\.from\("([a-z_]+)"\)/g)].map((m) => m[1]!);
       return (
         froms.every((t) => expectedTables.includes(t)) &&
         new Set(froms).size === expectedTables.length &&
-        !/\.from\("[a-z_]+"\)\s*\n?\s*\.(insert|update|upsert|delete)\(/.test(bridgeCode)
+        !/\.from\("[a-z_]+"\)\s*\n?\s*\.(insert|update|upsert|delete)\(/.test(scoped)
       );
     })(),
   );

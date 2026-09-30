@@ -68,7 +68,9 @@ check("traversal path rejected", !isWorkspaceCustomMediaPath(ws, `${ws}/custom-m
 check("slot allowlist", isCustomMediaSlot("mission") && isCustomMediaSlot("broadcast") && !isCustomMediaSlot("inbox") && !isCustomMediaSlot(null));
 
 // ---- server function source invariants
-const fn = readFileSync("src/lib/telegram-miniapp-bridge.functions.ts", "utf8");
+const bridgeAll = readFileSync("src/lib/telegram-miniapp-bridge.functions.ts", "utf8");
+const fn = bridgeAll.slice(bridgeAll.indexOf("MINI-HQ B1 — prepared custom message media"));
+check("B1 section present in existing bridge", fn.length > 100);
 const ui = readFileSync("src/components/telegram-miniapp/MiniAppCustomMedia.tsx", "utf8");
 const home = readFileSync("src/routes/tg.index.tsx", "utf8");
 const sql = readFileSync("docs/sql/MINI_HQ_B1_custom_message_media.sql", "utf8");
@@ -80,7 +82,7 @@ check("upload validates decoded bytes", /inspectCustomMedia\(bytes\)/.test(fn));
 check("upload uses generated path, no upsert", /customMediaStoragePath\(g\.workspaceId, assetId/.test(fn) && /upsert: false/.test(fn));
 check("existing private bucket reused", /"workspace-assets"/.test(fn));
 check("listing workspace-bound", /eq\("workspace_id", g\.workspaceId\)/.test(fn) && /isWorkspaceCustomMediaPath\(g\.workspaceId/.test(fn));
-check("no client actor/chat/path inputs", !/actorUserId: string;[^\n]*input|telegram_chat_id|chatId|storagePath:/.test(fn.split("createServerFn").slice(1).join("")));
+check("no client actor/chat/path inputs", !/inputValidator\(\(input: \{[^}]*(actor|chat|path|userId)/i.test(fn) && !/telegram_chat_id/.test(fn));
 check("no Telegram send in B1", !/sendPhoto|sendAnimation|sendMessage|api\.telegram\.org|functions\/v1/.test(fn + ui));
 check("UI labels prepared/pending", /Prepared media only/.test(ui) && /coming later/.test(ui));
 check("UI accepts only PNG/JPEG/GIF", /accept="image\/png,image\/jpeg,image\/gif"/.test(ui));
