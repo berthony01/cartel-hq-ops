@@ -21,6 +21,7 @@ import {
   miniAppCommercialStatus,
 } from "@/lib/telegram-miniapp-bridge.functions";
 import { MiniAppInbox } from "@/components/telegram-miniapp/MiniAppInbox";
+import { MiniAppCustomMedia } from "@/components/telegram-miniapp/MiniAppCustomMedia";
 import {
   MiniAppFrame,
   MiniAppIdentity,
@@ -650,6 +651,7 @@ function MiniAppHome() {
               <MiniAppSkeleton label="Loading project identity…" />
             )}
           </MiniAppPanel>
+          {initData ? <MiniAppCustomMedia key={workspaceId} initData={initData} workspaceId={workspaceId} /> : null}
           <MiniAppPanel heading="Edit in CARTEL HQ" note="Opens the full CARTEL HQ app in your browser.">
             <div className="flex min-w-0 flex-col gap-2">
               <FullAppLink to="/project-profile" label="Project Profile" />

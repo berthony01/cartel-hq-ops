@@ -84,9 +84,9 @@ export function MiniAppCustomMedia({ initData, workspaceId }: { initData: string
       note="Prepared media only. Sending with missions and broadcasts is coming later — nothing you pick here is used in messages yet."
     >
       {query.isLoading ? <MiniAppSkeleton label="Loading media…" /> : null}
-      {query.data && !query.data.ok ? <MiniAppMessage tone="warning" title="Media unavailable" body="Could not load custom media. Try again later." /> : null}
+      {query.data && !query.data.ok ? <MiniAppMessage title="Media unavailable" description="Could not load custom media. Try again later." /> : null}
       {state && !state.entitled ? (
-        <MiniAppMessage tone="info" title="Pro feature" body="Upgrade to Pro in CARTEL HQ Settings to upload custom message media." />
+        <MiniAppMessage title="Pro feature" description="Upgrade to Pro in CARTEL HQ Settings to upload custom message media." />
       ) : null}
       {state && state.entitled ? (
         <div className="flex min-w-0 flex-col gap-3">
