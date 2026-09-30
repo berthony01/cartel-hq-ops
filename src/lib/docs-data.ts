@@ -74,6 +74,95 @@ export default {
   ],
   "articles": [
     {
+      "id": "roadmap",
+      "category": "getting-started",
+      "title": "CARTEL HQ roadmap",
+      "summary": "What is delivered, what comes next, what is planned and what is deferred, as of 30 September 2026.",
+      "audience": "Project owners, community members, Service Partners and prospective customers",
+      "location": "Public Help Center; Telegram /roadmap",
+      "prerequisites": [],
+      "sections": [
+        {
+          "title": "How to read this roadmap",
+          "body": [
+            "This is an honest status summary dated 30 September 2026. It has no completion percentages and no promised dates. Planned items are not all approved for immediate build, and the ordering of later items, including the AI Operator and the public launchpad, is still pending."
+          ]
+        },
+        {
+          "title": "Delivered foundation",
+          "body": [
+            "These areas exist in the product today. Some still have runtime closeout checks in progress, such as real two-account partner tests and end-to-end delivery confirmations, and those checks are tracked separately from the feature being built."
+          ],
+          "steps": [
+            "Public site and onboarding",
+            "Telegram account and group connections, with welcome messages",
+            "Community broadcasts, two-way Project Inbox and Launch Watch",
+            "X missions",
+            "Stickers, Brand Kit, Asset Vault, motion stickers and Sticker Drops",
+            "Free and Pro billing interfaces",
+            "Service Partner applications (limited U.S. beta)",
+            "Cartel Network public discovery",
+            "This Help Center"
+          ]
+        },
+        {
+          "title": "Next",
+          "body": [],
+          "steps": [
+            "Mini App organization and routing",
+            "Pro custom static and motion message media (planned, not live)",
+            "Verification of new-customer, billing, partner and Mini App journeys",
+            "Identity and ownership, UX and installable app (PWA) polish",
+            "Advanced mission lifecycle proof"
+          ]
+        },
+        {
+          "title": "Planned",
+          "body": [
+            "Planned means intended direction, not a commitment to a date or an approved build."
+          ],
+          "steps": [
+            "Multi-platform Cartel Social and Connect X",
+            "Analytics",
+            "Scheduled announcements, polls and giveaways",
+            "Cartel Shield and reputation",
+            "Protected Launch and Launch Passport",
+            "Quick Launch and custom contracts",
+            "PCART readiness and utility",
+            "AI Operator foundation (memory, permissions, approvals, tools, audit) and conversational setup",
+            "Controlled public launchpad after PCART"
+          ]
+        },
+        {
+          "title": "Deferred and exploratory",
+          "body": [
+            "The Affiliate Program remains closed. The items below are deferred or exploratory and may never ship."
+          ],
+          "steps": [
+            "Contributor recognition",
+            "Credits and usage wallet",
+            "NFT Studio",
+            "Additional sign-in options",
+            "Member Mini App",
+            "Community website V2 and V3",
+            "Member-risk screening (exploratory)"
+          ]
+        },
+        {
+          "title": "Important limits",
+          "body": [
+            "Nothing on this roadmap is a promise of mainnet availability, AI features or custom media. Deployment verification and official contract registration confirm recorded evidence only; they are not a safety audit, endorsement, guarantee or investment recommendation."
+          ]
+        }
+      ],
+      "related": [
+        "first-session",
+        "plans",
+        "partner-program-overview",
+        "network-browse"
+      ]
+    },
+    {
       "id": "first-session",
       "category": "getting-started",
       "title": "Your first session: from account to connected community",

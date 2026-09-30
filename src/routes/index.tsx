@@ -162,6 +162,13 @@ function LandingPage() {
             Docs
           </Link>
           <Link
+            to="/docs"
+            search={{ article: "roadmap" }}
+            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "hidden min-h-11 md:inline-flex")}
+          >
+            Roadmap
+          </Link>
+          <Link
             to="/partner-program"
             className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "min-h-11 px-2 sm:px-3")}
           >
@@ -364,6 +371,7 @@ function LandingPage() {
           <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 text-xs font-semibold">
             <Link to="/partner-program" className="inline-flex min-h-11 items-center text-gold hover:underline">Offer services with CARTEL HQ</Link>
             <Link to="/docs" className="inline-flex min-h-11 items-center text-gold hover:underline">Read the documentation</Link>
+            <Link to="/docs" search={{ article: "roadmap" }} className="inline-flex min-h-11 items-center text-gold hover:underline">See the roadmap</Link>
           </div>
         </section>
 

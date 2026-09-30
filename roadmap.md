@@ -39,3 +39,12 @@
 - [ ] SP-B6 real two-account E2E — BLOCKED: 0 approved active Service Partners
 - [ ] SP-B6.1 web mission start/close/end/resurface/Mission Control — DEFERRED (owner-only)
 - [ ] SP-B5 browser propagation + real two-account scheduled-drop test — BLOCKED: needs an approved active Service Partner account
+
+## Current status summary — 30 September 2026
+Historical items above are preserved as technical evidence; staged vs production distinctions still apply. Public product roadmap: https://pepecartelhq.com/docs?article=roadmap (Help Center article `roadmap`, mirrored by Telegram `/roadmap`).
+- Delivered foundation: public site/onboarding; Telegram/groups/welcomes; broadcasts, Project Inbox, Launch Watch; missions; stickers, Brand Kit, Asset Vault, motion, Sticker Drops; Free/Pro billing interfaces; Service Partner applications (limited U.S. beta); Cartel Network; Help Center. Runtime closeout (two-account partner tests, delivery proofs) tracked separately.
+- Next: Mini App organization/routing; Pro custom static/motion message media (planned, not live); new-customer/billing/partner/Mini App verification; identity/ownership, UX/PWA; advanced mission lifecycle proof.
+- Planned: Cartel Social/Connect X, analytics, scheduled announcements/polls/giveaways, Cartel Shield/reputation, Protected Launch/Launch Passport, Quick Launch/custom contracts, PCART readiness/utility, AI Operator foundation + conversational setup, controlled public launchpad after PCART. Ordering of AI/public launchpad pending; no fixed dates.
+- Deferred/exploratory: Affiliate CLOSED; contributor recognition; credits/usage wallet; NFT Studio; additional sign-in; member Mini App; community website V2/V3; member-risk screening.
+- [x] MINI-HQ Batch A staged (repository only): webhook copies byte-identical (1B.1 + 1C kept), compact operator Inbox alerts, dated /roadmap, Help Center roadmap article
+- [ ] MINI-HQ Batch A telegram-webhook deploy — awaiting owner review/deploy (live v107 lacks 1B.1 and 1C)
