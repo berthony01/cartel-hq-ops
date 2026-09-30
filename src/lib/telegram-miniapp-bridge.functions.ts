@@ -24,6 +24,18 @@
 
 import { createServerFn } from "@tanstack/react-start";
 import {
+  CUSTOM_MEDIA_ASSET_TYPE,
+  CUSTOM_MEDIA_FEATURE_KEY,
+  CUSTOM_MEDIA_MAX_BYTES,
+  CUSTOM_MEDIA_PURPOSE,
+  customMediaEntitled,
+  customMediaStoragePath,
+  inspectCustomMedia,
+  isCustomMediaSlot,
+  isWorkspaceCustomMediaPath,
+  type CustomMediaSlot,
+} from "./custom-message-media";
+import {
   isCurrentChatAdmin,
   isRequestId,
   isUuid,
@@ -1606,18 +1618,6 @@ export const miniAppInboxAckUncertainty = createServerFn({ method: "POST" })
  * select require Pro or platform-owner unrestricted access (fail closed).
  * Nothing here sends a Telegram message; no sender reads these selections yet.
  * ========================================================================== */
-import {
-  CUSTOM_MEDIA_ASSET_TYPE,
-  CUSTOM_MEDIA_FEATURE_KEY,
-  CUSTOM_MEDIA_MAX_BYTES,
-  CUSTOM_MEDIA_PURPOSE,
-  customMediaEntitled,
-  customMediaStoragePath,
-  inspectCustomMedia,
-  isCustomMediaSlot,
-  isWorkspaceCustomMediaPath,
-  type CustomMediaSlot,
-} from "./custom-message-media";
 
 export const CUSTOM_MEDIA_SELECT_RPC = "set_workspace_custom_message_media";
 const CUSTOM_MEDIA_BUCKET = "workspace-assets";
