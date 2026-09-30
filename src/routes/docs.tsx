@@ -125,6 +125,6 @@ function DocsPage() {
       </div>
     </main>
     <footer className="app-gutter mt-8 border-t border-border-subtle py-6"><LegalFooter/></footer>
-    <Dialog open={!!zoom} onOpenChange={open=>{if(!open)setZoom(null);}}><DialogContent onCloseAutoFocus={event=>{event.preventDefault();zoomTrigger.current?.focus();}} className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-6xl overflow-auto p-4 sm:p-6"><DialogTitle className="pr-8">Documentation screenshot</DialogTitle><DialogDescription>{zoom?.alt} On a narrow screen, scroll horizontally to read at full resolution.</DialogDescription>{zoom?<div className="overflow-auto"><img src={zoom.src} alt={zoom.alt} className="h-auto max-w-none sm:w-full sm:max-w-full"/></div>:null}</DialogContent></Dialog>
+    <Dialog open={!!zoom} onOpenChange={open=>{if(!open)setZoom(null);}}><DialogContent onCloseAutoFocus={event=>{event.preventDefault();const target=zoomTrigger.current;window.setTimeout(()=>target?.focus(),0);}} className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-6xl overflow-auto p-4 sm:p-6"><DialogTitle className="pr-8">Documentation screenshot</DialogTitle><DialogDescription>{zoom?.alt} On a narrow screen, scroll horizontally to read at full resolution.</DialogDescription>{zoom?<div className="overflow-auto"><img src={zoom.src} alt={zoom.alt} className="h-auto max-w-none sm:w-full sm:max-w-full"/></div>:null}</DialogContent></Dialog>
   </div>;
 }
