@@ -385,7 +385,7 @@ const opts = { now: NOW_MS };
     "7.4 exactly the approved tables are read, and only for reads",
     (() => {
       // MINI-HQ B1 media section (brand_kits read, media_assets insert) is covered by mini-hq-b1-custom-media-regression.
-      const b1 = bridgeCode.indexOf("MINI-HQ B1 — prepared custom message media");
+      const b1 = bridgeCode.indexOf("export const CUSTOM_MEDIA_SELECT_RPC");
       const scoped = b1 >= 0 ? bridgeCode.slice(0, b1) : bridgeCode;
       const froms = [...scoped.matchAll(/\.from\("([a-z_]+)"\)/g)].map((m) => m[1]!);
       return (
