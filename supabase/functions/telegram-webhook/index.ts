@@ -515,84 +515,45 @@ function startMenuText(linked: boolean) {
     : `<b>WELCOME TO CARTEL HQ 🐸</b>\n\nThe Telegram command bot for the growing PEPECARTEL ecosystem.\n\nSticker creation, Telegram sticker-pack publishing, native sticker delivery and multi-group distribution are live in <b>Private Beta</b>. More community tools are on the way.\n\n<b>What would you like to do?</b>`;
 }
 function roadmapText() {
-  return `<b>CARTEL HQ • ECOSYSTEM ROADMAP</b>
+  return `<b>CARTEL HQ • ROADMAP</b>
+<i>Status summary · 30 September 2026</i>
 
-Cartel HQ is evolving from community tooling into an operating system for launching and running onchain projects.
+<b>✅ DELIVERED FOUNDATION</b>
+• Public site and onboarding
+• Telegram account, group connections and welcomes
+• Community broadcasts, Project Inbox and Launch Watch
+• X missions
+• Stickers, Brand Kit, Asset Vault, motion stickers and Sticker Drops
+• Free / Pro billing interfaces
+• Service Partner applications (limited U.S. beta)
+• Cartel Network and Help Center
 
-<b>✅ BUILT FOUNDATION</b>
+Some delivered areas still have runtime closeout checks in progress.
 
-🎨 <b>Brand &amp; Creative</b>
-• AI Sticker Lab
-• Telegram sticker-pack publishing
-• Native sticker delivery
-• Multi-group distribution
-• Brand Kit &amp; asset management
-• Scheduled Sticker Drops
-• Motion sticker workflow foundation
+<b>🔜 NEXT</b>
+• Mini App organization and routing
+• Pro custom static/motion message media (planned, not live)
+• New-customer, billing, partner and Mini App verification
+• Identity/ownership, UX and PWA polish
+• Advanced mission lifecycle proof
 
-🏘 <b>Community Operations</b>
-• Multi-community Telegram connections
-• Welcome &amp; onboarding automation
-• Launch Watch CTA in community onboarding
-• Official Community Broadcast
-• Two-way Project Inbox
-• Team Bot Console
-• Project-to-subscriber updates
+<b>🗺 PLANNED</b>
+• Multi-platform Cartel Social / Connect X
+• Analytics
+• Scheduled announcements, polls and giveaways
+• Cartel Shield and reputation
+• Protected Launch / Launch Passport
+• Quick Launch and custom contracts
+• PCART readiness and utility
+• AI Operator foundation and conversational setup
+• Controlled public launchpad after PCART
 
-🚀 <b>Launch Infrastructure</b>
-• Project Identity &amp; Launch Control
-• Launch Watch opt-in network
-• 24h &amp; 1h countdown reminders
-• Schedule-change communication
-• Launch-live alerts
-• Deployment evidence verification
-• Official contract registration
-• Official CA delivery to Launch Watch subscribers
-• Official CA Telegram group broadcast
-• Contract correction + immutable history
-• Launch monitoring handoff
+<b>🧪 DEFERRED / EXPLORATORY</b>
+Affiliate program (closed), contributor recognition, credits/usage wallet, NFT Studio, additional sign-in options, member Mini App, community website V2/V3, member-risk screening.
 
-🌐 <b>Cartel Network</b>
-• Public project discovery
-• Public launch pages
-• Upcoming launches
-• Cartel Signals event feed
+Planned items are not all approved for immediate build. Ordering is not fixed and no dates are promised.
 
-⛓ <b>Robinhood Chain Launcher Foundation</b>
-• Wallet connection + network switching
-• Robinhood Chain Testnet launch preflight
-• Fixed-supply ERC-20 deployment
-• Onchain deployment verification
-• Launch receipt
-• Official-contract + Launch Watch handoff
-
-<b>🚧 CURRENT PRODUCTION WORK</b>
-
-Robinhood Chain Mainnet readiness:
-• Production wallet/gas safeguards
-• Mainnet deployment verification
-• Verified liquidity execution path
-• Liquidity receipt/evidence
-• Full real-money launch checklist
-
-Testnet liquidity execution remains deferred until the required AMM infrastructure can be authoritatively verified. We will not invent contract addresses just to call it finished.
-
-<b>🔜 NEXT PRODUCT LAYERS</b>
-• Public Cartel Launchpad
-• Cartel Verified Launch / Launch Passport experience
-• My Watchlist
-• Expanded analytics, reputation &amp; Cartel Shield
-• Distribution and marketing expansion
-• Operations &amp; Missions
-• Cartel AI Operator
-• Deeper ecosystem integrations
-
-<b>THE VISION</b>
-Before the launch. During the launch. After the launch.
-
-One project. One operating system.
-
-<b>CARTEL HQ.</b>
+Full roadmap: https://pepecartelhq.com/docs?article=roadmap
 
 Launch Watch is opt-in and can be muted or stopped. Deployment verification confirms specific recorded onchain evidence. It is not a token/project safety audit, endorsement, guarantee or investment recommendation.`;
 }
@@ -2343,7 +2304,7 @@ Deno.serve(async (req: Request) => {
         await sendMessage(
           TELEGRAM_BOT_TOKEN,
           String(operatorId),
-          `<b>${heading}</b>\n\nFrom <b>${escapeHtml(String(target.member_ref ?? "Member"))}</b>\n\n${escapeHtml(String(target.body ?? ""))}`,
+          `<b>${heading}</b>\n\nFrom <b>${escapeHtml(String(target.member_ref ?? "Member"))}</b>\n\nNew message in Project Inbox. Open Inbox to read and reply.`,
           {
             parse_mode: "HTML",
             reply_markup: {
