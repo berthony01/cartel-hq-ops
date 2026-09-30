@@ -515,84 +515,45 @@ function startMenuText(linked: boolean) {
     : `<b>WELCOME TO CARTEL HQ 🐸</b>\n\nThe Telegram command bot for the growing PEPECARTEL ecosystem.\n\nSticker creation, Telegram sticker-pack publishing, native sticker delivery and multi-group distribution are live in <b>Private Beta</b>. More community tools are on the way.\n\n<b>What would you like to do?</b>`;
 }
 function roadmapText() {
-  return `<b>CARTEL HQ • ECOSYSTEM ROADMAP</b>
+  return `<b>CARTEL HQ • ROADMAP</b>
+<i>Status summary · 30 September 2026</i>
 
-Cartel HQ is evolving from community tooling into an operating system for launching and running onchain projects.
+<b>✅ DELIVERED FOUNDATION</b>
+• Public site and onboarding
+• Telegram account, group connections and welcomes
+• Community broadcasts, Project Inbox and Launch Watch
+• X missions
+• Stickers, Brand Kit, Asset Vault, motion stickers and Sticker Drops
+• Free / Pro billing interfaces
+• Service Partner applications (limited U.S. beta)
+• Cartel Network and Help Center
 
-<b>✅ BUILT FOUNDATION</b>
+Some delivered areas still have runtime closeout checks in progress.
 
-🎨 <b>Brand &amp; Creative</b>
-• AI Sticker Lab
-• Telegram sticker-pack publishing
-• Native sticker delivery
-• Multi-group distribution
-• Brand Kit &amp; asset management
-• Scheduled Sticker Drops
-• Motion sticker workflow foundation
+<b>🔜 NEXT</b>
+• Mini App organization and routing
+• Pro custom static/motion message media (planned, not live)
+• New-customer, billing, partner and Mini App verification
+• Identity/ownership, UX and PWA polish
+• Advanced mission lifecycle proof
 
-🏘 <b>Community Operations</b>
-• Multi-community Telegram connections
-• Welcome &amp; onboarding automation
-• Launch Watch CTA in community onboarding
-• Official Community Broadcast
-• Two-way Project Inbox
-• Team Bot Console
-• Project-to-subscriber updates
+<b>🗺 PLANNED</b>
+• Multi-platform Cartel Social / Connect X
+• Analytics
+• Scheduled announcements, polls and giveaways
+• Cartel Shield and reputation
+• Protected Launch / Launch Passport
+• Quick Launch and custom contracts
+• PCART readiness and utility
+• AI Operator foundation and conversational setup
+• Controlled public launchpad after PCART
 
-🚀 <b>Launch Infrastructure</b>
-• Project Identity &amp; Launch Control
-• Launch Watch opt-in network
-• 24h &amp; 1h countdown reminders
-• Schedule-change communication
-• Launch-live alerts
-• Deployment evidence verification
-• Official contract registration
-• Official CA delivery to Launch Watch subscribers
-• Official CA Telegram group broadcast
-• Contract correction + immutable history
-• Launch monitoring handoff
+<b>🧪 DEFERRED / EXPLORATORY</b>
+Affiliate program (closed), contributor recognition, credits/usage wallet, NFT Studio, additional sign-in options, member Mini App, community website V2/V3, member-risk screening.
 
-🌐 <b>Cartel Network</b>
-• Public project discovery
-• Public launch pages
-• Upcoming launches
-• Cartel Signals event feed
+Planned items are not all approved for immediate build. Ordering is not fixed and no dates are promised.
 
-⛓ <b>Robinhood Chain Launcher Foundation</b>
-• Wallet connection + network switching
-• Robinhood Chain Testnet launch preflight
-• Fixed-supply ERC-20 deployment
-• Onchain deployment verification
-• Launch receipt
-• Official-contract + Launch Watch handoff
-
-<b>🚧 CURRENT PRODUCTION WORK</b>
-
-Robinhood Chain Mainnet readiness:
-• Production wallet/gas safeguards
-• Mainnet deployment verification
-• Verified liquidity execution path
-• Liquidity receipt/evidence
-• Full real-money launch checklist
-
-Testnet liquidity execution remains deferred until the required AMM infrastructure can be authoritatively verified. We will not invent contract addresses just to call it finished.
-
-<b>🔜 NEXT PRODUCT LAYERS</b>
-• Public Cartel Launchpad
-• Cartel Verified Launch / Launch Passport experience
-• My Watchlist
-• Expanded analytics, reputation &amp; Cartel Shield
-• Distribution and marketing expansion
-• Operations &amp; Missions
-• Cartel AI Operator
-• Deeper ecosystem integrations
-
-<b>THE VISION</b>
-Before the launch. During the launch. After the launch.
-
-One project. One operating system.
-
-<b>CARTEL HQ.</b>
+Full roadmap: https://pepecartelhq.com/docs?article=roadmap
 
 Launch Watch is opt-in and can be muted or stopped. Deployment verification confirms specific recorded onchain evidence. It is not a token/project safety audit, endorsement, guarantee or investment recommendation.`;
 }
@@ -2147,12 +2108,32 @@ Deno.serve(async (req: Request) => {
     return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20, 32)}`;
   };
 
-  const inboxListMarkup = (rows: any[]) => ({
+  /**
+   * MINI-HQ-1B.1 — Owner Mini App Inbox deep link. Only UUID-shaped workspace
+   * and conversation ids are ever placed in the URL; never Telegram user/chat/
+   * provider identifiers. Returns null when a safe URL cannot be formed.
+   */
+  const INBOX_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const buildInboxWebAppUrl = (workspaceId: string, conversationId: string): string | null => {
+    if (!INBOX_UUID_RE.test(workspaceId) || !INBOX_UUID_RE.test(conversationId)) return null;
+    const url = new URL(MISSION_CONTROL_WEBAPP_URL);
+    url.search = new URLSearchParams({
+      tab: "inbox",
+      workspace: workspaceId,
+      conversation: conversationId,
+    }).toString();
+    return url.toString();
+  };
+
+  const inboxListMarkup = (rows: any[], workspaceId: string) => ({
     inline_keyboard: [
-      ...rows.map((r: any) => [{
-        text: `${INBOX_STATUS_DOT(String(r.conversation_status))} ${String(r.member_ref)}`,
-        callback_data: `pi_c_${String(r.conversation_id)}`,
-      }]),
+      ...rows.map((r: any) => {
+        const text = `${INBOX_STATUS_DOT(String(r.conversation_status))} ${String(r.member_ref)}`;
+        const url = buildInboxWebAppUrl(workspaceId, String(r.conversation_id));
+        return [url
+          ? { text, web_app: { url } }
+          : { text, callback_data: `pi_c_${String(r.conversation_id)}` }];
+      }),
       [{ text: "✖️ Close inbox", callback_data: "pi_x" }],
     ],
   });
@@ -2188,8 +2169,8 @@ Deno.serve(async (req: Request) => {
     await sendMessage(
       TELEGRAM_BOT_TOKEN,
       chatId,
-      `<b>📥 PROJECT INBOX — ${escapeHtml(workspaceName)}</b>\n\n${lines.join("\n\n")}\n\nPick a conversation to read and reply.`,
-      { parse_mode: "HTML", reply_markup: inboxListMarkup(rows) },
+      `<b>📥 PROJECT INBOX — ${escapeHtml(workspaceName)}</b>\n\n${lines.join("\n\n")}\n\nOpen a conversation in the Mini App to read and reply.`,
+      { parse_mode: "HTML", reply_markup: inboxListMarkup(rows, workspaceId) },
     );
   };
 
@@ -2271,6 +2252,37 @@ Deno.serve(async (req: Request) => {
    * a failure here can never roll back or invalidate the captured message.
    * The member's Telegram identity is never included; only member_ref.
    */
+  /**
+   * MINI-HQ-1B.1 — resolve the conversation's workspace server-side from the
+   * trusted conversation_id (exact id lookup), then re-authorize the operator
+   * against bot_inbox_operator_workspaces. Returns null on any failure so the
+   * caller falls back to the legacy pi_c_* callback button.
+   */
+  const resolveAlertInboxWebAppUrl = async (operatorId: number, conversationId: string): Promise<string | null> => {
+    try {
+      if (!INBOX_UUID_RE.test(conversationId)) return null;
+      const { data: conv, error: convError } = await admin
+        .from("project_conversations")
+        .select("workspace_id")
+        .eq("id", conversationId)
+        .maybeSingle();
+      if (convError || !conv) return null;
+      const workspaceId = String((conv as any).workspace_id ?? "");
+      if (!INBOX_UUID_RE.test(workspaceId)) return null;
+      const { data: wsData, error: wsError } = await admin.rpc("bot_inbox_operator_workspaces", {
+        _telegram_user_id: operatorId,
+      });
+      if (wsError) return null;
+      const allowed = (Array.isArray(wsData) ? wsData : []).some(
+        (w: any) => String(w.workspace_id) === workspaceId,
+      );
+      if (!allowed) return null;
+      return buildInboxWebAppUrl(workspaceId, conversationId);
+    } catch {
+      return null;
+    }
+  };
+
   const notifyTeamOfCapture = async (updateId: number) => {
     try {
       const { data, error } = await admin.rpc("bot_inbox_capture_alert_targets", {
@@ -2284,14 +2296,19 @@ Deno.serve(async (req: Request) => {
         const heading = target.is_new_conversation === true
           ? "🆕 NEW PROJECT INBOX MESSAGE"
           : "📥 PROJECT INBOX MESSAGE";
+        const conversationId = String(target.conversation_id);
+        const webAppUrl = await resolveAlertInboxWebAppUrl(operatorId, conversationId);
+        const alertButton = webAppUrl
+          ? { text: "📥 Open Inbox", web_app: { url: webAppUrl } }
+          : { text: "📖 Open conversation", callback_data: `pi_c_${conversationId}` };
         await sendMessage(
           TELEGRAM_BOT_TOKEN,
           String(operatorId),
-          `<b>${heading}</b>\n\nFrom <b>${escapeHtml(String(target.member_ref ?? "Member"))}</b>\n\n${escapeHtml(String(target.body ?? ""))}`,
+          `<b>${heading}</b>\n\nFrom <b>${escapeHtml(String(target.member_ref ?? "Member"))}</b>\n\nNew message in Project Inbox. Open Inbox to read and reply.`,
           {
             parse_mode: "HTML",
             reply_markup: {
-              inline_keyboard: [[{ text: "📖 Open conversation", callback_data: `pi_c_${String(target.conversation_id)}` }]],
+              inline_keyboard: [[alertButton]],
             },
           },
         );
