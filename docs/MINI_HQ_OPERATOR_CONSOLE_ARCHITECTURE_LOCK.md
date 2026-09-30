@@ -83,3 +83,12 @@ This is a separate future phase for community-facing project identity, mission p
 - `/tg/mission/$missionId` exposes End mission now and Cancel mission behind a two-step confirmation. Bridge `miniAppEndMission` / `miniAppCancelMission` reuse `end_social_mission_from_control` / `cancel_social_mission_from_control`, the existing in-place `edit_mission` transport lane (which alone owns the single best-effort final X read for COMPLETED; CANCELLED takes none), the schedule-event ownership rule (`event_owned`), and the `pinned_by_hq`-guarded safe unpin. Retries replay the same request id; the transport duplicate short-circuits.
 - New private Mission Control panels show only a mission-specific `Open Mission Control` web_app button (`/tg/mission/<uuid>`) plus Exit. Legacy `mc_*` callbacks stay handled for old messages and emergency fallback. Link Finder START MISSION / IGNORE unchanged.
 - Brand tab shows saved identity read-only and links to Project Profile / Brand Kit; More links to existing full-app routes. No new backend, RPC, table, or schema.
+
+## MINI-HQ Batch A — state (30 Sep 2026, repository only, not deployed)
+- Live `telegram-webhook` v107 lacks 1B.1 Inbox deep links and 1C simplified mission panel. Both repository copies of the webhook source are now byte-identical and include 1B.1 + 1C.
+- Operator Inbox alerts (`notifyTeamOfCapture`) are compact: heading, member_ref, "New message in Project Inbox. Open Inbox to read and reply." plus the authorized Mini App deep link (legacy `pi_c_` fallback). The member message body is no longer echoed into operator DMs. Capture, member delivery, idempotency, `/inbox` list and the 30-minute legacy reply mode are unchanged.
+- Mini App tabs Home/Missions/Inbox/Brand/More already exist; the Broadcast composer already supports a branded photo with the saved Project Profile logo.
+
+## Forward scope (not yet approved for build)
+- Pro-only, server-enforced custom static/motion media for owner-composed content where the transport supports it: mission cards (same-message edits preserved), broadcasts, watcher updates, inbox replies. Platform owner bypass via existing unrestricted-access checks first. Free/standard behavior unchanged. System/operator alerts stay compact and are not customizable.
+- Full website remains deep administration. Member Mini App remains deferred.
