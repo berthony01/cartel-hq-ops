@@ -68,7 +68,7 @@ check("traversal path rejected", !isWorkspaceCustomMediaPath(ws, `${ws}/custom-m
 check("slot allowlist", isCustomMediaSlot("mission") && isCustomMediaSlot("broadcast") && !isCustomMediaSlot("inbox") && !isCustomMediaSlot(null));
 
 // ---- server function source invariants
-const fn = readFileSync("src/lib/telegram-miniapp-media.functions.ts", "utf8");
+const fn = readFileSync("src/lib/telegram-miniapp-bridge.functions.ts", "utf8");
 const ui = readFileSync("src/components/telegram-miniapp/MiniAppCustomMedia.tsx", "utf8");
 const home = readFileSync("src/routes/tg.index.tsx", "utf8");
 const sql = readFileSync("docs/sql/MINI_HQ_B1_custom_message_media.sql", "utf8");

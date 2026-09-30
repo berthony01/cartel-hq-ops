@@ -10,7 +10,7 @@ import {
   miniAppCustomMediaSelect,
   miniAppCustomMediaState,
   miniAppCustomMediaUpload,
-} from "@/lib/telegram-miniapp-media.functions";
+} from "@/lib/telegram-miniapp-bridge.functions";
 import { CUSTOM_MEDIA_MAX_BYTES, type CustomMediaSlot } from "@/lib/custom-message-media";
 import { MiniAppMessage, MiniAppPanel, MiniAppSkeleton } from "@/components/telegram-miniapp/MiniAppPieces";
 import { Button } from "@/components/ui/button";
