@@ -37,7 +37,7 @@ ADM=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa; OWN=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb
 A1=a1a1a1a1-0000-4000-8000-000000000001; A2=a1a1a1a1-0000-4000-8000-000000000002; AF=a1a1a1a1-0000-4000-8000-00000000000f
 AB=a1a1a1a1-0000-4000-8000-0000000000b0; AX=a1a1a1a1-0000-4000-8000-0000000000b1; AD=a1a1a1a1-0000-4000-8000-0000000000b2; AP=a1a1a1a1-0000-4000-8000-0000000000b3
 Q <<SQL
-INSERT INTO t_owner VALUES ('$OWN'); INSERT INTO t_ops VALUES ('$WS','$ADM'),('$WN','$ADM'),('$WF','$ADM');
+INSERT INTO t_owner VALUES ('$OWN'); INSERT INTO t_ops VALUES ('$WS','$ADM'),('$WN','$ADM'),('$WF','$ADM'),('44444444-4444-4444-8444-444444444444','$ADM');
 INSERT INTO t_gate VALUES ('$WS','$PRO'::jsonb),('$WN','$PRO'::jsonb);
 INSERT INTO brand_kits VALUES ('$WS','{"tone":"noir","palette":["#070707"]}',now()),('$WF','{}',now());
 INSERT INTO media_assets VALUES
@@ -87,16 +87,16 @@ t "NULL size" ASSET_NOT_FOUND "$(S $WS $ADM mission "'$AD'")"
 t "wrong asset_type" ASSET_NOT_FOUND "$(S $WS $ADM mission "'$AP'")"
 t "bad slot" INVALID_INPUT "$(S $WS $ADM avatar "'$A1'")"
 t "no brand kit" BRAND_KIT_REQUIRED "$(S $WN $ADM mission NULL)"
-t "other metadata preserved" 'noir|t' "SELECT metadata->>'tone' || '|' || (metadata ? 'palette')::text FROM brand_kits WHERE workspace_id='$WS'"
+t "other metadata preserved" 'noir|true' "SELECT metadata->>'tone' || '|' || (metadata ? 'palette')::text FROM brand_kits WHERE workspace_id='$WS'"
 t "gif animated flag stored" true "SELECT metadata->'custom_message_media'->'broadcast'->>'animated' FROM brand_kits WHERE workspace_id='$WS'"
 t "clear mission ok" true "$(S $WS $ADM mission NULL ok)"
-t "clear keeps broadcast" "f|$A2" "SELECT (metadata->'custom_message_media' ? 'mission')::text || '|' || (metadata->'custom_message_media'->'broadcast'->>'asset_id') FROM brand_kits WHERE workspace_id='$WS'"
+t "clear keeps broadcast" "false|$A2" "SELECT (metadata->'custom_message_media' ? 'mission')::text || '|' || (metadata->'custom_message_media'->'broadcast'->>'asset_id') FROM brand_kits WHERE workspace_id='$WS'"
 # grants
 t "anon cannot execute" f "SELECT has_function_privilege('anon','public.set_workspace_custom_message_media(uuid,uuid,text,uuid)','EXECUTE')"
 t "authenticated cannot execute" f "SELECT has_function_privilege('authenticated','public.set_workspace_custom_message_media(uuid,uuid,text,uuid)','EXECUTE')"
 t "service_role can execute" t "SELECT has_function_privilege('service_role','public.set_workspace_custom_message_media(uuid,uuid,text,uuid)','EXECUTE')"
 t "gate helper not public" f "SELECT has_function_privilege('authenticated','public.custom_media_gate_ok(jsonb)','EXECUTE')"
-t "search_path empty" 't|t' "SELECT bool_and(proconfig::text LIKE '%search_path=\"\"%')::text || '|' || bool_or(prosecdef)::text FROM pg_proc WHERE proname IN ('set_workspace_custom_message_media','custom_media_gate_ok')"
+t "search_path empty" 'true|true' "SELECT bool_and(array_to_string(proconfig,',') IN ('search_path=\"\"','search_path='))::text || '|' || bool_or(prosecdef)::text FROM pg_proc WHERE proname IN ('set_workspace_custom_message_media','custom_media_gate_ok')"
 
 echo "B1 SQL local: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]
