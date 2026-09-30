@@ -6,9 +6,9 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/compone
 import { articleById, categoryHref, docs, docsHref, searchDocs, type DocArticle } from '@/lib/docs-content';
 
 type DocsSearch = {
-  article?: string;
-  category?: string;
-  q?: string;
+  article?: string | undefined;
+  category?: string | undefined;
+  q?: string | undefined;
 };
 
 export const Route = createFileRoute('/docs')({
