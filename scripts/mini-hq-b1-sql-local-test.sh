@@ -3,7 +3,7 @@
 # schema-faithful stubs (media_assets, brand_kits, authority + commercial RPCs).
 # Never touches production. Usage: bash scripts/mini-hq-b1-sql-local-test.sh
 set -euo pipefail
-if [[ "$(id -u)" == "0" ]]; then exec su -s /bin/bash nobody -c "bash '$(realpath "$0")'"; fi
+if [[ "$(id -u)" == "0" ]]; then exec setpriv --reuid=65534 --regid=65534 --clear-groups env HOME=/tmp bash "$(realpath "$0")"; fi
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 D="$(mktemp -d)"; PORT=55439
 trap 'pg_ctl -D "$D/data" -m immediate stop >/dev/null 2>&1 || true; rm -rf "$D"' EXIT
