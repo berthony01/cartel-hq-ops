@@ -204,7 +204,7 @@ function panelStatus(raw: unknown): string {
 }
 
 /** Bot token is read per-request from server env only, never at module scope. */
-export function botToken(): string {
+function botToken(): string {
   return process.env["TELEGRAM_BOT_TOKEN"] ?? "";
 }
 

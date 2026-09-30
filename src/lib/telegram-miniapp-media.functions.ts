@@ -11,7 +11,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { isUuid, validateTelegramInitData } from "./telegram-miniapp-auth.server";
 import {
   adminClient,
-  botToken,
   fail,
   miniAppCommercialActor,
   type AdminClient,
@@ -32,6 +31,10 @@ import {
 
 export const CUSTOM_MEDIA_SELECT_RPC = "set_workspace_custom_message_media";
 const BUCKET = "workspace-assets";
+/** Read per-request from server env only (not shared/exported). */
+function botToken(): string {
+  return process.env["TELEGRAM_BOT_TOKEN"] ?? "";
+}
 const LIST_LIMIT = 12;
 
 export type MiniAppCustomMediaAsset = {
