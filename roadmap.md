@@ -53,4 +53,6 @@ Historical items above are preserved as technical evidence; staged vs production
 - [ ] MINI-HQ B2–B4 — pending sequenced implementation: B2 custom photo/GIF in website broadcasts (ledger fingerprint incl. media); B3 Mini App broadcast composer via service-authenticated signed-identity branch in telegram-group; B4 ANIMATION mission cards in social-mission-telegram + runner with staged constraint
 - [ ] Watcher update and Inbox reply custom media — not started (explicit later scope)
 - [x] L-S1 + L-S2 PCART launcher simplification (presentation + pure readiness only): five-step guide (Token, Auction, Treasury, Review, Launch) on Launch Control Overview, plain-English blocked notice and test-launch panel, advanced-testing note on chain launcher; no backend, SQL, deploy or safety-switch change
-- [ ] L-S3 upstream verification (CCA, Uniswap v4, LP custody, vesting) — next; then Safe creation + PCART testnet rehearsal, auction design lock
+- [x] L-S3 current-source research + doc alignment (2026-10-01): compatibility manifest v2 and master plan section 0 updated (public CCA, ~96h, no extension, Target Raise separate from Graduation Floor, old 24h/10 ETH/12-month SUPERSEDED). Docs only; nothing implemented
+- [ ] Direct managed-RPC on-chain code-hash verification of in-scope addresses — mandatory pre-integration gate, not done
+- [ ] L-S5 economic/auction design lock (Graduation Floor, Target Raise, allocation, vesting schedule, LP custody choice) — next; then treasury Safe creation + PCART testnet rehearsal
