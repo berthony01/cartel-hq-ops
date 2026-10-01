@@ -141,12 +141,17 @@ export function derivePcartReadiness(input: PcartReadinessInput): PcartReadiness
   ];
 
   const buildReady = auctionReady && treasuryReady && reviewReady;
-  const firstOpen = steps.find((s) => s.state !== "ready" && s.state !== "locked");
+  // "Next" must be an action the operator can actually take: prefer the first
+  // step needing setup. Only when no actionable setup remains may Next name a
+  // pending build dependency.
+  const firstActionable = steps.find((s) => s.state === "needs_setup");
+  const firstPending = steps.find((s) => s.state === "pending_build");
+  const nextStep = firstActionable ?? firstPending;
   return {
     steps,
     buildReady,
     overall: buildReady ? "Ready" : "Not Ready",
     mainnetLocked,
-    next: firstOpen && firstOpen.nextAction ? { stepId: firstOpen.id, action: firstOpen.nextAction } : null,
+    next: nextStep && nextStep.nextAction ? { stepId: nextStep.id, action: nextStep.nextAction } : null,
   };
 }

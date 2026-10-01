@@ -58,7 +58,15 @@ const full = derivePcartReadiness({
 });
 check("S10", full.buildReady && full.overall === "Ready" && full.mainnetLocked && full.steps[4]!.state === "locked",
   "mainnet lock stays on while overall Ready");
-check("S11", base.next?.stepId === "auction" && full.next === null, "next action points at first open step");
+check("S11", base.next?.stepId === "treasury" && full.next === null,
+  "next action prefers the first actionable setup step over a pending build");
+const onlyPending = derivePcartReadiness({
+  treasurySignersRecorded: true,
+  treasurySafeVerified: true,
+  deploymentRows: [row(PCART, "CONFIRMED")],
+});
+check("S11b", onlyPending.next?.stepId === "auction",
+  "once all setup is done, next may name the pending build dependency");
 check("S12", base.steps[0]!.state === "ready" && base.steps[4]!.state === "locked", "token ready, launch locked");
 
 const LIB = readFileSync("src/lib/pcart-launch-readiness.ts", "utf8");

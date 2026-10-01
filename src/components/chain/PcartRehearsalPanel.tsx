@@ -160,7 +160,7 @@ export function PcartRehearsalPanel(props: {
     <Section
       variant="primary"
       title="Test PCART before launch"
-      description="Runs one practice launch of the real PCART token on Robinhood Chain Testnet. It is free test money and not the real launch."
+      description="Runs one practice launch of the real PCART token on Robinhood Chain Testnet. It uses testnet funds only and is not the real launch."
       actions={
         <Button size="sm" onClick={() => void run()} disabled={!canRun}>
           {busy ? (
