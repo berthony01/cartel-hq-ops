@@ -11,6 +11,7 @@ import {
   normalizeTreasuryAddress,
   SAFE_GET_OWNERS_SELECTOR,
   SAFE_GET_THRESHOLD_SELECTOR,
+  SAFE_FALLBACK_HANDLER_STORAGE_SLOT,
   SAFE_GUARD_STORAGE_SLOT,
   SAFE_MASTER_COPY_SELECTOR,
   SAFE_NONCE_SELECTOR,
@@ -38,9 +39,13 @@ import {
 
 const REQUEST_TIMEOUT_MS = 8_000;
 
-type RpcOutcome = { ok: true; value: unknown } | { ok: false; failed: true };
+export type RpcOutcome = { ok: true; value: unknown } | { ok: false; failed: true };
 
-async function rpcCall(endpoint: string, method: string, params: unknown[]): Promise<RpcOutcome> {
+export async function rpcCall(
+  endpoint: string,
+  method: string,
+  params: unknown[],
+): Promise<RpcOutcome> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
@@ -63,7 +68,7 @@ async function rpcCall(endpoint: string, method: string, params: unknown[]): Pro
   }
 }
 
-function parseChainId(value: unknown): number | null {
+export function parseChainId(value: unknown): number | null {
   if (typeof value !== "string" || !/^0x[0-9a-fA-F]+$/.test(value)) return null;
   try {
     const parsed = Number(BigInt(value));
@@ -113,31 +118,51 @@ export const verifyTreasurySafe = createServerFn({ method: "POST" })
       );
     }
 
-    const [code, masterCopy, owners, threshold, version, nonce, modules, guard] = await Promise.all([
-      rpcCall(endpoint, "eth_getCode", [address, "latest"]),
-      rpcCall(endpoint, "eth_call", [{ to: address, data: SAFE_MASTER_COPY_SELECTOR }, "latest"]),
-      rpcCall(endpoint, "eth_call", [{ to: address, data: SAFE_GET_OWNERS_SELECTOR }, "latest"]),
-      rpcCall(endpoint, "eth_call", [{ to: address, data: SAFE_GET_THRESHOLD_SELECTOR }, "latest"]),
-      rpcCall(endpoint, "eth_call", [{ to: address, data: SAFE_VERSION_SELECTOR }, "latest"]),
-      rpcCall(endpoint, "eth_call", [{ to: address, data: SAFE_NONCE_SELECTOR }, "latest"]),
+    return readCanonicalSafeState(endpoint, address, observedChainId, "latest");
+  });
+
+/**
+ * Shared read + evaluate step for a candidate Safe. `endpoint` must already
+ * have been read from process.env inside a server handler. `blockTag` pins
+ * every read to one block. Optional `expectedOwners` enforces the exact
+ * intended owner SET. Never writes, never signs, never sends.
+ */
+export async function readCanonicalSafeState(
+  endpoint: string,
+  address: string,
+  observedChainId: number,
+  blockTag: string,
+  expectedOwners?: string[],
+): Promise<TreasurySafeVerification> {
+  const [code, masterCopy, owners, threshold, version, nonce, modules, guard, handler] =
+    await Promise.all([
+      rpcCall(endpoint, "eth_getCode", [address, blockTag]),
+      rpcCall(endpoint, "eth_call", [{ to: address, data: SAFE_MASTER_COPY_SELECTOR }, blockTag]),
+      rpcCall(endpoint, "eth_call", [{ to: address, data: SAFE_GET_OWNERS_SELECTOR }, blockTag]),
+      rpcCall(endpoint, "eth_call", [{ to: address, data: SAFE_GET_THRESHOLD_SELECTOR }, blockTag]),
+      rpcCall(endpoint, "eth_call", [{ to: address, data: SAFE_VERSION_SELECTOR }, blockTag]),
+      rpcCall(endpoint, "eth_call", [{ to: address, data: SAFE_NONCE_SELECTOR }, blockTag]),
       rpcCall(endpoint, "eth_call", [
         { to: address, data: encodeGetModulesPaginatedCall() },
-        "latest",
+        blockTag,
       ]),
-      rpcCall(endpoint, "eth_getStorageAt", [address, SAFE_GUARD_STORAGE_SLOT, "latest"]),
+      rpcCall(endpoint, "eth_getStorageAt", [address, SAFE_GUARD_STORAGE_SLOT, blockTag]),
+      rpcCall(endpoint, "eth_getStorageAt", [address, SAFE_FALLBACK_HANDLER_STORAGE_SLOT, blockTag]),
     ]);
 
-    // Any failed read is passed through as null and fails closed downstream.
-    return evaluateSafeTreasury({
-      address,
-      observedChainId,
-      codeHex: code.ok ? code.value : null,
-      masterCopyData: masterCopy.ok ? masterCopy.value : null,
-      ownersData: owners.ok ? owners.value : null,
-      thresholdData: threshold.ok ? threshold.value : null,
-      versionData: version.ok ? version.value : null,
-      nonceData: nonce.ok ? nonce.value : null,
-      modulesData: modules.ok ? modules.value : null,
-      guardStorageData: guard.ok ? guard.value : null,
-    });
+  // Any failed read is passed through as null and fails closed downstream.
+  return evaluateSafeTreasury({
+    address,
+    observedChainId,
+    codeHex: code.ok ? code.value : null,
+    masterCopyData: masterCopy.ok ? masterCopy.value : null,
+    ownersData: owners.ok ? owners.value : null,
+    thresholdData: threshold.ok ? threshold.value : null,
+    versionData: version.ok ? version.value : null,
+    nonceData: nonce.ok ? nonce.value : null,
+    modulesData: modules.ok ? modules.value : null,
+    guardStorageData: guard.ok ? guard.value : null,
+    fallbackHandlerStorageData: handler.ok ? handler.value : null,
+    ...(expectedOwners !== undefined ? { expectedOwners } : {}),
   });
+}

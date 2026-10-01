@@ -15,6 +15,8 @@ import {
   CANONICAL_SAFE_PROXY_RUNTIME_CODEHASH,
   CANONICAL_SAFE_VERSION,
   CANONICAL_SAFEL2_SINGLETON,
+  CANONICAL_COMPATIBILITY_FALLBACK_HANDLER,
+  ownerSetsMatchExactly,
   decodeAddress,
   decodeAddressArray,
   decodeModulesPaginated,
@@ -103,6 +105,7 @@ const base = (over: Partial<TreasurySafeReads> = {}): TreasurySafeReads => ({
   nonceData: nonceData(7),
   modulesData: modulesData([], SAFE_SENTINEL_MODULES),
   guardStorageData: ZERO_WORD,
+  fallbackHandlerStorageData: `0x${pad(CANONICAL_COMPATIBILITY_FALLBACK_HANDLER)}`,
   ...over,
 });
 
@@ -356,6 +359,56 @@ check(
   "strict decoders reject malformed data",
 );
 
+// ------------------------------------------- fallback handler + exact owners
+check(
+  "L1B-FH1",
+  evaluateSafeTreasury(base({ fallbackHandlerStorageData: `0x${pad(D)}` })).failureCode ===
+    "FALLBACK_HANDLER_MISMATCH" &&
+    evaluateSafeTreasury(base({ fallbackHandlerStorageData: ZERO_WORD })).failureCode ===
+      "FALLBACK_HANDLER_MISMATCH",
+  "a non-canonical or unset fallback handler fails canonical verification",
+);
+check(
+  "L1B-FH2",
+  evaluateSafeTreasury(base({ fallbackHandlerStorageData: null })).failureCode ===
+    "FALLBACK_HANDLER_UNREADABLE" &&
+    evaluateSafeTreasury(base({ fallbackHandlerStorageData: `0x${"f".repeat(64)}` })).failureCode ===
+      "FALLBACK_HANDLER_UNREADABLE",
+  "unreadable or dirty fallback handler slot fails closed",
+);
+{
+  const ok1 = evaluateSafeTreasury(base({ expectedOwners: [C, A, B] }));
+  const ok2 = evaluateSafeTreasury(base({ expectedOwners: [A.toUpperCase().replace("0X", "0x"), B, C] }));
+  check(
+    "L1B-EO1",
+    ok1.isCanonicalSafeV141 && ok1.ownersMatchIntended === true && ok2.ownersMatchIntended === true,
+    "exact intended owner set passes regardless of order and case",
+  );
+  const miss = evaluateSafeTreasury(base({ expectedOwners: [A, B, D] }));
+  const extra = evaluateSafeTreasury(base({ expectedOwners: [A, B, C, D] }));
+  const short = evaluateSafeTreasury(base({ expectedOwners: [A, B] }));
+  check(
+    "L1B-EO2",
+    [miss, extra, short].every(
+      (r) => r.failureCode === "OWNERS_NOT_INTENDED" && !r.isCanonicalSafeV141 && r.ownersMatchIntended === false,
+    ) && !ownerSetsMatchExactly([A, A, B], [A, B, B]),
+    "missing, extra or wrong intended owner fails closed",
+  );
+  check(
+    "L1B-EO3",
+    evaluateSafeTreasury(base()).ownersMatchIntended === null,
+    "without an intended set, ownersMatchIntended stays null (never implied true)",
+  );
+  check(
+    "L1B-EO4",
+    evaluateSafeTreasury(base({ modulesData: modulesData([D], SAFE_SENTINEL_MODULES), expectedOwners: [A, B, C] }))
+      .failureCode === "MODULES_PRESENT" &&
+      evaluateSafeTreasury(base({ guardStorageData: `0x${pad(D)}`, expectedOwners: [A, B, C] })).failureCode ===
+        "GUARD_PRESENT",
+    "existing module and guard failures still apply with exact owners",
+  );
+}
+
 // -------------------------------------------------------- safety boundaries
 const forbidden = /eth_sendTransaction|eth_sendRawTransaction|eth_sign|personal_sign|signTypedData|privateKey/i;
 check("L1B-13", !forbidden.test(fnCode), "server verifier contains no signing or send method");
@@ -377,7 +430,7 @@ check(
   ) &&
     /process\.env\[ROBINHOOD_MAINNET_MANAGED_RPC_ENV\]/.test(fnCode) &&
     (fnCode.match(/process\.env/g) ?? []).length === 1 &&
-    !/fallback|diagnostic|PUBLIC_RPC/i.test(fnCode),
+    !/diagnostic|PUBLIC_RPC|fallback(?!_?handler)/i.test(fnCode),
   "only the managed RPC transport and the allowed read methods are used, with no public fallback",
 );
 check(

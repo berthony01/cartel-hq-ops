@@ -112,8 +112,14 @@ import { PcartProductionBlockedCheckpoint } from "@/components/cartel/PcartProdu
 import { isCanonicalPcartLaunch } from "@/lib/launch-artifact-registry";
 import { TreasurySignerSetupPanel } from "@/components/cartel/TreasurySignerSetupPanel";
 import { PcartLaunchSetupGuide } from "@/components/cartel/PcartLaunchSetupGuide";
-import { derivePcartReadiness } from "@/lib/pcart-launch-readiness";
+import { derivePcartReadiness, isPcartTreasurySafeReady } from "@/lib/pcart-launch-readiness";
 import { getLaunchTreasurySigners, treasurySignerConfigQueryKey } from "@/lib/treasury-signers";
+import {
+  TreasurySafeCreatePanel,
+  treasurySafeStatusQueryKey,
+} from "@/components/cartel/TreasurySafeCreatePanel";
+import { getTreasurySafeStatus } from "@/lib/treasury-safe-create.functions";
+import { useServerFn } from "@tanstack/react-start";
 import {
   getLaunchProductionDeploymentRequest,
   hasRegistrationRecord,
@@ -1074,18 +1080,28 @@ function LaunchControlPage() {
     enabled: !!selected?.id && selectedIsCanonicalPcart,
     queryFn: () => getLaunchTreasurySigners(selected!.id),
   });
+  const treasurySafeStatusFn = useServerFn(getTreasurySafeStatus);
+  const pcartSafeStatusQuery = useQuery({
+    queryKey: treasurySafeStatusQueryKey(selected?.id ?? null),
+    enabled: !!selected?.id && selectedIsCanonicalPcart && !!pcartSignerQuery.data,
+    queryFn: () => treasurySafeStatusFn({ data: { launchId: selected!.id } }),
+  });
+  const pcartSafeReady = isPcartTreasurySafeReady({
+    persistedSafeAddress: pcartSafeStatusQuery.data?.persistedSafeAddress,
+    fresh: pcartSafeStatusQuery.data?.fresh,
+  });
   const pcartReadiness = useMemo(
     () =>
       selectedIsCanonicalPcart
         ? derivePcartReadiness({
             auctionIntegrated: false,
             treasurySignersRecorded: !!pcartSignerQuery.data,
-            treasurySafeVerified: false,
+            treasurySafeVerified: pcartSafeReady,
             deploymentRows: deploymentEvidenceQuery.data ?? [],
             mainnetLocked: true,
           })
         : null,
-    [selectedIsCanonicalPcart, pcartSignerQuery.data, deploymentEvidenceQuery.data],
+    [selectedIsCanonicalPcart, pcartSignerQuery.data, pcartSafeReady, deploymentEvidenceQuery.data],
   );
   const deploymentEvidence = useMemo(() => {
     if (!selected) return null;
@@ -2874,6 +2890,17 @@ function LaunchControlPage() {
                     nothing, moves nothing and does not gate the request below. */}
                 {selected && selectedIsProjectLaunch ? (
                   <TreasurySignerSetupPanel
+                    launchId={selected.id}
+                    isWorkspaceOwner={isWorkspaceOwner}
+                    disabled={readOnly}
+                  />
+                ) : null}
+
+                {/* PCART treasury Safe creation — one explicit wallet
+                    confirmation, no auto-retry. Separate from token
+                    deployment controls, which stay locked. */}
+                {selected && selectedIsProjectLaunch && selectedIsCanonicalPcart ? (
+                  <TreasurySafeCreatePanel
                     launchId={selected.id}
                     isWorkspaceOwner={isWorkspaceOwner}
                     disabled={readOnly}

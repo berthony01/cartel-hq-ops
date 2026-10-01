@@ -38,12 +38,38 @@ export type PcartReadinessInput = {
   /** Only true once a real auction integration exists. Always false today. */
   auctionIntegrated?: boolean;
   treasurySignersRecorded: boolean;
-  /** Only true once the real Safe is created and verified. Always false today. */
+  /**
+   * True only via isPcartTreasurySafeReady(): a persisted Safe address AND a
+   * fresh server-side canonical verification against the saved owners.
+   */
   treasurySafeVerified?: boolean;
   deploymentRows: readonly PcartRehearsalRowLike[];
   /** Existing mainnet execution lock. Defaults to locked. */
   mainnetLocked?: boolean;
 };
+
+/**
+ * Treasury Safe readiness. Persisted evidence alone is NEVER enough: a fresh
+ * server-side verification must pass the full canonical Safe v1.4.1 profile
+ * AND match the exact saved owner set. Does not touch mainnet execution locks.
+ */
+export function isPcartTreasurySafeReady(input: {
+  persistedSafeAddress: string | null | undefined;
+  fresh:
+    | { isCanonicalSafeV141: boolean; ownersMatchIntended: boolean | null; address: string }
+    | null
+    | undefined;
+}): boolean {
+  const persisted = (input.persistedSafeAddress ?? "").toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(persisted)) return false;
+  const f = input.fresh;
+  if (!f) return false;
+  return (
+    f.isCanonicalSafeV141 === true &&
+    f.ownersMatchIntended === true &&
+    String(f.address ?? "").toLowerCase() === persisted
+  );
+}
 
 export type PcartStep = {
   id: PcartStepId;

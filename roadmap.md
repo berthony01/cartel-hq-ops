@@ -60,3 +60,8 @@ Historical items above are preserved as technical evidence; staged vs production
 - [ ] B. Treasury Safe creation + signer recording — NOT DONE
 - [ ] C. Exact PCART testnet rehearsal — NOT DONE
 - [ ] D. L-S6 testnet auction integration, then L-S7 liquidity/vesting integration — NOT STARTED (after A–C)
+
+## PCART treasury Safe creation — 1 October 2026
+- [x] Built (not live): in-app "Create treasury Safe" card in Launch Control, canonical Safe v1.4.1 plan (CompatibilityFallbackHandler, deterministic salt, CREATE2 prediction), managed-RPC preflight, one wallet send without retry, exact-owner + fallback-handler verification, readiness from fresh verification only.
+- [ ] Apply staged SQL `docs/sql/PCART_TREASURY_SAFE_EVIDENCE.sql` — waiting on owner authorization.
+- [ ] Create the Safe with a signer wallet — waiting on owner authorization; no transaction sent yet.
