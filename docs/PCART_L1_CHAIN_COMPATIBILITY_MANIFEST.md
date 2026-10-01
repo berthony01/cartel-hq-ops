@@ -103,3 +103,32 @@ OpenZeppelin `VestingWallet` (linear ERC-20 vesting) and `VestingWalletCliff` (a
 - This manifest authorizes nothing. It does not authorize a Safe deployment, a compile, an artifact, a production request, a testnet or mainnet transaction, liquidity work, or any value movement.
 - None of these addresses may be placed in `src/**`, `supabase/**`, `contracts/**` or `docs/sql/**`. Documentation only.
 - Infrastructure/protocol compatibility evidence for PCART-L1 closure (item **L1-e1**) consists of this manifest, the already-finalized separate generic mainnet canary, and static/read-only checks. It does **not** include exact-artifact rehearsal, which remains **L1-e2 / Phase 3**.
+
+## 9. Managed-RPC observed + ABI/config verified 2026-10-01
+
+Read through CARTEL HQ's managed Robinhood mainnet RPC (read-only `eth_chainId`/`eth_getCode`/`eth_call` only; no signing, no transaction). `eth_chainId` = **4663**. All reads pinned to block **77,685,829**. Every expectation below PASSED.
+
+**PINNED AS CARTEL HQ OBSERVED MAINNET FINGERPRINTS** for future pre-send rechecks. These are not proof of a third-party audit. Future execution MUST re-read code hashes and config immediately before any integration/send and require an exact match; **any mismatch fails closed**.
+
+| Component | Address | Runtime bytes | Runtime code keccak256 |
+|---|---|---|---|
+| LiquidityLauncher core | `0x0000FffFBE8efE702c8703aE3477FF5dE3d319C0` | 4127 | `0x4a586d925c9d59ece13ce2239ebd7dea9ee725f9d33c6667e0fd16ae8d977d80` |
+| LBPStrategy v3.3.0 | `0xbf1aB81f7d534b2CC0Da76fcf4d541322bB0e000` | 21241 | `0x52b5ff6eb222744bfe04beab33c12d3d0126ab731d8bb0737d58b63b12e35d2c` |
+| InitializerHook v3.3.0 | `0x5fB5229FBA341dFE5a7e6A14d4809D6Cf887a000` | 3104 | `0xb427c9117931c9139aa652ab6098bd9ffe6d2cc2c48ea47c75e8f52cebe24fff` |
+| CCA factory v2.1.0 | `0x000000001F26a0044BaA66024e7b6599c61963F8` | 24214 | `0xa1d2a90564f4f63580b25de42efaff92505c254b00fc666f65ab38126cce5cfa` |
+| FeeSplitter fees-off | `0x882Ae5e2095435A62Fd1BBDEfcb637f5CeAFc0ee` | 7260 | `0x8238e5106b3a895514083110d1f3b4e51be61148604f35113719af56ae325f42` |
+| FeeSplitter fees-on | `0x9411fa7F956f64aa7981AA27cB3bC6eC0415449C` | 7260 | `0x8238e5106b3a895514083110d1f3b4e51be61148604f35113719af56ae325f42` |
+| CompoundingClaimRecipient | `0xf585b5D728A8fdE743027307BF5F3556E3B9C58D` | 3598 | `0xd2fa4e20bd2f18107b33b38cd3115be9f8d11b9d03767a462c2fe224c67a7fe2` |
+| UERC20BeneficiaryVault | `0x26d2F7AcB07707034406a0dC458351Bb63C02553` | 6390 | `0x60f051c91b567218a6703c35dd264b9c5257ee0db7379e9869c9968642fb8a44` |
+| Permit2 | `0x000000000022D473030F116dDEE9F6B43aC78BA3` | 9152 | `0x5208783f52488f7d3493e5e38311ab707c1d75457fe472a19b0b4d57d66a7fca` |
+
+Note: both FeeSplitters share identical runtime code; they differ only in their split configuration, so the config below (not the hash alone) distinguishes them and must be rechecked too.
+
+**Observed config:**
+- LBPStrategy `positionManager()` = `0x58daec3116aae6D93017bAAea7749052E8a04fA7` (code present, 23877 bytes); `poolManager()` = `0x8366a39CC670B4001A1121B8F6A443A643e40951` (code present, 24009 bytes); `initializerFactory()` = `0x000000001F26a0044BaA66024e7b6599c61963F8` (= CCA factory, PASS).
+- InitializerHook `authorized()` = `0xbf1aB81f7d534b2CC0Da76fcf4d541322bB0e000` (= LBPStrategy, PASS).
+- Fees-off FeeSplitter: `positionManager()`/`poolManager()` equal LBPStrategy's (PASS). `getSplits()` = `[(0xf585b5D728A8fdE743027307BF5F3556E3B9C58D, nativeBps 10000, tokenBps 10000, useCallback true)]` (PASS).
+- Fees-on FeeSplitter: `positionManager()`/`poolManager()` equal LBPStrategy's (PASS). `getSplits()` = `[(0x26d2F7AcB07707034406a0dC458351Bb63C02553, 4000, 0, true), (0xf585b5D728A8fdE743027307BF5F3556E3B9C58D, 6000, 10000, true)]` (PASS). Not used for PCART (section 6).
+- CCA factory: code existence and hash only; no non-interface getters were called.
+
+Limits: one authoritative managed RPC reading, with no independent second source; positionManager/poolManager hashes were not pinned (only code presence checked). This section satisfies the section 5 code-hash/config gate as of this date only; it authorizes no transaction.
