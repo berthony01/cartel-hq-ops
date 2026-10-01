@@ -111,6 +111,9 @@ import { ProductionDeploymentRequestPanel } from "@/components/cartel/Production
 import { PcartProductionBlockedCheckpoint } from "@/components/cartel/PcartProductionBlockedCheckpoint";
 import { isCanonicalPcartLaunch } from "@/lib/launch-artifact-registry";
 import { TreasurySignerSetupPanel } from "@/components/cartel/TreasurySignerSetupPanel";
+import { PcartLaunchSetupGuide } from "@/components/cartel/PcartLaunchSetupGuide";
+import { derivePcartReadiness } from "@/lib/pcart-launch-readiness";
+import { getLaunchTreasurySigners, treasurySignerConfigQueryKey } from "@/lib/treasury-signers";
 import {
   getLaunchProductionDeploymentRequest,
   hasRegistrationRecord,
@@ -1064,6 +1067,26 @@ function LaunchControlPage() {
     enabled: !!selected?.id,
     queryFn: () => listChainDeployments(selected!.id),
   });
+  // ---- L-S2: PCART launch setup readiness (read-only, existing surfaces) ----
+  const selectedIsCanonicalPcart = !!selected && isCanonicalPcartLaunch(selected);
+  const pcartSignerQuery = useQuery({
+    queryKey: treasurySignerConfigQueryKey(selected?.id ?? null),
+    enabled: !!selected?.id && selectedIsCanonicalPcart,
+    queryFn: () => getLaunchTreasurySigners(selected!.id),
+  });
+  const pcartReadiness = useMemo(
+    () =>
+      selectedIsCanonicalPcart
+        ? derivePcartReadiness({
+            auctionIntegrated: false,
+            treasurySignersRecorded: !!pcartSignerQuery.data,
+            treasurySafeVerified: false,
+            deploymentRows: deploymentEvidenceQuery.data ?? [],
+            mainnetLocked: true,
+          })
+        : null,
+    [selectedIsCanonicalPcart, pcartSignerQuery.data, deploymentEvidenceQuery.data],
+  );
   const deploymentEvidence = useMemo(() => {
     if (!selected) return null;
     return evaluateLaunchDeploymentEvidence(
@@ -1729,6 +1752,11 @@ function LaunchControlPage() {
                 form state, queries, mutation state and idempotency outcomes
                 survive navigation. */}
             <WorkingView id="lc-overview" active={activeSection === "lc-overview"}>
+              {pcartReadiness ? (
+                <div className="mb-4 min-w-0">
+                  <PcartLaunchSetupGuide readiness={pcartReadiness} />
+                </div>
+              ) : null}
               <LaunchControlHero
                 identity={
                   <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3">

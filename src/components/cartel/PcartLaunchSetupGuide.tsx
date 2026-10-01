@@ -13,7 +13,7 @@ const STATE_ICON: Record<PcartStepState, typeof Circle> = {
 };
 
 const STATE_TONE: Record<PcartStepState, string> = {
-  ready: "text-success",
+  ready: "text-pepe",
   needs_setup: "text-gold",
   pending_build: "text-muted-foreground",
   locked: "text-muted-foreground",
@@ -31,7 +31,7 @@ export function PcartLaunchSetupGuide({ readiness }: { readiness: PcartReadiness
         <p className="type-eyebrow text-gold">PEPECARTEL launch setup</p>
         <span
           className={`rounded-sm border px-2 py-1 text-xs font-semibold uppercase tracking-wide ${
-            ready ? "border-success/50 text-success" : "border-gold/50 text-gold"
+            ready ? "border-pepe/50 text-pepe" : "border-gold/50 text-gold"
           }`}
         >
           {readiness.overall}
