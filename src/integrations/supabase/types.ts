@@ -1357,6 +1357,11 @@ export type Database = {
           created_by: string
           id: string
           launch_id: string
+          safe_address: string | null
+          safe_creation_tx_hash: string | null
+          safe_salt_nonce: string | null
+          safe_verified_at: string | null
+          safe_verified_block: number | null
           signer_1: string
           signer_2: string
           signer_3: string
@@ -1370,6 +1375,11 @@ export type Database = {
           created_by: string
           id?: string
           launch_id: string
+          safe_address?: string | null
+          safe_creation_tx_hash?: string | null
+          safe_salt_nonce?: string | null
+          safe_verified_at?: string | null
+          safe_verified_block?: number | null
           signer_1: string
           signer_2: string
           signer_3: string
@@ -1383,6 +1393,11 @@ export type Database = {
           created_by?: string
           id?: string
           launch_id?: string
+          safe_address?: string | null
+          safe_creation_tx_hash?: string | null
+          safe_salt_nonce?: string | null
+          safe_verified_at?: string | null
+          safe_verified_block?: number | null
           signer_1?: string
           signer_2?: string
           signer_3?: string
@@ -7647,6 +7662,39 @@ export type Database = {
           verified_at: string
         }[]
       }
+      save_launch_treasury_safe_evidence: {
+        Args: {
+          _launch_id: string
+          _safe_address: string
+          _safe_creation_tx_hash: string
+          _safe_salt_nonce: string
+          _safe_verified_block: number
+        }
+        Returns: {
+          created_at: string
+          created_by: string
+          id: string
+          launch_id: string
+          safe_address: string | null
+          safe_creation_tx_hash: string | null
+          safe_salt_nonce: string | null
+          safe_verified_at: string | null
+          safe_verified_block: number | null
+          signer_1: string
+          signer_2: string
+          signer_3: string
+          threshold: number
+          updated_at: string
+          updated_by: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_treasury_signer_configs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       save_launch_treasury_signers: {
         Args: {
           _launch_id: string
@@ -7659,6 +7707,11 @@ export type Database = {
           created_by: string
           id: string
           launch_id: string
+          safe_address: string | null
+          safe_creation_tx_hash: string | null
+          safe_salt_nonce: string | null
+          safe_verified_at: string | null
+          safe_verified_block: number | null
           signer_1: string
           signer_2: string
           signer_3: string
