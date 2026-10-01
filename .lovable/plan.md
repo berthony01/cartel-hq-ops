@@ -1,100 +1,51 @@
-# PCART Launcher — Read-Only Audit and Simplify / Finish / Test / Lock Plan
+# PCART Treasury Safe Creation — Read-Only Audit (no changes made)
 
-Audit only. Nothing was edited, applied, deployed or published. Live database values were not queried; switch states below come from repository migrations and source, and must be confirmed read-only before any build.
+Nothing was edited, applied, deployed, signed or sent. Every finding below comes from a file read done for this audit.
 
-## A. Current flow and where complexity leaks
+## Short answer
+You can build this safely inside Cartel HQ. It needs one short code step first (B0) and one small storage addition (E). Two values can't be found anywhere in the project, so they need your decision. Until then, the fastest safe option is still the official Safe app (see H).
 
-Two owner pages plus one harness:
+## Findings
 
-```text
-/chain-launcher  (6 sections)
-  1 Wallet + network connect
-  2 "Test deployment" (legacy C8.2 throwaway artifact)        <- leak
-  3 PCART rehearsal panel (frozen pepecartel-token-v1, testnet)
-  4 Token form + "Run simulation" + SimulationReviewCard        <- jargon
-  5 LaunchReceiptCard
-  6 Liquidity planning (LiquidityPlanCard, local math only)     <- implies a capability that does not exist
-/launch-control  (~17 sections)
-  Overview, Details, Schedule, Launch Watch, Communications, Deploy & Contract,
-  LaunchLifecycleRail, contract registration,
-  TreasurySignerSetupPanel -> PcartProductionBlockedCheckpoint -> ProductionDeploymentRequestPanel
-/mainnet-canary  (8 sections, canary permits, operator log)    <- operator-only internals
-```
+**A. Is the wallet setup enough?** Mostly yes. `src/lib/wallet-connector.ts` already enforces Robinhood Chain (eip155:4663): it switches chains only when the user taps, and it reads the chain from the wallet session rather than trusting the wallet's default. `src/lib/chain-mainnet-wallet.ts` already has a "send exactly one transaction, no retry, an unclear result is treated as failure" pattern. That send path is tied to server-issued token-deployment envelopes and the mainnet kill switches, so it should NOT be reused as-is (see the separation section below). A small separate sender is needed that copies its rules: one `eth_sendTransaction`, chain checked again just before the wallet prompt, no automatic retry.
 
-Leaks: the user goes back and forth between pages; "simulation", "init code", "canary", "presign", "canonical", "verifier" wording; the legacy test deployment sits next to the real flow; liquidity planning has no auction or liquidity behind it; treasury appears last instead of before token setup (the treasury address is the token's mint recipient).
+**B. Setup data for a plain 2-of-3 Safe.** These values come from the public Safe v1.4.1 `setup` interface. No Safe contract code or ABI exists in the project or its installed packages. `@safe-global/safe-apps-*` are Safe app SDKs, not the Safe protocol kit. So every value below has to be pinned and checked against the published source before use:
+- `_owners`: the 3 saved signers, in saved order (signer_1, signer_2, signer_3)
+- `_threshold`: 2
+- `to`: 0x0000000000000000000000000000000000000000
+- `data`: 0x
+- `fallbackHandler`: **unresolved.** The project pins no fallback handler. Zero is valid and gives the strict "no handler" result you asked for. The official Safe app normally sets the CompatibilityFallbackHandler instead, which some signing tools need for contract signatures (EIP-1271). This is your decision; the project doesn't settle it.
+- `paymentToken`: 0x0000000000000000000000000000000000000000
+- `payment`: 0
+- `paymentReceiver`: 0x0000000000000000000000000000000000000000
 
-## B. Keep unchanged (protected)
+**C. Factory method and salt.** Use `createProxyWithNonce(singleton = SafeL2 0x29fc…C762, initializer, saltNonce)`. Don't use `createChainSpecificProxyWithNonce` or the callback variant. The saltNonce should be fixed and saved before the wallet prompt (for example a hash of the launch ID plus a saved attempt number), so the predicted address stays the same if you retry. If a send result is unclear, check whether code already exists at the predicted address before allowing anything new. Never pick a new salt silently.
 
-- `contracts/PepeCartelToken.sol`, `artifacts/pepecartel-token-v1.*`, `src/lib/pepecartel-token.artifact.ts` (frozen, immutable 1B, no mint/tax/admin — already matches the locked direction).
-- `src/lib/launch-artifact-registry.ts` (`isArtifactAllowedIn`), `src/lib/chain-mainnet-registry.ts`, `src/lib/chain-mainnet-presign.functions.ts`, `src/lib/chain-verify.functions.ts`.
-- `src/lib/treasury-safe-verify.ts`, `src/lib/treasury-signers.ts`, and their SQL/RPCs.
-- `launch_chain_production_execution_controls`, canary permits, presign authorizations, emergency stop, verification RPCs (`apply_launch_chain_*`), `assert_launch_contract_evidence`.
-- Launch lifecycle RPCs, Launch Watch, notifications.
-- All `scripts/pcart-*`, `launcher-b*`, `p3c-f*`, `hardening-b`, `verifier-state-write-activation` regressions.
+**D. Can the address be predicted before sending?** Yes, without sending anything. It's CREATE2 on the factory, with salt = keccak256(keccak256(initializer) ++ saltNonce) and the code hash = keccak256(factory `proxyCreationCode()` ++ singleton padded to 32 bytes). `proxyCreationCode()` can be read from the factory, and the result can be cross-checked with an `eth_call` simulation of the create. viem (already installed) has everything needed.
 
-## C. Simplify / merge / hide (presentation only)
+**E. Where to save the Safe address.** There is no suitable place today. `launch_treasury_signer_configs` stores only the signers and threshold; no table has a Safe address column. Minimal storage needed (not created in this audit):
+- New columns on `launch_treasury_signer_configs`: `safe_address`, `safe_salt_nonce`, `safe_creation_tx_hash`, `safe_verified_at`, `safe_verified_block`
+- Writes go only through a security-definer RPC that the workspace owner can call. The server re-runs the verifier itself and never trusts a pass reported by the browser.
 
-- `src/routes/_authenticated/chain-launcher.tsx`: hide the "Test deployment" section (~line 826–898) behind an Advanced toggle; rename "Run simulation" to "Check launch"; hide the liquidity planning section (~1126–1230) or label it "Planning preview — not live".
-- `src/components/chain/SimulationReviewCard.tsx`, `LaunchReceiptCard.tsx`, `PcartRehearsalPanel.tsx`: plain wording by default, technical details folded into "Technical details".
-- `src/components/chain/LiquidityPlanCard.tsx`: move behind Advanced.
-- `src/routes/_authenticated/launch-control.tsx` + `TreasurySignerSetupPanel`, `PcartProductionBlockedCheckpoint`, `ProductionDeploymentRequestPanel`, `LaunchLifecycleRail`: put them under a single five-step guide (Token, Auction, Treasury, Review, Launch) with one Ready / Not Ready summary.
-- `/mainnet-canary`: keep it owner/operator-only and leave it out of the normal user guide.
-- New view-model helper (pure, like `src/lib/launch-readiness.ts`) that works out the 5 steps and PCART Ready / Not Ready from existing state. It is read-only.
+**F. Readiness change.** `pcart-launch-readiness.ts` already requires `treasurySafeVerified === true`. In `launch-control.tsx:1083` that value is hard-coded to `false`. It should be set to true only when a saved Safe address exists AND a fresh server check passes AND the on-chain owners exactly match the saved signer set. Gap: the current verifier checks that there are 3 owners and a threshold of 2. It does not check that they are the INTENDED 3 owners. An exact owner-set comparison has to be added.
 
-## D. Missing vs hidden
+**G. Smallest safe allowlist (later build, split into steps)**
+- B0: `src/lib/treasury-safe-create.ts` (new, pure code): pinned factory/setup interface fragments, initializer encoder, CREATE2 address prediction, exact owner-set comparison. Adds a narrow L1C-6 exception for the factory address in `scripts/pcart-l1-closure-regression.ts`.
+- B1: staged SQL plus rollback for the columns and RPC in E (applied only with your approval).
+- B2: `TreasurySafeCreatePanel.tsx` (new) inside the Treasury area of `launch-control.tsx`. Plain-English review, predicted address, one wallet confirm, waits for the receipt, then runs the existing `verifyTreasurySafe` and the exact-owner check, then saves through the RPC.
+- B3: wire `treasurySafeVerified` into readiness.
+- Tests: new `scripts/pcart-treasury-safe-create-regression.ts` (initializer bytes match a pinned expected value, prediction matches a known vector, wrong owner/order/threshold fails, nonzero fallback/module/guard is rejected, no retry path, mainnet kill switches untouched). Extend `pcart-launch-simplification-regression.ts` for the readiness change. Extend `pcart-l1b-treasury-safe-verify-regression.ts` for the exact owner match.
 
-Missing (no code at all, only in the docs):
-- CCA auction: config, contract addresses, creation, bidding, settlement. `chain-mainnet-registry.ts` deliberately contains no auction or Uniswap addresses.
-- Target Raise vs Graduation Floor fields and the logic between them.
-- Moving funds into Uniswap v4 after the auction, and permanent LP custody.
-- Team vesting contract or integration.
-- Safe creation. Only signer recording and checking an existing Safe exist.
+**Separation from token-deployment controls.** The Safe creation send must not read or change `execution_enabled`, the emergency stop, canary permits or presign authorizations. It also must not open any path for token deployment requests. It is treasury setup that requires explicit wallet confirmation and has no auto-retry.
 
-Hidden / incomplete:
-- Liquidity planning: a local calculator only.
-- The PCART artifact is testnet-only. The L1-e2 exact-artifact testnet rehearsal has not been done.
-- The treasury recipient is unresolved.
+**H. Reasons not to build this (or to wait)**
+1. No pinned Safe v1.4.1 setup or factory interface exists in the project. These are the bytes that would actually be sent, and today they would be written from memory. That needs a pinned-source check first (cost: B0).
+2. The fallback handler choice (B) is unresolved and changes how the Safe behaves with signing tools later.
+3. The factory's `proxyCreationCode` and code hash aren't yet pinned in the manifest, so the prediction depends on a fresh read.
+4. You'd be doing a single, one-time action. The official Safe app supports custom chains less reliably, but it is battle-tested. Using it, then pasting the address into the existing verifier, needs only steps B1 and B3 and zero new transaction code.
 
-## E. PCART work left before "finished but mainnet locked"
+Recommendation: if the official Safe app supports chain 4663 for you, use it, then build only B1 + B3 (save the address + mark Treasury ready after exact verification). Otherwise do B0–B3 in that order, stopping for review after each step.
 
-1. Real 2-of-3 Safe deployed (by the owner, outside the app). Its 3 signers recorded. It must pass the existing canonical Safe check.
-2. Exact-artifact testnet rehearsal of `pepecartel-token-v1` with the Safe as recipient. Then verification and a receipt.
-3. Check the current upstream CCA and Uniswap v4 deployments on Robinhood Chain (L1 manifest addresses are "RESEARCHED / NOT ON-CHAIN VERIFIED"). Confirm whether permanent LP custody is supported there.
-4. Decide on auction integration: CCA factory call from the Safe or the user's wallet. That needs design approval before any code.
-5. Choose and integrate a vesting mechanism (an existing audited vesting contract). The economics are not decided here.
-6. Production allowlist change for `pepecartel-token-v1`. This is a separate high-risk gate and stays off until launch authorization.
-7. Simplified UX plus a PCART Ready / Not Ready checklist that names each item above.
-
-"Finished but mainnet locked" means items 1–5 and 7 are done and tested on testnet. Item 6 and the execution controls stay off.
-
-## F. Staged batches (each its own approval)
-
-```text
-L-S1 UX shell (low risk)  -> five-step guide + Advanced toggle + plain wording; presentation only
-L-S2 Readiness model       -> pure PCART Ready/Not Ready derivation + unit tests; no backend
-L-S3 Upstream verification -> read-only on-chain check of CCA, Uniswap v4, LP custody, vesting candidates; doc only
-L-S4 Treasury + rehearsal  -> owner deploys Safe; record signers; testnet rehearsal of frozen artifact (existing paths)
-L-S5 Auction design lock   -> written contract: auction params (target, floor, ~96h), who signs, settlement; no code
-L-S6 Auction integration   -> testnet only, behind existing controls; staged SQL if needed
-L-S7 Liquidity + vesting   -> testnet only; permanent LP custody; vesting
-L-S8 Lock                  -> full regression, readiness = Ready (testnet), mainnet controls verified OFF
-```
-
-Dependencies: S1 and S2 can run in parallel. S4 needs the Safe. S6 needs S3 and S5. S7 needs S6. Tests per batch: the existing launcher regressions must stay green, plus a check at 390px and on desktop for S1, unit fixtures for S2 (0/N through N/N), and a testnet receipt check for S4, S6 and S7.
-
-## G. Defer (not launch-critical)
-
-- Legacy C8.2 test-artifact deployment (hide, don't delete).
-- Generic `cartel-fixed-erc20-v1` launches for other projects (keep, but out of PCART focus).
-- Liquidity calculator UI until S7.
-- Mainnet canary UI improvements.
-- Quick Launch / custom contracts, Protected Launch, Launch Passport, public launchpad.
-
-## H. Safety switches (from repo; live confirmation pending)
-
-- `execution_enabled=false`, `emergency_stop_engaged=true` (bootstrap row `INITIAL_DEFAULT_OFF`), service-role only, RLS forced; the stop can only be engaged, never cleared by the same path.
-- `MAINNET_LIQUIDITY_TX_ENABLED=false`. `MAINNET_DEPLOYMENT_TX_ENABLED=true` is a capability flag that does nothing alone: a send also needs the control row, a canary permit and a presign authorization.
-- `pepecartel-token-v1` is TESTNET-only in `launch-artifact-registry.ts`.
-- Do not change casually: the files in section B, the execution-control/canary/presign SQL, `enforce_launch_chain_*` triggers, `enforce_canonical_pcart_no_production_deployment`, the verifier RPCs, and the wallet-only signer rule (no server signer).
-
-Recommended first step: a read-only SQL check of the live control row, canary permits and presign rows. Then approve L-S1 and L-S2.
+## Decisions needed from you
+- Fallback handler: zero (strict) or the canonical CompatibilityFallbackHandler v1.4.1 (address to be pinned and checked on-chain first).
+- Route: official Safe app + verify-and-save, or the full in-app creation.
