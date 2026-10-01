@@ -112,7 +112,7 @@ _(Revenue portion SUPERSEDED by section 00: creator-fee/trading-fee revenue is n
 
 **Frozen launch-distribution and price-discovery decision:** PEPECARTEL chooses **Option A: public onchain CCA/LBP launch auction** as the preferred launch path because the project does not expect to supply all required launch liquidity ETH itself. A Continuous Clearing Auction (CCA) / Liquidity Bootstrapping Pool (LBP) is a public onchain token sale/auction economically; it is not a private fixed-price presale. Do not market it as “no sale” or imply legal distinctions that have not been reviewed.
 
-The current technical reason for choosing CCA/LBP is that Uniswap's LBP strategy can run a Continuous Clearing Auction, transfer raised currency to the LBP strategy, discover a market-clearing price, and migrate reserved token supply plus raised currency into Uniswap v4 liquidity according to configured migration parameters. Exact Robinhood Chain contracts, code hashes, parameters, auction amount, reserve/starting price, duration, LP allocation schedule, token/currency split, position recipient/lock, creator-fee compatibility, and failure-recovery behavior must be reverified in PCART-L5 before any execution.
+The current technical reason for choosing CCA/LBP is that Uniswap's LBP strategy can run a Continuous Clearing Auction, transfer raised currency to the LBP strategy, discover a market-clearing price, and migrate reserved token supply plus raised currency into Uniswap v4 liquidity according to configured migration parameters. Exact Robinhood Chain contracts, code hashes, parameters, auction amount, reserve/starting price, duration, LP allocation schedule, token/currency split, position recipient/lock, creator-fee compatibility (no longer launch-critical — section 00), and failure-recovery behavior must be reverified in PCART-L5 before any execution.
 
 Choosing CCA/LBP can reduce the amount of ETH the project must contribute for initial liquidity, but does NOT mean the launch requires zero ETH. PEPECARTEL still needs ETH for deployment/gas and may need additional ETH depending on final auction/liquidity configuration and operational requirements.
 
@@ -300,7 +300,7 @@ STOP for QA.
 
 Reverify current Robinhood Chain and Uniswap LiquidityLauncher contracts/code hashes/SDK revision on chain 4663. Determine exact supported strategy for the already-deployed PEPECARTEL token.
 Priority: evaluate standard ERC-20 + audited creator/LP fee revenue without fee-on-transfer behavior, and existing-token CCA/LBP compatibility for the approved allocation.
-Freeze: liquidity amounts, paired ETH, price/auction/instant-launch strategy, pool parameters, beneficiary/treasury destination, protocol fee/creator-fee treatment, LP ownership/lock/compounding rules, approvals/Permit2, slippage/deadline, recovery/finality, and revenue accounting.
+Freeze: liquidity amounts, paired ETH, price/auction/instant-launch strategy, pool parameters, beneficiary/treasury destination, protocol fee/creator-fee treatment (creator-fee revenue not launch-critical per section 00), LP ownership/lock/compounding rules, approvals/Permit2, slippage/deadline, recovery/finality, and revenue accounting.
 If current LiquidityLauncher / CCA/LBP path cannot satisfy the revenue model or the approved tokenomics, STOP and separately audit alternatives. Never silently add token transfer taxes.
 No liquidity send until separately authorized.
 
