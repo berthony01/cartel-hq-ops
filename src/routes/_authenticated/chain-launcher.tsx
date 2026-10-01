@@ -879,6 +879,15 @@ function ChainLauncherPage() {
           rehearsal panel. Generic inert/test-token deploy and liquidity
           planning are not rendered for it; unchanged for every other launch. */}
       {launchId && isCanonical ? (
+        <p
+          role="note"
+          className="rounded-lg border border-border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground"
+        >
+          Advanced testing page. The simple PEPECARTEL launch steps live in Launch Control →
+          Overview. Use this page only to run the PCART test launch on testnet.
+        </p>
+      ) : null}
+      {launchId && isCanonical ? (
         <PcartRehearsalPanel
           launchId={launchId}
           account={account}

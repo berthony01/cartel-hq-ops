@@ -159,8 +159,8 @@ export function PcartRehearsalPanel(props: {
   return (
     <Section
       variant="primary"
-      title="PCART exact-artifact rehearsal — testnet only"
-      description={`Deploys the frozen PEPECARTEL artifact to Robinhood Chain Testnet ${ROBINHOOD_TESTNET_CHAIN_ID} as rehearsal evidence.`}
+      title="Test PCART before launch"
+      description="Runs one practice launch of the real PCART token on Robinhood Chain Testnet. It is free test money and not the real launch."
       actions={
         <Button size="sm" onClick={() => void run()} disabled={!canRun}>
           {busy ? (
@@ -168,7 +168,7 @@ export function PcartRehearsalPanel(props: {
           ) : (
             <FlaskConical className="size-4" aria-hidden="true" />
           )}
-          Run PCART rehearsal
+          Run test launch
         </Button>
       }
     >
@@ -187,7 +187,9 @@ export function PcartRehearsalPanel(props: {
           notifications or creates liquidity.
         </p>
       </div>
-      <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+      <details className="mt-3">
+        <summary className="cursor-pointer text-xs text-muted-foreground">Technical details</summary>
+      <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
         {rows.map(([k, v]) => (
           <div key={k} className="min-w-0 rounded-md border border-border p-2">
             <dt className="text-muted-foreground">{k}</dt>
@@ -195,6 +197,7 @@ export function PcartRehearsalPanel(props: {
           </div>
         ))}
       </dl>
+      </details>
       <div className="mt-3 flex flex-col gap-1">
         <label htmlFor="pcart-rehearsal-recipient" className="text-xs font-medium text-muted-foreground">
           Rehearsal recipient (testnet only, not the treasury)

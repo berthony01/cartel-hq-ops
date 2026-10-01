@@ -12,29 +12,47 @@ export const PCART_PRODUCTION_BLOCKERS = [
   "A separately reviewed production-allowlist migration",
 ] as const;
 
+const PLAIN_BLOCKERS = [
+  "Run one test launch of PCART on testnet",
+  "Set up the 2-of-3 treasury Safe",
+  "Check the treasury Safe",
+  "Final launch approval",
+] as const;
+
 export function PcartProductionBlockedCheckpoint() {
   return (
     <section
-      aria-label="PCART production path blocked"
+      aria-label="PCART launch locked"
       className="rounded-lg border border-gold/40 bg-gold/10 p-4 text-xs leading-relaxed"
     >
       <p className="flex items-center gap-2 font-semibold uppercase tracking-wide text-gold">
         <Lock className="size-4" aria-hidden="true" />
-        Protected PCART path — blocked
+        PEPECARTEL launch is locked for safety
       </p>
       <p className="mt-1 text-muted-foreground">
-        The PEPECARTEL launch never uses the generic production deployment request. Its protected
-        PCART path is prepared but remains blocked until all of these are complete:
+        The real launch stays locked until these are done:
       </p>
       <ol className="mt-2 list-decimal space-y-1 pl-5 text-foreground">
-        {PCART_PRODUCTION_BLOCKERS.map((b) => (
+        {PLAIN_BLOCKERS.map((b) => (
           <li key={b}>{b}</li>
         ))}
       </ol>
       <p className="mt-2 text-muted-foreground">
-        No mainnet request, deployment, official contract record or liquidity action can be made
-        from here.
+        Nothing on this page can start the real launch, record an official contract or add
+        liquidity.
       </p>
+      <details className="mt-2">
+        <summary className="cursor-pointer text-muted-foreground">Technical details</summary>
+        <p className="mt-1 text-muted-foreground">
+          The PEPECARTEL launch never uses the generic production deployment request. Its protected
+          PCART path remains blocked until all of these are complete:
+        </p>
+        <ol className="mt-1 list-decimal space-y-1 pl-5 text-foreground">
+          {PCART_PRODUCTION_BLOCKERS.map((b) => (
+            <li key={b}>{b}</li>
+          ))}
+        </ol>
+      </details>
     </section>
   );
 }
