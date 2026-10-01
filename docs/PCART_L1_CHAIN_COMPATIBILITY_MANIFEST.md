@@ -42,17 +42,15 @@ RESEARCHED / NOT ON-CHAIN VERIFIED BY CARTEL HQ IN THIS UNIT. Mandatory pre-L5 r
 
 ## 3. Uniswap / Robinhood liquidity stack
 
-| Component | Address |
-|---|---|
 | Component | Address | Status (2026-10-01) |
 |---|---|---|
 | LiquidityLauncher core v3.2.0 | `0x0000FffFBE8efE702c8703aE3477FF5dE3d319C0` | in scope |
 | Robinhood LBPStrategy v3.3.0 | `0xbf1aB81f7d534b2CC0Da76fcf4d541322bB0e000` | in scope |
 | Robinhood InitializerHook v3.3.0 | `0x5fB5229FBA341dFE5a7e6A14d4809D6Cf887a000` | in scope |
 | ContinuousClearingAuctionFactory (CCA v2.1.0, recommended) | `0x000000001F26a0044BaA66024e7b6599c61963F8` | in scope |
-| Robinhood FeeSplitter — autocompound / fees-off | `0x882Ae5e2095435A62Fd1BBDEfcb637f5CeAFc0ee` | LP custody candidate (L-S5/L-S7 gate) |
-| Robinhood FeeSplitter — creator-fees-on | `0x9411fa7F956f64aa7981AA27cB3bC6eC0415449C` | OPEN — PCART routing unproven (section 6) |
-| UERC20BeneficiaryVault | `0x26d2F7AcB07707034406a0dC458351Bb63C02553` | OPEN — UERC20-specific attribution (section 6) |
+| Robinhood FeeSplitter — autocompound / fees-off | `0x882Ae5e2095435A62Fd1BBDEfcb637f5CeAFc0ee` | L-S5 LOCKED default PCART positionRecipient, subject to on-chain hash/config verification + testnet/fork simulation |
+| Robinhood FeeSplitter — creator-fees-on | `0x9411fa7F956f64aa7981AA27cB3bC6eC0415449C` | NOT USED for PCART (L-S5; section 6) |
+| UERC20BeneficiaryVault | `0x26d2F7AcB07707034406a0dC458351Bb63C02553` | NOT RELIED ON for PCART (L-S5; section 6) |
 | CompoundingClaimRecipient | `0xf585b5D728A8fdE743027307BF5F3556E3B9C58D` | reference only |
 | Robinhood TokenSplitter (v1 record) | `0x4F5E3FBb9745358A92Da5674305FAb8D2B8a73cE` | not re-confirmed in v2; verify before any use |
 | Permit2 | `0x000000000022D473030F116dDEE9F6B43aC78BA3` | in scope |
@@ -90,9 +88,11 @@ Before any integration code or transaction, each in-scope address must be read d
 
 **Any mismatch, missing code or ambiguity fails closed.** Do not substitute an address. This manifest does not satisfy that gate.
 
-## 6. Open: creator fees for existing-token PCART
+## 6. Creator fees for existing-token PCART — RESOLVED BY L-S5 (2026-10-01): not launch-critical
 
-Do NOT assume that the creator-fees-on FeeSplitter routes PCART creator fees to the PEPECARTEL treasury. `UERC20BeneficiaryVault` creator attribution behaves specifically for launcher-created UERC20 tokens, and PCART is a custom existing `PepeCartelToken`. Creator-fee and treasury-revenue compatibility on the existing-token LBP path stays **OPEN** until explicitly proven. The fees-off/autocompound FeeSplitter is a candidate for permanent LP custody only. The production choice is an L-S5/L-S7 gate.
+Do NOT assume that the creator-fees-on FeeSplitter routes PCART creator fees to the PEPECARTEL treasury. `UERC20BeneficiaryVault` creator attribution behaves specifically for launcher-created UERC20 tokens, and PCART is a custom existing `PepeCartelToken`. Creator-fee and treasury-revenue compatibility on the existing-token LBP path stays **OPEN** until explicitly proven. The fees-off/autocompound FeeSplitter is a candidate for permanent LP custody only. The production choice is an L-S5/L-S7 gate. _(Historical paragraph.)_
+
+**L-S5 decision:** creator-fee/trading-fee revenue is removed from PCART launch-critical requirements. Default `positionRecipient` is the fees-off/autocompound FeeSplitter `0x882Ae5e2095435A62Fd1BBDEfcb637f5CeAFc0ee` (permanent, irrecoverable LP custody; 100% of LP fees to CompoundingClaimRecipient per upstream README, not to treasury), only after mandatory on-chain hash/config verification and testnet/fork simulation. No custom FeeSplitter. See master plan section 00.
 
 ## 7. Vesting candidate (research only)
 

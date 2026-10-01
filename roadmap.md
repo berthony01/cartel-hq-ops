@@ -55,4 +55,8 @@ Historical items above are preserved as technical evidence; staged vs production
 - [x] L-S1 + L-S2 PCART launcher simplification (presentation + pure readiness only): five-step guide (Token, Auction, Treasury, Review, Launch) on Launch Control Overview, plain-English blocked notice and test-launch panel, advanced-testing note on chain launcher; no backend, SQL, deploy or safety-switch change
 - [x] L-S3 current-source research + doc alignment (2026-10-01): compatibility manifest v2 and master plan section 0 updated (public CCA, ~96h, no extension, Target Raise separate from Graduation Floor, old 24h/10 ETH/12-month SUPERSEDED). Docs only; nothing implemented
 - [ ] Direct managed-RPC on-chain code-hash verification of in-scope addresses — mandatory pre-integration gate, not done
-- [ ] L-S5 economic/auction design lock (Graduation Floor, Target Raise, allocation, vesting schedule, LP custody choice) — next; then treasury Safe creation + PCART testnet rehearsal
+- [x] L-S5 economic/auction design lock (2026-10-01, docs only): ~96h public CCA in ETH, Graduation Floor 5 ETH, Target Raise 30 ETH (not a gate), 150M/200M/150M final, 100/90/80 LP brackets, 0.25% static v4 pool, fees-off FeeSplitter LP custody, creator-fee revenue not launch-critical, team 24-month linear no cliff, partners 6m delay + 24m linear
+- [ ] A. Managed-RPC ABI/config verification + pin observed hashes/configs — NOT DONE
+- [ ] B. Treasury Safe creation + signer recording — NOT DONE
+- [ ] C. Exact PCART testnet rehearsal — NOT DONE
+- [ ] D. L-S6 testnet auction integration, then L-S7 liquidity/vesting integration — NOT STARTED (after A–C)

@@ -2,7 +2,47 @@
 
 Date: 2026-09-12
 Status: Authoritative working plan / DOCUMENTATION ONLY
-Last direction update: 2026-10-01 (L-S3 — documentation alignment only; authorizes no transaction or production integration)
+Last direction update: 2026-10-01 (L-S5 — economic/auction design lock; documentation/policy only; authorizes no transaction or production integration)
+
+## 00. L-S5 economic/auction design lock (2026-10-01) — SUPERSEDES section 0 TBDs and all conflicting older text
+
+Policy/design lock only. Not implementation, not transaction authorization. Where this section conflicts with section 0 or anything below, this section wins.
+
+**1. Auction.** Public Uniswap Continuous Clearing Auction (CCA) run through the current LBPStrategy on Robinhood Chain. About 96 hours (4 days). Exact `startBlock`/`endBlock`/`claimBlock` are derived at execution from the current blocknumberish-aware Uniswap SDK and current Robinhood clock and independently checked; never hardcode a block count from the old 12-second assumption. No normal extension after bidding starts. Currency: native ETH. No whitelist by default. No custom presale. Pre-launch marketing/Launch Watch may run for several weeks and collects no funds.
+
+**2. Target Raise vs Graduation Floor (separate concepts).**
+- Desired **Target Raise: 30 ETH.** An aspiration, not a gate. Missing it does NOT block launch.
+- **Graduation Floor / `requiredCurrencyRaised`: 5 ETH.** Below it the auction does not graduate; bidders use the CCA refund path and the launch does not proceed to liquidity.
+- These are PEPECARTEL economic settings, not Robinhood/Uniswap protocol minimums.
+- Rationale: under the LP schedule below, 5 ETH is the minimum floor at which 100% of raised ETH is still directed to liquidity.
+- No USD promises or projections.
+
+**3. Public-launch/liquidity allocation (final, 500M bucket).** 150,000,000 PCART max auction supply; 200,000,000 PCART reserved token-side LBP/liquidity budget; 150,000,000 PCART future liquidity/market reserve held outside the initial launcher. If execution testing proves a mechanical incompatibility, this fails closed and requires explicit re-review; no silent parameter substitution.
+
+**4. LP allocation of ETH raised (final bracket policy).**
+
+| Auction ETH raised | To LP | To treasury/operations |
+|---|---|---|
+| Under 5 ETH | — no graduation, refund path | — |
+| 5 ETH up to <15 ETH | 100% | 0% |
+| 15 ETH up to <30 ETH | 90% | 10% |
+| 30 ETH or more | 80% | 20% |
+
+Percentages apply to net available auction ETH; protocol fees and gas are accounted before any net treasury remainder is claimed. The operational gas reserve policy (0.10 ETH reserve, 0.05 ETH execution-wallet floor) stays outside auction proceeds unless explicitly changed later.
+
+**5. Pool / LP custody (safety-first).** Static-fee Uniswap v4 pool, 0.25% LP fee, if current integration/fork tests confirm the pool parameters. Default production `positionRecipient`: the current Robinhood v3.3.0 fees-off/autocompound FeeSplitter `0x882Ae5e2095435A62Fd1BBDEfcb637f5CeAFc0ee`, only after mandatory on-chain hash/config verification and testnet/fork simulation pass. This permanently locks the LP NFT and directs 100% of LP fees into the current CompoundingClaimRecipient path, not to the PEPECARTEL treasury. Creator-fee/trading-fee revenue is REMOVED from the launch-critical requirements; `UERC20BeneficiaryVault` is not relied on for the custom existing PCART token. A future audited revenue mechanism may be researched after launch, must not weaken or alter the immutable PCART token, and is not required for launch readiness. No custom FeeSplitter is deployed; custom contracts are minimized.
+
+**6. Vesting.**
+- Team: 100,000,000 PCART, 24-month linear on-chain vesting, starting at the public launch/trading go-live timestamp, no cliff, 0 team tokens liquid at that exact timestamp, accruing continuously thereafter. Preferred implementation: OpenZeppelin `VestingWallet` with a dedicated team beneficiary Safe as owner/beneficiary. Caveat: `VestingWallet` is `Ownable`, so ownership/beneficiary rights can be transferred; for PCART any ownership change must be publicly disclosed and should require the team beneficiary Safe policy. The frozen PCART token artifact is not modified.
+- Strategic partnerships: 50,000,000 PCART, 6-month delay + 24-month linear, implemented as `VestingWallet` start = launch + 6 months, duration = 24 months (no cliff catch-up unlock). Individual grant recipients are later operational data, not launcher policy.
+
+**7. Treasury.** 2-of-3 Safe required/preferred, with three distinct independently secured keys (not necessarily three different people). Actual signer addresses and Safe address are operational inputs and are not recorded in docs.
+
+**8. "Finished but mainnet locked" means all of:** frozen PCART artifact ready; current CCA/LBP integration implemented and testnet/fork tested; the auction parameters above encoded and tested; real 2-of-3 Safe created/verified; exact PCART testnet rehearsal confirmed; vesting contracts/path tested; permanent LP custody path tested; production allowlist/migration prepared but NOT applied until final launch authorization; mainnet execution locked until launch day.
+
+**9. Upstream facts preserved (manifest v2 sources).** CCA graduation is based on `requiredCurrencyRaised`; if not reached, bidders can refund. LBPStrategy migration has a configurable `positionRecipient`. FeeSplitter is zero-admin and positions sent to it are irrecoverable. The current Robinhood fees-off FeeSplitter sends 100% of native ETH and token fee shares to CompoundingClaimRecipient per the upstream README. The existing-token flow must batch Permit2 `depositToken` + `distributeToken` in one LiquidityLauncher multicall.
+
+**Status of remaining dependencies (none done):** A. managed-RPC ABI/config verification and pinning of observed hashes/configs; B. treasury Safe creation + signer recording; C. exact PCART testnet rehearsal; D. only then L-S6 testnet auction integration and L-S7 liquidity/vesting integration.
 
 ## 0. L-S3 locked launch direction (2026-10-01) — SUPERSEDES conflicting older text below
 
@@ -16,11 +56,11 @@ Older text below is kept as history. Where it conflicts with this section, this 
 - **Pre-launch:** several weeks of marketing and Launch Watch, with no funds collected.
 - **Target Raise vs Graduation Floor (separate):**
   - The **Target Raise** is the amount we would like to raise. Missing it does NOT block launch.
-  - The **Graduation Floor** (`requiredCurrencyRaised`) is the minimum technically and economically responsible amount for liquidity. It is not a fundraising quota. **Its value is TBD by L-S5 modeling.** No ETH number is set in L-S3.
+  - The **Graduation Floor** (`requiredCurrencyRaised`) is the minimum technically and economically responsible amount for liquidity. It is not a fundraising quota. _(L-S3 TBD now RESOLVED by section 00: Graduation Floor 5 ETH, Target Raise 30 ETH.)_
 - **After the auction:** CCA/LBP migrates into Uniswap v4 liquidity, with permanent, non-ruggable LP custody **only if compatibility is proven** (L-S5/L-S7 gate).
-- **Team vesting:** longer, transparent, on-chain vesting. About 24 months is a design candidate only. The exact cliff and duration are TBD in L-S5. The OpenZeppelin `VestingWallet`/`VestingWalletCliff` is a candidate. Caveat: it is `Ownable`, so unvested rights can be transferred.
-- **Carried-forward working allocation (NOT frozen):** 150M auction / 200M reserved LP / 150M future liquidity, pending the final L-S5 economic simulation.
-- **Creator-fee revenue for the existing PCART token is OPEN.** No claim is made that the creator-fees-on FeeSplitter routes PCART fees to the treasury (see manifest section 6).
+- **Team vesting:** longer, transparent, on-chain vesting. _(Resolved in section 00: 24-month linear, no cliff.)_ The OpenZeppelin `VestingWallet`/`VestingWalletCliff` is a candidate. Caveat: it is `Ownable`, so unvested rights can be transferred.
+- **Allocation:** 150M auction / 200M reserved LP / 150M future liquidity — now FINAL per section 00.
+- **Creator-fee revenue:** _(SUPERSEDED by section 00: removed from launch-critical requirements; LP custody = fees-off FeeSplitter.)_
 - **User experience:** the user-facing launcher stays simple. Technical detail stays internal.
 - See `docs/PCART_L1_CHAIN_COMPATIBILITY_MANIFEST.md` v2. Those upstream sources are verified as current; CARTEL HQ has NOT verified the code hashes on-chain yet.
 
@@ -54,25 +94,25 @@ Launch the official PEPECARTEL token, ticker PCART, on Robinhood Chain mainnet (
 
 ### 3.2 Vesting and lock policy
 
-- **Team allocation:** 100,000,000 PCART vests linearly over 12 months from launch _(SUPERSEDED 2026-10-01: historical; now longer transparent on-chain vesting, ~24 months candidate, exact cliff/duration TBD in L-S5)_. **Zero team allocation is liquid or unlocked at launch.** Prefer continuous/time-based linear vesting so 100% is vested at the end of the schedule; do not create a one-time 100M cliff unlock. Exact vesting contract implementation remains for a later audited step.
+- **Team allocation:** 100,000,000 PCART vests linearly over 12 months from launch _(SUPERSEDED 2026-10-01: historical; now 24-month linear, no cliff — section 00)_. **Zero team allocation is liquid or unlocked at launch.** Prefer continuous/time-based linear vesting so 100% is vested at the end of the schedule; do not create a one-time 100M cliff unlock. Exact vesting contract implementation remains for a later audited step.
 - **Strategic partnerships:** 50,000,000 PCART preserved with the recommended guardrail of a 6-month initial lock followed by 24-month linear release, unless later L1 approval explicitly changes it. Grants must be disclosed from the allocation, not treated as hidden discretionary supply.
 - Public launch + liquidity, ecosystem + community, and treasury allocations are not subject to the above vesting locks unless separately decided.
 
 ### 3.3 Treasury architecture
 
 - **Frozen preferred architecture: 2-of-3 multisig, separate from deployer/everyday wallet.**
-- Treasury is intended to receive the 150M treasury allocation plus project trading-fee revenue and operational assets.
+- Treasury is intended to receive the 150M treasury allocation plus operational assets and any treasury share of auction ETH per section 00 _(historical "project trading-fee revenue" SUPERSEDED: LP fees go to CompoundingClaimRecipient, not treasury)_.
 - Exact multisig implementation/addresses remain unresolved until chain compatibility and security audit are complete.
 
 ## 4. Transfer-tax / trading-revenue decision gate
 
 User wants modest ongoing revenue from trading for marketing, production, and ecosystem operations.
 
-**Frozen direction:** keep PCART a standard 0%-transfer-tax ERC-20 and seek project revenue through audited liquidity-layer creator/LP fees. The Uniswap LiquidityLauncher technical reference states rebasing and fee-on-transfer tokens are not compatible with LiquidityLauncher. The Robinhood Chain Uniswap stack currently exposes creator-fee / fee-splitter infrastructure, which may offer ongoing trading-fee revenue while keeping PCART a standard ERC-20. This must be reverified from current Uniswap code/on-chain contracts immediately before implementation.
+_(Revenue portion SUPERSEDED by section 00: creator-fee/trading-fee revenue is not launch-critical.)_ **Historical direction:** keep PCART a standard 0%-transfer-tax ERC-20 and seek project revenue through audited liquidity-layer creator/LP fees. The Uniswap LiquidityLauncher technical reference states rebasing and fee-on-transfer tokens are not compatible with LiquidityLauncher. The Robinhood Chain Uniswap stack currently exposes creator-fee / fee-splitter infrastructure, which may offer ongoing trading-fee revenue while keeping PCART a standard ERC-20. This must be reverified from current Uniswap code/on-chain contracts immediately before implementation.
 
 **Frozen launch-distribution and price-discovery decision:** PEPECARTEL chooses **Option A: public onchain CCA/LBP launch auction** as the preferred launch path because the project does not expect to supply all required launch liquidity ETH itself. A Continuous Clearing Auction (CCA) / Liquidity Bootstrapping Pool (LBP) is a public onchain token sale/auction economically; it is not a private fixed-price presale. Do not market it as “no sale” or imply legal distinctions that have not been reviewed.
 
-The current technical reason for choosing CCA/LBP is that Uniswap's LBP strategy can run a Continuous Clearing Auction, transfer raised currency to the LBP strategy, discover a market-clearing price, and migrate reserved token supply plus raised currency into Uniswap v4 liquidity according to configured migration parameters. Exact Robinhood Chain contracts, code hashes, parameters, auction amount, reserve/starting price, duration, LP allocation schedule, token/currency split, position recipient/lock, creator-fee compatibility, and failure-recovery behavior must be reverified in PCART-L5 before any execution.
+The current technical reason for choosing CCA/LBP is that Uniswap's LBP strategy can run a Continuous Clearing Auction, transfer raised currency to the LBP strategy, discover a market-clearing price, and migrate reserved token supply plus raised currency into Uniswap v4 liquidity according to configured migration parameters. Exact Robinhood Chain contracts, code hashes, parameters, auction amount, reserve/starting price, duration, LP allocation schedule, token/currency split, position recipient/lock, creator-fee compatibility (no longer launch-critical — section 00), and failure-recovery behavior must be reverified in PCART-L5 before any execution.
 
 Choosing CCA/LBP can reduce the amount of ETH the project must contribute for initial liquidity, but does NOT mean the launch requires zero ETH. PEPECARTEL still needs ETH for deployment/gas and may need additional ETH depending on final auction/liquidity configuration and operational requirements.
 
@@ -111,13 +151,13 @@ Unused migration currency and unused reserved LP tokens return to the configured
 - **Future liquidity/market reserve outside launcher:** 150,000,000 PCART.
 - **Auction window:** ~~24h~~ SUPERSEDED (historical) → ~96 hours, exact blocks derived at execution from current SDK/Robinhood clock (section 0).
 - **Floor FDV planning guardrail (pending L-S5 re-confirmation):** 50 ETH equivalent across the 1,000,000,000 PCART total supply. This is an approved planning input, not a promised valuation or fundraising target.
-- **Graduation Floor / `requiredCurrencyRaised`:** old 10 ETH value SUPERSEDED/UNFROZEN (historical). New floor TBD by L-S5 modeling; separate from Target Raise (section 0).
+- **Graduation Floor / `requiredCurrencyRaised`:** old 10 ETH value SUPERSEDED/UNFROZEN (historical). New Graduation Floor 5 ETH; Target Raise 30 ETH, separate (section 00).
 - **Tick spacing:** approximately 1% of floor price, subject to SDK derivation and validation.
 - **Auction emission/supply schedule:** use the current audited SDK convex schedule derivation and independently validate significant final issuance; do not hand-invent a schedule.
-- **Post-auction static LP fee planning input (pending L-S5):** 0.25%, technically conditional on live Robinhood Chain v4 pool-key availability / creator-fee compatibility. Do not mislabel this technical compatibility gate as owner indecision.
+- **Post-auction static LP fee planning input (LOCKED in section 00):** 0.25% static fee, conditional on integration/fork tests confirming pool parameters. Do not mislabel this technical compatibility gate as owner indecision.
 - **Validation hook:** none by default unless legal/compliance or technical audit requires one.
 
-### 4.1.4 Tiered LP allocation of ETH raised (historical planning input, pending L-S5)
+### 4.1.4 Tiered LP allocation of ETH raised (historical; FINAL version with 5 ETH floor in section 00)
 
 Current SDK supports bracketed LP allocations, but exact inclusive on-chain thresholds must be encoded and tested later. The objective is that weak/modest demand prioritizes liquidity, while stronger demand creates a modest operational reserve. Protocol fees, gas, and exact accounting must be deducted and verified in simulation; these percentages are not net guaranteed proceeds.
 
@@ -141,7 +181,7 @@ The following price snapshot is **illustrative and stale immediately after writi
 
 Actual CCA clearing, unsold tokens, protocol fees, and position construction mean real outcomes can differ materially. These figures are a planning sensitivity table, not a guarantee, prediction, or offering document.
 
-### 4.1.6 LP custody / creator-fee preference (updated 2026-10-01)
+### 4.1.6 LP custody / creator-fee preference (HISTORICAL — SUPERSEDED by section 00 item 5)
 
 Prefer permanent/non-ruggable LP custody using the current creator-fees-on `FeeSplitter` path **if and only if** the existing-token LBP path can correctly register and route PEPECARTEL's beneficiary. Current SDK history indicates that new auction/crowd-launch positions on Robinhood need the current creator-fees position recipient, but addresses and beneficiary compatibility have changed through redeploys. Therefore **do not pin a production address in this master plan**.
 
@@ -153,7 +193,7 @@ This is a **hard PCART-L5 reverification gate**. If existing-token beneficiary r
 
 - **PCART-L1A ECONOMICS:** historically owner-approved (2026-09); **partly SUPERSEDED 2026-10-01** (section 0).
 - **Balanced 150M / 200M / 150M split:** carried-forward working allocation pending L-S5 (not frozen).
-- **Old 24h window and old 10 ETH graduation minimum:** SUPERSEDED (historical). 50 ETH floor-FDV, tiered 100-90-80 LP schedule and 0.25% fee: historical planning inputs pending L-S5. Not execution authorization.
+- **Old 24h window and old 10 ETH graduation minimum:** SUPERSEDED (historical). Tiered 100-90-80 LP schedule and 0.25% fee: now LOCKED in section 00 (with 5 ETH floor / 30 ETH target); 50 ETH floor-FDV is historical illustration only. Not execution authorization.
 - **Formerly open before PCART-L1 could close:** exact operational ETH reserve for gas, exact multisig implementation/address, legal/comms review, live Robinhood/Uniswap compatibility confirmation, and fork/testnet simulation. These are now dispositioned in section 14 as **POLICY CLOSED / EXECUTION PREREQUISITES PENDING** (fork/testnet simulation split into L1-e1 policy evidence and L1-e2 mandatory Phase 3 exact-artifact rehearsal). Exact on-chain encoding is derived from these frozen policies in PCART-L5.
 - **No Solidity or value-moving action until those gates close.**
 
@@ -225,17 +265,17 @@ Freeze exact tokenomics allocation, custody/treasury architecture, utility launc
 
 ### PCART-L1 — Utility + tokenomics + treasury specification freeze
 
-Status: **POLICY CLOSED / EXECUTION PREREQUISITES PENDING.** Strategic tokenomics, utility, custody, trading-revenue and launch-distribution direction approved; PCART-L1A CCA auction economics were historically owner-approved; as of 2026-10-01 the old 24h window and 10 ETH graduation minimum are SUPERSEDED (historical) and the 150M/200M/150M split is a carried-forward working allocation pending L-S5 (section 0). The formerly open inputs — operational ETH reserve, multisig implementation, internal comms policy, live Robinhood/Uniswap compatibility, and fork/testnet simulation sequencing — are dispositioned in **section 14**. POLICY CLOSED does **not** mean launch-ready, execution-ready or mainnet-ready; every execution prerequisite in section 14 remains PENDING.
+Status: **POLICY CLOSED / EXECUTION PREREQUISITES PENDING.** Strategic tokenomics, utility, custody, trading-revenue and launch-distribution direction approved; PCART-L1A CCA auction economics were historically owner-approved; as of 2026-10-01 the old 24h window and 10 ETH graduation minimum are SUPERSEDED (historical) and the 150M/200M/150M split is FINAL per L-S5 (section 00). The formerly open inputs — operational ETH reserve, multisig implementation, internal comms policy, live Robinhood/Uniswap compatibility, and fork/testnet simulation sequencing — are dispositioned in **section 14**. POLICY CLOSED does **not** mean launch-ready, execution-ready or mainnet-ready; every execution prerequisite in section 14 remains PENDING.
 
 No deployment.
 Required outputs:
-- exact 1B allocation percentages and vesting/lock policy if applicable; ✅ FROZEN: 50% public launch + liquidity, 20% ecosystem + community, 15% treasury, 10% team (zero liquid at launch; historical 12-month schedule SUPERSEDED — longer on-chain vesting, ~24-month candidate, TBD L-S5), 5% strategic partnerships (6-month lock + 24-month linear release);
+- exact 1B allocation percentages and vesting/lock policy if applicable; ✅ FROZEN: 50% public launch + liquidity, 20% ecosystem + community, 15% treasury, 10% team (zero liquid at launch; historical 12-month schedule SUPERSEDED — 24-month linear, no cliff, section 00), 5% strategic partnerships (6-month lock + 24-month linear release);
 - initial recipient/treasury architecture, preferably hardened/multisig rather than an ordinary hot wallet; ✅ FROZEN PREFERRED: 2-of-3 multisig, separate from deployer/everyday wallet;
 - exact launch-day utility benefits and any holder thresholds/discount formulas; ✅ FROZEN: Verified Holder 1+, Cartel Member 10,000+ (5% discount), Cartel Capo 100,000+ (10% discount), Cartel Boss 1,000,000+ (20% discount);
 - explicit non-security-style utility/comms guardrails; ✅ FROZEN: no passive revenue, no dividends, no guaranteed yield, treasury revenue for operations;
 - final decision: 0% transfer tax plus liquidity-layer fee revenue versus separate taxed-token architecture; ✅ FROZEN: 0% transfer tax, liquidity-layer creator/LP fee revenue preferred;
 - launch-distribution and price-discovery method: ✅ FROZEN: public onchain CCA/LBP launch auction (Option A), because the project does not expect to supply all required launch liquidity ETH itself. CCA/LBP is a public onchain token sale/auction economically, not a private fixed-price presale. Choosing CCA/LBP can reduce required project ETH for initial liquidity but does NOT mean zero ETH; ETH is still required for deployment/gas and may be required for additional auction/liquidity/operational configuration.
-- liquidity budget and intended launch pricing/strategy inputs, without sending value. ⏳ WORKING (2026-10-01): 150M CCA auction / 200M reserved LP / 150M future reserve carried forward pending L-S5; old 24h window and old 10 ETH graduation minimum SUPERSEDED (historical) — ~96h auction, Graduation Floor TBD by L-S5, separate Target Raise (section 0). ✅ POLICY CLOSED in section 14: operational ETH reserve policy (0.10 ETH reserve / 0.05 ETH execution-wallet floor), multisig implementation choice (Safe v1.4.1 SafeL2 + SafeProxyFactory, 2-of-3), internal comms policy, dated Robinhood/Uniswap compatibility manifest, and L1-e1 infrastructure/protocol compatibility evidence. ⏳ STILL PENDING AS EXECUTION PREREQUISITES: actual Safe deployment, signer addresses, Safe/treasury recipient address, stronger Safe verification, funded execution wallet, external legal review if required, Phase 2 compilation, L1-e2 exact-artifact testnet rehearsal, and pre-L5 on-chain revalidation.
+- liquidity budget and intended launch pricing/strategy inputs, without sending value. ✅ LOCKED L-S5 (2026-10-01): 150M CCA auction / 200M reserved LP / 150M future reserve; old 24h window and old 10 ETH graduation minimum SUPERSEDED (historical) — ~96h auction, Graduation Floor 5 ETH, Target Raise 30 ETH (section 00). ✅ POLICY CLOSED in section 14: operational ETH reserve policy (0.10 ETH reserve / 0.05 ETH execution-wallet floor), multisig implementation choice (Safe v1.4.1 SafeL2 + SafeProxyFactory, 2-of-3), internal comms policy, dated Robinhood/Uniswap compatibility manifest, and L1-e1 infrastructure/protocol compatibility evidence. ⏳ STILL PENDING AS EXECUTION PREREQUISITES: actual Safe deployment, signer addresses, Safe/treasury recipient address, stronger Safe verification, funded execution wallet, external legal review if required, Phase 2 compilation, L1-e2 exact-artifact testnet rehearsal, and pre-L5 on-chain revalidation.
 
 STOP for approval before proceeding to L2. L1 POLICY is closed; PCART-L2 still requires separate explicit authorization, and no execution prerequisite in section 14 may be assumed satisfied.
 
@@ -260,7 +300,7 @@ STOP for QA.
 
 Reverify current Robinhood Chain and Uniswap LiquidityLauncher contracts/code hashes/SDK revision on chain 4663. Determine exact supported strategy for the already-deployed PEPECARTEL token.
 Priority: evaluate standard ERC-20 + audited creator/LP fee revenue without fee-on-transfer behavior, and existing-token CCA/LBP compatibility for the approved allocation.
-Freeze: liquidity amounts, paired ETH, price/auction/instant-launch strategy, pool parameters, beneficiary/treasury destination, protocol fee/creator-fee treatment, LP ownership/lock/compounding rules, approvals/Permit2, slippage/deadline, recovery/finality, and revenue accounting.
+Freeze: liquidity amounts, paired ETH, price/auction/instant-launch strategy, pool parameters, beneficiary/treasury destination, protocol fee/creator-fee treatment (creator-fee revenue not launch-critical per section 00), LP ownership/lock/compounding rules, approvals/Permit2, slippage/deadline, recovery/finality, and revenue accounting.
 If current LiquidityLauncher / CCA/LBP path cannot satisfy the revenue model or the approved tokenomics, STOP and separately audit alternatives. Never silently add token transfer taxes.
 No liquidity send until separately authorized.
 
