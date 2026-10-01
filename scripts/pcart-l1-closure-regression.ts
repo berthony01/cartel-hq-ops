@@ -245,6 +245,18 @@ const SAFE_PIN_EXCEPTION_FILE = "src/lib/treasury-safe-verify.ts";
 const SAFE_PIN_EXCEPTION_VALUES = new Set(
   [SAFE_SINGLETON, SAFE_SINGLETON_CODEHASH].map((v) => v.toLowerCase()),
 );
+/**
+ * SECOND NARROW, EXPLICITLY AUTHORIZED EXCEPTION (treasury Safe creation).
+ * The pure creation-plan module must pin the canonical singleton + factory and
+ * their runtime code hashes for the createProxyWithNonce target and CREATE2
+ * prediction. No other Safe/Uniswap value and no other file is allowed.
+ */
+const SAFE_CREATE_PIN_FILE = "src/lib/treasury-safe-create.ts";
+const SAFE_CREATE_PIN_VALUES = new Set(
+  [SAFE_SINGLETON, SAFE_SINGLETON_CODEHASH, SAFE_FACTORY, SAFE_FACTORY_CODEHASH].map((v) =>
+    v.toLowerCase(),
+  ),
+);
 const protectedFiles = PROTECTED_ROOTS.flatMap((root) => walk(root));
 const leaks: string[] = [];
 for (const file of protectedFiles) {
@@ -253,7 +265,8 @@ for (const file of protectedFiles) {
   for (const value of LEAK_CANDIDATES) {
     if (!body.includes(value.toLowerCase())) continue;
     const excepted =
-      normalized === SAFE_PIN_EXCEPTION_FILE && SAFE_PIN_EXCEPTION_VALUES.has(value.toLowerCase());
+      (normalized === SAFE_PIN_EXCEPTION_FILE && SAFE_PIN_EXCEPTION_VALUES.has(value.toLowerCase())) ||
+      (normalized === SAFE_CREATE_PIN_FILE && SAFE_CREATE_PIN_VALUES.has(value.toLowerCase()));
     if (!excepted) leaks.push(`${file}:${value}`);
   }
 }

@@ -44,6 +44,18 @@ export const SAFE_GUARD_STORAGE_SLOT =
 /** SENTINEL_MODULES; an empty module list decodes as [] with next === sentinel. */
 export const SAFE_SENTINEL_MODULES =
   "0x0000000000000000000000000000000000000001" as const;
+/**
+ * FallbackManager (v1.4.1) handler storage slot:
+ * keccak256("fallback_manager.handler.address").
+ */
+export const SAFE_FALLBACK_HANDLER_STORAGE_SLOT =
+  "0x6c9a6c4a39284e37ed1cf53d337577d14212a4870fb976a4366c693b939918d5" as const;
+/**
+ * Canonical Safe v1.4.1 CompatibilityFallbackHandler. Verified on chain 4663
+ * (runtime keccak256 0x7c6007a5d711cea8dfd5d91f5940ec29c7f200fe511eb1fc1397b367af3c42f9).
+ */
+export const CANONICAL_COMPATIBILITY_FALLBACK_HANDLER =
+  "0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99" as const;
 export const SAFE_MODULES_PAGE_SIZE = 1n;
 
 /** PCART foundation policy for this slice. */
@@ -97,10 +109,13 @@ export type TreasurySafeFailureCode =
   | "MODULES_PRESENT"
   | "GUARD_UNREADABLE"
   | "GUARD_PRESENT"
+  | "FALLBACK_HANDLER_UNREADABLE"
+  | "FALLBACK_HANDLER_MISMATCH"
   | "SAFE_INTERFACE_UNREADABLE"
   | "OWNER_SET_INVALID"
   | "OWNER_COUNT_NOT_THREE"
-  | "THRESHOLD_NOT_TWO";
+  | "THRESHOLD_NOT_TWO"
+  | "OWNERS_NOT_INTENDED";
 
 export type TreasurySafeVerification = {
   address: string;
@@ -121,13 +136,42 @@ export type TreasurySafeVerification = {
   nonceReadable: boolean;
   modulesEmpty: boolean;
   guardUnset: boolean;
+  /** Fallback handler slot equals the canonical CompatibilityFallbackHandler. */
+  fallbackHandlerOk: boolean;
+  fallbackHandler: string | null;
   /** Full canonical Safe v1.4.1 profile + PCART 3-owner/threshold-2 policy. */
   isCanonicalSafeV141: boolean;
   /** Owner/threshold policy only. Never a standalone success signal. */
   isTwoOfThreeSafeCompatible: boolean;
+  /**
+   * true only when intended owners were supplied AND the on-chain owner SET
+   * equals them exactly (case-insensitive, order-independent). null when no
+   * intended owner set was supplied to the check.
+   */
+  ownersMatchIntended: boolean | null;
   failureCode: TreasurySafeFailureCode | null;
   message: string;
 };
+
+/**
+ * Exact owner SET equality: case-insensitive, order-independent, no missing,
+ * no extra, no duplicates. Fails closed on any malformed entry.
+ */
+export function ownerSetsMatchExactly(onchain: string[], intended: string[]): boolean {
+  if (!Array.isArray(onchain) || !Array.isArray(intended)) return false;
+  if (onchain.length !== intended.length || onchain.length === 0) return false;
+  const norm = (list: string[]) => list.map((v) => normalizeTreasuryAddress(String(v ?? "")));
+  const a = norm(onchain);
+  const b = norm(intended);
+  if (a.some((v) => !isCandidateTreasuryAddress(v)) || b.some((v) => !isCandidateTreasuryAddress(v))) {
+    return false;
+  }
+  const sa = new Set(a);
+  const sb = new Set(b);
+  if (sa.size !== a.length || sb.size !== b.length) return false;
+  for (const v of sa) if (!sb.has(v)) return false;
+  return true;
+}
 
 export function isCandidateTreasuryAddress(raw: string): boolean {
   const text = (raw ?? "").trim();
@@ -303,6 +347,13 @@ export type TreasurySafeReads = {
   modulesData?: unknown;
   /** Raw 32-byte word from eth_getStorageAt(guard slot). */
   guardStorageData?: unknown;
+  /** Raw 32-byte word from eth_getStorageAt(fallback handler slot). */
+  fallbackHandlerStorageData?: unknown;
+  /**
+   * Optional intended owner set (the saved signer row). When supplied, the
+   * on-chain owner SET must equal it exactly or the check fails closed.
+   */
+  expectedOwners?: string[];
 };
 
 function fail(
@@ -330,6 +381,9 @@ function fail(
     nonceReadable: false,
     modulesEmpty: false,
     guardUnset: false,
+    fallbackHandlerOk: false,
+    fallbackHandler: null,
+    ownersMatchIntended: null,
     isCanonicalSafeV141: false,
     isTwoOfThreeSafeCompatible: false,
     failureCode: code,
@@ -493,10 +547,33 @@ export function evaluateSafeTreasury(reads: TreasurySafeReads): TreasurySafeVeri
     );
   }
 
+  const handlerWord = decodeStorageWord(reads.fallbackHandlerStorageData);
+  if (handlerWord === null || !/^0x0{24}[0-9a-f]{40}$/.test(handlerWord)) {
+    return fail(
+      address,
+      reads.observedChainId,
+      "FALLBACK_HANDLER_UNREADABLE",
+      "The Safe fallback handler setting could not be read, so nothing was confirmed.",
+      { ...versionedBase, modulesEmpty: true, guardUnset: true },
+    );
+  }
+  const fallbackHandler = `0x${handlerWord.slice(26)}`;
+  if (fallbackHandler !== CANONICAL_COMPATIBILITY_FALLBACK_HANDLER.toLowerCase()) {
+    return fail(
+      address,
+      reads.observedChainId,
+      "FALLBACK_HANDLER_MISMATCH",
+      "This wallet does not use the official Safe v1.4.1 fallback handler, so it was not accepted.",
+      { ...versionedBase, modulesEmpty: true, guardUnset: true, fallbackHandler },
+    );
+  }
+
   const canonicalBase: Partial<TreasurySafeVerification> = {
     ...versionedBase,
     modulesEmpty: true,
     guardUnset: true,
+    fallbackHandlerOk: true,
+    fallbackHandler,
   };
 
   const owners = decodeAddressArray(reads.ownersData);
@@ -552,8 +629,11 @@ export function evaluateSafeTreasury(reads: TreasurySafeReads): TreasurySafeVeri
     nonceReadable: true,
     modulesEmpty: true,
     guardUnset: true,
+    fallbackHandlerOk: true,
+    fallbackHandler,
     isCanonicalSafeV141: false,
     isTwoOfThreeSafeCompatible: false,
+    ownersMatchIntended: null,
     failureCode: null,
     message: "",
   };
@@ -570,6 +650,26 @@ export function evaluateSafeTreasury(reads: TreasurySafeReads): TreasurySafeVeri
       ...base,
       failureCode: "THRESHOLD_NOT_TWO",
       message: `This multisig requires ${threshold} signature(s). The PEPECARTEL treasury policy expects exactly 2.`,
+    };
+  }
+
+  if (reads.expectedOwners !== undefined) {
+    if (!ownerSetsMatchExactly(owners, reads.expectedOwners)) {
+      return {
+        ...base,
+        ownersMatchIntended: false,
+        failureCode: "OWNERS_NOT_INTENDED",
+        message:
+          "The Safe's owners are not exactly the three saved PEPECARTEL signer wallets, so it was not accepted.",
+      };
+    }
+    return {
+      ...base,
+      ownersMatchIntended: true,
+      isTwoOfThreeSafeCompatible: true,
+      isCanonicalSafeV141: true,
+      message:
+        "Canonical Safe v1.4.1 verified by live reads on Robinhood Chain mainnet, owned by exactly the three saved signer wallets with 2 approvals required.",
     };
   }
 
