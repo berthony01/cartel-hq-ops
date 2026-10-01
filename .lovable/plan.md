@@ -1,134 +1,100 @@
-# SP-B6 Missions — Audit and Plan (no edits)
+# PCART Launcher — Read-Only Audit and Simplify / Finish / Test / Lock Plan
 
-Baseline: HEAD `9ec63ce9`. Live DB: 13 missions (all COMPLETED/CANCELLED, 0 ACTIVE), 13 targets, 13,684 metric snapshots, 67 schedule events, 0 `social_mission_settings` rows, 0 `partner_client_access`.
+Audit only. Nothing was edited, applied, deployed or published. Live database values were not queried; switch states below come from repository migrations and source, and must be confirmed read-only before any build.
 
-## 1. How Missions work today (verified)
+## A. Current flow and where complexity leaks
 
-- **Start (`/mission <link>` or link finder)** happens only in `telegram-webhook`. Steps: resolve the Telegram sender to exactly one CARTEL HQ user through `telegram_connections`, check the sender is a group admin live in Telegram, check the bot's permissions live, check Project Identity (`requireProjectToolAccess`), check the `x_missions` plan limit (`requireCommercialAccess`), then run `create_social_mission_from_telegram_link`. That database function is service-only and keyed on Telegram IDs, and it re-derives the actor from `telegram_connections.telegram_user_id`. After that, the webhook calls `social-mission-telegram` `send_mission` on its internal service path.
-- **Close (`/mission close`)** runs `close_social_mission_from_telegram(_telegram_chat_id, _telegram_user_id)`, then `social-mission-telegram` `edit_mission`. `finalRefresh` is on only for the webhook caller, and it makes one final paid official X read.
-- **Mission Control** (target, duration, end, cancel, panel, history) is a set of service-only functions. Every one takes `_telegram_user_id` and `_verified_chat_id` and is authorized through `social_mission_control_authorize`.
-- **`social-mission-telegram`** (`verify_jwt=true`) has exactly three actions: send, edit, resurface. It hard-requires `workspace_members.role` of owner or admin for every caller, including internal ones. It loads `telegram_chat_id` server-side and holds the bot token.
-- **`social-mission-runner`** (cron) does the paid X metric polling with `X_API_BEARER_TOKEN`, refreshes cards, sends pulse messages and completes missions. It works from trusted rows only.
-- **X credentials** are one platform-wide bearer token stored as a secret. There is no per-workspace X account connection.
-- **Plan limits:** `x_missions` is a monthly quota of 100, on `cartel_49` only. It is counted as missions created, through `commercial_feature_usage`. X polling after start is capped only by the runner's own cadence, not by a per-client cost limit.
-- **Mission defaults** are stored in `social_mission_settings`. The table grants authenticated users SELECT, INSERT and UPDATE directly, controlled by member-read and operator-write policies. The web card is read-only for non-operators (`useIsWorkspaceOperator`). Saving defaults has no plan check. Defaults apply only to future missions, which snapshot them at start.
-- **Why missions are read-only on the web:** creating, closing and controlling a mission is tied by design to a verified Telegram identity plus a live group-admin check. The web has no start or close path at all, even for owners.
+Two owner pages plus one harness:
 
-## 2. Action classification
+```text
+/chain-launcher  (6 sections)
+  1 Wallet + network connect
+  2 "Test deployment" (legacy C8.2 throwaway artifact)        <- leak
+  3 PCART rehearsal panel (frozen pepecartel-token-v1, testnet)
+  4 Token form + "Run simulation" + SimulationReviewCard        <- jargon
+  5 LaunchReceiptCard
+  6 Liquidity planning (LiquidityPlanCard, local math only)     <- implies a capability that does not exist
+/launch-control  (~17 sections)
+  Overview, Details, Schedule, Launch Watch, Communications, Deploy & Contract,
+  LaunchLifecycleRail, contract registration,
+  TreasurySignerSetupPanel -> PcartProductionBlockedCheckpoint -> ProductionDeploymentRequestPanel
+/mainnet-canary  (8 sections, canary permits, operator log)    <- operator-only internals
+```
 
-| Action | Class |
-|---|---|
-| List client missions, status, metrics summary, schedule timeline, group titles | A (via a new safe read function) |
-| Read and edit future mission defaults | B (new partner wrapper; no table grant changes) |
-| Start a mission from the web | D: defer |
-| Close or end a mission from the web | D: defer |
-| Resurface card | D: defer |
-| Target, duration, cancel overrides (Mission Control) | C: owner-only (Telegram identity) |
-| X bearer token, runner secret, cron, provider config | C |
-| Telegram group connect/disconnect, bot admin, raw chat/user IDs | C |
-| History deletion, billing, launcher, wallet, Affiliate | C |
+Leaks: the user goes back and forth between pages; "simulation", "init code", "canary", "presign", "canonical", "verifier" wording; the legacy test deployment sits next to the real flow; liquidity planning has no auction or liquidity behind it; treasury appears last instead of before token setup (the treasury address is the token's mint recipient).
 
-**Why start and close are deferred, not delegated now:**
-- A partner has no Telegram identity in the client's group. Telegram's "current group admin" rule would have to be replaced by a new web-only authority.
-- Creation and closing live inside Telegram-keyed functions (create is about 9.6k characters). The transport function hard-codes an owner/admin membership check.
-- Safe delegation would need all of the following:
-  - a new shared creation core extracted from `create_social_mission_from_telegram_link`
-  - a partner branch in `social-mission-telegram`
-  - a re-implemented bot-permission preflight
-  - a new paid final X read path
-- That is a broad rewrite of a working engine, which hits the stop condition. It is proposed as a separate SP-B6.1 audit, not part of V1.
+## B. Keep unchanged (protected)
 
-## 3. Recommended SP-B6 V1: read plus future defaults
+- `contracts/PepeCartelToken.sol`, `artifacts/pepecartel-token-v1.*`, `src/lib/pepecartel-token.artifact.ts` (frozen, immutable 1B, no mint/tax/admin — already matches the locked direction).
+- `src/lib/launch-artifact-registry.ts` (`isArtifactAllowedIn`), `src/lib/chain-mainnet-registry.ts`, `src/lib/chain-mainnet-presign.functions.ts`, `src/lib/chain-verify.functions.ts`.
+- `src/lib/treasury-safe-verify.ts`, `src/lib/treasury-signers.ts`, and their SQL/RPCs.
+- `launch_chain_production_execution_controls`, canary permits, presign authorizations, emergency stop, verification RPCs (`apply_launch_chain_*`), `assert_launch_contract_evidence`.
+- Launch lifecycle RPCs, Launch Watch, notifications.
+- All `scripts/pcart-*`, `launcher-b*`, `p3c-f*`, `hardening-b`, `verifier-state-write-activation` regressions.
 
-The partner, on managed `/telegram` → Missions, can:
-- see the client's missions: status, post link, group title, start and end times, latest metrics, milestone progress, and a schedule timeline of at most 50 events with state and time only
-- view and edit future mission defaults with the same limits the owner has
-- lose access immediately when revoked
+## C. Simplify / merge / hide (presentation only)
 
-The partner cannot start, close, end or resurface missions, use Mission Control, or reach any X or Telegram secret or ID.
+- `src/routes/_authenticated/chain-launcher.tsx`: hide the "Test deployment" section (~line 826–898) behind an Advanced toggle; rename "Run simulation" to "Check launch"; hide the liquidity planning section (~1126–1230) or label it "Planning preview — not live".
+- `src/components/chain/SimulationReviewCard.tsx`, `LaunchReceiptCard.tsx`, `PcartRehearsalPanel.tsx`: plain wording by default, technical details folded into "Technical details".
+- `src/components/chain/LiquidityPlanCard.tsx`: move behind Advanced.
+- `src/routes/_authenticated/launch-control.tsx` + `TreasurySignerSetupPanel`, `PcartProductionBlockedCheckpoint`, `ProductionDeploymentRequestPanel`, `LaunchLifecycleRail`: put them under a single five-step guide (Token, Auction, Treasury, Review, Launch) with one Ready / Not Ready summary.
+- `/mainnet-canary`: keep it owner/operator-only and leave it out of the normal user guide.
+- New view-model helper (pure, like `src/lib/launch-readiness.ts`) that works out the 5 steps and PCART Ready / Not Ready from existing state. It is read-only.
 
-**Plan limits and cost:**
-- V1 makes no X or Telegram call and uses no `x_missions` quota.
-- Saving defaults has no plan check today, matching the owner. It will need only Project Identity, checked against the client's workspace.
-- There is no platform-owner bypass for partners.
+## D. Missing vs hidden
 
-## Technical details
+Missing (no code at all, only in the docs):
+- CCA auction: config, contract addresses, creation, bidding, settlement. `chain-mainnet-registry.ts` deliberately contains no auction or Uniswap addresses.
+- Target Raise vs Graduation Floor fields and the logic between them.
+- Moving funds into Uniswap v4 after the auction, and permanent LP custody.
+- Team vesting contract or integration.
+- Safe creation. Only signer recording and checking an existing Safe exist.
 
-### Database (staged file only: `docs/sql/SP_B6_partner_missions.sql`)
-- `partner_list_mission_state(_workspace_id uuid)`:
-  - checks `partner_has_scope(_workspace_id,'missions')` first
-  - returns missions: id, status, canonical_url, author_handle, created_at, starts_at, ends_at, completed_at, and the snapshotted goal
-  - returns latest metrics: views, likes, replies, reposts, bookmarks, observed_at
-  - returns each target's `group_connection_id` and group title only
-  - returns schedule events: kind, state, scheduled_for, finished_at
-  - returns current defaults, or the system defaults when none are saved
-  - never returns `telegram_chat_id`, `telegram_user_id`, `telegram_message_id`, raw metadata or availability payloads, `created_by`, idempotency keys, or errors carrying provider text
-- `partner_save_mission_settings(_workspace_id uuid, _settings jsonb)`:
-  - scope first, then Project Identity against the client
-  - validates the same presets, milestone types and ranges as the table constraints and `validateMissionSettings`
-  - upserts one row for the workspace; future missions only
-- Both functions: SECURITY DEFINER, owner postgres, `SET search_path TO ''`, explicit `auth.uid()`, REVOKE from PUBLIC and anon, GRANT to authenticated and service_role.
-- No table, RLS, grant, trigger or membership/operator helper changes.
+Hidden / incomplete:
+- Liquidity planning: a local calculator only.
+- The PCART artifact is testnet-only. The L1-e2 exact-artifact testnet rehearsal has not been done.
+- The treasury recipient is unresolved.
 
-### Edge
-None. `social-mission-telegram`, `social-mission-runner` and `telegram-webhook` stay unchanged. Nothing is deployed, so no deployed-versus-repo comparison is needed for V1. That comparison becomes mandatory for SP-B6.1.
+## E. PCART work left before "finished but mainnet locked"
 
-### Frontend
-- New `src/lib/partner-missions.ts`
-- New `src/components/cartel/PartnerMissionsPanel.tsx`: read-only list and timeline, plus a defaults editor that reuses `validateMissionSettings`
-- Update `src/routes/_authenticated/telegram.tsx`: when the `missions` scope is active, show a Missions tab
-- Update `src/lib/partner-client-access.ts`: add `missions` to `ACTIVE_PARTNER_SCOPES`
-- Update only if required: `ManagedAccessGuard.tsx`, `SidebarNav.tsx`, `ServicePartnerAccessPanel.tsx`
-- Owner `MissionSettingsCard` stays untouched.
+1. Real 2-of-3 Safe deployed (by the owner, outside the app). Its 3 signers recorded. It must pass the existing canonical Safe check.
+2. Exact-artifact testnet rehearsal of `pepecartel-token-v1` with the Safe as recipient. Then verification and a receipt.
+3. Check the current upstream CCA and Uniswap v4 deployments on Robinhood Chain (L1 manifest addresses are "RESEARCHED / NOT ON-CHAIN VERIFIED"). Confirm whether permanent LP custody is supported there.
+4. Decide on auction integration: CCA factory call from the Safe or the user's wallet. That needs design approval before any code.
+5. Choose and integrate a vesting mechanism (an existing audited vesting contract). The economics are not decided here.
+6. Production allowlist change for `pepecartel-token-v1`. This is a separate high-risk gate and stays off until launch authorization.
+7. Simplified UX plus a PCART Ready / Not Ready checklist that names each item above.
 
-### Strict allowlist
-- The files above
-- `scripts/sp-b6-partner-missions-regression.ts`
-- `docs/SP_B6_PARTNER_MISSIONS_RUNBOOK.md`
-- `roadmap.md`
-- Expectation-only updates to prior-phase regressions and public discovery D-24, only if required
+"Finished but mainnet locked" means items 1–5 and 7 are done and tested on testnet. Item 6 and the execution controls stay off.
 
-### Regression matrix
-- Scope states: no scope, pending, declined, revoked, suspended and anon are all denied; revoke takes effect immediately
-- Cross-workspace denial happens before any other check; mission and group rows are isolated by workspace
-- Outputs contain no Telegram IDs, message IDs, provider payloads, secrets or `created_by`
-- Settings limits match the table constraints at the edges, including invalid presets and milestone types
-- The save needs client Project Identity; there is no owner bypass
-- Every paid-cost check stays untouched: no `x_missions` usage change and no metric snapshot inserts
-- No mission, target, schedule event or usage-ledger writes
-- Edge files and the runner are byte-unchanged; no start, close, end or resurface path exists for partners; Mission Control functions keep authenticated execute = false
-- No side effects on broadcasts, watchers, stickers, inbox or launches
-- The owner path is unchanged: owner direct-table settings writes still work, and non-operator members stay read-only
-- All prior suites, TypeScript, build and diff check pass
+## F. Staged batches (each its own approval)
 
-### Production smoke (after SQL approval; transactional, rolled back)
-- In one transaction: seed a fixture partner grant, `SET LOCAL ROLE authenticated` with the partner's JWT claims, then call both functions
-- Assert that outputs are safe and that denials work for the wrong workspace and for a revoked grant
-- Assert that mission, snapshot and usage counts are unchanged, then ROLLBACK
-- No X or Telegram calls
+```text
+L-S1 UX shell (low risk)  -> five-step guide + Advanced toggle + plain wording; presentation only
+L-S2 Readiness model       -> pure PCART Ready/Not Ready derivation + unit tests; no backend
+L-S3 Upstream verification -> read-only on-chain check of CCA, Uniswap v4, LP custody, vesting candidates; doc only
+L-S4 Treasury + rehearsal  -> owner deploys Safe; record signers; testnet rehearsal of frozen artifact (existing paths)
+L-S5 Auction design lock   -> written contract: auction params (target, floor, ~96h), who signs, settlement; no code
+L-S6 Auction integration   -> testnet only, behind existing controls; staged SQL if needed
+L-S7 Liquidity + vesting   -> testnet only; permanent LP custody; vesting
+L-S8 Lock                  -> full regression, readiness = Ready (testnet), mainnet controls verified OFF
+```
 
-### Real two-account test (after all scopes are live, needs an approved active partner)
-- The partner opens the client's `/telegram` Missions tab and sees history without IDs
-- The partner edits defaults; the owner starts a test mission in the test group via `/mission` and confirms the new defaults were used
-- Revoke, then confirm the partner is blocked
+Dependencies: S1 and S2 can run in parallel. S4 needs the Safe. S6 needs S3 and S5. S7 needs S6. Tests per batch: the existing launcher regressions must stay green, plus a check at 390px and on desktop for S1, unit fixtures for S2 (0/N through N/N), and a testnet receipt check for S4, S6 and S7.
 
-### Activation order and rollback
-- Order: CP-SPB6-SQL (with smoke) → CP-SPB6-PUBLISH → types sync
-- Rollback: drop both functions and revert the scope list in the frontend. No data is written except a settings row, which the owner can edit.
+## G. Defer (not launch-critical)
 
-### Advisor delta
-- 0028 stays at 9
-- 0029 goes from 132 to 134
-- Mutable search path stays at 1
+- Legacy C8.2 test-artifact deployment (hide, don't delete).
+- Generic `cartel-fixed-erc20-v1` launches for other projects (keep, but out of PCART focus).
+- Liquidity calculator UI until S7.
+- Mainnet canary UI improvements.
+- Quick Launch / custom contracts, Protected Launch, Launch Passport, public launchpad.
 
-### STOP conditions
-Stop if safe delegation turns out to need any of:
-- membership or operator changes
-- the owner's Telegram identity
-- X or bot secret exposure
-- table or RLS grant changes
-- an Edge change in V1
-- `x_missions` usage or paid X calls
+## H. Safety switches (from repo; live confirmation pending)
 
-### SP-B6.1 (separate future audit)
-Web start and close through a shared, auth.uid-authorized creation and close core. It would use client `x_missions` quota, reuse the existing transport through a narrow partner branch, and include a defined answer to replacing the "current group admin" check.
+- `execution_enabled=false`, `emergency_stop_engaged=true` (bootstrap row `INITIAL_DEFAULT_OFF`), service-role only, RLS forced; the stop can only be engaged, never cleared by the same path.
+- `MAINNET_LIQUIDITY_TX_ENABLED=false`. `MAINNET_DEPLOYMENT_TX_ENABLED=true` is a capability flag that does nothing alone: a send also needs the control row, a canary permit and a presign authorization.
+- `pepecartel-token-v1` is TESTNET-only in `launch-artifact-registry.ts`.
+- Do not change casually: the files in section B, the execution-control/canary/presign SQL, `enforce_launch_chain_*` triggers, `enforce_canonical_pcart_no_production_deployment`, the verifier RPCs, and the wallet-only signer rule (no server signer).
+
+Recommended first step: a read-only SQL check of the live control row, canary permits and presign rows. Then approve L-S1 and L-S2.
