@@ -246,7 +246,9 @@ async function runCreateAppKit(
     });
     // THE ONLY `createAppKit` CALL IN THE APPLICATION.
     const instance = createAppKit({
-      adapters: [wagmiAdapter],
+      // Documented cast: Reown 1.8.24 types adapter `namespace` optional, which
+      // exactOptionalPropertyTypes rejects. Runtime value is the real adapter.
+      adapters: [wagmiAdapter as never],
       coinbasePreference: "all",
       projectId,
       networks: [ROBINHOOD_APPKIT_NETWORK],
