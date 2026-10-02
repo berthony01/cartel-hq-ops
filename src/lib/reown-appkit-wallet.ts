@@ -205,7 +205,9 @@ async function runCreateAppKit(
     const ethersAdapter = new EthersAdapter();
     // THE ONLY `createAppKit` CALL IN THE APPLICATION.
     const instance = createAppKit({
-      adapters: [ethersAdapter],
+      // Same documented cast as the pre-core build: Reown 1.8.23 types its
+      // adapter `namespace` optional, which exactOptionalPropertyTypes rejects.
+      adapters: [ethersAdapter as never],
       coinbasePreference: "all",
       projectId,
       networks: [ROBINHOOD_APPKIT_NETWORK],

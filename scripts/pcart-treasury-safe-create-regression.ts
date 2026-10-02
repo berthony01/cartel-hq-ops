@@ -354,7 +354,7 @@ check(
   const loader = r.slice(r.indexOf("async function loadAppKitLibraries"), r.indexOf("export async function preloadAppKitLibraries"));
   const i1 = loader.indexOf('await import("./reown-appkit-browser")');
   check("ML-1", i1 > 0 && !/appkit-adapter-ethers|REOWN_ADAPTER_LOAD_FAILED/.test(loader) && /REOWN_MODULE_EVAL_FAILED/.test(loader) && (loader.match(/REOWN_CHUNK_FETCH_FAILED/g) ?? []).length === 1 && (loader.match(/await import\(/g) ?? []).length === 1, "single bridge import, chunk vs eval classified, no separate adapter import");
-  check("AC-1", !/appkit-adapter-ethers/.test(r) && /adapters: \[ethersAdapter\]/.test(r) && !/adapters: \[\]/.test(r) && (r.match(/new EthersAdapter\(\)/g) ?? []).length === 1 && /coinbasePreference: "all"/.test(r) && /type AppKitHandle = import\("@reown\/appkit"\)\.AppKit/.test(r), "one EthersAdapter via the bridge, coinbasePreference all");
+  check("AC-1", !/appkit-adapter-ethers/.test(r) && /adapters: \[ethersAdapter as never\]/.test(r) && !/adapters: \[\]/.test(r) && (r.match(/new EthersAdapter\(\)/g) ?? []).length === 1 && /coinbasePreference: "all"/.test(r) && /type AppKitHandle = import\("@reown\/appkit"\)\.AppKit/.test(r), "one EthersAdapter via the bridge, coinbasePreference all");
   {
     const panel = readFileSync("src/components/cartel/TreasurySafeCreatePanel.tsx", "utf8");
     const nulls = (panel.match(/setConnectNotice\(null\)/g) ?? []).length;

@@ -106,7 +106,7 @@ check(
   /await import\("\.\/reown-appkit-browser"\)/.test(appkitCode) &&
     (appkitCode.match(/await import\(/g) ?? []).length === 1 &&
     !/appkit-adapter-ethers/.test(appkitCode) &&
-    /adapters: \[ethersAdapter\]/.test(appkitCode) &&
+    /adapters: \[ethersAdapter as never\]/.test(appkitCode) &&
     (appkitCode.match(/new EthersAdapter\(\)/g) ?? []).length === 1 &&
     /coinbasePreference: "all"/.test(appkitCode) &&
     /from "@reown\/appkit"/.test(bridgeCode) &&
