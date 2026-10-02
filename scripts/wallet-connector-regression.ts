@@ -45,6 +45,7 @@ const chainRegistrySrc = read(CHAIN_REGISTRY);
 const verifyApplySrc = read(VERIFY_APPLY);
 const appkitSrc = read(APPKIT);
 const appkitCode = stripComments(appkitSrc);
+const bridgeCode = read("src/lib/reown-appkit-browser.ts");
 const pkgSrc = read(PKG);
 /** The panel's ONLY mount/subscription effect, extracted once and reused. */
 const panelMountEffect = /useEffect\(\(\) => \{[\s\S]*?\}, \[refresh, refreshAvailability\]\);/.exec(
