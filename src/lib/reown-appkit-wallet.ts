@@ -157,27 +157,26 @@ export function isLazyChunkFetchFailure(error: unknown): boolean {
   }
 }
 
-type AppKitLibraries = {
-  createAppKit: typeof import("@reown/appkit/core").createAppKit;
-};
+type AppKitBridge = typeof import("./reown-appkit-browser");
 
 /**
- * The SINGLE lazy import: official adapter-free AppKit core (no Ethers
- * adapter). Chunk-fetch vs module-evaluation failures stay separately classified.
+ * The SINGLE lazy import: the local browser-only bridge that bundles AppKit and
+ * the official Ethers EVM adapter together. Chunk-fetch vs module-evaluation
+ * failures stay separately classified.
  */
 async function loadAppKitLibraries(): Promise<
-  { ok: true; libs: AppKitLibraries } | { ok: false; notice: AppKitNotice }
+  { ok: true; libs: AppKitBridge } | { ok: false; notice: AppKitNotice }
 > {
-  let createAppKit: AppKitLibraries["createAppKit"];
+  let bridge: AppKitBridge;
   try {
-    ({ createAppKit } = await import("@reown/appkit/core"));
+    bridge = await import("./reown-appkit-browser");
   } catch (error) {
     return {
       ok: false,
       notice: isLazyChunkFetchFailure(error) ? "REOWN_CHUNK_FETCH_FAILED" : "REOWN_MODULE_EVAL_FAILED",
     };
   }
-  return { ok: true, libs: { createAppKit } };
+  return { ok: true, libs: bridge };
 }
 
 /**
@@ -198,14 +197,16 @@ async function runCreateAppKit(
 ): Promise<{ appKit: AppKitHandle | null; notice: AppKitNotice | null }> {
   const loaded = await loadAppKitLibraries();
   if (!loaded.ok) return { appKit: null, notice: loaded.notice };
-  const { createAppKit } = loaded.libs;
+  const { createAppKit, EthersAdapter } = loaded.libs;
 
   try {
     const origin = getCurrentOrigin() ?? "";
+    // Official EVM adapter: registers injected / EIP-6963 / Coinbase connectors.
+    const ethersAdapter = new EthersAdapter();
     // THE ONLY `createAppKit` CALL IN THE APPLICATION.
     const instance = createAppKit({
-      // Official adapter-free core mode (Reown html-ak-basic): no adapter at all.
-      adapters: [],
+      adapters: [ethersAdapter],
+      coinbasePreference: "all",
       projectId,
       networks: [ROBINHOOD_APPKIT_NETWORK],
       defaultNetwork: ROBINHOOD_APPKIT_NETWORK,
