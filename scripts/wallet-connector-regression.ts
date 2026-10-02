@@ -933,7 +933,7 @@ check(
 );
 check(
   "T5",
-  !/as never/.test(appkitCode.replace(/new EthersAdapter\(\) as never/, "")) &&
+  !/as never/.test(appkitCode.replace(/adapters: \[ethersAdapter as never\]/, "")) &&
     /ROBINHOOD_APPKIT_NETWORK: import\("@reown\/appkit-common"\)\.CaipNetwork/.test(appkitCode) &&
     /networks: \[ROBINHOOD_APPKIT_NETWORK\]/.test(appkitCode),
   "the custom network is typed against the installed CaipNetwork contract with no unsafe cast hiding a required property",
