@@ -2899,10 +2899,11 @@ function LaunchControlPage() {
                 {/* PCART treasury Safe creation — one explicit wallet
                     confirmation, no auto-retry. Separate from token
                     deployment controls, which stay locked. */}
-                {selected && selectedIsProjectLaunch && selectedIsCanonicalPcart ? (
+                {selected && selectedIsCanonicalPcart && pcartSignerQuery.data ? (
                   <TreasurySafeCreatePanel
                     launchId={selected.id}
                     isWorkspaceOwner={isWorkspaceOwner}
+                    signerConfig={pcartSignerQuery.data}
                     disabled={readOnly}
                   />
                 ) : null}
@@ -3081,13 +3082,20 @@ function LaunchControlPage() {
                 />
 
                 {/* Full technical evidence stays mounted and read-only, using
-                    the same evaluation object as the panels above. */}
+                    the same evaluation object as the panels above. Canonical
+                    PCART history is audit-only and closed by default. */}
                 <details className="surface-quiet min-w-0 rounded-lg">
                   <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
                 <span className="min-w-0 [overflow-wrap:anywhere]">Technical deployment evidence</span>
                 <ChevronDown className="size-4 shrink-0 transition-transform [[open]_&]:rotate-180" aria-hidden="true" />
               </summary>
                   <div className="min-w-0 px-3 pb-3">
+                    {selectedIsCanonicalPcart ? (
+                      <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
+                        These are historical test or generic deployment records. They are not the
+                        PCART treasury Safe or the PCART official launch path.
+                      </p>
+                    ) : null}
                     <VerifiedDeploymentEvidencePanel
                       evaluation={deploymentEvidence}
                       loading={deploymentEvidenceQuery.isLoading}
