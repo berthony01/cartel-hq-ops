@@ -1456,5 +1456,40 @@ check(
   check("FW-8", /enableReconnect: false/.test(appkitCode) && /enableNetworkSwitch: false/.test(appkitCode) && /allowUnsupportedChain: true/.test(appkitCode) && ["enableWalletConnect","enableInjected","enableEIP6963","enableCoinbase"].every((k) => new RegExp(k + ": true").test(appkitCode)) && /graceMs = 5_000/.test(appkitCode) && !/wallet_addEthereumChain/.test(appkitCode), "connector flags, 5s grace, no add-chain unchanged");
 }
 
+{
+  // WalletConnect readiness proof (WR-*)
+  const m = await import("../src/lib/reown-appkit-wallet");
+  const wc = [{ id: "walletConnect" }];
+  check("WR-2", m.hasWalletConnectConnector({ connectors: wc, wagmiConfig: { connectors: wc } }) &&
+    !m.hasWalletConnectConnector({ connectors: wc, wagmiConfig: { connectors: [] } }) &&
+    !m.hasWalletConnectConnector({ connectors: [], wagmiConfig: { connectors: wc } }) &&
+    !m.hasWalletConnectConnector(null), "readiness requires BOTH adapter and wagmi connectors");
+  const mk = (provider: unknown, installs: boolean) => {
+    const calls = { get: 0, set: 0 };
+    const adapter = { connectors: [] as { id: string }[], wagmiConfig: { connectors: [] as { id: string }[] },
+      setUniversalProvider: async () => { calls.set++; if (installs) { adapter.connectors.push(...wc); adapter.wagmiConfig.connectors.push(...wc); } } };
+    const inst = { getUniversalProvider: async () => { calls.get++; return provider; } };
+    return { adapter, inst, calls };
+  };
+  const ok = mk({}, true); const okR = await m.proveWalletConnectReady(ok.inst, ok.adapter);
+  check("WR-3", okR && ok.calls.get === 1 && ok.calls.set === 1, "missing connector => exactly one recovery that can succeed");
+  const none = mk(undefined, true); const noneR = await m.proveWalletConnectReady(none.inst, none.adapter);
+  check("WR-4", !noneR && none.calls.get === 1 && none.calls.set === 0, "no provider => setUniversalProvider never called");
+  const pres = mk({}, true); pres.adapter.connectors.push(...wc); pres.adapter.wagmiConfig.connectors.push(...wc);
+  const presR = await m.proveWalletConnectReady(pres.inst, pres.adapter);
+  check("WR-4b", presR && pres.calls.get === 0 && pres.calls.set === 0, "already present => no recovery, no duplicate setUniversalProvider");
+  const bad = mk({}, false); const badR = await m.proveWalletConnectReady(bad.inst, bad.adapter);
+  check("WR-5", !badR && bad.calls.get === 1 && bad.calls.set === 1, "still missing after one recovery => fail");
+  const run = appkitCode.slice(appkitCode.indexOf("async function runCreateAppKit"), appkitCode.indexOf("type WalletConnectProbe"));
+  check("WR-1", /await instance\.ready\(\);[\s\S]*proveWalletConnectReady\(instance, wagmiAdapter\)[\s\S]*if \(!proven\)[\s\S]*REOWN_WALLETCONNECT_UNAVAILABLE[\s\S]*return \{ appKit: instance/.test(run) &&
+    /if \(!hasWalletConnectConnector\(wagmiAdapterHandle\)\)/.test(appkitCode) &&
+    /const \{ appKit, notice \} = await ensureAppKit\(\);\s*if \(!appKit\) return/.test(appkitCode), "open() unreachable until WalletConnect readiness is proven");
+  const prove = appkitCode.slice(appkitCode.indexOf("export async function proveWalletConnectReady"), appkitCode.indexOf("export async function ensureAppKit"));
+  check("WR-6", !/setTimeout|setInterval|while|for \(|reload|open\(/.test(prove) && !/export (let|const) wagmiAdapterHandle/.test(appkitCode), "no automatic retry/reload/connect; adapter handle module-private");
+  check("WR-7", /case "REOWN_WALLETCONNECT_UNAVAILABLE":\s*return "REOWN_WALLETCONNECT_UNAVAILABLE"/.test(connectorCode), "notice mapped through connector");
+  const css = readFileSync("src/styles.css", "utf8");
+  check("WR-12", /html,\s*body \{\s*max-width: 100%;\s*overflow-x: clip;/.test(css) && !/zoom:/.test(css), "horizontal overflow guard, no zoom hack");
+}
+
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

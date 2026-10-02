@@ -389,4 +389,8 @@ if (failures > 0) {
   console.error(`\n${failures} CHECK(S) FAILED`);
   process.exit(1);
 }
+{
+  const p = readFileSync("src/components/cartel/TreasurySafeCreatePanel.tsx", "utf8");
+  check("WR-7b", /REOWN_WALLETCONNECT_UNAVAILABLE: "WalletConnect could not start on this browser\. Reload the page once and try again\. If it still fails, open CARTEL HQ in your wallet's browser or another mobile browser\."/.test(p) && !/CHOOSER_UNAVAILABLE[^\]]*REOWN_WALLETCONNECT_UNAVAILABLE/.test(p) && /Connection code: \{connectNotice\}/.test(p), "persistent copy, no injected fallback, sanitized code only");
+}
 console.log("\nALL CHECKS PASSED");
