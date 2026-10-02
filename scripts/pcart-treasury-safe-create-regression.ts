@@ -352,9 +352,15 @@ check(
   const wc = strip(read("src/lib/wallet-connector.ts"));
   const p = strip(read("src/components/cartel/TreasurySafeCreatePanel.tsx"));
   const loader = r.slice(r.indexOf("async function loadAppKitLibraries"), r.indexOf("export async function preloadAppKitLibraries"));
-  const i1 = loader.indexOf('await import("@reown/appkit/core")');
-  check("ML-1", i1 > 0 && !/appkit-adapter-ethers|EthersAdapter|REOWN_ADAPTER_LOAD_FAILED/.test(loader) && /REOWN_MODULE_EVAL_FAILED/.test(loader) && (loader.match(/REOWN_CHUNK_FETCH_FAILED/g) ?? []).length === 1 && (loader.match(/await import\(/g) ?? []).length === 1, "single AppKit core import, chunk vs eval classified, no adapter");
-  check("AC-1", !/appkit-adapter-ethers|EthersAdapter/.test(r) && /adapters: \[\],/.test(r) && !/new \w+Adapter\(/.test(r) && /type AppKitHandle = import\("@reown\/appkit\/core"\)\.AppKit/.test(r), "adapter-free core mode: adapters [], no adapter instantiated");
+  const i1 = loader.indexOf('await import("./reown-appkit-browser")');
+  check("ML-1", i1 > 0 && !/appkit-adapter-ethers|REOWN_ADAPTER_LOAD_FAILED/.test(loader) && /REOWN_MODULE_EVAL_FAILED/.test(loader) && (loader.match(/REOWN_CHUNK_FETCH_FAILED/g) ?? []).length === 1 && (loader.match(/await import\(/g) ?? []).length === 1, "single bridge import, chunk vs eval classified, no separate adapter import");
+  check("AC-1", !/appkit-adapter-ethers/.test(r) && /adapters: \[ethersAdapter as never\]/.test(r) && !/adapters: \[\]/.test(r) && (r.match(/new EthersAdapter\(\)/g) ?? []).length === 1 && /coinbasePreference: "all"/.test(r) && /type AppKitHandle = import\("@reown\/appkit"\)\.AppKit/.test(r), "one EthersAdapter via the bridge, coinbasePreference all");
+  {
+    const panel = readFileSync("src/components/cartel/TreasurySafeCreatePanel.tsx", "utf8");
+    const nulls = (panel.match(/setConnectNotice\(null\)/g) ?? []).length;
+    check("PN-1", nulls === 1 && /Wallet connection did not finish\. If your wallet app opened/.test(panel) && /Connection code: \{connectNotice\}/.test(panel) && !/error\.message|String\(err/.test(panel), "warning persists until the next explicit attempt; sanitized code only in Technical details");
+  }
+  check("AC-2", /const graceMs = 5_000;/.test(r) && !/1_000/.test(r), "every modal close gets >=5s grace");
   check("ML-2", !/console\.|\.stack|return[^;]*error\.message|localStorage|sessionStorage/.test(r.slice(r.indexOf("CHUNK_FETCH_PATTERNS"), r.indexOf("async function runCreateAppKit"))), "classifier/loader never logs, stores or returns raw error text");
   const pre = r.slice(r.indexOf("export async function preloadAppKitLibraries"), r.indexOf("async function runCreateAppKit"));
   check("ML-3", pre.length > 0 && !/createAppKit\(|\.ready\(|\.open\(|connect|getWalletProvider|Storage|request\(/.test(pre), "preload helper is file-load only");

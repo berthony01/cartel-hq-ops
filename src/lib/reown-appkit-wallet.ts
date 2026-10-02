@@ -32,7 +32,7 @@ export type AppKitNotice =
   | "REOWN_LIBRARY_LOAD_FAILED"
   | "REOWN_CHUNK_FETCH_FAILED"
   | "REOWN_MODULE_EVAL_FAILED"
-  /** Legacy only: the adapter-free core path never emits this. */
+  /** Legacy only: the single-bridge path never emits this. */
   | "REOWN_ADAPTER_LOAD_FAILED"
   | "REOWN_ORIGIN_NOT_ALLOWED"
   | "REOWN_PROJECT_ID_INVALID_OR_MISSING"
@@ -54,7 +54,7 @@ export type MinimalEip1193 = {
  * A hand-written interface is deliberately avoided here: it can silently invent
  * a method name that does not exist at runtime.
  */
-type AppKitHandle = import("@reown/appkit/core").AppKit;
+type AppKitHandle = import("@reown/appkit").AppKit;
 
 /**
  * Robinhood Chain mainnet, declared with the project's own frozen constants and
@@ -157,27 +157,26 @@ export function isLazyChunkFetchFailure(error: unknown): boolean {
   }
 }
 
-type AppKitLibraries = {
-  createAppKit: typeof import("@reown/appkit/core").createAppKit;
-};
+type AppKitBridge = typeof import("./reown-appkit-browser");
 
 /**
- * The SINGLE lazy import: official adapter-free AppKit core (no Ethers
- * adapter). Chunk-fetch vs module-evaluation failures stay separately classified.
+ * The SINGLE lazy import: the local browser-only bridge that bundles AppKit and
+ * the official Ethers EVM adapter together. Chunk-fetch vs module-evaluation
+ * failures stay separately classified.
  */
 async function loadAppKitLibraries(): Promise<
-  { ok: true; libs: AppKitLibraries } | { ok: false; notice: AppKitNotice }
+  { ok: true; libs: AppKitBridge } | { ok: false; notice: AppKitNotice }
 > {
-  let createAppKit: AppKitLibraries["createAppKit"];
+  let bridge: AppKitBridge;
   try {
-    ({ createAppKit } = await import("@reown/appkit/core"));
+    bridge = await import("./reown-appkit-browser");
   } catch (error) {
     return {
       ok: false,
       notice: isLazyChunkFetchFailure(error) ? "REOWN_CHUNK_FETCH_FAILED" : "REOWN_MODULE_EVAL_FAILED",
     };
   }
-  return { ok: true, libs: { createAppKit } };
+  return { ok: true, libs: bridge };
 }
 
 /**
@@ -198,14 +197,18 @@ async function runCreateAppKit(
 ): Promise<{ appKit: AppKitHandle | null; notice: AppKitNotice | null }> {
   const loaded = await loadAppKitLibraries();
   if (!loaded.ok) return { appKit: null, notice: loaded.notice };
-  const { createAppKit } = loaded.libs;
+  const { createAppKit, EthersAdapter } = loaded.libs;
 
   try {
     const origin = getCurrentOrigin() ?? "";
+    // Official EVM adapter: registers injected / EIP-6963 / Coinbase connectors.
+    const ethersAdapter = new EthersAdapter();
     // THE ONLY `createAppKit` CALL IN THE APPLICATION.
     const instance = createAppKit({
-      // Official adapter-free core mode (Reown html-ak-basic): no adapter at all.
-      adapters: [],
+      // Same documented cast as the pre-core build: Reown 1.8.23 types its
+      // adapter `namespace` optional, which exactOptionalPropertyTypes rejects.
+      adapters: [ethersAdapter as never],
+      coinbasePreference: "all",
       projectId,
       networks: [ROBINHOOD_APPKIT_NETWORK],
       defaultNetwork: ROBINHOOD_APPKIT_NETWORK,
@@ -441,7 +444,6 @@ export async function openAppKitConnect(timeoutMs: number): Promise<AppKitConnec
     /** Only evidence arising AFTER this attempt's chooser opened may settle it. */
     let chooserStarted = false;
     let modalClosed = false;
-    let handoffObserved = false;
     const unsubscribers: Array<() => void> = [];
     let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
     let rejectionTimer: ReturnType<typeof setTimeout> | undefined;
@@ -502,9 +504,9 @@ export async function openAppKitConnect(timeoutMs: number): Promise<AppKitConnec
     const scheduleVisibleRejection = () => {
       clearRejectionTimer();
       if (settled || !modalClosed || document.hidden || !document.hasFocus()) return;
-      // A plain in-page dismissal rejects quickly. A wallet-app handoff gets a
-      // longer return grace so AppKit can publish the approved provider/account.
-      const graceMs = handoffObserved ? 5_000 : 1_000;
+      // Android can close the chooser before blur/visibilitychange fires on a
+      // wallet-app handoff, so EVERY visible close gets the same 5s grace.
+      const graceMs = 5_000;
       rejectionTimer = setTimeout(() => {
         tryResolveConnected();
         if (!settled && !document.hidden && document.hasFocus()) {
@@ -515,7 +517,6 @@ export async function openAppKitConnect(timeoutMs: number): Promise<AppKitConnec
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        handoffObserved = true;
         clearRejectionTimer();
         pauseVisibleBudget();
         return;
@@ -526,7 +527,6 @@ export async function openAppKitConnect(timeoutMs: number): Promise<AppKitConnec
     };
 
     const handleBlur = () => {
-      handoffObserved = true;
       clearRejectionTimer();
       pauseVisibleBudget();
     };
@@ -564,8 +564,7 @@ export async function openAppKitConnect(timeoutMs: number): Promise<AppKitConnec
     startVisibleBudget();
 
     void appKit
-      // Core-mode open() takes no namespace; eip155 is the only configured one.
-      .open({ view: "Connect" })
+      .open({ view: "Connect", namespace: "eip155" })
       .then(() => {
         // The chooser for THIS attempt is now open: evidence from here on is
         // the operator's current choice.

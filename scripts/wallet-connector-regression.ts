@@ -45,6 +45,7 @@ const chainRegistrySrc = read(CHAIN_REGISTRY);
 const verifyApplySrc = read(VERIFY_APPLY);
 const appkitSrc = read(APPKIT);
 const appkitCode = stripComments(appkitSrc);
+const bridgeCode = read("src/lib/reown-appkit-browser.ts");
 const pkgSrc = read(PKG);
 /** The panel's ONLY mount/subscription effect, extracted once and reused. */
 const panelMountEffect = /useEffect\(\(\) => \{[\s\S]*?\}, \[refresh, refreshAvailability\]\);/.exec(
@@ -102,10 +103,15 @@ check(
 
 check(
   "C1",
-  /await import\("@reown\/appkit\/core"\)/.test(appkitCode) &&
-    !/appkit-adapter-ethers|EthersAdapter/.test(appkitCode) &&
-    /adapters: \[\],/.test(appkitCode),
-  "adapter-free AppKit core is the only dynamic import; no Ethers adapter; adapters: []",
+  /await import\("\.\/reown-appkit-browser"\)/.test(appkitCode) &&
+    (appkitCode.match(/await import\(/g) ?? []).length === 1 &&
+    !/appkit-adapter-ethers/.test(appkitCode) &&
+    /adapters: \[ethersAdapter as never\]/.test(appkitCode) &&
+    (appkitCode.match(/new EthersAdapter\(\)/g) ?? []).length === 1 &&
+    /coinbasePreference: "all"/.test(appkitCode) &&
+    /from "@reown\/appkit"/.test(bridgeCode) &&
+    /from "@reown\/appkit-adapter-ethers"/.test(bridgeCode),
+  "one lazy bridge import bundles AppKit + one EthersAdapter; coinbasePreference all",
 );
 check(
   "C2",
@@ -563,7 +569,7 @@ check(
 );
 check(
   "R2",
-  /open\(\{ view: "Connect" \}\)/.test(appkitCode) &&
+  /open\(\{ view: "Connect", namespace: "eip155" \}\)/.test(appkitCode) &&
     /networks: \[ROBINHOOD_APPKIT_NETWORK\]/.test(appkitCode) &&
     /"@reown\/appkit": "\^?1\.8\.23"/.test(pkgSrc),
   "the core chooser opens Connect with eip155 as the only configured namespace, pinned AppKit 1.8.23",
@@ -831,10 +837,10 @@ check(
 );
 check(
   "V3",
-  /const graceMs = handoffObserved \? 5_000 : 1_000;/.test(openConnectBody) &&
+  /const graceMs = 5_000;/.test(openConnectBody) && !/1_000/.test(openConnectBody) &&
     /rejectionTimer = setTimeout/.test(openConnectBody) &&
     /finish\(\{ status: "rejected" \}\)/.test(openConnectBody),
-  "a visible manual dismissal still rejects after a bounded one-second grace",
+  "any visible modal close rejects only after a bounded 5s grace",
 );
 check(
   "V4",
@@ -914,7 +920,7 @@ check(
 );
 check(
   "T3",
-  /type AppKitHandle = import\("@reown\/appkit\/core"\)\.AppKit;/.test(appkitCode) &&
+  /type AppKitHandle = import\("@reown\/appkit"\)\.AppKit;/.test(appkitCode) &&
     !/type AppKitHandle = \{/.test(appkitCode),
   "the AppKit instance is typed from the installed package, not from a hand-written interface",
 );
@@ -927,7 +933,7 @@ check(
 );
 check(
   "T5",
-  !/as never/.test(appkitCode.replace(/new EthersAdapter\(\) as never/, "")) &&
+  !/as never/.test(appkitCode.replace(/adapters: \[ethersAdapter as never\]/, "")) &&
     /ROBINHOOD_APPKIT_NETWORK: import\("@reown\/appkit-common"\)\.CaipNetwork/.test(appkitCode) &&
     /networks: \[ROBINHOOD_APPKIT_NETWORK\]/.test(appkitCode),
   "the custom network is typed against the installed CaipNetwork contract with no unsafe cast hiding a required property",
