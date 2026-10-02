@@ -502,9 +502,9 @@ export async function openAppKitConnect(timeoutMs: number): Promise<AppKitConnec
     const scheduleVisibleRejection = () => {
       clearRejectionTimer();
       if (settled || !modalClosed || document.hidden || !document.hasFocus()) return;
-      // A plain in-page dismissal rejects quickly. A wallet-app handoff gets a
-      // longer return grace so AppKit can publish the approved provider/account.
-      const graceMs = handoffObserved ? 5_000 : 1_000;
+      // Android can close the chooser before blur/visibilitychange fires on a
+      // wallet-app handoff, so EVERY visible close gets the same 5s grace.
+      const graceMs = 5_000;
       rejectionTimer = setTimeout(() => {
         tryResolveConnected();
         if (!settled && !document.hidden && document.hasFocus()) {
