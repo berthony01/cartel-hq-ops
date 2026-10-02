@@ -2809,6 +2809,7 @@ function LaunchControlPage() {
             </WorkingView>
 
             <WorkingView id="lc-contract" active={activeSection === "lc-contract"}>
+                {!selectedIsCanonicalPcart ? (
                 <Section
                   variant="surface"
                   className={
@@ -2851,10 +2852,41 @@ function LaunchControlPage() {
                     separate, explicit actions. Registering never messages anyone on its own.
                   </p>
                 </Section>
+                ) : null}
 
                 {/* Deployment path — plain-English ordering for this working
                     view. Guidance only: it changes no eligibility or state. */}
-                {selected && selectedIsProjectLaunch ? (
+                {selected && selectedIsCanonicalPcart ? (
+                  <div className="min-w-0 space-y-2 rounded-lg border border-border-subtle bg-surface-raised/30 p-4">
+                    <p className="text-sm font-semibold leading-snug text-foreground">PCART setup progress</p>
+                    <ol className="grid min-w-0 gap-1.5 text-xs sm:grid-cols-5">
+                      {[
+                        ["Token", "Ready"],
+                        ["Signers", pcartSignerQuery.data ? "Ready" : "Current step"],
+                        [
+                          "Treasury Safe",
+                          pcartSafeReady ? "Ready" : pcartSignerQuery.data ? "Current step" : "Later",
+                        ],
+                        ["Test launch", pcartSafeReady ? "Current step" : "Later"],
+                        ["Mainnet", "Locked"],
+                      ].map(([label, state]) => (
+                        <li
+                          key={label}
+                          className={`min-w-0 rounded-md border px-2.5 py-1.5 ${
+                            state === "Current step"
+                              ? "border-gold/50 bg-gold/10 text-foreground"
+                              : state === "Ready"
+                                ? "border-pepe/35 text-foreground"
+                                : "border-border-subtle text-muted-foreground"
+                          }`}
+                        >
+                          <span className="font-semibold">{label}</span>
+                          <span className="block text-[11px]">{state}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                ) : selected && selectedIsProjectLaunch ? (
                   <div className="min-w-0 space-y-2 rounded-lg border border-border-subtle bg-surface-raised/30 p-4">
                     <p className="text-sm font-semibold leading-snug text-foreground">
                       Deployment path — before deployment
@@ -2893,6 +2925,7 @@ function LaunchControlPage() {
                     launchId={selected.id}
                     isWorkspaceOwner={isWorkspaceOwner}
                     disabled={readOnly}
+                    compact={selectedIsCanonicalPcart}
                   />
                 ) : null}
 
@@ -2911,7 +2944,14 @@ function LaunchControlPage() {
                 {/* Launcher-B2 — guided handoff request, before the technical
                     deployment evidence details. PROJECT launches only. */}
                 {selected && selectedIsProjectLaunch && isCanonicalPcartLaunch(selected) ? (
-                  <PcartProductionBlockedCheckpoint />
+                  pcartSafeReady ? (
+                    <div className="min-w-0 space-y-2">
+                      <p className="text-sm font-semibold text-foreground">
+                        Next step: Test PCART before launch
+                      </p>
+                      <PcartProductionBlockedCheckpoint />
+                    </div>
+                  ) : null
                 ) : selected && selectedIsProjectLaunch ? (
                   <ProductionDeploymentRequestPanel
                     launchId={selected.id}
@@ -2947,6 +2987,10 @@ function LaunchControlPage() {
 
 
 
+                {/* Canonical PCART: later-stage registration/comms stay hidden
+                    until that stage is genuinely relevant. Generic unchanged. */}
+                {!selectedIsCanonicalPcart ? (
+                <>
                 <dl className="grid min-w-0 gap-2.5 sm:grid-cols-3">
                   <div className="surface-quiet min-w-0 rounded-lg p-3">
                     <dt className="type-eyebrow text-muted-foreground">Registration</dt>
@@ -3080,20 +3124,26 @@ function LaunchControlPage() {
                     correctionBroadcastMutation.mutate({ groupConnectionId, registrationEventId })
                   }
                 />
+                </>
+                ) : null}
+
 
                 {/* Full technical evidence stays mounted and read-only, using
                     the same evaluation object as the panels above. Canonical
                     PCART history is audit-only and closed by default. */}
                 <details className="surface-quiet min-w-0 rounded-lg">
                   <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
-                <span className="min-w-0 [overflow-wrap:anywhere]">Technical deployment evidence</span>
+                <span className="min-w-0 [overflow-wrap:anywhere]">
+                  {selectedIsCanonicalPcart ? "Advanced / Audit history" : "Technical deployment evidence"}
+                </span>
                 <ChevronDown className="size-4 shrink-0 transition-transform [[open]_&]:rotate-180" aria-hidden="true" />
               </summary>
                   <div className="min-w-0 px-3 pb-3">
                     {selectedIsCanonicalPcart ? (
                       <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
-                        These are historical test or generic deployment records. They are not the
-                        PCART treasury Safe or the PCART official launch path.
+                        Historical test/generic records. These are not the PCART treasury Safe, not
+                        the PCART exact-artifact rehearsal, and not the official PCART mainnet
+                        deployment.
                       </p>
                     ) : null}
                     <VerifiedDeploymentEvidencePanel

@@ -27,6 +27,8 @@ export type TreasurySignerSetupPanelProps = {
   launchId: string;
   isWorkspaceOwner: boolean;
   disabled?: boolean | undefined;
+  /** Canonical PCART guided flow: show a compact summary once signers are saved. */
+  compact?: boolean | undefined;
 };
 
 const EMPTY_FIELDS: [string, string, string] = ["", "", ""];
@@ -35,6 +37,7 @@ export function TreasurySignerSetupPanel({
   launchId,
   isWorkspaceOwner,
   disabled,
+  compact,
 }: TreasurySignerSetupPanelProps) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
@@ -76,6 +79,46 @@ export function TreasurySignerSetupPanel({
   const formOpen = editing || (!config && isWorkspaceOwner);
   const saveError =
     saveMutation.error instanceof Error ? saveMutation.error.message : null;
+
+  if (compact && config && !formOpen) {
+    return (
+      <div className="min-w-0 space-y-2 rounded-lg border border-pepe/35 bg-pepe/5 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <CheckCircle2 className="size-4" aria-hidden="true" />3 signer wallets saved
+          </p>
+          <StatusBadge tone="green">
+            <span>Signers ready</span>
+          </StatusBadge>
+        </div>
+        <p className="text-xs text-muted-foreground">2 of 3 approvals required</p>
+        <details className="min-w-0 text-xs text-muted-foreground">
+          <summary className="cursor-pointer">View signer wallets</summary>
+          <ul className="mt-2 min-w-0 space-y-0.5 font-mono text-foreground [overflow-wrap:anywhere]">
+            {config.signers.map((signer) => (
+              <li key={signer}>{displaySigner(signer)}</li>
+            ))}
+          </ul>
+        </details>
+        {isWorkspaceOwner ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="min-h-11"
+            disabled={disabled}
+            onClick={() => {
+              setFields([config.signers[0], config.signers[1], config.signers[2]]);
+              setShowErrors(false);
+              setEditing(true);
+            }}
+          >
+            Edit
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className="min-w-0 space-y-3 rounded-lg border border-border-subtle bg-surface-raised/40 p-4">
