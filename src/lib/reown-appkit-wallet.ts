@@ -32,7 +32,7 @@ export type AppKitNotice =
   | "REOWN_LIBRARY_LOAD_FAILED"
   | "REOWN_CHUNK_FETCH_FAILED"
   | "REOWN_MODULE_EVAL_FAILED"
-  /** Legacy only: the adapter-free core path never emits this. */
+  /** Legacy only: the single-bridge path never emits this. */
   | "REOWN_ADAPTER_LOAD_FAILED"
   | "REOWN_ORIGIN_NOT_ALLOWED"
   | "REOWN_PROJECT_ID_INVALID_OR_MISSING"
@@ -54,7 +54,7 @@ export type MinimalEip1193 = {
  * A hand-written interface is deliberately avoided here: it can silently invent
  * a method name that does not exist at runtime.
  */
-type AppKitHandle = import("@reown/appkit/core").AppKit;
+type AppKitHandle = import("@reown/appkit").AppKit;
 
 /**
  * Robinhood Chain mainnet, declared with the project's own frozen constants and
@@ -562,8 +562,7 @@ export async function openAppKitConnect(timeoutMs: number): Promise<AppKitConnec
     startVisibleBudget();
 
     void appKit
-      // Core-mode open() takes no namespace; eip155 is the only configured one.
-      .open({ view: "Connect" })
+      .open({ view: "Connect", namespace: "eip155" })
       .then(() => {
         // The chooser for THIS attempt is now open: evidence from here on is
         // the operator's current choice.
