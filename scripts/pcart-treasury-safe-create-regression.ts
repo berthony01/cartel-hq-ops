@@ -354,14 +354,14 @@ check(
   const loader = r.slice(r.indexOf("async function loadAppKitLibraries"), r.indexOf("export async function preloadAppKitLibraries"));
   const i1 = loader.indexOf('await import("./reown-appkit-browser")');
   check("ML-1", i1 > 0 && !/appkit-adapter-ethers|REOWN_ADAPTER_LOAD_FAILED/.test(loader) && /classifyLazyLoadFailure\(error\)/.test(loader) && /return "REOWN_CHUNK_FETCH_FAILED"/.test(r) && /return "REOWN_MODULE_EVAL_FAILED"/.test(r) && /return "REOWN_CUSTOM_ELEMENT_CONFLICT"/.test(r) && (loader.match(/await import\(/g) ?? []).length === 1 && (r.match(/await import\(/g) ?? []).length === 1, "single bridge import, chunk / custom-element / eval classified, no separate adapter import");
-  check("AC-1", !/EthersAdapter|appkit-adapter-ethers/.test(r) && /adapters: \[wagmiAdapter as never\]/.test(r) && !/adapters: \[\]/.test(r) && (r.match(/new WagmiAdapter\(\{/g) ?? []).length === 1 && /ssr: false/.test(r) && /coinbasePreference: "all"/.test(r) && /type AppKitHandle = import\("@reown\/appkit"\)\.AppKit/.test(r), "one WagmiAdapter via the bridge, coinbasePreference all, no EthersAdapter");
+  check("AC-1", !/EthersAdapter|appkit-adapter-ethers/.test(r) && /adapters: \[wagmiAdapter as never\]/.test(r) && !/adapters: \[\]/.test(r) && (r.match(/new WagmiAdapter\(\{/g) ?? []).length === 1 && /ssr: false/.test(r) && /coinbasePreference: "eoaOnly"/.test(r) && /type AppKitHandle = import\("@reown\/appkit"\)\.AppKit/.test(r), "one WagmiAdapter via the bridge, coinbasePreference all, no EthersAdapter");
   {
     const pkg = JSON.parse(read("package.json")) as { dependencies: Record<string, string> };
     const d = pkg.dependencies;
     check("WG-1", d["@reown/appkit"] === "1.8.24" && d["@reown/appkit-adapter-wagmi"] === "1.8.24" && !d["@reown/appkit-adapter-ethers"] && /^\d+\.\d+\.\d+$/.test(d["wagmi"] ?? "") && /^\d+\.\d+\.\d+$/.test(d["@wagmi/core"] ?? ""), "aligned exact stable Reown 1.8.24 + exact wagmi; EthersAdapter dependency removed");
     const bridge = strip(read("src/lib/reown-appkit-browser.ts"));
     check("WG-2", /export \{ createAppKit \} from "@reown\/appkit";/.test(bridge) && /export \{ WagmiAdapter \} from "@reown\/appkit-adapter-wagmi";/.test(bridge) && !/new |createAppKit\(|window|document|ethers/i.test(bridge.replace(/export \{[^}]*\} from "[^"]*";/g, "")), "bridge statically re-exports AppKit + WagmiAdapter only, no module-scope action");
-    check("WG-3", /open\(\{ view: "Connect", namespace: "eip155" \}\)/.test(r) && (r.match(/networks: \[ROBINHOOD_APPKIT_NETWORK\]/g) ?? []).length === 2, "Robinhood-only networks for adapter + AppKit; eip155 Connect view");
+    check("WG-3", /open\(\{ view: "Connect" \}\)/.test(r) && (r.match(/networks: \[ROBINHOOD_APPKIT_NETWORK\]/g) ?? []).length === 2, "Robinhood-only networks for adapter + AppKit; eip155 Connect view");
     check("WG-4", /reloadAndRetry/.test(p) && /connectNotice === "REOWN_CHUNK_FETCH_FAILED" \|\| connectNotice === "REOWN_CUSTOM_ELEMENT_CONFLICT"/.test(p) && /REOWN_CUSTOM_ELEMENT_CONFLICT: "The wallet interface did not initialize cleanly\. Reload this page once and try again\."/.test(p) && !/"REOWN_CUSTOM_ELEMENT_CONFLICT",?\s*\n?\s*"REOWN_APPKIT/.test(p), "custom-element conflict gets one-time reload recovery and exact copy");
   }
   {

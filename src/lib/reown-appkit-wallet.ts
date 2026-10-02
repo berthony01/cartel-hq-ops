@@ -249,7 +249,19 @@ async function runCreateAppKit(
       // Documented cast: Reown 1.8.24 types adapter `namespace` optional, which
       // exactOptionalPropertyTypes rejects. Runtime value is the real adapter.
       adapters: [wagmiAdapter as never],
-      coinbasePreference: "all",
+      // Saved signers are EOAs: never surface a Base smart-account address.
+      coinbasePreference: "eoaOnly",
+      defaultAccountTypes: { eip155: "eoa" },
+      // The Reown directory does not tag these wallets with eip155:4663, so the
+      // chain-filtered list hides them. Featured IDs are fetched unfiltered.
+      // Order: MetaMask, Base (formerly Coinbase Wallet), Robinhood Wallet.
+      featuredWalletIds: [
+        "c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96",
+        "fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa",
+        "8837dd9413b1d9b585ee937d27a816590248386d9dbf59f5cd3422dbbb65683e",
+      ],
+      allWallets: "SHOW",
+      enableMobileFullScreen: true,
       projectId,
       networks: [ROBINHOOD_APPKIT_NETWORK],
       defaultNetwork: ROBINHOOD_APPKIT_NETWORK,
@@ -605,7 +617,7 @@ export async function openAppKitConnect(timeoutMs: number): Promise<AppKitConnec
     startVisibleBudget();
 
     void appKit
-      .open({ view: "Connect", namespace: "eip155" })
+      .open({ view: "Connect" })
       .then(() => {
         // The chooser for THIS attempt is now open: evidence from here on is
         // the operator's current choice.
