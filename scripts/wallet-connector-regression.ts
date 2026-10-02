@@ -102,9 +102,10 @@ check(
 
 check(
   "C1",
-  /await import\("@reown\/appkit"\)/.test(appkitCode) &&
-    /await import\("@reown\/appkit-adapter-ethers"\)/.test(appkitCode),
-  "AppKit packages are dynamically imported inside a browser-executed function",
+  /await import\("@reown\/appkit\/core"\)/.test(appkitCode) &&
+    !/appkit-adapter-ethers|EthersAdapter/.test(appkitCode) &&
+    /adapters: \[\],/.test(appkitCode),
+  "adapter-free AppKit core is the only dynamic import; no Ethers adapter; adapters: []",
 );
 check(
   "C2",
@@ -512,7 +513,7 @@ check(
   importLoader !== undefined &&
     /REOWN_CHUNK_FETCH_FAILED/.test(importLoader) &&
     /REOWN_MODULE_EVAL_FAILED/.test(importLoader) &&
-    /REOWN_ADAPTER_LOAD_FAILED/.test(importLoader) &&
+    !/REOWN_ADAPTER_LOAD_FAILED/.test(importLoader) &&
     !/REOWN_APPKIT_INIT_FAILED/.test(importLoader),
   "a failed dynamic import returns a sanitized library-load code, not the init code",
 );
@@ -562,10 +563,10 @@ check(
 );
 check(
   "R2",
-  /open\(\{ view: "Connect", namespace: "eip155" \}\)/.test(appkitCode) &&
-    /"@reown\/appkit": "\^?1\.8\.23"/.test(pkgSrc) &&
-    /"@reown\/appkit-adapter-ethers": "\^?1\.8\.23"/.test(pkgSrc),
-  "the chooser opens scoped to eip155 through the pinned official AppKit 1.8.23 packages",
+  /open\(\{ view: "Connect" \}\)/.test(appkitCode) &&
+    /networks: \[ROBINHOOD_APPKIT_NETWORK\]/.test(appkitCode) &&
+    /"@reown\/appkit": "\^?1\.8\.23"/.test(pkgSrc),
+  "the core chooser opens Connect with eip155 as the only configured namespace, pinned AppKit 1.8.23",
 );
 
 /* N — explicit Robinhood Chain switch + safe deployer binding. */
@@ -913,7 +914,7 @@ check(
 );
 check(
   "T3",
-  /type AppKitHandle = import\("@reown\/appkit"\)\.AppKit;/.test(appkitCode) &&
+  /type AppKitHandle = import\("@reown\/appkit\/core"\)\.AppKit;/.test(appkitCode) &&
     !/type AppKitHandle = \{/.test(appkitCode),
   "the AppKit instance is typed from the installed package, not from a hand-written interface",
 );

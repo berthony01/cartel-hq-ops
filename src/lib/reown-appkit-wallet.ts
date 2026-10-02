@@ -32,6 +32,7 @@ export type AppKitNotice =
   | "REOWN_LIBRARY_LOAD_FAILED"
   | "REOWN_CHUNK_FETCH_FAILED"
   | "REOWN_MODULE_EVAL_FAILED"
+  /** Legacy only: the adapter-free core path never emits this. */
   | "REOWN_ADAPTER_LOAD_FAILED"
   | "REOWN_ORIGIN_NOT_ALLOWED"
   | "REOWN_PROJECT_ID_INVALID_OR_MISSING"
@@ -53,7 +54,7 @@ export type MinimalEip1193 = {
  * A hand-written interface is deliberately avoided here: it can silently invent
  * a method name that does not exist at runtime.
  */
-type AppKitHandle = import("@reown/appkit").AppKit;
+type AppKitHandle = import("@reown/appkit/core").AppKit;
 
 /**
  * Robinhood Chain mainnet, declared with the project's own frozen constants and
@@ -157,37 +158,30 @@ export function isLazyChunkFetchFailure(error: unknown): boolean {
 }
 
 type AppKitLibraries = {
-  createAppKit: typeof import("@reown/appkit").createAppKit;
-  EthersAdapter: typeof import("@reown/appkit-adapter-ethers").EthersAdapter;
+  createAppKit: typeof import("@reown/appkit/core").createAppKit;
 };
 
-/** The two lazy imports, each separately caught and classified. */
+/**
+ * The SINGLE lazy import: official adapter-free AppKit core (no Ethers
+ * adapter). Chunk-fetch vs module-evaluation failures stay separately classified.
+ */
 async function loadAppKitLibraries(): Promise<
   { ok: true; libs: AppKitLibraries } | { ok: false; notice: AppKitNotice }
 > {
   let createAppKit: AppKitLibraries["createAppKit"];
   try {
-    ({ createAppKit } = await import("@reown/appkit"));
+    ({ createAppKit } = await import("@reown/appkit/core"));
   } catch (error) {
     return {
       ok: false,
       notice: isLazyChunkFetchFailure(error) ? "REOWN_CHUNK_FETCH_FAILED" : "REOWN_MODULE_EVAL_FAILED",
     };
   }
-  let EthersAdapter: AppKitLibraries["EthersAdapter"];
-  try {
-    ({ EthersAdapter } = await import("@reown/appkit-adapter-ethers"));
-  } catch (error) {
-    return {
-      ok: false,
-      notice: isLazyChunkFetchFailure(error) ? "REOWN_CHUNK_FETCH_FAILED" : "REOWN_ADAPTER_LOAD_FAILED",
-    };
-  }
-  return { ok: true, libs: { createAppKit, EthersAdapter } };
+  return { ok: true, libs: { createAppKit } };
 }
 
 /**
- * FILE PRELOAD ONLY. Downloads/evaluates the two chooser libraries so a later
+ * FILE PRELOAD ONLY. Downloads/evaluates the AppKit core library so a later
  * explicit Connect click does not depend on fetching them. It never creates
  * AppKit, never opens anything and never touches a wallet, storage or network.
  */
@@ -204,13 +198,14 @@ async function runCreateAppKit(
 ): Promise<{ appKit: AppKitHandle | null; notice: AppKitNotice | null }> {
   const loaded = await loadAppKitLibraries();
   if (!loaded.ok) return { appKit: null, notice: loaded.notice };
-  const { createAppKit, EthersAdapter } = loaded.libs;
+  const { createAppKit } = loaded.libs;
 
   try {
     const origin = getCurrentOrigin() ?? "";
     // THE ONLY `createAppKit` CALL IN THE APPLICATION.
     const instance = createAppKit({
-      adapters: [new EthersAdapter() as never],
+      // Official adapter-free core mode (Reown html-ak-basic): no adapter at all.
+      adapters: [],
       projectId,
       networks: [ROBINHOOD_APPKIT_NETWORK],
       defaultNetwork: ROBINHOOD_APPKIT_NETWORK,
@@ -569,7 +564,8 @@ export async function openAppKitConnect(timeoutMs: number): Promise<AppKitConnec
     startVisibleBudget();
 
     void appKit
-      .open({ view: "Connect", namespace: "eip155" })
+      // Core-mode open() takes no namespace; eip155 is the only configured one.
+      .open({ view: "Connect" })
       .then(() => {
         // The chooser for THIS attempt is now open: evidence from here on is
         // the operator's current choice.
