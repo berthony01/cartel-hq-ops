@@ -87,21 +87,26 @@ check(
     safePanelIndex >= 0 && blockedCheckpointIndex > safePanelIndex,
   "canonical PCART with saved signers renders the Safe card before the protected checkpoint",
 );
-check(
-  "S16b",
-  /<details className="surface-quiet min-w-0 rounded-lg">[\s\S]*These are historical test or generic deployment records\.[\s\S]*<VerifiedDeploymentEvidencePanel/.test(
-    LAUNCH_CONTROL.slice(blockedCheckpointIndex),
-  ) &&
-    /\{selectedIsCanonicalPcart \? \([\s\S]*These are historical test or generic deployment records\.[\s\S]*\) : null\}[\s\S]*<VerifiedDeploymentEvidencePanel/.test(
-      LAUNCH_CONTROL.slice(blockedCheckpointIndex),
-    ),
-  "canonical PCART labels generic deployment history inside a default-closed technical disclosure",
-);
+const tail = LAUNCH_CONTROL.slice(safePanelIndex);
+check("S16b", /Historical test\/generic records\.[\s\S]*<VerifiedDeploymentEvidencePanel/.test(tail) &&
+  /"Advanced \/ Audit history" : "Technical deployment evidence"/.test(LAUNCH_CONTROL),
+  "PCART history only inside collapsed Advanced / Audit; generic label unchanged");
+check("S16c", /pcartSafeReady \? \([\s\S]{0,200}Next step: Test PCART before launch[\s\S]{0,120}<PcartProductionBlockedCheckpoint \/>/.test(LAUNCH_CONTROL),
+  "PCART checkpoint renders only after Safe verified, framed as next step");
+check("S16d", /\{!selectedIsCanonicalPcart \? \(\s*<>\s*<dl/.test(LAUNCH_CONTROL) &&
+  LAUNCH_CONTROL.indexOf("<OfficialContractCorrectionPanel") < LAUNCH_CONTROL.indexOf("</>\n                ) : null}"),
+  "registration summary/official/notify/broadcast/correction hidden for PCART");
+check("S16e", /compact=\{selectedIsCanonicalPcart\}/.test(LAUNCH_CONTROL) && /PCART setup progress/.test(LAUNCH_CONTROL),
+  "PCART progress card + compact signer summary");
+const SAFE_UI = readFileSync("src/components/cartel/TreasurySafeCreatePanel.tsx", "utf8");
+check("S16f", SAFE_UI.includes("Owners (your 3 signer wallets)") && SAFE_UI.includes("Predicted Safe contract address") &&
+  SAFE_UI.includes("it is not a\n              fourth signer") && SAFE_UI.includes("Connected signer wallet") &&
+  SAFE_UI.includes("It is not added as another owner."), "address labels distinguish owners, Safe contract, connected wallet");
 
 const FORBIDDEN = [
   "contracts/", "artifacts/", "src/lib/launch-artifact-registry.ts", "src/lib/chain-mainnet-registry.ts",
   "src/lib/chain-mainnet-presign.functions.ts", "src/lib/pcart-rehearsal.ts", "src/lib/treasury-signers.ts",
-  "src/lib/treasury-safe-verify.ts", "supabase/", "docs/sql/", "backend-source/",
+  "src/lib/treasury-safe-verify.ts", "src/lib/treasury-safe-create.ts", "src/lib/treasury-safe-create.functions.ts", "src/lib/treasury-safe-wallet.ts", "src/lib/treasury-safe-verify.functions.ts", "src/lib/pcart-launch-readiness.ts", "supabase/", "docs/sql/", "backend-source/",
 ];
 let changed = "";
 try {
