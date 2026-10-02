@@ -104,7 +104,8 @@ const CONNECT_NOTICE_COPY: Record<WalletConnectorNotice, string> = {
   WALLET_ACCOUNT_AMBIGUOUS: "The wallet shared more than one account. Share only one signer wallet and try again.",
   ACTIVE_ACCOUNT_CHANGED: "The wallet account changed. Connect again.",
   WALLETCONNECT_TIMEOUT: "The wallet did not respond in time. Try again.",
-  CONNECTION_REJECTED_OR_FAILED: "The connection was declined or did not finish. Nothing was connected.",
+  CONNECTION_REJECTED_OR_FAILED:
+    "Wallet connection did not finish. If your wallet app opened, approve the request and return here. Otherwise try Connect wallet again.",
   NO_ACCOUNT: "The wallet did not share an account. Nothing was connected.",
   NO_INJECTED_PROVIDER: "No wallet was found in this browser.",
 };
@@ -574,6 +575,9 @@ export function TreasurySafeCreatePanel({
       <details className="min-w-0 text-[11px] text-muted-foreground">
         <summary className="cursor-pointer">Technical details</summary>
         <div className="mt-2 min-w-0 space-y-3">
+          {connectNotice ? (
+            <p className="break-all font-mono text-foreground">Connection code: {connectNotice}</p>
+          ) : null}
           <div className="min-w-0 space-y-1">
             <p className="font-semibold text-foreground">Owners (your 3 signer wallets)</p>
             {signers.map((s) => (
