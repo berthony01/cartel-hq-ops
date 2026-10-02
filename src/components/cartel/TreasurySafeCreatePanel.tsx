@@ -227,7 +227,12 @@ export function TreasurySafeCreatePanel({
             <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" aria-hidden />
             Safe verified just now on Robinhood Chain.
           </p>
+          <p className="font-semibold text-foreground">Safe contract address</p>
           <p className="break-all font-mono text-foreground">{show(statusQuery.data.persistedSafeAddress)}</p>
+          <p className="text-[11px]">
+            This is a new contract address for the treasury. It is not a wallet and it is not a
+            fourth signer.
+          </p>
         </div>
       ) : (
         <>
@@ -238,7 +243,7 @@ export function TreasurySafeCreatePanel({
             <li>No modules, no guard</li>
           </ul>
           <div className="min-w-0 space-y-1">
-            <p className="text-xs font-semibold text-foreground">Owners</p>
+            <p className="text-xs font-semibold text-foreground">Owners (your 3 signer wallets)</p>
             {signers.map((s) => (
               <p key={s} className="break-all font-mono text-xs text-muted-foreground">
                 {show(s)}
@@ -246,7 +251,11 @@ export function TreasurySafeCreatePanel({
             ))}
           </div>
           <div className="min-w-0 space-y-1">
-            <p className="text-xs font-semibold text-foreground">Predicted Safe address</p>
+            <p className="text-xs font-semibold text-foreground">Predicted Safe contract address</p>
+            <p className="text-[11px] text-muted-foreground">
+              This is a new contract address for the treasury. It is not a wallet and it is not a
+              fourth signer.
+            </p>
             {reviewQuery.isLoading ? (
               <p className="text-xs text-muted-foreground">Checking Robinhood Chain…</p>
             ) : predicted ? (
@@ -292,7 +301,14 @@ export function TreasurySafeCreatePanel({
             </Button>
           )}
           {account ? (
-            <p className="break-all text-[11px] text-muted-foreground">Connected: {show(account)}</p>
+            <div className="min-w-0 space-y-0.5">
+              <p className="text-xs font-semibold text-foreground">Connected signer wallet</p>
+              <p className="break-all font-mono text-[11px] text-muted-foreground">{show(account)}</p>
+              <p className="text-[11px] text-muted-foreground">
+                Used only to approve this creation transaction. It must be one of your 3 signer
+                wallets. It is not added as another owner.
+              </p>
+            </div>
           ) : null}
           {phase === "awaiting_wallet" ? (
             <p className="text-xs text-muted-foreground">Confirm the transaction in your wallet.</p>
