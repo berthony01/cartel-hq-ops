@@ -108,7 +108,7 @@ check(
     !/EthersAdapter|appkit-adapter-ethers/.test(appkitCode + bridgeCode) &&
     /adapters: \[wagmiAdapter as never\]/.test(appkitCode) &&
     (appkitCode.match(/new WagmiAdapter\(\{/g) ?? []).length === 1 &&
-    /coinbasePreference: "all"/.test(appkitCode) &&
+    /coinbasePreference: "eoaOnly"/.test(appkitCode) &&
     /from "@reown\/appkit"/.test(bridgeCode) &&
     /from "@reown\/appkit-adapter-wagmi"/.test(bridgeCode),
   "one lazy bridge import bundles AppKit + one WagmiAdapter; coinbasePreference all",
@@ -588,7 +588,7 @@ check(
 );
 check(
   "R2",
-  /open\(\{ view: "Connect", namespace: "eip155" \}\)/.test(appkitCode) &&
+  /open\(\{ view: "Connect" \}\)/.test(appkitCode) &&
     /networks: \[ROBINHOOD_APPKIT_NETWORK\]/.test(appkitCode) &&
     /"@reown\/appkit": "1\.8\.24"/.test(pkgSrc) &&
     /"@reown\/appkit-adapter-wagmi": "1\.8\.24"/.test(pkgSrc),
@@ -1442,6 +1442,19 @@ check(
     ),
   "re-proof never selects a replacement account and introduces no sign, send or add-chain path",
 );
+
+
+{
+  const ids = (appkitCode.match(/featuredWalletIds: \[([^\]]*)\]/)?.[1] ?? "").match(/[0-9a-f]{64}/g) ?? [];
+  check("FW-1", ids.join(",") === "c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96,fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa,8837dd9413b1d9b585ee937d27a816590248386d9dbf59f5cd3422dbbb65683e", "featured IDs exactly MetaMask, Base, Robinhood in order");
+  check("FW-2", !appkitCode.includes("a797aa35c0fadbfc1a53e7f675162ed5226968b44a19ee3d24385c64d1d3c393"), "Phantom is not featured");
+  check("FW-3", /\n      allWallets: "SHOW",/.test(appkitCode), "top-level allWallets SHOW");
+  check("FW-4", /enableMobileFullScreen: true/.test(appkitCode), "mobile full screen");
+  check("FW-5", /defaultAccountTypes: \{ eip155: "eoa" \}/.test(appkitCode) && /coinbasePreference: "eoaOnly"/.test(appkitCode), "EOA account preference");
+  check("FW-6", /\.open\(\{ view: "Connect" \}\)/.test(appkitCode) && !/namespace: "eip155" \}\)/.test(appkitCode), "Connect view opens with no namespace filter");
+  check("FW-7", !/includeWalletIds/.test(appkitCode) && (appkitCode.match(/networks: \[ROBINHOOD_APPKIT_NETWORK\]/g) ?? []).length === 2, "no include restriction; Robinhood is the only network");
+  check("FW-8", /enableReconnect: false/.test(appkitCode) && /enableNetworkSwitch: false/.test(appkitCode) && /allowUnsupportedChain: true/.test(appkitCode) && ["enableWalletConnect","enableInjected","enableEIP6963","enableCoinbase"].every((k) => new RegExp(k + ": true").test(appkitCode)) && /graceMs = 5_000/.test(appkitCode) && !/wallet_addEthereumChain/.test(appkitCode), "connector flags, 5s grace, no add-chain unchanged");
+}
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
