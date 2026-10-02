@@ -18,7 +18,11 @@ import {
   SAFE_CREATE_SINGLETON,
 } from "@/lib/treasury-safe-create";
 import { sendTreasurySafeCreation } from "@/lib/treasury-safe-wallet";
-import { getLaunchTreasurySigners, treasurySignerConfigQueryKey } from "@/lib/treasury-signers";
+import {
+  getLaunchTreasurySigners,
+  treasurySignerConfigQueryKey,
+  type TreasurySignerConfig,
+} from "@/lib/treasury-signers";
 import {
   connectInjected,
   connectWalletConnectOnRobinhoodChain,
@@ -59,10 +63,12 @@ type Phase =
 export function TreasurySafeCreatePanel({
   launchId,
   isWorkspaceOwner,
+  signerConfig,
   disabled,
 }: {
   launchId: string;
   isWorkspaceOwner: boolean;
+  signerConfig?: TreasurySignerConfig | undefined;
   disabled?: boolean;
 }) {
   const qc = useQueryClient();
@@ -73,6 +79,7 @@ export function TreasurySafeCreatePanel({
   const signerQuery = useQuery({
     queryKey: treasurySignerConfigQueryKey(launchId),
     queryFn: () => getLaunchTreasurySigners(launchId),
+    enabled: !signerConfig,
   });
   const statusQuery = useQuery({
     queryKey: treasurySafeStatusQueryKey(launchId),
@@ -96,7 +103,8 @@ export function TreasurySafeCreatePanel({
     setAccount(getActiveAccount());
   }, []);
 
-  const signers = signerQuery.data?.signers ?? null;
+  const savedSignerConfig = signerConfig ?? signerQuery.data ?? null;
+  const signers = savedSignerConfig?.signers ?? null;
   const review: TreasurySafePreflightResponse | undefined = reviewQuery.data;
   const predicted = review?.preflight.predictedAddress ?? null;
   const ready = statusQuery.data?.ready === true;

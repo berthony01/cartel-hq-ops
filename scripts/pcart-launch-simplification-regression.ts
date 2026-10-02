@@ -77,6 +77,27 @@ check("S15", !/<input|<Input|<Button|onClick|onSubmit/.test(GUIDE), "guide is re
 const CP = readFileSync("src/components/cartel/PcartProductionBlockedCheckpoint.tsx", "utf8");
 check("S16", /Technical details/.test(CP) && !/<Button|onClick|<Input/.test(CP), "checkpoint plain-first, technical collapsed, read-only");
 
+const LAUNCH_CONTROL = readFileSync("src/routes/_authenticated/launch-control.tsx", "utf8");
+const safePanelIndex = LAUNCH_CONTROL.indexOf("<TreasurySafeCreatePanel");
+const blockedCheckpointIndex = LAUNCH_CONTROL.indexOf("<PcartProductionBlockedCheckpoint");
+check(
+  "S16a",
+  /selectedIsCanonicalPcart && pcartSignerQuery\.data \? \(/.test(LAUNCH_CONTROL) &&
+    /signerConfig=\{pcartSignerQuery\.data\}/.test(LAUNCH_CONTROL) &&
+    safePanelIndex >= 0 && blockedCheckpointIndex > safePanelIndex,
+  "canonical PCART with saved signers renders the Safe card before the protected checkpoint",
+);
+check(
+  "S16b",
+  /<details className="surface-quiet min-w-0 rounded-lg">[\s\S]*These are historical test or generic deployment records\.[\s\S]*<VerifiedDeploymentEvidencePanel/.test(
+    LAUNCH_CONTROL.slice(blockedCheckpointIndex),
+  ) &&
+    /\{selectedIsCanonicalPcart \? \([\s\S]*These are historical test or generic deployment records\.[\s\S]*\) : null\}[\s\S]*<VerifiedDeploymentEvidencePanel/.test(
+      LAUNCH_CONTROL.slice(blockedCheckpointIndex),
+    ),
+  "canonical PCART labels generic deployment history inside a default-closed technical disclosure",
+);
+
 const FORBIDDEN = [
   "contracts/", "artifacts/", "src/lib/launch-artifact-registry.ts", "src/lib/chain-mainnet-registry.ts",
   "src/lib/chain-mainnet-presign.functions.ts", "src/lib/pcart-rehearsal.ts", "src/lib/treasury-signers.ts",
