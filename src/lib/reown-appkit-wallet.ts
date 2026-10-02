@@ -442,7 +442,6 @@ export async function openAppKitConnect(timeoutMs: number): Promise<AppKitConnec
     /** Only evidence arising AFTER this attempt's chooser opened may settle it. */
     let chooserStarted = false;
     let modalClosed = false;
-    let handoffObserved = false;
     const unsubscribers: Array<() => void> = [];
     let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
     let rejectionTimer: ReturnType<typeof setTimeout> | undefined;
@@ -516,7 +515,6 @@ export async function openAppKitConnect(timeoutMs: number): Promise<AppKitConnec
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        handoffObserved = true;
         clearRejectionTimer();
         pauseVisibleBudget();
         return;
@@ -527,7 +525,6 @@ export async function openAppKitConnect(timeoutMs: number): Promise<AppKitConnec
     };
 
     const handleBlur = () => {
-      handoffObserved = true;
       clearRejectionTimer();
       pauseVisibleBudget();
     };
