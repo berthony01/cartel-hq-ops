@@ -41,6 +41,7 @@ export type AppKitNotice =
   | "REOWN_RATE_LIMITED"
   | "REOWN_APPKIT_INIT_FAILED"
   | "REOWN_STALE_SESSION"
+  | "REOWN_WALLETCONNECT_UNAVAILABLE"
   | "REOWN_CONNECT_FAILED";
 
 export type MinimalEip1193 = {
@@ -79,6 +80,11 @@ export const ROBINHOOD_APPKIT_NETWORK: import("@reown/appkit-common").CaipNetwor
 let appKitHandle: AppKitHandle | null = null;
 let appKitInitPromise: Promise<{ appKit: AppKitHandle | null; notice: AppKitNotice | null }> | null =
   null;
+/**
+ * Browser-lifecycle WagmiAdapter handle, retained ONLY for WalletConnect
+ * readiness checks. Module-private; never exported.
+ */
+let wagmiAdapterHandle: InstanceType<AppKitBridge["WagmiAdapter"]> | null = null;
 
 export function getReownProjectId(): string | null {
   const raw = (import.meta.env as Record<string, string | undefined>)[
@@ -306,10 +312,71 @@ async function runCreateAppKit(
      * connects nothing, opens nothing and touches no wallet.
      */
     await instance.ready();
+    /**
+     * WALLETCONNECT READINESS PROOF. Installed AppKit 1.8.24 `getUniversalProvider()`
+     * swallows UniversalProvider init errors, so `ready()` can resolve while
+     * `setUniversalProvider()` never ran and every WalletConnect tile is dead
+     * ("WalletConnectConnector not found"). The chooser is never returned —
+     * and so never opened — until BOTH connector lists are proven.
+     */
+    const proven = await proveWalletConnectReady(instance, wagmiAdapter);
+    if (!proven) {
+      wagmiAdapterHandle = null;
+      return { appKit: null, notice: "REOWN_WALLETCONNECT_UNAVAILABLE" };
+    }
+    wagmiAdapterHandle = wagmiAdapter;
     return { appKit: instance, notice: null };
   } catch (error) {
+    wagmiAdapterHandle = null;
     return { appKit: null, notice: classifyAppKitError(error) };
   }
+}
+
+type WalletConnectProbe = {
+  connectors?: ReadonlyArray<{ id?: unknown }> | null;
+  wagmiConfig?: { connectors?: ReadonlyArray<{ id?: unknown }> | null } | null;
+};
+
+/**
+ * TRUE only when BOTH the AppKit AdapterBlueprint connector list AND the wagmi
+ * config connector list contain id === "walletConnect".
+ */
+export function hasWalletConnectConnector(adapter: WalletConnectProbe | null | undefined): boolean {
+  try {
+    const blueprint = adapter?.connectors ?? [];
+    const wagmi = adapter?.wagmiConfig?.connectors ?? [];
+    return (
+      blueprint.some((c) => c?.id === "walletConnect") &&
+      wagmi.some((c) => c?.id === "walletConnect")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Exactly ONE public recovery attempt, only when the connector is missing:
+ * AppKit's own `getUniversalProvider()` once, then WagmiAdapter's own
+ * `setUniversalProvider()` once if a provider exists. No loop, no timer.
+ */
+export async function proveWalletConnectReady<P>(
+  instance: { getUniversalProvider: () => Promise<P | undefined> },
+  adapter: WalletConnectProbe & { setUniversalProvider: (provider: P) => Promise<void> },
+): Promise<boolean> {
+  if (hasWalletConnectConnector(adapter)) return true;
+  let provider: P | undefined;
+  try {
+    provider = await instance.getUniversalProvider();
+  } catch {
+    return false;
+  }
+  if (!provider) return false;
+  try {
+    await adapter.setUniversalProvider(provider);
+  } catch {
+    return false;
+  }
+  return hasWalletConnectConnector(adapter);
 }
 
 /**
@@ -325,7 +392,14 @@ export async function ensureAppKit(): Promise<{
   }
   const projectId = getReownProjectId();
   if (!projectId) return { appKit: null, notice: "REOWN_NOT_CONFIGURED" };
-  if (appKitHandle) return { appKit: appKitHandle, notice: null };
+  if (appKitHandle) {
+    // Re-prove on every explicit click: a cached chooser is never reopened
+    // with dead WalletConnect tiles.
+    if (!hasWalletConnectConnector(wagmiAdapterHandle)) {
+      return { appKit: null, notice: "REOWN_WALLETCONNECT_UNAVAILABLE" };
+    }
+    return { appKit: appKitHandle, notice: null };
+  }
   if (!appKitInitPromise) appKitInitPromise = runCreateAppKit(projectId);
   const outcome = await appKitInitPromise;
   if (outcome.appKit) {
